@@ -49,6 +49,11 @@ pull requesteille), kytke repo Vercelin hallinnasta: Add New → Project →
 import `sfb3`. Frameworkiksi **Other**, build-komento tyhjäksi ja
 output-hakemistoksi `.`.
 
+## Jatkokehitys
+
+`HANDOFF.md` kertoo missä työ on kesken, mitä on jo todennettu ja mihin
+moottorissa on helppo kompastua.
+
 ## Testit
 
 Repossa on headless-tarkistus, joka tarjoilee sivuston itse, ajaa botin läpi
