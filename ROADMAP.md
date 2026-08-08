@@ -55,6 +55,31 @@ mahdu. **Korjaa se ensin.**
 Järjestys: (a) tehtaan pääntila, (b) tehostuspalikka jokaisen kentän alkuun,
 (c) tyhjät laattapolut, (d) kuilujen levennys uudelle budjetille.
 
+### 3. Uudet ruututyypit: murenevat lavat ja kytkimet
+
+Moottorissa on jo kaikki tarvittava, joten tämä on halpaa:
+
+- **Ruudukko on muokattava** (`setTile`), ja `TILE_INFO` kartoittaa merkin
+  ominaisuuksiksi — uusi tyyppi on yksi merkki ja yksi rivi taulukkoon.
+- **`scene.bumps` on jo per-ruutu-ajastin** (Map avaimella `"tx,ty"`), ja
+  **tilatallennus tallentaa sekä ruudukon että ajastimet** (`savestate.js:59,71`).
+  Sama rakenne kelpaa murenemisajastimeksi sellaisenaan.
+
+**Mureneva lava** (`%`): kiinteä ruutu, joka käynnistää ajastimen kun pelaaja
+seisoo sen päällä. Ajastimen loppuessa `setTile(EMPTY)` ja `BrickPiece`-sirpaleet.
+Piirto tärisyttää ruutua ajastimen edetessä, jotta varoitus on näkyvä — sama
+periaate kuin putkikasvilla: *mikä voi satuttaa, sen pitää näkyä*.
+
+**Kytkinruudut** (P-switch-tyyliin): **älä kirjoita ruudukkoa uusiksi.** Puhtaampi
+tapa on käännöstaulu `tileAt()`:ssa: kun kytkin on päällä, tietyt merkit
+luetaan toisina (esim. tiili ↔ kolikko). Silloin ruudukko pysyy muuttumattomana,
+tilatallennus tarvitsee vain yhden totuusarvon, eikä kytkimen loppuminen voi
+jättää kenttää rikkinäiseen välitilaan.
+
+**Ylläpitokustannus, joka on syytä tietää etukäteen:** uusi merkki pitää lisätä
+myös `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai
+validaattori pitää murenevaa lavaa kuiluna ja generoi mahdottomia kenttiä.
+
 ## Myöhemmin
 
 - **Kosketusohjaus.** Tietoisesti pöydällä: työpöytäkokemus ensin.
