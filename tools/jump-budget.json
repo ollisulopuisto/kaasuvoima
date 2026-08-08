@@ -1,0 +1,58 @@
+{
+  "note": "Measured by tools/measure-jump.mjs. Regenerate after touching physics.",
+  "margin": 0.7,
+  "cases": [
+    {
+      "label": "standing, tapped",
+      "speed": 0,
+      "height": 31,
+      "distance": 0,
+      "frames": 28
+    },
+    {
+      "label": "standing, held",
+      "speed": 0,
+      "height": 121,
+      "distance": 0,
+      "frames": 79
+    },
+    {
+      "label": "walking, held",
+      "speed": 1.5,
+      "height": 121,
+      "distance": 120,
+      "frames": 79
+    },
+    {
+      "label": "running, held",
+      "speed": 2.5,
+      "height": 121,
+      "distance": 200,
+      "frames": 79
+    },
+    {
+      "label": "P-speed, held",
+      "speed": 3.5,
+      "height": 100,
+      "distance": 245,
+      "frames": 69
+    },
+    {
+      "label": "running + fart jump",
+      "speed": 2.5,
+      "height": 240,
+      "distance": 387,
+      "frames": 154
+    },
+    {
+      "label": "small, running",
+      "speed": 2.5,
+      "height": 0,
+      "distance": 20,
+      "frames": 7
+    }
+  ],
+  "gapTiles": 8,
+  "softGapTiles": 13,
+  "wallTiles": 6
+}
