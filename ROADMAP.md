@@ -20,7 +20,23 @@ ennen pushia on `node tools/verify.mjs`.
 - [x] **Kosketusohjaus**: kaksi mallia (näppäimet / peukalot), oma osumatarkistus,
       monikosketus, testattu. Ei enää "myöhemmin".
 - [x] **Kuvaefektit**: bloom, juovat, vinjetti ja WebGL-kuvaputki, esiasetukset
-      näppäimessä 7, fallback testattuna. Jäljellä vain makuasiat, ks. kohta 1.
+      näppäimessä 7, fallback testattuna. Kuvaputki on oletus.
+- [x] **Kenttäkohtainen tunnelma**: kuumuus aavikkoon ja tehtaaseen, huurre jäähän.
+- [x] **Murenevat lavat** (`%`) ja **spritekohtainen värjäys/hehku**.
+- [x] **`tools/playable.mjs`**: geometrian läpäisytesti ilman vihollisia.
+- [x] **Generaattori lukee telemetriaa** (`--telemetry`).
+- [ ] **Pavunvarret ja piilotetut alueet** — työn alla, ks. kohta 5.
+
+### Tila 9.8.2026 aamulla
+
+`node tools/playable.mjs` sanoo: 4-3 ei mene läpi botilla edes tuplahypyllä, ja
+2-1, 3-1, 3-F ja 5-F vaativat tuplahypyn. **Tarkistin 4-3:n käsin: se ei ole
+rikki** — kuilun yli mennään riveillä 8 ja 10 olevia kelluvia lavoja pitkin,
+joita botti ei osaa käyttää. Loput ovat todennäköisesti samaa lajia, mutta niitä
+ei ole tarkistettu ruutu ruudulta. **Älä muuta kenttädataa botin raportin
+perusteella katsomatta karttaa.**
+
+Kytkinruudut (kohta 4) ovat yhä tekemättä.
 
 ## Seuraavaksi
 
