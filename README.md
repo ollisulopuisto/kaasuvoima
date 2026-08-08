@@ -80,8 +80,9 @@ Botti osaa vain juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaali
 | Alas | kyykky · pudotus läpi puulavan |
 | Enter | tauko kentässä · kartalla käytä varastoesine |
 | M | äänet päälle/pois |
-| F5 / F8 | tallenna tila / lataa tila (kuten emulaattorissa) |
-| F6 | vaihda tallennuspaikkaa (1–3) |
+| K / L | tallenna tila / lataa tila (kuten emulaattorissa); myös F5 / F8 |
+| J | vaihda tallennuspaikkaa (1–3); myös F6 |
+| I tai ` | debug-ruutu: fps, entiteetit, pelaajan tila |
 
 Peliohjain (standard gamepad) toimii myös.
 

@@ -244,6 +244,10 @@ export class Plant extends Enemy {
 
   get exposed() { return this.offset < 30; }
 
+  // Down the pipe means out of play. Its box collapses to zero height, but a
+  // zero-height box still straddles the player's, so this has to be explicit.
+  get harmless() { return !this.exposed; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();

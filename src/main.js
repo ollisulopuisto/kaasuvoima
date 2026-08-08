@@ -34,7 +34,7 @@ class Game {
     this.flashTimer = 0;
     this.pendingNode = null;
 
-    // F3 / ` toggles the developer overlay.
+    // I / ` toggles the developer overlay.
     this.debug = false;
     this.fps = 0;
     this.frameMs = 0;
@@ -224,7 +224,7 @@ class Game {
       ctx.fillRect(0, 90, W, 48);
       drawText(ctx, 'TAUKO', W / 2, 104, { color: '#ffffff', align: 'center', shadow: '#303048' });
       drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
-      drawText(ctx, `F5 TALLENNA  F8 LATAA  F6 PAIKKA ${this.slot}`, W / 2, 126,
+      drawText(ctx, `K TALLENNA  L LATAA  J PAIKKA ${this.slot}  I DEBUG`, W / 2, 126,
         { color: '#8890b0', align: 'center' });
     }
     if (this.flashTimer > 0) {

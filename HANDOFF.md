@@ -38,7 +38,7 @@ paluuarvon jos jokin hajoaa.
 - **Ilmavaivateema**: ummetuskorkki, närästysliekki, ruskeat pilvet, vihainen
   aurinko aavikolla.
 - **Pomot**: neljä varianttia, viimeisenä 3-kertaiseksi pullistuva PIERUPRINSSI.
-- **Tilatallennus**: F5/F8/F6, palautuu täsmälleen ja peli jatkuu vedoksesta.
+- **Tilatallennus**: K/L/J (macOS vie F-näppäimet), palautuu täsmälleen ja peli jatkuu vedoksesta.
 
 ## Kesken tai auki
 
@@ -96,7 +96,7 @@ Nämä on opittu kantapään kautta — lue ennen kuin muutat moottoria.
   uppoavat lattiaan. Ks. `ENEMY_ROW` tiedostossa `tools/gen-levels.mjs`.
 - **Kenttäaika lasketaan pituudesta** (`defaultTime` tiedostossa
   `src/data/levels.js`), ellei kentässä ole omaa `time`-arvoa.
-- **F3 tai ` avaa debug-ruudun**: fps, framebudjetti, entiteetit, pelaajan
+- **I tai ` avaa debug-ruudun**: fps, framebudjetti, entiteetit, pelaajan
   tila, kamera ja soiva musiikkivariaatio.
 - **`window.sfb3` on elävä Game-olio.** Konsolista pääsee käsiksi kaikkeen, ja
   testit ajavat peliä juuri sen kautta (`window.sfb3.scene.player` jne.).

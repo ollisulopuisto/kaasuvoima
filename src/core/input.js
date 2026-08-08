@@ -15,11 +15,18 @@ const KEYMAP = {
   Enter: 'start',
   Escape: 'start',
   KeyM: 'mute',
+  // macOS grabs most of the function row (Mission Control, brightness, and so
+  // on), so the letters are the real bindings and the F-keys are a bonus for
+  // whoever has them free.
+  KeyK: 'quicksave',
+  KeyL: 'quickload',
+  KeyJ: 'slot',
+  KeyI: 'debug',
+  Backquote: 'debug',
   F5: 'quicksave',
   F6: 'slot',
   F8: 'quickload',
   F3: 'debug',
-  Backquote: 'debug',
 };
 
 // Standard gamepad layout: face buttons, then d-pad.

@@ -270,6 +270,35 @@ const report = await page.evaluate(async () => {
       + `${s.player.dying ? ', died' : ''}`);
   }
 
+  /* A piranha hidden inside its pipe must not hurt anybody. Its box collapses
+   * to zero height while it is down, but a zero-height box still straddles the
+   * player's, so standing on the pipe mouth used to be lethal. */
+  {
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-2');
+    game.setScene(s);
+    const { Plant } = await import('/src/entities/enemies.js');
+    const i = mkInput();
+    for (let f = 0; f < 8; f++) s.update(i);
+
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    const feet = s.player.y + s.player.h;
+    const plant = new Plant(s, s.player.cx - 8, feet - 33);
+    plant.active = true;
+    plant.alwaysActive = true;
+    plant.phase = 'hidden';
+    plant.timer = 999;
+    plant.offset = 32;
+    plant.y = plant.pipeTopY + 32;
+    s.entities.push(plant);
+
+    const powerBefore = s.player.powerLevel;
+    s.collisions();
+    expect('a piranha hidden in its pipe cannot hurt the player',
+      !s.player.dying && s.player.powerLevel === powerBefore,
+      `power ${powerBefore}->${s.player.powerLevel}, plant box h=${plant.box.h}`);
+  }
+
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music } = await import('/src/core/audio.js');
   {

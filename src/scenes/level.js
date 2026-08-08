@@ -419,6 +419,9 @@ export class LevelScene {
         continue;
       }
 
+      // An empty box is not a hitbox, whatever `overlaps` thinks of it.
+      if (e.box.h <= 0 || e.box.w <= 0) continue;
+
       if (e.kind !== 'enemy' || e.dying || e.harmless) continue;
 
       if (spin && overlaps(spin, e.box)) {

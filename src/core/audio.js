@@ -415,78 +415,83 @@ const TRACKS = {
     },
   },
 
+  /*
+   * A minor, swung hard. Three things make this one jazz rather than chiptune
+   * with a shuffle: the voices are deliberately different lengths (lead 30,
+   * comp 24, bass 16) so they only line up every four passes, the ride rides a
+   * 12-step pattern against a 16-step bar for a 3-against-4, and the bass riff
+   * is short, accented and never allowed to drop out.
+   */
   map: {
-    tempo: 132,
-    swing: 0.14,
+    tempo: 138,
+    swing: 0.22,
     lead: {
-      wave: 'triangle', gain: 0.15, detune: 7, vibrato: 3,
+      wave: 'triangle', gain: 0.13, detune: 6, vibrato: 3, staccato: 0.75,
       notes: [
-        [0, 2], [4, 2], [7, 2], [12, 2], [7, 2], [4, 2], [5, 4],
-        [2, 2], [5, 2], [9, 2], [14, 2], [9, 2], [5, 2], [7, 4],
-        [0, 2], [4, 2], [7, 2], [12, 4], [11, 2], [9, 2], [7, 2],
-        [5, 2], [4, 2], [2, 2], [0, 4], [null, 4],
+        [0, 2], [3, 1], [5, 1], [7, 2], [10, 2], [7, 2], [5, 1], [3, 1], [0, 2],
+        [null, 2], [12, 2], [10, 2], [7, 2], [5, 2], [3, 2], [2, 2], [0, 2],
       ],
     },
-    harm: {
-      wave: 'square', gain: 0.05, octave: 12,
+    comp: {
+      wave: 'square', gain: 0.055, octave: -12, staccato: 0.28, attack: 0.006, hold: 0.2,
       notes: [
-        [null, 4], [4, 2], [null, 2], [7, 2], [null, 6],
-        [null, 4], [5, 2], [null, 2], [9, 2], [null, 6],
-        [null, 4], [4, 2], [null, 2], [7, 2], [null, 6],
-        [null, 8], [null, 8],
+        [null, 4], [[0, 3, 7, 10], 1], [null, 3], [[0, 3, 7, 10], 1], [null, 3],
+        [null, 1], [[-7, -4, 0, 3], 1], [null, 3], [[-7, -4, 0, 3], 1], [null, 2],
+        [[-5, -1, 2, 5], 1], [null, 3],
       ],
     },
     bass: {
-      wave: 'triangle', gain: 0.16,
+      wave: 'triangle', gain: 0.19, staccato: 0.55, attack: 0.005, hold: 0.35,
+      accent: 'x..x..x.x..x..x.',
       notes: [
-        [-24, 4], [-17, 4], [-24, 4], [-17, 4],
-        [-22, 4], [-15, 4], [-22, 4], [-15, 4],
-        [-24, 4], [-17, 4], [-24, 4], [-17, 4],
-        [-19, 4], [-12, 4], [-24, 8],
+        [-24, 2], [-24, 1], [-17, 1], [-24, 2], [-22, 2],
+        [-19, 2], [-17, 1], [-18, 1], [-19, 2], [-24, 2],
       ],
     },
     drums: {
-      kick: 'x.......x.......',
-      snare: '....x.......x...',
+      kick: 'x..x..x...x.x...',
+      snare: '..g.x..g..g.x..g',
       hat: '..x...x...x...x.',
+      ride: 'x..x.xx..x.x',
     },
   },
 
+  /*
+   * Same idea, driven harder: the bass walks in straight eighths so the groove
+   * never lets up, while the lead (28 steps) and the ride (12) push against it.
+   */
   level: {
-    tempo: 152,
-    swing: 0.1,
+    tempo: 156,
+    swing: 0.2,
     lead: {
-      wave: 'square', gain: 0.13, detune: 8,
+      wave: 'square', gain: 0.12, detune: 8, staccato: 0.7,
       notes: [
-        [7, 2], [7, 2], [null, 2], [7, 2], [null, 2], [4, 2], [7, 4],
-        [12, 4], [null, 4], [0, 4], [null, 4],
-        [4, 4], [null, 2], [0, 2], [null, 2], [-3, 4], [null, 2],
-        [2, 2], [4, 2], [null, 2], [3, 2], [2, 4],
-        [0, 2], [7, 2], [9, 2], [5, 2], [7, 2], [null, 2], [4, 2], [2, 2],
+        [7, 2], [7, 1], [10, 1], [12, 2], [10, 2], [7, 2], [5, 2],
+        [3, 2], [5, 1], [7, 1], [3, 2], [2, 2], [0, 2], [null, 2],
+        [0, 1], [2, 1], [3, 2],
       ],
     },
-    harm: {
-      wave: 'triangle', gain: 0.06, octave: 12,
+    comp: {
+      wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.25, attack: 0.005, hold: 0.2,
       notes: [
-        [null, 8], [4, 2], [null, 2], [7, 4],
-        [null, 8], [0, 2], [null, 2], [4, 4],
-        [null, 8], [-3, 2], [null, 2], [0, 4],
-        [null, 8], [2, 2], [null, 2], [7, 4],
+        [null, 2], [[0, 3, 7, 10], 1], [null, 2], [[0, 3, 7, 10], 1], [null, 3],
+        [[-2, 2, 5, 9], 1], [null, 2], [[-2, 2, 5, 9], 1], [null, 5],
+        [[-5, -1, 2, 5], 1], [null, 2],
       ],
     },
     bass: {
-      wave: 'triangle', gain: 0.17,
+      wave: 'triangle', gain: 0.2, staccato: 0.5, attack: 0.004, hold: 0.3,
+      accent: 'x...x...x...x...',
       notes: [
-        [-24, 4], [-24, 4], [-17, 4], [-24, 4],
-        [-20, 4], [-20, 4], [-13, 4], [-20, 4],
-        [-22, 4], [-22, 4], [-15, 4], [-22, 4],
-        [-24, 4], [-17, 4], [-24, 4], [-12, 4],
+        [-24, 1], [-24, 1], [-17, 1], [-24, 1], [-22, 1], [-24, 1], [-17, 1], [-20, 1],
+        [-19, 1], [-19, 1], [-12, 1], [-19, 1], [-17, 1], [-19, 1], [-22, 1], [-23, 1],
       ],
     },
     drums: {
-      kick: 'x...x.....x.x...',
-      snare: '....x.......x...',
-      hat: 'x.x.x.x.x.x.xxx.',
+      kick: 'x...x..x..x.x...',
+      snare: '..g.x..g..g.x.gg',
+      hat: 'x.x.x.x.x.x.x.x.',
+      ride: 'x..x.xx..x.x',
     },
   },
 
@@ -606,11 +611,30 @@ const VARIATIONS = [
   { label: 'no harmony', drop: ['harm'] },
   { label: 'breakdown', drop: ['lead'], busyHats: true },
   { label: 'lead octave up', leadOctave: 12 },
-  { label: 'stripped', drop: ['drums'], swingBoost: 0.06 },
-  { label: 'up a tone', transpose: 2 },
+  { label: 'stripped', drop: ['comp', 'drums'], swingBoost: 0.06 },
+  { label: 'comp only', drop: ['lead'] },
   { label: 'double time', speed: 2, drop: ['harm'] },
-  { label: 'up a fourth', transpose: 5, leadOctave: 12, swingBoost: 0.08 },
+  { label: 'shout chorus', leadOctave: 12, swingBoost: 0.08 },
 ];
+
+/**
+ * Where the key goes, one entry per pass, and it is not arbitrary.
+ *
+ * Every move is to a closely related key — one step around the circle of
+ * fifths, so the old and new keys share all but one note — and every one
+ * resolves straight back to the tonic instead of drifting upwards forever:
+ *
+ *   I → I → IV → I → V → I → II → I
+ *
+ * The subdominant (+5) relaxes, the dominant (+7) lifts, and the one distant
+ * move, the whole-tone step (+2), is the old pop "truck driver" lift, kept for
+ * a single pass and then dropped. Two modulations never sit back to back.
+ *
+ * A key change is also prepared rather than lurched into: the fill bar before
+ * one sounds the dominant of the key it is about to land in, which is the
+ * oldest trick there is for making a new tonic sound inevitable.
+ */
+const KEY_PLAN = [0, 0, 5, 0, 7, 0, 2, 0];
 
 /** How much the tempo lifts once the level clock gets scary. */
 const HURRY_SPEED = 1.4;
@@ -625,6 +649,8 @@ export const Music = {
   _nextTime: 0,
   _stepDur: 0,
   _swing: 0,
+  _transpose: 0,
+  _nextTranspose: 0,
   _loopLen: 16,
   _cycle: 0,
   _variation: VARIATIONS[0],
@@ -643,7 +669,7 @@ export const Music = {
     if (muted || !track || !ensure()) return;
 
     this._track = track;
-    this._voices = ['lead', 'harm', 'bass']
+    this._voices = ['lead', 'harm', 'comp', 'bass']
       .filter((key) => track[key])
       .map((key) => ({ name: key, ...track[key], ...compile(track[key].notes) }));
     this._drums = track.drums || null;
@@ -677,6 +703,8 @@ export const Music = {
   _applyVariation() {
     const v = VARIATIONS[this._cycle % VARIATIONS.length];
     this._variation = v;
+    this._transpose = KEY_PLAN[this._cycle % KEY_PLAN.length];
+    this._nextTranspose = KEY_PLAN[(this._cycle + 1) % KEY_PLAN.length];
     const speed = (v.speed || 1) * (this._hurry ? HURRY_SPEED : 1);
     this._stepDur = 60 / (this._track.tempo * speed) / 4;
     this._swing = (this._track.swing || 0) + (v.swingBoost || 0);
@@ -706,40 +734,66 @@ export const Music = {
     const delay = Math.max(0, at - ctx.currentTime);
 
     for (const voice of this._voices) {
-      if (drop.includes(voice.name)) continue;
+      // The bass is never dropped and never transposed out of its riff: the
+      // groove is the one thing every variation is allowed to lean on.
+      if (voice.name !== 'bass' && drop.includes(voice.name)) continue;
       const note = voice.map.get(step % voice.len);
       if (!note) continue;
       const [semi, len] = note;
       const dur = len * this._stepDur;
       const octave = (voice.octave || 0) + (voice.name === 'lead' ? (v.leadOctave || 0) : 0);
-      tone({
-        type: voice.wave,
-        from: freq(semi + octave + (v.transpose || 0)),
-        dur: dur * 0.98,
-        gain: voice.gain,
-        attack: 0.012,
-        hold: 0.62,
-        detune: voice.detune || 0,
-        vibrato: voice.vibrato || 0,
-        vibratoRate: voice.vibratoRate || 6,
-        bus: musicBus,
-        delay,
-      });
+      const accent = voice.accent && voice.accent[(step % voice.len) % voice.accent.length] === 'x';
+      const chord = Array.isArray(semi) ? semi : [semi];
+      for (const note of chord) {
+        tone({
+          type: voice.wave,
+          from: freq(note + octave + this._transpose),
+          dur: dur * (voice.staccato || 0.98),
+          gain: voice.gain * (accent ? 1.5 : 1) / Math.sqrt(chord.length),
+          attack: voice.attack || 0.012,
+          hold: voice.hold || 0.62,
+          detune: voice.detune || 0,
+          vibrato: voice.vibrato || 0,
+          vibratoRate: voice.vibratoRate || 6,
+          bus: musicBus,
+          delay,
+        });
+      }
     }
 
     const d = this._drums;
     if (!d || drop.includes('drums')) return;
 
-    // The last half-bar of a pass turns into a fill announcing the change.
+    // The last half-bar of a pass turns into a fill announcing the change, and
+    // when the key is about to move the fill carries the new key's dominant.
     if (local >= this._loopLen - 4) {
       snareAt(at, local % 2 ? 0.16 : 0.26);
       if (local === this._loopLen - 1) hatAt(at, 0.16, true);
+      if (this._nextTranspose !== this._transpose && local >= this._loopLen - 2) {
+        const dominant = this._nextTranspose + 7 - 24;      // V of the target key
+        tone({
+          type: 'triangle',
+          from: freq(dominant),
+          dur: this._stepDur * 1.6,
+          gain: 0.16,
+          attack: 0.01,
+          hold: 0.5,
+          bus: musicBus,
+          delay,
+        });
+      }
       return;
     }
-    const hit = (pattern) => pattern && pattern[step % pattern.length] === 'x';
-    if (hit(d.kick)) kickAt(at, 0.42);
-    if (hit(d.snare)) snareAt(at, 0.24);
-    if (hit(d.hat) || (v.busyHats && step % 2 === 0)) hatAt(at, step % 4 === 0 ? 0.12 : 0.07);
+    // Patterns are read modulo their own length, so a 12-step ride over a
+    // 16-step bar is a 3-against-4 that walks around the beat for four bars
+    // before it lines up again. That is where the polyrhythm comes from.
+    const at_ = (pattern, mark) => pattern && pattern[step % pattern.length] === mark;
+    if (at_(d.kick, 'x')) kickAt(at, 0.46);
+    if (at_(d.snare, 'x')) snareAt(at, 0.24);
+    if (at_(d.snare, 'g')) snareAt(at, 0.07);            // ghost note
+    if (at_(d.hat, 'x') || (v.busyHats && step % 2 === 0)) hatAt(at, step % 4 === 0 ? 0.12 : 0.07);
+    if (at_(d.hat, 'o')) hatAt(at, 0.11, true);
+    if (at_(d.ride, 'x')) hatAt(at, 0.055, true);
   },
 };
 
