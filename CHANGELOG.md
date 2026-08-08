@@ -7,6 +7,20 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.19 — linkin esikatselukortti
+
+### Lisätty
+- **Open Graph -kortti**: kun linkki jaetaan Slackiin, Discordiin tai someen,
+  esikatselussa näkyy pelin alkuruutu otsikoineen.
+- `node tools/make-card.mjs` **valokuvaa kortin pelistä itsestään** ja kirjoittaa
+  `card.png`:n. *Miksi näin:* Slack ja muut eivät renderöi SVG:tä esikatselussa,
+  joten yksi bittikartta on pakko olla — mutta käsin piirretty kortti vanhenee
+  heti kun peli muuttuu, ja generoitu ei. Aja työkalu kun alkuruutu muuttuu.
+- Metatiedoissa on absoluuttiset URL:t, koska esikatselun hakee palvelu omalta
+  palvelimeltaan eikä suhteellinen polku tarkoita siellä mitään.
+
+---
+
 ## v26.08.08.18 — aavikon yö
 
 ### Lisätty

@@ -154,6 +154,7 @@ npm i -D playwright && npx playwright install chromium   # kerran
 node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
 node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
 node tools/gen-levels.mjs    # generoi maailman 5 kentät tilastoista
+node tools/make-card.mjs     # päivittää linkkien esikatselukuvan card.png
 ```
 
 `verify.mjs` tarjoilee sivuston itse, ajaa botin läpi jokaisen kentän ja

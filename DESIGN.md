@@ -13,10 +13,15 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 
 | osa-alue | miten tehty | mitä *ei* ole käytetty |
 | --- | --- | --- |
-| Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Repossa ei ole yhtään kuvatiedostoa. | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä. |
+| Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä. |
 | Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita olemassa olevista sävelmistä. |
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
 | Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
+
+Repon ainoa binääri on `card.png`, linkkien esikatselukuva. Sekin on generoitu
+**pelistä itsestään** (`node tools/make-card.mjs` valokuvaa alkuruudun), koska
+Slack ja muut eivät renderöi SVG:tä esikatselussa. Se ei ole ulkopuolista
+materiaalia eikä sitä piirretty käsin.
 
 Melodiat on sävelletty tätä peliä varten. Jos joskus lisätään sävelmä joka
 muistuttaa jotain olemassa olevaa, se ei mene sisään — samankaltaisuus on
