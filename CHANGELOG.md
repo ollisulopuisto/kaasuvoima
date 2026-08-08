@@ -7,6 +7,29 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.11 — linnakkeen ovi ja säännöt koko pelille
+
+### Korjattu
+- **Linnakkeen ovi oli mahdoton ohittaa.** Pomo seuraa pelaajaa, ja koska
+  areenan sivut ovat auki, se käveli ulos käytävään ja **putosi kuiluun**.
+  Instrumentoitu läpipeluu: pomon y kasvoi 144 → 1650 → 2458 (kentän korkeus on
+  240), ja se poistettiin framella 1002 kaatamattomana. Silloin `bossDefeated`
+  jää epätodeksi eikä ovi aukea koskaan — kenttä on läpäisemätön eikä pelaaja
+  näe miksi.
+  Pomo kääntyy nyt jyrkänteillä kuten kilpikonnatkin, `alwaysActive`-entiteettiä
+  ei koskaan siivota kameran taakse jäämisen takia, ja jos pomo jostain syystä
+  silti tipahtaa, se palautetaan aloituspaikalleen.
+
+### Lisätty
+- **Kenttäsäännöt omaan moduuliinsa** (`src/data/rules.js`), jota sekä
+  generaattori että `tools/verify.mjs` käyttävät — säännöt eivät voi enää
+  erkaantua toisistaan.
+- **Säännöt ajetaan nyt kaikille 20 kentälle**, ei vain generoiduille. Käsin
+  tehtyjen rikkeet raportoidaan työlistana (ne on tehty vanhalle
+  hyppybudjetille), generoitujen rikkeet kaatavat ajon.
+
+---
+
 ## v26.08.08.10 — kadonneet hypyt ja mykkä ääni
 
 ### Korjattu

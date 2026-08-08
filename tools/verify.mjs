@@ -101,6 +101,7 @@ const report = await page.evaluate(async () => {
   const levels = [];
   const failures = [];
   const checks = [];
+  let ruleReport = [];
 
   /* ------------------------------- levels ------------------------------ */
   for (const id of levelIds()) {
@@ -415,6 +416,92 @@ const report = await page.evaluate(async () => {
     expect('every jump press launches a jump', missed === 0, `${missed}/12 presses ignored`);
   }
 
+  /* Running past the boss must not delete it. The fortress door only opens on
+   * `bossDefeated`, so a despawned boss is an unwinnable level. */
+  {
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-F');
+    game.setScene(s);
+    const boss = s.entities.find((e) => e.constructor.name === 'Boss');
+    const i = mkInput();
+    // Put the player at the far end of the arena, where the door is, and let
+    // the camera settle there — the boss is now way behind.
+    // Run the level the way a player does. The boss chases, so it will follow
+    // the player out of its arena if nothing stops it.
+    i.held.right = true;
+    i.held.run = true;
+    let lost = null;
+    for (let f = 0; f < 1500; f++) {
+      i.pressed = blank();
+      if (f % 35 === 0) { i.pressed.jump = true; i.held.jump = true; } else if (f % 35 > 12) i.held.jump = false;
+      s.player.invuln = Math.max(s.player.invuln, 4);      // survive long enough to watch
+      s.update(i);
+      if (!lost && (!s.entities.includes(boss) || boss.remove || boss.y > s.heightPx)) {
+        lost = { f, x: Math.round(boss.x), y: Math.round(boss.y), hp: boss.hp };
+      }
+    }
+    expect('the boss cannot leave its arena and fall out of the level',
+      !lost && !s.bossDefeated === !s.bossDefeated && s.entities.includes(boss),
+      lost ? `pomo katosi framella ${lost.f} kohdassa ${lost.x},${lost.y} hp ${lost.hp}` : '');
+
+    // The save state has to bring the boss back too, or the door never opens.
+    game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-f');
+    game.slot = 2;
+    game.quickSave();
+    game.quickLoad();
+    const after = game.scene;
+    const bossBack = after.entities.filter((e) => e.constructor.name === 'Boss').length;
+    expect('a save state in the fortress keeps the boss',
+      bossBack === 1 && after.entities.length > 0,
+      `${bossBack} pomoa, ${after.entities.length} entiteettiä`);
+
+    // And with the boss down, the door has to actually let you out.
+    reset({ type: 'shroom', level: 1 });
+    const s2 = new LevelScene(game, '1-F');
+    game.setScene(s2);
+    s2.bossDefeated = true;
+    let finished = null;
+    game.finishLevel = (r) => { finished = r; };
+    const door = [];
+    for (let ty = 0; ty < s2.h; ty++) {
+      for (let tx = 0; tx < s2.w; tx++) if (s2.grid[ty][tx] === 'D') door.push({ tx, ty });
+    }
+    if (door.length) {
+      s2.player.x = door[0].tx * 16;
+      s2.player.y = door[0].ty * 16;
+      for (let f = 0; f < 200 && !finished; f++) { s2.update(i); i.pressed = blank(); }
+    }
+    expect('the fortress door opens once the boss is beaten',
+      door.length === 1 && !!finished && finished.cleared,
+      `${door.length} ovea, finished ${JSON.stringify(finished)}`);
+  }
+
+  /* The design rules, applied to EVERY level in the game rather than only the
+   * generated ones. Worlds 1-4 predate the current jump budget, so their
+   * violations are reported as a work list, not as a build failure. */
+  {
+    const { validateLevel } = await import('/src/data/rules.js');
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const budget = await (await fetch('/tools/jump-budget.json')).json();
+    const perLevel = [];
+    for (const id of levelIds()) {
+      const problems = validateLevel(getLevel(id).rows, budget);
+      if (problems.length) perLevel.push({ id, problems });
+    }
+    const generatedBad = perLevel.filter((l) => /^5-[123]$/.test(l.id));
+    checks.push({
+      name: 'design rules across every level',
+      ok: generatedBad.length === 0,
+      detail: perLevel.length
+        ? `${perLevel.length}/${levelIds().length} kenttää rikkoo sääntöjä`
+        : 'kaikki kentät sääntöjen mukaisia',
+    });
+    if (generatedBad.length) {
+      failures.push(...generatedBad.flatMap((l) => l.problems.map((p) => `${l.id}: ${p}`)));
+    }
+    ruleReport = perLevel;
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');
@@ -539,7 +626,7 @@ const report = await page.evaluate(async () => {
   }
 
   return {
-    levels, checks, failures, worlds: WORLDS.length,
+    levels, checks, failures, worlds: WORLDS.length, ruleReport,
     audio: { sfx: Sfx.names(), music: Music.names() },
   };
 });
@@ -589,6 +676,19 @@ for (const l of report.levels) {
 }
 console.log('');
 for (const c of report.checks) console.log(`  ${c.ok ? 'ok  ' : 'FAIL'} ${c.name}${c.detail ? `  [${c.detail}]` : ''}`);
+
+if (report.ruleReport.length) {
+  console.log('\nSUUNNITTELUSAANNOT — korjattavaa:');
+  for (const level of report.ruleReport) {
+    const counts = {};
+    for (const p of level.problems) {
+      const kind = p.replace(/ at column \d+.*| at \d+,\d+.*| of \d+/g, '');
+      counts[kind] = (counts[kind] || 0) + 1;
+    }
+    const summary = Object.entries(counts).map(([k, n]) => `${n}x ${k}`).join(', ');
+    console.log(`  ${level.id.padEnd(6)} ${summary}`);
+  }
+}
 
 const hardFailures = [...report.failures, ...(booted ? [] : ['game did not boot']), ...errors];
 console.log('');

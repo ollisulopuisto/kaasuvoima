@@ -25,6 +25,7 @@
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateLevel } from '../src/data/rules.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const stats = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
@@ -481,106 +482,9 @@ const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H']);
 
 function validate(id, rows) {
-  const problems = [];
-  const w = rows[0].length;
-  const at = (x, y) => (y < 0 || y >= ROWS || x < 0 || x >= w ? ' ' : rows[y][x]);
-
-  if (rows.some((r) => r.length !== w)) problems.push('ragged rows');
+  const problems = validateLevel(rows, budget);
   if (!rows.some((r) => r.includes('1'))) problems.push('no player start');
   if (!rows.some((r) => r.includes('F'))) problems.push('no goal');
-
-  // Floor profile: the top of the connected ground stack, so a floating block
-  // row is never mistaken for terrain the player has to climb.
-  const floor = [];
-  for (let x = 0; x < w; x++) {
-    if (!SOLID.has(at(x, FLOOR + 1)) && !SOLID.has(at(x, FLOOR))) { floor.push(null); continue; }
-    let y = SOLID.has(at(x, FLOOR)) ? FLOOR : FLOOR + 1;
-    while (y > 0 && SOLID.has(at(x, y - 1))) y--;
-    floor.push(y);
-  }
-  let gap = 0;
-  for (let x = 0; x < w; x++) {
-    const bottomless = ![FLOOR, FLOOR + 1].some((y) => SOLID.has(at(x, y)))
-      && !'W'.includes(at(x, FLOOR));
-    if (bottomless) {
-      gap++;
-      continue;
-    }
-    if (gap > REACH.gap) {
-      // Wide gaps are only legal with something to land on in the middle.
-      const from = x - gap;
-      const hasStone = rows.slice(0, FLOOR).some(
-        (row) => row.slice(from, x).includes('-'),
-      );
-      if (!hasStone) problems.push(`gap of ${gap} at column ${from} with no stepping stone`);
-    }
-    gap = 0;
-  }
-  for (let x = 1; x < w; x++) {
-    if (floor[x] === null || floor[x - 1] === null) continue;
-    const rise = floor[x - 1] - floor[x];
-    if (rise > REACH.wall) problems.push(`wall of ${rise} at column ${x}`);
-  }
-
-  // Headroom: the tallest power level needs HEAD clear tiles over the floor.
-  for (let x = 0; x < w; x++) {
-    if (floor[x] === null || floor[x] > FLOOR) continue;
-    for (let y = floor[x] - HEAD; y < floor[x]; y++) {
-      if (SOLID.has(at(x, y))) { problems.push(`no headroom at column ${x}`); break; }
-    }
-  }
-
-  // Nothing may be buried in a wall.
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < w; x++) {
-      const ch = at(x, y);
-      if (ch !== '1' && !ENEMY.has(ch)) continue;
-      // Hovering kinds and the ones that live in pipes have no footing to check.
-      if ('Apfr'.includes(ch)) continue;
-      if (!SOLID.has(at(x, y + 1))) problems.push(`${ch} at ${x},${y} is standing on nothing`);
-      if (SOLID.has(ch === 'H' ? ' ' : at(x, y))) problems.push(`${ch} at ${x},${y} is inside a wall`);
-    }
-  }
-
-  /*
-   * Two rules that make the power-up mean something without making it a tax:
-   *
-   *   1. The ground route is always clearable at the smallest size. That is
-   *      already enforced above — every gap is inside the plain jump budget or
-   *      has a stepping stone — so the fart double jump only ever opens the
-   *      high routes, never the level.
-   *   2. A mushroom sits in the first quarter, so losing your power early is a
-   *      setback rather than a sentence.
-   */
-  const quarter = Math.floor(w * 0.25);
-  let earlyPower = false;
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < quarter; x++) if (at(x, y) === '!') earlyPower = true;
-  }
-  if (!earlyPower) problems.push('no power-up in the first quarter');
-
-  /*
-   * No stairway to nothing. A run of platforms is a promise; if the player
-   * climbs it and finds bare sky, they learn to stop climbing. Platforms that
-   * bridge a bottomless gap are exempt — getting across is the payoff.
-   */
-  const REWARD = new Set(['o', '!', '?', 'N', 'B']);
-  for (let y = 0; y < FLOOR; y++) {
-    let run = 0;
-    for (let x = 0; x <= w; x++) {
-      if (at(x, y) === '-') { run++; continue; }
-      if (run) {
-        const from = x - run;
-        const overGap = Array.from({ length: run }, (_, i) => from + i)
-          .some((px) => !SOLID.has(at(px, FLOOR)) && !SOLID.has(at(px, FLOOR + 1)));
-        const paid = !overGap && Array.from({ length: run + 2 }, (_, i) => from - 1 + i)
-          .some((px) => [1, 2, 3, 4].some((up) => REWARD.has(at(px, y - up))));
-        if (!overGap && !paid) problems.push(`platform at ${from},${y} leads to nothing`);
-      }
-      run = 0;
-    }
-  }
-
   return problems.map((p) => `${id}: ${p}`);
 }
 

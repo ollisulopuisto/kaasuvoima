@@ -602,6 +602,8 @@ export class Boss extends Enemy {
     this.active = true;
     this.baseW = 30;
     this.baseH = 32;
+    this.spawnX = x;
+    this.spawnY = y;
   }
 
   get giant() { return this.variant === 3; }
@@ -638,6 +640,19 @@ export class Boss extends Enemy {
     }
     if (moveX(this, this.level)) this.facing *= -1;
 
+    /*
+     * The boss chases the player, and the arena has open sides, so without this
+     * it walks straight out into the corridor and falls down the first pit.
+     * That leaves a fortress with no boss and a door that can never open —
+     * the level becomes unwinnable with no way for the player to know why.
+     * So it turns at ledges, exactly like the shell walkers do.
+     */
+    if (this.onGround && !footingAhead(this.level, this.x + this.facing * 4, this.y, this.w, this.h)) {
+      this.facing *= -1;
+      this.charging = 0;
+      this.x += this.facing * 2;
+    }
+
     const fallSpeed = this.onGround ? 0 : this.vy;
     if (this.onGround && --this.jumpTimer <= 0) {
       this.vy = -5.6;
@@ -651,6 +666,16 @@ export class Boss extends Enemy {
 
     applyGravity(this, 1);
     moveY(this, this.level);
+
+    // Last line of defence: if it ever gets out anyway, put it back rather than
+    // let the level quietly become impossible.
+    if (this.y > this.level.heightPx) {
+      this.x = this.spawnX;
+      this.y = this.spawnY;
+      this.vx = 0;
+      this.vy = 0;
+      this.charging = 0;
+    }
 
     // A hard landing sends shockwaves out along the floor. Only after a real
     // fall, and never more than a couple of pairs at a time.

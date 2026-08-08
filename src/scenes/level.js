@@ -319,7 +319,9 @@ export class LevelScene {
         else continue;
       }
       e.update();
-      if (e.x + e.w < this.cam.x - 240 && e.kind === 'enemy') e.remove = true;
+      // `alwaysActive` means the entity is part of the level's state, not just
+      // scenery near the camera — a boss must never be tidied away.
+      if (!e.alwaysActive && e.x + e.w < this.cam.x - 240 && e.kind === 'enemy') e.remove = true;
     }
     this.entities = this.entities.filter((e) => !e.remove);
   }
