@@ -54,6 +54,8 @@ export const CHUNKS = {
   coins: ck(16, { 9: '   o o o o', 13: G, 14: G }),
   qrow: ck(16, { 9: '    ?B?B?', 13: G, 14: G }),
   power: ck(16, { 9: '      !', 13: G, 14: G }),
+  // Same block, but for the chunks that have a ceiling.
+  fort_power: ck(16, { 0: G, 1: G, 9: '      !', 13: G, 14: G }),
   power_hi: ck(16, { 5: '      !', 9: '   BB?BB', 13: G, 14: G }),
   bricks: ck(16, { 9: '  BBBB?BBBB', 13: G, 14: G }),
   // Four tiles tall: clearable with a running jump, awkward from a standstill.
@@ -289,7 +291,9 @@ export const CHUNKS = {
     2: 'XX          XX',
     3: 'XX    r     XX',
     4: 'XX          XX',
-    8: 'XX   BBBB   XX',
+    // Bricks in the middle only: over the pillars they left the tallest power
+    // level with two tiles of clearance, and it is 2.7 tiles tall.
+    8: '     BBBB',
     11: 'XX          XX',
     12: 'XX  c    H  XX',
     13: G,
