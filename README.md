@@ -1,5 +1,9 @@
 # Super Fart Bros 3
 
+> Suunnitteluperiaatteet ja sisällön alkuperä: [DESIGN.md](DESIGN.md) ·
+> Muutosloki perusteluineen: [CHANGELOG.md](CHANGELOG.md) ·
+> Liikkeen vakiot: [PHYSICS.md](PHYSICS.md)
+
 Selaimessa pyörivä tasohyppelypeli Super Mario Bros. 3:n hengessä: oma
 **maailmankarttamoottori** (solmut, polut, avautuvat reitit, hernetalot) ja oma
 **kenttämoottori** (ruutupohjainen kenttä, fysiikka, viholliset, viisiportaiset
@@ -80,9 +84,9 @@ Botti osaa vain juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaali
 | Alas | kyykky · pudotus läpi puulavan |
 | Enter | tauko kentässä · kartalla käytä varastoesine |
 | M | äänet päälle/pois |
-| K / L | tallenna tila / lataa tila (kuten emulaattorissa); myös F5 / F8 |
-| J | vaihda tallennuspaikkaa (1–3); myös F6 |
-| I tai ` | debug-ruutu: fps, entiteetit, pelaajan tila |
+| 1 / 2 | tallenna tila / lataa tila (kuten emulaattorissa); myös F5 / F8 |
+| 3 | vaihda tallennuspaikkaa (1–3); myös F6 |
+| 9 tai ` | debug-ruutu: fps, entiteetit, pelaajan tila |
 
 Peliohjain (standard gamepad) toimii myös.
 

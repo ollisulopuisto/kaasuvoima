@@ -9,6 +9,8 @@ import { LevelScene } from './scenes/level.js';
 import { InterludeScene, GameOverScene, EndingScene } from './scenes/cards.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
+import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
+import { qualifies } from './core/scores.js';
 
 const W = 320;
 const H = 240;
@@ -34,7 +36,7 @@ class Game {
     this.flashTimer = 0;
     this.pendingNode = null;
 
-    // I / ` toggles the developer overlay.
+    // 9 / ` toggles the developer overlay.
     this.debug = false;
     this.fps = 0;
     this.frameMs = 0;
@@ -62,6 +64,27 @@ class Game {
 
   toWorldMap() {
     this.setScene(new WorldMapScene(this));
+  }
+
+  toHighScores(highlight = -1) {
+    this.setScene(new HighScoreScene(this, highlight));
+  }
+
+  /**
+   * End of a run: onto the board if the score is good enough, then show it.
+   * `world` is one-based so the table reads like the level names do.
+   */
+  finishRun() {
+    const result = {
+      score: this.state.score,
+      world: this.state.world + 1,
+      assisted: !!this.state.usedSaveState,
+    };
+    if (!qualifies(result.score)) {
+      this.toHighScores();
+      return;
+    }
+    this.setScene(new NameEntryScene(this, result, (index) => this.toHighScores(index)));
   }
 
   /** Builds a level scene without showing it — used by save-state restore. */
@@ -180,6 +203,9 @@ class Game {
     }
     this.paused = false;
     if (restoreState(this, snap)) {
+      // The run is now a rewound one. The board marks these with a star.
+      this.state.usedSaveState = true;
+      this.persist();
       this.toast(`TILA ${this.slot} LADATTU`);
       Sfx.play('powerup');
     } else {
@@ -224,7 +250,7 @@ class Game {
       ctx.fillRect(0, 90, W, 48);
       drawText(ctx, 'TAUKO', W / 2, 104, { color: '#ffffff', align: 'center', shadow: '#303048' });
       drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
-      drawText(ctx, `K TALLENNA  L LATAA  J PAIKKA ${this.slot}  I DEBUG`, W / 2, 126,
+      drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  9 DEBUG`, W / 2, 126,
         { color: '#8890b0', align: 'center' });
     }
     if (this.flashTimer > 0) {

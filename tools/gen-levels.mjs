@@ -175,12 +175,13 @@ const PIECES = {
   },
 
   /**
-   * Ummetus gate: a cork guy patrols in front of a gap only the fart jump can
-   * clear comfortably, so getting corked turns a hop into a problem. The soup
-   * that cures it is on the far side, in reach but not free.
+   * Ummetus gate: a cork guy patrols in front of a gap, so getting corked turns
+   * a routine hop into a problem. The gap itself stays inside the plain jump
+   * budget — the fart jump is never the price of admission — and the soup that
+   * cures the cork sits on the far side.
    */
   corkGate(c, x) {
-    const w = REACH.softGap;
+    const w = REACH.gap;
     c.ground(x, 5);
     c.set(x + 2, FLOOR - 1, 'c');
     const half = Math.floor(w / 2);
@@ -189,6 +190,24 @@ const PIECES = {
     c.ground(x + 5 + w, 6);
     c.set(x + 5 + w + 3, FLOOR - 4, '!');
     return 5 + w + 6;
+  },
+
+  /**
+   * A reward that only the fart double jump reaches: a ledge above the normal
+   * jump, with something worth having on it. This is the whole bargain of the
+   * power-up — it opens places, it does not open the level.
+   */
+  highReward(c, x, ctx) {
+    const w = 14;
+    c.ground(x, w);
+    const height = REACH.wall + 4;
+    for (let i = 0; i < 4; i++) c.set(x + 5 + i, FLOOR - height, '-');
+    c.set(x + 6, FLOOR - height - 1, ctx.gaveePower ? 'o' : '!');
+    c.set(x + 7, FLOOR - height - 1, 'o');
+    c.set(x + 8, FLOOR - height - 1, 'o');
+    ctx.gaveePower = true;
+    ctx.hasHighReward = true;
+    return w;
   },
 
   /** Närästys jets rising out of the floor, spaced so a run can thread them. */
@@ -274,11 +293,19 @@ const PIECES = {
     const count = range(2, 3);
     const w = count * 5 + 4;
     c.ground(x, w);
+    // A climb has to lead somewhere: the last and highest platform always
+    // carries something. Stairways to nothing teach the player to ignore them.
+    let topHeight = 0;
+    let topX = x;
     for (let i = 0; i < count; i++) {
       const height = range(4, 7);
       for (let j = 0; j < 3; j++) c.set(x + 2 + i * 5 + j, FLOOR - height, '-');
       if (rnd() < 0.6) c.set(x + 3 + i * 5, FLOOR - height - 2, 'o');
+      if (height >= topHeight) { topHeight = height; topX = x + 3 + i * 5; }
     }
+    c.set(topX, FLOOR - topHeight - 2, 'o');
+    c.set(topX - 1, FLOOR - topHeight - 2, 'o');
+    c.set(topX + 1, FLOOR - topHeight - 2, 'o');
     return w;
   },
 
@@ -338,7 +365,7 @@ const PALETTES = {
     enemies: ['g', 'g', 'k', 'f'],
     weights: {
       gap: 4, enemies: 5, blockRow: 4, stairs: 2, pipe: 2, platforms: 3,
-      coins: 2, notes: 1, stinkGap: 2, corkGate: 1,
+      coins: 2, notes: 1, stinkGap: 2, corkGate: 1, highReward: 2,
     },
   },
   dunes: {
@@ -346,6 +373,7 @@ const PALETTES = {
     weights: {
       gap: 3, enemies: 4, blockRow: 3, stairs: 2, platforms: 3, spikes: 2,
       heartburn: 3, sun: 1, coins: 2, stinkGap: 2, corkGate: 2, lava: 1,
+      highReward: 2,
     },
   },
   glacier: {
@@ -353,6 +381,7 @@ const PALETTES = {
     weights: {
       gap: 4, enemies: 4, blockRow: 3, platforms: 4, stairs: 2, spikes: 2,
       coins: 2, notes: 1, stinkGap: 3, corkGate: 2, lava: 2, heartburn: 2,
+      highReward: 2,
     },
   },
 };
@@ -395,6 +424,27 @@ function buildLevel({ palette, targetWidth }) {
     if (name === lastPiece) name = weightedPiece(pal.weights);   // avoid doubles
     lastPiece = name;
     x += PIECES[name](c, x, ctx);
+  }
+
+  /*
+   * Every level opens with a mushroom within its first quarter. Losing your
+   * power at the start of a level should not sentence you to the whole of it
+   * at the smallest size — the recovery has to be nearby, not a reward for
+   * surviving to the middle.
+   */
+  const quarter = Math.floor(x * 0.25);
+  let hasEarlyPower = false;
+  for (let y = 0; y < ROWS; y++) {
+    for (let px = 0; px < quarter; px++) if (c.get(px, y) === '!') hasEarlyPower = true;
+  }
+  if (!hasEarlyPower) {
+    for (let px = intro + 4; px < quarter && !hasEarlyPower; px++) {
+      const clear = [0, 1].every((d) => c.get(px + d, FLOOR) === '#'
+        && [1, 2, 3, 4, 5].every((up) => c.get(px + d, FLOOR - up) === ' '));
+      if (!clear) continue;
+      c.set(px, FLOOR - 4, '!');
+      hasEarlyPower = true;
+    }
   }
 
   // The piece weights alone undershoot the corpus enemy density, so top it up
@@ -488,6 +538,45 @@ function validate(id, rows) {
       if ('Apfr'.includes(ch)) continue;
       if (!SOLID.has(at(x, y + 1))) problems.push(`${ch} at ${x},${y} is standing on nothing`);
       if (SOLID.has(ch === 'H' ? ' ' : at(x, y))) problems.push(`${ch} at ${x},${y} is inside a wall`);
+    }
+  }
+
+  /*
+   * Two rules that make the power-up mean something without making it a tax:
+   *
+   *   1. The ground route is always clearable at the smallest size. That is
+   *      already enforced above — every gap is inside the plain jump budget or
+   *      has a stepping stone — so the fart double jump only ever opens the
+   *      high routes, never the level.
+   *   2. A mushroom sits in the first quarter, so losing your power early is a
+   *      setback rather than a sentence.
+   */
+  const quarter = Math.floor(w * 0.25);
+  let earlyPower = false;
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < quarter; x++) if (at(x, y) === '!') earlyPower = true;
+  }
+  if (!earlyPower) problems.push('no power-up in the first quarter');
+
+  /*
+   * No stairway to nothing. A run of platforms is a promise; if the player
+   * climbs it and finds bare sky, they learn to stop climbing. Platforms that
+   * bridge a bottomless gap are exempt — getting across is the payoff.
+   */
+  const REWARD = new Set(['o', '!', '?', 'N', 'B']);
+  for (let y = 0; y < FLOOR; y++) {
+    let run = 0;
+    for (let x = 0; x <= w; x++) {
+      if (at(x, y) === '-') { run++; continue; }
+      if (run) {
+        const from = x - run;
+        const overGap = Array.from({ length: run }, (_, i) => from + i)
+          .some((px) => !SOLID.has(at(px, FLOOR)) && !SOLID.has(at(px, FLOOR + 1)));
+        const paid = !overGap && Array.from({ length: run + 2 }, (_, i) => from - 1 + i)
+          .some((px) => [1, 2, 3, 4].some((up) => REWARD.has(at(px, y - up))));
+        if (!overGap && !paid) problems.push(`platform at ${from},${y} leads to nothing`);
+      }
+      run = 0;
     }
   }
 

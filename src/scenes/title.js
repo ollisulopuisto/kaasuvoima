@@ -15,8 +15,8 @@ export class TitleScene {
   enter() {
     Music.play('title');
     this.options = Save.exists()
-      ? ['JATKA PELIA', 'UUSI PELI']
-      : ['UUSI PELI'];
+      ? ['JATKA PELIA', 'UUSI PELI', 'PARHAAT PIERUT']
+      : ['UUSI PELI', 'PARHAAT PIERUT'];
     this.cursor = 0;
   }
 
@@ -43,7 +43,9 @@ export class TitleScene {
       input.consume('jump');
       input.consume('start');
       Sfx.play('select');
-      if (this.options[this.cursor] === 'JATKA PELIA') this.game.continueGame();
+      const choice = this.options[this.cursor];
+      if (choice === 'JATKA PELIA') this.game.continueGame();
+      else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
       else this.game.newGame();
     }
   }
@@ -105,7 +107,10 @@ export class TitleScene {
       }
     });
 
-    drawText(ctx, 'Z HYPPY   X JUOKSU/PIERU   ENTER VALITSE', 160, 228, {
+    drawText(ctx, 'NUOLET TAI WASD   HYPPY Z / VALI / L', 160, 220, {
+      color: '#8890b0', align: 'center',
+    });
+    drawText(ctx, 'JUOKSU JA PIERU X / K   ENTER VALITSE', 160, 230, {
       color: '#8890b0', align: 'center',
     });
   }

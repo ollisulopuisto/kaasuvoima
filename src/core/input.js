@@ -1,4 +1,16 @@
+/*
+ * Both hand positions are live at once, so there is no mode to pick:
+ *
+ *   arrows + Z/X          steering right hand, actions left hand
+ *   WASD + K/L or ,/.     steering left hand, actions right hand
+ *   space                 jump, whichever way round you sit
+ *
+ * Keys are `event.code`, i.e. physical positions, so a Finnish, US or Dvorak
+ * layout all land in the same place. That matters most for the comma and
+ * period, which move around a lot between layouts.
+ */
 const KEYMAP = {
+  // steering
   ArrowLeft: 'left',
   ArrowRight: 'right',
   ArrowUp: 'up',
@@ -7,22 +19,35 @@ const KEYMAP = {
   KeyD: 'right',
   KeyW: 'up',
   KeyS: 'down',
+  // jump
   KeyZ: 'jump',
   Space: 'jump',
+  KeyL: 'jump',
+  Period: 'jump',
+  Numpad0: 'jump',
+  // run / fart
   KeyX: 'run',
+  KeyK: 'run',
+  Comma: 'run',
   ShiftLeft: 'run',
   ShiftRight: 'run',
+  NumpadEnter: 'run',
   Enter: 'start',
   Escape: 'start',
-  KeyM: 'mute',
-  // macOS grabs most of the function row (Mission Control, brightness, and so
-  // on), so the letters are the real bindings and the F-keys are a bonus for
-  // whoever has them free.
-  KeyK: 'quicksave',
-  KeyL: 'quickload',
-  KeyJ: 'slot',
-  KeyI: 'debug',
+  // Utility keys live on the number row, well away from anything a thumb
+  // reaches for mid-jump. These are `event.code` values, i.e. physical keys,
+  // so they land in the same place whatever the keyboard layout says.
+  // macOS eats most of the function row, so the F-keys are only a bonus.
+  Digit1: 'quicksave',
+  Digit2: 'quickload',
+  Digit3: 'slot',
+  Digit9: 'debug',
+  Digit0: 'mute',
+  Numpad1: 'quicksave',
+  Numpad2: 'quickload',
+  Numpad3: 'slot',
   Backquote: 'debug',
+  KeyM: 'mute',
   F5: 'quicksave',
   F6: 'slot',
   F8: 'quickload',

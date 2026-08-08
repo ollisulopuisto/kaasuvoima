@@ -68,7 +68,7 @@ export class GameOverScene {
     if (this.tick > 200 || input.pressed.jump || input.pressed.start) {
       input.consume('jump');
       input.consume('start');
-      this.game.toTitle();
+      this.game.finishRun();
     }
   }
 
@@ -97,7 +97,7 @@ export class EndingScene {
     if (this.tick > 60 && (input.pressed.jump || input.pressed.start)) {
       input.consume('jump');
       input.consume('start');
-      this.game.toTitle();
+      this.game.finishRun();
     }
   }
 

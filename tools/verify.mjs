@@ -299,6 +299,72 @@ const report = await page.evaluate(async () => {
       `power ${powerBefore}->${s.player.powerLevel}, plant box h=${plant.box.h}`);
   }
 
+  /* The piranha's hitbox must be exactly the part of it sticking out of the
+   * pipe, at every point of its animation, and a sliver too small to see must
+   * not be able to hurt anyone. */
+  {
+    reset();
+    const s = new LevelScene(game, '1-2');
+    const { Plant } = await import('/src/entities/enemies.js');
+    const plant = new Plant(s, 100, 112);
+    const mouth = 112 + 32;
+    const bad = [];
+    for (let offset = 0; offset <= 32; offset++) {
+      plant.offset = offset;
+      plant.y = plant.pipeTopY + offset;
+      const box = plant.box;
+      if (box.y + box.h !== mouth) bad.push(`offset ${offset}: box ends at ${box.y + box.h}, not ${mouth}`);
+      if (box.y < plant.pipeTopY) bad.push(`offset ${offset}: box starts above the sprite`);
+      const visible = mouth - box.y;
+      if (!plant.harmless && visible < 8) bad.push(`offset ${offset}: ${visible}px sliver still hurts`);
+      if (plant.harmless && visible >= 12) bad.push(`offset ${offset}: ${visible}px visible but harmless`);
+    }
+    expect('the piranha hitbox is exactly what sticks out of the pipe',
+      bad.length === 0, bad.slice(0, 3).join('; '));
+  }
+
+  /* ----------------------------- high scores --------------------------- */
+  {
+    const scores = await import('/src/core/scores.js');
+    scores.clearScores();
+    expect('an empty board takes any score', scores.qualifies(10) && !scores.qualifies(0));
+
+    for (let i = 0; i < scores.MAX_ENTRIES; i++) {
+      scores.addScore({ name: `P${i}`, score: 1000 + i * 100, world: 1 });
+    }
+    const full = scores.loadScores();
+    const sorted = full.every((e, i) => i === 0 || full[i - 1].score >= e.score);
+    expect('the board keeps the best ten in order',
+      full.length === scores.MAX_ENTRIES && sorted && full[0].score === 1900,
+      `${full.length} rows, top ${full[0].score}`);
+
+    expect('a score below the board is turned away', !scores.qualifies(500));
+    const idx = scores.addScore({ name: 'STAR', score: 5000, world: 3, assisted: true });
+    const board = scores.loadScores();
+    expect('a new best lands on top and keeps its star',
+      idx === 0 && board[0].name === 'STAR' && board[0].assisted && board.length === 10,
+      `index ${idx}, assisted ${board[0].assisted}`);
+
+    // A tie must not push the older entry down: you beat a score, not match it.
+    scores.addScore({ name: 'TIE', score: 5000, world: 1 });
+    expect('a tie stays behind the entry that got there first',
+      scores.loadScores()[0].name === 'STAR');
+    scores.clearScores();
+  }
+
+  {
+    // Loading a save state has to mark the run, or the star means nothing.
+    reset();
+    const s = new LevelScene(game, '1-1');
+    game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-1');
+    game.setScene(s);
+    game.state.usedSaveState = false;
+    game.slot = 3;
+    game.quickSave();
+    game.quickLoad();
+    expect('loading a save state marks the run as assisted', game.state.usedSaveState === true);
+  }
+
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music } = await import('/src/core/audio.js');
   {

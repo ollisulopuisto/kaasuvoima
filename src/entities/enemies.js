@@ -230,6 +230,9 @@ export class Flyer extends Enemy {
 }
 
 export class Plant extends Enemy {
+  /** Offsets at or beyond this are "down the pipe": not drawn, cannot hurt. */
+  static HIDDEN_OFFSET = 24;
+
   /** `pipeTopY` is the y of the pipe mouth; the plant hides one tile below. */
   constructor(level, x, pipeTopY) {
     super(level, x, pipeTopY, 16, 32);
@@ -242,7 +245,13 @@ export class Plant extends Enemy {
     this.alwaysActive = false;
   }
 
-  get exposed() { return this.offset < 30; }
+  /**
+   * Half a tile has to be showing before the thing counts as out. Below that
+   * it is a two-pixel sliver at the rim of the pipe — technically visible,
+   * practically not, and dying to it feels like the game cheated. The same
+   * number gates the drawing, so what can hurt you is exactly what you see.
+   */
+  get exposed() { return this.offset < Plant.HIDDEN_OFFSET; }
 
   // Down the pipe means out of play. Its box collapses to zero height, but a
   // zero-height box still straddles the player's, so this has to be explicit.
@@ -298,7 +307,7 @@ export class Plant extends Enemy {
   }
 
   draw(ctx) {
-    if (this.offset >= 31) return;
+    if (this.offset >= Plant.HIDDEN_OFFSET) return;
     ctx.save();
     ctx.beginPath();
     ctx.rect(this.x - 2, this.pipeTopY - 40, this.w + 4, 40 + this.h);

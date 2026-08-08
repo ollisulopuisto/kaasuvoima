@@ -443,9 +443,14 @@ function plantBody(ctx, x, y, frame) {
   const open = Math.floor(frame / 12) % 2 === 0;
   ctx.fillStyle = '#e04040';
   ctx.fillRect(px + 1, py, 14, 11);
+  // Polka dots, not eyes. The plant is a plant; giving it a face made it read
+  // as a character rather than a hazard. (Lead designer's call.)
   ctx.fillStyle = '#f8f8f8';
-  ctx.fillRect(px + 3, py + 2, 3, 3);
-  ctx.fillRect(px + 10, py + 2, 3, 3);
+  ctx.fillRect(px + 2, py + 1, 2, 2);
+  ctx.fillRect(px + 11, py + 2, 3, 2);
+  ctx.fillRect(px + 6, py + 0, 2, 2);
+  ctx.fillStyle = '#a02020';
+  ctx.fillRect(px + 1, py, 14, 1);
   if (open) {
     ctx.fillStyle = '#701010';
     ctx.fillRect(px + 3, py + 5, 10, 4);
