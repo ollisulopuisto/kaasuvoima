@@ -54,6 +54,46 @@ export const PLAYER_DUCK_SIZES = [
 const BASE_NORMAL = { w: 14, h: 26 };
 const BASE_DUCK = { w: 14, h: 16 };
 
+/* --------------------------- outline helper ---------------------------- */
+
+const OUTLINE_OFFSETS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+/**
+ * A drawing surface that swallows every colour change, so replaying a sprite
+ * through it paints a flat silhouette instead of the real artwork.
+ */
+function silhouette(ctx) {
+  return {
+    set fillStyle(_v) { /* colours are fixed during the outline pass */ },
+    get fillStyle() { return ctx.fillStyle; },
+    fillRect: (x, y, w, h) => ctx.fillRect(x, y, w, h),
+    save: () => ctx.save(),
+    restore: () => ctx.restore(),
+    translate: (x, y) => ctx.translate(x, y),
+    scale: (x, y) => ctx.scale(x, y),
+    drawImage: (...args) => ctx.drawImage(...args),
+  };
+}
+
+/**
+ * Draws `paint` four times as a dark silhouette, one pixel out in each
+ * direction, then once properly on top. Characters keep their shape against
+ * busy scenery this way.
+ */
+function outlined(ctx, paint, color = 'rgba(16,16,24,0.85)') {
+  ctx.save();
+  ctx.fillStyle = color;
+  const flat = silhouette(ctx);
+  for (const [dx, dy] of OUTLINE_OFFSETS) {
+    ctx.save();
+    ctx.translate(dx, dy);
+    paint(flat);
+    ctx.restore();
+  }
+  ctx.restore();
+  paint(ctx);
+}
+
 /** Runs `fn` with the horizontal axis mirrored around the sprite box. */
 function flip(ctx, x, w, doFlip, fn) {
   if (!doFlip) {
@@ -260,11 +300,11 @@ function scratch() {
 export function drawPlayer(ctx, x, y, s) {
   const level = Math.max(0, Math.min(5, s.level ?? 0));
   if (level === 0) {
-    drawPlayerBase(ctx, x, y, s, true);
+    outlined(ctx, (g) => drawPlayerBase(g, x, y, s, true));
     return;
   }
   if (level === 1) {
-    drawPlayerBase(ctx, x, y, s, false);
+    outlined(ctx, (g) => drawPlayerBase(g, x, y, s, false));
     return;
   }
 
@@ -275,7 +315,7 @@ export function drawPlayer(ctx, x, y, s) {
 
   const b = scratch();
   b.clearRect(0, 0, BUF_W, BUF_H);
-  drawPlayerBase(b, PAD.x, PAD.y, s, false);
+  outlined(b, (g) => drawPlayerBase(g, PAD.x, PAD.y, s, false));
 
   const prev = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
@@ -298,7 +338,7 @@ export function drawCork(ctx, x, y, tick) {
 
 /* ------------------------------- enemies ------------------------------- */
 
-export function drawWalker(ctx, x, y, frame, facing, squashed) {
+function walkerBody(ctx, x, y, frame, facing, squashed) {
   const px = Math.round(x);
   const py = Math.round(y);
   if (squashed) {
@@ -332,7 +372,11 @@ export function drawWalker(ctx, x, y, frame, facing, squashed) {
   });
 }
 
-export function drawShell(ctx, x, y, frame, facing, mode) {
+export function drawWalker(ctx, x, y, frame, facing, squashed) {
+  outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed));
+}
+
+function shellBody(ctx, x, y, frame, facing, mode) {
   const px = Math.round(x);
   const py = Math.round(y);
   if (mode === 'shell' || mode === 'sliding') {
@@ -370,20 +414,26 @@ export function drawShell(ctx, x, y, frame, facing, mode) {
   });
 }
 
+export function drawShell(ctx, x, y, frame, facing, mode) {
+  outlined(ctx, (g) => shellBody(g, x, y, frame, facing, mode));
+}
+
 export function drawFlyer(ctx, x, y, frame, facing) {
   const px = Math.round(x);
   const py = Math.round(y);
   const flap = Math.floor(frame / 4) % 2;
-  ctx.fillStyle = C.white;
-  ctx.fillRect(px - 4, py + (flap ? 1 : 5), 6, 5);
-  ctx.fillRect(px + 14, py + (flap ? 1 : 5), 6, 5);
-  ctx.fillStyle = '#c8c8d8';
-  ctx.fillRect(px - 4, py + (flap ? 5 : 9), 6, 1);
-  ctx.fillRect(px + 14, py + (flap ? 5 : 9), 6, 1);
-  drawWalker(ctx, px, py, frame, facing, false);
+  outlined(ctx, (g) => {
+    g.fillStyle = C.white;
+    g.fillRect(px - 4, py + (flap ? 1 : 5), 6, 5);
+    g.fillRect(px + 14, py + (flap ? 1 : 5), 6, 5);
+    g.fillStyle = '#c8c8d8';
+    g.fillRect(px - 4, py + (flap ? 5 : 9), 6, 1);
+    g.fillRect(px + 14, py + (flap ? 5 : 9), 6, 1);
+    walkerBody(g, px, py, frame, facing, false);
+  });
 }
 
-export function drawPlant(ctx, x, y, frame) {
+function plantBody(ctx, x, y, frame) {
   const px = Math.round(x);
   const py = Math.round(y);
   ctx.fillStyle = C.greenDark;
@@ -407,8 +457,12 @@ export function drawPlant(ctx, x, y, frame) {
   }
 }
 
+export function drawPlant(ctx, x, y, frame) {
+  outlined(ctx, (g) => plantBody(g, x, y, frame));
+}
+
 /** Ruskea pilvi — a drifting brown stink cloud. */
-export function drawStinkCloud(ctx, x, y, frame, facing, angry) {
+function stinkBody(ctx, x, y, frame, facing, angry) {
   const px = Math.round(x);
   const py = Math.round(y);
   const puff = Math.floor(frame / 8) % 2;
@@ -435,8 +489,12 @@ export function drawStinkCloud(ctx, x, y, frame, facing, angry) {
   });
 }
 
+export function drawStinkCloud(ctx, x, y, frame, facing, angry) {
+  outlined(ctx, (g) => stinkBody(g, x, y, frame, facing, angry));
+}
+
 /** Ummetuskorkki — corks you up instead of hurting you. */
-export function drawCorkGuy(ctx, x, y, frame, facing) {
+function corkGuyBody(ctx, x, y, frame, facing) {
   const px = Math.round(x);
   const py = Math.round(y);
   const hop = Math.floor(frame / 6) % 2;
@@ -458,6 +516,10 @@ export function drawCorkGuy(ctx, x, y, frame, facing) {
     ctx.fillRect(bx + 4, py + 14 + hop, 3, 2);
     ctx.fillRect(bx + 9, py + 14 + hop, 3, 2);
   });
+}
+
+export function drawCorkGuy(ctx, x, y, frame, facing) {
+  outlined(ctx, (g) => corkGuyBody(g, x, y, frame, facing));
 }
 
 /** Vihainen aurinko — hovers over the desert and dive-bombs the player. */

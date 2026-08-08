@@ -1,0 +1,13 @@
+{
+  "name": "sfb3",
+  "private": true,
+  "description": "Super Fart Bros 3 — a static browser game. Nothing here is needed to run or deploy the game; these are the dev-time tools for tools/verify.mjs.",
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/verify.mjs",
+    "start": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

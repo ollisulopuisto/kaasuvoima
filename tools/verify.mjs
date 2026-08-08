@@ -232,11 +232,109 @@ const report = await page.evaluate(async () => {
     expect('restored level keeps running', r.player.x > 0 && !!r.player.update);
   }
 
-  return { levels, checks, failures, worlds: WORLDS.length };
+  /* -------------------------------- audio ------------------------------ */
+  const { Sfx, Music } = await import('/src/core/audio.js');
+  {
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const missing = [...new Set(levelIds().map((id) => getLevel(id).music).filter(Boolean))]
+      .filter((name) => !Music.has(name));
+    expect('every level names a real music track', missing.length === 0, missing.join(', '));
+  }
+
+  /* ------------------------------ rendering ---------------------------- */
+  {
+    const { drawBackdrop } = await import('/src/gfx/backdrop.js');
+    const { drawTile, THEMES, T } = await import('/src/gfx/tiles.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 208;
+    const g = canvas.getContext('2d');
+
+    // A backdrop that throws, or comes out as a flat wash, is a regression.
+    const shot = (bg, theme, camX, tick) => {
+      g.clearRect(0, 0, 320, 208);
+      drawBackdrop(g, bg, theme, camX, 320, 208, tick);
+      return g.getImageData(0, 0, 320, 208).data;
+    };
+    const badBg = [];
+    for (const theme of Object.keys(THEMES)) {
+      for (const bg of ['hills', 'dunes', 'peaks', 'factory', 'none']) {
+        try {
+          const near = shot(bg, theme, 0, 24);
+          const far = shot(bg, theme, 640, 24);
+          const seen = new Set();
+          let moved = 0;
+          for (let i = 0; i < near.length; i += 4 * 89) {
+            seen.add((near[i] << 16) | (near[i + 1] << 8) | near[i + 2]);
+            if (near[i] !== far[i] || near[i + 1] !== far[i + 1]) moved++;
+          }
+          if (seen.size < 5) badBg.push(`${theme}/${bg} flat`);
+          if (moved < 8) badBg.push(`${theme}/${bg} does not parallax`);
+        } catch (err) {
+          badBg.push(`${theme}/${bg}: ${err.message}`);
+        }
+      }
+    }
+    expect('every backdrop renders with detail and parallax', badBg.length === 0, badBg.join(' '));
+
+    const badTile = [];
+    const chars = Object.values(T).filter((ch) => ch !== ' ');
+    for (const theme of Object.keys(THEMES)) {
+      for (const ch of chars) {
+        try {
+          for (const t of [0, 44]) {
+            drawTile(g, ch, 0, 16, theme, 3, 5, t, ' ', { doorOpen: true });
+            drawTile(g, ch, 0, 16, theme, 4, 5, t, '#', { doorOpen: false });
+          }
+        } catch (err) {
+          badTile.push(`${theme}/${ch}: ${err.message}`);
+        }
+      }
+    }
+    expect('every tile type draws in every theme', badTile.length === 0, badTile.join(' '));
+  }
+
+  return {
+    levels, checks, failures, worlds: WORLDS.length,
+    audio: { sfx: Sfx.names(), music: Music.names() },
+  };
 });
 
 await browser.close();
 server.close();
+
+/* Every Sfx.play('x') / Music.play('x') in the source must name a real sound. */
+const sourceFiles = [];
+{
+  const { readdir } = await import('node:fs/promises');
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.name.endsWith('.js')) sourceFiles.push(full);
+    }
+  };
+  await walk(join(ROOT, 'src'));
+}
+const audioRefs = [];
+for (const file of sourceFiles) {
+  const text = await readFile(file, 'utf8');
+  for (const [, name] of text.matchAll(/Sfx\.play\([^)]*?'([\w-]+)'/g)) {
+    audioRefs.push({ kind: 'sfx', name, file });
+  }
+  for (const [, name] of text.matchAll(/Music\.play\([^)]*?'([\w-]+)'/g)) {
+    audioRefs.push({ kind: 'music', name, file });
+  }
+}
+const unknownAudio = audioRefs
+  .filter((ref) => !report.audio[ref.kind].includes(ref.name))
+  .map((ref) => `${ref.kind} '${ref.name}' in ${ref.file.slice(ROOT.length)}`);
+report.checks.push({
+  name: 'every sound the code asks for exists',
+  ok: unknownAudio.length === 0,
+  detail: unknownAudio.length ? unknownAudio.join(', ') : `${audioRefs.length} call sites`,
+});
+if (unknownAudio.length) report.failures.push(...unknownAudio);
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);

@@ -38,6 +38,7 @@ export class LevelScene {
     this.state = 'play';
     this.stateTimer = 0;
     this.bossDefeated = false;
+    this.shakeAmp = 0;
     this.goal = null;
     this.cardIndex = 0;
     this.wonCard = null;
@@ -69,7 +70,14 @@ export class LevelScene {
   }
 
   enter() {
-    Music.play(this.def.music || 'level');
+    // A boss level gets its own theme until the thing is beaten.
+    const track = this.def.boss && !this.bossDefeated ? 'boss' : (this.def.music || 'level');
+    Music.play(track);
+  }
+
+  /** Kicks the camera for a frame or two. Purely cosmetic. */
+  shake(amount) {
+    this.shakeAmp = Math.min(6, Math.max(this.shakeAmp, amount));
   }
 
   /* ------------------------------ level API ---------------------------- */
@@ -124,6 +132,7 @@ export class LevelScene {
     this.add(new BrickPiece(this, px, py + 8, -1.1, -2.2, this.theme));
     this.add(new BrickPiece(this, px + 8, py + 8, 1.1, -2.2, this.theme));
     this.awardScore(50);
+    this.shake(1.5);
     Sfx.play('brick');
   }
 
@@ -174,7 +183,10 @@ export class LevelScene {
 
   onBossDefeated() {
     this.bossDefeated = true;
+    Music.play(this.def.music || 'fortress');
     Sfx.play('clear');
+    Sfx.play('door');
+    this.shake(4);
     this.addScorePop(this.player.cx, this.player.y - 12, 'OVI AUKI');
   }
 
@@ -273,6 +285,7 @@ export class LevelScene {
       }
     }
 
+    if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
     this.updateCamera();
@@ -288,7 +301,7 @@ export class LevelScene {
         this.time = 0;
         this.player.die();
       } else if (this.time === 100) {
-        Sfx.play('cursor');
+        Sfx.play('timewarn');
       }
     }
   }
@@ -449,8 +462,12 @@ export class LevelScene {
 
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, VIEW_H, this.tick);
 
-    const camX = Math.round(this.cam.x);
-    const camY = Math.round(this.cam.y);
+    const jitter = this.shakeAmp > 0
+      ? { x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp),
+        y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * 0.6) }
+      : { x: 0, y: 0 };
+    const camX = Math.round(this.cam.x) + jitter.x;
+    const camY = Math.round(this.cam.y) + jitter.y;
     ctx.translate(-camX, -camY);
 
     this.drawTiles(ctx, camX, camY);
@@ -482,7 +499,7 @@ export class LevelScene {
         const bump = this.bumps.get(`${tx},${ty}`);
         const offset = bump === undefined ? 0 : Math.round(Math.sin((bump / 10) * Math.PI) * -6);
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,
-          this.tileAt(tx, ty - 1));
+          this.tileAt(tx, ty - 1), { doorOpen: this.bossDefeated });
       }
     }
   }

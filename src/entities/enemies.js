@@ -639,6 +639,7 @@ export class Boss extends Enemy {
     if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.variant >= 1 || this.scale > 1.5)) {
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
+      this.level.shake(2 + this.scale);
       Sfx.play('stomp');
     }
   }

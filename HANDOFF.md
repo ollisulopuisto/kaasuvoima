@@ -42,10 +42,11 @@ paluuarvon jos jokin hajoaa.
 
 ## Kesken tai auki
 
-1. **Vercel-julkaisua ei ole tehty.** `vercel.json` ja ohjeet ovat valmiina
-   (README → Julkaisu Verceliin), mutta deploy vaatii käyttäjän Vercel-tunnukset.
-2. **PR #1 on mergaamatta.** Jos tuotanto deployataan `main`-haarasta, PR pitää
-   mergetä ensin.
+1. ~~Vercel-julkaisu~~ — tehty: peli on tuotannossa osoitteessa
+   <https://sfb3.vercel.app>. `main` deployautuu automaattisesti pushista.
+   `vercel.json` ohittaa asennusvaiheen (`installCommand`), joten
+   `package.json`in devDependency (playwright) ei hidasta julkaisua.
+2. ~~PR #1~~ — mergattu `main`-haaraan.
 3. Peli ei ole tasapainotettu ihmispelaajalla — vain botilla ja käsin. Vaikeus
    erityisesti maailmassa 4 (kolme närästysliekkiä samassa palikassa) kannattaa
    tarkistaa oikealla pelaajalla.
@@ -69,6 +70,12 @@ Nämä on opittu kantapään kautta — lue ennen kuin muutat moottoria.
   kantaa noin **124 px** (7,5 ruutua). Yli 4 ruudun seinä tai yli 6 ruudun kuoppa
   tarvitsee lavan väliin. Tämä luku ratkaisee lähes kaikki kenttäsuunnittelubugit.
 - **Kaikki nopeudet ovat pikseliä per frame** 60 Hz askeleella, eivät sekunnissa.
+- **Taustakerrokset piirretään kerran välimuistiin.** `src/gfx/backdrop.js`
+  maalaa vuoret, kukkulat ja linnakkeen seinän offscreen-nauhoiksi ja toistaa
+  ne. Jos muutat nauhan sisältöä, muuta myös sen avainta — muuten vanha kuva
+  jää elämään välimuistiin.
+- **Sään hiukkasilla pitää olla eri siemen x- ja y-akselille.** Sama siemen
+  molempiin latoo hiukkaset siistiin diagonaaliin ruudun poikki.
 - **Ei kuvatiedostoja eikä build-vaihetta.** Kaikki grafiikka piirretään
   proseduraalisesti ja äänet syntetisoidaan WebAudiolla. Pidä se niin: se on
   syy miksi repo deployautuu staattisena ilman mitään työkaluketjua.

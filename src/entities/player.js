@@ -230,7 +230,7 @@ export class Player extends Entity {
       if (this.type === 'flower') this.shoot();
       else if (this.type === 'leaf') {
         this.spin = 18;
-        Sfx.play('fart');
+        Sfx.play('squeak');
       }
     }
 
@@ -262,7 +262,7 @@ export class Player extends Entity {
     this.vy = -4.3;
     this.jumpHeld = true;
     this.onGround = false;
-    Sfx.play('fart');
+    Sfx.play(this.power.level >= 3 ? 'bigfart' : 'fart');
     this.level.fartBlast(this.cx, this.y + this.h, 20 + this.power.level * 3, this);
   }
 
@@ -319,7 +319,7 @@ export class Player extends Entity {
     this.corked = Math.max(this.corked, frames);
     this.flying = 0;
     this.spin = 0;
-    Sfx.play('bump');
+    Sfx.play('cork');
     this.level.addScorePop(this.cx, this.y - 8, 'UMMETUS');
     return true;
   }
@@ -372,7 +372,7 @@ export class Player extends Entity {
           this.level.awardScore(1000, this.cx, this.y);
         }
         this.corked = 0;
-        Sfx.play('powerup');
+        Sfx.play('soup');
         break;
       }
       case 'oneup':

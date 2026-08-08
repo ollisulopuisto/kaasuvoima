@@ -51,8 +51,13 @@ export const info = (ch) => TILE_INFO[ch] || {};
 export const isSolid = (ch) => !!info(ch).solid;
 export const isSemi = (ch) => !!info(ch).semi;
 
+/**
+ * `surface` picks how ground tiles are dressed (blades, ripples, rivets…),
+ * everything else is straight palette.
+ */
 export const THEMES = {
   grass: {
+    surface: 'grass',
     sky: ['#5c94fc', '#93c3ff'],
     ground: '#a05820', groundDark: '#6b3a12', groundTop: '#3ea23a', groundTopDark: '#25731f',
     brick: '#c8601c', brickDark: '#7a3410', brickLight: '#e8945c',
@@ -62,6 +67,7 @@ export const THEMES = {
     cloud: '#ffffff',
   },
   desert: {
+    surface: 'sand',
     sky: ['#f0a860', '#ffd9a0'],
     ground: '#d8a048', groundDark: '#9c6a24', groundTop: '#f0c060', groundTopDark: '#c08c30',
     brick: '#d8a040', brickDark: '#8c5c18', brickLight: '#f4cc84',
@@ -71,6 +77,7 @@ export const THEMES = {
     cloud: '#fff0dc',
   },
   ice: {
+    surface: 'snow',
     sky: ['#2c4c9c', '#8cb8e8'],
     ground: '#a8c8e8', groundDark: '#5c7ca8', groundTop: '#eaf6ff', groundTopDark: '#a8c8e8',
     brick: '#8cb0d8', brickDark: '#4c6c98', brickLight: '#c8e0f8',
@@ -80,6 +87,7 @@ export const THEMES = {
     cloud: '#ffffff',
   },
   factory: {
+    surface: 'metal',
     sky: ['#2a2438', '#4a3c50'],
     ground: '#6a6478', groundDark: '#3c3848', groundTop: '#9a94ae', groundTopDark: '#5c5670',
     brick: '#b06030', brickDark: '#6c3a18', brickLight: '#e09050',
@@ -89,6 +97,7 @@ export const THEMES = {
     cloud: '#5a5470',
   },
   fortress: {
+    surface: 'stone',
     sky: ['#101018', '#282840'],
     ground: '#8a8aa0', groundDark: '#4a4a60', groundTop: '#a8a8c0', groundTopDark: '#6a6a84',
     brick: '#9a7a9a', brickDark: '#5a3c5a', brickLight: '#c4a4c4',
@@ -108,31 +117,142 @@ function bevel(ctx, x, y, w, h, light, dark) {
   ctx.fillRect(x + w - 1, y, 1, h);
 }
 
+/* -------------------------------- ground -------------------------------- */
+
+/** The dressing on the top edge of a ground tile, one per theme. */
+function surfaceCap(ctx, x, y, th, tx, ty) {
+  const n = hashNoise(tx, ty);
+  switch (th.surface) {
+    case 'grass':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 5);
+      // blades poking into the air above the tile
+      for (let i = 0; i < 5; i++) {
+        const bn = hashNoise(tx * 5 + i, ty);
+        if (bn < 0.45) continue;
+        const bx = x + Math.floor(bn * 14);
+        ctx.fillRect(bx, y - 1, 1, 1);
+        if (bn > 0.85) ctx.fillRect(bx, y - 2, 1, 1);
+      }
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 4, TILE, 2);
+      for (let i = 0; i < 3; i++) {
+        const bn = hashNoise(tx + i * 3, ty * 2);
+        ctx.fillRect(x + Math.floor(bn * 13), y + 1, 1, 3);
+      }
+      break;
+
+    case 'sand':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 5);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 5, TILE, 1);
+      // wind ripples
+      for (let i = 0; i < 3; i++) {
+        const bn = hashNoise(tx * 3 + i, ty + 5);
+        ctx.fillRect(x + Math.floor(bn * 11), y + 2 + (i % 2), 4, 1);
+      }
+      break;
+
+    case 'snow':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y - 1, TILE, 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y - 1, TILE, 2);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 5, TILE, 1);
+      if (n > 0.72) {                       // an icicle hanging off the lip
+        ctx.fillStyle = '#dceeff';
+        const ix = x + Math.floor(n * 12);
+        ctx.fillRect(ix, y + 6, 1, 3);
+        ctx.fillRect(ix, y + 6, 2, 1);
+      }
+      break;
+
+    case 'metal':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 4);
+      ctx.fillStyle = th.hardLight;
+      ctx.fillRect(x, y, TILE, 1);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 4, TILE, 2);
+      ctx.fillStyle = th.hardDark;
+      ctx.fillRect(x + 2, y + 1, 2, 2);
+      ctx.fillRect(x + 12, y + 1, 2, 2);
+      break;
+
+    default:                                 // stone
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 4);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 4, TILE, 2);
+      ctx.fillStyle = th.hardLight;
+      ctx.fillRect(x, y, TILE, 1);
+      break;
+  }
+}
+
 function drawGround(ctx, x, y, th, openAbove, tx, ty) {
-  if (openAbove) {
-    ctx.fillStyle = th.groundTop;
-    ctx.fillRect(x, y, TILE, 5);
-    ctx.fillStyle = th.groundTopDark;
-    ctx.fillRect(x, y + 4, TILE, 2);
-    ctx.fillStyle = th.ground;
-    ctx.fillRect(x, y + 6, TILE, TILE - 6);
+  ctx.fillStyle = th.ground;
+  ctx.fillRect(x, y, TILE, TILE);
+
+  // body texture: strata for sand, panels for metal, blocks for stone, specks else
+  if (th.surface === 'sand') {
+    ctx.fillStyle = th.groundDark;
+    for (let i = 0; i < 2; i++) {
+      const n = hashNoise(tx + i * 7, ty * 3);
+      ctx.fillRect(x + Math.floor(n * 6), y + 8 + i * 4, 6 + Math.floor(n * 6), 1);
+    }
+  } else if (th.surface === 'metal') {
+    ctx.fillStyle = th.groundDark;
+    ctx.fillRect(x + 7, y, 2, TILE);
+    ctx.fillRect(x, y + 10, TILE, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x, y + 6, TILE, 1);
+    if (hashNoise(tx, ty) > 0.8) {                 // rust patch
+      ctx.fillStyle = 'rgba(160,70,30,0.35)';
+      ctx.fillRect(x + 2, y + 11, 5, 4);
+    }
+  } else if (th.surface === 'snow') {
+    // packed ice: a couple of long cracks instead of dirt specks
+    ctx.fillStyle = th.groundDark;
+    const n = hashNoise(tx, ty);
+    ctx.fillRect(x + 2 + Math.floor(n * 5), y + 8, 1, 5);
+    ctx.fillRect(x + 3 + Math.floor(n * 5), y + 10, 4, 1);
+    if (n > 0.55) {
+      ctx.fillRect(x + 11, y + 7, 1, 4);
+      ctx.fillRect(x + 9, y + 9, 3, 1);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(x + 1, y + 7, 3, 1);
+  } else if (th.surface === 'stone') {
+    ctx.fillStyle = th.groundDark;
+    const off = (tx + ty) % 2 ? 0 : 8;
+    ctx.fillRect(x, y + 7, TILE, 1);
+    ctx.fillRect(x + off, y, 1, 7);
+    ctx.fillRect(x + ((off + 8) % 16), y + 8, 1, 8);
   } else {
-    ctx.fillStyle = th.ground;
-    ctx.fillRect(x, y, TILE, TILE);
+    ctx.fillStyle = th.groundDark;
+    for (let i = 0; i < 5; i++) {
+      const n = hashNoise(tx * 7 + i, ty * 13 + i * 3);
+      const px = Math.floor(n * 14);
+      const py = (openAbove ? 7 : 1) + Math.floor(hashNoise(ty + i, tx - i) * (openAbove ? 8 : 14));
+      if (py < TILE - 1) ctx.fillRect(x + px, y + py, 2, 2);
+    }
   }
-  ctx.fillStyle = th.groundDark;
-  for (let i = 0; i < 5; i++) {
-    const n = hashNoise(tx * 7 + i, ty * 13 + i * 3);
-    const px = Math.floor(n * 14);
-    const py = (openAbove ? 7 : 1) + Math.floor(hashNoise(ty + i, tx - i) * (openAbove ? 8 : 14));
-    if (py < TILE - 1) ctx.fillRect(x + px, y + py, 2, 2);
-  }
+
+  if (openAbove) surfaceCap(ctx, x, y, th, tx, ty);
+
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
   ctx.fillRect(x, y + TILE - 1, TILE, 1);
   ctx.fillRect(x + TILE - 1, y, 1, TILE);
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(x, openAbove ? y + 6 : y, 1, TILE - (openAbove ? 6 : 0));
 }
 
-function drawBrick(ctx, x, y, th) {
+/* -------------------------------- blocks -------------------------------- */
+
+function drawBrick(ctx, x, y, th, tx, ty) {
   ctx.fillStyle = th.brick;
   ctx.fillRect(x, y, TILE, TILE);
   ctx.fillStyle = th.brickDark;
@@ -143,6 +263,17 @@ function drawBrick(ctx, x, y, th) {
   ctx.fillStyle = th.brickLight;
   ctx.fillRect(x, y, TILE, 1);
   ctx.fillRect(x, y + 8, TILE, 1);
+  ctx.fillRect(x + 4, y + 1, 1, 6);
+  ctx.fillRect(x + 12, y + 9, 1, 6);
+  // a hairline crack on some of them, so a wall is not four copies of one tile
+  const n = hashNoise(tx * 3, ty * 5);
+  if (n > 0.66) {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    const cx = x + 5 + Math.floor(n * 6);
+    ctx.fillRect(cx, y + 2, 1, 2);
+    ctx.fillRect(cx + 1, y + 4, 1, 2);
+    if (n > 0.88) ctx.fillRect(cx + 1, y + 10, 1, 4);
+  }
 }
 
 function drawQuestion(ctx, x, y, tick) {
@@ -151,12 +282,25 @@ function drawQuestion(ctx, x, y, tick) {
   ctx.fillStyle = glow;
   ctx.fillRect(x, y, TILE, TILE);
   bevel(ctx, x, y, TILE, TILE, '#ffe8a0', '#a05c10');
+
+  // a highlight sweeping across the face every couple of seconds
+  const sweep = (tick % 150) / 150;
+  if (sweep < 0.18) {
+    const sx = Math.round(x + sweep * (TILE / 0.18) - 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let i = 0; i < 3; i++) {
+      const px = sx + i;
+      if (px > x && px < x + TILE - 1) ctx.fillRect(px, y + 1, 1, TILE - 2);
+    }
+  }
+
   ctx.fillStyle = '#7a3c08';
-  // question mark
   ctx.fillRect(x + 5, y + 4, 6, 2);
   ctx.fillRect(x + 9, y + 6, 2, 2);
   ctx.fillRect(x + 7, y + 8, 3, 2);
   ctx.fillRect(x + 7, y + 12, 2, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillRect(x + 5, y + 3, 6, 1);
   ctx.fillStyle = '#a05c10';
   ctx.fillRect(x + 1, y + 1, 1, 1);
   ctx.fillRect(x + 14, y + 1, 1, 1);
@@ -168,15 +312,38 @@ function drawUsed(ctx, x, y, th) {
   ctx.fillStyle = th.brickDark;
   ctx.fillRect(x, y, TILE, TILE);
   bevel(ctx, x, y, TILE, TILE, th.brick, '#3a1c06');
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x + 3, y + 3, 10, 10);
 }
 
-function drawHard(ctx, x, y, th) {
+function drawHard(ctx, x, y, th, tx, ty) {
   ctx.fillStyle = th.hard;
   ctx.fillRect(x, y, TILE, TILE);
   bevel(ctx, x, y, TILE, TILE, th.hardLight, th.hardDark);
-  ctx.fillStyle = th.hardDark;
-  ctx.fillRect(x + 3, y + 3, 2, 2);
-  ctx.fillRect(x + 11, y + 11, 2, 2);
+
+  if (th.surface === 'metal') {                    // riveted plate
+    ctx.fillStyle = th.hardDark;
+    for (const [rx, ry] of [[2, 2], [12, 2], [2, 12], [12, 12]]) {
+      ctx.fillRect(x + rx, y + ry, 2, 2);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(x + 3, y + 3, 1, 1);
+    ctx.fillRect(x + 13, y + 3, 1, 1);
+    ctx.fillStyle = th.hardDark;
+    ctx.fillRect(x + 5, y + 7, 6, 2);
+  } else if (th.surface === 'snow') {              // packed ice with a glint
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillRect(x + 3, y + 3, 4, 1);
+    ctx.fillRect(x + 3, y + 3, 1, 4);
+    ctx.fillStyle = th.hardDark;
+    ctx.fillRect(x + 10, y + 9, 3, 1);
+    ctx.fillRect(x + 12, y + 6, 1, 4);
+  } else {
+    ctx.fillStyle = th.hardDark;
+    ctx.fillRect(x + 3, y + 3, 2, 2);
+    ctx.fillRect(x + 11, y + 11, 2, 2);
+    if (hashNoise(tx, ty) > 0.7) ctx.fillRect(x + 10, y + 4, 2, 1);
+  }
 }
 
 function drawNote(ctx, x, y, tick, bumped) {
@@ -184,11 +351,11 @@ function drawNote(ctx, x, y, tick, bumped) {
   ctx.fillStyle = '#e8901c';
   ctx.fillRect(x, y + off, TILE, TILE - off);
   bevel(ctx, x, y + off, TILE, TILE - off, '#ffc060', '#8c4c08');
+  const bob = Math.round(Math.sin(tick / 12) * 1);
   ctx.fillStyle = '#fff4d8';
-  ctx.fillRect(x + 9, y + 4 + off, 2, 7);
-  ctx.fillRect(x + 6, y + 9 + off, 4, 3);
-  ctx.fillRect(x + 9, y + 4 + off, 4, 2);
-  void tick;
+  ctx.fillRect(x + 9, y + 4 + off + bob, 2, 7);
+  ctx.fillRect(x + 6, y + 9 + off + bob, 4, 3);
+  ctx.fillRect(x + 9, y + 4 + off + bob, 4, 2);
 }
 
 function drawPipe(ctx, x, y, ch, th) {
@@ -204,6 +371,8 @@ function drawPipe(ctx, x, y, ch, th) {
   } else {
     ctx.fillStyle = th.pipeDark;
     ctx.fillRect(x + TILE - 4, y, 4, TILE);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(x + TILE - 1, y, 1, TILE);
   }
   if (top) {
     ctx.fillStyle = th.pipe;
@@ -213,6 +382,13 @@ function drawPipe(ctx, x, y, ch, th) {
     ctx.fillStyle = th.pipeDark;
     ctx.fillRect(x, y, TILE, 1);
     ctx.fillRect(x, y + 5, TILE, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(x, y + 1, TILE, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';           // the dark throat of the pipe
+    ctx.fillRect(x, y + 6, TILE, 2);
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x, y + 7, TILE, 1);
   }
 }
 
@@ -225,39 +401,84 @@ function drawPlatform(ctx, x, y, th) {
   ctx.fillRect(x, y + 5, TILE, 1);
   ctx.fillRect(x + 5, y + 2, 1, 3);
   ctx.fillRect(x + 11, y + 2, 1, 3);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(x, y + 6, TILE, 1);
 }
 
-function drawSpike(ctx, x, y) {
-  ctx.fillStyle = '#c8c8d8';
+function drawSpike(ctx, x, y, tick) {
   for (let i = 0; i < 4; i++) {
     const bx = x + i * 4;
+    ctx.fillStyle = '#c8c8d8';
     ctx.fillRect(bx + 1, y + 12, 2, 4);
     ctx.fillRect(bx + 1, y + 9, 2, 3);
     ctx.fillRect(bx + 1, y + 6, 2, 3);
+    ctx.fillStyle = '#f4f4ff';
+    ctx.fillRect(bx + 1, y + 6, 1, 6);
+  }
+  // a glint travelling along the row
+  const g = Math.floor(tick / 10) % 8;
+  if (g < 4) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + g * 4 + 1, y + 6, 2, 2);
   }
   ctx.fillStyle = '#6f6f8a';
   ctx.fillRect(x, y + 14, TILE, 2);
+  ctx.fillStyle = '#4a4a60';
+  ctx.fillRect(x, y + 15, TILE, 1);
 }
 
-function drawLava(ctx, x, y, tick) {
+function drawLava(ctx, x, y, tick, tx) {
   const wave = Math.sin((x + tick * 1.6) / 9) * 1.5;
-  ctx.fillStyle = '#d83018';
+  ctx.fillStyle = '#8c1808';
   ctx.fillRect(x, y + 2, TILE, TILE - 2);
+  ctx.fillStyle = '#d83018';
+  ctx.fillRect(x, y + 4, TILE, TILE - 4);
   ctx.fillStyle = '#f87818';
   ctx.fillRect(x, y + 2 + Math.round(wave), TILE, 3);
   ctx.fillStyle = '#ffd048';
   ctx.fillRect(x, y + 2 + Math.round(wave), TILE, 1);
+
+  // bubbles surfacing at their own pace per column
+  const seed = hashNoise(tx, 3);
+  const period = 70 + Math.floor(seed * 60);
+  const age = (tick + Math.floor(seed * period)) % period;
+  if (age < 22) {
+    const t = age / 22;
+    const bx = x + 3 + Math.floor(seed * 9);
+    const by = y + 12 - Math.round(t * 9);
+    const s = t > 0.75 ? 1 : 2;
+    ctx.fillStyle = t > 0.75 ? '#ffe89a' : '#ffb040';
+    ctx.fillRect(bx, by, s, s);
+  }
+  ctx.fillStyle = 'rgba(255,140,40,0.18)';
+  ctx.fillRect(x, y, TILE, 2);
 }
 
-function drawDoor(ctx, x, y, th) {
+function drawDoor(ctx, x, y, th, tick, open) {
   ctx.fillStyle = th.hardDark;
   ctx.fillRect(x, y, TILE, TILE);
-  ctx.fillStyle = '#4a2c10';
-  ctx.fillRect(x + 2, y + 2, 12, 14);
+  ctx.fillStyle = th.hard;
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillStyle = '#3a2008';
+  ctx.fillRect(x + 2, y + 1, 12, 15);
   ctx.fillStyle = '#7a4c20';
-  ctx.fillRect(x + 3, y + 3, 10, 13);
-  ctx.fillStyle = '#ffd048';
+  ctx.fillRect(x + 3, y + 2, 10, 14);
+  ctx.fillStyle = '#5c3410';
+  ctx.fillRect(x + 7, y + 2, 1, 14);
+  ctx.fillStyle = '#9c6a30';
+  ctx.fillRect(x + 3, y + 2, 10, 1);
+  ctx.fillStyle = '#c8c8d8';                      // hinges
+  ctx.fillRect(x + 3, y + 4, 2, 1);
+  ctx.fillRect(x + 3, y + 12, 2, 1);
+  const glow = open && Math.floor(tick / 8) % 2 === 0;
+  ctx.fillStyle = glow ? '#fff0a0' : '#ffd048';   // handle
   ctx.fillRect(x + 10, y + 9, 2, 2);
+  if (open) {
+    ctx.fillStyle = 'rgba(255,224,120,0.12)';
+    ctx.fillRect(x - 2, y - 2, TILE + 4, TILE + 4);
+  }
 }
 
 export function drawCoinSprite(ctx, x, y, tick) {
@@ -274,18 +495,26 @@ export function drawCoinSprite(ctx, x, y, tick) {
     ctx.fillRect(left + 1, y + 3, w - 2, 10);
     ctx.fillStyle = '#c88800';
     ctx.fillRect(left + Math.floor(w / 2), y + 5, 1, 6);
+    ctx.fillStyle = '#fff8d0';
+    ctx.fillRect(left + 1, y + 3, 1, 3);
+  }
+  // a sparkle that pops on the widest frame
+  if (w === 10 && Math.floor(tick / 6) % 8 === 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx + 4, y + 1, 1, 3);
+    ctx.fillRect(cx + 3, y + 2, 3, 1);
   }
 }
 
 /**
  * Draws a single map tile. `above` lets ground know whether to grow grass.
  */
-export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above) {
+export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
     case T.GROUND: drawGround(ctx, x, y, th, !isSolid(above), tx, ty); break;
-    case T.HARD: drawHard(ctx, x, y, th); break;
-    case T.BRICK: drawBrick(ctx, x, y, th); break;
+    case T.HARD: drawHard(ctx, x, y, th, tx, ty); break;
+    case T.BRICK: drawBrick(ctx, x, y, th, tx, ty); break;
     case T.QCOIN:
     case T.QPOWER: drawQuestion(ctx, x, y, tick); break;
     case T.USED: drawUsed(ctx, x, y, th); break;
@@ -296,9 +525,9 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above) {
     case T.PIPE_BR: drawPipe(ctx, x, y, ch, th); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
-    case T.SPIKE: drawSpike(ctx, x, y); break;
-    case T.LAVA: drawLava(ctx, x, y, tick); break;
-    case T.DOOR: drawDoor(ctx, x, y, th); break;
+    case T.SPIKE: drawSpike(ctx, x, y, tick); break;
+    case T.LAVA: drawLava(ctx, x, y, tick, tx); break;
+    case T.DOOR: drawDoor(ctx, x, y, th, tick, !!opts.doorOpen); break;
     default: break;
   }
 }

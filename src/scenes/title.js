@@ -13,7 +13,7 @@ export class TitleScene {
   }
 
   enter() {
-    Music.play('map');
+    Music.play('title');
     this.options = Save.exists()
       ? ['JATKA PELIA', 'UUSI PELI']
       : ['UUSI PELI'];
