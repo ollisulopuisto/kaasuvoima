@@ -104,8 +104,31 @@ export function moveY(entity, level, { onHeadBump = null, dropThrough = false } 
     }
   }
 
-  entity.onGround = result.ground;
+  /*
+   * Being on the ground is a question about where you are, not about whether
+   * you happened to land this frame.
+   *
+   * Resolving a landing puts the feet exactly on the tile boundary, which means
+   * the body's last pixel sits one pixel *above* the floor tile. A single frame
+   * of gravity moves less than a pixel, so a collision test alone reports "in
+   * the air" for three frames out of four while the player is standing still —
+   * and every jump pressed on one of those frames silently disappears.
+   */
+  entity.onGround = result.ground || (entity.vy >= 0 && footingBelow(entity, level, dropThrough));
   return result;
+}
+
+/** True when the tile row directly under the entity's feet is standable. */
+function footingBelow(entity, level, dropThrough) {
+  const ty = Math.floor((entity.y + entity.h) / TILE);
+  const left = Math.floor(entity.x / TILE);
+  const right = Math.floor((entity.x + entity.w - 1) / TILE);
+  for (let tx = left; tx <= right; tx++) {
+    const ch = level.tileAt(tx, ty);
+    if (isSolid(ch)) return true;
+    if (!dropThrough && isSemi(ch) && entity.y + entity.h <= ty * TILE + 1) return true;
+  }
+  return false;
 }
 
 /** True when there is solid or semi-solid footing just below the given box. */

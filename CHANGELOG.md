@@ -7,6 +7,35 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.10 — kadonneet hypyt ja mykkä ääni
+
+### Korjattu
+- **Suurin osa hyppypainalluksista katosi.** Juurisyy oli `moveY`:ssä: kun
+  laskeutuminen ratkaistaan, jalat asetetaan täsmälleen ruudun rajalle, jolloin
+  vartalon viimeinen pikseli jää *lattiaruudun yläpuolelle*. Yksi frame
+  painovoimaa liikuttaa alle pikselin, joten törmäystesti raportoi "ilmassa"
+  kolmella framella neljästä paikallaan seistessä — ja jokainen niille framille
+  osunut hyppy katosi äänettömästi. Mitattu ennen korjausta: **40/60 framea
+  ilmassa** paikallaan, 4/12 hyppyä ohitettu.
+  Maassa olo on nyt sijaintikysymys eikä tapahtuma: katsotaan onko jalkojen alla
+  oleva ruuturivi seisottava.
+  *Miksi tämä ilmeni vasta nyt:* vika on ollut olemassa aina, mutta viiden
+  framen coyote time peitti sen. SMB3-fysiikan myötä coyote meni nollaan ja vika
+  paljastui.
+- **Coyote time takaisin (5 framea) ja hyppypuskuri (6 framea).** SMB3:ssa
+  kumpaakaan ei ole, ja se on aito — mutta langattomalla näppäimistöllä ja
+  modernilla näytöllä sama sääntö tarkoittaa "peli ei kuunnellut minua".
+  Tietoinen poikkeama alkuperäisestä, kirjattu myös PHYSICS.md:hen.
+- **Ääni saattoi jäädä kokonaan pois.** Selain päästää äänen läpi vain
+  käyttäjän eleen sisällä, ja jos se yksi ele meni ohi tai torjuttiin, peli
+  pysyi mykkänä koko session. Nyt lupaa pyydetään uudelleen jokaisella
+  syötteellä kunnes konteksti on käynnissä.
+- **Debug-ruutu näyttää nyt äänen tilan** (`AUDIO RUNNING/SUSPENDED  GAIN`),
+  jotta mykkyyden syyn näkee suoraan ruudulta.
+- **index.html:n ohjeteksti** näytti yhä vanhat F-näppäimet.
+
+---
+
 ## v26.08.08.9 — syöteviive, kartan animaatiot, dokumenttien tarkistus
 
 ### Korjattu

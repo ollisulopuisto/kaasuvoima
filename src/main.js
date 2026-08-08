@@ -1,6 +1,6 @@
 import { Input } from './core/input.js';
 import { Save } from './core/save.js';
-import { Music, Sfx, toggleMute, isMuted } from './core/audio.js';
+import { Music, Sfx, toggleMute, isMuted, audioDiag } from './core/audio.js';
 import { drawText } from './gfx/font.js';
 import { WORLDS, startNode, findNode } from './data/worlds.js';
 import { TitleScene } from './scenes/title.js';
@@ -219,6 +219,19 @@ class Game {
   step() {
     Input.poll();
 
+    // Keep asking until the browser lets the audio through. One refused or
+    // mistimed gesture used to mean silence for the rest of the session.
+    const anyInput = Input.anyKeyPressed
+      || Input.held.jump || Input.held.left || Input.held.right || Input.held.start;
+    if (anyInput && audioDiag().state !== 'running') {
+      Sfx.resume();
+      if (!isMuted() && Music.current) {
+        const track = Music.current;
+        Music.current = null;
+        Music.play(track);
+      }
+    }
+
     if (Input.pressed.mute) this.toast(toggleMute() ? 'AANI POIS' : 'AANI PAALLE', 60);
     if (Input.pressed.debug) this.debug = !this.debug;
     if (Input.pressed.slot) {
@@ -284,8 +297,10 @@ class Game {
       lines.push(`CAM ${Math.round(scene.cam.x)},${Math.round(scene.cam.y)}`
         + `  MAP ${scene.w || 0}X${scene.h || 0}`);
     }
-    lines.push(`MUS ${(Music.current || 'NONE').toUpperCase()} (${Music.variation().toUpperCase()})`
-      + `  MUTE ${isMuted() ? 1 : 0}`);
+    const a = audioDiag();
+    lines.push(`MUS ${a.track.toUpperCase()} (${Music.variation().toUpperCase()})`
+      + `  MUTE ${a.muted ? 1 : 0}`);
+    lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
 
     const width = Math.max(...lines.map((l) => l.length)) * 6 + 8;

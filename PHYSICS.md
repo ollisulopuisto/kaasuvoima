@@ -29,11 +29,20 @@ jaettuna 16:lla. Suluissa alkuperäinen tavu.
 | hännän liito | 0.6…1.2 | **1.0** (`$10`) | — |
 | lennon nousu | −3.0…−3.5 | **−1.5** (`-$18`) | — |
 | P-mittarin tyhjennys | 1.6/frame | **24 framea per pykälä** | ja jäätyy ilmassa |
-| coyote time | 5 framea | **0** | SMB3:ssa sitä ei ole |
+| coyote time | 5 framea | **5** | SMB3:ssa ei ole; pidetty tarkoituksella |
+| hyppypuskuri | ei ollut | **6 framea** | SMB3:ssa ei ole; pidetty tarkoituksella |
 
-Coyote time on `COYOTE_FRAMES` tiedostossa `src/entities/player.js`. Jos haara
-tuntuu liian ankaralta, se on ensimmäinen numero jota kannattaa nostaa — se on
-ainoa kohta jossa poikettiin tarkoituksella pelituntuman puolelle.
+**Kaksi tietoista poikkeamaa alkuperäisestä**, molemmat `src/entities/player.js`:ssä:
+`COYOTE_FRAMES` (5) ja `JUMP_BUFFER_FRAMES` (6). SMB3:ssa kumpaakaan ei ole —
+painallus framen etuajassa tai jäljessä katoaa. Se on aito, mutta langattomalla
+näppäimistöllä ja modernilla näytöllä se tuntuu siltä että peli ei kuuntele.
+Molemmat ovat niin pieniä ettei framen tarkkuudella pelaava huomaa niitä.
+
+Huom: nollattu coyote time paljasti aidon vian törmäyskoodissa — `onGround`
+välkkyi paikallaan seistessä, koska laskeutumisen jälkeen jalat jäävät
+lattiaruudun rajalle eikä sub-pikselin painovoima ylitä sitä. Se on korjattu
+(`footingBelow` tiedostossa `src/level/physics.js`); jos coyote joskus nollataan
+uudelleen, tuo korjaus on se joka pitää hypyt toimivina.
 
 ## Mitattu hyppybudjetti
 

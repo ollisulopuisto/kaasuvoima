@@ -32,8 +32,16 @@ const JUMP_SPEED_BONUS = [0, 0.125, 0.25, 0.5];
 const STOMP_BOUNCE = -4.0;     // -$40
 const TAIL_FLOAT = 1.0;        // PLAYER_TAILWAG_YVEL $10
 const FLIGHT_CLIMB = -1.5;     // PLAYER_FLY_YVEL -$18
-/** SMB3 has no coyote time. Raise this if the branch feels too unforgiving. */
-const COYOTE_FRAMES = 0;
+/*
+ * SMB3 has neither coyote time nor jump buffering: a press one frame early or
+ * one frame late is simply gone. That is faithful, and on a CRT with a wired
+ * pad it is fine. On a modern setup — wireless keyboard, compositor, LCD — the
+ * same rule turns into "the game ignored me", so both forgivenesses are here
+ * as a deliberate deviation from the original. They are small enough that a
+ * frame-perfect player will never notice them.
+ */
+const COYOTE_FRAMES = 5;
+const JUMP_BUFFER_FRAMES = 6;
 
 export const P_METER_MAX = 112;
 const P_SEGMENTS = 7;
@@ -87,6 +95,7 @@ export class Player extends Entity {
     this.ducking = false;
     this.pMeter = 0;
     this.idle = 0;
+    this.jumpBuffer = 0;
     this.flying = 0;
     this.spin = 0;
     this.invuln = 0;
@@ -164,7 +173,11 @@ export class Player extends Entity {
     const right = this.controllable ? input.held.right || this.autoWalk : this.autoWalk;
     const down = this.controllable ? input.held.down : false;
     const run = this.controllable ? input.held.run : false;
-    const jumpPressed = this.controllable ? input.pressed.jump : false;
+    // A press is remembered for a few frames, so asking for a jump just before
+    // landing gets you a jump on landing instead of nothing at all.
+    if (this.controllable && input.pressed.jump) this.jumpBuffer = JUMP_BUFFER_FRAMES;
+    else if (this.jumpBuffer > 0) this.jumpBuffer--;
+    const jumpPressed = this.jumpBuffer > 0;
     const jumpHeld = this.controllable ? input.held.jump : false;
 
     /* -------------------------------- ducking ------------------------- */
@@ -213,12 +226,14 @@ export class Player extends Entity {
 
     const canFly = this.type === 'leaf' && this.pFull && !this.corked;
     if (jumpPressed && (this.onGround || this.coyote > 0)) {
+      this.jumpBuffer = 0;
       this.vy = JUMP_BASE - JUMP_SPEED_BONUS[Math.min(3, Math.floor(Math.abs(this.vx)))];
       this.onGround = false;
       this.coyote = 0;
       this.jumpHeld = true;
       Sfx.play(this.big ? 'bigjump' : 'jump');
     } else if (jumpPressed && canFly && this.flying <= 0) {
+      this.jumpBuffer = 0;
       this.flying = 180 + this.power.level * 30;     // take off
       this.vy = -2.6;
       Sfx.play('flight');
@@ -226,6 +241,7 @@ export class Player extends Entity {
       this.vy = Math.max(FLIGHT_CLIMB, this.vy - 2.6);
       Sfx.play('flight');
     } else if (jumpPressed && this.airJumps < this.airJumpsMax) {
+      this.jumpBuffer = 0;
       this.fartJump();
     }
 

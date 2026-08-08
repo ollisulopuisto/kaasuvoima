@@ -386,6 +386,35 @@ const report = await page.evaluate(async () => {
     expect('the world map animates', frames.size >= 3, `${frames.size} distinct frames`);
   }
 
+  /* Standing still on solid ground must read as grounded on EVERY frame. If it
+   * flickers, jumps silently vanish: the press lands on a frame where the game
+   * thinks the player is in mid-air. */
+  {
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-1');
+    const i = mkInput();
+    for (let f = 0; f < 30; f++) s.update(i);        // settle on the floor
+    let airborne = 0;
+    for (let f = 0; f < 60; f++) {
+      s.update(i);
+      if (!s.player.onGround) airborne++;
+    }
+    expect('standing on the ground reads as grounded every frame',
+      airborne === 0, `${airborne}/60 frames airborne while standing still`);
+
+    // And a jump has to fire on any frame the player asks for one.
+    let missed = 0;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      for (let f = 0; f < 24; f++) { s.update(i); i.pressed = blank(); }
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i);
+      i.pressed = blank();
+      if (s.player.vy >= 0) missed++;
+      i.held.jump = false;
+    }
+    expect('every jump press launches a jump', missed === 0, `${missed}/12 presses ignored`);
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');

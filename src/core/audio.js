@@ -347,6 +347,16 @@ function hatAt2(delay) {
   hatAt(ctx.currentTime + delay, 0.1, false);
 }
 
+/** What the audio engine is actually doing, for the debug overlay. */
+export function audioDiag() {
+  return {
+    state: ctx ? ctx.state : 'none',
+    master: master ? Number(master.gain.value.toFixed(2)) : 0,
+    muted,
+    track: Music.current || 'none',
+  };
+}
+
 export const Sfx = {
   play(name) {
     const fn = SFX[name];
@@ -354,8 +364,16 @@ export const Sfx = {
   },
   has: (name) => Object.prototype.hasOwnProperty.call(SFX, name),
   names: () => Object.keys(SFX),
+  /**
+   * Browsers only let audio start inside a user gesture, and a gesture can be
+   * refused (or arrive before the context exists). So this is safe to call on
+   * every input, and main.js does exactly that until the context is running —
+   * one swallowed gesture must not mean a silent game for the whole session.
+   */
   resume() {
-    if (ensure() && ctx.state === 'suspended') ctx.resume();
+    if (!ensure()) return false;
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    return ctx.state === 'running';
   },
 };
 
