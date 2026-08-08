@@ -13,7 +13,7 @@
  *      There is nothing here to tie back to a person, so this needs no consent
  *      dialog and no privacy promise we would have to keep.
  *   2. **Nothing leaves the browser.** No network calls anywhere in this file.
- *      Sending is a separate, later decision (ROADMAP §1 phase 3); export is a
+ *      Sending is a separate, later decision (ROADMAP §2 phase 4); export is a
  *      file the player chooses to hand over.
  *
  * Coordinates are stored as tiles, not pixels. It is the resolution the level

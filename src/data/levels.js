@@ -127,8 +127,8 @@ const LEVEL_DEFS = {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_press', 'fac_vents', 'corks',
-      'fac_belt', 'clouds', 'fac_shaft', 'fac_gap', 'heartburn', 'fac_press',
-      'cloud_run', 'fac_vents', 'steps_up', 'run_up', 'goal', 'goal_end',
+      'fac_belt', 'clouds', 'fac_shaft', 'fac_gap', 'heartburn', 'fac_crumble',
+      'fac_press', 'cloud_run', 'fac_vents', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
   '4-2': {

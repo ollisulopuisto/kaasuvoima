@@ -686,7 +686,8 @@ const out = `/**
  * The pacing comes from tools/pacing-stats.json; every set piece in here is
  * this game's own. See the header of tools/gen-levels.mjs for the reasoning.
  *
- * Seed: ${SEED}
+ * Seed: ${SEED}${TELEMETRY ? `
+ * Shaped by playtest telemetry: ${TELEMETRY_FILE}, ${TELEMETRY.events} events` : ''}
  */
 
 export const GENERATED_LEVELS = {
@@ -729,7 +730,7 @@ if (TELEMETRY) {
   const thin = TELEMETRY.ignored.filter((i) => i.code === 'thin');
   for (const id of new Set(thin.map((i) => i.level))) {
     const mine = thin.filter((i) => i.level === id);
-    console.log(`  ignored  ${id}  ${mine.length} more spots under the `
+    console.log(`  ignored  ${id}  ${mine.length} more spot${mine.length === 1 ? '' : 's'} under the `
       + `${RULES.cluster}-event threshold (biggest ${Math.max(...mine.map((i) => i.count))})`);
   }
   if (!acted && !TELEMETRY.ignored.length) console.log('  nothing in the log to act on');

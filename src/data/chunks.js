@@ -317,6 +317,22 @@ export const CHUNKS = {
     13: '#####     ######',
     14: '#####WWWWW######',
   }),
+  /**
+   * A catwalk that will not hold. Keep moving and it is a straight run; stop to
+   * think and the floor leaves without you.
+   *
+   * The coins sit above the crumbling tiles rather than on the safe ends, so
+   * the greedy line and the safe line are the same line — the tension is in the
+   * pace, not in a choice made before you start.
+   */
+  fac_crumble: ck(22, {
+    0: G + '      ',
+    1: G + '      ',
+    9: '      o o o o',
+    12: '  ?',
+    13: '#####%%%%%%%%%%%#####',
+    14: '#####            ####',
+  }),
   /** Roomy arena with landing platforms: the giant needs headroom. */
   boss_arena_big: ck(48, {
     0: G + G + G,

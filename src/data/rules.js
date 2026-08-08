@@ -17,7 +17,13 @@ const ROWS = 15;
 const FLOOR = 13;
 const HEAD = 3;
 
-const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
+/*
+ * '%' is the crumbling platform. It counts as solid here on purpose: it holds
+ * long enough to walk across, so a route over it is a real route. Leaving it
+ * out would make the validator read every catwalk as a bottomless pit and
+ * reject perfectly good levels.
+ */
+const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}', '%']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 

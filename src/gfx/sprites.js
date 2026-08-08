@@ -217,7 +217,9 @@ const TINTS = {
 
 const GLOWS = {
   star: { scale: 1.9, alpha: 0.28, tint: null },
-  fart: { scale: 2.4, alpha: 0.22, tint: makeTint('#d0ff90', 1) },
+  // Not a full substitution: the halo keeps some of the ball's own colour, so a
+  // tinted shot dims its own glow instead of sitting in a bright one.
+  fart: { scale: 2.4, alpha: 0.22, tint: makeTint('#d0ff90', 0.4) },
 };
 
 const PALETTES = {

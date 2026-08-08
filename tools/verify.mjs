@@ -706,6 +706,68 @@ const report = await page.evaluate(async () => {
     tele.clearTelemetry();
   }
 
+  /* -------------------------- murenevat lavat -------------------------- */
+  {
+    const { T } = await import('/src/gfx/tiles.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '4-1');
+    game.setScene(s);
+    const i = mkInput();
+
+    // Find a crumbling tile and stand the player on it.
+    let spot = null;
+    for (let ty = 0; ty < s.h && !spot; ty++) {
+      for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.CRUMBLE) { spot = { tx, ty }; break; }
+    }
+    expect('4-1 has a crumbling catwalk in it', !!spot, spot ? `${spot.tx},${spot.ty}` : 'ei löytynyt');
+
+    if (spot) {
+      s.player.x = spot.tx * 16 + 2;
+      s.player.y = spot.ty * 16 - s.player.h;
+      s.player.vy = 0;
+      for (let f = 0; f < 3; f++) s.update(i);
+      const heldAtFirst = s.tileAt(spot.tx, spot.ty) === T.CRUMBLE;
+      const started = s.crumbleProgress(spot.tx, spot.ty) > 0;
+
+      // It has to hold long enough to walk across…
+      for (let f = 0; f < 40; f++) s.update(i);
+      const stillThere = s.tileAt(spot.tx, spot.ty) === T.CRUMBLE;
+
+      /* …and then go, whether or not anyone is still standing there. Step off
+       * first: the pit under this catwalk is bottomless, and a dead scene stops
+       * updating after the death animation, so staying would only prove that. */
+      s.player.x = s.spawn.x;
+      s.player.y = s.spawn.y - s.player.h;
+      s.player.vy = 0;
+      for (let f = 0; f < 40; f++) s.update(i);
+      const gone = s.tileAt(spot.tx, spot.ty) === T.EMPTY;
+      expect('a crumbling platform holds, warns, then drops out',
+        heldAtFirst && started && stillThere && gone,
+        `heti ${heldAtFirst}, ajastin ${started}, 40 framea ${stillThere}, 80 framea poissa ${gone}`);
+
+      /* It must come back. Dying halfway across a row of these would otherwise
+       * leave the level impassable for the rest of the attempt, with nothing on
+       * screen to explain why. */
+      for (let f = 0; f < 260; f++) s.update(i);
+      expect('a crumbling platform grows back',
+        s.tileAt(spot.tx, spot.ty) === T.CRUMBLE, s.tileAt(spot.tx, spot.ty));
+
+      // And the save state has to carry the timers, like it does for bumps.
+      const s2 = new LevelScene(game, '4-1');
+      game.pendingNode = WORLDS[3].nodes.find((n) => n.level === '4-1') || game.pendingNode;
+      game.setScene(s2);
+      s2.player.x = spot.tx * 16 + 2;
+      s2.player.y = spot.ty * 16 - s2.player.h;
+      for (let f = 0; f < 8; f++) s2.update(i);
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      const before = s2.crumbles.size;
+      restoreState(game, snap);
+      expect('a save state remembers which platforms are already crumbling',
+        before > 0 && game.scene.crumbles.size === before,
+        `${before} -> ${game.scene.crumbles.size}`);
+    }
+  }
+
   /* --------------------------- kosketusohjaus -------------------------- */
   {
     const { Input } = await import('/src/core/input.js');
@@ -1120,6 +1182,38 @@ const report = await page.evaluate(async () => {
       }
     }
     expect('every tile type draws in every theme', badTile.length === 0, badTile.join(' '));
+
+    /* Sprites now tint and glow, and glowing means switching the composite mode
+     * mid-draw. One that is not switched back corrupts every tile drawn after
+     * it, which looks like a graphics bug rather than a leak — so this is
+     * asserted the same way the post-processing pass is. */
+    {
+      const sprites = await import('/src/gfx/sprites.js');
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      const leaks = [];
+      const check = (what) => {
+        if (g.globalCompositeOperation !== 'source-over') leaks.push(`${what}: ${g.globalCompositeOperation}`);
+        if (g.globalAlpha !== 1) leaks.push(`${what}: alpha ${g.globalAlpha}`);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+      };
+      for (const kind of ['shroom', 'flower', 'leaf', 'soup', 'star']) {
+        sprites.drawItem(g, kind, 20, 20, 30);
+        check(`item ${kind}`);
+      }
+      const { TINTS } = sprites;
+      for (const level of [0, 1, 3, 5]) {
+        for (const tint of [null, TINTS && TINTS.frozen, TINTS && TINTS.flash]) {
+          sprites.drawPlayer(g, 20, 20, {
+            type: 'leaf', level, facing: 1, state: 'walk', frame: 1, tick: 12, tint,
+          });
+          check(`player ${level}${tint ? ' tinted' : ''}`);
+        }
+      }
+      expect('drawing a sprite leaves the canvas state as it found it',
+        leaks.length === 0, leaks.join(', '));
+    }
   }
 
   return {

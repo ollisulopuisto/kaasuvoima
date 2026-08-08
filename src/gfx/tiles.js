@@ -19,6 +19,7 @@ export const T = {
   PIPE_BR: '}',
   SPIKE: '^',
   LAVA: 'W',
+  CRUMBLE: '%',
   GOAL: 'F',
   DOOR: 'D',
   NOTE: 'N',
@@ -40,6 +41,9 @@ export const TILE_INFO = {
   [T.PIPE_BL]: { ...S, pipe: true },
   [T.PIPE_BR]: { ...S, pipe: true },
   [T.PLATFORM]: { ...SEMI },
+  /* Solid until you stand on it. The timer lives on the scene, not here —
+   * `TILE_INFO` describes what a character *is*, never what it is doing. */
+  [T.CRUMBLE]: { ...S, crumble: true },
   [T.COIN]: { coin: true },
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
@@ -519,6 +523,41 @@ export function drawCoinSprite(ctx, x, y, tick) {
 /**
  * Draws a single map tile. `above` lets ground know whether to grow grass.
  */
+/**
+ * A crumbling platform. `progress` runs 0→1 while the player stands on it.
+ *
+ * The warning has to be *visible*, not merely fair — same rule as the piranha
+ * plant: anything that can hurt you must show itself first. So it shakes harder
+ * and the cracks open wider the closer it is to going, and by the end it is
+ * obviously about to fail rather than technically signposted.
+ */
+function drawCrumble(ctx, x, y, th, tx, ty, progress) {
+  const shake = progress > 0 ? Math.round(Math.sin(progress * 44) * progress * 1.6) : 0;
+  const px = x + shake;
+  ctx.fillStyle = th.brick;
+  ctx.fillRect(px, y, TILE, TILE);
+  ctx.fillStyle = th.brickLight;
+  ctx.fillRect(px, y, TILE, 1);
+  ctx.fillStyle = th.brickDark;
+  ctx.fillRect(px, y + 15, TILE, 1);
+
+  // Two cracks that open outwards from the middle as the timer runs down.
+  const spread = Math.round(progress * 5);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(px + 7 - spread, y + 2, 1, 12);
+  ctx.fillRect(px + 8 + spread, y + 4, 1, 10);
+  if (progress > 0.55) {
+    ctx.fillRect(px + 2, y + 6, 4, 1);
+    ctx.fillRect(px + 11, y + 9, 3, 1);
+  }
+  // Dust from underneath once it is genuinely about to go.
+  if (progress > 0.75) {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(px + 3, y + TILE, 2, 1);
+    ctx.fillRect(px + 10, y + TILE, 3, 1);
+  }
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
@@ -534,6 +573,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.PIPE_BL:
     case T.PIPE_BR: drawPipe(ctx, x, y, ch, th); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
+    case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA: drawLava(ctx, x, y, tick, tx); break;

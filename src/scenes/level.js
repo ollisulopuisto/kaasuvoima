@@ -32,6 +32,12 @@ const CAM_LOOK_RETURN = 0.07; // and how fast it settles back when you stop
 const STUCK_FRAMES = 480;
 const STUCK_PROGRESS = 8;     // px of new ground that counts as progress
 
+/* How long a crumbling platform holds. Just under a second: long enough to
+ * cross two of them at a walk, short enough that standing still is a mistake. */
+const CRUMBLE_FRAMES = 52;
+/** And how long the hole stays before the tile comes back. */
+const CRUMBLE_REGROW = 220;
+
 export class LevelScene {
   constructor(game, levelId) {
     this.game = game;
@@ -47,6 +53,10 @@ export class LevelScene {
 
     this.entities = [];
     this.bumps = new Map();
+    /* Crumbling platforms: "tx,ty" → frames stood on. Same shape as `bumps`,
+     * which is deliberate — the save-state code already knows how to store a
+     * per-tile timer map, so this costs one line there instead of a design. */
+    this.crumbles = new Map();
     this.cam = { x: 0, y: 0 };
     this.camLook = 0;
     this.tick = 0;
@@ -383,6 +393,7 @@ export class LevelScene {
     if (this.state !== 'dead') this.collisions();
     this.updateCamera();
     this.updateBumps();
+    this.updateCrumbles();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
   }
 
@@ -428,6 +439,60 @@ export class LevelScene {
       if (!e.alwaysActive && e.x + e.w < this.cam.x - 240 && e.kind === 'enemy') e.remove = true;
     }
     this.entities = this.entities.filter((e) => !e.remove);
+  }
+
+  /**
+   * Crumbling platforms. A tile starts its timer the moment the player's feet
+   * are on it, keeps counting whether or not they stay, and then drops out.
+   *
+   * It grows back after a while, and that is not decoration: without it, dying
+   * halfway across a row of them would leave the level permanently impassable
+   * for the rest of the attempt, and the player would have no way to know why.
+   */
+  updateCrumbles() {
+    const p = this.player;
+    if (!p.dying && p.onGround) {
+      const ty = Math.floor((p.y + p.h) / TILE);
+      const x0 = Math.floor(p.x / TILE);
+      const x1 = Math.floor((p.x + p.w - 1) / TILE);
+      for (let tx = x0; tx <= x1; tx++) {
+        if (this.tileAt(tx, ty) !== T.CRUMBLE) continue;
+        const key = `${tx},${ty}`;
+        if (!this.crumbles.has(key)) {
+          this.crumbles.set(key, 0);
+          Sfx.play('bump');
+        }
+      }
+    }
+
+    for (const [key, value] of this.crumbles) {
+      const next = value + 1;
+      const [tx, ty] = key.split(',').map(Number);
+      if (next === CRUMBLE_FRAMES) {
+        this.setTile(tx, ty, T.EMPTY);
+        const px = tx * TILE;
+        const py = ty * TILE;
+        this.add(new BrickPiece(this, px, py, -1.2, -2.6, this.theme));
+        this.add(new BrickPiece(this, px + 8, py, 1.2, -2.6, this.theme));
+        this.shake(1.2);
+        Sfx.play('brick');
+      } else if (next > CRUMBLE_FRAMES + CRUMBLE_REGROW) {
+        // Never rebuild a tile inside the player: that would be a wall
+        // appearing out of nowhere, and it would be our fault, not theirs.
+        const box = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
+        if (overlaps(this.player.box, box)) continue;
+        this.setTile(tx, ty, T.CRUMBLE);
+        this.crumbles.delete(key);
+        continue;
+      }
+      this.crumbles.set(key, next);
+    }
+  }
+
+  /** 0→1 while a crumbling tile is counting down, for the drawing code. */
+  crumbleProgress(tx, ty) {
+    const value = this.crumbles.get(`${tx},${ty}`);
+    return value === undefined ? 0 : Math.min(1, value / CRUMBLE_FRAMES);
   }
 
   updateBumps() {
@@ -673,7 +738,8 @@ export class LevelScene {
         const bump = this.bumps.get(`${tx},${ty}`);
         const offset = bump === undefined ? 0 : Math.round(Math.sin((bump / 10) * Math.PI) * -6);
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,
-          this.tileAt(tx, ty - 1), { doorOpen: this.bossDefeated });
+          this.tileAt(tx, ty - 1),
+          { doorOpen: this.bossDefeated, crumble: this.crumbleProgress(tx, ty) });
       }
     }
   }

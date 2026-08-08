@@ -70,6 +70,7 @@ export function captureState(game) {
         cardIndex: scene.cardIndex,
         wonCard: scene.wonCard,
         bumps: [...scene.bumps.entries()],
+        crumbles: [...scene.crumbles.entries()],
       },
     };
   }
@@ -113,6 +114,8 @@ export function restoreState(game, snap) {
   scene.cardIndex = data.cardIndex;
   scene.wonCard = data.wonCard;
   scene.bumps = new Map(data.bumps);
+  // Older snapshots predate crumbling platforms; an absent list is not an error.
+  scene.crumbles = new Map(data.crumbles || []);
   game.setScene(scene);
   return true;
 }

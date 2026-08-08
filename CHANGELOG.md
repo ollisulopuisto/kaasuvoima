@@ -7,6 +7,69 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.24 — murenevat lavat, spritetehosteet ja datalla ohjattu generaattori
+
+Kolme rinnakkaista työtä, joista kaksi teki alaagentti. Osa tiedostoista tuli
+mukaan jo edelliseen committiin `git add -A`:n kautta kesken agenttien työn —
+tässä ne on kuvattu kokonaisuutena.
+
+### Murenevat lavat (`%`)
+Uusi ruututyyppi: kiinteä kunnes sen päälle astuu, sitten se tärisee, halkeaa ja
+putoaa pois 52 framessa. Käytössä tehtaan uudessa `fac_crumble`-palikassa (4-1):
+kolikot ovat murenevien ruutujen **päällä** eikä turvallisissa päissä, jotta
+ahne reitti ja turvallinen reitti ovat sama reitti — jännite on tahdissa, ei
+valinnassa jonka tekee ennen kuin lähtee.
+
+Kolme päätöstä joita ei kannata purkaa myöhemmin:
+- **Ajastin on `scene.crumbles`, samanmuotoinen kuin `bumps`.** Tilatallennus
+  osasi jo tallentaa ruutukohtaisen ajastinkartan, joten tämä maksoi siellä
+  yhden rivin eikä uutta suunnittelua.
+- **Ruutu kasvaa takaisin 220 framen jälkeen.** Ilman sitä kuolema puolivälissä
+  jättäisi kentän lopullisesti mahdottomaksi loppuyritykseksi, eikä ruudulla
+  olisi mitään mikä kertoisi miksi. Ruutua ei koskaan palauteta pelaajan sisään.
+- **`%` on `rules.js`:n `SOLID`-joukossa.** Se kantaa tarpeeksi kauan että sen yli
+  kulkeva reitti on oikea reitti; ilman tätä validaattori lukisi jokaisen
+  kulkusillan pohjattomaksi kuiluksi ja hylkäisi kelvolliset kentät.
+
+### Spritekohtaiset tehosteet
+`tint`-parametri ja hehkukehä. Spritet ovat proseduraalisia, joten värjäys on
+**väritaulun korvaus piirron aikana**, ei kuvankäsittelyä: alfakanava on
+tavulleen sama värjätyssä ja värjäämättömässä. Käyttöön otettu siellä missä
+pelitilalla ei ollut omaa kuvakieltä: jäätynyt hahmo, vahingoittumattomuuden
+välähdys (joka ennen vain katosi joka toinen frame) ja sammumassa oleva
+pierupallo. `ctx.filter`-varjoja ei käytetä — ne maksavat moninkertaisesti sen
+mitä koko jälkikäsittelypassi.
+
+### Generaattori lukee telemetriaa
+`node tools/gen-levels.mjs --telemetry loki.json`. Kuolemakeskittymä leventää
+edeltävää lepotasannetta, jumikeskittymä madaltaa seuraavaa estettä — mutta
+vain jos dataa on tarpeeksi: **5 tapahtumaa samassa kohdassa JA 3 yritystä jotka
+päättyivät muualla.** Jälkimmäinen on se joka erottaa harjoittelun ongelmasta:
+kaksikymmentä kuolemaa yhdessä hypyssä eikä mitään muuta lokissa tarkoittaa että
+pelaaja valitsi sen hypyn.
+
+Kolme asiaa jotka roadmap oletti väärin ja jotka toteutus paljasti:
+1. **Lokin sarakenumerot eivät tarkoita mitään muutoksen jälkeen.** Generaattori
+   latoo palikat vasemmalta oikealle, joten minkä tahansa levennys numeroi
+   uudelleen kaiken sen jälkeen. Siksi kenttä rakennetaan kahdesti: ensimmäinen
+   on kartta, toinen se joka muuttuu.
+2. **Kaikilla esteillä ei ole korkeutta.** Suurimmalla osalla sanastoa ei ole
+   nuppia jolla siitä tulisi helpompi olematta jotain muuta. Rehellinen vastaus
+   on kirjattu "jätettiin rauhaan", ei keksitty säätö.
+3. **Säädetyt kentät lyhenevät.** Rakennussilmukka lopettaa samaan leveyteen,
+   joten levennetty lepo syö sisältöä. Puolustettavaa, muttei sitä miltä sana
+   "leventää" kuulostaa.
+
+### Testit
+Neljä uutta murenevalle lavalle (kantaa, varoittaa, putoaa, kasvaa takaisin,
+tilatallennus muistaa ajastimet) ja yksi spriteille: piirto ei saa jättää
+`globalCompositeOperation`ia tai `globalAlpha`ia jälkeensä. Kaksi ensimmäistä
+versiota murenemistestistä olivat itse rikki — pelaaja putosi kuoppaan ja kuoli,
+ja kuollut kohtaus lakkaa päivittämästä 140 framen jälkeen, joten testi mittasi
+sitä eikä ruutua.
+
+---
+
 ## v26.08.08.23 — kenttäkohtainen tunnelma ja oikeampi kuvaputki
 
 ### Lisätty

@@ -111,12 +111,12 @@ tarvitse kirjoittaa, koska dataa ei voi yhdistää kehenkään.
 Vaiheet:
 1. ✔ Paikallinen kirjaus localStorageen + lämpökartta debug-ruutuun. Nolla infraa.
 2. ✔ Vienti (näppäin 8) JSON-tiedostoksi, jonka voi syöttää generaattorille.
-3. **Kesken:** generaattori lukee viedyn lokin ja säätää painoja sen mukaan.
-   Tähän tarvitaan `gen-levels.mjs`:ään lippu `--telemetry tiedosto.json` ja
-   sääntö sille *mitä* data muuttaa: kuolemakeskittymä leventää edeltävää
-   lepotasannetta, jumikeskittymä madaltaa seuraavaa estettä. Huom: dataa pitää
-   olla riittävästi ennen kuin se on signaalia — yhden pelaajan kymmenen kuolemaa
-   samassa paikassa voi olla vain se että hän harjoitteli siinä kohtaa.
+3. ✔ Generaattori lukee viedyn lokin: `--telemetry loki.json`. Kynnys on 5
+   tapahtumaa samassa kohdassa JA 3 yritystä jotka päättyivät muualla.
+   Kolme asiaa jotka tämä paljasti ja jotka vaihe 4 rikkoisi hiljaa: lokin
+   sarakenumerot eivät tarkoita mitään muutoksen jälkeen (kenttä rakennetaan
+   siksi kahdesti), kaikilla esteillä ei ole korkeutta jota madaltaa, ja
+   säädetyt kentät lyhenevät koska levennetty lepo syö sisältöä.
 4. Vercel-funktio + KV vastaanottoon, cron joka ajaa generaattorin.
 
 Vaihe 4 rikkoo "ei ajonaikaisia riippuvuuksia" -periaatteen ja vaatii sen
@@ -156,10 +156,10 @@ Moottorissa on jo kaikki tarvittava, joten tämä on halpaa:
   **tilatallennus tallentaa sekä ruudukon että ajastimet** (`savestate.js:59,71`).
   Sama rakenne kelpaa murenemisajastimeksi sellaisenaan.
 
-**Mureneva lava** (`%`): kiinteä ruutu, joka käynnistää ajastimen kun pelaaja
-seisoo sen päällä. Ajastimen loppuessa `setTile(EMPTY)` ja `BrickPiece`-sirpaleet.
-Piirto tärisyttää ruutua ajastimen edetessä, jotta varoitus on näkyvä — sama
-periaate kuin putkikasvilla: *mikä voi satuttaa, sen pitää näkyä*.
+**Mureneva lava** (`%`) ✔ **tehty** (v26.08.08.24). Kiinteä kunnes sen päälle
+astuu, tärisee ja halkeaa 52 framea, putoaa, kasvaa takaisin 220 framen jälkeen.
+Takaisinkasvu ei ole koristetta: ilman sitä kuolema puolivälissä jättäisi kentän
+mahdottomaksi loppuyritykseksi. Käytössä 4-1:n `fac_crumble`-palikassa.
 
 **Kytkinruudut** (P-switch-tyyliin): **älä kirjoita ruudukkoa uusiksi.** Puhtaampi
 tapa on käännöstaulu `tileAt()`:ssa: kun kytkin on päällä, tietyt merkit
