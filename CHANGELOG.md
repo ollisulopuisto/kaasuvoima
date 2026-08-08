@@ -7,6 +7,52 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.21 — kuvaefektit (bloom, juovat, kuvaputki)
+
+### Lisätty
+- **`src/gfx/postfx.js`**: bloom, skanviivat, vinjetti ja WebGL:llä myös kaareva
+  kuvaputki ja värivirhe. Näppäin **7** kiertää esiasetukset `pois → hehku →
+  kuvaputki`, ja valinta muistetaan.
+- **Efektit debug-ruudulla** (`FX WEBGL CRT`), ja tauko­ruutuun vihje näppäimestä.
+
+### Miksi näin — ja miksi ei WebGL-uudelleenkirjoitusta
+Peli **piirtää edelleen Canvas 2D:llä**; WebGL vain esittää valmiin
+320×240-kuvan shaderin läpi. Koko renderöijän kirjoittaminen WebGL:llä
+harkittiin ja hylättiin: `src/gfx/` on tuhansia rivejä suorakaiteita, se maksaa
+mitatusti alle millisekunnin framessa, eikä uudelleenkirjoitus toisi muuta kuin
+shaderit — jotka saa näinkin, yhdellä tiedostolla ja koskematta piirtokoodiin.
+
+**Fallback on pakollinen, ei kohteliaisuus.** `getContext('webgl2')` palauttaa
+nullin estolistatulla ajurilla, virtuaalikoneessa ja kun laitteistokiihdytys on
+pois — täysin ajantasaisessakin selaimessa. Ilman WebGL:ää bloom, juovat ja
+vinjetti piirretään Canvas 2D:llä; vain kaarevuus jää pois. `verify.mjs` tynkää
+kontekstin pois ja tarkistaa tämän joka ajolla, samoin sen että heittävä ajuri ei
+kaada peliä.
+
+### Kaksi virhettä, jotka löytyivät vasta kuvakaappauksesta
+Molemmat menivät testeistä läpi ja näkyivät heti silmällä — tästä syystä efektit
+katsottiin oikeasta selaimesta eikä vain mitattu:
+- **Kuva oli ylösalaisin.** Canvas on ylhäältä alas, GL-tekstuuri alhaalta ylös.
+  Korjaus: `UNPACK_FLIP_Y_WEBGL`.
+- **Skanviivat muodostivat moiré-renkaita.** Taajuus oli sidottu näytön
+  pikselikokoon (720), jolloin se lähestyi pikseliruudukkoa. Nyt yksi viiva per
+  **lähdekuvan** rivi (240), eli 3 px per viiva kolminkertaisella skaalalla.
+
+### Bloomin kynnys on luminanssissa, ei kanavissa
+Ensimmäinen versio käytti `ctx.filter = 'contrast()'`, joka kynnystää kanava
+kerrallaan. Se ei erota kirkasta taivasta valkoisesta auringosta, koska taivaan
+sininen kanava on jo 252 — koko kuva nousi ~45 tasoa ja muuttui maitomaiseksi
+(taivas 104,158,252 → 151,224,255). Nyt kynnys lasketaan Rec. 709 -luminanssista
+80×60-kopiosta: taivas on 153, kolikko 179, aurinko 251, joten kynnys 168
+hehkuttaa kolikon ja jättää taivaan rauhaan. Mitattuna taivas ja maa ovat nyt
+pikselilleen samat kuin ilman efektejä.
+
+Luminanssikynnys vaatii pikselien lukemisen, mutta vain 4800 kpl: koko passi
+mittaa 0,35 ms framessa. `verify.mjs` vahtii 2,5 ms:n budjettia, koska juuri
+tällainen asia lakkaa huomaamatta olemasta halpa.
+
+---
+
 ## v26.08.08.20 — pelidatan kirjaus ja lämpökartta
 
 ### Lisätty

@@ -17,8 +17,8 @@ ennen pushia on `node tools/verify.mjs`.
 - [x] **Vokaalit** ("jee!", "hup", "oof") formanttisynteesillä, hyppyäänet
       satunnaistettuna 18 %:iin.
 - [x] **Telemetria, vaiheet 1–2**: paikallinen kirjaus, lämpökartta, JSON-vienti.
-- [ ] **Kuvaefektit** (kohta 1) — seuraava työ. Halvat 2D-efektit ensin, sitten
-      päätös shaderiputkesta.
+- [x] **Kuvaefektit**: bloom, juovat, vinjetti ja WebGL-kuvaputki, esiasetukset
+      näppäimessä 7, fallback testattuna. Jäljellä vain makuasiat, ks. kohta 1.
 
 ## Seuraavaksi
 
@@ -41,9 +41,11 @@ tiedosto; koko `src/gfx/` pysyy koskemattomana. Efektit joita se antaa:
 - kuumuuden väreily aavikossa, aaltoilu veden alla, tärinä pomon iskuun
 - vaalean hehkun bloom kolikoista ja tulipalloista
 
-Ehdot: **`willReadFrequently`-canvas ei kelpaa lähteeksi joka framessa** ilman
-mittausta, ja **fallback pakollinen** — jos `getContext('webgl2')` palauttaa
-nullin, näytetään sama 2D-canvas suoraan. Peli ei saa mennä mustaksi ajurin takia.
+Ehdot: **fallback pakollinen** — jos `getContext('webgl2')` palauttaa nullin,
+näytetään sama 2D-canvas suoraan. Peli ei saa mennä mustaksi ajurin takia.
+`willReadFrequently` on käytössä vain 80×60-bloomkopiossa, jota luetaan joka
+frame; pelin omalle canvasille se olisi väärä valinta, koska sitä kirjoitetaan
+paljon enemmän kuin luetaan.
 
 **Selaintuki.** WebGL 1 on käytännössä kaikkialla (Chrome, Firefox, Safari, Edge,
 mobiiliselaimet) — se on ollut mukana vuodesta 2011. WebGL 2 on tuettu kaikissa
@@ -60,21 +62,44 @@ kohteliaisuus vanhoja selaimia kohtaan vaan pakollinen — ja siksi se testataan
 WebGPU sen sijaan olisi liian aikaista: Safarilla se tuli vasta 2025 ja Firefoxin
 tuki on yhä osittainen. Se ei toisi tähän mitään mitä WebGL ei tekisi.
 
-Toteutusjärjestys:
+**Tehty** (v26.08.08.21, `src/gfx/postfx.js`): bloom luminanssikynnyksellä,
+skanviivat, vinjetti, kaareva kuvaputki ja värivirhe shaderissa, esiasetukset
+näppäimessä 7, valinta muistissa, fallback testattuna ja efektipassin
+aikabudjetti vahdittuna (2,5 ms, toteuma 0,35 ms).
 
-1. **Halvat 2D-efektit ensin**: `globalCompositeOperation = 'lighter'` hehkuun,
-   offscreen-canvas + `drawImage` skanviivoihin ja vinjettiin, CSS-filtterit
-   (`hue-rotate`, `contrast`) koko canvasille. Tunnin työ, ja kertoo kannattaako
-   shaderiputki ollenkaan — jos CRT-suodin ei miellytä 2D:nä, ei se miellytä
-   shaderinakaan.
-2. **Efektikytkin asetuksiin ja debug-ruutuun.** Efektit ovat makuasia ja
-   suorituskykyriski; ne pitää voida kytkeä pois ilman koodin koskemista.
-   Kysy myös lapselta — hän on pääsuunnittelija.
-3. **Vasta sitten WebGL-passi**, jos halutaan väreily tai kaareva ruutu, joita
-   2D ei tee. Yksi tiedosto `src/gfx/postfx.js`, joka ottaa 2D-canvasin ja
-   näyttää sen; jos konteksti puuttuu, se palauttaa 2D-canvasin sellaisenaan.
-4. **`verify.mjs`:ään tarkistus** että peli piirtyy myös ilman WebGL:ää
-   (`getContext` stubattuna nulliksi). Fallback jota ei testata ei ole fallback.
+**Jäljellä — makuasiat ja kohdistetut efektit:**
+
+1. **Kysy lapselta mikä esiasetus on oletus.** Hän on pääsuunnittelija, ja
+   kuvaputki on makuasia jota kukaan ei voi päättää hänen puolestaan.
+2. **Palettisiirto tapahtumiin**: vahinkovälähdys, pomon huoneen sävy, tähden
+   välkyntä. Shaderiin yksi uniform lisää; 2D-tilassa `globalCompositeOperation`.
+   Vaatii että efekti voidaan ajastaa framen tarkkuudella pelilogiikasta.
+3. **Kuumuuden väreily aavikkoon ja aaltoilu veden alle.** Nämä ovat ne kaksi
+   asiaa joita 2D-tila *ei* voi tehdä, eli ensimmäiset joissa WebGL näkyy
+   sisältönä eikä pelkkänä suotimena. Silloin tarvitaan myös päätös siitä miltä
+   sama kohta näyttää ilman WebGL:ää — mieluiten samalta, vain ilman väreilyä.
+4. **Spritekohtaiset efektit eivät kuulu tähän tiedostoon.** Jälkikäsittely näkee
+   vain valmiin kuvan eikä tiedä mikä pikseli oli mikäkin olio, joten kaikki
+   "vain tämä sprite" -efektit tehdään piirtokoodissa.
+
+   **Meillä on tähän epätavallisen hyvä lähtökohta: spritet ovat proseduraalisia.**
+   Ne piirretään kokonaislukusuorakaiteina nimetyillä väreillä, ei bittikartoista,
+   joten värin vaihtaminen on parametri eikä kuvankäsittelyä. Se mikä
+   bittikarttapelissä vaatisi valmiiksi värjätyt kopiot jokaisesta ruudusta, on
+   täällä yksi ylimääräinen argumentti `drawPlayer`/`drawEnemy`-funktioille:
+
+   - **palettivaihto** (jäätynyt sininen, myrkytetty vihreä, pomon toinen väri):
+     `tint`-parametri, joka korvaa väritaulun. Ilmainen ja pikselintarkka.
+   - **hehkukehä** (tähti, tulipallo): sama sprite piirrettynä kerran isompana
+     ja `globalCompositeOperation = 'lighter'` -tilassa taakse.
+   - **läpikuultavuus** (haamu, vahingoittumattomuus): `globalAlpha`. Käytössä jo
+     osittain vilkkumisessa.
+   - **`ctx.filter = 'drop-shadow()'` per sprite: älä.** Se on framekohtainen
+     suodin jokaiselle piirrolle, ja se maksaa moninkertaisesti sen mitä koko
+     jälkikäsittelypassi.
+
+   Sääntö: jos efekti koskee **yhtä oliota**, se kuuluu `src/gfx/sprites.js`:ään;
+   jos se koskee **koko ruutua**, se kuuluu `postfx.js`:ään. Väliin ei jää mitään.
 
 ### 2. Telemetria ja palautesilmukka
 

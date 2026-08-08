@@ -12,6 +12,7 @@ import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { qualifies } from './core/scores.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
+import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
 
 const W = 320;
 const H = 240;
@@ -263,6 +264,10 @@ class Game {
     if (Input.pressed.quicksave) this.quickSave();
     if (Input.pressed.quickload) this.quickLoad();
     if (Input.pressed.export) this.exportTelemetry();
+    if (Input.pressed.fx) {
+      this.toast(`KUVAEFEKTIT: ${PRESET_NAMES[PostFX.cyclePreset()]}`);
+      Sfx.play('cursor');
+    }
     if (this.flashTimer > 0) this.flashTimer--;
 
     const pausable = this.scene instanceof LevelScene;
@@ -285,13 +290,18 @@ class Game {
       ctx.fillRect(0, 90, W, 48);
       drawText(ctx, 'TAUKO', W / 2, 104, { color: '#ffffff', align: 'center', shadow: '#303048' });
       drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
-      drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  9 DEBUG`, W / 2, 126,
+      drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
         { color: '#8890b0', align: 'center' });
     }
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });
     }
+
+    // Effects go over the game but under the developer overlay: a CRT filter
+    // on top of debug text would make the one thing you are reading unreadable.
+    PostFX.apply(ctx);
     if (this.debug) this.drawDebug(ctx);
+    PostFX.present();
   }
 
   /** Developer overlay: frame budget, scene contents, player and audio state. */
@@ -323,6 +333,8 @@ class Game {
     lines.push(`MUS ${a.track.toUpperCase()} (${Music.variation().toUpperCase()})`
       + `  MUTE ${a.muted ? 1 : 0}`);
     lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
+    const fx = PostFX.diag();
+    lines.push(`FX ${fx.mode.toUpperCase()} ${fx.preset.toUpperCase()}  (7 VAIHDA)`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
     if (scene && scene.id && scene.cam) {
       const t = levelSummary(scene.id);
@@ -372,13 +384,19 @@ class Game {
 const canvas = document.getElementById('game');
 const game = new Game(canvas);
 
+// The game always draws into `canvas`. What ends up on screen may be another
+// one — see src/gfx/postfx.js. If WebGL is unavailable this returns `canvas`
+// itself and nothing below changes.
+const display = PostFX.init(canvas);
+
 function resize() {
   const scale = Math.max(1, Math.min(
     Math.floor(window.innerWidth / W),
     Math.floor((window.innerHeight - 56) / H),
   ));
-  canvas.style.width = `${W * scale}px`;
-  canvas.style.height = `${H * scale}px`;
+  display.style.width = `${W * scale}px`;
+  display.style.height = `${H * scale}px`;
+  PostFX.resize(scale);
 }
 
 window.addEventListener('resize', resize);
@@ -398,3 +416,4 @@ window.sfb3 = game;
 // …and `window.sfb3.telemetry.summary('1-1')` to see where a level is killing
 // people without having to squint at the heatmap.
 game.telemetry = { summary: levelSummary, count: eventCount, clear: clearTelemetry };
+game.fx = PostFX;

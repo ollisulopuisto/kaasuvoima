@@ -23,7 +23,10 @@ html, body {
   gap: 14px;
 }
 
-#game {
+/* #screen is the WebGL presentation canvas, created at runtime by postfx.js
+   when the machine has a usable context. Without one, #game stays on screen
+   and this rule simply never matches anything. */
+#game, #screen {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;

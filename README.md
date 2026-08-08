@@ -50,6 +50,7 @@ näppäimistöasettelu ei siirrä niitä.
 | M tai 0 | äänet päälle/pois |
 | 1 / 2 | tallenna tila / lataa tila |
 | 3 | vaihda tallennuspaikkaa (1–3) |
+| 7 | kuvaefektit: ei efektejä → hehku → kuvaputki |
 | 8 | vie pelidata tiedostoon (JSON) |
 | 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
 
@@ -172,6 +173,31 @@ git clone --depth 1 https://github.com/TheVGLC/TheVGLC /tmp/vglc
 VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
 ```
 
+## Kuvaefektit
+
+Näppäin **7** kiertää kolme esiasetusta:
+
+| Esiasetus | Mitä tekee |
+| --- | --- |
+| `pois` | ei mitään — sama kuva kuin ennen efektejä |
+| `hehku` | bloom: kirkkaat asiat (aurinko, kolikot, tulipallot) hehkuvat |
+| `kuvaputki` | bloom + juovat + vinjetti, ja WebGL:llä myös kaareva ruutu ja värivirhe |
+
+Peli **piirtää edelleen Canvas 2D:llä**. WebGL:ää käytetään vain valmiin
+320×240-kuvan esittämiseen shaderin läpi, eikä `src/gfx/` tiedä siitä mitään.
+Koko renderöijän kirjoittaminen WebGL:llä harkittiin ja hylättiin: piirtokoodi
+maksaa alle millisekunnin framessa, joten uudelleenkirjoitus ei toisi muuta kuin
+shaderit — ja shaderit saa näinkin.
+
+**Jos WebGL ei ole käytettävissä, peli toimii silti.** `getContext('webgl2')`
+palauttaa nullin estolistatulla näytönohjaimella, virtuaalikoneessa ja aina kun
+laitteistokiihdytys on pois päältä — myös täysin ajantasaisessa selaimessa.
+Silloin bloom, juovat ja vinjetti piirretään Canvas 2D:llä ja vain kaarevuus
+jää pois. `verify.mjs` tynkää WebGL-kontekstin pois ja tarkistaa tämän joka
+ajolla: fallback jota ei testata ei ole fallback.
+
+Efektipassi mitataan samalla: budjetti on 2,5 ms framessa, toteuma ~0,35 ms.
+
 ## Pelidata ja yksityisyys
 
 Peli kirjaa **selaimen omaan muistiin** (localStorage) sen mihin pelaaja kuolee,
@@ -207,7 +233,7 @@ vercel --prod   # käsin, jos automaattinen julkaisu ei ole käytössä
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
 src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
 src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
-src/gfx/            bittikarttafontti, ruudut, spritet, taustat
+src/gfx/            bittikarttafontti, ruudut, spritet, taustat, kuvaefektit
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
 src/entities/       pelaaja, viholliset, esineet, efektit
 src/level/          fysiikka ja törmäykset

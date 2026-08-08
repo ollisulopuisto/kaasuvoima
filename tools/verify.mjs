@@ -706,6 +706,169 @@ const report = await page.evaluate(async () => {
     tele.clearTelemetry();
   }
 
+  /* ------------------------------ kuvaefektit -------------------------- */
+  {
+    const { PostFX, PRESETS } = await import('/src/gfx/postfx.js');
+
+    // A fresh instance per case: the live PostFX is already attached to the
+    // real canvas and must not be re-initialised out from under the game.
+    const makeFX = () => Object.create(PostFX);
+    const testCanvas = () => {
+      const c = document.createElement('canvas');
+      c.width = 320;
+      c.height = 240;
+      const g = c.getContext('2d');
+      g.fillStyle = '#204080';
+      g.fillRect(0, 0, 320, 240);
+      g.fillStyle = '#ffe0a0';                 // something bright for the bloom
+      g.fillRect(140, 90, 40, 40);
+      return c;
+    };
+    const pixels = (c) => c.getContext('2d').getImageData(0, 0, 320, 240).data;
+    // Any channel counts. A bloom around something already at 255 red shows up
+    // only in the other two, and counting red alone missed almost all of it.
+    const differs = (a, b) => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++;
+      }
+      return n;
+    };
+
+    /* THE point of this file: a machine without WebGL still gets a game.
+     * getContext('webgl2') returns null on a blocklisted driver, in a VM and
+     * whenever hardware acceleration is off — in an up-to-date browser. */
+    const realGet = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, opts) {
+      if (String(type).startsWith('webgl')) return null;
+      return realGet.call(this, type, opts);
+    };
+    let fallbackOk = false;
+    let drewGlow = 0;
+    let drewCrt = 0;
+    try {
+      const fx = makeFX();
+      const c = testCanvas();
+      const shown = fx.init(c);
+      fallbackOk = fx.mode === '2d' && shown === c && !fx.displayCanvas
+        && fx.present() === false;
+      for (const [preset, out] of [['hehku', 'glow'], ['crt', 'crt']]) {
+        const t = testCanvas();
+        fx.source = t;
+        fx.setPreset(preset);
+        const before = pixels(t).slice();
+        fx.apply(t.getContext('2d'));
+        const n = differs(before, pixels(t));
+        if (out === 'glow') drewGlow = n; else drewCrt = n;
+      }
+    } finally {
+      HTMLCanvasElement.prototype.getContext = realGet;
+    }
+    expect('without WebGL the game still draws, effects and all',
+      fallbackOk && drewGlow > 200, `mode-ok ${fallbackOk}, hehku muutti ${drewGlow} px`);
+    // Scanlines and the vignette live in the shader when there is one, and in
+    // Canvas 2D when there is not. Without WebGL, CRT must still beat plain glow.
+    expect('the CRT preset really does more than the glow one without WebGL',
+      drewCrt > drewGlow * 4, `hehku ${drewGlow} px, crt ${drewCrt} px`);
+
+    // A context that throws outright must land in the same place as a null one.
+    HTMLCanvasElement.prototype.getContext = function (type, opts) {
+      if (String(type).startsWith('webgl')) throw new Error('ajuri estetty');
+      return realGet.call(this, type, opts);
+    };
+    let threwOk = false;
+    try {
+      const fx = makeFX();
+      threwOk = fx.init(testCanvas()) !== null && fx.mode === '2d';
+    } catch {
+      threwOk = false;
+    } finally {
+      HTMLCanvasElement.prototype.getContext = realGet;
+    }
+    expect('a driver that throws falls back instead of taking the game down', threwOk);
+
+    /* Every preset has to survive being drawn, and 'pois' has to mean off —
+     * an effects switch that does not switch anything off is worse than none. */
+    const perPreset = [];
+    for (const preset of PRESETS) {
+      const fx = makeFX();
+      const c = testCanvas();
+      fx.init(c);
+      fx.setPreset(preset);
+      const before = pixels(c).slice();
+      try {
+        fx.apply(c.getContext('2d'));
+        fx.present();
+        perPreset.push({ preset, changed: differs(before, pixels(c)), error: null });
+      } catch (err) {
+        perPreset.push({ preset, changed: -1, error: err.message });
+      }
+    }
+    const off = perPreset.find((p) => p.preset === 'pois');
+    const on = perPreset.filter((p) => p.preset !== 'pois');
+    expect('every effect preset renders, and "pois" really is off',
+      perPreset.every((p) => !p.error) && off.changed === 0
+      && on.every((p) => p.changed > 200),
+      perPreset.map((p) => `${p.preset}:${p.error || p.changed}`).join(' '));
+
+    /* Effects must leave the context exactly as they found it. A filter or a
+     * composite mode left set wrecks the next frame's tiles, and that reads as
+     * a graphics glitch rather than as a leak. */
+    {
+      const fx = makeFX();
+      const c = testCanvas();
+      fx.init(c);
+      fx.setPreset('crt');
+      const g = c.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      fx.apply(g);
+      expect('effects put the drawing context back the way they found it',
+        g.imageSmoothingEnabled === false && g.globalAlpha === 1
+        && g.globalCompositeOperation === 'source-over'
+        && (!('filter' in g) || g.filter === 'none'),
+        `smoothing ${g.imageSmoothingEnabled}, alpha ${g.globalAlpha}, `
+        + `op ${g.globalCompositeOperation}, filter ${g.filter}`);
+    }
+
+    // The preset is a taste decision, so it has to survive a reload.
+    {
+      const fx = makeFX();
+      fx.init(testCanvas());
+      fx.setPreset('crt');
+      const other = makeFX();
+      other.init(testCanvas());
+      expect('the chosen preset is remembered', other.preset === 'crt', other.preset);
+      const cycled = [fx.cyclePreset(), fx.cyclePreset(), fx.cyclePreset()];
+      expect('the effects key cycles through every preset and back',
+        cycled.join(',') === 'pois,hehku,crt', cycled.join(','));
+    }
+
+    /* The bloom reads back 4800 pixels every frame. That is affordable, but it
+     * is exactly the kind of thing that quietly stops being affordable, so the
+     * budget is asserted rather than assumed. */
+    {
+      const fx = makeFX();
+      const c = testCanvas();
+      fx.init(c);
+      fx.setPreset('crt');
+      const g = c.getContext('2d');
+      fx.apply(g);                        // warm up
+      const t0 = performance.now();
+      for (let i = 0; i < 60; i++) fx.apply(g);
+      const per = (performance.now() - t0) / 60;
+      expect('the effect pass fits in the frame budget',
+        per < 2.5, `${per.toFixed(2)} ms / frame`);
+    }
+
+    // And whatever the live game ended up with, it has to be a working mode.
+    expect('the running game has a valid effect mode',
+      ['webgl', '2d'].includes(game.fx.mode) && PRESETS.includes(game.fx.preset),
+      `${game.fx.mode} / ${game.fx.preset}`);
+    game.fx.setPreset('hehku');
+  }
+
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music } = await import('/src/core/audio.js');
 
