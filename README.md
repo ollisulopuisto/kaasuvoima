@@ -23,12 +23,47 @@ Repo on staattinen sivusto ilman build-vaihetta, ja `vercel.json` kertoo sen
 Vercelille. Julkaisu onnistuu suoraan repon juuresta:
 
 ```bash
-npx vercel          # esikatselu
-npx vercel --prod   # tuotanto
+git fetch origin && git checkout claude/super-fart-bros-3-wmbbku
+python3 -m http.server 8000   # tarkista paikallisesti ensin
+
+vercel          # ensimmäinen ajo luo projektin ja antaa esikatselu-URLin
+vercel --prod   # tuotantoon
 ```
 
-Vaihtoehtoisesti kytke repo Vercelin hallinnasta (Add New → Project → import).
-Frameworkiksi **Other**, build-komento tyhjäksi ja output-hakemistoksi `.`.
+Ensimmäisellä kerralla CLI kysyy muutaman asian. Vastaukset:
+
+| Kysymys | Vastaus |
+| --- | --- |
+| Set up and deploy? | **Y** |
+| Link to existing project? | **N** |
+| Project name | `sfb3` (tai mikä tahansa) |
+| In which directory is your code located? | `./` |
+| Want to modify these settings? | **N** — `vercel.json` hoitaa asetukset |
+
+`vercel` lataa työhakemiston sellaisenaan, joten haaralla ei ole väliä: voit
+julkaista suoraan kehityshaarasta. CLI luo paikallisen `.vercel/`-hakemiston,
+joka on `.gitignore`ssa.
+
+Jos haluat automaattiset julkaisut jokaisesta pushista (ja esikatselu-URLit
+pull requesteille), kytke repo Vercelin hallinnasta: Add New → Project →
+import `sfb3`. Frameworkiksi **Other**, build-komento tyhjäksi ja
+output-hakemistoksi `.`.
+
+## Testit
+
+Repossa on headless-tarkistus, joka tarjoilee sivuston itse, ajaa botin läpi
+jokaisen kentän ja tarkistaa mekaniikat ja tilatallennuksen:
+
+```bash
+npm i -D playwright && npx playwright install chromium
+node tools/verify.mjs
+```
+
+Se listaa jokaisen kentän, kuinka pitkälle botti pääsi ja mihin se kaatui, ja
+palauttaa nollasta poikkeavan paluuarvon jos jokin menee rikki (konsolivirhe,
+kenttä ei lataudu, aloituspaikka seinän sisällä, mekaniikkatesti pettää).
+Botti osaa vain juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaalia
+— merkitseviä ovat FAILURES-listan rivit.
 
 ## Näppäimet
 
