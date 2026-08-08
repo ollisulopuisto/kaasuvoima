@@ -7,6 +7,22 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.8 — eloa animaatioihin
+
+### Lisätty
+- **Pelaajalle idle-esitys.** Paikallaan seisova hahmo hengittää (vartalo nousee
+  ja laskee pikselin noin puolentoista sekunnin välein) ja räpäyttää silmää pari
+  sekunnin välein. Kolmen sekunnin seisoskelun jälkeen se alkaa viihdyttää
+  itseään: katsoo ylös, raapii takamustaan, katsoo alas, naputtaa jalkaa.
+  *Miksi:* liikkumaton seisova sprite lukeutuu pysähtyneeksi peliksi.
+- **Kävelijöille oma nytkähdys**, jotta nekään eivät ole pelkkiä liukuvia kuvia.
+
+Kaikki tämä on puhdas funktio tickistä ja paikallaanoloajasta, joten ääriviivan
+piirtokierros toistaa saman asennon ja tilatallennus palauttaa saman ruudun.
+Testi varmistaa että hengitys ja idle-asennot todella eroavat toisistaan.
+
+---
+
 ## v26.08.08.7 — kenttäsuunnittelun säännöt, ohjaimet molemmille käsille
 
 ### Lisätty

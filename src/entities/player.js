@@ -86,6 +86,7 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
+    this.idle = 0;
     this.flying = 0;
     this.spin = 0;
     this.invuln = 0;
@@ -265,6 +266,11 @@ export class Player extends Entity {
     });
 
     /* ------------------------------ animation ------------------------- */
+    // How long the player has been standing perfectly still, which is what
+    // drives the idle performance in the sprite.
+    if (this.onGround && Math.abs(this.vx) < 0.05 && dir === 0 && !this.ducking) this.idle++;
+    else this.idle = 0;
+
     const speed = Math.abs(this.vx);
     if (this.onGround && speed > 0.1) {
       this.animTimer += 0.12 + speed * 0.14;
@@ -438,6 +444,7 @@ export class Player extends Entity {
       running: Math.abs(this.vx) > MAX_WALK,
       tick: this.tick,
       wag: this.wag,
+      idle: this.idle,
     });
     if (this.corked > 0) {
       drawCork(ctx, this.x + this.w / 2 - 4, this.y - 10, this.tick);

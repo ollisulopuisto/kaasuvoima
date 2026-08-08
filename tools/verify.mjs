@@ -323,6 +323,30 @@ const report = await page.evaluate(async () => {
       bad.length === 0, bad.slice(0, 3).join('; '));
   }
 
+  /* A standing player must never be a still image: there is always a breath,
+   * and after a few seconds the idle performance kicks in. */
+  {
+    const { drawPlayer } = await import('/src/gfx/sprites.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 40;
+    canvas.height = 48;
+    const g = canvas.getContext('2d');
+    const shot = (tick, idle) => {
+      g.clearRect(0, 0, 40, 48);
+      drawPlayer(g, 12, 10, {
+        type: 'shroom', level: 1, facing: 1, frame: 0, state: 'idle',
+        ducking: false, running: false, tick, idle,
+      });
+      return [...g.getImageData(0, 0, 40, 48).data].join(',');
+    };
+    const breathing = new Set([shot(0, 30), shot(13, 43), shot(26, 56), shot(152, 182)]);
+    const performing = new Set();
+    for (let beat = 0; beat < 4; beat++) performing.add(shot(300 + beat * 90, 240 + beat * 90));
+    expect('a standing player breathes and then finds something to do',
+      breathing.size >= 2 && performing.size >= 3,
+      `${breathing.size} breathing frames, ${performing.size} idle poses`);
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');

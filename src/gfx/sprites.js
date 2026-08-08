@@ -165,11 +165,49 @@ function capSpots(ctx, x, y, w) {
   ctx.fillRect(x + w - 4, y, 2, 2);
 }
 
+/**
+ * What the player is doing while doing nothing. A standing sprite that does not
+ * move reads as a paused game, so there is always at least a breath, and after
+ * a few seconds of genuine idleness the character starts amusing itself.
+ *
+ * Everything here is a pure function of tick and idle time, so the outline pass
+ * replays it identically and a save state restores the same pose.
+ */
+function idlePose(s) {
+  const tick = s.tick || 0;
+  const idle = s.idle || 0;
+  const still = s.state === 'idle' && !s.ducking;
+  const pose = { breath: 0, eye: 0, blink: false, scratch: 0, tap: 0, look: 0 };
+  if (!still) return pose;
+
+  // Breathing: the torso rises and settles about once every one and a half
+  // seconds. One pixel is plenty at this size.
+  pose.breath = Math.sin(tick / 26) > 0.55 ? -1 : 0;
+  // A blink every couple of seconds, three frames long.
+  pose.blink = tick % 150 < 4;
+
+  if (idle < 200) return pose;
+
+  // After a few seconds standing around: look up, look down, scratch, repeat.
+  const beat = Math.floor((idle - 200) / 90) % 4;
+  const phase = (idle - 200) % 90;
+  if (beat === 0 && phase > 20 && phase < 70) pose.look = -1;        // up
+  else if (beat === 2 && phase > 20 && phase < 60) pose.look = 1;    // down
+  else if (beat === 1 && phase > 15 && phase < 65) {
+    pose.scratch = Math.floor(phase / 5) % 2 ? 1 : 2;                // behind, twice a second
+  } else if (beat === 3 && phase > 20 && phase < 70) {
+    pose.tap = Math.floor(phase / 7) % 2;                            // foot tapping
+  }
+  pose.eye = pose.look;
+  return pose;
+}
+
 /** Draws the player at template scale. `s.type` picks the palette. */
 function drawPlayerBase(ctx, x, y, s, small) {
   const pal = PALETTES[s.type || 'none'] || PALETTES.none;
   const ducking = s.ducking && !small;
   const w = small ? 12 : 14;
+  const pose = idlePose(s);
 
   flip(ctx, x, w, s.facing < 0, (bx) => {
     const px = Math.round(bx);
@@ -180,21 +218,23 @@ function drawPlayerBase(ctx, x, y, s, small) {
     }
 
     if (small) {
+      const b = pose.breath;
       ctx.fillStyle = pal.cap;
-      ctx.fillRect(px + 2, py, 8, 3);
-      ctx.fillRect(px + 2, py + 3, 10, 1);
-      if (pal.spots) capSpots(ctx, px + 2, py, 8);
+      ctx.fillRect(px + 2, py + b, 8, 3);
+      ctx.fillRect(px + 2, py + 3 + b, 10, 1);
+      if (pal.spots) capSpots(ctx, px + 2, py + b, 8);
       ctx.fillStyle = C.skin;
-      ctx.fillRect(px + 3, py + 4, 7, 5);
+      ctx.fillRect(px + 3, py + 4 + b, 7, 5);
       ctx.fillStyle = C.skinDark;
-      ctx.fillRect(px + 3, py + 7, 3, 2);
+      ctx.fillRect(px + 3, py + 7 + b, 3, 2);
       ctx.fillStyle = C.ink;
-      ctx.fillRect(px + 7, py + 5, 1, 2);
+      if (pose.blink) ctx.fillRect(px + 7, py + 6 + b, 2, 1);
+      else ctx.fillRect(px + 7, py + 5 + b + pose.eye, 1, 2);
       ctx.fillStyle = pal.shirt;
-      ctx.fillRect(px + 2, py + 9, 8, 3);
+      ctx.fillRect(px + 2, py + 9 + b, 8, 3);
       ctx.fillStyle = C.skin;
-      ctx.fillRect(px, py + 9, 2, 3);
-      ctx.fillRect(px + 10, py + 9, 2, 3);
+      ctx.fillRect(px, py + 9 + b, 2, 3);
+      ctx.fillRect(px + 10 - pose.scratch, py + 9 + b + pose.scratch, 2, 3);
       ctx.fillStyle = pal.pants;
       ctx.fillRect(px + 3, py + 11, 6, 3);
       ctx.fillStyle = pal.pantsDark;
@@ -231,23 +271,26 @@ function drawPlayerBase(ctx, x, y, s, small) {
       return;
     }
 
+    const b = pose.breath;
     ctx.fillStyle = pal.cap;
-    ctx.fillRect(px + 3, py, 9, 4);
-    ctx.fillRect(px + 2, py + 4, 12, 2);
-    if (pal.spots) capSpots(ctx, px + 3, py, 9);
+    ctx.fillRect(px + 3, py + b, 9, 4);
+    ctx.fillRect(px + 2, py + 4 + b, 12, 2);
+    if (pal.spots) capSpots(ctx, px + 3, py + b, 9);
     ctx.fillStyle = C.skin;
-    ctx.fillRect(px + 3, py + 6, 9, 7);
+    ctx.fillRect(px + 3, py + 6 + b, 9, 7);
     ctx.fillStyle = C.skinDark;
-    ctx.fillRect(px + 3, py + 11, 4, 2);
+    ctx.fillRect(px + 3, py + 11 + b, 4, 2);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(px + 8, py + 7, 2, 3);
+    if (pose.blink) ctx.fillRect(px + 8, py + 9 + b, 3, 1);
+    else ctx.fillRect(px + 8, py + 7 + b + pose.eye, 2, 3);
     ctx.fillStyle = pal.shirt;
-    ctx.fillRect(px + 2, py + 13, 10, 5);
+    ctx.fillRect(px + 2, py + 13 + b, 10, 5);
     ctx.fillStyle = pal.shirtDark;
-    ctx.fillRect(px + 2, py + 17, 10, 1);
+    ctx.fillRect(px + 2, py + 17 + b, 10, 1);
     ctx.fillStyle = C.skin;
-    ctx.fillRect(px - 1, py + 13, 3, 5);
-    ctx.fillRect(px + 12, py + 13, 3, 5);
+    ctx.fillRect(px - 1, py + 13 + b, 3, 5);
+    // The front arm reaches round the back during the scratch.
+    ctx.fillRect(px + 12 - pose.scratch * 2, py + 13 + b + pose.scratch * 2, 3, 5);
     ctx.fillStyle = pal.pants;
     ctx.fillRect(px + 2, py + 18, 10, 4);
     ctx.fillStyle = pal.pantsDark;
@@ -268,10 +311,10 @@ function drawPlayerBase(ctx, x, y, s, small) {
     } else {
       ctx.fillStyle = pal.pants;
       ctx.fillRect(px + 3, py + 22, 3, 2);
-      ctx.fillRect(px + 8, py + 22, 3, 2);
+      ctx.fillRect(px + 8, py + 22 - pose.tap, 3, 2);
       ctx.fillStyle = C.ink;
       ctx.fillRect(px + 2, py + 24, 4, 2);
-      ctx.fillRect(px + 8, py + 24, 4, 2);
+      ctx.fillRect(px + 8, py + 24 - pose.tap, 4, 2);
     }
   });
 }
@@ -348,9 +391,11 @@ function walkerBody(ctx, x, y, frame, facing, squashed) {
     ctx.fillRect(px + 1, py + 14, 14, 2);
     return;
   }
+  // A slow squash keeps the walker alive even when it is just plodding along.
+  const bob = Math.floor(frame / 2) % 2;
   flip(ctx, px, 16, facing < 0, (bx) => {
     ctx.fillStyle = '#a06828';
-    ctx.fillRect(bx + 2, py + 3, 12, 9);
+    ctx.fillRect(bx + 2, py + 3 + bob, 12, 9 - bob);
     ctx.fillRect(bx + 1, py + 5, 14, 6);
     ctx.fillStyle = '#7a4c18';
     ctx.fillRect(bx + 2, py + 10, 12, 2);
