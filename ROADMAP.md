@@ -55,7 +55,9 @@ mahdu. **Korjaa se ensin.**
 Järjestys: (a) tehtaan pääntila ✔, (b) tehostuspalikka jokaisen kentän alkuun ✔,
 (c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille — **kesken**.
 
-Kohdat a–c on tehty ja validaattori on puhdas kaikille 20 kentälle. Jäljellä on
+Kohdat a–c on tehty ja **validaattori on puhdas kaikille 20 kentälle** — tästä
+eteenpäin sääntörikkeen ilmestyminen on regressio, joten `verify.mjs`:n voi
+kytkeä kaatamaan ajon myös käsintehdyistä kentistä. Jäljellä on
 vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
 juoksuhyppy kantaa nyt 12,5. Se ei riko mitään, mutta tekee kentistä helppoja.
 

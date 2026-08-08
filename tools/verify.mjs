@@ -495,7 +495,9 @@ const report = await page.evaluate(async () => {
       const problems = validateLevel(getLevel(id).rows, budget);
       if (problems.length) perLevel.push({ id, problems });
     }
-    const generatedBad = perLevel.filter((l) => /^5-[123]$/.test(l.id));
+    // Every level is clean as of v26.08.08.15, so any violation from here on is
+    // a regression and fails the run — hand-made levels included.
+    const generatedBad = perLevel;
     checks.push({
       name: 'design rules across every level',
       ok: generatedBad.length === 0,

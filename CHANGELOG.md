@@ -26,7 +26,7 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
   päätyy — osa kolikoista oli lavan alla, missä ne eivät palkitse kiipeämistä.
 
 Validaattorin työlista: pääntilarikkeet 24 → 0, tehostusrikkeet 17 → 0,
-tyhjät laattapolut 49 → 0.
+tyhjät laattapolut 49 → 0 (kaikki 20 kenttää läpäisevät validaattorin).
 
 ---
 
