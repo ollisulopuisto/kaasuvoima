@@ -86,6 +86,40 @@ jättää kenttää rikkinäiseen välitilaan.
 myös `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai
 validaattori pitää murenevaa lavaa kuiluna ja generoi mahdottomia kenttiä.
 
+### 4. Pavunvarret ja piilotetut alueet
+
+Yksi kenttä per maailma saa salaisen alueen: **pavunvarsi ylös taivaalle** ja
+**putki alas maan alle**. Ei joka kenttään — löytö lakkaa olemasta löytö jos
+sellainen on joka nurkassa.
+
+**Avainoivallus: tähän ei tarvita kohtausvaihtoja.** Salainen alue mahtuu samaan
+ruudukkoon, kunhan kenttä on korkeampi. Kamera osaa jo vierittää pystysuunnassa
+(`cam.y` rajataan `heightPx - VIEW_H`:hon), joten 15 rivin sijaan 30 rivin kenttä
+antaa yläpuolelle taivasalueen ja alapuolelle maanalaisen ilman yhtään uutta
+kohtausta, uutta tallennuslogiikkaa tai siirtymäanimaatiota. Se on murto-osa siitä
+työstä mitä erillinen bonushuone vaatisi — ja tilatallennus toimii sellaisenaan,
+koska se tallentaa koko ruudukon.
+
+Toteutusjärjestys:
+
+1. **Kiipeilyruutu** `v` (pavunvarsi). `TILE_INFO`: `{ climb: true }`, ei kiinteä.
+   Pelaajan `update`:een kiipeilytila: kun ruutu on `climb` ja ylös/alas on
+   pohjassa, painovoima pois ja pystyliike vakionopeudella. Hyppy irrottaa.
+2. **Palikoiden pinoaminen.** `assemble()` rakentaa nyt 15 riviä. Lisätään
+   `assembleTall(main, sky, cave)`, joka liimaa kolme 15 rivin kaistaa
+   päällekkäin ja palauttaa 45 riviä. Kentän `rows` vain kasvaa — moottori ei
+   tiedä eroa.
+3. **Pavunvarsipalikka**: `?`-lohko joka pudottaa pavun, ja pavusta kasvava
+   varsi (animoitu ruudun kirjoitus `setTile`illä ylöspäin). Yksinkertaisempi
+   ensiversio: varsi on valmiiksi kentässä.
+4. **Putki alas**: `pipe_down`-merkki joka teleporttaa pelaajan luolakaistan
+   vastaavaan kohtaan. Sama ruudukko, joten se on pelkkä `player.y += 15 * TILE`.
+
+**Muista** (ks. kohta 6): uusi merkki pitää lisätä `src/data/rules.js`:n
+tauluihin, tai validaattori pitää taivasaluetta yhtenä valtavana kuiluna ja
+hylkää jokaisen kentän. Todennäköisesti sääntöjen pitää katsoa vain
+pääkaistaa — se on tämän työn kiperin kohta ja kannattaa ratkaista ensin.
+
 ## Myöhemmin
 
 - **Kosketusohjaus.** Tietoisesti pöydällä: työpöytäkokemus ensin.
