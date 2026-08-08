@@ -1,8 +1,18 @@
 import { TILE, isSolid, isSemi } from '../gfx/tiles.js';
 
-export const GRAVITY = 0.42;
-export const GRAVITY_HELD = 0.20;
-export const TERMINAL = 7.0;
+/*
+ * Gravity, straight off the SMB3 disassembly (PRG/prg008.asm). Velocity there
+ * is 4.4 fixed point, so a raw byte divided by 16 is pixels per frame at 60 Hz
+ * — the same unit this engine already uses.
+ *
+ * The low gravity is not simply "the jump button is held": it also requires
+ * still rising faster than 2 px/frame. Once you slow past that, holding the
+ * button stops helping, which is what gives the original its crisp apex.
+ */
+export const GRAVITY = 0.3125;              // $05
+export const GRAVITY_HELD = 0.0625;         // $01
+export const GRAVITY_HELD_CUTOFF = -2.0;    // -$20
+export const TERMINAL = 4.0;                // $40
 
 /**
  * Moves an entity horizontally and pushes it out of solid tiles.

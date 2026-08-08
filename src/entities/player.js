@@ -1,22 +1,45 @@
 import { Entity } from './entity.js';
-import { moveX, moveY, GRAVITY, GRAVITY_HELD, TERMINAL } from '../level/physics.js';
+import {
+  moveX, moveY, GRAVITY, GRAVITY_HELD, GRAVITY_HELD_CUTOFF, TERMINAL,
+} from '../level/physics.js';
 import { drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES } from '../gfx/sprites.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
 import { T } from '../gfx/tiles.js';
 
-const MAX_WALK = 1.55;
-const MAX_RUN = 2.70;
-const MAX_P = 3.30;
-const ACC_WALK = 0.085;
-const ACC_RUN = 0.125;
-const FRICTION = 0.10;
-const SKID = 0.30;
-const JUMP_BASE = -4.75;
+/*
+ * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
+ * so the comment gives the original and the value is that byte over 16.
+ *
+ * Three of these are the ones that actually change how the game feels:
+ *   - running does NOT accelerate harder than walking, it only lifts the cap
+ *   - there is no air friction at all, so speed carries through a whole jump
+ *   - the jump gets a small discrete bonus per whole pixel of ground speed,
+ *     not a smooth one, so there are exactly four jump heights
+ */
+const MAX_WALK = 1.5;          // $18
+const MAX_RUN = 2.5;           // $28
+const MAX_P = 3.5;             // $38
+const MAX_SPEED = 4.0;         // $40, the hard clamp
+const ACC = 0.0547;            // $00 + $E0/256, identical with and without B
+const FRICTION_SMALL = 0.0391; // -$01 + $60/256
+const FRICTION_BIG = 0.0547;   // -$01 + $20/256
+const SKID = 0.125;            // $02
+const JUMP_BASE = -3.5;        // -$38
+/** Player_SpeedJumpInc: extra lift per whole pixel/frame of ground speed. */
+const JUMP_SPEED_BONUS = [0, 0.125, 0.25, 0.5];
+const STOMP_BOUNCE = -4.0;     // -$40
+const TAIL_FLOAT = 1.0;        // PLAYER_TAILWAG_YVEL $10
+const FLIGHT_CLIMB = -1.5;     // PLAYER_FLY_YVEL -$18
+/** SMB3 has no coyote time. Raise this if the branch feels too unforgiving. */
+const COYOTE_FRAMES = 0;
 
 export const P_METER_MAX = 112;
 const P_SEGMENTS = 7;
+/** 7 segments, 8 frames each to fill and 24 each to drain. */
+const P_FILL = P_METER_MAX / P_SEGMENTS / 8;
+const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
 
 export const MAX_POWER_LEVEL = 5;
 export const POWER_TYPES = ['shroom', 'flower', 'leaf'];
@@ -155,43 +178,41 @@ export class Player extends Entity {
     /* ------------------------------ horizontal ------------------------ */
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
     const cap = this.pFull ? MAX_P : run ? MAX_RUN : MAX_WALK;
-    const airControl = this.onGround ? 1 : 0.75;
+    const friction = this.big ? FRICTION_BIG : FRICTION_SMALL;
 
     if (this.ducking) {
-      this.vx = approach(this.vx, 0, FRICTION * 1.4);
+      this.vx = approach(this.vx, 0, friction * 1.4);
     } else if (dir !== 0) {
       const skidding = this.onGround && Math.sign(this.vx) === -dir && Math.abs(this.vx) > 0.2;
-      const acc = skidding ? SKID : (run ? ACC_RUN : ACC_WALK) * airControl;
-      this.vx = approach(this.vx, cap * dir, acc);
+      this.vx = approach(this.vx, cap * dir, skidding ? SKID : ACC);
       if (Math.abs(this.vx) > cap && this.onGround) this.vx = approach(this.vx, cap * dir, 0.06);
       this.facing = dir;
     } else if (this.onGround) {
-      this.vx = approach(this.vx, 0, FRICTION);
+      // No air friction: let go of everything mid-jump and you keep your speed.
+      this.vx = approach(this.vx, 0, friction);
     }
+    this.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, this.vx));
 
     /* ------------------------------- P-meter -------------------------- */
-    const atSpeed = Math.abs(this.vx) >= MAX_RUN - 0.15 && run;
+    const atSpeed = Math.abs(this.vx) >= MAX_RUN - 0.05 && run;
     if (this.onGround) {
       this.pMeter = atSpeed
-        ? Math.min(P_METER_MAX, this.pMeter + 2)
-        : Math.max(0, this.pMeter - 1.6);
+        ? Math.min(P_METER_MAX, this.pMeter + P_FILL)
+        : Math.max(0, this.pMeter - P_DRAIN);
     } else if (this.flying > 0) {
-      this.pMeter = Math.max(0, this.pMeter - 0.5);   // flight burns the gauge
-    } else if (this.pFull) {
-      // Stays pinned in mid-air so the take-off window survives the jump.
-    } else {
-      this.pMeter = Math.max(0, this.pMeter - 0.9);
+      this.pMeter = Math.max(0, this.pMeter - P_DRAIN);   // flight burns the gauge
     }
+    // Otherwise the gauge is frozen: SMB3 leaves it alone while you are airborne.
 
     /* -------------------------------- jump ---------------------------- */
     if (this.onGround) {
-      this.coyote = 5;
+      this.coyote = COYOTE_FRAMES;
       this.airJumps = 0;
     } else if (this.coyote > 0) this.coyote--;
 
     const canFly = this.type === 'leaf' && this.pFull && !this.corked;
     if (jumpPressed && (this.onGround || this.coyote > 0)) {
-      this.vy = JUMP_BASE - Math.abs(this.vx) * 0.28;
+      this.vy = JUMP_BASE - JUMP_SPEED_BONUS[Math.min(3, Math.floor(Math.abs(this.vx)))];
       this.onGround = false;
       this.coyote = 0;
       this.jumpHeld = true;
@@ -201,7 +222,7 @@ export class Player extends Entity {
       this.vy = -2.6;
       Sfx.play('flight');
     } else if (jumpPressed && this.flying > 0) {
-      this.vy = Math.max(-3.0 - this.power.level * 0.1, this.vy - 2.6);
+      this.vy = Math.max(FLIGHT_CLIMB, this.vy - 2.6);
       Sfx.play('flight');
     } else if (jumpPressed && this.airJumps < this.airJumpsMax) {
       this.fartJump();
@@ -216,12 +237,12 @@ export class Player extends Entity {
     }
 
     /* ------------------------------- gravity -------------------------- */
-    let g = this.jumpHeld && this.vy < 0 ? GRAVITY_HELD : GRAVITY;
+    let g = this.jumpHeld && this.vy < GRAVITY_HELD_CUTOFF ? GRAVITY_HELD : GRAVITY;
     if (this.flying > 0) g *= 0.45;
     this.vy = Math.min(this.vy + g, TERMINAL);
     // The tail lets you float down gently.
     if (this.type === 'leaf' && !this.corked && jumpHeld && this.vy > 1.1 && this.flying <= 0) {
-      this.vy = Math.max(0.6, 1.2 - this.power.level * 0.1);
+      this.vy = Math.min(this.vy, TAIL_FLOAT);
       this.wag += 0.4;
     }
 
@@ -307,8 +328,9 @@ export class Player extends Entity {
     }
   }
 
-  bounce(strong) {
-    this.vy = strong ? -5.4 : -3.6;
+  bounce() {
+    // Flat in SMB3; holding the button pays off through the low ascent gravity.
+    this.vy = STOMP_BOUNCE;
     this.onGround = false;
     this.airJumps = 0;
   }

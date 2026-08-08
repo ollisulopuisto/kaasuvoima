@@ -37,8 +37,18 @@ const ROWS = 15;
 const FLOOR = 13;          // rows 13-14 are the ground slab
 const HEAD = 3;            // tiles of headroom the tallest player needs
 
-/** This game's jump budget, in tiles (see HANDOFF.md). */
-const REACH = { gap: 6, wall: 4, softGap: 8 };
+/**
+ * The jump budget is measured, not assumed: tools/measure-jump.mjs plays a
+ * jump and writes what it actually achieved. Change the physics and the level
+ * geometry follows, instead of quietly going stale.
+ */
+let budget = { gapTiles: 6, softGapTiles: 8, wallTiles: 4 };
+try {
+  budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+} catch {
+  console.warn('  (no tools/jump-budget.json — run node tools/measure-jump.mjs; using defaults)');
+}
+const REACH = { gap: budget.gapTiles, wall: budget.wallTiles, softGap: budget.softGapTiles };
 /** The corpus jump budget, for translating difficulty rather than distance. */
 const CORPUS_REACH = 5;
 const GAP_SCALE = REACH.gap / CORPUS_REACH;
