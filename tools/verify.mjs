@@ -523,6 +523,27 @@ const report = await page.evaluate(async () => {
       `varasto ${game.state.reserve}, taso ${s2.player.powerLevel}`);
   }
 
+  /* Every character the game puts on screen must have a glyph. A missing one
+   * shows as a hole, and Finnish is full of letters ASCII does not have. */
+  {
+    const font = await import('/src/gfx/font.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 16;
+    const g = canvas.getContext('2d');
+    const missing = [];
+    for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖ0123456789 .,:!?*()=/+<>%\'-') {
+      g.clearRect(0, 0, 64, 16);
+      font.drawText(g, ch, 2, 2, { color: '#ffffff' });
+      const data = g.getImageData(0, 0, 64, 16).data;
+      let ink = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) ink++;
+      if (ch !== ' ' && ink === 0) missing.push(ch);
+    }
+    expect('the font can draw every letter the game uses',
+      missing.length === 0, missing.length ? `puuttuu: ${missing.join('')}` : '');
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');

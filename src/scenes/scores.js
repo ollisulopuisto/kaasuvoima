@@ -89,14 +89,14 @@ export class NameEntryScene {
     ctx.fillStyle = '#1a2444';
     ctx.fillRect(0, 40, 320, 2);
 
-    drawText(ctx, 'PAASIT LISTALLE!', 160, 22, {
+    drawText(ctx, 'PÄÄSIT LISTALLE!', 160, 22, {
       color: '#ffd048', align: 'center', shadow: '#303048',
     });
     drawText(ctx, `PISTEET ${padNum(this.result.score, 7)}`, 160, 56, {
       color: '#8fe04a', align: 'center',
     });
     if (this.result.assisted) {
-      drawText(ctx, '* TILATALLENNUS KAYTOSSA', 160, 70, { color: '#c88040', align: 'center' });
+      drawText(ctx, '* TILATALLENNUS KÄYTÖSSÄ', 160, 70, { color: '#c88040', align: 'center' });
     }
 
     drawText(ctx, 'NIMI:', 160, 96, { color: '#ffffff', align: 'center' });
@@ -119,7 +119,7 @@ export class NameEntryScene {
       }
     }
 
-    drawText(ctx, 'YLOS/ALAS KIRJAIN   VASEN/OIKEA PAIKKA', 160, 176, {
+    drawText(ctx, 'YLÖS/ALAS KIRJAIN   VASEN/OIKEA PAIKKA', 160, 176, {
       color: '#8890b0', align: 'center',
     });
     drawText(ctx, 'X PYYHI   ENTER VALMIS', 160, 190, { color: '#8890b0', align: 'center' });
@@ -164,8 +164,8 @@ export class HighScoreScene {
     ctx.fillRect(28, 36, 264, 1);
 
     if (!this.scores.length) {
-      drawText(ctx, 'EI VIELA TULOKSIA', 160, 100, { color: '#c0c0d0', align: 'center' });
-      drawText(ctx, 'PELAA YKSI PELI LAPI', 160, 114, { color: '#8890b0', align: 'center' });
+      drawText(ctx, 'EI VIELÄ TULOKSIA', 160, 100, { color: '#c0c0d0', align: 'center' });
+      drawText(ctx, 'PELAA YKSI PELI LÄPI', 160, 114, { color: '#8890b0', align: 'center' });
     }
 
     this.scores.forEach((entry, i) => {
@@ -185,7 +185,7 @@ export class HighScoreScene {
     });
 
     if (this.scores.some((e) => e.assisted)) {
-      drawText(ctx, '* TILATALLENNUS KAYTOSSA', 160, 212, {
+      drawText(ctx, '* TILATALLENNUS KÄYTÖSSÄ', 160, 212, {
         color: '#c88040', align: 'center',
       });
     }

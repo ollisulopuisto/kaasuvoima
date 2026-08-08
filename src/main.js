@@ -186,7 +186,7 @@ class Game {
   quickSave() {
     const snap = writeSlot(this, this.slot);
     if (!snap) {
-      this.toast('TILAA EI VOI TALLENTAA TASSA');
+      this.toast('TILAA EI VOI TALLENTAA TÄSSÄ');
       Sfx.play('bump');
       return;
     }
@@ -197,7 +197,7 @@ class Game {
   quickLoad() {
     const snap = readSlot(this.slot);
     if (!snap) {
-      this.toast(`TILA ${this.slot} ON TYHJA`);
+      this.toast(`TILA ${this.slot} ON TYHJÄ`);
       Sfx.play('bump');
       return;
     }
@@ -209,7 +209,7 @@ class Game {
       this.toast(`TILA ${this.slot} LADATTU`);
       Sfx.play('powerup');
     } else {
-      this.toast('TILAN LATAUS EPAONNISTUI');
+      this.toast('TILAN LATAUS EPÄONNISTUI');
       Sfx.play('bump');
     }
   }
@@ -232,7 +232,7 @@ class Game {
       }
     }
 
-    if (Input.pressed.mute) this.toast(toggleMute() ? 'AANI POIS' : 'AANI PAALLE', 60);
+    if (Input.pressed.mute) this.toast(toggleMute() ? 'ÄÄNI POIS' : 'ÄÄNI PÄÄLLE', 60);
     if (Input.pressed.debug) this.debug = !this.debug;
     if (Input.pressed.slot) {
       this.slot = (this.slot % SLOT_COUNT) + 1;

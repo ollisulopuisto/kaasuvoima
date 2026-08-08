@@ -611,7 +611,7 @@ export class LevelScene {
 
     if (this.state === 'clear' && this.wonCard) {
       const cx = VIEW_W / 2;
-      drawText(ctx, 'KENTTA SELVA!', cx, 60, { color: '#ffffff', align: 'center', shadow: '#202030' });
+      drawText(ctx, 'KENTTÄ SELVÄ!', cx, 60, { color: '#ffffff', align: 'center', shadow: '#202030' });
       drawItem(ctx, this.wonCard, cx - 8, 76, this.tick);
     }
     if (this.state === 'dead') {

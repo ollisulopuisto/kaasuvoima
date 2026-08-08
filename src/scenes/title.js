@@ -15,7 +15,7 @@ export class TitleScene {
   enter() {
     Music.play('title');
     this.options = Save.exists()
-      ? ['JATKA PELIA', 'UUSI PELI', 'PARHAAT PIERUT']
+      ? ['JATKA PELIÄ', 'UUSI PELI', 'PARHAAT PIERUT']
       : ['UUSI PELI', 'PARHAAT PIERUT'];
     this.cursor = 0;
   }
@@ -44,7 +44,7 @@ export class TitleScene {
       input.consume('start');
       Sfx.play('select');
       const choice = this.options[this.cursor];
-      if (choice === 'JATKA PELIA') this.game.continueGame();
+      if (choice === 'JATKA PELIÄ') this.game.continueGame();
       else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
       else this.game.newGame();
     }
@@ -111,7 +111,7 @@ export class TitleScene {
       }
     });
 
-    drawText(ctx, 'NUOLET/WASD  HYPPY Z/L/VALI  JUOKSU X/K', 160, panelY + panelH + 2, {
+    drawText(ctx, 'NUOLET/WASD  HYPPY Z/L/VÄLI  JUOKSU X/K', 160, panelY + panelH + 2, {
       color: '#8890b0', align: 'center',
     });
   }

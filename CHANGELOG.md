@@ -7,6 +7,19 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.14 — ääkköset
+
+### Korjattu
+- **Tekstit kirjoitetaan nyt oikein suomeksi**: "PÄÄSIT LISTALLE", "JATKA PELIÄ",
+  "ÄÄNI PÄÄLLE", "KENTTÄ SELVÄ", "TILATALLENNUS KÄYTÖSSÄ", "EI VIELÄ TULOKSIA".
+  Fontissa oli Ä ja Ö koko ajan, mutta pisteet olivat epäkeskellä ja kirjaimet
+  oli kirjoitettu ilman niitä. Umlautit ovat nyt keskitetyt ja kirjain on
+  puristettu viidelle riville niiden alle.
+- Testi varmistaa että jokainen pelin käyttämä merkki todella piirtyy — puuttuva
+  glyfi näkyy pelkkänä aukkona eikä sitä huomaa koodia lukemalla.
+
+---
+
 ## v26.08.08.13 — uudet melodiat, pistepompahdukset, versio pistetauluun
 
 ### Muutettu
