@@ -7,7 +7,7 @@ import { Sfx } from '../core/audio.js';
 const EMERGE_FRAMES = 26;
 
 export class Item extends Entity {
-  /** @param {'bean'|'flower'|'leaf'|'oneup'} itemKind */
+  /** @param {'shroom'|'flower'|'leaf'|'soup'|'oneup'} itemKind */
   constructor(level, x, y, itemKind, { emerge = true } = {}) {
     super(level, x, y, 16, 16);
     this.kind = 'item';
@@ -32,7 +32,7 @@ export class Item extends Entity {
     }
 
     switch (this.itemKind) {
-      case 'bean':
+      case 'shroom':
       case 'oneup': {
         this.vx = 0.85 * this.facing;
         if (moveX(this, this.level)) this.facing *= -1;
@@ -49,6 +49,7 @@ export class Item extends Entity {
         moveY(this, this.level);
         break;
       }
+      case 'soup':
       case 'flower':
       default:
         applyGravity(this, 0.7);

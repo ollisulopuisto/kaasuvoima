@@ -6,7 +6,7 @@ import { normalizeRows } from '../core/utils.js';
  *
  * Terrain characters:
  *   . grass  , dark grass  T tree  M mountain  ~ water  S sand
- *   C cactus  R rock  I ice  P pine  " bush
+ *   C cactus  R rock  I ice  P pine  " bush  F factory floor  E machinery
  */
 const WORLD_DEFS = [
   {
@@ -28,7 +28,7 @@ const WORLD_DEFS = [
       { id: 'w1-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
       { id: 'w1-1', tx: 3, ty: 6, type: 'level', level: '1-1', name: 'PAPUPELTO' },
       { id: 'w1-2', tx: 6, ty: 6, type: 'level', level: '1-2', name: 'MÖNKIJÄNIITTY' },
-      { id: 'w1-h', tx: 6, ty: 3, type: 'house', name: 'PAPUTALO' },
+      { id: 'w1-h', tx: 6, ty: 3, type: 'house', name: 'HERNETALO' },
       { id: 'w1-3', tx: 10, ty: 4, type: 'level', level: '1-3', name: 'TUULINEN HARJU' },
       { id: 'w1-f', tx: 14, ty: 6, type: 'fortress', level: '1-F', name: 'LINNAKE 1' },
     ],
@@ -58,7 +58,7 @@ const WORLD_DEFS = [
     nodes: [
       { id: 'w2-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
       { id: 'w2-1', tx: 3, ty: 5, type: 'level', level: '2-1', name: 'KUUMA DYYNI' },
-      { id: 'w2-h', tx: 3, ty: 2, type: 'house', name: 'PAPUTALO' },
+      { id: 'w2-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
       { id: 'w2-2', tx: 7, ty: 5, type: 'level', level: '2-2', name: 'HIEKKAMYRSKY' },
       { id: 'w2-3', tx: 11, ty: 3, type: 'level', level: '2-3', name: 'LAAVAKUILU' },
       { id: 'w2-f', tx: 15, ty: 5, type: 'fortress', level: '2-F', name: 'LINNAKE 2' },
@@ -90,7 +90,7 @@ const WORLD_DEFS = [
       { id: 'w3-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
       { id: 'w3-1', tx: 4, ty: 6, type: 'level', level: '3-1', name: 'KYLMÄ VIIMA' },
       { id: 'w3-2', tx: 8, ty: 4, type: 'level', level: '3-2', name: 'JÄÄPUTOUS' },
-      { id: 'w3-h', tx: 12, ty: 4, type: 'house', name: 'PAPUTALO' },
+      { id: 'w3-h', tx: 12, ty: 4, type: 'house', name: 'HERNETALO' },
       { id: 'w3-3', tx: 12, ty: 7, type: 'level', level: '3-3', name: 'HALKEAMA' },
       { id: 'w3-f', tx: 16, ty: 5, type: 'fortress', level: '3-F', name: 'PIERUKUNINGAS' },
     ],
@@ -100,6 +100,37 @@ const WORLD_DEFS = [
       { a: 'w3-2', b: 'w3-h' },
       { a: 'w3-h', b: 'w3-3' },
       { a: 'w3-3', b: 'w3-f', path: [[16, 7]] },
+    ],
+  },
+  {
+    id: 'w4',
+    name: 'PIERUTEHDAS',
+    theme: 'factory',
+    terrain: [
+      'FFFFFFFFFFFFFFFFFFFF',
+      'FFEEFFFFFFFEEFFFFFFF',
+      'FFFFFFFFEFFFFFFFFEFF',
+      'FFEFFFFFFFFFFEFFFFFF',
+      'FFFFFFFEFFFFFFFFFFFF',
+      'FFFEFFFFFFFFFFFEFFFF',
+      'FFFFFFFFFFEFFFFFFFFF',
+      'FFEFFFFFEFFFFFFEFFFF',
+      'FFFFFFFFFFFFFFFFFFFF',
+    ],
+    nodes: [
+      { id: 'w4-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
+      { id: 'w4-1', tx: 4, ty: 4, type: 'level', level: '4-1', name: 'HIHNAKULJETIN' },
+      { id: 'w4-h', tx: 4, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w4-2', tx: 8, ty: 6, type: 'level', level: '4-2', name: 'KAASUPUTKISTO' },
+      { id: 'w4-3', tx: 12, ty: 3, type: 'level', level: '4-3', name: 'PAINEKATTILA' },
+      { id: 'w4-f', tx: 16, ty: 5, type: 'fortress', level: '4-F', name: 'PIERUPRINSSI' },
+    ],
+    links: [
+      { a: 'w4-s', b: 'w4-1' },
+      { a: 'w4-1', b: 'w4-h' },
+      { a: 'w4-1', b: 'w4-2', path: [[8, 4]] },
+      { a: 'w4-2', b: 'w4-3', path: [[12, 6]] },
+      { a: 'w4-3', b: 'w4-f', path: [[16, 3]] },
     ],
   },
 ];

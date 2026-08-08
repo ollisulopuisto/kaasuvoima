@@ -58,7 +58,7 @@ export class LevelScene {
           this.spawn = { x: tx * TILE, y: ty * TILE };
           this.grid[ty][tx] = ' ';
         } else if (ENEMY_CHARS[ch]) {
-          this.entities.push(ENEMY_CHARS[ch](this, tx, ty));
+          this.entities.push(ENEMY_CHARS[ch](this, tx, ty, this.def.bossVariant || 0));
           this.grid[ty][tx] = ' ';
         } else if (ch === T.GOAL) {
           this.goal = { tx, ty, x: tx * TILE, y: ty * TILE + TILE - GOAL_HEIGHT };
@@ -94,8 +94,36 @@ export class LevelScene {
     return entity;
   }
 
-  spawnPuff(x, y) {
-    for (let i = 0; i < 4; i++) this.add(new Puff(this, x, y, { spread: 1.6, size: 3 }));
+  spawnPuff(x, y, brown = false) {
+    for (let i = 0; i < 4; i++) {
+      this.add(new Puff(this, x, y, { spread: 1.6, size: 3, brown }));
+    }
+  }
+
+  /** The blast under a mid-air fart jump: knocks over anything just below. */
+  fartBlast(x, y, radius, source) {
+    for (let i = 0; i < 5; i++) {
+      this.add(new Puff(this, x + (i - 2) * 3, y, { spread: 2.2, size: 4, life: 20 }));
+    }
+    for (const e of this.entities) {
+      if (e.kind !== 'enemy' || e.dying || e.remove || e === source) continue;
+      if (Math.abs(e.cx - x) < radius && e.cy > y - 10 && e.cy < y + radius) {
+        e.flipDie(Math.sign(e.cx - x) || 1);
+      }
+    }
+  }
+
+  smashBrick(tx, ty) {
+    if (this.tileAt(tx, ty) !== T.BRICK) return;
+    this.setTile(tx, ty, T.EMPTY);
+    const px = tx * TILE;
+    const py = ty * TILE;
+    this.add(new BrickPiece(this, px, py, -1.4, -3.4, this.theme));
+    this.add(new BrickPiece(this, px + 8, py, 1.4, -3.4, this.theme));
+    this.add(new BrickPiece(this, px, py + 8, -1.1, -2.2, this.theme));
+    this.add(new BrickPiece(this, px + 8, py + 8, 1.1, -2.2, this.theme));
+    this.awardScore(50);
+    Sfx.play('brick');
   }
 
   addScorePop(x, y, text) {
@@ -173,10 +201,7 @@ export class LevelScene {
         this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
         this.addCoin(tx * TILE + 8, ty * TILE);
       } else {
-        const kind = player.big
-          ? (player.power === 'big' ? (Math.random() < 0.5 ? 'leaf' : 'flower') : 'leaf')
-          : 'bean';
-        this.add(new Item(this, tx * TILE, ty * TILE - TILE, kind));
+        this.add(new Item(this, tx * TILE, ty * TILE - TILE, this.rollPowerup(player)));
         Sfx.play('bump');
       }
       return;
@@ -184,16 +209,8 @@ export class LevelScene {
 
     if (ch === T.BRICK) {
       if (player.big) {
-        this.setTile(tx, ty, T.EMPTY);
-        const px = tx * TILE;
-        const py = ty * TILE;
-        this.add(new BrickPiece(this, px, py, -1.4, -3.4, this.theme));
-        this.add(new BrickPiece(this, px + 8, py, 1.4, -3.4, this.theme));
-        this.add(new BrickPiece(this, px, py + 8, -1.1, -2.2, this.theme));
-        this.add(new BrickPiece(this, px + 8, py + 8, 1.1, -2.2, this.theme));
         this.bumps.delete(key);
-        this.awardScore(50);
-        Sfx.play('brick');
+        this.smashBrick(tx, ty);
       } else {
         Sfx.play('bump');
       }
@@ -208,6 +225,19 @@ export class LevelScene {
     }
 
     Sfx.play('bump');
+  }
+
+  /**
+   * A power block gives the first mushroom to a powerless player, then mixes
+   * types and pea soup so the level can be pushed toward the top tier.
+   */
+  rollPowerup(player) {
+    if (player.powerLevel === 0) return 'shroom';
+    const roll = Math.random();
+    if (roll < 0.3) return 'soup';
+    if (roll < 0.53) return 'shroom';
+    if (roll < 0.77) return 'flower';
+    return 'leaf';
   }
 
   flipEnemiesAbove(tx, ty) {
@@ -329,7 +359,7 @@ export class LevelScene {
 
     if (this.goal && this.state === 'play') {
       const pole = { x: this.goal.x + 4, y: this.goal.y - 8, w: 10, h: GOAL_HEIGHT + 8 };
-      if (overlaps(p.box, pole)) this.completeLevel(['bean', 'flower', 'star'][this.cardIndex]);
+      if (overlaps(p.box, pole)) this.completeLevel(['shroom', 'flower', 'star'][this.cardIndex]);
     }
   }
 
@@ -362,6 +392,11 @@ export class LevelScene {
         continue;
       }
 
+      if (e.kind === 'hazard') {
+        if (e.box.h > 0 && overlaps(p.box, e.box)) p.hurt();
+        continue;
+      }
+
       if (e.kind !== 'enemy' || e.dying) continue;
 
       if (spin && overlaps(spin, e.box)) {
@@ -385,7 +420,8 @@ export class LevelScene {
         continue;
       }
 
-      p.hurt();
+      if (e.corks) p.cork();
+      else p.hurt();
     }
   }
 
@@ -481,8 +517,18 @@ export class LevelScene {
       ctx.fillStyle = '#101018';
       ctx.fillRect(bx + 5, y + 6, 2, 7);
     }
-    drawText(ctx, 'VAUHTI', 34, y + 17, { color: '#8890b0' });
-
+    // power level pips — one per collected power-up, colour shows the type
+    const p = this.player;
+    const typeColor = { shroom: '#e04c3c', flower: '#f8f8f8', leaf: '#c88c40' }[p.type] || '#3a3a52';
+    for (let i = 0; i < 5; i++) {
+      const bx = 34 + i * 7;
+      ctx.fillStyle = i < p.powerLevel ? typeColor : '#2a2a3e';
+      ctx.fillRect(bx, y + 18, 5, 5);
+      if (i < p.powerLevel) {
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(bx, y + 18, 5, 1);
+      }
+    }
     drawText(ctx, `SFB *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
 
@@ -493,7 +539,12 @@ export class LevelScene {
     drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
       color: '#ffffff', align: 'right',
     });
-    if (this.bossDefeated) {
+    if (this.player.corked > 0) {
+      const secs = Math.ceil(this.player.corked / 60);
+      drawText(ctx, `UMMETUS ${secs}`, VIEW_W - 6, y + 17, {
+        color: Math.floor(this.tick / 6) % 2 ? '#ff8040' : '#c85820', align: 'right',
+      });
+    } else if (this.bossDefeated) {
       drawText(ctx, 'OVI AUKI', VIEW_W - 6, y + 17, { color: '#ffd048', align: 'right' });
     }
 

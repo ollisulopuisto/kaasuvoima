@@ -29,6 +29,35 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
   const near = -camX * 0.45;
   const far = -camX * 0.22;
 
+  if (bg === 'factory') {
+    // Pipe stacks and slow gears behind the machinery.
+    ctx.fillStyle = th.hillDark;
+    for (let i = -1; i < 8; i++) {
+      const x = Math.round(far + i * 120);
+      ctx.fillRect(x, viewH - 96, 26, 96);
+      ctx.fillRect(x - 4, viewH - 100, 34, 6);
+      ctx.fillRect(x + 44, viewH - 64, 20, 64);
+      ctx.fillRect(x + 40, viewH - 68, 28, 6);
+    }
+    ctx.fillStyle = th.hill;
+    for (let i = -1; i < 9; i++) {
+      const cxg = Math.round(near + i * 104 + 40);
+      const cyg = viewH - 58;
+      const spin = tick * 0.02 + i;
+      for (let t = 0; t < 8; t++) {
+        const a = spin + (t * Math.PI) / 4;
+        ctx.fillRect(Math.round(cxg + Math.cos(a) * 16) - 3, Math.round(cyg + Math.sin(a) * 16) - 3, 6, 6);
+      }
+      ctx.fillRect(cxg - 11, cyg - 11, 22, 22);
+      ctx.fillStyle = th.hillDark;
+      ctx.fillRect(cxg - 4, cyg - 4, 8, 8);
+      ctx.fillStyle = th.hill;
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, viewH - 26, viewW, 26);
+    return;
+  }
+
   if (bg === 'hills' || bg === 'dunes') {
     const round = bg === 'dunes';
     ctx.fillStyle = th.hillDark;

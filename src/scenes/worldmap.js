@@ -3,6 +3,7 @@ import { drawText } from '../gfx/font.js';
 import { drawItem, drawPlayer } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise, padNum } from '../core/utils.js';
+import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
 
 const TILE = 16;
 const MAP_Y = 14;
@@ -10,7 +11,7 @@ const MAP_H = 144;
 const PANEL_Y = MAP_Y + MAP_H;
 const WALK_SPEED = 1.4;
 
-const HOUSE_ITEMS = ['bean', 'flower', 'leaf'];
+const HOUSE_ITEMS = ['shroom', 'flower', 'leaf', 'soup'];
 
 export class WorldMapScene {
   constructor(game) {
@@ -156,12 +157,13 @@ export class WorldMapScene {
   }
 
   updateHouse(input) {
+    const n = HOUSE_ITEMS.length;
     if (input.pressed.left) {
-      this.houseCursor = (this.houseCursor + 2) % 3;
+      this.houseCursor = (this.houseCursor + n - 1) % n;
       Sfx.play('cursor');
     }
     if (input.pressed.right) {
-      this.houseCursor = (this.houseCursor + 1) % 3;
+      this.houseCursor = (this.houseCursor + 1) % n;
       Sfx.play('cursor');
     }
     if (input.pressed.jump || input.pressed.start) {
@@ -183,10 +185,17 @@ export class WorldMapScene {
       Sfx.play('bump');
       return;
     }
+    const before = normalizePower(this.game.state.power);
+    if (before.level >= 5) {
+      this.showMessage('OLET JO TAYSISSA KAASUISSA');
+      Sfx.play('bump');
+      return;
+    }
     this.game.state.reserve = null;
-    this.game.state.power = item === 'bean' ? 'big' : item;
+    this.game.state.power = powerAfterItem(before, item);
     this.game.persist();
-    this.showMessage('KAYTIT VARASTOESINEEN');
+    const p = this.game.state.power;
+    this.showMessage(`${POWER_NAMES[p.type] || 'VOIMA'} TASO ${p.level}`);
     Sfx.play('powerup');
   }
 
@@ -214,8 +223,10 @@ export class WorldMapScene {
 
   drawTerrain(ctx) {
     const th = this.world.theme;
-    const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff' : '#4cb04c';
-    const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8' : '#348a34';
+    const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff'
+      : th === 'factory' ? '#4a4460' : '#4cb04c';
+    const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
+      : th === 'factory' ? '#332f44' : '#348a34';
     ctx.fillStyle = base;
     ctx.fillRect(0, MAP_Y, 320, MAP_H);
 
@@ -286,6 +297,30 @@ export class WorldMapScene {
             ctx.fillRect(x + 6, y + 3, 4, 12);
             ctx.fillRect(x + 2, y + 7, 3, 5);
             ctx.fillRect(x + 11, y + 5, 3, 6);
+            break;
+          case 'F': {
+            // factory floor plating with rivets
+            ctx.fillStyle = '#3f3a55';
+            ctx.fillRect(x, y + 15, TILE, 1);
+            ctx.fillRect(x + 15, y, 1, TILE);
+            if (hashNoise(tx * 9, ty * 7) > 0.7) {
+              ctx.fillStyle = '#6a6484';
+              ctx.fillRect(x + 3, y + 3, 2, 2);
+              ctx.fillRect(x + 11, y + 10, 2, 2);
+            }
+            break;
+          }
+          case 'E':
+            // machinery: pipe stack with a valve wheel
+            ctx.fillStyle = '#2f2b40';
+            ctx.fillRect(x + 2, y + 3, 12, 12);
+            ctx.fillStyle = '#7a7498';
+            ctx.fillRect(x + 3, y + 4, 10, 10);
+            ctx.fillStyle = '#c05820';
+            ctx.fillRect(x + 6, y + 1, 4, 4);
+            ctx.fillStyle = '#2f2b40';
+            ctx.fillRect(x + 5, y + 7, 6, 1);
+            ctx.fillRect(x + 7, y + 5, 1, 6);
             break;
           case 'S': {
             const n = hashNoise(tx * 5, ty * 3);
@@ -393,10 +428,11 @@ export class WorldMapScene {
 
   drawToken(ctx) {
     const bob = this.mode === 'idle' ? Math.round(Math.sin(this.tick / 12) * 1) : 0;
-    const power = this.game.state.power;
-    const lift = power === 'small' ? 12 : 20;   // keep the node icon readable
+    const power = normalizePower(this.game.state.power);
+    const lift = power.level === 0 ? 12 : 16 + power.level * 4;
     drawPlayer(ctx, this.pos.x - 6, MAP_Y + this.pos.y - lift + bob, {
-      power: power === 'small' ? 'small' : power,
+      type: power.type,
+      level: power.level,
       facing: 1,
       frame: Math.floor(this.tick / 8) % 3,
       state: this.mode === 'walk' ? 'walk' : 'idle',
@@ -461,11 +497,11 @@ export class WorldMapScene {
     ctx.fillStyle = '#50506e';
     ctx.fillRect(50, 66, 220, 1);
     ctx.fillRect(50, 161, 220, 1);
-    drawText(ctx, 'PAPUTALO', 160, 76, { color: '#8fe04a', align: 'center' });
+    drawText(ctx, 'HERNETALO', 160, 76, { color: '#8fe04a', align: 'center' });
     drawText(ctx, 'VALITSE YKSI', 160, 88, { color: '#ffffff', align: 'center' });
 
     HOUSE_ITEMS.forEach((item, i) => {
-      const x = 86 + i * 56;
+      const x = 72 + i * 46;
       const selected = i === this.houseCursor;
       ctx.fillStyle = selected ? '#f8f8f8' : '#3a3a52';
       ctx.fillRect(x - 4, 104, 26, 26);

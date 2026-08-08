@@ -79,6 +79,15 @@ export const THEMES = {
     hill: '#7c9cd0', hillDark: '#4c6c98',
     cloud: '#ffffff',
   },
+  factory: {
+    sky: ['#2a2438', '#4a3c50'],
+    ground: '#6a6478', groundDark: '#3c3848', groundTop: '#9a94ae', groundTopDark: '#5c5670',
+    brick: '#b06030', brickDark: '#6c3a18', brickLight: '#e09050',
+    hard: '#a8b0c0', hardDark: '#585f70', hardLight: '#d8e0f0',
+    pipe: '#c05820', pipeDark: '#7a3410', pipeLight: '#f09040',
+    hill: '#3a3450', hillDark: '#282238',
+    cloud: '#5a5470',
+  },
   fortress: {
     sky: ['#101018', '#282840'],
     ground: '#8a8aa0', groundDark: '#4a4a60', groundTop: '#a8a8c0', groundTopDark: '#6a6a84',

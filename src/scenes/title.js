@@ -75,7 +75,8 @@ export class TitleScene {
     const walkX = ((this.tick * 0.6 + 120) % 400) - 40;
     drawWalker(ctx, walkX + 40, 168, Math.floor(this.tick / 8), 1, false);
     drawPlayer(ctx, walkX, 158, {
-      power: 'leaf',
+      type: 'leaf',
+      level: 1,
       facing: 1,
       frame: Math.floor(this.tick / 6) % 3,
       state: 'walk',

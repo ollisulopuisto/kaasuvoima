@@ -4,7 +4,7 @@ import { drawCoinSprite, THEMES } from '../gfx/tiles.js';
 import { drawText } from '../gfx/font.js';
 
 export class Puff extends Entity {
-  constructor(level, x, y, { spread = 0, size = 4, life = 24 } = {}) {
+  constructor(level, x, y, { spread = 0, size = 4, life = 24, brown = false } = {}) {
     super(level, x - size, y - size, size * 2, size * 2);
     this.kind = 'effect';
     this.alwaysActive = true;
@@ -12,6 +12,7 @@ export class Puff extends Entity {
     this.maxLife = life;
     this.life = life;
     this.size = size;
+    this.brown = brown;
     this.vx = (Math.random() - 0.5) * spread;
     this.vy = -0.3 - Math.random() * 0.4;
   }
@@ -26,7 +27,7 @@ export class Puff extends Entity {
 
   draw(ctx) {
     const t = this.life / this.maxLife;
-    drawGasPuff(ctx, this.cx, this.cy, t, this.size * (1.6 - t * 0.6));
+    drawGasPuff(ctx, this.cx, this.cy, t, this.size * (1.6 - t * 0.6), this.brown);
   }
 }
 

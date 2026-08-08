@@ -1,6 +1,9 @@
 import { Entity } from './entity.js';
 import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
-import { drawWalker, drawShell, drawFlyer, drawPlant, drawBoss } from '../gfx/sprites.js';
+import {
+  drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
+  drawStinkCloud, drawCorkGuy, drawHeartburn,
+} from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 
@@ -299,16 +302,219 @@ export class Plant extends Enemy {
   }
 }
 
-export class Boss extends Enemy {
+/** Ruskea pilvi — drifts through the air and stinks on contact. */
+export class StinkCloud extends Enemy {
   constructor(level, x, y) {
-    super(level, x, y, 30, 32);
-    this.hp = 3;
-    this.score = 5000;
-    this.invuln = 0;
-    this.jumpTimer = 90;
-    this.speed = 0.75;
+    super(level, x, y, 20, 14);
+    this.score = 200;
+    this.homeY = y;
+    this.phase = Math.random() * Math.PI * 2;
+    this.speed = 0.35;
+    this.amplitude = 14;
+    // Start on the curve, otherwise the first update teleports it mid-bob.
+    this.y = y + Math.sin(this.phase) * this.amplitude;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+
+    const player = this.level.player;
+    if (player) {
+      const toward = Math.sign(player.cx - this.cx);
+      if (toward !== 0) this.facing = toward;
+      // drifts slowly toward the player, never in a hurry
+      if (Math.abs(player.cx - this.cx) > 24) this.x += this.speed * toward;
+    }
+    this.phase += 0.045;
+    this.y = this.homeY + Math.sin(this.phase) * this.amplitude;
+
+    if (this.tick % 26 === 0) this.level.spawnPuff(this.cx, this.y + this.h, true);
+  }
+
+  stomp() {
+    this.remove = true;
+    this.level.spawnPuff(this.cx, this.cy, true);
+    this.level.awardScore(this.score, this.cx, this.y);
+    return true;
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawStinkCloud(ctx, this.x, this.y, this.tick, this.facing, true));
+      return;
+    }
+    drawStinkCloud(ctx, this.x, this.y, this.tick, this.facing, true);
+  }
+}
+
+/** Ummetuskorkki — plugs you up instead of hurting you. */
+export class CorkGuy extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 14, 16);
+    this.score = 200;
+    this.corks = true;
+    this.speed = 0.7;
+    this.hopTimer = 40;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    this.vx = this.speed * this.facing;
+    if (moveX(this, this.level)) this.facing *= -1;
+    if (this.onGround && --this.hopTimer <= 0) {
+      this.vy = -3.2;
+      this.hopTimer = 50 + Math.floor(Math.random() * 40);
+    }
+    applyGravity(this, 0.9);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawCorkGuy(ctx, this.x - 1, this.y, this.tick, this.facing));
+      return;
+    }
+    drawCorkGuy(ctx, this.x - 1, this.y, this.tick, this.facing);
+  }
+}
+
+/** Närästys — a heartburn jet that erupts out of the floor on a timer. */
+export class Heartburn extends Entity {
+  constructor(level, x, floorY) {
+    super(level, x, floorY, 16, 0);
+    this.kind = 'hazard';
+    this.floorY = floorY;
+    this.maxHeight = 44;
+    this.height = 0;
+    this.phase = 'idle';
+    this.timer = 60 + Math.floor(Math.random() * 60);
+  }
+
+  get box() {
+    return { x: this.x + 3, y: this.floorY - this.height, w: 10, h: this.height };
+  }
+
+  update() {
+    this.tick++;
+    switch (this.phase) {
+      case 'idle':
+        this.height = 0;
+        if (--this.timer <= 0) {
+          this.phase = 'warn';
+          this.timer = 40;   // a beat of warning before it blows
+        }
+        break;
+      case 'warn':
+        this.height = 3;
+        if (--this.timer <= 0) {
+          this.phase = 'up';
+          this.timer = 18;
+          Sfx.play('fart');
+        }
+        break;
+      case 'up':
+        this.height = this.maxHeight * (1 - this.timer / 18);
+        if (--this.timer <= 0) {
+          this.phase = 'hold';
+          this.timer = 34;
+          this.height = this.maxHeight;
+        }
+        break;
+      case 'hold':
+        if (--this.timer <= 0) {
+          this.phase = 'down';
+          this.timer = 20;
+        }
+        break;
+      default:
+        this.height = this.maxHeight * (this.timer / 20);
+        if (--this.timer <= 0) {
+          this.phase = 'idle';
+          this.timer = 80 + Math.floor(Math.random() * 60);
+        }
+        break;
+    }
+  }
+
+  draw(ctx) {
+    if (this.phase === 'warn') {
+      ctx.fillStyle = Math.floor(this.tick / 3) % 2 ? 'rgba(248,120,24,0.7)' : 'rgba(216,48,24,0.4)';
+      ctx.fillRect(Math.round(this.x) + 4, Math.round(this.floorY) - 3, 8, 3);
+      return;
+    }
+    drawHeartburn(ctx, this.x, this.floorY, this.height, this.tick);
+  }
+}
+
+/** Ground shockwave thrown off by the heavier bosses when they land. */
+export class Shockwave extends Enemy {
+  constructor(level, x, y, dir) {
+    super(level, x, y, 12, 12);
+    this.stompable = false;
+    this.vx = 2.6 * dir;
+    this.life = 90;
+    this.score = 0;
     this.alwaysActive = true;
     this.active = true;
+  }
+
+  update() {
+    this.tick++;
+    if (--this.life <= 0) this.remove = true;
+    if (moveX(this, this.level)) this.remove = true;
+    applyGravity(this, 1);
+    moveY(this, this.level);
+  }
+
+  flipDie() { this.remove = true; }
+  hitByProjectile() {}
+  hitByShell() {}
+  hitByTail() {}
+
+  draw(ctx) {
+    const p = Math.floor(this.tick / 3) % 2;
+    ctx.fillStyle = p ? 'rgba(200,160,90,0.85)' : 'rgba(150,110,60,0.85)';
+    ctx.fillRect(Math.round(this.x), Math.round(this.y) + 2, 12, 10);
+    ctx.fillStyle = 'rgba(240,220,170,0.8)';
+    ctx.fillRect(Math.round(this.x) + 3, Math.round(this.y) + p, 6, 5);
+  }
+}
+
+/**
+ * Fortress boss. `variant` picks the move set:
+ *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates.
+ */
+export class Boss extends Enemy {
+  constructor(level, x, y, variant = 0) {
+    super(level, x, y, 30, 32);
+    this.variant = variant;
+    this.hp = variant === 3 ? 5 : 3 + Math.min(1, variant);
+    this.score = 5000 + variant * 1000;
+    this.invuln = 0;
+    this.jumpTimer = 90;
+    this.speed = 0.75 + variant * 0.15;
+    this.chargeTimer = 220;
+    this.charging = 0;
+    this.scale = 1;
+    this.targetScale = 1;
+    this.alwaysActive = true;
+    this.active = true;
+    this.baseW = 30;
+    this.baseH = 32;
+  }
+
+  get giant() { return this.variant === 3; }
+
+  applyScale() {
+    const bottom = this.y + this.h;
+    const cx = this.x + this.w / 2;
+    this.w = Math.round(this.baseW * this.scale);
+    this.h = Math.round(this.baseH * this.scale);
+    this.x = cx - this.w / 2;
+    this.y = bottom - this.h;
   }
 
   update() {
@@ -318,25 +524,59 @@ export class Boss extends Enemy {
     const player = this.level.player;
     if (this.invuln > 0) this.invuln--;
 
-    if (player) this.facing = player.cx < this.cx ? -1 : 1;
-    this.vx = this.speed * this.facing;
+    if (this.scale !== this.targetScale) {
+      this.scale += Math.sign(this.targetScale - this.scale) * 0.04;
+      if (Math.abs(this.targetScale - this.scale) < 0.05) this.scale = this.targetScale;
+      this.applyScale();
+    }
+
+    if (player && this.charging <= 0) this.facing = player.cx < this.cx ? -1 : 1;
+
+    if (this.charging > 0) {
+      this.charging--;
+      this.vx = 3.4 * this.facing / Math.max(1, this.scale * 0.7);
+    } else {
+      this.vx = (this.speed / Math.max(1, this.scale * 0.6)) * this.facing;
+    }
     if (moveX(this, this.level)) this.facing *= -1;
 
+    const fallSpeed = this.onGround ? 0 : this.vy;
     if (this.onGround && --this.jumpTimer <= 0) {
       this.vy = -5.6;
-      this.jumpTimer = 80 + Math.floor(Math.random() * 60);
+      this.jumpTimer = (this.giant ? 60 : 80) + Math.floor(Math.random() * 60);
       Sfx.play('boss');
     }
+    if (this.variant >= 2 && this.onGround && --this.chargeTimer <= 0) {
+      this.charging = 45;
+      this.chargeTimer = 200 + Math.floor(Math.random() * 120);
+    }
+
     applyGravity(this, 1);
     moveY(this, this.level);
+
+    // A hard landing sends shockwaves out along the floor. Only after a real
+    // fall, and never more than a couple of pairs at a time.
+    const live = this.level.entities.filter((e) => e instanceof Shockwave && !e.remove).length;
+    if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.variant >= 1 || this.scale > 1.5)) {
+      this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
+      this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
+      Sfx.play('stomp');
+    }
   }
 
   stomp() {
     if (this.invuln > 0) return true;
     this.hp--;
     this.invuln = 70;
-    this.speed += 0.35;
+    this.charging = 0;
     Sfx.play('stomp');
+    if (this.giant) {
+      // Puffs up half a size with every hit, all the way to three times over.
+      this.targetScale = Math.min(3, this.targetScale + 0.5);
+      Sfx.play('fart');
+    } else {
+      this.speed += 0.35;
+    }
     if (this.hp <= 0) {
       this.dying = true;
       this.noclip = true;
@@ -355,10 +595,11 @@ export class Boss extends Enemy {
   draw(ctx) {
     const frame = this.tick;
     if (this.dying) {
-      this.drawFlipped(ctx, () => drawBoss(ctx, this.x - 1, this.y, frame, this.facing, false));
+      this.drawFlipped(ctx, () =>
+        drawBoss(ctx, this.x - 1, this.y, frame, this.facing, false, this.variant, this.scale));
       return;
     }
-    drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0);
+    drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0, this.variant, this.scale);
   }
 }
 
@@ -367,5 +608,8 @@ export const ENEMY_CHARS = {
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),
   f: (level, tx, ty) => new Flyer(level, tx * TILE, ty * TILE),
   p: (level, tx, ty) => new Plant(level, tx * TILE + 8, (ty + 1) * TILE - 32),
-  b: (level, tx, ty) => new Boss(level, tx * TILE, ty * TILE),
+  r: (level, tx, ty) => new StinkCloud(level, tx * TILE, ty * TILE),
+  c: (level, tx, ty) => new CorkGuy(level, tx * TILE + 1, ty * TILE),
+  H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
+  b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),
 };

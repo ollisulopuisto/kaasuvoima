@@ -1,10 +1,10 @@
 # Super Fart Bros 3
 
 Selaimessa pyörivä tasohyppelypeli Super Mario Bros. 3:n hengessä: oma
-**maailmankarttamoottori** (solmut, polut, avautuvat reitit, papu­talot) ja oma
-**kenttämoottori** (ruutupohjainen kenttä, fysiikka, viholliset, tehostukset,
-maalikortti). Ei riippuvuuksia, ei buildia, ei kuvatiedostoja — kaikki grafiikka
-ja äänet syntyvät ajossa.
+**maailmankarttamoottori** (solmut, polut, avautuvat reitit, hernetalot) ja oma
+**kenttämoottori** (ruutupohjainen kenttä, fysiikka, viholliset, viisiportaiset
+tehostukset, maalikortti). Ei riippuvuuksia, ei buildia, ei kuvatiedostoja —
+kaikki grafiikka ja äänet syntyvät ajossa.
 
 ## Käynnistys
 
@@ -17,47 +17,96 @@ python3 -m http.server 8000
 
 Mikä tahansa staattinen palvelin käy (`npx http-server`, `php -S`, ...).
 
+## Julkaisu Verceliin
+
+Repo on staattinen sivusto ilman build-vaihetta, ja `vercel.json` kertoo sen
+Vercelille. Julkaisu onnistuu suoraan repon juuresta:
+
+```bash
+npx vercel          # esikatselu
+npx vercel --prod   # tuotanto
+```
+
+Vaihtoehtoisesti kytke repo Vercelin hallinnasta (Add New → Project → import).
+Frameworkiksi **Other**, build-komento tyhjäksi ja output-hakemistoksi `.`.
+
 ## Näppäimet
 
 | Näppäin | Toiminto |
 | --- | --- |
 | Nuolet / WASD | liikkuminen, kartalla solmusta toiseen |
-| Z tai välilyönti | hyppy · kartalla mene kenttään |
+| Z tai välilyönti | hyppy · **ilmassa uudestaan = pierupomppu** · kartalla mene kenttään |
 | X tai vaihto | juoksu · pierupallo (kukka) · häntäisku (lehti) |
 | Alas | kyykky · pudotus läpi puulavan |
 | Enter | tauko kentässä · kartalla käytä varastoesine |
 | M | äänet päälle/pois |
+| F5 / F8 | tallenna tila / lataa tila (kuten emulaattorissa) |
+| F6 | vaihda tallennuspaikkaa (1–3) |
 
 Peliohjain (standard gamepad) toimii myös.
 
-## Pelin idea
+## Voimatasot 1–5
 
-* **Maailmoja on kolme** ja jokaisessa kolme kenttää, papu­talo ja linnake.
-  Kentän läpäisy avaa siitä lähtevät polut; linnakkeen pomon kaato avaa
-  seuraavan maailman.
-* **Vauhtimittari (P)** täyttyy juostessa täyttä vauhtia. Täydellä mittarilla
-  juokset nopeammin, ja lehtivoimalla pääset **lentoon**: hyppää, paina hyppyä
-  uudelleen ilmassa ja räpyttele. Mittari tyhjenee lennon aikana.
-* **Tehostukset**: papu (iso), pierukukka (ammu pierupalloja), kaasulehti
-  (häntä, liito ja lento). Osuma pudottaa yhden tason kerrallaan ja pudottaa
-  samalla varastoesineen kentälle.
-* **Papu­talosta** valitset yhden esineen varastoon. Varastoesineen voi käyttää
-  kartalla Enterillä.
-* **Maalikortti**: kolme korttia antaa lisäelämiä, kolme samaa antaa enemmän.
-* Sata kolikkoa = lisäelämä. Edistyminen tallentuu selaimen localStorageen.
+Tehostukset kasautuvat: jokainen kerätty tehostus nostaa tasoa yhdellä (max 5),
+ja **jokainen taso kasvattaa hahmoa ja vahvistaa sitä ominaisuutta**, jonka
+tehostus antaa. Osuma pudottaa yhden tason kerrallaan — tasolla 0 osuma tappaa.
+
+| Tehostus | Ominaisuus | Mitä taso tekee |
+| --- | --- | --- |
+| **Pierusieni** | tuplahyppy: hyppää ilmassa uudelleen ja pieru nostaa ylemmäs | tasoja vastaava määrä ilmahyppyjä (taso 5 = 5 kpl) |
+| **Pierukukka** | ammu pierupalloja | enemmän palloja kerralla (3+) ja enemmän yhtä aikaa ilmassa |
+| **Kaasulehti** | häntäisku, liito ja lento täydellä vauhtimittarilla | pidempi lento, pidempi häntä, hitaampi liito |
+| **Hernekeitto** | +1 taso nykyiseen voimaan | parantaa myös ummetuksen |
+
+Ilmapierun purkaus kaataa myös alapuolella olevat viholliset, ja tasolta 4
+ylöspäin hahmo jyrää tiiliä juoksemalla niiden läpi.
+
+## Vaarat: ummetus ja närästys
+
+* **Ummetuskorkki** ei vahingoita vaan **korkkaa**: kaikki kaasuvoimat (tuplahyppy,
+  pierupallot, lento, häntä) menevät poikki muutamaksi sekunniksi. HUD näyttää
+  laskurin. Hernekeitto tai mikä tahansa tehostus avaa korkin heti.
+* **Närästys** on lattiasta purkautuva liekkisuihku. Se varoittaa välähdyksellä
+  ennen syöksyä, joten se on ajoituspulma — mutta osuma polttaa yhden voimatason.
+* **Ruskeat pilvet** leijuvat ilmassa ja ajelehtivat pelaajaa kohti. Ne voi
+  tömäyttää tai pierupallottaa pois.
+
+## Maailmat
+
+| Maailma | Teema | Pomo |
+| --- | --- | --- |
+| 1 PAPULAAKSO | niityt | Linnakkeen pomo — kävelee ja hyppii |
+| 2 HIKIHIEKKA | aavikko | sama pomo uutena versiona: laskeutuminen synnyttää maa-aaltoja |
+| 3 JÄÄTÄVÄ VETO | jää | nopeampi versio, joka syöksyy pelaajaa kohti |
+| 4 PIERUTEHDAS | tehdas | **PIERUPRINSSI**, joka pullistuu jokaisesta osumasta aina 3-kertaiseksi |
+
+Jokaisessa maailmassa on kolme kenttää, hernetalo ja linnake. Kentän läpäisy avaa
+siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
+
+Muuta: vauhtimittari (P) täyttyy juostessa, sata kolikkoa on lisäelämä, kolme
+maalikorttia antaa lisäelämiä ja edistyminen tallentuu localStorageen.
 
 ## Koodin rakenne
 
 ```
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
-src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, tallennus
-src/core/           syöte, ääni (WebAudio-syntetisaattori + musiikki), tallennus
+vercel.json         staattinen julkaisu ilman buildia
+src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, pikatallennus
+src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat
 src/data/           kenttäpalikat, kentät, maailmankartat
 src/entities/       pelaaja, viholliset, esineet, efektit
 src/level/          fysiikka ja törmäykset
 src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit
 ```
+
+### Tilatallennus
+
+`src/core/savestate.js` ottaa tilannevedoksen koko pelistä: kenttäruudukko,
+kaikki entiteetit, pelaaja, kamera, kello ja pelitila. Entiteetit sarjallistuvat
+yleisesti (kaikki omat kentät paitsi viittaus kenttäolioon) ja herätetään
+tiedoston `REGISTRY`-taulun avulla — uusi vihollistyyppi tarvitsee vain rivin
+siihen tauluun.
 
 ### Kenttien tekeminen
 
@@ -84,8 +133,11 @@ Kenttä on lista palikoiden nimiä (`src/data/levels.js`):
 
 Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko, `!`
 tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
-`N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset: `g` mönkijä,
-`k` kilpikonna, `f` lentäjä, `p` putkikasvi, `b` pomo. Pelaajan aloituspaikka on `1`.
+`N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset ja vaarat: `g`
+mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
+ummetuskorkki, `H` närästys, `b` pomo. Pelaajan aloituspaikka on `1`.
+
+Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 
 ### Maailmankartan muokkaus
 

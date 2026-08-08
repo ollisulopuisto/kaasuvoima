@@ -1,6 +1,7 @@
 import { drawText } from '../gfx/font.js';
 import { drawPlayer, drawItem, drawBoss } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
+import { normalizePower, POWER_NAMES } from '../entities/player.js';
 
 /** The "MAAILMA 1-1 / SFB x 4" card shown before every level. */
 export class InterludeScene {
@@ -30,8 +31,10 @@ export class InterludeScene {
     drawText(ctx, `MAAILMA ${this.levelId}`, 160, 84, {
       color: '#ffffff', align: 'center', shadow: '#303048',
     });
-    drawPlayer(ctx, 122, 108, {
-      power: this.game.state.power,
+    const power = normalizePower(this.game.state.power);
+    drawPlayer(ctx, 122, 134 - (power.level === 0 ? 16 : 26), {
+      type: power.type,
+      level: Math.min(1, power.level),
       facing: 1,
       frame: 0,
       state: 'idle',
@@ -40,8 +43,12 @@ export class InterludeScene {
       tick: this.tick,
       wag: this.tick / 20,
     });
-    drawText(ctx, `*  ${this.game.state.lives}`, 158, 118, { color: '#ffffff' });
-    if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 186, 108, this.tick);
+    drawText(ctx, `*  ${this.game.state.lives}`, 158, 122, { color: '#ffffff' });
+    if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 186, 112, this.tick);
+    if (power.level > 0) {
+      drawText(ctx, `${POWER_NAMES[power.type]} ${power.level}/5`, 160, 150,
+        { color: '#8fe04a', align: 'center' });
+    }
   }
 }
 
@@ -101,9 +108,10 @@ export class EndingScene {
     drawText(ctx, 'PIERUKUNINGAS ON KUKISTETTU', 160, 68, { color: '#ffffff', align: 'center' });
     drawText(ctx, 'JA KAASUT VAPAUTETTU', 160, 80, { color: '#ffffff', align: 'center' });
 
-    drawBoss(ctx, 144, 120, this.tick, -1, true);
+    drawBoss(ctx, 150, 116, this.tick, -1, true, 3, 1.6);
     drawPlayer(ctx, 90, 128, {
-      power: 'leaf',
+      type: 'leaf',
+      level: 1,
       facing: 1,
       frame: Math.floor(this.tick / 8) % 3,
       state: 'walk',

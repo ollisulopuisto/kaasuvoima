@@ -15,6 +15,9 @@ const KEYMAP = {
   Enter: 'start',
   Escape: 'start',
   KeyM: 'mute',
+  F5: 'quicksave',
+  F6: 'slot',
+  F8: 'quickload',
 };
 
 // Standard gamepad layout: face buttons, then d-pad.
@@ -30,7 +33,8 @@ const PADMAP = {
   15: 'right',
 };
 
-const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute'];
+const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute',
+  'quicksave', 'quickload', 'slot'];
 
 function blank() {
   const o = {};

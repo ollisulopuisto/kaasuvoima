@@ -1,10 +1,10 @@
-const KEY = 'sfb3.save.v1';
+const KEY = 'sfb3.save.v2';
 
 export const DEFAULT_SAVE = () => ({
   lives: 4,
   coins: 0,
   score: 0,
-  power: 'small',
+  power: { type: null, level: 0 },
   reserve: null,
   world: 0,
   node: null,
