@@ -416,7 +416,13 @@ function cloud(ctx, x, y, size, color, shade) {
 
 /* --------------------------------- main -------------------------------- */
 
-export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
+/**
+ * `drop` pushes the scenery down the screen without moving the sky, for the
+ * moments when the camera is above the ground band of a tall level: hills at
+ * the player's feet twenty tiles up in the air would say the climb never
+ * happened. Zero — every ordinary level — is the picture this always drew.
+ */
+export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0) {
   const th = THEMES[theme] || THEMES.grass;
 
   if (bg === 'none') {
@@ -430,6 +436,8 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
     factoryYard(ctx, th, camX, viewW, viewH, tick);
     return;
   }
+
+  const groundY = viewH + drop;
 
   const shape = bg === 'dunes' ? 'round' : bg === 'peaks' ? 'peak' : 'dome';
   const farColor = mix(th.hillDark, th.sky[1], 0.62);
@@ -448,13 +456,13 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
       if (shape === 'peak') snowCap(g, i * 72 - 24, FAR_H - 1, w, h, capColor);
     }
   });
-  tileStrip(ctx, farStrip, -camX * 0.14, viewH - FAR_H, viewW);
+  tileStrip(ctx, farStrip, -camX * 0.14, groundY - FAR_H, viewW);
 
   // Clouds sit between the far and mid ridges.
   const cloudShade = mix(th.cloud, th.sky[1], 0.45);
   for (let i = 0; i < 7; i++) {
     const seed = hashNoise(i * 13, 7);
-    const y = 12 + Math.floor(seed * 52);
+    const y = 12 + Math.floor(seed * 52) + drop * 0.55;
     const span = viewW + 140;
     const x = Math.round(((-camX * 0.12 - tick * 0.08 + i * 74 + seed * 60) % span + span) % span - 70);
     cloud(ctx, x, y, 1 + Math.floor(seed * 2), th.cloud, cloudShade);
@@ -472,7 +480,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
       if (shape === 'peak') snowCap(g, i * 64 - 12, MID_H - 1, w, h, capColor);
     }
   });
-  tileStrip(ctx, midStrip, -camX * 0.28, viewH - MID_H, viewW);
+  tileStrip(ctx, midStrip, -camX * 0.28, groundY - MID_H, viewW);
 
   // Near ridge, with a treeline / cactus field planted along each crest.
   const NEAR_H = 104;
@@ -526,15 +534,15 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick) {
       }, 3, 28);
     }
   });
-  tileStrip(ctx, nearStrip, -camX * 0.5, viewH - NEAR_H, viewW);
+  tileStrip(ctx, nearStrip, -camX * 0.5, groundY - NEAR_H, viewW);
 
   // Haze where the scenery meets the tilemap, so the seam is not a hard line.
-  const haze = ctx.createLinearGradient(0, viewH - 30, 0, viewH);
+  const haze = ctx.createLinearGradient(0, groundY - 30, 0, groundY);
   haze.addColorStop(0, 'rgba(0,0,0,0)');
   haze.addColorStop(1, theme === 'ice' ? 'rgba(200,225,255,0.35)'
     : theme === 'desert' ? 'rgba(240,190,120,0.3)' : 'rgba(20,30,20,0.22)');
   ctx.fillStyle = haze;
-  ctx.fillRect(0, viewH - 30, viewW, 30);
+  ctx.fillRect(0, groundY - 30, viewW, 30);
 
   weather(ctx, theme, camX, viewW, viewH, tick);
 }

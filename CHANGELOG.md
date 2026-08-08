@@ -7,6 +7,65 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.1 — pavunvarret ja piilotetut alueet
+
+Kenttä 1-2 on nyt **45 riviä korkea**: taivaskaista pilvien yllä, tavallinen
+reitti keskellä ja suljettu luolahuone alla. Sarakkeessa 150 kasvaa pavunvarsi,
+sarakkeessa 229 on putki joka näyttää tavalliselta putkelta. Kumpikaan ei ole
+matkalla maaliin — löytö lakkaa olemasta löytö jos se on joka nurkassa, ja
+`playable.mjs` vahvistaa että 1-2 menee yhä läpi voimatasolla 0.
+
+Uudet ruudut: `v` (köynnös, kiipeiltävä, **ei kiinteä**) ja `(` `)` (putki jonka
+kurkusta käy hidas kiilto). Kiipeäminen kytkee painovoiman pois; hyppy irrottaa
+luovuttamalla hypyn tavalliselle hyppykoodille, jottei varresta tule toista
+hyppymekaniikkaa.
+
+### Se mitä tässä oikeasti löytyi
+Roadmap sanoi että validaattori lukisi taivaskaistan yhdeksi valtavaksi kuiluksi
+ja hylkäisi jokaisen kentän. **Se teki päinvastoin, ja se on pahempi.** Vanha
+`validateLevel` palautti uudesta 45-rivisestä 1-2:sta *nolla ongelmaa* — se luki
+taivaskaistan lattiarivit, ei löytänyt maata mistään, eikä kuilulaskuria koskaan
+tyhjennetty, joten yksikään geometriasääntö ei ollut päällä eikä mikään kertonut
+siitä. Todistettu punaisella: kun pääkaistan lattiaan puhkaistiin 20 ruudun
+reikä, vanhat säännöt raportoivat vain yhden vihollisen leijuvan ilmassa.
+
+Korjaus jakaa säännöt kysymyksen mukaan, ei sijainnin: **jalansijakysymykset**
+(leijuva vihollinen) katsovat koko ruudukkoa, **reittikysymykset** (kuilut,
+seinät, pääntila, tehostus, portaat tyhjään) katsovat sitä 15 rivin kaistaa
+**jossa pelaajan aloitusmerkki `1` on**. Se on sama lause kuin lupaus itse —
+reitin alusta maaliin pitää aueta pienimmällä koolla — joten validaattori ja
+suunnittelusääntö eivät voi ajautua erilleen. Korkea kenttä ilman aloitusmerkkiä
+on siis aito virhe, ja se raportoidaan sellaisena eikä arvailla ympäri.
+
+### Kaksi muuta asiaa jotka kaistojen pinoaminen rikkoi
+- **Kuilu lakkasi olemasta kuilu.** Pohjaton sarake pääkaistalla sai kellarin
+  alleen, eli putoaminen olisi ollut kahden sekunnin maisemakierros salaisuuden
+  läpi. `assembleTall` kansittaa jokaisen pohjattoman sarakkeen laavalla
+  luolakaistan yläreunaan; putoaminen tappaa yhä 19 framessa, kuten ennenkin.
+- **Pystykamera oli oikeassa mutta ei riittävä.** 15 rivin kentässä `cam.y`
+  liikkuu 32 pikseliä; 45 rivissä se olisi 512 pikseliä 1:1-seurantaa, eli
+  jokainen hyppy vierittäisi ruutua — juuri sitä merenkäyntiä jota vaakakamera
+  välttää. Kamera pysyy nyt siinä kaistassa jossa pelaajan **jalat** ovat
+  (jalat eikä keskipiste: kuiluun pudotessa vartalo on hetken alemmassa
+  kaistassa), siirtyy pehmeästi kaistan vaihtuessa ja jäätyy kuollessa.
+
+### Bugi joka jäi kiinni vasta testissä
+**Isoin voimataso ei mahtunut ulos luolasta.** Hahmo on tasolla 5 kokoa 21×43
+pikseliä, eli kolme ruutua leveä, ja poistumisputken yläpuolella pinnalla oli
+tiilirivi kahden sarakkeen päässä. `tryWarp` kieltäytyi aivan oikein — ja
+lopputulos olisi ollut isoin pelaaja sinetöitynä bonushuoneeseen. Putki
+siirrettiin sarakkeeseen jonka **pinta** on auki, ei siihen joka näytti luolassa
+siistimmältä. Testi ajaa nyt sekä voimatason 0 että 5 läpi molemmista
+salaisuuksista, koska juuri tällainen menee muuten huomaamatta tuotantoon.
+
+### Testit
+Kahdeksan uutta: varsi ylös ja takaisin (tasot 0 ja 5), putki alas ja luolasta
+ulos (tasot 0 ja 5), putki ei heitä tyhjään taivaalle, kuilu tappaa yhä 19
+framessa eikä esittele salaisuutta, maareitti ei koskaan näytä toista kaistaa,
+ja korkea kenttä ilman aloitusmerkkiä raportoidaan.
+
+---
+
 ## v26.08.08.24 — murenevat lavat, spritetehosteet ja datalla ohjattu generaattori
 
 Kolme rinnakkaista työtä, joista kaksi teki alaagentti. Osa tiedostoista tuli

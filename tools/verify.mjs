@@ -509,6 +509,22 @@ const report = await page.evaluate(async () => {
       failures.push(...generatedBad.flatMap((l) => l.problems.map((p) => `${l.id}: ${p}`)));
     }
     ruleReport = perLevel;
+
+    /* The band split is load-bearing and silent when it breaks. Before it
+     * existed, a 45-row level came back with zero problems — not because it was
+     * sound, but because the rules read the sky band's empty floor rows, never
+     * found ground, and never flushed the gap counter. Every geometry rule was
+     * switched off and nothing said so. This asserts the one case that cannot
+     * be guessed around: a tall level with no start marker is an error. */
+    const tall = levelIds().map((id) => getLevel(id)).find((d) => d.rows.length > 15);
+    if (tall) {
+      const stripped = tall.rows.map((row) => row.replace('1', ' '));
+      const problems = validateLevel(stripped, budget);
+      expect('a tall level with no start marker is reported, not silently skipped',
+        problems.some((p) => p.includes('no player start')), problems.slice(0, 2).join(' / '));
+    }
+    expect('at least one level is tall enough to have a hidden band', !!tall,
+      tall ? `${tall.rows.length} riviä` : 'ei korkeita kenttiä');
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -704,6 +720,101 @@ const report = await page.evaluate(async () => {
       !/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket/.test(src));
 
     tele.clearTelemetry();
+  }
+
+  /* --------------------- pavunvarsi ja piilotettu alue ------------------ */
+  {
+    const mk = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-2');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      game.scene = s;
+      return s;
+    };
+    const put = (s, tx, ty) => {
+      s.player.x = tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = ty * 16 - s.player.h;
+      s.player.vy = 0;
+      s.player.climbing = false;
+      s.player.warpLock = 0;
+    };
+    const hold = (s, i, keys, frames) => {
+      for (let f = 0; f < frames; f++) {
+        i.held = blank();
+        for (const k of keys) i.held[k] = true;
+        i.pressed = blank();
+        s.update(i);
+      }
+    };
+
+    /* Both ends of the size range. The widest body is three tiles across while
+     * it hangs off a vine, so anything solid beside the vine is a ceiling only
+     * the big player hits — exactly the sort of thing that ships unnoticed. */
+    for (const power of [{ type: null, level: 0 }, { type: 'leaf', level: 5 }]) {
+      const s = mk(power);
+      const i = mkInput();
+      put(s, 150, 28);
+      hold(s, i, ['up'], 360);
+      const up = s.player.y + s.player.h < 15 * 16;
+      hold(s, i, ['right'], 60);
+      const onPlatform = s.player.onGround && Math.round(s.player.y + s.player.h) === 9 * 16;
+      const coins = game.state.coins;
+      hold(s, i, ['right'], 180);          // walk off the edge and fall home
+      expect(`the beanstalk goes up and lets power ${power.level} back down`,
+        up && onPlatform && game.state.coins > coins && s.player.onGround
+        && !s.player.dying && s.player.y + s.player.h > 27 * 16,
+        `taivaassa ${up}, lavalla ${onPlatform}, jalat ${Math.round(s.player.y + s.player.h)}`);
+
+      // Down the pipe, and — the part that matters — back out of it. A bonus
+      // area you cannot leave is a trap, not a bonus.
+      const c = mk(power);
+      put(c, 229, 26);
+      hold(c, i, ['down'], 40);
+      const inCave = c.player.y > 30 * 16 && c.player.onGround && !c.player.dying;
+      put(c, 250, 42);
+      hold(c, i, [], 3);
+      c.player.warpLock = 0;
+      hold(c, i, ['up'], 40);
+      hold(c, i, [], 20);
+      expect(`the warp pipe takes power ${power.level} down and the cave lets it out`,
+        inCave && c.player.y < 30 * 16 && c.player.onGround && !c.player.dying
+        && c.state === 'play',
+        `luolassa ${inCave}, paluu ${Math.round(c.player.y + c.player.h)}`);
+    }
+
+    const s = mk({ type: null, level: 0 });
+    const i = mkInput();
+    put(s, 229, 26);
+    const y0 = s.player.y;
+    hold(s, i, ['up'], 60);
+    expect('a warp pipe will not throw you into empty sky',
+      Math.abs(s.player.y - y0) < 1, `${Math.round(y0)} -> ${Math.round(s.player.y)}`);
+
+    /* Stacking bands changes what a pit is: a bottomless column in the route
+     * band now has a cellar under it. Falling in has to still kill, and kill at
+     * the same moment, rather than become a scenic tour of the secret. */
+    const pit = mk({ type: null, level: 0 });
+    pit.player.x = 71 * 16;
+    pit.player.y = 26 * 16;
+    let frames = 0;
+    while (pit.state === 'play' && frames < 200) { pit.update(i); frames++; }
+    expect('falling into a pit still kills instead of touring the secret',
+      pit.state === 'dead' && frames < 45 && pit.player.y < 32 * 16,
+      `${frames} framea, y ${Math.round(pit.player.y)}`);
+
+    // And walking the ordinary route must never show the band above or below.
+    const run = mk({ type: 'shroom', level: 1 });
+    let worst = 15 * 16;
+    for (let f = 0; f < 900 && run.state === 'play'; f++) {
+      i.held = blank(); i.held.right = true; i.held.run = true;
+      i.pressed = blank();
+      if (run.player.onGround && f % 27 === 0) { i.pressed.jump = true; i.held.jump = true; }
+      run.update(i);
+      worst = Math.max(worst, run.cam.y);
+    }
+    expect('the ground route never shows another band', worst <= 15 * 16 + 32,
+      `cam.y ${Math.round(worst)}`);
   }
 
   /* -------------------------- murenevat lavat -------------------------- */

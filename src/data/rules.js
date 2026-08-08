@@ -23,9 +23,32 @@ const HEAD = 3;
  * out would make the validator read every catwalk as a bottomless pit and
  * reject perfectly good levels.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}', '%']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}', '%', '(', ')']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
+
+/**
+ * A tall level is three bands of ROWS stacked into one grid — sky, route, cave
+ * — and only the middle one carries the promise. Read whole, the sky band is
+ * one enormous bottomless pit and the cave is a room with no way in, so every
+ * rule in here would fire on a level that is perfectly sound.
+ *
+ * Which band is the route is not a guess and not a position: it is the band the
+ * player starts in. That is the same sentence as the promise itself — the route
+ * from the start to the flag must work at the smallest size — so the validator
+ * and the design rule cannot drift apart. A tall level with no start marker is
+ * therefore a genuine error and not a case to guess around.
+ *
+ * @returns {string[]|null} the 15 rows of the route, or null when there is no
+ *   telling which band that is
+ */
+function routeBand(rows) {
+  if (rows.length <= ROWS) return rows;
+  const start = rows.findIndex((row) => row.includes('1'));
+  if (start < 0) return null;
+  const top = Math.floor(start / ROWS) * ROWS;
+  return rows.slice(top, top + ROWS);
+}
 
 /**
  * @param {string[]} rows padded level rows
@@ -36,9 +59,34 @@ export function validateLevel(rows, budget) {
   const REACH = { gap: budget.gapTiles, wall: budget.wallTiles };
   const problems = [];
   const w = rows[0].length;
-  const at = (x, y) => (y < 0 || y >= rows.length || x < 0 || x >= w ? ' ' : rows[y][x]);
 
   if (rows.some((r) => r.length !== w)) problems.push('ragged rows');
+
+  /*
+   * Footing is a question about one tile and the tile under it, so it is asked
+   * of the whole grid: an enemy hanging in mid-air is a mistake wherever it is.
+   * Everything below this asks "where is the floor", which only means anything
+   * inside one band.
+   */
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = rows[y][x];
+      if (!ENEMY.has(ch)) continue;
+      // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
+      // a tile high and drop in) have no footing to check. The player start is
+      // likewise allowed to be in mid-air: the game drops them in.
+      if ('ApfrkO'.includes(ch)) continue;
+      const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
+      if (!SOLID.has(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
+    }
+  }
+
+  const route = routeBand(rows);
+  if (!route) {
+    problems.push('tall level with no player start: cannot tell which band is the route');
+    return problems;
+  }
+  const at = (x, y) => (y < 0 || y >= route.length || x < 0 || x >= w ? ' ' : route[y][x]);
 
   // Floor profile: the top of the connected ground stack, so a floating block
   // row is never mistaken for terrain the player has to climb.
@@ -57,7 +105,7 @@ export function validateLevel(rows, budget) {
     if (bottomless) { gap++; continue; }
     if (gap > REACH.gap) {
       const from = x - gap;
-      const hasStone = rows.slice(0, FLOOR).some((row) => row.slice(from, x).includes('-'));
+      const hasStone = route.slice(0, FLOOR).some((row) => row.slice(from, x).includes('-'));
       if (!hasStone) problems.push(`gap of ${gap} at column ${from} with no stepping stone`);
     }
     gap = 0;
@@ -76,21 +124,9 @@ export function validateLevel(rows, budget) {
     }
   }
 
-  for (let y = 0; y < rows.length; y++) {
-    for (let x = 0; x < w; x++) {
-      const ch = at(x, y);
-      if (!ENEMY.has(ch)) continue;
-      // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
-      // a tile high and drop in) have no footing to check. The player start is
-      // likewise allowed to be in mid-air: the game drops them in.
-      if ('ApfrkO'.includes(ch)) continue;
-      if (!SOLID.has(at(x, y + 1))) problems.push(`${ch} at ${x},${y} is standing on nothing`);
-    }
-  }
-
   const quarter = Math.floor(w * 0.25);
   let earlyPower = false;
-  for (let y = 0; y < rows.length; y++) {
+  for (let y = 0; y < route.length; y++) {
     for (let x = 0; x < quarter; x++) if (at(x, y) === '!') earlyPower = true;
   }
   if (!earlyPower) problems.push('no power-up in the first quarter');

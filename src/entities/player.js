@@ -43,6 +43,15 @@ const FLIGHT_CLIMB = -1.5;     // PLAYER_FLY_YVEL -$18
 const COYOTE_FRAMES = 5;
 const JUMP_BUFFER_FRAMES = 6;
 
+/*
+ * Beanstalk climbing. Constant speeds, no acceleration and no gravity: a vine
+ * is a place where the physics stop, which is what makes it read as climbing
+ * rather than as slow flying. Sideways movement is deliberately kept — without
+ * it you could climb to the top of a vine and have no way off it but a jump.
+ */
+const CLIMB_SPEED = 1.1;
+const CLIMB_SIDE = 0.75;
+
 export const P_METER_MAX = 112;
 const P_SEGMENTS = 7;
 /** 7 segments, 8 frames each to fill and 24 each to drain. */
@@ -110,6 +119,10 @@ export class Player extends Entity {
     this.controllable = true;
     this.jumpHeld = false;
     this.coyote = 0;
+    this.climbing = false;
+    /* Frames before a warp pipe will take this player anywhere again. Without
+     * it, holding the button on arrival sends you straight back. */
+    this.warpLock = 0;
     this.applySize();
     this.y = y - this.h;   // spawn standing on the given tile top
   }
@@ -153,6 +166,7 @@ export class Player extends Entity {
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
     if (this.corked > 0) this.corked--;
+    if (this.warpLock > 0) this.warpLock--;
     if (this.wag !== 0 || this.type === 'leaf') this.wag += this.flying > 0 ? 0.5 : 0.12;
 
     if (this.dying) {
@@ -171,6 +185,7 @@ export class Player extends Entity {
 
     const left = this.controllable ? input.held.left : false;
     const right = this.controllable ? input.held.right || this.autoWalk : this.autoWalk;
+    const up = this.controllable ? input.held.up : false;
     const down = this.controllable ? input.held.down : false;
     const run = this.controllable ? input.held.run : false;
     // A press is remembered for a few frames, so asking for a jump just before
@@ -179,6 +194,37 @@ export class Player extends Entity {
     else if (this.jumpBuffer > 0) this.jumpBuffer--;
     const jumpPressed = this.jumpBuffer > 0;
     const jumpHeld = this.controllable ? input.held.jump : false;
+
+    /* ------------------------------- climbing ------------------------- */
+    const vine = this.level.climbAt(this);
+    if (this.climbing && jumpPressed) {
+      /* Letting go is a jump from where you hang. It is handed to the ordinary
+       * jump code rather than done here, so a vine cannot quietly become a
+       * second kind of jump with its own height and its own sound. */
+      this.climbing = false;
+      this.coyote = COYOTE_FRAMES;
+    } else if (this.climbing && !vine) {
+      this.climbing = false;
+    } else if (!this.climbing && vine && (up || (down && !this.onGround))) {
+      // Up grabs; down only grabs in mid-air, or ducking at the foot of a vine
+      // would climb instead.
+      this.grabVine(vine);
+    }
+
+    if (this.climbing) {
+      this.vy = (down ? CLIMB_SPEED : 0) - (up ? CLIMB_SPEED : 0);
+      this.vx = ((right ? 1 : 0) - (left ? 1 : 0)) * CLIMB_SIDE;
+      if (this.vx !== 0) this.facing = Math.sign(this.vx);
+      moveX(this, this.level);
+      // A vine passes through planks. Only rock stops a climb, or a platform
+      // beside the vine would catch you on the way down and never let go.
+      moveY(this, this.level, { dropThrough: true });
+      // Climbing down onto solid ground is arriving, not still climbing.
+      if (this.onGround) this.climbing = false;
+      // Hands over hands, at the speed you are actually moving.
+      if (this.vy !== 0) this.animFrame = Math.floor(this.tick / 8) % 2;
+      return;
+    }
 
     /* -------------------------------- ducking ------------------------- */
     const wantDuck = this.big && down && this.onGround;
@@ -297,6 +343,23 @@ export class Player extends Entity {
     } else if (this.onGround) {
       this.animFrame = 0;
     }
+  }
+
+  /**
+   * Takes hold of a beanstalk. Snapping to the middle of the column is what
+   * makes a vine feel like one thing instead of a strip you keep sliding off.
+   */
+  grabVine(vine) {
+    this.climbing = true;
+    if (this.ducking) {
+      this.ducking = false;
+      this.applySize();
+    }
+    this.x = vine.tx * 16 + (16 - this.w) / 2;
+    this.vx = 0;
+    this.vy = 0;
+    this.flying = 0;
+    this.onGround = false;
   }
 
   /** Mid-air fart jump: a burst of gas that also knocks out whatever is below. */

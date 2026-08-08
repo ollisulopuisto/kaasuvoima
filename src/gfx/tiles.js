@@ -23,6 +23,9 @@ export const T = {
   GOAL: 'F',
   DOOR: 'D',
   NOTE: 'N',
+  VINE: 'v',
+  WARP_L: '(',
+  WARP_R: ')',
 };
 
 const S = { solid: true };
@@ -41,6 +44,13 @@ export const TILE_INFO = {
   [T.PIPE_BL]: { ...S, pipe: true },
   [T.PIPE_BR]: { ...S, pipe: true },
   [T.PLATFORM]: { ...SEMI },
+  /* The beanstalk. Deliberately not solid: you climb through it, and a vine you
+   * could also stand on would be a ladder with leaves painted on. */
+  [T.VINE]: { climb: true },
+  /* A pipe that leads to another band of the same level. Solid like any pipe;
+   * the travelling is in the scene, because only it knows how tall a band is. */
+  [T.WARP_L]: { ...S, pipe: true, warp: true },
+  [T.WARP_R]: { ...S, pipe: true, warp: true },
   /* Solid until you stand on it. The timer lives on the scene, not here —
    * `TILE_INFO` describes what a character *is*, never what it is doing. */
   [T.CRUMBLE]: { ...S, crumble: true },
@@ -406,6 +416,51 @@ function drawPipe(ctx, x, y, ch, th) {
   }
 }
 
+/**
+ * The beanstalk: a plant, not a ladder. The stalk leans a little further with
+ * every row and the leaves alternate sides, so a vine forty tiles tall is not
+ * one tile stamped forty times. The greens are fixed rather than themed — a
+ * beanstalk that turned metallic in the factory would read as machinery.
+ */
+function drawVine(ctx, x, y, tx, ty, tick) {
+  const lean = Math.round(Math.sin(ty * 0.8 + tick / 90) * 2);
+  const sx = x + 6 + lean;
+  ctx.fillStyle = '#1c6b1f';
+  ctx.fillRect(sx - 1, y, 6, TILE);
+  ctx.fillStyle = '#3ea23a';
+  ctx.fillRect(sx, y, 4, TILE);
+  ctx.fillStyle = '#8fe04a';
+  ctx.fillRect(sx, y, 1, TILE);
+
+  const right = ty % 2 === 0;
+  const lx = right ? sx + 4 : sx - 7;
+  const tip = right ? lx + 2 : lx;
+  ctx.fillStyle = '#3ea23a';
+  ctx.fillRect(lx, y + 5, 7, 3);
+  ctx.fillRect(tip, y + 4, 5, 1);
+  ctx.fillStyle = '#8fe04a';
+  ctx.fillRect(lx + 1, y + 5, 4, 1);
+  ctx.fillStyle = '#1c6b1f';
+  ctx.fillRect(tip, y + 8, 5, 1);
+  // a bean, on some rows only
+  if (hashNoise(tx, ty * 3) > 0.72) {
+    ctx.fillStyle = '#c8e04a';
+    ctx.fillRect(right ? sx - 3 : sx + 5, y + 11, 2, 3);
+  }
+}
+
+/**
+ * A warp pipe looks like a pipe, because finding out that it is not is the
+ * whole point. The only tell is a slow shine in the throat: enough to notice
+ * if you are looking at it, not enough to announce itself.
+ */
+function drawWarpPipe(ctx, x, y, ch, th, tick) {
+  drawPipe(ctx, x, y, ch === T.WARP_L ? T.PIPE_TL : T.PIPE_TR, th);
+  const pulse = 0.1 + 0.12 * Math.sin(tick / 20);
+  ctx.fillStyle = `rgba(255,255,255,${pulse})`;
+  ctx.fillRect(x, y + 6, TILE, 2);
+}
+
 function drawPlatform(ctx, x, y, th) {
   ctx.fillStyle = th.brickLight;
   ctx.fillRect(x, y, TILE, 2);
@@ -572,6 +627,9 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.PIPE_TR:
     case T.PIPE_BL:
     case T.PIPE_BR: drawPipe(ctx, x, y, ch, th); break;
+    case T.WARP_L:
+    case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick); break;
+    case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;

@@ -1,4 +1,4 @@
-import { assemble } from './chunks.js';
+import { assemble, assembleTall, CHUNK_ROWS } from './chunks.js';
 import { normalizeRows } from '../core/utils.js';
 import { GENERATED_LEVELS } from './generated.js';
 
@@ -17,14 +17,23 @@ const LEVEL_DEFS = {
       'flat', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /*
+   * World 1's hidden level, and the only one in the world: a discovery stops
+   * being a discovery if there is one in every corner. The beanstalk at column
+   * 150 climbs into the sky band, the pipe at column 229 drops into the cave
+   * band, and neither is on the way to the flag — the ground route is exactly
+   * the level it was before.
+   */
   '1-2': {
     theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'plat_float', 'pit_s', 'note_pair',
-      'walkers', 'brick_wall', 'coins', 'pipe_plant', 'pit_bridge', 'flyer',
-      'plat_steps', 'power_hi', 'clouds', 'pit_l', 'ledge', 'shell',
-      'sky_run', 'steps_down', 'run_up', 'goal', 'goal_end',
+      'walkers', 'brick_wall', 'coins', 'beanstalk', 'pipe_plant', 'pit_bridge',
+      'flyer', 'plat_steps', 'warp_pipe', 'power_hi', 'clouds', 'pit_l',
+      'ledge', 'shell', 'sky_run', 'steps_down', 'run_up', 'goal', 'goal_end',
     ],
+    sky: [[144, 'sky_garden']],
+    cave: [[224, 'cave_room']],
   },
   '1-3': {
     theme: 'grass', bg: 'peaks', music: 'level',
@@ -179,14 +188,33 @@ const cache = new Map();
  */
 const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((columns * 1.3) / 10) * 10));
 
-/** Returns { id, theme, bg, music, time, boss, rows } with rows fully padded. */
+/**
+ * Where the bands of a tall level sit, in tile rows. Everything that needs to
+ * know — the camera, the warp pipes, the underground wash — reads it from here
+ * rather than counting rows for itself.
+ */
+const BANDS = { rows: CHUNK_ROWS, main: CHUNK_ROWS, cave: 2 * CHUNK_ROWS };
+
+function buildRows(def) {
+  if (def.rows) return normalizeRows(def.rows);
+  if (def.sky || def.cave) return assembleTall(def.chunks, def.sky, def.cave);
+  return assemble(def.chunks);
+}
+
+/** Returns { id, theme, bg, music, time, boss, bands, rows } with rows padded. */
 export function getLevel(id) {
   if (cache.has(id)) return cache.get(id);
   const def = LEVEL_DEFS[id];
   if (!def) throw new Error(`unknown level: ${id}`);
-  const rows = def.rows ? normalizeRows(def.rows) : assemble(def.chunks);
+  const rows = buildRows(def);
   const level = {
-    id, boss: false, bossVariant: 0, time: defaultTime(rows[0].length), ...def, rows,
+    id,
+    boss: false,
+    bossVariant: 0,
+    time: defaultTime(rows[0].length),
+    ...def,
+    bands: rows.length > CHUNK_ROWS ? BANDS : null,
+    rows,
   };
   cache.set(id, level);
   return level;

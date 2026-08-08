@@ -25,7 +25,8 @@ ennen pushia on `node tools/verify.mjs`.
 - [x] **Murenevat lavat** (`%`) ja **spritekohtainen värjäys/hehku**.
 - [x] **`tools/playable.mjs`**: geometrian läpäisytesti ilman vihollisia.
 - [x] **Generaattori lukee telemetriaa** (`--telemetry`).
-- [ ] **Pavunvarret ja piilotetut alueet** — työn alla, ks. kohta 5.
+- [x] **Pavunvarret ja piilotetut alueet** — 1-2 on 45 riviä korkea: taivaskaista,
+      reitti ja luolahuone. Muut maailmat odottavat, ks. kohta 5.
 
 ### Tila 9.8.2026 aamulla
 
@@ -216,10 +217,15 @@ Toteutusjärjestys:
 4. **Putki alas**: `pipe_down`-merkki joka teleporttaa pelaajan luolakaistan
    vastaavaan kohtaan. Sama ruudukko, joten se on pelkkä `player.y += 15 * TILE`.
 
-**Muista** (ks. [DESIGN.md](DESIGN.md) kohta 6): uusi merkki pitää lisätä `src/data/rules.js`:n
-tauluihin, tai validaattori pitää taivasaluetta yhtenä valtavana kuiluna ja
-hylkää jokaisen kentän. Todennäköisesti sääntöjen pitää katsoa vain
-pääkaistaa — se on tämän työn kiperin kohta ja kannattaa ratkaista ensin.
+**Tehty maailmaan 1** (v26.08.09.1). Jäljellä maailmat 2–5: yksi kenttä kussakin.
+`assembleTall` ja kaistajako ovat valmiina, joten seuraava on kenttädataa.
+
+**Se mitä tämä kohta sanoi väärin:** validaattori ei hylännyt korkeita kenttiä —
+se hyväksyi ne tarkistamatta mitään, koska se luki taivaskaistan lattiarivit
+eikä löytänyt maata mistään. Ratkaisu: reittisäännöt katsovat sitä kaistaa jossa
+aloitusmerkki `1` on. Lisäksi kaistojen pinoaminen rikkoi kaksi asiaa joita tämä
+kohta ei maininnut: pohjaton kuilu sai kellarin alleen (kansitetaan laavalla) ja
+pystykamera olisi vierittänyt joka hypyllä (kamera pysyy jalkojen kaistassa).
 
 ## Myöhemmin
 

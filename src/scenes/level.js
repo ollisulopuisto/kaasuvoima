@@ -1,5 +1,5 @@
 import { getLevel } from '../data/levels.js';
-import { TILE, T, info, isSolid, drawTile, THEMES } from '../gfx/tiles.js';
+import { TILE, T, info, isSolid, isSemi, drawTile, THEMES } from '../gfx/tiles.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
@@ -25,6 +25,7 @@ const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
 const CAM_LOOK_AHEAD = 34;    // px the view leans ahead at full running speed
 const CAM_LOOK_GAIN = 0.035;  // how fast the lean builds
 const CAM_LOOK_RETURN = 0.07; // and how fast it settles back when you stop
+const CAM_BAND_EASE = 0.18;   // how fast the view crosses to another band
 
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
@@ -132,6 +133,20 @@ export class LevelScene {
 
   solidAt(tx, ty) {
     return isSolid(this.tileAt(tx, ty));
+  }
+
+  /** The climbable tile an entity is inside, or null. */
+  climbAt(entity) {
+    const x0 = Math.floor(entity.x / TILE);
+    const x1 = Math.floor((entity.x + entity.w - 1) / TILE);
+    const y0 = Math.floor(entity.y / TILE);
+    const y1 = Math.floor((entity.y + entity.h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (info(this.tileAt(tx, ty)).climb) return { tx, ty };
+      }
+    }
+    return null;
   }
 
   add(entity) {
@@ -297,6 +312,72 @@ export class LevelScene {
     logStuck({ level: this.id, tx, ty: Math.floor(p.cy / TILE), frames: this.tick });
   }
 
+  /* -------------------------------- warping ---------------------------- */
+
+  /**
+   * Warp pipes. The bands of a tall level are a fixed number of rows apart, so
+   * travelling between them is an addition and nothing else: no second scene,
+   * no transition, no save logic of its own. Down goes down a band, up goes up.
+   *
+   * Two things can refuse: rock where you would arrive, and a band with no
+   * ground under the arrival. The second is what stops the surface pipe from
+   * being a way to drop yourself out of the sky onto your own head.
+   */
+  tryWarp(input) {
+    const bands = this.def.bands;
+    const p = this.player;
+    if (!bands || p.dying || !p.onGround || p.warpLock > 0) return;
+    const dir = input.held.down ? 1 : input.held.up ? -1 : 0;
+    if (!dir) return;
+
+    const under = Math.floor((p.y + p.h) / TILE);
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    let onPipe = false;
+    for (let tx = x0; tx <= x1; tx++) if (info(this.tileAt(tx, under)).warp) onPipe = true;
+    if (!onPipe) return;
+
+    const shift = dir * bands.rows * TILE;
+    if (!this.fits(p.x, p.y + shift, p.w, p.h)) return;
+    const feet = Math.floor((p.y + shift + p.h) / TILE);
+    const bandEnd = (Math.floor(feet / bands.rows) + 1) * bands.rows - 1;
+    if (!this.footingWithin(p.x, p.w, feet, bandEnd)) return;
+
+    p.y += shift;
+    p.vy = 0;
+    p.climbing = false;
+    p.warpLock = 24;
+    this.centerCamera();
+    this.spawnPuff(p.cx, p.y + p.h);
+    Sfx.play('door');
+  }
+
+  /** True when a box that size has no solid tile in it at (x, y). */
+  fits(x, y, w, h) {
+    if (y < 0 || y + h > this.heightPx) return false;
+    const x0 = Math.floor(x / TILE);
+    const x1 = Math.floor((x + w - 1) / TILE);
+    const y0 = Math.floor(y / TILE);
+    const y1 = Math.floor((y + h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) if (this.solidAt(tx, ty)) return false;
+    }
+    return true;
+  }
+
+  /** True when rows `from`..`to` hold anything a box that wide could land on. */
+  footingWithin(x, w, from, to) {
+    const x0 = Math.floor(x / TILE);
+    const x1 = Math.floor((x + w - 1) / TILE);
+    for (let ty = from; ty <= to; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const ch = this.tileAt(tx, ty);
+        if (isSolid(ch) || isSemi(ch)) return true;
+      }
+    }
+    return false;
+  }
+
   /* ------------------------------- bumping ----------------------------- */
 
   bumpTile(tx, ty, player) {
@@ -370,6 +451,7 @@ export class LevelScene {
       this.updateTimer();
       this.player.update(input);
       this.playerTiles();
+      this.tryWarp(input);
       this.updateProgress();
     } else if (this.state === 'clear') {
       this.player.update(input);
@@ -527,15 +609,43 @@ export class LevelScene {
     }
     this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.widthPx - VIEW_W));
 
-    const targetY = p.y - VIEW_H * 0.55;
-    const maxY = Math.max(0, this.heightPx - VIEW_H);
-    this.cam.y = clamp(targetY, 0, maxY);
+    const want = this.cameraY();
+    // Inside a band there is barely anywhere to go, so the ease is invisible;
+    // it is there for the moment the band under the player changes.
+    this.cam.y = this.def.bands ? this.cam.y + (want - this.cam.y) * CAM_BAND_EASE : want;
+  }
+
+  /**
+   * Where the view wants to sit vertically.
+   *
+   * A tall level is bands of the same 15 rows a short level has, and the camera
+   * stays inside the one the player is in. That is not a detail: without it the
+   * view would follow every jump over 208 pixels of free travel, which is the
+   * seasickness the horizontal camera goes to such lengths to avoid — and it
+   * would show the secret above or below while you walked past underneath.
+   */
+  cameraY() {
+    const p = this.player;
+    const target = p.y - VIEW_H * 0.55;
+    const bands = this.def.bands;
+    if (!bands) return clamp(target, 0, Math.max(0, this.heightPx - VIEW_H));
+    // The view holds still while you die: following the body down would pan it
+    // straight through whatever is under the pit you just fell into.
+    if (p.dying) return this.cam.y;
+    /* Which band you are in is decided by your feet, not your middle. Falling
+     * into a pit puts your middle in the band below for the few frames before
+     * the lava under the pit gets you, and that was enough to lurch the view
+     * down and show the secret to someone who was only dying. */
+    const span = bands.rows * TILE;
+    const feet = Math.floor((p.y + p.h - 1) / span) * span;
+    const top = clamp(feet, 0, this.heightPx - span);
+    return clamp(target, top, top + span - VIEW_H);
   }
 
   centerCamera() {
     this.camLook = 0;
     this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
-    this.cam.y = clamp(this.player.y - VIEW_H * 0.55, 0, Math.max(0, this.heightPx - VIEW_H));
+    this.cam.y = this.cameraY();
   }
 
   /* ------------------------------ collisions --------------------------- */
@@ -665,7 +775,12 @@ export class LevelScene {
     ctx.rect(0, 0, VIEW_W, VIEW_H);
     ctx.clip();
 
-    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, VIEW_H, this.tick);
+    /* The scenery belongs to the ground band. Once the camera is above it —
+     * up the beanstalk — the hills have to get out of the way, or a platform
+     * twenty tiles in the air looks like it is standing on them. */
+    const bandDrop = this.def.bands
+      ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
+    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, VIEW_H, this.tick, bandDrop);
 
     const jitter = this.shakeAmp > 0
       ? { x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp),
@@ -675,6 +790,7 @@ export class LevelScene {
     const camY = Math.round(this.cam.y) + jitter.y;
     ctx.translate(-camX, -camY);
 
+    if (this.def.bands) this.drawUnderground(ctx, camX, camY);
     this.drawTiles(ctx, camX, camY);
     if (this.game.debug) this.drawHeatmap(ctx, camX, camY);
     if (this.goal) {
@@ -723,6 +839,19 @@ export class LevelScene {
         ctx.fillRect(tx * TILE, camY + VIEW_H - 6, TILE, 6);
       }
     }
+  }
+
+  /**
+   * The backdrop is sky, and sky has no business being visible from inside the
+   * cave. One wash over the bottom band is all it takes — the tiles are drawn
+   * on top of it — so underground reads as underground without a second
+   * backdrop, a second theme or a second scene.
+   */
+  drawUnderground(ctx, camX, camY) {
+    const top = this.def.bands.cave * TILE;
+    if (camY + VIEW_H <= top) return;
+    ctx.fillStyle = '#150e1c';
+    ctx.fillRect(camX, top, VIEW_W, this.heightPx - top);
   }
 
   drawTiles(ctx, camX, camY) {

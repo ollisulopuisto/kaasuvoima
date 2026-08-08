@@ -9,12 +9,28 @@
  *
  * Characters: see src/gfx/tiles.js (T) plus entity markers
  *   1 player start | g walker | k shell | f flyer | p piranha | b boss
+ *
+ * A level can also be three of these bands stacked — see assembleTall.
  */
 
 export const CHUNK_ROWS = 15;
 
 const G = '################';
 const G8 = '########';
+
+/**
+ * Threads a beanstalk down a column of a chunk spec, `top`..`bottom` inclusive.
+ * Merged rather than written, so the vine can pass through rows that already
+ * have something in them — and twenty near-identical `'      v'` lines are not
+ * a level map, they are a copy-paste.
+ */
+function withVine(spec, col, top, bottom) {
+  for (let y = top; y <= bottom; y++) {
+    const row = (spec[y] || '').padEnd(col + 1, ' ');
+    spec[y] = row.slice(0, col) + 'v' + row.slice(col + 1);
+  }
+  return spec;
+}
 
 function ck(w, spec) {
   const rows = [];
@@ -156,6 +172,50 @@ export const CHUNKS = {
     12: ' {}       {} ',
     13: G,
     14: G,
+  }),
+
+  /* --------------------- salaisuudet: varsi ja putki -------------------- */
+  /** Grows from the floor all the way through the band and into the sky one. */
+  beanstalk: ck(16, withVine({ 9: '   o     o   o', 13: G, 14: G }, 6, 0, 12)),
+  /** An ordinary-looking pipe. Press down on it and it is not one. */
+  warp_pipe: ck(16, {
+    11: '     ()',
+    12: '     {}',
+    13: G,
+    14: G,
+  }),
+  /* The sky band: where the beanstalk arrives. The vine runs three tiles past
+   * the platform so you can step off sideways instead of guessing where to let
+   * go, and the way back down is to walk off the edge — a bonus area you
+   * cannot leave is a trap, not a bonus.
+   *
+   * The platform is planks and not ground on purpose: the tallest power level
+   * is three tiles wide when it hangs off a vine, so anything solid beside the
+   * vine is a ceiling that stops the biggest player climbing past it. */
+  sky_garden: ck(32, withVine({
+    5: '        ?!?',
+    8: '          ooooo',
+    9: '       ---------',
+  }, 6, 6, 14)),
+  /* The cave band: a sealed room under the warp pipe. The exit pipe stands one
+   * tile lower than the entry one, which is exactly the height difference that
+   * puts you back on the surface standing on the floor. */
+  cave_room: ck(32, {
+    5: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    6: ' X                            X',
+    7: ' X                            X',
+    8: ' X                            X',
+    9: ' X        ?B!B?               X',
+    10: ' X                            X',
+    11: ' X        oooooooooo          X',
+    /* The exit sits where the *surface* above it is clear, not where it looks
+     * tidiest down here. The tallest power level is 21x43 px — three tiles wide
+     * and nearly three tall — so a brick row on the surface two columns over is
+     * enough to make the warp refuse, and the biggest player would be sealed in
+     * a bonus room with no way out. */
+    12: ' X        oooooooooo      ()  X',
+    13: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    14: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   }),
 
   /* ----------------------------- platforms ----------------------------- */
@@ -438,4 +498,46 @@ export function assemble(names) {
     for (let y = 0; y < CHUNK_ROWS; y++) rows[y] += chunk.rows[y];
   }
   return rows;
+}
+
+/** Stamps sparse `[column, chunk]` placements into one otherwise empty band. */
+function band(width, places) {
+  const rows = Array.from({ length: CHUNK_ROWS }, () => ' '.repeat(width));
+  for (const [at, name] of places) {
+    const chunk = CHUNKS[name];
+    if (!chunk) throw new Error(`unknown chunk: ${name}`);
+    if (at < 0 || at + chunk.w > width) {
+      throw new Error(`chunk ${name} at column ${at} does not fit a ${width} wide level`);
+    }
+    for (let y = 0; y < CHUNK_ROWS; y++) {
+      rows[y] = rows[y].slice(0, at) + chunk.rows[y] + rows[y].slice(at + chunk.w);
+    }
+  }
+  return rows;
+}
+
+/**
+ * Three bands of the same 15 rows, stacked: sky, the route, the cave. The
+ * engine is told nothing — the level is simply 45 rows tall, the camera already
+ * scrolls vertically, and the save state already stores the whole grid.
+ *
+ * `sky` and `cave` are sparse `[column, chunkName]` placements rather than
+ * playlists, because a hidden area is a room or two and not a second level.
+ *
+ * The one thing stacking breaks is the floor of the middle band: a pit that
+ * used to end a fall now drops the player into the band below and shows them
+ * the secret on the way past. So every bottomless column gets a lid of lava
+ * directly underneath, and falling in kills at the moment it always did.
+ */
+export function assembleTall(main, sky = [], cave = []) {
+  const rows = assemble(main);
+  const width = rows[0].length;
+  const under = band(width, cave);
+  let lid = '';
+  for (let x = 0; x < width; x++) {
+    const bottomless = rows[CHUNK_ROWS - 2][x] === ' ' && rows[CHUNK_ROWS - 1][x] === ' ';
+    lid += bottomless ? 'W' : under[0][x];
+  }
+  under[0] = lid;
+  return [...band(width, sky), ...rows, ...under];
 }

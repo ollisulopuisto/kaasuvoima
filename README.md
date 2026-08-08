@@ -188,6 +188,21 @@ git clone --depth 1 https://github.com/TheVGLC/TheVGLC /tmp/vglc
 VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
 ```
 
+## Salaisuudet
+
+Maailman 1 kenttä 1-2 on **45 riviä korkea**: pilvien yllä on taivaskaista ja
+maan alla suljettu luolahuone. Kumpaankaan ei tarvita kohtausvaihtoja — sama
+ruudukko, korkeampi kenttä, ja kamera pysyy siinä kaistassa jossa pelaajan jalat
+ovat.
+
+- **Pavunvarsi** (`v`) sarakkeessa 150: pidä ylös pohjassa kiivetäksesi. Hyppy
+  irrottaa. Takaisin pääsee kävelemällä lavan reunan yli.
+- **Lämpöputki** (`(` `)`) sarakkeessa 229: paina alas seistessäsi sen päällä.
+  Luolan poistumisputkesta pääsee ylös painamalla ylös.
+
+Kumpikaan ei ole matkalla maaliin, ja `tools/playable.mjs` vahvistaa että 1-2
+menee yhä läpi pienimmällä koolla ilman kumpaakaan.
+
 ## Kosketusohjaus
 
 Ohjaimet ilmestyvät **vasta ensimmäisestä oikeasta kosketuksesta** — moni
