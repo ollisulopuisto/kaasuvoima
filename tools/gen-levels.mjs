@@ -1,7 +1,7 @@
 /**
  * Builds levels from the mined pacing statistics.
  *
- *   node tools/gen-levels.mjs [--seed 1234]
+ *   node tools/gen-levels.mjs [--seed 1234] [--telemetry log.json]
  *
  * What is borrowed and what is not
  * --------------------------------
@@ -21,17 +21,38 @@
  * Every level is checked before it is written: gaps and walls stay inside the
  * jump budget, nothing spawns inside a wall, there is headroom for the tallest
  * power level, and no eight-column stretch matches the source corpus.
+ *
+ * With `--telemetry` it also reads an exported playtest log and lets the data
+ * move two knobs: a cluster of deaths lengthens the calm ground in front of the
+ * spot, a cluster of stalls takes a tile off the obstacle that stopped them.
+ * Nothing else. The thresholds that decide what counts as a cluster live in
+ * tools/read-telemetry.mjs, and everything the data was too thin to justify is
+ * printed too — silence would be indistinguishable from having no log at all.
  */
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateLevel } from '../src/data/rules.js';
+import { readTelemetry, RULES } from './read-telemetry.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const stats = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
 
 const seedArg = process.argv.indexOf('--seed');
 const SEED = seedArg > 0 ? Number(process.argv[seedArg + 1]) : 20260808;
+
+const telArg = process.argv.indexOf('--telemetry');
+const TELEMETRY_FILE = telArg > 0 ? process.argv[telArg + 1] : null;
+if (telArg > 0 && !TELEMETRY_FILE) {
+  console.error('  --telemetry needs a file: node tools/gen-levels.mjs --telemetry log.json');
+  process.exit(1);
+}
+const TELEMETRY = TELEMETRY_FILE
+  ? await readTelemetry(TELEMETRY_FILE).catch((err) => {
+    console.error(`  ${err.message}`);
+    process.exit(1);
+  })
+  : null;
 
 /* ------------------------------- the engine ----------------------------- */
 
@@ -121,7 +142,9 @@ class Canvas {
 
 /* ------------------------------ set pieces ------------------------------ */
 /* Each returns the number of columns it consumed. `ctx` carries the running
- * state the pieces need to stay fair to the player. */
+ * state the pieces need to stay fair to the player. `ctx.ease` is the tiles a
+ * piece should shave off its height or its span; it is zero unless telemetry
+ * says people stalled here, and the pieces that can honour it are EASEABLE. */
 
 /**
  * Where each enemy belongs. Hovering kinds bob around their spawn height, so
@@ -150,9 +173,9 @@ const PIECES = {
   },
 
   /** A gap. Wide ones get a stepping stone, because ours is a 6-tile budget. */
-  gap(c, x) {
+  gap(c, x, ctx) {
     const raw = sampleHist(stats.gapWidth, { min: 1, max: 9 });
-    const w = Math.max(2, Math.min(REACH.softGap, Math.round(raw * GAP_SCALE)));
+    const w = Math.max(2, Math.min(REACH.softGap, Math.round(raw * GAP_SCALE)) - ctx.ease);
     const lead = 2;
     c.ground(x, lead);
     if (w > REACH.gap) {
@@ -165,10 +188,10 @@ const PIECES = {
   },
 
   /** Gas cloud drifting over a gap: this game's own version of a leap of faith. */
-  stinkGap(c, x) {
+  stinkGap(c, x, ctx) {
     const w = Math.min(REACH.gap, Math.max(3, Math.round(
       sampleHist(stats.gapWidth, { min: 2, max: 8 }) * GAP_SCALE,
-    )));
+    ) - ctx.ease));
     c.ground(x, 2);
     c.set(x + 2 + Math.floor(w / 2), FLOOR - 4, 'r');
     coinArc(c, x + 2, w);
@@ -182,8 +205,8 @@ const PIECES = {
    * budget — the fart jump is never the price of admission — and the soup that
    * cures the cork sits on the far side.
    */
-  corkGate(c, x) {
-    const w = REACH.gap;
+  corkGate(c, x, ctx) {
+    const w = Math.max(3, REACH.gap - ctx.ease);
     c.ground(x, 5);
     c.set(x + 2, FLOOR - 1, 'c');
     const half = Math.floor(w / 2);
@@ -252,8 +275,9 @@ const PIECES = {
   },
 
   /** A staircase, sized from the mined step distribution and our wall budget. */
-  stairs(c, x) {
-    const h = Math.min(REACH.wall, Math.max(2, sampleHist(stats.stepUp, { min: 2, max: 5 })));
+  stairs(c, x, ctx) {
+    const h = Math.min(REACH.wall,
+      Math.max(2, sampleHist(stats.stepUp, { min: 2, max: 5 }) - ctx.ease));
     const w = h * 2 + 4;
     c.ground(x, w);
     for (let i = 0; i < h; i++) {
@@ -291,7 +315,7 @@ const PIECES = {
   },
 
   /** Floating platforms — the vertical half of the level's vocabulary. */
-  platforms(c, x) {
+  platforms(c, x, ctx) {
     const count = range(2, 3);
     const w = count * 5 + 4;
     c.ground(x, w);
@@ -300,7 +324,7 @@ const PIECES = {
     let topHeight = 0;
     let topX = x;
     for (let i = 0; i < count; i++) {
-      const height = range(4, 7);
+      const height = Math.max(3, range(4, 7) - ctx.ease);
       for (let j = 0; j < 3; j++) c.set(x + 2 + i * 5 + j, FLOOR - height, '-');
       if (rnd() < 0.6) c.set(x + 3 + i * 5, FLOOR - height - 2, 'o');
       if (height >= topHeight) { topHeight = height; topX = x + 3 + i * 5; }
@@ -399,10 +423,11 @@ function weightedPiece(weights) {
   return entries[0][0];
 }
 
-function buildLevel({ palette, targetWidth }) {
+function buildLevel({ palette, targetWidth, tuning = null }) {
   const pal = PALETTES[palette];
   const c = new Canvas();
-  const ctx = { enemies: pal.enemies, restScale: 1, gaveePower: false };
+  const ctx = { enemies: pal.enemies, restScale: 1, ease: 0, gaveePower: false };
+  const trace = [];
   let x = 0;
 
   // A safe opening, the length the corpus gives before its first challenge.
@@ -419,13 +444,17 @@ function buildLevel({ palette, targetWidth }) {
     // The ramp modulates how much calm sits between challenges: the busiest
     // quarter of the corpus gets the shortest rests.
     const quarter = Math.min(3, Math.floor((x / targetWidth) * 4));
-    ctx.restScale = 1.35 - 0.6 * (ramp[quarter] / peak);
+    const tuned = tuning ? tuning.get(trace.length) : null;
+    ctx.restScale = (1.35 - 0.6 * (ramp[quarter] / peak)) * (tuned ? tuned.restScale : 1);
+    ctx.ease = tuned ? tuned.ease : 0;
+    const from = x;
     x += PIECES.rest(c, x, ctx);
 
     let name = weightedPiece(pal.weights);
     if (name === lastPiece) name = weightedPiece(pal.weights);   // avoid doubles
     lastPiece = name;
     x += PIECES[name](c, x, ctx);
+    trace.push({ name, from, to: x });
   }
 
   /*
@@ -473,7 +502,75 @@ function buildLevel({ palette, targetWidth }) {
   x += 10;
   c.set(x + 3, FLOOR - 1, 'F');
   c.ground(x, 10);
-  return c.rows();
+  return { rows: c.rows(), trace };
+}
+
+/* ------------------------------ telemetry ------------------------------- */
+
+/**
+ * How much a death cluster stretches the calm ground leading into it. Rests
+ * are three to eight columns, so anything under a doubling rounds away to a
+ * tile or two — less than the histogram's own spread, i.e. not a change the
+ * player could feel.
+ */
+const REST_BOOST = 2;
+
+/** The pieces whose difficulty is a height or a distance, i.e. the ones `ease` can lower. */
+const EASEABLE = new Set(['gap', 'stinkGap', 'corkGate', 'stairs', 'platforms']);
+
+/**
+ * Turns hotspots into per-iteration adjustments.
+ *
+ * This is why a level is built twice. The log indexes the columns of the level
+ * people actually played, and widening anything shifts every column after it —
+ * compare a hotspot against the shifted layout and it points at the next piece
+ * along. So the first build is the map, and the second build is the one that
+ * moves: same seed, same pieces in the same order (nothing here draws from the
+ * generator's RNG), only their widths and heights differ.
+ *
+ * A stall lands either in the calm before an obstacle or on the obstacle
+ * itself, and in both cases the obstacle to lower is the one in that same
+ * iteration — the rest always comes first.
+ */
+function planTuning(hot, trace) {
+  const tuning = new Map();
+  const notes = [];
+  const where = (h) => (h.from === h.to ? `col ${h.from}` : `cols ${h.from}-${h.to}`);
+  const step = (i) => {
+    if (!tuning.has(i)) tuning.set(i, { restScale: 1, ease: 0 });
+    return tuning.get(i);
+  };
+  const index = (col) => trace.findIndex((t) => col >= t.from && col < t.to);
+
+  for (const h of hot.deaths) {
+    const i = index(h.at);
+    if (i < 0) {
+      notes.push(`deaths ${where(h)} (${h.count})  ->  outside any set piece, left alone`);
+      continue;
+    }
+    step(i).restScale = REST_BOOST;
+    notes.push(`deaths ${where(h)} (${h.count})  ->  rest before ${trace[i].name} x${REST_BOOST}`);
+  }
+
+  for (const h of hot.stalls) {
+    const i = index(h.at);
+    if (i < 0) {
+      notes.push(`stalls ${where(h)} (${h.count})  ->  outside any set piece, left alone`);
+      continue;
+    }
+    const name = trace[i].name;
+    if (!EASEABLE.has(name)) {
+      notes.push(`stalls ${where(h)} (${h.count})  ->  ${name} has no height to give, left alone`);
+      continue;
+    }
+    // A cluster at twice the threshold is not twice as bad, but it is bad
+    // enough that one tile is unlikely to be the difference.
+    const ease = h.count >= 2 * RULES.cluster ? 2 : 1;
+    step(i).ease = ease;
+    notes.push(`stalls ${where(h)} (${h.count})  ->  ${name} lowered by ${ease}`);
+  }
+
+  return { tuning, notes };
 }
 
 /* ------------------------------ validation ------------------------------ */
@@ -531,10 +628,25 @@ const failures = [];
 
 for (const spec of PLAN) {
   let rows = null;
+  let notes = [];
   let problems = ['not attempted'];
   for (let attempt = 0; attempt < 40 && problems.length; attempt++) {
-    rnd = mulberry32(SEED + attempt * 7919 + spec.id.charCodeAt(2) * 104729);
-    rows = buildLevel({ palette: spec.palette, targetWidth: spec.width });
+    const seed = SEED + attempt * 7919 + spec.id.charCodeAt(2) * 104729;
+    rnd = mulberry32(seed);
+    const build = { palette: spec.palette, targetWidth: spec.width };
+    const plain = buildLevel(build);
+    rows = plain.rows;
+    notes = [];
+
+    const hot = TELEMETRY?.levels.get(spec.id);
+    if (hot) {
+      const plan = planTuning(hot, plain.trace);
+      notes = plan.notes;
+      if (plan.tuning.size) {
+        rnd = mulberry32(seed);
+        rows = buildLevel({ ...build, tuning: plan.tuning }).rows;
+      }
+    }
     problems = validate(spec.id, rows);
   }
   if (problems.length) {
@@ -546,7 +658,7 @@ for (const spec of PLAN) {
     failures.push(`${spec.id}: ${orig.hits} eight-column windows match the corpus`);
     continue;
   }
-  built.push({ spec, rows, orig });
+  built.push({ spec, rows, orig, notes });
 }
 
 if (failures.length) {
@@ -593,4 +705,34 @@ for (const { spec, rows, orig } of built) {
     String(enemies).padStart(2)} enemies   ${String(coins).padStart(2)} coins   `
     + `originality ${orig.checked ? `${orig.hits} corpus matches` : 'not checked (set VGLC_DIR)'}`);
 }
+
+if (TELEMETRY) {
+  console.log(`\nTelemetry: ${TELEMETRY_FILE}, ${TELEMETRY.events} events`
+    + `  (cluster >= ${RULES.cluster}, attempts elsewhere >= ${RULES.elsewhere})\n`);
+  let acted = 0;
+  for (const { spec, notes } of built) {
+    for (const note of notes) console.log(`  ${spec.id}  ${note}`);
+    acted += notes.length;
+  }
+  for (const id of TELEMETRY.levels.keys()) {
+    if (!PLAN.some((spec) => spec.id === id)) {
+      console.log(`  ignored  ${id}  hotspots found, but this level is not generated here`);
+    }
+  }
+  // A near-miss is worth a line each; the long tail of one-off deaths is not,
+  // so it gets counted instead of listed.
+  for (const ig of TELEMETRY.ignored.filter((i) => i.code === 'grind')) {
+    const where = ig.from === ig.to ? `col ${ig.from}` : `cols ${ig.from}-${ig.to}`;
+    console.log(`  ignored  ${ig.level}  ${ig.kind} ${where} (${ig.count})  —  only `
+      + `${ig.elsewhere} attempts ended elsewhere, want ${RULES.elsewhere}`);
+  }
+  const thin = TELEMETRY.ignored.filter((i) => i.code === 'thin');
+  for (const id of new Set(thin.map((i) => i.level))) {
+    const mine = thin.filter((i) => i.level === id);
+    console.log(`  ignored  ${id}  ${mine.length} more spots under the `
+      + `${RULES.cluster}-event threshold (biggest ${Math.max(...mine.map((i) => i.count))})`);
+  }
+  if (!acted && !TELEMETRY.ignored.length) console.log('  nothing in the log to act on');
+}
+
 console.log('\n  wrote src/data/generated.js\n');

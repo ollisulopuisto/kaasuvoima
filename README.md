@@ -155,6 +155,7 @@ muutkin linnakkeet. Ks. [DESIGN.md](DESIGN.md) kohta 3.
 npm i -D playwright && npx playwright install chromium   # kerran
 
 node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
+node tools/playable.mjs      # pelkkä geometria: onko kentät läpäistävissä ilman tehostuksia
 node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
 node tools/gen-levels.mjs    # generoi maailman 5 kentät tilastoista
 node tools/make-card.mjs     # päivittää linkkien esikatselukuvan card.png
@@ -165,6 +166,18 @@ tarkistaa mekaniikat, tilatallennuksen, pistetaulun, grafiikan ja äänet. Se
 palauttaa nollasta poikkeavan paluuarvon jos jokin menee rikki. Botti osaa vain
 juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaalia — merkitseviä
 ovat FAILURES-listan rivit.
+
+`playable.mjs` kysyy yhden asian: onko *maasto* läpäistävissä. Se poistaa kaikki
+viholliset ja vaarat ja ajaa botin läpi kahdesti — kerran voimatasolla 0
+(suunnittelulupaus: maareitin pitää aueta pienimmällä koolla) ja kerran
+tuplahypyllä. Ero näiden välillä kertoo onko kenttä rikki vai vain vaativa.
+
+Se **ei kaada ajoa** ilman `--strict`-lippua, ja syy on tärkeä: botti osaa vain
+juosta oikealle ja hypätä. Se ei osaa hypellä kelluvalta lavalta toiselle, mennä
+kyykkyyn, käyttää putkia, potkia kuorta eikä odottaa liikkuvaa lavaa. Useampi
+kenttä on rakennettu juuri niiden varaan, ja silloin botin "umpikuja" on botin
+rajoitus. Heuristiikka joka kaataisi ajon johtaisi käsintehtyjen kenttien
+korjaamiseen huonon botin mieliksi — se on väärinpäin.
 
 Rytmitilastojen louhinta vaatii ulkoisen korpuksen, jota **ei säilytetä
 repossa**:

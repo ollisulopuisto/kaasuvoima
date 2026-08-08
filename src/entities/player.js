@@ -2,7 +2,7 @@ import { Entity } from './entity.js';
 import {
   moveX, moveY, GRAVITY, GRAVITY_HELD, GRAVITY_HELD_CUTOFF, TERMINAL,
 } from '../level/physics.js';
-import { drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES } from '../gfx/sprites.js';
+import { drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES, TINTS } from '../gfx/sprites.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -455,7 +455,13 @@ export class Player extends Entity {
   }
 
   draw(ctx) {
-    if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) return;
+    // Being frozen and being invulnerable used to look identical, because
+    // neither had a picture: the sprite just vanished every other frame. The
+    // flicker still reads as i-frames, but the character stays on screen and
+    // the freeze after a power change is now its own colour.
+    let tint = null;
+    if (this.frozen > 0) tint = TINTS.frozen;
+    else if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) tint = TINTS.flash;
     const spinning = this.spin > 0;
     drawPlayer(ctx, this.x, this.y, {
       type: this.power.type,
@@ -468,6 +474,7 @@ export class Player extends Entity {
       tick: this.tick,
       wag: this.wag,
       idle: this.idle,
+      tint,
     });
     if (this.corked > 0) {
       drawCork(ctx, this.x + this.w / 2 - 4, this.y - 10, this.tick);

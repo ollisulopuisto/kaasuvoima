@@ -64,6 +64,7 @@ const OUTLINE_OFFSETS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
  */
 function silhouette(ctx) {
   return {
+    flat: true,
     set fillStyle(_v) { /* colours are fixed during the outline pass */ },
     get fillStyle() { return ctx.fillStyle; },
     fillRect: (x, y, w, h) => ctx.fillRect(x, y, w, h),
@@ -106,6 +107,118 @@ function flip(ctx, x, w, doFlip, fn) {
   fn(x);
   ctx.restore();
 }
+
+/* ------------------------ per-sprite tint and glow --------------------- */
+
+function parseColor(css) {
+  if (typeof css !== 'string') return null;
+  if (css[0] === '#') {
+    if (css.length === 7) {
+      return [parseInt(css.slice(1, 3), 16), parseInt(css.slice(3, 5), 16),
+        parseInt(css.slice(5, 7), 16), 1];
+    }
+    if (css.length === 4) {
+      return [parseInt(css[1] + css[1], 16), parseInt(css[2] + css[2], 16),
+        parseInt(css[3] + css[3], 16), 1];
+    }
+    return null;
+  }
+  const m = /^rgba?\(([^)]+)\)$/.exec(css);
+  if (!m) return null;
+  const p = m[1].split(',');
+  if (p.length < 3) return null;
+  return [+p[0], +p[1], +p[2], p.length > 3 ? +p[3] : 1];
+}
+
+/**
+ * `drain` pulls a colour towards its own brightness first, so a tint reads as
+ * the sprite changing material rather than as a coloured sheet over it.
+ */
+function makeTint(color, amount, drain = 0) {
+  const [r, g, b] = parseColor(color);
+  return { r, g, b, amount, drain, cache: new Map() };
+}
+
+function tintColor(tint, css) {
+  const hit = tint.cache.get(css);
+  if (hit !== undefined) return hit;
+  const src = parseColor(css);
+  let out = css;
+  if (src) {
+    let [r, g, b] = src;
+    const a = src[3];
+    if (tint.drain > 0) {
+      const lum = r * 0.299 + g * 0.587 + b * 0.114;
+      r += (lum - r) * tint.drain;
+      g += (lum - g) * tint.drain;
+      b += (lum - b) * tint.drain;
+    }
+    r = Math.round(r + (tint.r - r) * tint.amount);
+    g = Math.round(g + (tint.g - g) * tint.amount);
+    b = Math.round(b + (tint.b - b) * tint.amount);
+    out = a >= 1
+      ? `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+      : `rgba(${r},${g},${b},${a})`;
+  }
+  // A couple of sprites build their colour out of a sine, so the key space is
+  // not really finite. Drop the table rather than let it grow all session.
+  if (tint.cache.size > 256) tint.cache.clear();
+  tint.cache.set(css, out);
+  return out;
+}
+
+/**
+ * The same trick as `silhouette`, except the colours survive — remapped. This is
+ * the whole reason the artwork is drawn from a named colour table: a frozen or
+ * flashing sprite is a substitution as it paints, not a pass over pixels, so it
+ * stays pixel-exact and costs one map lookup per colour change.
+ */
+function recolored(ctx, tint) {
+  if (!tint || ctx.flat) return ctx;
+  return {
+    set fillStyle(v) { ctx.fillStyle = tintColor(tint, v); },
+    get fillStyle() { return ctx.fillStyle; },
+    set globalAlpha(v) { ctx.globalAlpha = v; },
+    get globalAlpha() { return ctx.globalAlpha; },
+    set globalCompositeOperation(v) { ctx.globalCompositeOperation = v; },
+    get globalCompositeOperation() { return ctx.globalCompositeOperation; },
+    fillRect: (x, y, w, h) => ctx.fillRect(x, y, w, h),
+    save: () => ctx.save(),
+    restore: () => ctx.restore(),
+    translate: (x, y) => ctx.translate(x, y),
+    scale: (x, y) => ctx.scale(x, y),
+    drawImage: (...args) => ctx.drawImage(...args),
+  };
+}
+
+/**
+ * Draws the sprite once larger and additive behind itself. Light spilling off an
+ * object looks like a screen effect but cannot be one: the post pass only sees
+ * the finished picture and has no idea which pixel was the star.
+ */
+function glowing(ctx, cx, cy, glow, paint) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = glow.alpha;
+  ctx.translate(cx, cy);
+  ctx.scale(glow.scale, glow.scale);
+  ctx.translate(-cx, -cy);
+  paint(recolored(ctx, glow.tint));
+  ctx.restore();
+  paint(ctx);
+}
+
+/** Named states a sprite can be drawn in. Pass one as `tint`. */
+const TINTS = {
+  frozen: makeTint('#78c0ff', 0.62, 0.55),
+  flash: makeTint('#fff0c0', 0.7, 0.45),
+  spent: makeTint('#8c8878', 0.5, 0.65),
+};
+
+const GLOWS = {
+  star: { scale: 1.9, alpha: 0.28, tint: null },
+  fart: { scale: 2.4, alpha: 0.22, tint: makeTint('#d0ff90', 1) },
+};
 
 const PALETTES = {
   none: { cap: C.green, shirt: C.green, shirtDark: C.greenDark, pants: C.brown, pantsDark: C.brownDark },
@@ -338,16 +451,16 @@ function scratch() {
 }
 
 /**
- * @param {object} s { type, level, facing, frame, state, ducking, running, wag }
+ * @param {object} s { type, level, facing, frame, state, ducking, running, wag, tint }
  */
 export function drawPlayer(ctx, x, y, s) {
   const level = Math.max(0, Math.min(5, s.level ?? 0));
   if (level === 0) {
-    outlined(ctx, (g) => drawPlayerBase(g, x, y, s, true));
+    outlined(ctx, (g) => drawPlayerBase(recolored(g, s.tint), x, y, s, true));
     return;
   }
   if (level === 1) {
-    outlined(ctx, (g) => drawPlayerBase(g, x, y, s, false));
+    outlined(ctx, (g) => drawPlayerBase(recolored(g, s.tint), x, y, s, false));
     return;
   }
 
@@ -358,7 +471,7 @@ export function drawPlayer(ctx, x, y, s) {
 
   const b = scratch();
   b.clearRect(0, 0, BUF_W, BUF_H);
-  outlined(b, (g) => drawPlayerBase(g, PAD.x, PAD.y, s, false));
+  outlined(b, (g) => drawPlayerBase(recolored(g, s.tint), PAD.x, PAD.y, s, false));
 
   const prev = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
@@ -680,7 +793,12 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1)
 
 /* -------------------------------- items -------------------------------- */
 
-export function drawItem(ctx, kind, x, y, tick) {
+/** @param {object} [opts] { tint } */
+export function drawItem(ctx, kind, x, y, tick, opts) {
+  if (opts && opts.tint) {
+    drawItem(recolored(ctx, opts.tint), kind, x, y, tick);
+    return;
+  }
   const px = Math.round(x);
   const py = Math.round(y);
 
@@ -766,23 +884,33 @@ export function drawItem(ctx, kind, x, y, tick) {
   }
 
   if (kind === 'star') {
-    ctx.fillStyle = Math.floor(tick / 4) % 2 ? '#fff070' : '#ffb020';
-    ctx.fillRect(px + 6, py + 1, 4, 14);
-    ctx.fillRect(px + 1, py + 6, 14, 4);
-    ctx.fillRect(px + 3, py + 3, 10, 10);
+    // The one item that is literally a light source, so it gets the halo.
+    glowing(ctx, px + 8, py + 8, GLOWS.star, (g) => {
+      g.fillStyle = Math.floor(tick / 4) % 2 ? '#fff070' : '#ffb020';
+      g.fillRect(px + 6, py + 1, 4, 14);
+      g.fillRect(px + 1, py + 6, 14, 4);
+      g.fillRect(px + 3, py + 3, 10, 10);
+    });
   }
 }
 
-export function drawFart(ctx, x, y, tick) {
+/** @param {object} [opts] { tint, glow } */
+export function drawFart(ctx, x, y, tick, opts) {
   const px = Math.round(x);
   const py = Math.round(y);
   const p = Math.floor(tick / 4) % 2;
-  ctx.fillStyle = 'rgba(140,220,80,0.9)';
-  ctx.fillRect(px + 1, py + 1, 6, 6);
-  ctx.fillRect(px, py + 2, 8, 4);
-  ctx.fillRect(px + 2, py, 4, 8);
-  ctx.fillStyle = 'rgba(232,255,180,0.9)';
-  ctx.fillRect(px + 2 + p, py + 2, 2, 2);
+  const tint = opts && opts.tint;
+  const body = (surface) => {
+    const g = recolored(surface, tint);
+    g.fillStyle = 'rgba(140,220,80,0.9)';
+    g.fillRect(px + 1, py + 1, 6, 6);
+    g.fillRect(px, py + 2, 8, 4);
+    g.fillRect(px + 2, py, 4, 8);
+    g.fillStyle = 'rgba(232,255,180,0.9)';
+    g.fillRect(px + 2 + p, py + 2, 2, 2);
+  };
+  if (opts && opts.glow) glowing(ctx, px + 4, py + 4, opts.glow, body);
+  else body(ctx);
 }
 
 export function drawGasPuff(ctx, x, y, life, size, brown) {
@@ -826,4 +954,4 @@ export function drawBrickShard(ctx, x, y, color) {
   ctx.fillRect(Math.round(x), Math.round(y) + 4, 6, 2);
 }
 
-export { C as SPRITE_COLORS, CARD_ICONS };
+export { C as SPRITE_COLORS, CARD_ICONS, TINTS, GLOWS };

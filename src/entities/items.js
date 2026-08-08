@@ -1,10 +1,14 @@
 import { Entity } from './entity.js';
 import { moveX, moveY, applyGravity } from '../level/physics.js';
-import { drawItem, drawFart } from '../gfx/sprites.js';
+import { drawItem, drawFart, TINTS, GLOWS } from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 
 const EMERGE_FRAMES = 26;
+
+/** Shared so the draw loop is not allocating an options object per shot. */
+const FART_STYLE = { glow: GLOWS.fart };
+const FART_STYLE_SPENT = { glow: GLOWS.fart, tint: TINTS.spent };
 
 export class Item extends Entity {
   /** @param {'shroom'|'flower'|'leaf'|'soup'|'oneup'} itemKind */
@@ -101,6 +105,8 @@ export class FartBall extends Entity {
   }
 
   draw(ctx) {
-    drawFart(ctx, this.x, this.y, this.tick);
+    // A shot running out of gas stops looking like fresh gas before it pops.
+    drawFart(ctx, this.x, this.y, this.tick,
+      this.life > 40 ? FART_STYLE : FART_STYLE_SPENT);
   }
 }
