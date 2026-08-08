@@ -7,6 +7,20 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.16 — lead alemmas
+
+### Muutettu
+- **Lead-melodia laskettiin oktaavilla.** Neliö- ja kolmioaalto C6:n tienoilla
+  on pienestä kaiuttimesta aidosti kirskuva, ja sävelmä asui siellä pysyvästi.
+  Nyt kaksi "oktaavi ylös" -osiota käyvät siinä rekisterissä pariksi
+  kierrokseksi sen sijaan että se olisi oletus.
+- **Musiikkiväylälle alipäästösuodin** 4,8 kHz:iin. Neliö- ja saha-aalto
+  kantavat yläsäveliä loputtomiin; huipun pyöristäminen vie kirskunnan pois
+  ilman että mikään kuulostaa vaimennetulta.
+- Kellon tikitys jätettiin klassiseen 24 framen yksikköön (0,4 s) pyynnöstä.
+
+---
+
 ## v26.08.08.15 — värisevä hahmo, tehtaan pääntila, laattapolkujen palkinnot
 
 ### Korjattu

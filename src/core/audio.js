@@ -37,7 +37,13 @@ function ensure() {
 
   musicBus = ctx.createGain();
   musicBus.gain.value = 0.5;
-  musicBus.connect(master);
+  // Square and sawtooth waves carry harmonics all the way up; rolling off the
+  // top takes the glare out without making anything sound muffled.
+  const tame = ctx.createBiquadFilter();
+  tame.type = 'lowpass';
+  tame.frequency.value = 4800;
+  tame.Q.value = 0.4;
+  musicBus.connect(tame).connect(master);
 
   sfxBus = ctx.createGain();
   sfxBus.gain.value = 0.95;
@@ -50,7 +56,7 @@ function ensure() {
   feedback.gain.value = 0.24;
   const wet = ctx.createGain();
   wet.gain.value = 0.16;
-  musicBus.connect(echo);
+  tame.connect(echo);
   echo.connect(feedback).connect(echo);
   echo.connect(wet).connect(master);
 
@@ -543,6 +549,11 @@ const TRACKS = {
     swing: 0.22,
     lead: {
       wave: 'triangle', gain: 0.13, detune: 6, vibrato: 3, staccato: 0.75,
+      // An octave below where this started. Square and triangle leads up around
+      // C6 are genuinely piercing over a small speaker, and the tune was living
+      // there permanently — the two "octave up" sections now reach that register
+      // for a couple of passes instead of it being the default.
+      octave: -12,
       phrases: [
         // statement
         [[0, 2], [3, 2], [5, 2], [7, 2],
@@ -604,6 +615,7 @@ const TRACKS = {
     swing: 0.2,
     lead: {
       wave: 'square', gain: 0.12, detune: 8, staccato: 0.7,
+      octave: -12,
       phrases: [
         [[7, 2], [7, 1], [10, 1], [12, 2], [10, 2],
           [7, 2], [5, 2], [3, 2], [5, 2],
