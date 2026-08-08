@@ -44,7 +44,7 @@ const LEVEL_DEFS = {
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', time: 300,
     chunks: [
-      'start', 'flat', 'walkers', 'qrow', 'pipe_plant', 'pit_s',
+      'start', 'flat', 'walkers', 'sun', 'qrow', 'pipe_plant', 'pit_s',
       'heartburn', 'coins', 'shell', 'plat_steps', 'pit_l', 'flyer',
       'bricks', 'ledge', 'pit_plat', 'corks', 'power', 'steps_up',
       'run_up', 'goal', 'goal_end',
@@ -53,7 +53,7 @@ const LEVEL_DEFS = {
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level', time: 300,
     chunks: [
-      'start', 'plat_float', 'spikes', 'pipe_pair', 'walkers', 'sky_run',
+      'start', 'plat_float', 'sun', 'spikes', 'pipe_pair', 'walkers', 'sky_run',
       'coin_stack', 'pit_bridge', 'clouds', 'brick_wall', 'heartburn_pair',
       'plat_hi', 'shell', 'pit_l', 'power_hi', 'walkers', 'note_pair',
       'steps_down', 'run_up', 'goal', 'goal_end',
@@ -62,7 +62,7 @@ const LEVEL_DEFS = {
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', time: 300,
     chunks: [
-      'start', 'flat', 'lava_gap', 'walker', 'plat_steps', 'flyer',
+      'start', 'flat', 'sun', 'lava_gap', 'walker', 'plat_steps', 'flyer',
       'pipe_plant', 'lava_wide', 'coins', 'soup_stop', 'sky_run', 'bricks',
       'heartburn', 'plat_float', 'walkers', 'power', 'steps_up',
       'run_up', 'goal', 'goal_end',

@@ -460,6 +460,52 @@ export function drawCorkGuy(ctx, x, y, frame, facing) {
   });
 }
 
+/** Vihainen aurinko — hovers over the desert and dive-bombs the player. */
+export function drawAngrySun(ctx, x, y, tick, diving, hurt) {
+  const cx = Math.round(x) + 10;
+  const cy = Math.round(y) + 10;
+  const hot = diving || hurt;
+  const disc = hurt && Math.floor(tick / 2) % 2 ? '#ffffff' : hot ? '#ff9820' : '#ffd048';
+  const rayColor = hot ? '#ff6810' : '#f8a820';
+
+  // eight rays, slowly turning
+  const rot = tick * 0.035;
+  ctx.fillStyle = rayColor;
+  for (let i = 0; i < 8; i++) {
+    const a = rot + (i * Math.PI) / 4;
+    for (let r = 8; r <= 12; r++) {
+      const w = 13 - r;
+      ctx.fillRect(
+        Math.round(cx + Math.cos(a) * r - w / 2),
+        Math.round(cy + Math.sin(a) * r - w / 2), w, w);
+    }
+  }
+
+  // disc
+  ctx.fillStyle = disc;
+  for (let dy = -8; dy <= 8; dy++) {
+    const half = Math.round(Math.sqrt(Math.max(0, 64 - dy * dy)));
+    ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+  }
+  ctx.fillStyle = hot ? '#ffd048' : '#fff0a0';
+  for (let dy = -6; dy <= 2; dy++) {
+    const half = Math.round(Math.sqrt(Math.max(0, 36 - dy * dy)) * 0.7);
+    ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+  }
+
+  // furious face
+  ctx.fillStyle = '#101018';
+  ctx.fillRect(cx - 6, cy - 4, 4, 2);
+  ctx.fillRect(cx - 5, cy - 2, 3, 3);
+  ctx.fillRect(cx + 2, cy - 4, 4, 2);
+  ctx.fillRect(cx + 2, cy - 2, 3, 3);
+  ctx.fillRect(cx - 5, cy + 3, 10, 3);
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(cx - 4, cy + 3, 2, 2);
+  ctx.fillRect(cx - 1, cy + 3, 2, 2);
+  ctx.fillRect(cx + 2, cy + 3, 2, 2);
+}
+
 /** Närästys — a heartburn flame jet erupting from the floor. */
 export function drawHeartburn(ctx, x, y, height, tick) {
   if (height <= 0) return;

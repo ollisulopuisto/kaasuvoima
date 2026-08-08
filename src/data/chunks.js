@@ -235,6 +235,13 @@ export const CHUNKS = {
     13: '###         ####',
     14: '###         ####',
   }),
+  /** Wakes the angry sun. One per level is plenty — it follows you after that. */
+  sun: ck(16, {
+    2: '       A',
+    9: '   o o o',
+    13: G,
+    14: G,
+  }),
   soup_stop: ck(16, {
     9: '      !',
     12: '   g       c',

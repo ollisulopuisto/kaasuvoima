@@ -108,7 +108,8 @@ export class LevelScene {
     for (const e of this.entities) {
       if (e.kind !== 'enemy' || e.dying || e.remove || e === source) continue;
       if (Math.abs(e.cx - x) < radius && e.cy > y - 10 && e.cy < y + radius) {
-        e.flipDie(Math.sign(e.cx - x) || 1);
+        // Same rules as a fart ball, so tough customers stay tough.
+        e.hitByProjectile(Math.sign(e.cx - x) || 1);
       }
     }
   }

@@ -70,6 +70,9 @@ ylöspäin hahmo jyrää tiiliä juoksemalla niiden läpi.
   ennen syöksyä, joten se on ajoituspulma — mutta osuma polttaa yhden voimatason.
 * **Ruskeat pilvet** leijuvat ilmassa ja ajelehtivat pelaajaa kohti. Ne voi
   tömäyttää tai pierupallottaa pois.
+* **Vihainen aurinko** roikkuu aavikon taivaalla pelaajan vieressä ja syöksyy
+  aika ajoin kaaressa hänen lävitseen. Sitä ei voi tömäyttää, mutta kolme
+  pierupalloa tai häntäiskua sammuttaa sen.
 
 ## Maailmat
 
@@ -135,7 +138,7 @@ Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko, `!`
 tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
 `N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset ja vaarat: `g`
 mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
-ummetuskorkki, `H` närästys, `b` pomo. Pelaajan aloituspaikka on `1`.
+ummetuskorkki, `A` vihainen aurinko, `H` närästys, `b` pomo. Pelaajan aloituspaikka on `1`.
 
 Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 

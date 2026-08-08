@@ -2,7 +2,7 @@ import { Entity } from './entity.js';
 import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
 import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
-  drawStinkCloud, drawCorkGuy, drawHeartburn,
+  drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun,
 } from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
@@ -348,6 +348,85 @@ export class StinkCloud extends Enemy {
   }
 }
 
+/**
+ * Vihainen aurinko. Hangs in the sky next to the player, then swoops down
+ * through them in an arc and climbs back up. Cannot be stomped; three fart
+ * balls (or tail whacks) put it out.
+ */
+export class AngrySun extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 20, 20);
+    this.skyY = y;
+    this.hp = 3;
+    this.score = 1000;
+    this.stompable = false;
+    this.side = -1;
+    this.phase = 'hover';
+    this.timer = 150;
+    this.diveT = 0;
+    this.fromX = x;
+    this.toX = x;
+    this.diveDepth = 0;
+    this.invuln = 0;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.invuln > 0) this.invuln--;
+
+    const player = this.level.player;
+    if (!player) return;
+
+    if (this.phase === 'hover') {
+      const target = player.cx + 84 * this.side - this.w / 2;
+      this.x += (target - this.x) * 0.035;
+      this.y = this.skyY + Math.sin(this.tick / 22) * 5;
+      // The sky follows the camera so it never gets left behind.
+      this.skyY = Math.min(this.skyY, this.level.cam.y + 18);
+      if (--this.timer <= 0) {
+        this.phase = 'dive';
+        this.diveT = 0;
+        this.fromX = this.x;
+        this.toX = player.cx - 60 * this.side - this.w / 2;
+        this.diveDepth = Math.max(40, player.y - this.skyY + 10);
+        Sfx.play('boss');
+      }
+      return;
+    }
+
+    // one smooth arc down through the player's level and back up
+    this.diveT = Math.min(1, this.diveT + 0.014);
+    this.x = this.fromX + (this.toX - this.fromX) * this.diveT;
+    this.y = this.skyY + Math.sin(this.diveT * Math.PI) * this.diveDepth;
+    if (this.diveT >= 1) {
+      this.phase = 'hover';
+      this.timer = 140 + Math.floor(Math.random() * 60);
+      this.side *= -1;
+    }
+  }
+
+  takeHit(dir) {
+    if (this.invuln > 0) return;
+    this.hp--;
+    this.invuln = 30;
+    Sfx.play('bump');
+    if (this.hp <= 0) this.flipDie(dir);
+  }
+
+  hitByProjectile(dir) { this.takeHit(dir); }
+  hitByTail(dir) { this.takeHit(dir); }
+  hitByShell(dir) { this.takeHit(dir); }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawAngrySun(ctx, this.x, this.y, this.tick, false, false));
+      return;
+    }
+    drawAngrySun(ctx, this.x, this.y, this.tick, this.phase === 'dive', this.invuln > 0);
+  }
+}
+
 /** Ummetuskorkki — plugs you up instead of hurting you. */
 export class CorkGuy extends Enemy {
   constructor(level, x, y) {
@@ -610,6 +689,7 @@ export const ENEMY_CHARS = {
   p: (level, tx, ty) => new Plant(level, tx * TILE + 8, (ty + 1) * TILE - 32),
   r: (level, tx, ty) => new StinkCloud(level, tx * TILE, ty * TILE),
   c: (level, tx, ty) => new CorkGuy(level, tx * TILE + 1, ty * TILE),
+  A: (level, tx, ty) => new AngrySun(level, tx * TILE, ty * TILE),
   H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
   b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),
 };
