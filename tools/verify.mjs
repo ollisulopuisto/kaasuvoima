@@ -553,6 +553,26 @@ const report = await page.evaluate(async () => {
       missing.length === 0, missing.length ? `puuttuu: ${missing.join('')}` : '');
   }
 
+  /* Taking a hit drops the reserve item, and that item must not land straight
+   * back in the player's hands — otherwise a hit silently swaps your power
+   * instead of costing you one. */
+  {
+    reset({ type: 'shroom', level: 3 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    game.state.reserve = 'leaf';
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+
+    const before = s.player.powerLevel;
+    s.player.hurt();
+    for (let f = 0; f < 20; f++) { s.update(i); i.pressed = blank(); }
+    const p = s.player;
+    expect('a hit costs a power level instead of swapping your power',
+      p.type === 'shroom' && p.powerLevel === before - 1,
+      `${p.type} ${p.powerLevel}, odotettiin shroom ${before - 1}`);
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');

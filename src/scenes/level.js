@@ -2,7 +2,7 @@ import { getLevel } from '../data/levels.js';
 import { TILE, T, info, isSolid, drawTile, THEMES } from '../gfx/tiles.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
-import { drawText } from '../gfx/font.js';
+import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item } from '../entities/items.js';
@@ -148,7 +148,17 @@ export class LevelScene {
   }
 
   addScorePop(x, y, text) {
-    this.add(new ScorePop(this, x, y, text));
+    // Two numbers in the same spot read as one unreadable smudge, and a big
+    // one drawn over a small one is worse. Nudge a new pop clear of any that
+    // is already there.
+    let ny = y;
+    for (let tries = 0; tries < 6; tries++) {
+      const clash = this.entities.some((e) => e instanceof ScorePop && !e.remove
+        && Math.abs(e.x - x) < 26 && Math.abs(e.y - ny) < 12);
+      if (!clash) break;
+      ny -= 13;
+    }
+    this.add(new ScorePop(this, x, ny, text));
   }
 
   awardScore(points, x, y) {
@@ -547,6 +557,31 @@ export class LevelScene {
     }
   }
 
+  /**
+   * A banner with some swagger: it punches in from oversized, rocks gently,
+   * and cycles colour. A flat line of white text is an error message, not a
+   * moment.
+   */
+  drawBanner(ctx, text, y, colors) {
+    const age = this.stateTimer;
+    const punch = age < 8;
+    const scale = punch ? 3 : 2;
+    const rock = Math.round(Math.sin(age / 7) * 2);
+    const color = colors[Math.floor(age / 6) % colors.length];
+    const cx = VIEW_W / 2;
+    const width = textWidth(text, scale);
+
+    ctx.fillStyle = 'rgba(8,8,16,0.55)';
+    ctx.fillRect(cx - width / 2 - 8, y - 6, width + 16, scale * 7 + 12);
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - width / 2 - 8, y - 6, width + 16, 2);
+    ctx.fillRect(cx - width / 2 - 8, y + scale * 7 + 4, width + 16, 2);
+
+    drawText(ctx, text, cx + rock, y, {
+      color, align: 'center', shadow: '#101018', scale,
+    });
+  }
+
   drawHud(ctx) {
     const th = THEMES[this.theme] || THEMES.grass;
     const y = VIEW_H;
@@ -610,12 +645,11 @@ export class LevelScene {
     }
 
     if (this.state === 'clear' && this.wonCard) {
-      const cx = VIEW_W / 2;
-      drawText(ctx, 'KENTTÄ SELVÄ!', cx, 60, { color: '#ffffff', align: 'center', shadow: '#202030' });
-      drawItem(ctx, this.wonCard, cx - 8, 76, this.tick);
+      this.drawBanner(ctx, 'KENTTÄ SELVÄ!', 54, ['#ffd048', '#ffffff', '#8fe04a']);
+      drawItem(ctx, this.wonCard, VIEW_W / 2 - 8, 84, this.tick);
     }
     if (this.state === 'dead') {
-      drawText(ctx, 'VOI EI!', VIEW_W / 2, 80, { color: '#ffffff', align: 'center', shadow: '#202030' });
+      this.drawBanner(ctx, 'VOI EI!', 74, ['#ff6060', '#ffffff', '#ffb040']);
     }
   }
 }

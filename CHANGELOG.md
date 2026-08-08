@@ -7,6 +7,25 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.17 — näyttötekstit
+
+### Muutettu
+- **Pistenumerot eivät enää mene päällekkäin.** Uusi pomppu siirtyy ylemmäs jos
+  samassa kohdassa on jo toinen — kaksi numeroa samassa paikassa lukeutuu yhdeksi
+  lukukelvottomaksi tahraksi, ja tuplakokoinen isolla palkinnolla piirtyi pienen
+  päälle.
+- **"KENTTÄ SELVÄ!" ja "VOI EI!" saivat ryhtiä**: isku sisään ylikokoisena,
+  keinunta, värikierto ja kehystetty tausta. Litteä valkoinen teksti lukeutuu
+  virheilmoitukseksi, ei hetkeksi.
+
+### Tarkistettu
+- **Tehostuksen vaihto vahingon yhteydessä** epäiltiin rikkinäiseksi. Testi
+  osoitti sen ehjäksi: osuma vie yhden voimatason eikä vaihda tyyppiä. Tyyppi
+  vaihtuu vasta jos pelaaja nappaa pudonneen varastoesineen, mikä on tarkoitus.
+  Testi jäi paikalleen suojaamaan tätä.
+
+---
+
 ## v26.08.08.16 — lead alemmas
 
 ### Muutettu
