@@ -595,33 +595,65 @@ const TRACKS = {
 const LOOKAHEAD_S = 0.15;
 const TICK_MS = 45;
 
+/**
+ * Every pass through a track picks the next arrangement off this list, so the
+ * same eight bars never come back sounding the same twice in a row: parts drop
+ * out and return, the lead jumps an octave, the key steps up, one pass runs at
+ * double time. Straight out of the NES playbook.
+ */
+const VARIATIONS = [
+  { label: 'full' },
+  { label: 'no harmony', drop: ['harm'] },
+  { label: 'breakdown', drop: ['lead'], busyHats: true },
+  { label: 'lead octave up', leadOctave: 12 },
+  { label: 'stripped', drop: ['drums'], swingBoost: 0.06 },
+  { label: 'up a tone', transpose: 2 },
+  { label: 'double time', speed: 2, drop: ['harm'] },
+  { label: 'up a fourth', transpose: 5, leadOctave: 12, swingBoost: 0.08 },
+];
+
+/** How much the tempo lifts once the level clock gets scary. */
+const HURRY_SPEED = 1.4;
+
 export const Music = {
   current: null,
   _timer: null,
   _voices: null,
   _drums: null,
+  _track: null,
   _step: 0,
   _nextTime: 0,
   _stepDur: 0,
   _swing: 0,
+  _loopLen: 16,
+  _cycle: 0,
+  _variation: VARIATIONS[0],
+  _hurry: false,
 
   has: (name) => Object.prototype.hasOwnProperty.call(TRACKS, name),
   names: () => Object.keys(TRACKS),
+  variation: () => Music._variation.label,
 
   play(name) {
     if (this.current === name) return;
     this.stop();
     this.current = name;
+    this._hurry = false;          // a fresh track always starts calm
     const track = TRACKS[name];
     if (muted || !track || !ensure()) return;
 
+    this._track = track;
     this._voices = ['lead', 'harm', 'bass']
       .filter((key) => track[key])
-      .map((key) => ({ ...track[key], ...compile(track[key].notes) }));
+      .map((key) => ({ name: key, ...track[key], ...compile(track[key].notes) }));
     this._drums = track.drums || null;
-    this._stepDur = 60 / track.tempo / 4;
-    this._swing = track.swing || 0;
+    // One pass = the longest voice, rounded up to whole bars so the parts that
+    // loop faster still land on the downbeat when the arrangement changes.
+    const longest = Math.max(16, ...this._voices.map((v) => v.len));
+    this._loopLen = Math.ceil(longest / 16) * 16;
     this._step = 0;
+    this._cycle = 0;
+    this._applyVariation();
     this._nextTime = ctx.currentTime + 0.08;
     this._tick();
   },
@@ -635,11 +667,30 @@ export const Music = {
     }
   },
 
+  /** Time-is-running-out mode: same tune, driven harder. */
+  setHurry(on) {
+    if (this._hurry === !!on) return;
+    this._hurry = !!on;
+    if (this._voices) this._applyVariation();
+  },
+
+  _applyVariation() {
+    const v = VARIATIONS[this._cycle % VARIATIONS.length];
+    this._variation = v;
+    const speed = (v.speed || 1) * (this._hurry ? HURRY_SPEED : 1);
+    this._stepDur = 60 / (this._track.tempo * speed) / 4;
+    this._swing = (this._track.swing || 0) + (v.swingBoost || 0);
+  },
+
   /** Schedules everything that starts inside the lookahead window. */
   _tick() {
     if (!this._voices || muted || !ctx) return;
     const horizon = ctx.currentTime + LOOKAHEAD_S;
     while (this._nextTime < horizon) {
+      if (this._step > 0 && this._step % this._loopLen === 0) {
+        this._cycle++;
+        this._applyVariation();
+      }
       const swing = this._step % 2 ? this._swing * this._stepDur : 0;
       this._emit(this._step, this._nextTime + swing);
       this._step++;
@@ -649,15 +700,21 @@ export const Music = {
   },
 
   _emit(step, at) {
+    const v = this._variation;
+    const drop = v.drop || [];
+    const local = step % this._loopLen;
+    const delay = Math.max(0, at - ctx.currentTime);
+
     for (const voice of this._voices) {
+      if (drop.includes(voice.name)) continue;
       const note = voice.map.get(step % voice.len);
       if (!note) continue;
       const [semi, len] = note;
       const dur = len * this._stepDur;
-      const f = freq(semi + (voice.octave || 0));
+      const octave = (voice.octave || 0) + (voice.name === 'lead' ? (v.leadOctave || 0) : 0);
       tone({
         type: voice.wave,
-        from: f,
+        from: freq(semi + octave + (v.transpose || 0)),
         dur: dur * 0.98,
         gain: voice.gain,
         attack: 0.012,
@@ -666,15 +723,23 @@ export const Music = {
         vibrato: voice.vibrato || 0,
         vibratoRate: voice.vibratoRate || 6,
         bus: musicBus,
-        delay: Math.max(0, at - ctx.currentTime),
+        delay,
       });
     }
+
     const d = this._drums;
-    if (!d) return;
+    if (!d || drop.includes('drums')) return;
+
+    // The last half-bar of a pass turns into a fill announcing the change.
+    if (local >= this._loopLen - 4) {
+      snareAt(at, local % 2 ? 0.16 : 0.26);
+      if (local === this._loopLen - 1) hatAt(at, 0.16, true);
+      return;
+    }
     const hit = (pattern) => pattern && pattern[step % pattern.length] === 'x';
     if (hit(d.kick)) kickAt(at, 0.42);
     if (hit(d.snare)) snareAt(at, 0.24);
-    if (hit(d.hat)) hatAt(at, step % 4 === 0 ? 0.12 : 0.07);
+    if (hit(d.hat) || (v.busyHats && step % 2 === 0)) hatAt(at, step % 4 === 0 ? 0.12 : 0.07);
   },
 };
 

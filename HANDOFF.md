@@ -47,10 +47,18 @@ paluuarvon jos jokin hajoaa.
    `vercel.json` ohittaa asennusvaiheen (`installCommand`), joten
    `package.json`in devDependency (playwright) ei hidasta julkaisua.
 2. ~~PR #1~~ — mergattu `main`-haaraan.
-3. Peli ei ole tasapainotettu ihmispelaajalla — vain botilla ja käsin. Vaikeus
+3. **Maailma 5 on generoitu.** `tools/mine-pacing.mjs` louhii rytmitilastot
+   ulkoisesta kenttäkorpuksesta (VGLC; **älä committaa korpusta**, aseta vain
+   `VGLC_DIR`) tiedostoon `tools/pacing-stats.json`, ja `tools/gen-levels.mjs`
+   rakentaa niistä `src/data/generated.js`:n. Tilastoista otetaan vain rytmi —
+   haasteiden väli, tiheyskäyrä, kuilun leveys suhteessa hyppybudjettiin,
+   vihollisten ryhmittely. Palikat ovat tämän pelin omia. Generaattori
+   tarkistaa itse hyppybudjetin, pääntilan ja sen ettei yksikään 8 sarakkeen
+   pätkä osu korpukseen.
+4. Peli ei ole tasapainotettu ihmispelaajalla — vain botilla ja käsin. Vaikeus
    erityisesti maailmassa 4 (kolme närästysliekkiä samassa palikassa) kannattaa
    tarkistaa oikealla pelaajalla.
-4. Ei tarkistuspisteitä kenttien sisällä, ei warp-putkia, ei kosketusohjausta.
+5. Ei tarkistuspisteitä kenttien sisällä, ei warp-putkia, ei kosketusohjausta.
 
 ## Kompastuskivet
 
@@ -83,6 +91,13 @@ Nämä on opittu kantapään kautta — lue ennen kuin muutat moottoria.
 - **localStorage-avaimet**: `sfb3.save.v2` (edistyminen) ja `sfb3.savestate.1..3`
   (pikatallennukset). Jos muutat tallennuksen muotoa, nosta versionumeroa —
   `normalizePower()` hoitaa vanhat merkkijonomuotoiset voimat.
+- **Leijuvia vihollisia ei saa asettaa maahan.** `r` (ruskea pilvi) ja `f`
+  keinuvat spawn-korkeutensa ympärillä, joten maantasolle asetettuna ne
+  uppoavat lattiaan. Ks. `ENEMY_ROW` tiedostossa `tools/gen-levels.mjs`.
+- **Kenttäaika lasketaan pituudesta** (`defaultTime` tiedostossa
+  `src/data/levels.js`), ellei kentässä ole omaa `time`-arvoa.
+- **F3 tai ` avaa debug-ruudun**: fps, framebudjetti, entiteetit, pelaajan
+  tila, kamera ja soiva musiikkivariaatio.
 - **`window.sfb3` on elävä Game-olio.** Konsolista pääsee käsiksi kaikkeen, ja
   testit ajavat peliä juuri sen kautta (`window.sfb3.scene.player` jne.).
 

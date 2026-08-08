@@ -29,6 +29,9 @@ export class Enemy extends Entity {
     Sfx.play('kick');
   }
 
+  /** True while the enemy is on screen but can no longer hurt anyone. */
+  get harmless() { return false; }
+
   hitByProjectile(dir) { this.flipDie(dir); }
   hitByShell(dir) { this.flipDie(dir); }
   hitByTail(dir) { this.flipDie(dir); }
@@ -62,6 +65,9 @@ export class Walker extends Enemy {
     this.speed = 0.55;
     this.squash = 0;
   }
+
+  // A flattened walker is scenery for the rest of its animation.
+  get harmless() { return this.squash > 0; }
 
   update() {
     this.tick++;

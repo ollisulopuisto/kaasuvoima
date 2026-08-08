@@ -33,6 +33,15 @@ class Game {
     this.flash = '';
     this.flashTimer = 0;
     this.pendingNode = null;
+
+    // F3 / ` toggles the developer overlay.
+    this.debug = false;
+    this.fps = 0;
+    this.frameMs = 0;
+    this.workMs = 0;
+    this.stepsThisFrame = 0;
+    this._fpsFrames = 0;
+    this._fpsSince = 0;
   }
 
   toast(text, frames = 90) {
@@ -185,6 +194,7 @@ class Game {
     Input.poll();
 
     if (Input.pressed.mute) this.toast(toggleMute() ? 'AANI POIS' : 'AANI PAALLE', 60);
+    if (Input.pressed.debug) this.debug = !this.debug;
     if (Input.pressed.slot) {
       this.slot = (this.slot % SLOT_COUNT) + 1;
       this.toast(`TALLENNUSPAIKKA ${this.slot}`);
@@ -220,15 +230,55 @@ class Game {
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });
     }
+    if (this.debug) this.drawDebug(ctx);
+  }
+
+  /** Developer overlay: frame budget, scene contents, player and audio state. */
+  drawDebug(ctx) {
+    const scene = this.scene;
+    const p = scene && scene.player;
+    const n = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d);
+
+    const lines = [
+      `FPS ${this.fps}  FRAME ${n(this.frameMs)}MS  WORK ${n(this.workMs)}MS  STEPS ${this.stepsThisFrame}`,
+      `SCENE ${(scene ? scene.constructor.name : 'NONE').replace('SCENE', '')}`
+        + `${scene && scene.id ? ` ${scene.id}` : ''}  TICK ${scene ? scene.tick || 0 : 0}`,
+    ];
+    if (scene && scene.entities) {
+      const live = scene.entities.filter((e) => e.active).length;
+      lines.push(`ENT ${live}/${scene.entities.length}  BUMPS ${scene.bumps ? scene.bumps.size : 0}`
+        + `  SHAKE ${n(scene.shakeAmp || 0)}`);
+    }
+    if (p) {
+      lines.push(`POS ${Math.round(p.x)},${Math.round(p.y)}  VEL ${n(p.vx, 2)},${n(p.vy, 2)}`);
+      lines.push(`POWER ${(p.type || 'NONE').toUpperCase()} ${p.powerLevel}  P ${Math.round(p.pMeter)}`
+        + `  GROUND ${p.onGround ? 1 : 0}  CORK ${Math.ceil((p.corked || 0) / 60)}`);
+    }
+    if (scene && scene.cam) {
+      lines.push(`CAM ${Math.round(scene.cam.x)},${Math.round(scene.cam.y)}`
+        + `  MAP ${scene.w || 0}X${scene.h || 0}`);
+    }
+    lines.push(`MUS ${(Music.current || 'NONE').toUpperCase()} (${Music.variation().toUpperCase()})`
+      + `  MUTE ${isMuted() ? 1 : 0}`);
+    lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
+
+    const width = Math.max(...lines.map((l) => l.length)) * 6 + 8;
+    ctx.fillStyle = 'rgba(8,8,16,0.72)';
+    ctx.fillRect(2, 2, Math.min(W - 4, width), lines.length * 9 + 6);
+    lines.forEach((line, i) => {
+      drawText(ctx, line, 6, 6 + i * 9, { color: i === 0 ? '#8fe04a' : '#d0d0e8' });
+    });
   }
 
   frame(now) {
     if (!this.lastTime) this.lastTime = now;
     let delta = now - this.lastTime;
     this.lastTime = now;
+    this.frameMs = delta;
     if (delta > 250) delta = STEP;      // tab was in the background
     this.accumulator += delta;
 
+    const started = performance.now();
     let steps = 0;
     while (this.accumulator >= STEP && steps < 5) {
       this.accumulator -= STEP;
@@ -236,6 +286,15 @@ class Game {
       this.step();
     }
     this.render();
+    this.stepsThisFrame = steps;
+    this.workMs = performance.now() - started;
+
+    this._fpsFrames++;
+    if (now - this._fpsSince >= 500) {
+      this.fps = Math.round((this._fpsFrames * 1000) / (now - this._fpsSince));
+      this._fpsFrames = 0;
+      this._fpsSince = now;
+    }
     requestAnimationFrame((t) => this.frame(t));
   }
 }

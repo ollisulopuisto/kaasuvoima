@@ -124,7 +124,12 @@ const report = await page.evaluate(async () => {
         if (e.constructor.name === 'Plant' || e.kind === 'hazard') return false;
         return isSolid(scene.tileAt(Math.floor(e.cx / 16), Math.floor((e.y + e.h - 1) / 16)));
       });
-      if (stuck.length) failures.push(`${id}: ${stuck.length} enemies inside walls`);
+      if (stuck.length) {
+        const where = stuck.slice(0, 4)
+          .map((e) => `${e.constructor.name}@${Math.floor(e.cx / 16)},${Math.floor(e.y / 16)}`)
+          .join(' ');
+        failures.push(`${id}: ${stuck.length} enemies inside walls — ${where}`);
+      }
 
       // dumb bot: run right, jump over walls, gaps, enemies; wait out fire jets
       const input = mkInput();
@@ -230,6 +235,39 @@ const report = await page.evaluate(async () => {
     for (let f = 0; f < 30; f++) r.update(mkInput());
     expect('save state restores the level exactly', before === after, `${before} vs ${after}`);
     expect('restored level keeps running', r.player.x > 0 && !!r.player.update);
+  }
+
+  /* Landing on two enemies at once must not stomp one and kill you on the
+   * other: the stomp test has to use the fall speed the player arrived with,
+   * not the bounce speed the first stomp just gave them. */
+  {
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const { Walker } = await import('/src/entities/enemies.js');
+    const i = mkInput();
+    for (let f = 0; f < 4; f++) s.update(i);
+
+    const groundY = s.player.y + s.player.h;
+    const px = s.player.cx;
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    const a = new Walker(s, px - 8, groundY - 16);
+    const b = new Walker(s, px + 8, groundY - 16);
+    for (const e of [a, b]) { e.active = true; e.alwaysActive = true; e.vx = 0; s.entities.push(e); }
+
+    // Drop the player onto the pair from just above them.
+    s.player.y = groundY - 16 - s.player.h - 6;
+    s.player.vy = 4;
+    s.player.onGround = false;
+    const powerBefore = s.player.powerLevel;
+    for (let f = 0; f < 6 && !s.player.dying; f++) s.update(i);
+
+    const squashed = [a, b].filter((e) => e.dying || e.remove || !e.stompable).length;
+    const unhurt = !s.player.dying && s.player.powerLevel === powerBefore;
+    expect('stomping two enemies at once does not hurt the player',
+      unhurt && s.state === 'play' && squashed >= 1,
+      `power ${powerBefore}->${s.player.powerLevel}, ${squashed}/2 squashed`
+      + `${s.player.dying ? ', died' : ''}`);
   }
 
   /* -------------------------------- audio ------------------------------ */

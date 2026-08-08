@@ -15,6 +15,8 @@ export const VIEW_H = 208;
 export const HUD_H = 32;
 
 const GOAL_HEIGHT = 6 * TILE;
+/** Seconds left when the music starts pushing. */
+const HURRY_TIME = 100;
 
 export class LevelScene {
   constructor(game, levelId) {
@@ -73,6 +75,7 @@ export class LevelScene {
     // A boss level gets its own theme until the thing is beaten.
     const track = this.def.boss && !this.bossDefeated ? 'boss' : (this.def.music || 'level');
     Music.play(track);
+    Music.setHurry(this.time <= HURRY_TIME);
   }
 
   /** Kicks the camera for a frame or two. Purely cosmetic. */
@@ -300,8 +303,9 @@ export class LevelScene {
       if (this.time <= 0) {
         this.time = 0;
         this.player.die();
-      } else if (this.time === 100) {
+      } else if (this.time === HURRY_TIME) {
         Sfx.play('timewarn');
+        Music.setHurry(true);
       }
     }
   }
@@ -381,6 +385,10 @@ export class LevelScene {
     const p = this.player;
     if (p.dying) return;
     const spin = p.spinBox;
+    // The stomp test has to use the speed the player *arrived* with. Bouncing
+    // off the first enemy flips vy upwards, and without this snapshot every
+    // other enemy landed on in the same frame would read as a side-on hit.
+    const fallVy = p.vy;
 
     for (const e of this.entities) {
       if (e.remove) continue;
@@ -411,7 +419,7 @@ export class LevelScene {
         continue;
       }
 
-      if (e.kind !== 'enemy' || e.dying) continue;
+      if (e.kind !== 'enemy' || e.dying || e.harmless) continue;
 
       if (spin && overlaps(spin, e.box)) {
         e.hitByTail(p.facing);
@@ -420,7 +428,7 @@ export class LevelScene {
 
       if (!overlaps(p.box, e.box)) continue;
 
-      const stomping = p.vy > 0 && p.y + p.h - p.vy <= e.y + e.h * 0.6;
+      const stomping = fallVy > 0 && p.y + p.h - fallVy <= e.y + e.h * 0.6;
       if (stomping && e.stompable) {
         if (e.stomp()) {
           p.bounce(this.game.input.held.jump);

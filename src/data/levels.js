@@ -1,4 +1,6 @@
 import { assemble } from './chunks.js';
+import { normalizeRows } from '../core/utils.js';
+import { GENERATED_LEVELS } from './generated.js';
 
 /**
  * A level is a chunk playlist plus presentation data. `boss: true` means the
@@ -7,7 +9,7 @@ import { assemble } from './chunks.js';
  */
 const LEVEL_DEFS = {
   '1-1': {
-    theme: 'grass', bg: 'hills', music: 'level', time: 300,
+    theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
       'start', 'flat', 'walker', 'qrow', 'coins', 'walker',
       'pipe_short', 'flat', 'power', 'pit_s', 'plat_hi', 'walkers',
@@ -16,7 +18,7 @@ const LEVEL_DEFS = {
     ],
   },
   '1-2': {
-    theme: 'grass', bg: 'hills', music: 'level', time: 300,
+    theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
       'start', 'flat', 'plat_float', 'pit_s', 'note_pair', 'walkers',
       'brick_wall', 'coins', 'pipe_plant', 'pit_bridge', 'flyer',
@@ -25,7 +27,7 @@ const LEVEL_DEFS = {
     ],
   },
   '1-3': {
-    theme: 'grass', bg: 'peaks', music: 'level', time: 300,
+    theme: 'grass', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'plat_hi', 'sky_run', 'coins', 'flyer', 'pit_plat',
       'plat_steps', 'walkers', 'pipe_pair', 'bricks', 'pit_l',
@@ -34,7 +36,7 @@ const LEVEL_DEFS = {
     ],
   },
   '1-F': {
-    theme: 'fortress', bg: 'none', music: 'fortress', time: 300, boss: true, bossVariant: 0,
+    theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
     chunks: [
       'start', 'fort_hall', 'fort_blocks', 'fort_gap', 'fort_spikes',
       'fort_pillars', 'fort_hall', 'fort_gap', 'boss_arena',
@@ -42,7 +44,7 @@ const LEVEL_DEFS = {
   },
 
   '2-1': {
-    theme: 'desert', bg: 'dunes', music: 'level', time: 300,
+    theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
       'start', 'flat', 'walkers', 'sun', 'qrow', 'pipe_plant', 'pit_s',
       'heartburn', 'coins', 'shell', 'plat_steps', 'pit_l', 'flyer',
@@ -51,7 +53,7 @@ const LEVEL_DEFS = {
     ],
   },
   '2-2': {
-    theme: 'desert', bg: 'dunes', music: 'level', time: 300,
+    theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
       'start', 'plat_float', 'sun', 'spikes', 'pipe_pair', 'walkers', 'sky_run',
       'coin_stack', 'pit_bridge', 'clouds', 'brick_wall', 'heartburn_pair',
@@ -60,7 +62,7 @@ const LEVEL_DEFS = {
     ],
   },
   '2-3': {
-    theme: 'desert', bg: 'peaks', music: 'level', time: 300,
+    theme: 'desert', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'sun', 'lava_gap', 'walker', 'plat_steps', 'flyer',
       'pipe_plant', 'lava_wide', 'coins', 'soup_stop', 'sky_run', 'bricks',
@@ -69,7 +71,7 @@ const LEVEL_DEFS = {
     ],
   },
   '2-F': {
-    theme: 'fortress', bg: 'none', music: 'fortress', time: 300, boss: true, bossVariant: 1,
+    theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 1,
     chunks: [
       'start', 'fort_hall', 'fort_spikes', 'fort_gap', 'fort_blocks',
       'fort_pillars', 'fort_spikes', 'fort_gap', 'fort_hall', 'boss_arena',
@@ -77,7 +79,7 @@ const LEVEL_DEFS = {
   },
 
   '3-1': {
-    theme: 'ice', bg: 'peaks', music: 'level', time: 300,
+    theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'walkers', 'pit_s', 'qrow', 'flyer', 'plat_hi',
       'shell', 'pit_l', 'coin_stack', 'pipe_tall', 'spikes', 'cork_gap',
@@ -86,7 +88,7 @@ const LEVEL_DEFS = {
     ],
   },
   '3-2': {
-    theme: 'ice', bg: 'peaks', music: 'level', time: 300,
+    theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'sky_run', 'plat_steps', 'flyer', 'pit_l', 'coins',
       'brick_wall', 'cloud_run', 'pit_bridge', 'shell', 'plat_float',
@@ -95,7 +97,7 @@ const LEVEL_DEFS = {
     ],
   },
   '3-3': {
-    theme: 'ice', bg: 'peaks', music: 'level', time: 300,
+    theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'lava_gap', 'walkers', 'plat_steps', 'shell',
       'lava_wide', 'clouds', 'coin_stack', 'heartburn_pair', 'pipe_plant',
@@ -104,7 +106,7 @@ const LEVEL_DEFS = {
     ],
   },
   '3-F': {
-    theme: 'fortress', bg: 'none', music: 'fortress', time: 350, boss: true, bossVariant: 2,
+    theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 2,
     chunks: [
       'start', 'fort_hall', 'fort_pillars', 'fort_gap', 'fort_spikes',
       'fort_blocks', 'fort_gap', 'fort_spikes', 'fort_pillars',
@@ -113,7 +115,7 @@ const LEVEL_DEFS = {
   },
 
   '4-1': {
-    theme: 'factory', bg: 'factory', music: 'factory', time: 320,
+    theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fac_press', 'fac_vents', 'corks',
       'fac_belt', 'clouds', 'fac_shaft', 'fac_gap', 'heartburn',
@@ -122,7 +124,7 @@ const LEVEL_DEFS = {
     ],
   },
   '4-2': {
-    theme: 'factory', bg: 'factory', music: 'factory', time: 320,
+    theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fac_belt', 'heartburn_pair', 'fac_shaft',
       'cork_gap', 'fac_press', 'cloud_run', 'fac_gap', 'soup_stop',
@@ -131,7 +133,7 @@ const LEVEL_DEFS = {
     ],
   },
   '4-3': {
-    theme: 'factory', bg: 'factory', music: 'factory', time: 350,
+    theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fac_vents', 'fac_belt', 'fac_shaft',
       'heartburn_pair', 'cloud_run', 'fac_gap', 'fac_press', 'corks',
@@ -140,22 +142,44 @@ const LEVEL_DEFS = {
     ],
   },
   '4-F': {
-    theme: 'factory', bg: 'factory', music: 'fortress', time: 400, boss: true, bossVariant: 3,
+    theme: 'factory', bg: 'factory', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
       'start', 'fac_floor', 'fac_vents', 'fac_gap', 'fac_shaft',
       'fac_belt', 'fac_floor', 'boss_arena_big',
+    ],
+  },
+
+  // World 5 is the statistics-driven bonus world; 5-1..5-3 come out of
+  // tools/gen-levels.mjs, the rematch arena is hand-built like the others.
+  ...GENERATED_LEVELS,
+  '5-F': {
+    theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 3,
+    chunks: [
+      'start', 'fort_hall', 'fort_spikes', 'fort_pillars', 'fort_gap',
+      'fort_blocks', 'fort_spikes', 'fort_gap', 'fort_hall', 'boss_arena_big',
     ],
   },
 };
 
 const cache = new Map();
 
+/**
+ * A level's clock is proportional to its length: the classic one-unit-per-24-
+ * frames tick means a 16-tile chunk costs about 5 units at a walk, so a short
+ * level with a long clock is not tension, it is just a number going down.
+ * `time` in a level definition overrides this.
+ */
+const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((columns * 1.3) / 10) * 10));
+
 /** Returns { id, theme, bg, music, time, boss, rows } with rows fully padded. */
 export function getLevel(id) {
   if (cache.has(id)) return cache.get(id);
   const def = LEVEL_DEFS[id];
   if (!def) throw new Error(`unknown level: ${id}`);
-  const level = { id, boss: false, bossVariant: 0, ...def, rows: assemble(def.chunks) };
+  const rows = def.rows ? normalizeRows(def.rows) : assemble(def.chunks);
+  const level = {
+    id, boss: false, bossVariant: 0, time: defaultTime(rows[0].length), ...def, rows,
+  };
   cache.set(id, level);
   return level;
 }

@@ -1,0 +1,592 @@
+/**
+ * Builds levels from the mined pacing statistics.
+ *
+ *   node tools/gen-levels.mjs [--seed 1234]
+ *
+ * What is borrowed and what is not
+ * --------------------------------
+ * From `tools/pacing-stats.json` this takes RHYTHM: how many columns of calm
+ * sit between challenges, how that density ramps across a level, how wide gaps
+ * are as a fraction of what a jump can clear, how enemies cluster, how high
+ * block rows float, how big a coin group tends to be.
+ *
+ * It takes no layout. The vocabulary below is this game's own — fart double
+ * jumps, ummetus corks, hernekeitto, närästys jets, stink clouds — arranged by
+ * rules written for this game's jump budget (a running jump clears ~7.5 tiles
+ * and rises ~4.5, so a gap over 6 needs a stepping stone and a wall over 4
+ * needs a platform). A generated level should read as a Super Fart Bros level
+ * that happens to breathe at a classic tempo, not as a copy of anything.
+ *
+ * Every level is checked before it is written: gaps and walls stay inside the
+ * jump budget, nothing spawns inside a wall, there is headroom for the tallest
+ * power level, and no eight-column stretch matches the source corpus.
+ */
+import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const stats = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
+
+const seedArg = process.argv.indexOf('--seed');
+const SEED = seedArg > 0 ? Number(process.argv[seedArg + 1]) : 20260808;
+
+/* ------------------------------- the engine ----------------------------- */
+
+const ROWS = 15;
+const FLOOR = 13;          // rows 13-14 are the ground slab
+const HEAD = 3;            // tiles of headroom the tallest player needs
+
+/** This game's jump budget, in tiles (see HANDOFF.md). */
+const REACH = { gap: 6, wall: 4, softGap: 8 };
+/** The corpus jump budget, for translating difficulty rather than distance. */
+const CORPUS_REACH = 5;
+const GAP_SCALE = REACH.gap / CORPUS_REACH;
+
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let rnd = mulberry32(SEED);
+const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+const range = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
+
+/** Weighted draw from one of the mined histograms. */
+function sampleHist(summary, { min = -Infinity, max = Infinity } = {}) {
+  const entries = Object.entries(summary.histogram)
+    .map(([k, v]) => [Number(k), v])
+    .filter(([k]) => k >= min && k <= max);
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  let roll = rnd() * total;
+  for (const [value, weight] of entries) {
+    roll -= weight;
+    if (roll <= 0) return value;
+  }
+  return entries.length ? entries[entries.length - 1][0] : min;
+}
+
+class Canvas {
+  constructor() {
+    this.cells = Array.from({ length: ROWS }, () => []);
+    this.width = 0;
+  }
+
+  ensure(x) {
+    while (this.width <= x) {
+      for (let y = 0; y < ROWS; y++) this.cells[y][this.width] = ' ';
+      this.width++;
+    }
+  }
+
+  set(x, y, ch) {
+    if (y < 0 || y >= ROWS) return;
+    this.ensure(x);
+    this.cells[y][x] = ch;
+  }
+
+  get(x, y) {
+    if (y < 0 || y >= ROWS || x < 0 || x >= this.width) return ' ';
+    return this.cells[y][x];
+  }
+
+  /** Lays the ground slab across [x, x+w). */
+  ground(x, w) {
+    for (let i = 0; i < w; i++) {
+      this.set(x + i, FLOOR, '#');
+      this.set(x + i, FLOOR + 1, '#');
+    }
+  }
+
+  rows() {
+    return this.cells.map((row) => row.join(''));
+  }
+}
+
+/* ------------------------------ set pieces ------------------------------ */
+/* Each returns the number of columns it consumed. `ctx` carries the running
+ * state the pieces need to stay fair to the player. */
+
+/**
+ * Where each enemy belongs. Hovering kinds bob around their spawn height, so
+ * putting one on the floor sinks it into the ground.
+ */
+const ENEMY_ROW = { g: 1, k: 1, c: 1, f: 5, r: 4 };
+
+const placeEnemy = (c, x, kind) => c.set(x, FLOOR - (ENEMY_ROW[kind] || 1), kind);
+
+const coinArc = (c, x, w) => {
+  // Coins trace the jump the gap asks for, which is how a player reads it.
+  for (let i = 0; i < w; i++) {
+    const t = (i + 0.5) / w;
+    const lift = Math.round(Math.sin(t * Math.PI) * 3);
+    if (lift > 0) c.set(x + i, FLOOR - 2 - lift, 'o');
+  }
+};
+
+const PIECES = {
+  /** Plain ground with nothing on it — the rest between challenges. */
+  rest(c, x, ctx) {
+    const w = Math.max(3, Math.round(sampleHist(stats.challengeSpacing, { min: 2, max: 20 })
+      * ctx.restScale));
+    c.ground(x, w);
+    return w;
+  },
+
+  /** A gap. Wide ones get a stepping stone, because ours is a 6-tile budget. */
+  gap(c, x) {
+    const raw = sampleHist(stats.gapWidth, { min: 1, max: 9 });
+    const w = Math.max(2, Math.min(REACH.softGap, Math.round(raw * GAP_SCALE)));
+    const lead = 2;
+    c.ground(x, lead);
+    if (w > REACH.gap) {
+      const half = Math.floor(w / 2);
+      for (let i = 0; i < 2; i++) c.set(x + lead + half - 1 + i, FLOOR - 3, '-');
+    }
+    if (rnd() < 0.55) coinArc(c, x + lead, w);
+    c.ground(x + lead + w, 3);
+    return lead + w + 3;
+  },
+
+  /** Gas cloud drifting over a gap: this game's own version of a leap of faith. */
+  stinkGap(c, x) {
+    const w = Math.min(REACH.gap, Math.max(3, Math.round(
+      sampleHist(stats.gapWidth, { min: 2, max: 8 }) * GAP_SCALE,
+    )));
+    c.ground(x, 2);
+    c.set(x + 2 + Math.floor(w / 2), FLOOR - 4, 'r');
+    coinArc(c, x + 2, w);
+    c.ground(x + 2 + w, 3);
+    return 2 + w + 3;
+  },
+
+  /**
+   * Ummetus gate: a cork guy patrols in front of a gap only the fart jump can
+   * clear comfortably, so getting corked turns a hop into a problem. The soup
+   * that cures it is on the far side, in reach but not free.
+   */
+  corkGate(c, x) {
+    const w = REACH.softGap;
+    c.ground(x, 5);
+    c.set(x + 2, FLOOR - 1, 'c');
+    const half = Math.floor(w / 2);
+    for (let i = 0; i < 2; i++) c.set(x + 5 + half - 1 + i, FLOOR - 3, '-');
+    coinArc(c, x + 5, w);
+    c.ground(x + 5 + w, 6);
+    c.set(x + 5 + w + 3, FLOOR - 4, '!');
+    return 5 + w + 6;
+  },
+
+  /** Närästys jets rising out of the floor, spaced so a run can thread them. */
+  heartburn(c, x) {
+    const count = range(2, 3);
+    const step = 4;
+    const w = count * step + 4;
+    c.ground(x, w);
+    for (let i = 0; i < count; i++) c.set(x + 3 + i * step, FLOOR - 1, 'H');
+    return w;
+  },
+
+  /** A row of blocks floating at a mined height, mostly plain, rarely a prize. */
+  blockRow(c, x, ctx) {
+    const run = Math.min(7, Math.max(2, sampleHist(stats.blockRun, { min: 2, max: 9 })));
+    const height = Math.min(9, Math.max(HEAD + 1,
+      sampleHist(stats.blockHeightAboveFloor, { min: 4, max: 9 })));
+    const w = run + 4;
+    c.ground(x, w);
+    const rewardAt = rnd() < 0.55 ? range(0, run - 1) : -1;
+    for (let i = 0; i < run; i++) {
+      let ch = 'B';
+      if (i === rewardAt) ch = ctx.gaveePower && rnd() < 0.5 ? '?' : '!';
+      else if (rnd() < stats.rewardBlockShare) ch = '?';
+      c.set(x + 2 + i, FLOOR - height, ch);
+    }
+    if (rewardAt >= 0) ctx.gaveePower = true;
+    return w;
+  },
+
+  /** Note blocks — bouncy, and this game's cheapest way to gain height. */
+  notes(c, x) {
+    const w = 8;
+    c.ground(x, w);
+    c.set(x + 3, FLOOR - 4, 'N');
+    c.set(x + 4, FLOOR - 4, 'N');
+    c.set(x + 3, FLOOR - 8, 'o');
+    c.set(x + 4, FLOOR - 8, 'o');
+    return w;
+  },
+
+  /** A staircase, sized from the mined step distribution and our wall budget. */
+  stairs(c, x) {
+    const h = Math.min(REACH.wall, Math.max(2, sampleHist(stats.stepUp, { min: 2, max: 5 })));
+    const w = h * 2 + 4;
+    c.ground(x, w);
+    for (let i = 0; i < h; i++) {
+      for (let j = 0; j <= i; j++) c.set(x + 2 + i, FLOOR - 1 - j, 'X');
+    }
+    for (let i = 0; i < h; i++) {
+      for (let j = 0; j < h - i; j++) c.set(x + 2 + h + i, FLOOR - 1 - j, 'X');
+    }
+    return w;
+  },
+
+  /** A cluster of walkers, shells or flyers, sized from the mined clustering. */
+  enemies(c, x, ctx) {
+    const count = Math.min(4, Math.max(1, sampleHist(stats.enemyCluster, { min: 1, max: 4 })));
+    const w = count * 3 + 6;
+    c.ground(x, w);
+    for (let i = 0; i < count; i++) {
+      placeEnemy(c, x + 3 + i * 3, pick(ctx.enemies));
+    }
+    return w;
+  },
+
+  /** A pipe, sometimes with something living in it. */
+  pipe(c, x) {
+    const h = Math.min(4, Math.max(1, sampleHist(stats.pipeHeight, { min: 1, max: 4 })));
+    const w = 8;
+    c.ground(x, w);
+    for (let i = 0; i < h; i++) {
+      const y = FLOOR - 1 - i;
+      c.set(x + 3, y, i === h - 1 ? '[' : '{');
+      c.set(x + 4, y, i === h - 1 ? ']' : '}');
+    }
+    if (h >= 3 && rnd() < 0.45) c.set(x + 3, FLOOR - 1 - h, 'p');
+    return w;
+  },
+
+  /** Floating platforms — the vertical half of the level's vocabulary. */
+  platforms(c, x) {
+    const count = range(2, 3);
+    const w = count * 5 + 4;
+    c.ground(x, w);
+    for (let i = 0; i < count; i++) {
+      const height = range(4, 7);
+      for (let j = 0; j < 3; j++) c.set(x + 2 + i * 5 + j, FLOOR - height, '-');
+      if (rnd() < 0.6) c.set(x + 3 + i * 5, FLOOR - height - 2, 'o');
+    }
+    return w;
+  },
+
+  /** Spikes on the floor: a hazard you walk into rather than fall into. */
+  spikes(c, x) {
+    const run = range(3, 5);
+    const w = run + 6;
+    c.ground(x, w);
+    for (let i = 0; i < run; i++) c.set(x + 3 + i, FLOOR - 1, '^');
+    return w;
+  },
+
+  /** A pool of lava with a bridge of platforms over it. */
+  lava(c, x) {
+    const run = range(4, 7);
+    const w = run + 6;
+    c.ground(x, 3);
+    for (let i = 0; i < run; i++) {
+      c.set(x + 3 + i, FLOOR, 'W');
+      c.set(x + 3 + i, FLOOR + 1, 'W');
+    }
+    for (let i = 1; i < run - 1; i += 3) {
+      for (let j = 0; j < 2; j++) c.set(x + 3 + i + j, FLOOR - 4, '-');
+    }
+    c.ground(x + 3 + run, 3);
+    return w;
+  },
+
+  /** Vihainen aurinko, for the levels that live under an open sky. */
+  sun(c, x) {
+    const w = 12;
+    c.ground(x, w);
+    c.set(x + 5, 2, 'A');
+    return w;
+  },
+
+  /** A pocket of coins to reward looking up. */
+  coins(c, x) {
+    const run = Math.min(6, Math.max(2, sampleHist(stats.coinGroup, { min: 2, max: 6 })));
+    const w = run + 5;
+    c.ground(x, w);
+    const height = range(3, 6);
+    for (let i = 0; i < run; i++) c.set(x + 2 + i, FLOOR - height, 'o');
+    return w;
+  },
+};
+
+/* ------------------------------- assembly ------------------------------- */
+
+/**
+ * The palette per world: which set pieces can appear and how often. Weights
+ * are this game's design, not the corpus — the corpus only says WHEN a
+ * challenge should arrive, never WHICH.
+ */
+const PALETTES = {
+  meadow: {
+    enemies: ['g', 'g', 'k', 'f'],
+    weights: {
+      gap: 4, enemies: 5, blockRow: 4, stairs: 2, pipe: 2, platforms: 3,
+      coins: 2, notes: 1, stinkGap: 2, corkGate: 1,
+    },
+  },
+  dunes: {
+    enemies: ['g', 'k', 'f', 'r'],
+    weights: {
+      gap: 3, enemies: 4, blockRow: 3, stairs: 2, platforms: 3, spikes: 2,
+      heartburn: 3, sun: 1, coins: 2, stinkGap: 2, corkGate: 2, lava: 1,
+    },
+  },
+  glacier: {
+    enemies: ['g', 'k', 'f', 'c'],
+    weights: {
+      gap: 4, enemies: 4, blockRow: 3, platforms: 4, stairs: 2, spikes: 2,
+      coins: 2, notes: 1, stinkGap: 3, corkGate: 2, lava: 2, heartburn: 2,
+    },
+  },
+};
+
+function weightedPiece(weights) {
+  const entries = Object.entries(weights);
+  const total = entries.reduce((sum, [, w]) => sum + w, 0);
+  let roll = rnd() * total;
+  for (const [name, w] of entries) {
+    roll -= w;
+    if (roll <= 0) return name;
+  }
+  return entries[0][0];
+}
+
+function buildLevel({ palette, targetWidth }) {
+  const pal = PALETTES[palette];
+  const c = new Canvas();
+  const ctx = { enemies: pal.enemies, restScale: 1, gaveePower: false };
+  let x = 0;
+
+  // A safe opening, the length the corpus gives before its first challenge.
+  const intro = Math.max(10, Math.min(24, sampleHist(stats.introSafeColumns, { min: 8, max: 26 })));
+  c.ground(x, intro);
+  c.set(2, FLOOR - 1, '1');
+  x += intro;
+
+  const ramp = stats.densityRampByQuarter;
+  const peak = Math.max(...ramp);
+  let lastPiece = null;
+
+  while (x < targetWidth - 26) {
+    // The ramp modulates how much calm sits between challenges: the busiest
+    // quarter of the corpus gets the shortest rests.
+    const quarter = Math.min(3, Math.floor((x / targetWidth) * 4));
+    ctx.restScale = 1.35 - 0.6 * (ramp[quarter] / peak);
+    x += PIECES.rest(c, x, ctx);
+
+    let name = weightedPiece(pal.weights);
+    if (name === lastPiece) name = weightedPiece(pal.weights);   // avoid doubles
+    lastPiece = name;
+    x += PIECES[name](c, x, ctx);
+  }
+
+  // The piece weights alone undershoot the corpus enemy density, so top it up
+  // on plain ground until the level breathes at the mined rate.
+  const target = Math.round((stats.enemiesPer100 / 100) * x * 0.8);
+  let placed = 0;
+  for (let y = 0; y < ROWS; y++) {
+    for (let px = 0; px < c.width; px++) if (pal.enemies.includes(c.get(px, y))) placed++;
+  }
+  for (let tries = 0; placed < target && tries < 400; tries++) {
+    const px = range(intro + 6, x - 12);
+    const kind = pick(pal.enemies);
+    const row = FLOOR - (ENEMY_ROW[kind] || 1);
+    const clear = [-2, -1, 0, 1, 2].every((d) => c.get(px + d, FLOOR) === '#'
+      && [1, 2, 3, 4, 5, 6].every((up) => c.get(px + d, FLOOR - up) === ' '));
+    if (!clear) continue;
+    c.set(px, row, kind);
+    placed++;
+  }
+
+  // Run-up, flag, and a little ground past it so the camera has somewhere to go.
+  c.ground(x, 10);
+  for (let i = 0; i < 3; i++) c.set(x + 2 + i * 2, FLOOR - 4, 'o');
+  x += 10;
+  c.set(x + 3, FLOOR - 1, 'F');
+  c.ground(x, 10);
+  return c.rows();
+}
+
+/* ------------------------------ validation ------------------------------ */
+
+const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
+const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H']);
+
+function validate(id, rows) {
+  const problems = [];
+  const w = rows[0].length;
+  const at = (x, y) => (y < 0 || y >= ROWS || x < 0 || x >= w ? ' ' : rows[y][x]);
+
+  if (rows.some((r) => r.length !== w)) problems.push('ragged rows');
+  if (!rows.some((r) => r.includes('1'))) problems.push('no player start');
+  if (!rows.some((r) => r.includes('F'))) problems.push('no goal');
+
+  // Floor profile: the top of the connected ground stack, so a floating block
+  // row is never mistaken for terrain the player has to climb.
+  const floor = [];
+  for (let x = 0; x < w; x++) {
+    if (!SOLID.has(at(x, FLOOR + 1)) && !SOLID.has(at(x, FLOOR))) { floor.push(null); continue; }
+    let y = SOLID.has(at(x, FLOOR)) ? FLOOR : FLOOR + 1;
+    while (y > 0 && SOLID.has(at(x, y - 1))) y--;
+    floor.push(y);
+  }
+  let gap = 0;
+  for (let x = 0; x < w; x++) {
+    const bottomless = ![FLOOR, FLOOR + 1].some((y) => SOLID.has(at(x, y)))
+      && !'W'.includes(at(x, FLOOR));
+    if (bottomless) {
+      gap++;
+      continue;
+    }
+    if (gap > REACH.gap) {
+      // Wide gaps are only legal with something to land on in the middle.
+      const from = x - gap;
+      const hasStone = rows.slice(0, FLOOR).some(
+        (row) => row.slice(from, x).includes('-'),
+      );
+      if (!hasStone) problems.push(`gap of ${gap} at column ${from} with no stepping stone`);
+    }
+    gap = 0;
+  }
+  for (let x = 1; x < w; x++) {
+    if (floor[x] === null || floor[x - 1] === null) continue;
+    const rise = floor[x - 1] - floor[x];
+    if (rise > REACH.wall) problems.push(`wall of ${rise} at column ${x}`);
+  }
+
+  // Headroom: the tallest power level needs HEAD clear tiles over the floor.
+  for (let x = 0; x < w; x++) {
+    if (floor[x] === null || floor[x] > FLOOR) continue;
+    for (let y = floor[x] - HEAD; y < floor[x]; y++) {
+      if (SOLID.has(at(x, y))) { problems.push(`no headroom at column ${x}`); break; }
+    }
+  }
+
+  // Nothing may be buried in a wall.
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = at(x, y);
+      if (ch !== '1' && !ENEMY.has(ch)) continue;
+      // Hovering kinds and the ones that live in pipes have no footing to check.
+      if ('Apfr'.includes(ch)) continue;
+      if (!SOLID.has(at(x, y + 1))) problems.push(`${ch} at ${x},${y} is standing on nothing`);
+      if (SOLID.has(ch === 'H' ? ' ' : at(x, y))) problems.push(`${ch} at ${x},${y} is inside a wall`);
+    }
+  }
+
+  return problems.map((p) => `${id}: ${p}`);
+}
+
+/** No eight-column stretch may match the corpus, once both are canonicalised. */
+async function originality(rows) {
+  const dir = process.env.VGLC_DIR;
+  if (!dir) return { checked: false };
+
+  const canonOurs = (ch) => (SOLID.has(ch) ? 'X' : ENEMY.has(ch) ? 'E' : ch === 'o' ? 'o' : '-');
+  const canonCorpus = (ch) => ('XSQ?<>[]'.includes(ch) ? 'X' : ch === 'E' ? 'E' : ch === 'o' ? 'o' : '-');
+
+  const windows = (grid, canon) => {
+    const w = grid[0].length;
+    const cols = [];
+    for (let x = 0; x < w; x++) {
+      cols.push(grid.map((row) => canon(row[x] || ' ')).join(''));
+    }
+    const out = new Set();
+    for (let x = 0; x + 8 <= w; x++) out.add(cols.slice(x, x + 8).join('|'));
+    return out;
+  };
+
+  const mine = windows(rows, canonOurs);
+  let hits = 0;
+  for (const file of (await readdir(dir)).filter((f) => f.endsWith('.txt'))) {
+    const grid = (await readFile(join(dir, file), 'utf8')).split('\n').filter((r) => r.length);
+    // Both grids are trimmed to the same 14 bottom rows before comparing.
+    const theirs = windows(grid.slice(-14), canonCorpus);
+    for (const key of theirs) if (mine.has(key)) hits++;
+  }
+  return { checked: true, hits };
+}
+
+/* --------------------------------- main --------------------------------- */
+
+const PLAN = [
+  { id: '5-1', palette: 'meadow', theme: 'grass', bg: 'hills', music: 'level', width: 210 },
+  { id: '5-2', palette: 'dunes', theme: 'desert', bg: 'dunes', music: 'level', width: 230 },
+  { id: '5-3', palette: 'glacier', theme: 'ice', bg: 'peaks', music: 'level', width: 240 },
+];
+
+const built = [];
+const failures = [];
+
+for (const spec of PLAN) {
+  let rows = null;
+  let problems = ['not attempted'];
+  for (let attempt = 0; attempt < 40 && problems.length; attempt++) {
+    rnd = mulberry32(SEED + attempt * 7919 + spec.id.charCodeAt(2) * 104729);
+    rows = buildLevel({ palette: spec.palette, targetWidth: spec.width });
+    problems = validate(spec.id, rows);
+  }
+  if (problems.length) {
+    failures.push(...problems);
+    continue;
+  }
+  const orig = await originality(rows);
+  if (orig.checked && orig.hits > 0) {
+    failures.push(`${spec.id}: ${orig.hits} eight-column windows match the corpus`);
+    continue;
+  }
+  built.push({ spec, rows, orig });
+}
+
+if (failures.length) {
+  console.error('\nGeneration failed:');
+  for (const f of failures) console.error(`  - ${f}`);
+  process.exit(1);
+}
+
+const body = built.map(({ spec, rows }) => {
+  const lines = rows.map((r) => `      ${JSON.stringify(r)},`).join('\n');
+  return `  '${spec.id}': {
+    theme: '${spec.theme}', bg: '${spec.bg}', music: '${spec.music}',
+    rows: [
+${lines}
+    ],
+  },`;
+}).join('\n');
+
+const out = `/**
+ * GENERATED FILE — do not edit by hand.
+ *
+ *   node tools/mine-pacing.mjs     (once, with VGLC_DIR set)
+ *   node tools/gen-levels.mjs      (rebuilds this file)
+ *
+ * The pacing comes from tools/pacing-stats.json; every set piece in here is
+ * this game's own. See the header of tools/gen-levels.mjs for the reasoning.
+ *
+ * Seed: ${SEED}
+ */
+
+export const GENERATED_LEVELS = {
+${body}
+};
+`;
+
+await writeFile(join(ROOT, 'src/data/generated.js'), out);
+
+console.log(`\nGenerated ${built.length} levels with seed ${SEED}:\n`);
+for (const { spec, rows, orig } of built) {
+  const cols = rows[0].length;
+  const enemies = rows.join('').split('').filter((ch) => ENEMY.has(ch)).length;
+  const coins = rows.join('').split('').filter((ch) => ch === 'o').length;
+  console.log(`  ${spec.id}  ${String(cols).padStart(3)} cols   ${
+    String(enemies).padStart(2)} enemies   ${String(coins).padStart(2)} coins   `
+    + `originality ${orig.checked ? `${orig.hits} corpus matches` : 'not checked (set VGLC_DIR)'}`);
+}
+console.log('\n  wrote src/data/generated.js\n');

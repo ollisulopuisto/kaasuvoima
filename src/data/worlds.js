@@ -133,6 +133,37 @@ const WORLD_DEFS = [
       { a: 'w4-3', b: 'w4-f', path: [[16, 3]] },
     ],
   },
+  {
+    id: 'w5',
+    name: 'JALKIPYYKKI',
+    theme: 'grass',
+    terrain: [
+      'MMM...TT......T..MMM',
+      'MM..T......TT.....MM',
+      '..,....T......T...,.',
+      '.T...."....T....."..',
+      '...."....T......T...',
+      '.,........,......T..',
+      '...T......"......T..',
+      '~~..T.....TT.....~~~',
+      '~~~~~~~..~~~~~~~~~~~',
+    ],
+    nodes: [
+      { id: 'w5-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
+      { id: 'w5-1', tx: 4, ty: 5, type: 'level', level: '5-1', name: 'JALKIRUOKA' },
+      { id: 'w5-h', tx: 4, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w5-2', tx: 8, ty: 3, type: 'level', level: '5-2', name: 'KUIVA KAUSI' },
+      { id: 'w5-3', tx: 12, ty: 6, type: 'level', level: '5-3', name: 'VIIMEINEN VETO' },
+      { id: 'w5-f', tx: 16, ty: 4, type: 'fortress', level: '5-F', name: 'UUSINTAOTTELU' },
+    ],
+    links: [
+      { a: 'w5-s', b: 'w5-1' },
+      { a: 'w5-1', b: 'w5-h' },
+      { a: 'w5-1', b: 'w5-2', path: [[8, 5]] },
+      { a: 'w5-2', b: 'w5-3', path: [[12, 3]] },
+      { a: 'w5-3', b: 'w5-f', path: [[16, 6]] },
+    ],
+  },
 ];
 
 export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.terrain) }));
