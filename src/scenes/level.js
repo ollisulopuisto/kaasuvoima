@@ -3,7 +3,7 @@ import { TILE, T, info, isSolid, drawTile, THEMES } from '../gfx/tiles.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText } from '../gfx/font.js';
-import { Player, P_METER_MAX } from '../entities/player.js';
+import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
@@ -17,6 +17,13 @@ export const HUD_H = 32;
 const GOAL_HEIGHT = 6 * TILE;
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
+
+/* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
+ * look-ahead is what lets you see the gap you are running at. */
+const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
+const CAM_LOOK_AHEAD = 34;    // px the view leans ahead at full running speed
+const CAM_LOOK_GAIN = 0.035;  // how fast the lean builds
+const CAM_LOOK_RETURN = 0.07; // and how fast it settles back when you stop
 
 export class LevelScene {
   constructor(game, levelId) {
@@ -34,6 +41,7 @@ export class LevelScene {
     this.entities = [];
     this.bumps = new Map();
     this.cam = { x: 0, y: 0 };
+    this.camLook = 0;
     this.tick = 0;
     this.time = this.def.time;
     this.timeSub = 0;
@@ -334,15 +342,37 @@ export class LevelScene {
     }
   }
 
+  /*
+   * Camera: a dead zone plus look-ahead, not inertia.
+   *
+   * Inertia — a camera that keeps drifting after the player stops — is what
+   * makes 2D platformers feel seasick, because the view moves while the thing
+   * you are aiming with does not. What actually helps is showing more of where
+   * you are going: the view shifts ahead in the direction you are running, and
+   * eases back when you stop. Inside the dead zone the camera does not move at
+   * all, so small hops and turns leave the screen still.
+   */
   updateCamera() {
-    const targetX = this.player.cx - VIEW_W / 2;
-    this.cam.x = clamp(targetX, 0, Math.max(0, this.widthPx - VIEW_W));
-    const targetY = this.player.y - VIEW_H * 0.55;
+    const p = this.player;
+    const speed = Math.abs(p.vx);
+    const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * Math.min(1, speed / MAX_RUN) : 0;
+    this.camLook += (wanted - this.camLook) * (Math.abs(wanted) > Math.abs(this.camLook)
+      ? CAM_LOOK_GAIN : CAM_LOOK_RETURN);
+
+    const centre = p.cx + this.camLook - VIEW_W / 2;
+    const drift = centre - this.cam.x;
+    if (Math.abs(drift) > CAM_DEAD_ZONE) {
+      this.cam.x += drift - Math.sign(drift) * CAM_DEAD_ZONE;
+    }
+    this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.widthPx - VIEW_W));
+
+    const targetY = p.y - VIEW_H * 0.55;
     const maxY = Math.max(0, this.heightPx - VIEW_H);
     this.cam.y = clamp(targetY, 0, maxY);
   }
 
   centerCamera() {
+    this.camLook = 0;
     this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
     this.cam.y = clamp(this.player.y - VIEW_H * 0.55, 0, Math.max(0, this.heightPx - VIEW_H));
   }
