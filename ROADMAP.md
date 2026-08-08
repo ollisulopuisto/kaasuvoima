@@ -17,10 +17,66 @@ ennen pushia on `node tools/verify.mjs`.
 - [x] **Vokaalit** ("jee!", "hup", "oof") formanttisynteesillä, hyppyäänet
       satunnaistettuna 18 %:iin.
 - [x] **Telemetria, vaiheet 1–2**: paikallinen kirjaus, lämpökartta, JSON-vienti.
+- [ ] **Kuvaefektit** (kohta 1) — seuraava työ. Halvat 2D-efektit ensin, sitten
+      päätös shaderiputkesta.
 
 ## Seuraavaksi
 
-### 1. Telemetria ja palautesilmukka
+### 1. Kuvaefektit: WebGL-jälkikäsittely, ei uudelleenkirjoitusta
+
+Kysymys oli "olisiko WebGL-rewrite liikaa". **Kokonaan uusi renderöijä on
+liikaa** — piirtokoodia on tuhansia rivejä (`src/gfx/`, jokainen ruutu, sprite ja
+tausta suorakaiteina) ja se pitäisi kirjoittaa uusiksi teksuuriatlaksena ja
+verteksipuskureina saamatta yhtään uutta ominaisuutta. Nykyinen 320×240-piirto
+maksaa mitatusti alle millisekunnin framessa, joten nopeusongelmaa ei ole,
+ja shaderit ovat ainoa asia jota WebGL toisi.
+
+**Hybridi on halpa ja antaa juuri sen shaderin.** Canvas 2D piirtää kuten nyt,
+mutta näkyvä canvas onkin WebGL, joka lataa 2D-canvasin tekstuuriksi ja piirtää
+sen yhtenä täysruudun kolmiona fragment-shaderin läpi. Työ on ~150 riviä ja yksi
+tiedosto; koko `src/gfx/` pysyy koskemattomana. Efektit joita se antaa:
+
+- CRT: skanviivat, varjomaski, reunan kaarevuus, vinjetti
+- palettisiirto (yökenttä, vahinkovälähdys, pomon huoneen sävy)
+- kuumuuden väreily aavikossa, aaltoilu veden alla, tärinä pomon iskuun
+- vaalean hehkun bloom kolikoista ja tulipalloista
+
+Ehdot: **`willReadFrequently`-canvas ei kelpaa lähteeksi joka framessa** ilman
+mittausta, ja **fallback pakollinen** — jos `getContext('webgl2')` palauttaa
+nullin, näytetään sama 2D-canvas suoraan. Peli ei saa mennä mustaksi ajurin takia.
+
+**Selaintuki.** WebGL 1 on käytännössä kaikkialla (Chrome, Firefox, Safari, Edge,
+mobiiliselaimet) — se on ollut mukana vuodesta 2011. WebGL 2 on tuettu kaikissa
+nykyselaimissa; viimeinen puuttuja oli Safari, joka sai sen iOS/macOS 15:ssä
+(2021). Tälle pelille kumpikin riittää, koska tarvittava on yksi tekstuuri ja
+yksi fragment-shader — WebGL 1 tekee sen ilman muuta.
+
+Se mikä *oikeasti* kaataa WebGL:n ei ole selaimen versio vaan ajuri: estolistalle
+joutunut näytönohjain, virtuaalikone ilman kiihdytystä, vanha Android, tai
+selainasetus jossa laitteistokiihdytys on pois päältä. Silloin `getContext`
+palauttaa nullin täysin ajantasaisessakin selaimessa. Siksi fallback ei ole
+kohteliaisuus vanhoja selaimia kohtaan vaan pakollinen — ja siksi se testataan.
+
+WebGPU sen sijaan olisi liian aikaista: Safarilla se tuli vasta 2025 ja Firefoxin
+tuki on yhä osittainen. Se ei toisi tähän mitään mitä WebGL ei tekisi.
+
+Toteutusjärjestys:
+
+1. **Halvat 2D-efektit ensin**: `globalCompositeOperation = 'lighter'` hehkuun,
+   offscreen-canvas + `drawImage` skanviivoihin ja vinjettiin, CSS-filtterit
+   (`hue-rotate`, `contrast`) koko canvasille. Tunnin työ, ja kertoo kannattaako
+   shaderiputki ollenkaan — jos CRT-suodin ei miellytä 2D:nä, ei se miellytä
+   shaderinakaan.
+2. **Efektikytkin asetuksiin ja debug-ruutuun.** Efektit ovat makuasia ja
+   suorituskykyriski; ne pitää voida kytkeä pois ilman koodin koskemista.
+   Kysy myös lapselta — hän on pääsuunnittelija.
+3. **Vasta sitten WebGL-passi**, jos halutaan väreily tai kaareva ruutu, joita
+   2D ei tee. Yksi tiedosto `src/gfx/postfx.js`, joka ottaa 2D-canvasin ja
+   näyttää sen; jos konteksti puuttuu, se palauttaa 2D-canvasin sellaisenaan.
+4. **`verify.mjs`:ään tarkistus** että peli piirtyy myös ilman WebGL:ää
+   (`getContext` stubattuna nulliksi). Fallback jota ei testata ei ole fallback.
+
+### 2. Telemetria ja palautesilmukka
 
 Kerätään **vain anonyymiä**: kuolinpaikat, jumipaikat, ajat per kenttä, voimataso
 kuollessa. Ei nimeä, ei pistetaulun nimimerkkiä — silloin yksityisyyslupauksia ei
@@ -40,7 +96,7 @@ Vaiheet:
 Vaihe 4 rikkoo "ei ajonaikaisia riippuvuuksia" -periaatteen ja vaatii sen
 suostumuskysymyksen, jota vaiheet 1–3 eivät tarvitse. Se on oma päätöksensä.
 
-### 2. Maailmojen 1–4 uudistus uudelle hyppybudjetille
+### 3. Maailmojen 1–4 uudistus uudelle hyppybudjetille
 
 `node tools/verify.mjs` tulostaa työlistan (SUUNNITTELUSAANNOT). Tilanne nyt:
 
@@ -64,7 +120,7 @@ kytkeä kaatamaan ajon myös käsintehdyistä kentistä. Jäljellä on
 vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
 juoksuhyppy kantaa nyt 12,5. Se ei riko mitään, mutta tekee kentistä helppoja.
 
-### 3. Uudet ruututyypit: murenevat lavat ja kytkimet
+### 4. Uudet ruututyypit: murenevat lavat ja kytkimet
 
 Moottorissa on jo kaikki tarvittava, joten tämä on halpaa:
 
@@ -89,7 +145,7 @@ jättää kenttää rikkinäiseen välitilaan.
 myös `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai
 validaattori pitää murenevaa lavaa kuiluna ja generoi mahdottomia kenttiä.
 
-### 4. Pavunvarret ja piilotetut alueet
+### 5. Pavunvarret ja piilotetut alueet
 
 Yksi kenttä per maailma saa salaisen alueen: **pavunvarsi ylös taivaalle** ja
 **putki alas maan alle**. Ei joka kenttään — löytö lakkaa olemasta löytö jos
@@ -118,38 +174,10 @@ Toteutusjärjestys:
 4. **Putki alas**: `pipe_down`-merkki joka teleporttaa pelaajan luolakaistan
    vastaavaan kohtaan. Sama ruudukko, joten se on pelkkä `player.y += 15 * TILE`.
 
-**Muista** (ks. kohta 6): uusi merkki pitää lisätä `src/data/rules.js`:n
+**Muista** (ks. [DESIGN.md](DESIGN.md) kohta 6): uusi merkki pitää lisätä `src/data/rules.js`:n
 tauluihin, tai validaattori pitää taivasaluetta yhtenä valtavana kuiluna ja
 hylkää jokaisen kentän. Todennäköisesti sääntöjen pitää katsoa vain
 pääkaistaa — se on tämän työn kiperin kohta ja kannattaa ratkaista ensin.
-
-### 5. Kuvaefektit: WebGL-jälkikäsittely, ei uudelleenkirjoitusta
-
-Kysymys oli "olisiko WebGL-rewrite liikaa". **Kokonaan uusi renderöijä on
-liikaa** — piirtokoodia on tuhansia rivejä (`src/gfx/`, jokainen ruutu, sprite ja
-tausta suorakaiteina) ja se pitäisi kirjoittaa uusiksi teksuuriatlaksena ja
-verteksipuskureina saamatta yhtään uutta ominaisuutta. Nykyinen 320×240-piirto
-maksaa mitatusti alle millisekunnin framessa, joten nopeusongelmaa ei ole,
-ja shaderit ovat ainoa asia jota WebGL toisi.
-
-**Hybridi on halpa ja antaa juuri sen shaderin.** Canvas 2D piirtää kuten nyt,
-mutta näkyvä canvas onkin WebGL, joka lataa 2D-canvasin tekstuuriksi ja piirtää
-sen yhtenä täysruudun kolmiona fragment-shaderin läpi. Työ on ~150 riviä ja yksi
-tiedosto; koko `src/gfx/` pysyy koskemattomana. Efektit joita se antaa:
-
-- CRT: skanviivat, varjomaski, reunan kaarevuus, vinjetti
-- palettisiirto (yökenttä, vahinkovälähdys, pomon huoneen sävy)
-- kuumuuden väreily aavikossa, aaltoilu veden alla, tärinä pomon iskuun
-- vaalean hehkun bloom kolikoista ja tulipalloista
-
-Ehdot: **`willReadFrequently`-canvas ei kelpaa lähteeksi joka framessa** ilman
-mittausta, ja **fallback pakollinen** — jos `getContext('webgl2')` palauttaa
-nullin, näytetään sama 2D-canvas suoraan. Peli ei saa mennä mustaksi ajurin takia.
-
-Ilman WebGL:ää saa jo nyt: `globalCompositeOperation = 'lighter'` hehkuun,
-offscreen-canvas + `drawImage` skanviivoihin ja vinjettiin, ja CSS-filtterit
-(`hue-rotate`, `contrast`) koko canvasille. Nämä kannattaa tehdä ensin, koska ne
-ovat tunnin työ ja kertovat kannattaako shaderiputki ollenkaan.
 
 ## Myöhemmin
 
