@@ -158,6 +158,7 @@ node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
 node tools/playable.mjs      # pelkkä geometria: onko kentät läpäistävissä ilman tehostuksia
 node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
 node tools/gen-levels.mjs    # generoi maailman 5 kentät tilastoista
+node tools/gen-levels.mjs --telemetry loki.json   # ...ja säätää niitä pelidatan mukaan
 node tools/make-card.mjs     # päivittää linkkien esikatselukuvan card.png
 ```
 

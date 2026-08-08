@@ -163,8 +163,31 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
 - **Kaikki nopeudet ovat pikseliä per frame** 60 Hz askeleella, eivät sekunnissa.
 - **ES-moduulit vaativat http-palvelimen**, `file://` ei toimi.
 - **localStorage-avaimet**: `sfb3.save.v2` (edistyminen), `sfb3.savestate.1..3`
-  (pikatallennukset) ja `sfb3.scores.v1` (pistetaulu). Jos muutat tallennuksen
+  (pikatallennukset), `sfb3.scores.v1` (pistetaulu), `sfb3.telemetry.v1`
+  (pelidata), `sfb3.fx.v1` (kuvaefektit) ja `sfb3.touch.v1` (ohjausmalli). Jos muutat tallennuksen
   muotoa, nosta versionumeroa.
+- **Kuollut kohtaus lakkaa päivittämästä.** `LevelScene.update` palaa aikaisin
+  140 framea kuoleman jälkeen. Testi joka haluaa ajaa kohtausta pitkään pitää
+  pitää pelaaja hengissä — muuten se mittaa kuolemanimation pituutta eikä sitä
+  mitä luulee. Kaksi murenemistestin versiota kaatui juuri tähän.
+- **Canvas on ylhäältä alas, GL-tekstuuri alhaalta ylös.** Ilman
+  `UNPACK_FLIP_Y_WEBGL`-asetusta koko peli tulee ruudulle ylösalaisin.
+  (`src/gfx/postfx.js`)
+- **Kuviotehosteiden taajuus sidotaan lähdekuvaan, ei näyttöön.** Skanviiva per
+  *näyttöpikseli* lähestyy pikseliruudukkoa ja hajoaa moiré-renkaiksi; skanviiva
+  per *lähderivi* (240) on skanviiva. Sama koskee varjomaskia, joka lisäksi
+  tarvitsee kolme oikeaa laitepikseliä ollakseen kuvio eikä himmennys.
+- **Piirtokoodi ei saa jättää canvasin tilaa jälkeensä.** `globalAlpha`,
+  `globalCompositeOperation`, `filter` ja `imageSmoothingEnabled` palautetaan
+  aina. Vuotanut yhdistelytila sotkee seuraavan framen ruudut ja näyttää
+  grafiikkabugilta, ei vuodolta. `verify.mjs` tarkistaa tämän sekä spriteiltä
+  että jälkikäsittelyltä.
+- **Kosketuksen `clearTouch()` tyhjentää myös painalluslatchin.** Latch on siksi
+  että framea lyhyempi näpäytys rekisteröityy; ilman tyhjennystä ohjausmallin
+  vaihto kesken painalluksen syöttää haamupainalluksen seuraavalle framelle.
+- **Kirkkauden kynnystys tehdään luminanssista, ei kanavista.** Kanavakohtainen
+  kynnys ei erota kirkasta sinistä taivasta valkoisesta auringosta, koska
+  taivaan sininen kanava on jo 252.
 - **`window.sfb3` on elävä Game-olio.** Konsolista pääsee käsiksi kaikkeen, ja
   `tools/verify.mjs` ajaa koko testistön juuri sen kautta.
 
