@@ -7,6 +7,29 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.15 — värisevä hahmo, tehtaan pääntila, laattapolkujen palkinnot
+
+### Korjattu
+- **Paikallaan seisova hahmo värisi ylös ja alas.** Sama juurisyy kuin kadonneissa
+  hypyissä, mutta sen näkyvä puoli: laskeutumistesti tutki ruutua `bottom - 1`,
+  joten lepäävä hahmo istui pikselin lattiaruudun yläpuolella eikä sub-pikselin
+  painovoima yltänyt siihen. Hahmo vajosi kolme framea ja napsahti takaisin
+  neljännellä. Testi laski **3 eri y-arvoa** paikallaan seistessä, nyt 1.
+  Nyt tutkitaan ruutua jota jalat *koskettavat*, jolloin lepo on aitoa lepoa.
+- **Tehtaan pääntila**: `fac_shaft`-palikan tiilirivi istui pilarien päällä ja
+  jätti niiden ylle kaksi ruutua tilaa. Isoin voimataso on 2,7 ruutua korkea.
+- **Kelluva ummetuskorkki** `cork_gap`-palikassa seisoi kuilun päällä ilmassa.
+
+### Muutettu
+- **Jokaisessa kentässä on tehostuspalikka ensimmäisten palikoiden joukossa.**
+- **Laattapolkujen palkinnot siirrettiin lavojen yläpuolelle**, jonne pelaaja
+  päätyy — osa kolikoista oli lavan alla, missä ne eivät palkitse kiipeämistä.
+
+Validaattorin työlista: pääntilarikkeet 24 → 0, tehostusrikkeet 17 → 0,
+tyhjät laattapolut 49 → 0.
+
+---
+
 ## v26.08.08.14 — ääkköset
 
 ### Korjattu

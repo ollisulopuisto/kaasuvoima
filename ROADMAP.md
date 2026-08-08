@@ -52,8 +52,12 @@ kentistä helpompia, ei rikkinäisiä — eli tämä on tasapainotustyötä. Ain
 bugi on tehtaan pääntila: isoimmalla voimatasolla siellä on kohtia joihin ei
 mahdu. **Korjaa se ensin.**
 
-Järjestys: (a) tehtaan pääntila, (b) tehostuspalikka jokaisen kentän alkuun,
-(c) tyhjät laattapolut, (d) kuilujen levennys uudelle budjetille.
+Järjestys: (a) tehtaan pääntila ✔, (b) tehostuspalikka jokaisen kentän alkuun ✔,
+(c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille — **kesken**.
+
+Kohdat a–c on tehty ja validaattori on puhdas kaikille 20 kentälle. Jäljellä on
+vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
+juoksuhyppy kantaa nyt 12,5. Se ei riko mitään, mutta tekee kentistä helppoja.
 
 ### 3. Uudet ruututyypit: murenevat lavat ja kytkimet
 

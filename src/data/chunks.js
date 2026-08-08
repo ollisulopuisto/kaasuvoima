@@ -36,6 +36,7 @@ export const CHUNKS = {
     14: G,
   }),
   start_high: ck(16, {
+    8: '   o',
     9: '  1',
     10: '  ---',
     13: G,
@@ -159,19 +160,23 @@ export const CHUNKS = {
 
   /* ----------------------------- platforms ----------------------------- */
   plat_hi: ck(16, {
+    5: '     o o',
     6: '    ------',
     7: '     o o',
     13: G,
     14: G,
   }),
   plat_steps: ck(16, {
+    4: '         oo',
     5: '        ----',
+    7: '   oo',
     8: '  ----',
     11: '       ---',
     13: G,
     14: G,
   }),
   plat_float: ck(16, {
+    6: '    ooo',
     7: '   -----',
     8: '    ooo',
     12: '            g',
@@ -181,6 +186,7 @@ export const CHUNKS = {
   sky_run: ck(16, {
     4: '  --------',
     5: '   o o o',
+    8: '            o',
     9: '           ---',
     13: '######      ####',
     14: '######      ####',
@@ -208,6 +214,7 @@ export const CHUNKS = {
     14: G,
   }),
   heartburn_pair: ck(16, {
+    9: '     ooo',
     10: '   ------',
     12: '  H        H',
     13: G,
@@ -219,8 +226,7 @@ export const CHUNKS = {
     14: G,
   }),
   cork_gap: ck(16, {
-    9: '        c',
-    12: '   c',
+    12: '   c        c',
     13: '#####      #####',
     14: '#####      #####',
   }),
@@ -233,6 +239,7 @@ export const CHUNKS = {
   cloud_run: ck(16, {
     4: '   r',
     7: '        r',
+    9: '      ooo',
     10: '     ----',
     13: '###         ####',
     14: '###         ####',
@@ -271,6 +278,7 @@ export const CHUNKS = {
   fac_vents: ck(16, {
     0: G,
     1: G,
+    7: '    ooo',
     8: '   -----',
     12: '  H     H    H',
     13: G,
@@ -280,6 +288,7 @@ export const CHUNKS = {
     0: G,
     1: G,
     6: '     r',
+    9: '     ooooo',
     10: '  ---------',
     12: '            c',
     13: '##          ####',
@@ -313,6 +322,7 @@ export const CHUNKS = {
     1: G + G + G,
     2: 'XX                                            XX',
     3: 'XX                                            XX',
+    5: '         o o                      o o',
     6: '        -----                    -----',
     7: '         o o                      o o',
     9: '                     b',
@@ -349,6 +359,7 @@ export const CHUNKS = {
     0: G,
     1: G,
     2: '     ^^^^',
+    7: '    o?o',
     8: '   -----',
     12: '  ^^    ^^',
     13: G,

@@ -79,7 +79,15 @@ export function moveY(entity, level, { onHeadBump = null, dropThrough = false } 
   const right = Math.floor((entity.x + entity.w - 1) / TILE);
 
   if (entity.vy >= 0) {
-    const ty = Math.floor((entity.y + entity.h - 1) / TILE);
+    /*
+     * Probe the tile the feet are *touching*, not the last pixel inside the
+     * body. With `- 1` a resting entity sits one pixel above the floor tile, so
+     * a sub-pixel of gravity never reaches it: it sinks for three frames and
+     * snaps back on the fourth. On screen that is a character vibrating in
+     * place. Using the bottom edge makes the landing re-detect every frame, so
+     * resting is genuinely still.
+     */
+    const ty = Math.floor((entity.y + entity.h) / TILE);
     for (let tx = left; tx <= right; tx++) {
       const ch = level.tileAt(tx, ty);
       const solid = isSolid(ch);

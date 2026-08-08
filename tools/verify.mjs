@@ -403,6 +403,13 @@ const report = await page.evaluate(async () => {
     expect('standing on the ground reads as grounded every frame',
       airborne === 0, `${airborne}/60 frames airborne while standing still`);
 
+    // ...and the player must not sink and pop back either: that reads on screen
+    // as the character vibrating even when the game says it is grounded.
+    const heights = new Set();
+    for (let f = 0; f < 60; f++) { s.update(i); heights.add(Math.round(s.player.y * 100)); }
+    expect('a standing player does not drift up and down',
+      heights.size === 1, `${heights.size} eri y-arvoa paikallaan seistessä`);
+
     // And a jump has to fire on any frame the player asks for one.
     let missed = 0;
     for (let attempt = 0; attempt < 12; attempt++) {
