@@ -7,6 +7,34 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.13 — uudet melodiat, pistepompahdukset, versio pistetauluun
+
+### Muutettu
+- **Neljä lead-fraasia raidan sijaan yhden.** Osio valitsee kumpi melodia
+  soi, joten sävelmä itse vaihtuu eikä vain sen puku. Yksikään
+  (fraasi, sävellaji, sovitus) -yhdistelmä ei toistu kierrossa kahta kertaa
+  useammin, eikä fraasi soi kahta peräkkäistä kierrosta pidempään.
+- **Lead putoaa pois enää yhdessä osiossa** (breakdown) aiemman kahden sijaan.
+  Sävelmä joka katoaa jatkuvasti lakkaa olemasta sävelmä.
+- **Harmonia suoraksi.** Kehys on kaksi tahtia: i (Am7) → iv (Dm7) → V7 (E7),
+  ja **basso ja komppi jakavat nyt saman 32 askeleen syklin**. Aiemmin ne
+  kulkivat eri mittaisina, jolloin soinnut osuivat väärien bassosävelien päälle
+  — vaiheistuva melodia on eri kappale kuin svengaava. Polyrytmi siirtyi sinne
+  minne se kuuluu: 12 askelen ride 16 askelen tahtia vasten. Jokaisen neljännen
+  tahdin G# on E7:n johtosävel, ja se yksi nuotti on suurin ero tämän ja
+  ratkaisemattoman modaalivampin välillä.
+- **Pistepompahdukset elävät**: valkoinen tuplakokoinen isku ensimmäisillä
+  frameilla, kipinäsuihku tuhannen pisteen arvoisista ja 1UP:sta, ja nousu
+  hidastuu loppua kohti. Aiemmin ne liukuivat ylös huomaamattomasti.
+
+### Lisätty
+- **Pistetauluun pelin versio.** Tuloksia **ei** nollata version vaihtuessa —
+  taulun pyyhkiminen aina kun peliä viritetään rankaisisi pelaajaa meidän
+  muutoksistamme. Versio kertoo millä buildilla tulos on tehty, mikä on
+  rehellistä ilman että se tuhoaa mitään.
+
+---
+
 ## v26.08.08.12 — kamera, vokaalit, tehostusten vaihto
 
 ### Lisätty

@@ -31,6 +31,12 @@ export class Puff extends Entity {
   }
 }
 
+/**
+ * The score numbers used to slide up quietly and vanish. Rewards should feel
+ * like rewards, so now they punch: a big white pop on the first few frames,
+ * settling to normal size, with a burst of sparks for anything worth having.
+ * The bigger the number, the bigger the noise it makes.
+ */
 export class ScorePop extends Entity {
   constructor(level, x, y, text) {
     super(level, x, y, 1, 1);
@@ -38,19 +44,51 @@ export class ScorePop extends Entity {
     this.alwaysActive = true;
     this.active = true;
     this.text = String(text);
-    this.life = 46;
+    this.maxLife = 52;
+    this.life = this.maxLife;
+    const value = Number(text);
+    // 1UP and four-figure scores are events; 200 for a coin is not.
+    this.big = Number.isNaN(value) || value >= 1000;
   }
+
+  get age() { return this.maxLife - this.life; }
 
   update() {
     this.tick++;
-    this.y -= 0.7;
+    // Shoots up, then eases as it fades — a flat drift reads as a UI element,
+    // an eased one reads as something that happened.
+    this.y -= 1.6 * (this.life / this.maxLife) ** 1.5 + 0.15;
     this.life--;
     if (this.life <= 0) this.remove = true;
   }
 
   draw(ctx) {
-    drawText(ctx, this.text, Math.round(this.x), Math.round(this.y), {
-      color: '#ffffff', align: 'center', shadow: '#202030',
+    const { age } = this;
+    const x = Math.round(this.x);
+    const y = Math.round(this.y);
+    const fade = this.life / this.maxLife;
+
+    if (this.big && age < 14) {
+      // the burst: sparks flying out, fastest at the start
+      const spread = 3 + age * 1.6;
+      ctx.fillStyle = age < 6 ? '#ffffff' : '#ffd048';
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3 + age * 0.08;
+        ctx.fillRect(
+          Math.round(x + Math.cos(a) * spread), Math.round(y + 3 + Math.sin(a) * spread * 0.7),
+          2, 2,
+        );
+      }
+    }
+
+    // Double size for the first few frames, then settle. The font only does
+    // whole-number scales, so the pop is a step rather than a smooth zoom.
+    const punchy = age < (this.big ? 10 : 5);
+    drawText(ctx, this.text, x, y - (punchy ? 4 : 0), {
+      color: punchy ? '#ffffff' : (this.big ? '#ffd048' : '#e8e8f4'),
+      align: 'center',
+      shadow: fade > 0.25 ? '#202030' : null,
+      scale: punchy ? 2 : 1,
     });
   }
 }

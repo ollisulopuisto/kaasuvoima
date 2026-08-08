@@ -524,28 +524,57 @@ const TRACKS = {
   },
 
   /*
-   * A minor, swung hard. Three things make this one jazz rather than chiptune
-   * with a shuffle: the voices are deliberately different lengths (lead 30,
-   * comp 24, bass 16) so they only line up every four passes, the ride rides a
-   * 12-step pattern against a 16-step bar for a 3-against-4, and the bass riff
-   * is short, accented and never allowed to drop out.
+   * A minor, swung hard. The harmonic frame is two bars: i (Am7) then iv (Dm7)
+   * turning to V7 (E7) at the end, which is what makes the loop want to come
+   * round again instead of just stopping.
+   *
+   * Bass and comp share that 32-step cycle deliberately. Earlier they ran at
+   * different lengths, which put chords over the wrong roots — a phasing
+   * melody is a different piece of music from a swinging one. The polyrhythm
+   * now lives where it belongs, in the cymbals: a 12-step ride against the
+   * 16-step bar, three against four, coming back round every four bars.
+   *
+   * The lead carries four phrases. The G# in every fourth bar is the raised
+   * leading tone over the E7 — that one note is most of what separates this
+   * from a modal vamp that never resolves.
    */
   map: {
     tempo: 138,
     swing: 0.22,
     lead: {
       wave: 'triangle', gain: 0.13, detune: 6, vibrato: 3, staccato: 0.75,
-      notes: [
-        [0, 2], [3, 1], [5, 1], [7, 2], [10, 2], [7, 2], [5, 1], [3, 1], [0, 2],
-        [null, 2], [12, 2], [10, 2], [7, 2], [5, 2], [3, 2], [2, 2], [0, 2],
+      phrases: [
+        // statement
+        [[0, 2], [3, 2], [5, 2], [7, 2],
+          [10, 4], [7, 2], [5, 2],
+          [3, 2], [5, 2], [8, 2], [7, 2],
+          [5, 2], [2, 2], [11, 2], [0, 2]],
+        // answer, an octave up and busier
+        [[12, 2], [10, 2], [12, 2], [15, 2],
+          [14, 4], [12, 2], [10, 2],
+          [8, 2], [10, 2], [12, 2], [10, 2],
+          [7, 2], [5, 2], [11, 2], [12, 2]],
+        // riff: same shape three times, answered differently each bar
+        [[7, 2], [null, 2], [7, 2], [10, 2],
+          [7, 2], [null, 2], [5, 2], [3, 2],
+          [5, 2], [null, 2], [8, 2], [5, 2],
+          [3, 2], [null, 2], [11, 2], [0, 2]],
+        // long notes, for contrast after all that movement
+        [[0, 4], [7, 4],
+          [10, 6], [7, 2],
+          [8, 4], [5, 4],
+          [2, 4], [11, 2], [0, 2]],
       ],
+      notes: [[0, 2], [3, 2], [5, 2], [7, 2], [10, 4], [7, 2], [5, 2],
+        [3, 2], [5, 2], [8, 2], [7, 2], [5, 2], [2, 2], [11, 2], [0, 2]],
     },
     comp: {
       wave: 'square', gain: 0.055, octave: -12, staccato: 0.28, attack: 0.006, hold: 0.2,
       notes: [
-        [null, 4], [[0, 3, 7, 10], 1], [null, 3], [[0, 3, 7, 10], 1], [null, 3],
-        [null, 1], [[-7, -4, 0, 3], 1], [null, 3], [[-7, -4, 0, 3], 1], [null, 2],
-        [[-5, -1, 2, 5], 1], [null, 3],
+        [null, 3], [[0, 3, 7, 10], 1], [null, 2], [[0, 3, 7, 10], 1], [null, 3],
+        [null, 2], [[0, 3, 7, 10], 1], [null, 3],
+        [null, 3], [[-7, -4, 0, 3], 1], [null, 2], [[-7, -4, 0, 3], 1], [null, 3],
+        [null, 2], [[-5, -1, 2, 5], 1], [null, 3],
       ],
     },
     bass: {
@@ -554,6 +583,8 @@ const TRACKS = {
       notes: [
         [-24, 2], [-24, 1], [-17, 1], [-24, 2], [-22, 2],
         [-19, 2], [-17, 1], [-18, 1], [-19, 2], [-24, 2],
+        [-19, 2], [-19, 1], [-12, 1], [-19, 2], [-17, 2],
+        [-14, 2], [-12, 1], [-13, 1], [-14, 2], [-17, 2],
       ],
     },
     drums: {
@@ -565,26 +596,42 @@ const TRACKS = {
   },
 
   /*
-   * Same idea, driven harder: the bass walks in straight eighths so the groove
-   * never lets up, while the lead (28 steps) and the ride (12) push against it.
+   * Same harmonic frame, driven harder: the bass walks in straight eighths so
+   * the groove never lets up, and the phrases are shorter and more insistent.
    */
   level: {
     tempo: 156,
     swing: 0.2,
     lead: {
       wave: 'square', gain: 0.12, detune: 8, staccato: 0.7,
-      notes: [
-        [7, 2], [7, 1], [10, 1], [12, 2], [10, 2], [7, 2], [5, 2],
-        [3, 2], [5, 1], [7, 1], [3, 2], [2, 2], [0, 2], [null, 2],
-        [0, 1], [2, 1], [3, 2],
+      phrases: [
+        [[7, 2], [7, 1], [10, 1], [12, 2], [10, 2],
+          [7, 2], [5, 2], [3, 2], [5, 2],
+          [8, 2], [8, 1], [10, 1], [12, 2], [8, 2],
+          [5, 2], [2, 2], [11, 2], [0, 2]],
+        [[12, 4], [10, 2], [12, 2],
+          [15, 2], [14, 2], [12, 2], [10, 2],
+          [8, 4], [10, 2], [12, 2],
+          [7, 2], [5, 2], [11, 2], [12, 2]],
+        [[0, 2], [null, 2], [3, 2], [5, 2],
+          [7, 2], [null, 2], [10, 2], [7, 2],
+          [5, 2], [null, 2], [8, 2], [5, 2],
+          [2, 2], [null, 2], [11, 2], [0, 2]],
+        [[10, 2], [12, 2], [10, 2], [7, 2],
+          [5, 4], [7, 2], [10, 2],
+          [12, 2], [10, 2], [8, 2], [5, 2],
+          [3, 2], [5, 2], [11, 2], [12, 2]],
       ],
+      notes: [[7, 2], [7, 1], [10, 1], [12, 2], [10, 2], [7, 2], [5, 2], [3, 2], [5, 2],
+        [8, 2], [8, 1], [10, 1], [12, 2], [8, 2], [5, 2], [2, 2], [11, 2], [0, 2]],
     },
     comp: {
       wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.25, attack: 0.005, hold: 0.2,
       notes: [
-        [null, 2], [[0, 3, 7, 10], 1], [null, 2], [[0, 3, 7, 10], 1], [null, 3],
-        [[-2, 2, 5, 9], 1], [null, 2], [[-2, 2, 5, 9], 1], [null, 5],
-        [[-5, -1, 2, 5], 1], [null, 2],
+        [null, 2], [[0, 3, 7, 10], 1], [null, 2], [[0, 3, 7, 10], 1], [null, 4],
+        [[0, 3, 7, 10], 1], [null, 5],
+        [null, 2], [[-7, -4, 0, 3], 1], [null, 2], [[-7, -4, 0, 3], 1], [null, 4],
+        [[-5, -1, 2, 5], 1], [null, 5],
       ],
     },
     bass: {
@@ -592,7 +639,9 @@ const TRACKS = {
       accent: 'x...x...x...x...',
       notes: [
         [-24, 1], [-24, 1], [-17, 1], [-24, 1], [-22, 1], [-24, 1], [-17, 1], [-20, 1],
-        [-19, 1], [-19, 1], [-12, 1], [-19, 1], [-17, 1], [-19, 1], [-22, 1], [-23, 1],
+        [-24, 1], [-24, 1], [-17, 1], [-24, 1], [-22, 1], [-19, 1], [-17, 1], [-22, 1],
+        [-19, 1], [-19, 1], [-12, 1], [-19, 1], [-17, 1], [-19, 1], [-12, 1], [-15, 1],
+        [-19, 1], [-19, 1], [-12, 1], [-14, 1], [-17, 1], [-17, 1], [-13, 1], [-17, 1],
       ],
     },
     drums: {
@@ -721,10 +770,10 @@ const LEAD_IN_STEPS = 16;
 const VARIATIONS = [
   { label: 'full' },
   { label: 'no harmony', drop: ['harm'] },
-  { label: 'breakdown', drop: ['lead'], busyHats: true },
+  { label: 'breakdown', drop: ['lead'], busyHats: true },   // the only one without a tune
   { label: 'lead octave up', leadOctave: 12 },
   { label: 'stripped', drop: ['comp', 'drums'], swingBoost: 0.06 },
-  { label: 'comp only', drop: ['lead'] },
+  { label: 'thin comp', drop: ['harm', 'drums'] },
   { label: 'double time', speed: 2, drop: ['harm'] },
   { label: 'shout chorus', leadOctave: 12, swingBoost: 0.08 },
 ];
@@ -759,17 +808,27 @@ const KEY_PLAN = [0, 0, 5, 0, 7, 0, 2, 0];
  * build, and, when the tempo is about to move, a ramp into it rather than a
  * jump cut.
  */
+/*
+ * The arrangement. `phrase` picks which lead melody plays, so the tune itself
+ * changes across the piece instead of the same eight bars coming back in a new
+ * hat every time. No (phrase, key, variation) combination appears more than
+ * twice in a full cycle, and a phrase never runs more than two passes in a row
+ * — an identical loop is heard at most twice before something moves.
+ *
+ * Only one section drops the lead entirely (the breakdown). A tune that keeps
+ * vanishing stops being the tune.
+ */
 const SECTIONS = [
-  { variation: 0, passes: 3, key: 0 },   // head, stated plainly
-  { variation: 1, passes: 2, key: 0 },   // thin it out
-  { variation: 2, passes: 2, key: 0 },   // breakdown: bass and drums carry it
-  { variation: 3, passes: 2, key: 5 },   // lead up an octave, over to IV
-  { variation: 0, passes: 2, key: 0 },   // home
-  { variation: 5, passes: 2, key: 7 },   // comping alone, over to V
-  { variation: 0, passes: 2, key: 0 },   // home again
-  { variation: 6, passes: 3, key: 2 },   // double time, whole-tone lift, held
-  { variation: 7, passes: 2, key: 0 },   // shout chorus, back home
-  { variation: 4, passes: 2, key: 0 },   // strip it and breathe
+  { variation: 0, passes: 2, key: 0, phrase: 0 },   // head
+  { variation: 1, passes: 2, key: 0, phrase: 1 },   // answer phrase, thinner
+  { variation: 3, passes: 2, key: 5, phrase: 2 },   // third tune, over to IV
+  { variation: 0, passes: 2, key: 0, phrase: 0 },   // head again, home
+  { variation: 2, passes: 2, key: 0, phrase: 0 },   // breakdown: no lead at all
+  { variation: 5, passes: 2, key: 7, phrase: 3 },   // fourth tune, over to V
+  { variation: 6, passes: 2, key: 2, phrase: 1 },   // double time, whole-tone lift
+  { variation: 7, passes: 2, key: 0, phrase: 2 },   // shout chorus, back home
+  { variation: 1, passes: 2, key: 0, phrase: 3 },   // last tune, thinned out
+  { variation: 4, passes: 2, key: 0, phrase: 0 },   // strip it and breathe
 ];
 const TOTAL_PASSES = SECTIONS.reduce((sum, s) => sum + s.passes, 0);
 
@@ -824,6 +883,11 @@ export const Music = {
     this._voices = ['lead', 'harm', 'comp', 'bass']
       .filter((key) => track[key])
       .map((key) => ({ name: key, ...track[key], ...compile(track[key].notes) }));
+    // A lead can carry several melodies; the section picks which one is on.
+    const lead = this._voices.find((v) => v.name === 'lead');
+    this._phrases = lead && lead.phrases
+      ? lead.phrases.map((notes) => compile(notes))
+      : null;
     this._drums = track.drums || null;
     // One pass = the longest voice, rounded up to whole bars so the parts that
     // loop faster still land on the downbeat when the arrangement changes.
@@ -863,6 +927,12 @@ export const Music = {
     // something is actually about to change.
     this._changing = here.last && next.index !== here.index;
     this._transpose = here.section.key;
+    if (this._phrases) {
+      const lead = this._voices.find((v) => v.name === 'lead');
+      const phrase = this._phrases[here.section.phrase % this._phrases.length];
+      lead.map = phrase.map;
+      lead.len = phrase.len;
+    }
     this._nextTranspose = this._changing ? next.section.key : here.section.key;
 
     const rate = (speedOf) => 60 / (this._track.tempo * speedOf * (this._hurry ? HURRY_SPEED : 1)) / 4;

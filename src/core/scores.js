@@ -8,6 +8,15 @@
  */
 
 const KEY = 'sfb3.scores.v1';
+
+/**
+ * Stamped onto every entry. Scores are NOT reset when this changes: wiping the
+ * board every time the game is tuned would punish players for our edits, and
+ * the kids would lose their names for no reason they can see. Showing which
+ * build a score was set on is honest without being destructive — an old score
+ * from before a physics change is comparable-ish, and now you can tell.
+ */
+export const GAME_VERSION = '26.08.08';
 export const MAX_ENTRIES = 10;
 export const NAME_LENGTH = 6;
 
@@ -24,6 +33,7 @@ export function loadScores() {
         score: Math.max(0, Math.floor(e.score)),
         world: Number(e.world) || 1,
         assisted: !!e.assisted,
+        version: typeof e.version === 'string' ? e.version : '',
         at: Number(e.at) || 0,
       }))
       .sort((a, b) => b.score - a.score)
@@ -59,6 +69,7 @@ export function addScore({ name, score, world = 1, assisted = false }) {
     score: Math.max(0, Math.floor(score)),
     world,
     assisted: !!assisted,
+    version: GAME_VERSION,
     at: Date.now(),
   };
   const list = loadScores();
