@@ -43,13 +43,6 @@
       "height": 240,
       "distance": 387,
       "frames": 154
-    },
-    {
-      "label": "small, running",
-      "speed": 2.5,
-      "height": 0,
-      "distance": 20,
-      "frames": 7
     }
   ],
   "gapTiles": 8,

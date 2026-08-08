@@ -12,10 +12,11 @@
  *
  * It takes no layout. The vocabulary below is this game's own — fart double
  * jumps, ummetus corks, hernekeitto, närästys jets, stink clouds — arranged by
- * rules written for this game's jump budget (a running jump clears ~7.5 tiles
- * and rises ~4.5, so a gap over 6 needs a stepping stone and a wall over 4
- * needs a platform). A generated level should read as a Super Fart Bros level
- * that happens to breathe at a classic tempo, not as a copy of anything.
+ * rules written against this game's *measured* jump budget (tools/jump-budget.json,
+ * produced by tools/measure-jump.mjs), so the geometry follows the physics
+ * instead of a number somebody wrote down once. A generated level should read
+ * as a Super Fart Bros level that happens to breathe at a classic tempo, not as
+ * a copy of anything.
  *
  * Every level is checked before it is written: gaps and walls stay inside the
  * jump budget, nothing spawns inside a wall, there is headroom for the tallest
@@ -42,7 +43,7 @@ const HEAD = 3;            // tiles of headroom the tallest player needs
  * jump and writes what it actually achieved. Change the physics and the level
  * geometry follows, instead of quietly going stale.
  */
-let budget = { gapTiles: 6, softGapTiles: 8, wallTiles: 4 };
+let budget = { gapTiles: 8, softGapTiles: 13, wallTiles: 6 };
 try {
   budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
 } catch {

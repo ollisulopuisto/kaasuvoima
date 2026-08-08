@@ -211,6 +211,7 @@ export class WorldMapScene {
     ctx.fillRect(0, 0, 320, 240);
 
     this.drawTerrain(ctx);
+    this.drawSky(ctx);
     this.drawLinks(ctx);
     this.drawNodes(ctx);
     this.drawToken(ctx);
@@ -221,8 +222,45 @@ export class WorldMapScene {
     if (this.mode === 'banner') this.drawBanner(ctx);
   }
 
+  /** Clouds and birds drifting over the map, on top of the terrain. */
+  drawSky(ctx) {
+    const th = this.world.theme;
+    if (th === 'factory') return;                 // that sky is full of smoke
+    const color = th === 'ice' ? 'rgba(255,255,255,0.75)'
+      : th === 'desert' ? 'rgba(255,244,224,0.6)' : 'rgba(255,255,255,0.7)';
+    for (let i = 0; i < 5; i++) {
+      const seed = hashNoise(i * 17, 5);
+      const span = 320 + 60;
+      const x = Math.round(((seed * span + this.tick * (0.10 + seed * 0.14)) % span + span)
+        % span - 40);
+      const y = MAP_Y + 6 + Math.round(seed * (MAP_H - 40));
+      const s = seed > 0.6 ? 2 : 1;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y + 3 * s, 22 * s, 3 * s);
+      ctx.fillRect(x + 4 * s, y, 9 * s, 5 * s);
+      ctx.fillRect(x + 12 * s, y + 2 * s, 7 * s, 3 * s);
+    }
+    if (th === 'grass') {
+      for (let i = 0; i < 3; i++) {
+        const seed = hashNoise(i * 29, 13);
+        const span = 320 + 80;
+        const x = Math.round(((seed * span - this.tick * (0.3 + seed * 0.2)) % span + span)
+          % span - 40);
+        const y = MAP_Y + 10 + Math.round(seed * 26) + Math.round(Math.sin(this.tick / 40 + i) * 3);
+        const flap = Math.floor(this.tick / 8 + i) % 2;
+        ctx.fillStyle = 'rgba(30,40,60,0.55)';
+        ctx.fillRect(x, y, 2, 1);
+        ctx.fillRect(x - 2, y - flap, 2, 1);
+        ctx.fillRect(x + 2, y - flap, 2, 1);
+      }
+    }
+  }
+
   drawTerrain(ctx) {
     const th = this.world.theme;
+    // One shared sway, offset per tile so neighbours do not move in lockstep.
+    const sway = (tx, ty, amount) =>
+      Math.round(Math.sin(this.tick / 24 + tx * 0.8 + ty * 0.5) * amount);
     const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff'
       : th === 'factory' ? '#4a4460' : '#4cb04c';
     const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
@@ -249,29 +287,36 @@ export class WorldMapScene {
             ctx.fillRect(x, y + 4 + Math.round(wave), TILE, 2);
             break;
           }
-          case 'T':
+          case 'T': {
+            // Everything that grows sways, each tile on its own phase, so the
+            // map reads as a place with weather rather than a printed picture.
+            const s1 = sway(tx, ty, 1);
             ctx.fillStyle = '#6a4018';
             ctx.fillRect(x + 7, y + 9, 3, 6);
             ctx.fillStyle = '#1f7a2a';
-            ctx.fillRect(x + 3, y + 3, 11, 7);
-            ctx.fillRect(x + 5, y + 1, 7, 4);
+            ctx.fillRect(x + 3 + s1, y + 3, 11, 7);
+            ctx.fillRect(x + 5 + s1, y + 1, 7, 4);
             ctx.fillStyle = '#2fa03a';
-            ctx.fillRect(x + 5, y + 3, 6, 4);
+            ctx.fillRect(x + 5 + s1, y + 3, 6, 4);
             break;
-          case 'P':
+          }
+          case 'P': {
+            const s1 = sway(tx, ty, 1);
+            const s2 = sway(tx, ty, 0.5);
             ctx.fillStyle = '#6a4018';
             ctx.fillRect(x + 7, y + 11, 3, 4);
             ctx.fillStyle = '#1f6a3a';
-            ctx.fillRect(x + 4, y + 8, 9, 4);
-            ctx.fillRect(x + 5, y + 4, 7, 4);
-            ctx.fillRect(x + 6, y + 1, 5, 4);
+            ctx.fillRect(x + 4 + s2, y + 8, 9, 4);
+            ctx.fillRect(x + 5 + s1, y + 4, 7, 4);
+            ctx.fillRect(x + 6 + s1, y + 1, 5, 4);
             if (th === 'ice') {
               ctx.fillStyle = '#f0f8ff';
-              ctx.fillRect(x + 6, y + 1, 5, 2);
-              ctx.fillRect(x + 5, y + 4, 7, 1);
-              ctx.fillRect(x + 4, y + 8, 9, 1);
+              ctx.fillRect(x + 6 + s1, y + 1, 5, 2);
+              ctx.fillRect(x + 5 + s1, y + 4, 7, 1);
+              ctx.fillRect(x + 4 + s2, y + 8, 9, 1);
             }
             break;
+          }
           case 'I': {
             // snow drifts and hairline cracks so the ice fields aren't blank
             const n = hashNoise(tx * 3, ty * 5);
@@ -292,12 +337,14 @@ export class WorldMapScene {
             ctx.fillStyle = '#e8e8f8';
             ctx.fillRect(x + 5, y + 3, 6, 2);
             break;
-          case 'C':
+          case 'C': {
+            const s1 = sway(tx, ty, 0.5);
             ctx.fillStyle = '#2f8f3a';
             ctx.fillRect(x + 6, y + 3, 4, 12);
-            ctx.fillRect(x + 2, y + 7, 3, 5);
-            ctx.fillRect(x + 11, y + 5, 3, 6);
+            ctx.fillRect(x + 2 + s1, y + 7, 3, 5);
+            ctx.fillRect(x + 11 + s1, y + 5, 3, 6);
             break;
+          }
           case 'F': {
             // factory floor plating with rivets
             ctx.fillStyle = '#3f3a55';
@@ -310,8 +357,9 @@ export class WorldMapScene {
             }
             break;
           }
-          case 'E':
-            // machinery: pipe stack with a valve wheel
+          case 'E': {
+            // machinery: the valve wheel turns, so the factory looks powered
+            const spin = Math.floor(this.tick / 12) % 4;
             ctx.fillStyle = '#2f2b40';
             ctx.fillRect(x + 2, y + 3, 12, 12);
             ctx.fillStyle = '#7a7498';
@@ -319,9 +367,17 @@ export class WorldMapScene {
             ctx.fillStyle = '#c05820';
             ctx.fillRect(x + 6, y + 1, 4, 4);
             ctx.fillStyle = '#2f2b40';
-            ctx.fillRect(x + 5, y + 7, 6, 1);
-            ctx.fillRect(x + 7, y + 5, 1, 6);
+            if (spin % 2 === 0) {
+              ctx.fillRect(x + 5, y + 7, 6, 1);
+              ctx.fillRect(x + 7, y + 5, 1, 6);
+            } else {
+              ctx.fillRect(x + 5, y + 5, 2, 2);
+              ctx.fillRect(x + 9, y + 9, 2, 2);
+              ctx.fillRect(x + 9, y + 5, 2, 2);
+              ctx.fillRect(x + 5, y + 9, 2, 2);
+            }
             break;
+          }
           case 'S': {
             const n = hashNoise(tx * 5, ty * 3);
             if (n > 0.8) {
@@ -337,11 +393,13 @@ export class WorldMapScene {
             ctx.fillStyle = '#b0b0c0';
             ctx.fillRect(x + 4, y + 8, 6, 3);
             break;
-          case '"':
+          case '"': {
+            const s1 = sway(tx, ty, 1);
             ctx.fillStyle = '#2a8a30';
             ctx.fillRect(x + 3, y + 9, 10, 5);
-            ctx.fillRect(x + 5, y + 6, 6, 4);
+            ctx.fillRect(x + 5 + s1, y + 6, 6, 4);
             break;
+          }
           default:
             break;
         }

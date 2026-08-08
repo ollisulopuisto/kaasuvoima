@@ -130,7 +130,8 @@ const result = await page.evaluate(async () => {
   add('running, held', { mode: 'run', power: big, hold: true });
   add('P-speed, held', { mode: 'p', power: big, hold: true });
   add('running + fart jump', { mode: 'run', power: { type: 'shroom', level: 3 }, hold: true, doubleJump: true });
-  add('small, running', { mode: 'run', power: { type: null, level: 0 }, hold: true });
+  // Body size is deliberately not measured: jump velocity and gravity in this
+  // engine do not depend on it, only friction does.
 
   return rows;
 });

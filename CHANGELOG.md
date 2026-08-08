@@ -7,6 +7,45 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.9 — syöteviive, kartan animaatiot, dokumenttien tarkistus
+
+### Korjattu
+- **Syöte jumitti sekunneiksi.** Syy ei ollut näppäimistökoodissa vaan
+  musiikkisekvensserissä: taustavälilehdessä `setTimeout` kuristetaan, jolloin
+  sekvensseri heräsi kymmeniä sekunteja jäljessä ja yritti rakentaa koko
+  rästilistan nuotteja yhdellä kertaa. Tuhansien oskillaattorien luonti jumittaa
+  pääsäikeen, ja peli lakkaa vastaamasta näppäimistöön. Nyt mennyt musiikki
+  hypätään yli ja synkataan seuraavaan tahtiin; yhdessä heräämisessä ajoitetaan
+  enintään 32 askelta, eikä ajastimelle anneta koskaan mennyttä aikaa.
+  Mitattu jälkeenpäin: kehystyö 0,3 ms mediaani, 60 fps, hypyn vaste 14 ms.
+- **Nopea näppäinpainallus saattoi kadota.** Jos näppäin painettiin ja
+  vapautettiin saman framen sisällä, kysely näki jo vapautetun näppäimen. Nyt
+  painallus salpautuu tapahtumakäsittelijässä.
+- **Alkuruudun valikko ja ohjeteksti menivät päällekkäin** kun valikkoon tuli
+  kolmas rivi. Laatikon korkeus lasketaan nyt riveistä.
+
+### Lisätty
+- **Maailmankartta elää**: puut, männyt, pensaat ja kaktukset huojuvat kukin
+  omassa vaiheessaan, pilvet ajelehtivat kartan yli, linnut lentävät ruohomaalla
+  ja tehtaan venttiilipyörä pyörii.
+- **Musiikin osiot kestävät useamman kierroksen** (2–3) yhden sijaan, ja
+  vaihdosta edeltää kokonaisen tahdin lead-in: virveli tihenee, ja jos tempo on
+  vaihtumassa, askelpituus liukuu uuteen tempoon sen sijaan että se leikkautuisi.
+  *Miksi:* yhden kierroksen mittainen muutos kuulostaa virheeltä, kahden tai
+  kolmen harkitulta.
+
+### Muutettu
+- Dokumentit tarkistettiin koodia vasten ja korjattiin: kilpikonnan pisteet
+  (100 ei 200), tehostuksen pisteet, kaasulehden tasovaikutus, P-mittarin
+  käytös lennon aikana, generaattorin samankaltaisuustarkistuksen ehdollisuus,
+  hyppybudjetin marginaalit ja se että kenttäsäännöt tarkistetaan vain
+  generoiduille kentille.
+- **HANDOFF.md poistettiin.** Sen tilannekatsaus oli vanhentunut (väärä haara,
+  neljä maailmaa, vanha hyppybudjetti), ja ainoa ainutlaatuinen sisältö —
+  moottorin kompastuskivet — siirrettiin [DESIGN.md](DESIGN.md):n kohtaan 6.
+
+---
+
 ## v26.08.08.8 — eloa animaatioihin
 
 ### Lisätty

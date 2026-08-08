@@ -135,7 +135,7 @@ const WORLD_DEFS = [
   },
   {
     id: 'w5',
-    name: 'JALKIPYYKKI',
+    name: 'JÄLKIPYYKKI',
     theme: 'grass',
     terrain: [
       'MMM...TT......T..MMM',
@@ -150,7 +150,7 @@ const WORLD_DEFS = [
     ],
     nodes: [
       { id: 'w5-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
-      { id: 'w5-1', tx: 4, ty: 5, type: 'level', level: '5-1', name: 'JALKIRUOKA' },
+      { id: 'w5-1', tx: 4, ty: 5, type: 'level', level: '5-1', name: 'JÄLKIRUOKA' },
       { id: 'w5-h', tx: 4, ty: 2, type: 'house', name: 'HERNETALO' },
       { id: 'w5-2', tx: 8, ty: 3, type: 'level', level: '5-2', name: 'KUIVA KAUSI' },
       { id: 'w5-3', tx: 12, ty: 6, type: 'level', level: '5-3', name: 'VIIMEINEN VETO' },

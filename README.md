@@ -1,160 +1,198 @@
 # Super Fart Bros 3
 
-> Suunnitteluperiaatteet ja sisällön alkuperä: [DESIGN.md](DESIGN.md) ·
-> Muutosloki perusteluineen: [CHANGELOG.md](CHANGELOG.md) ·
-> Liikkeen vakiot: [PHYSICS.md](PHYSICS.md)
+Selaimessa pyörivä tasohyppely: oma **maailmankarttamoottori** (solmut, polut,
+avautuvat reitit, hernetalot) ja oma **kenttämoottori** (ruutupohjainen kenttä,
+alipikselifysiikka, viholliset, viisiportaiset tehostukset, maalikortti).
 
-Selaimessa pyörivä tasohyppelypeli Super Mario Bros. 3:n hengessä: oma
-**maailmankarttamoottori** (solmut, polut, avautuvat reitit, hernetalot) ja oma
-**kenttämoottori** (ruutupohjainen kenttä, fysiikka, viholliset, viisiportaiset
-tehostukset, maalikortti). Ei riippuvuuksia, ei buildia, ei kuvatiedostoja —
-kaikki grafiikka ja äänet syntyvät ajossa.
+Ei riippuvuuksia, ei build-vaihetta, ei kuva- tai äänitiedostoja — kaikki
+grafiikka piirretään ja kaikki äänet syntetisoidaan ajossa.
+
+**Pelattavissa: <https://sfb3.vercel.app>**
+
+| Dokumentti | Sisältö |
+| --- | --- |
+| [DESIGN.md](DESIGN.md) | suunnitteluperiaatteet, kenttäsuunnittelun säännöt ja sisällön alkuperä |
+| [CHANGELOG.md](CHANGELOG.md) | muutokset perusteluineen (CalVer) |
+| [PHYSICS.md](PHYSICS.md) | liikkeen vakiot ja mitattu hyppybudjetti |
+
+Moottorin kompastuskivet ovat [DESIGN.md](DESIGN.md):n kohdassa 6 — lue ne
+ennen kuin muutat moottoria.
+
+---
 
 ## Käynnistys
 
-ES-moduulit vaativat http-palvelimen, eli pelkkä `index.html` tiedostona ei riitä.
+ES-moduulit vaativat http-palvelimen, eli `index.html` suoraan tiedostona ei riitä.
 
 ```bash
-python3 -m http.server 8000
-# avaa selaimessa http://localhost:8000
+python3 -m http.server 8000    # tai npm start
+# http://localhost:8000
 ```
-
-Mikä tahansa staattinen palvelin käy (`npx http-server`, `php -S`, ...).
-
-## Julkaisu Verceliin
-
-Repo on staattinen sivusto ilman build-vaihetta, ja `vercel.json` kertoo sen
-Vercelille. Julkaisu onnistuu suoraan repon juuresta:
-
-```bash
-git fetch origin && git checkout claude/super-fart-bros-3-wmbbku
-python3 -m http.server 8000   # tarkista paikallisesti ensin
-
-vercel          # ensimmäinen ajo luo projektin ja antaa esikatselu-URLin
-vercel --prod   # tuotantoon
-```
-
-Ensimmäisellä kerralla CLI kysyy muutaman asian. Vastaukset:
-
-| Kysymys | Vastaus |
-| --- | --- |
-| Set up and deploy? | **Y** |
-| Link to existing project? | **N** |
-| Project name | `sfb3` (tai mikä tahansa) |
-| In which directory is your code located? | `./` |
-| Want to modify these settings? | **N** — `vercel.json` hoitaa asetukset |
-
-`vercel` lataa työhakemiston sellaisenaan, joten haaralla ei ole väliä: voit
-julkaista suoraan kehityshaarasta. CLI luo paikallisen `.vercel/`-hakemiston,
-joka on `.gitignore`ssa.
-
-Jos haluat automaattiset julkaisut jokaisesta pushista (ja esikatselu-URLit
-pull requesteille), kytke repo Vercelin hallinnasta: Add New → Project →
-import `sfb3`. Frameworkiksi **Other**, build-komento tyhjäksi ja
-output-hakemistoksi `.`.
-
-## Jatkokehitys
-
-`HANDOFF.md` kertoo missä työ on kesken, mitä on jo todennettu ja mihin
-moottorissa on helppo kompastua.
-
-## Testit
-
-Repossa on headless-tarkistus, joka tarjoilee sivuston itse, ajaa botin läpi
-jokaisen kentän ja tarkistaa mekaniikat ja tilatallennuksen:
-
-```bash
-npm i -D playwright && npx playwright install chromium
-node tools/verify.mjs
-```
-
-Se listaa jokaisen kentän, kuinka pitkälle botti pääsi ja mihin se kaatui, ja
-palauttaa nollasta poikkeavan paluuarvon jos jokin menee rikki (konsolivirhe,
-kenttä ei lataudu, aloituspaikka seinän sisällä, mekaniikkatesti pettää).
-Botti osaa vain juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaalia
-— merkitseviä ovat FAILURES-listan rivit.
 
 ## Näppäimet
 
+Molemmat käsijärjestykset ovat käytössä yhtä aikaa, eli mitään tilaa ei tarvitse
+valita. Näppäimet luetaan fyysisinä paikkoina (`event.code`), joten
+näppäimistöasettelu ei siirrä niitä.
+
+| Toiminto | Ohjaus oikealla kädellä | Ohjaus vasemmalla kädellä |
+| --- | --- | --- |
+| Liikkuminen | nuolet | W A S D |
+| Hyppy | **Z** tai välilyönti | **L** tai **.** tai välilyönti |
+| Juoksu / pieru | **X** tai vaihto | **K** tai **,** |
+
 | Näppäin | Toiminto |
 | --- | --- |
-| Nuolet / WASD | liikkuminen, kartalla solmusta toiseen |
-| Z tai välilyönti | hyppy · **ilmassa uudestaan = pierupomppu** · kartalla mene kenttään |
-| X tai vaihto | juoksu · pierupallo (kukka) · häntäisku (lehti) |
-| Alas | kyykky · pudotus läpi puulavan |
+| hyppy ilmassa uudestaan | **pierupomppu** (pierusieni) |
+| juoksunäppäin | pierupallo (kukka) · häntäisku (lehti) |
+| alas | kyykky · pudotus puulavan läpi |
 | Enter | tauko kentässä · kartalla käytä varastoesine |
-| M | äänet päälle/pois |
-| 1 / 2 | tallenna tila / lataa tila (kuten emulaattorissa); myös F5 / F8 |
-| 3 | vaihda tallennuspaikkaa (1–3); myös F6 |
-| 9 tai ` | debug-ruutu: fps, entiteetit, pelaajan tila |
+| M tai 0 | äänet päälle/pois |
+| 1 / 2 | tallenna tila / lataa tila |
+| 3 | vaihda tallennuspaikkaa (1–3) |
+| 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita |
 
-Peliohjain (standard gamepad) toimii myös.
+F5 / F8 / F6 / F3 toimivat myös, jos käyttöjärjestelmä ei vie niitä — macOS vie.
+Peliohjain (standard gamepad) toimii.
+
+## Pisteet, kolikot ja mittarit
+
+Mistä pisteitä tulee ja mitä ne tekevät:
+
+| Teko | Pisteet | Muu vaikutus |
+| --- | --- | --- |
+| Kolikko | 200 | **100 kolikkoa = lisäelämä**, laskuri nollautuu sadalla |
+| Mönkijän tallaus | 100 | |
+| Kilpikonna | 100 | jää kuoreksi, jonka voi potkaista |
+| Lentäjä, ruskea pilvi, ummetuskorkki | 200 | |
+| Tiilen rikkominen | 50 | |
+| Tehostuksen poiminta | 1000 | täydellä voimalla se menee varastoon |
+| Hernekeitto täydellä voimalla | 5000 | |
+| Pomon kaato | 5000–8000 | avaa linnakkeen oven |
+| Kentän läpäisy | jäljellä oleva **aika × 50** | eli nopeus palkitaan |
+
+Pisteet näkyvät HUDissa, kartalla ja lopputekstissä, ja pelin päätyttyä ne
+menevät **pistetauluun** (10 parasta, oma nimi). Jos ajon aikana on ladattu
+tilatallennus, nimen perässä on tähti — kelattu suoritus ei kuulu samaan
+sarakkeeseen kelaamattoman kanssa ilman merkintää.
+
+**Maalikortit:** jokaisesta läpäistystä kentästä saa kortin. Kolme korttia
+laukeaa: kolme samaa antaa 2 (sieni), 3 (kukka) tai 5 (tähti) lisäelämää,
+sekalainen kolmikko yhden.
+
+**Vauhtimittari (P)** täyttyy kun juokset maassa täydellä juoksuvauhdilla:
+seitsemän pykälää, kukin kahdeksan framea, eli alle sekunnissa. Ilmassa mittari
+jäätyy — paitsi lehden lennon aikana, jolloin se valuu ja lento loppuu kun se
+tyhjenee. Maassa se valuu hitaammin kuin täyttyy (24 framea per pykälä). Täysi
+mittari tekee kaksi asiaa:
+
+1. **Nopeuskatto nousee** juoksuvauhdista 2,5 → 3,5 pikseliin per frame.
+2. **Kaasulehdellä se avaa lennon** — täydellä mittarilla hyppy lähtee lentoon.
+
+Mittari ei vaikuta pierupomppuun: se tulee voimatasosta, ei vauhdista.
+
+**Aika** kuluu yhden yksikön 24 framessa. Kentän kello lasketaan kentän
+pituudesta, joten pitkä kenttä saa pidemmän ajan. Alle sadassa musiikki alkaa
+kiirehtiä.
 
 ## Voimatasot 1–5
 
 Tehostukset kasautuvat: jokainen kerätty tehostus nostaa tasoa yhdellä (max 5),
 ja **jokainen taso kasvattaa hahmoa ja vahvistaa sitä ominaisuutta**, jonka
-tehostus antaa. Osuma pudottaa yhden tason kerrallaan — tasolla 0 osuma tappaa.
+tehostus antaa. Osuma pudottaa yhden tason — tasolla 0 osuma tappaa.
 
 | Tehostus | Ominaisuus | Mitä taso tekee |
 | --- | --- | --- |
 | **Pierusieni** | tuplahyppy: hyppää ilmassa uudelleen ja pieru nostaa ylemmäs | tasoja vastaava määrä ilmahyppyjä (taso 5 = 5 kpl) |
-| **Pierukukka** | ammu pierupalloja | enemmän palloja kerralla (3+) ja enemmän yhtä aikaa ilmassa |
-| **Kaasulehti** | häntäisku, liito ja lento täydellä vauhtimittarilla | pidempi lento, pidempi häntä, hitaampi liito |
+| **Pierukukka** | ammu pierupalloja | enemmän palloja kerralla ja yhtä aikaa ilmassa |
+| **Kaasulehti** | häntäisku, liito ja lento täydellä vauhtimittarilla | pidempi lento, pidempi häntäisku |
 | **Hernekeitto** | +1 taso nykyiseen voimaan | parantaa myös ummetuksen |
 
-Ilmapierun purkaus kaataa myös alapuolella olevat viholliset, ja tasolta 4
-ylöspäin hahmo jyrää tiiliä juoksemalla niiden läpi.
+Ilmapierun purkaus kaataa alapuolella olevat viholliset, ja tasolta 4 ylöspäin
+hahmo jyrää tiiliä juoksemalla niiden läpi.
 
-## Vaarat: ummetus ja närästys
+Tehostus ei ole koskaan pakollinen: **maareitti on läpäistävissä pienimmällä
+koolla**, ja pierupomppu avaa korkeat reitit ja palkinnot. Generoiduissa
+kentissä tämä on koneellisesti tarkistettu; käsintehdyissä se on
+suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 
-* **Ummetuskorkki** ei vahingoita vaan **korkkaa**: kaikki kaasuvoimat (tuplahyppy,
-  pierupallot, lento, häntä) menevät poikki muutamaksi sekunniksi. HUD näyttää
-  laskurin. Hernekeitto tai mikä tahansa tehostus avaa korkin heti.
+## Vaarat
+
+* **Ummetuskorkki** ei vahingoita vaan **korkkaa**: kaikki kaasuvoimat
+  (tuplahyppy, pierupallot, lento, häntä) menevät poikki muutamaksi sekunniksi.
+  HUD näyttää laskurin. Hernekeitto tai mikä tahansa tehostus avaa korkin heti.
 * **Närästys** on lattiasta purkautuva liekkisuihku. Se varoittaa välähdyksellä
-  ennen syöksyä, joten se on ajoituspulma — mutta osuma polttaa yhden voimatason.
-* **Ruskeat pilvet** leijuvat ilmassa ja ajelehtivat pelaajaa kohti. Ne voi
-  tömäyttää tai pierupallottaa pois.
-* **Vihainen aurinko** roikkuu aavikon taivaalla pelaajan vieressä ja syöksyy
-  aika ajoin kaaressa hänen lävitseen. Sitä ei voi tömäyttää, mutta kolme
-  pierupalloa tai häntäiskua sammuttaa sen.
+  ennen syöksyä, joten se on ajoituspulma — osuma polttaa yhden voimatason.
+* **Ruskeat pilvet** leijuvat ilmassa ja ajelehtivat pelaajaa kohti.
+* **Vihainen aurinko** roikkuu aavikon taivaalla ja syöksyy kaaressa pelaajan
+  lävitse. Sitä ei voi tömäyttää; kolme pierupalloa tai häntäiskua sammuttaa sen.
+* **Putkikasvi** nousee putkesta. Se ei nouse jos seisot putken päällä, ja se voi
+  satuttaa vasta kun siitä on vähintään puoli ruutua näkyvissä.
 
 ## Maailmat
 
 | Maailma | Teema | Pomo |
 | --- | --- | --- |
-| 1 PAPULAAKSO | niityt | Linnakkeen pomo — kävelee ja hyppii |
+| 1 PAPULAAKSO | niityt | linnakkeen pomo: kävelee ja hyppii |
 | 2 HIKIHIEKKA | aavikko | sama pomo uutena versiona: laskeutuminen synnyttää maa-aaltoja |
 | 3 JÄÄTÄVÄ VETO | jää | nopeampi versio, joka syöksyy pelaajaa kohti |
-| 4 PIERUTEHDAS | tehdas | **PIERUPRINSSI**, joka pullistuu jokaisesta osumasta aina 3-kertaiseksi |
+| 4 PIERUTEHDAS | tehdas | **PIERUPRINSSI**, joka pullistuu jokaisesta osumasta 3-kertaiseksi |
+| 5 JÄLKIPYYKKI | sekateema | uusintaottelu prinssin kanssa |
 
 Jokaisessa maailmassa on kolme kenttää, hernetalo ja linnake. Kentän läpäisy avaa
 siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
 
-Muuta: vauhtimittari (P) täyttyy juostessa, sata kolikkoa on lisäelämä, kolme
-maalikorttia antaa lisäelämiä ja edistyminen tallentuu localStorageen.
+Maailman 5 kentät 5-1…5-3 ovat **generoituja**: rytmi tulee mitatuista
+tilastoista, palikat pelin omasta sanastosta. Linnake 5-F on käsintehty kuten
+muutkin linnakkeet. Ks. [DESIGN.md](DESIGN.md) kohta 3.
+
+## Työkalut
+
+```bash
+npm i -D playwright && npx playwright install chromium   # kerran
+
+node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
+node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
+node tools/gen-levels.mjs    # generoi maailman 5 kentät tilastoista
+```
+
+`verify.mjs` tarjoilee sivuston itse, ajaa botin läpi jokaisen kentän ja
+tarkistaa mekaniikat, tilatallennuksen, pistetaulun, grafiikan ja äänet. Se
+palauttaa nollasta poikkeavan paluuarvon jos jokin menee rikki. Botti osaa vain
+juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaalia — merkitseviä
+ovat FAILURES-listan rivit.
+
+Rytmitilastojen louhinta vaatii ulkoisen korpuksen, jota **ei säilytetä
+repossa**:
+
+```bash
+git clone --depth 1 https://github.com/TheVGLC/TheVGLC /tmp/vglc
+VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
+```
+
+## Julkaisu
+
+Repo on staattinen sivusto ilman build-vaihetta. `main`-haaran push julkaisee
+automaattisesti Verceliin; `vercel.json` asettaa frameworkin tyhjäksi ja ohittaa
+asennusvaiheen, koska `package.json` on olemassa vain kehitystyökaluja varten.
+
+```bash
+vercel --prod   # käsin, jos automaattinen julkaisu ei ole käytössä
+```
 
 ## Koodin rakenne
 
 ```
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
-vercel.json         staattinen julkaisu ilman buildia
-src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, pikatallennus
-src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus
+src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
+src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus, pistetaulu
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat
-src/data/           kenttäpalikat, kentät, maailmankartat
+src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
 src/entities/       pelaaja, viholliset, esineet, efektit
 src/level/          fysiikka ja törmäykset
-src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit
+src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit, pistetaulu
+tools/              verify, hyppymittaus, tilastolouhinta, kenttägenerointi
 ```
-
-### Tilatallennus
-
-`src/core/savestate.js` ottaa tilannevedoksen koko pelistä: kenttäruudukko,
-kaikki entiteetit, pelaaja, kamera, kello ja pelitila. Entiteetit sarjallistuvat
-yleisesti (kaikki omat kentät paitsi viittaus kenttäolioon) ja herätetään
-tiedoston `REGISTRY`-taulun avulla — uusi vihollistyyppi tarvitsee vain rivin
-siihen tauluun.
 
 ### Kenttien tekeminen
 
@@ -170,11 +208,12 @@ pipe_short: ck(16, {
 }),
 ```
 
-Kenttä on lista palikoiden nimiä (`src/data/levels.js`):
+Kenttä on lista palikoiden nimiä (`src/data/levels.js`). `time` on valinnainen —
+ilman sitä kello lasketaan kentän pituudesta:
 
 ```js
 '1-1': {
-  theme: 'grass', bg: 'hills', music: 'level', time: 300,
+  theme: 'grass', bg: 'hills', music: 'level',
   chunks: ['start', 'flat', 'walker', 'qrow', /* ... */ 'goal', 'goal_end'],
 },
 ```
@@ -183,18 +222,25 @@ Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko, `!`
 tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
 `N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset ja vaarat: `g`
 mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
-ummetuskorkki, `A` vihainen aurinko, `H` närästys, `b` pomo. Pelaajan aloituspaikka on `1`.
+ummetuskorkki, `A` vihainen aurinko, `H` närästys, `b` pomo. Aloituspaikka on `1`.
 
 Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 
 ### Maailmankartan muokkaus
 
-`src/data/worlds.js` sisältää jokaisen maailman maaston (20x9 ruutua),
-solmut (`start`, `level`, `house`, `fortress`) ja niiden väliset polut.
-Polulle voi antaa välipisteitä, jolloin siitä tulee kulmikas:
+`src/data/worlds.js` sisältää jokaisen maailman maaston (20x9 ruutua), solmut
+(`start`, `level`, `house`, `fortress`) ja niiden väliset polut. Polulle voi
+antaa välipisteitä, jolloin siitä tulee kulmikas:
 
 ```js
 { a: 'w1-2', b: 'w1-3', path: [[10, 6]] },
 ```
 
 Polku on kuljettavissa, kun jompikumpi pää on selvitetty.
+
+### Tilatallennus
+
+`src/core/savestate.js` ottaa tilannevedoksen koko pelistä: kenttäruudukko,
+kaikki entiteetit, pelaaja, kamera, kello ja pelitila. Entiteetit sarjallistuvat
+yleisesti ja herätetään `REGISTRY`-taulun avulla — uusi vihollistyyppi tarvitsee
+vain rivin siihen tauluun.

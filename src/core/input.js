@@ -81,6 +81,7 @@ export const Input = {
   pressed: blank(),
   released: blank(),
   _raw: blank(),
+  _latched: blank(),
   _prev: blank(),
   anyKeyPressed: false,
   onFirstInput: null,
@@ -91,6 +92,10 @@ export const Input = {
       if (action) {
         e.preventDefault();
         this._raw[action] = true;
+        // Latch it as well. A quick tap can go down and up inside a single
+        // frame, and without this the poll would look at an already-released
+        // key and drop the press entirely.
+        this._latched[action] = true;
       }
       this._fireFirstInput();
     });
@@ -104,6 +109,7 @@ export const Input = {
     // A tab switch can swallow the keyup, which would leave a key stuck down.
     addEventListener('blur', () => {
       this._raw = blank();
+      this._latched = blank();
     });
     addEventListener('pointerdown', () => this._fireFirstInput());
   },
@@ -119,6 +125,8 @@ export const Input = {
   /** Folds gamepad state in and recomputes edges. Call once per fixed step. */
   poll() {
     const state = { ...this._raw };
+    for (const a of ACTIONS) if (this._latched[a]) state[a] = true;
+    this._latched = blank();
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const pad of pads) {
       if (!pad) continue;

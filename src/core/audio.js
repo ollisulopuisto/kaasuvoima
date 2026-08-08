@@ -599,6 +599,10 @@ const TRACKS = {
 
 const LOOKAHEAD_S = 0.15;
 const TICK_MS = 45;
+/** Belt and braces: one wake-up may never build more than this many steps. */
+const MAX_STEPS_PER_TICK = 32;
+/** One bar of build before a section change. */
+const LEAD_IN_STEPS = 16;
 
 /**
  * Every pass through a track picks the next arrangement off this list, so the
@@ -636,6 +640,43 @@ const VARIATIONS = [
  */
 const KEY_PLAN = [0, 0, 5, 0, 7, 0, 2, 0];
 
+/**
+ * The arrangement, as sections rather than one-pass flips.
+ *
+ * A change that lasts a single pass sounds like a mistake being corrected: the
+ * ear has barely registered the new tempo or key before it is gone. Give the
+ * same change two or three passes and it reads as a decision. So every section
+ * below holds for at least two passes, the key rides with the section instead
+ * of flipping under it, and the bar before a change is a lead-in — a snare
+ * build, and, when the tempo is about to move, a ramp into it rather than a
+ * jump cut.
+ */
+const SECTIONS = [
+  { variation: 0, passes: 3, key: 0 },   // head, stated plainly
+  { variation: 1, passes: 2, key: 0 },   // thin it out
+  { variation: 2, passes: 2, key: 0 },   // breakdown: bass and drums carry it
+  { variation: 3, passes: 2, key: 5 },   // lead up an octave, over to IV
+  { variation: 0, passes: 2, key: 0 },   // home
+  { variation: 5, passes: 2, key: 7 },   // comping alone, over to V
+  { variation: 0, passes: 2, key: 0 },   // home again
+  { variation: 6, passes: 3, key: 2 },   // double time, whole-tone lift, held
+  { variation: 7, passes: 2, key: 0 },   // shout chorus, back home
+  { variation: 4, passes: 2, key: 0 },   // strip it and breathe
+];
+const TOTAL_PASSES = SECTIONS.reduce((sum, s) => sum + s.passes, 0);
+
+/** Which section a pass belongs to, and how many passes of it are left. */
+function sectionAt(cycle) {
+  let left = ((cycle % TOTAL_PASSES) + TOTAL_PASSES) % TOTAL_PASSES;
+  for (let i = 0; i < SECTIONS.length; i++) {
+    if (left < SECTIONS[i].passes) {
+      return { section: SECTIONS[i], last: left === SECTIONS[i].passes - 1, index: i };
+    }
+    left -= SECTIONS[i].passes;
+  }
+  return { section: SECTIONS[0], last: false, index: 0 };
+}
+
 /** How much the tempo lifts once the level clock gets scary. */
 const HURRY_SPEED = 1.4;
 
@@ -651,6 +692,9 @@ export const Music = {
   _swing: 0,
   _transpose: 0,
   _nextTranspose: 0,
+  _nextStepDur: 0,
+  _changing: false,
+  _section: null,
   _loopLen: 16,
   _cycle: 0,
   _variation: VARIATIONS[0],
@@ -658,7 +702,7 @@ export const Music = {
 
   has: (name) => Object.prototype.hasOwnProperty.call(TRACKS, name),
   names: () => Object.keys(TRACKS),
-  variation: () => Music._variation.label,
+  variation: () => Music._variation.label + (Music._changing ? ' >>' : ''),
 
   play(name) {
     if (this.current === name) return;
@@ -701,33 +745,80 @@ export const Music = {
   },
 
   _applyVariation() {
-    const v = VARIATIONS[this._cycle % VARIATIONS.length];
+    const here = sectionAt(this._cycle);
+    const next = sectionAt(this._cycle + 1);
+    const v = VARIATIONS[here.section.variation];
+
     this._variation = v;
-    this._transpose = KEY_PLAN[this._cycle % KEY_PLAN.length];
-    this._nextTranspose = KEY_PLAN[(this._cycle + 1) % KEY_PLAN.length];
-    const speed = (v.speed || 1) * (this._hurry ? HURRY_SPEED : 1);
-    this._stepDur = 60 / (this._track.tempo * speed) / 4;
+    this._section = here.section;
+    // A lead-in only happens on the last pass of a section, and only when
+    // something is actually about to change.
+    this._changing = here.last && next.index !== here.index;
+    this._transpose = here.section.key;
+    this._nextTranspose = this._changing ? next.section.key : here.section.key;
+
+    const rate = (speedOf) => 60 / (this._track.tempo * speedOf * (this._hurry ? HURRY_SPEED : 1)) / 4;
+    this._stepDur = rate(v.speed || 1);
+    this._nextStepDur = this._changing
+      ? rate(VARIATIONS[next.section.variation].speed || 1)
+      : this._stepDur;
     this._swing = (this._track.swing || 0) + (v.swingBoost || 0);
   },
 
-  /** Schedules everything that starts inside the lookahead window. */
+  /**
+   * Schedules everything that starts inside the lookahead window.
+   *
+   * The important part is the catch-up guard. `setTimeout` is throttled hard in
+   * a background tab, so this can wake up seconds or minutes behind the audio
+   * clock. Playing that backlog would mean building thousands of oscillators in
+   * one turn of the event loop — the main thread stalls, and the whole game
+   * stops responding to the keyboard for as long as it takes. Music that has
+   * already gone past is music nobody can hear, so we drop it and resync to the
+   * next bar instead.
+   */
   _tick() {
     if (!this._voices || muted || !ctx) return;
-    const horizon = ctx.currentTime + LOOKAHEAD_S;
-    while (this._nextTime < horizon) {
+    const now = ctx.currentTime;
+
+    if (this._nextTime < now) {
+      const behind = now - this._nextTime;
+      const skipped = Math.ceil(behind / this._stepDur);
+      // Land on a bar line so the arrangement and the drums stay in phase.
+      const toBar = (this._loopLen - ((this._step + skipped) % this._loopLen)) % this._loopLen;
+      this._step += skipped + toBar;
+      this._nextTime = now + 0.05;
+      this._cycle = Math.floor(this._step / this._loopLen);
+      this._applyVariation();
+    }
+
+    const horizon = now + LOOKAHEAD_S;
+    let scheduled = 0;
+    while (this._nextTime < horizon && scheduled < MAX_STEPS_PER_TICK) {
       if (this._step > 0 && this._step % this._loopLen === 0) {
         this._cycle++;
         this._applyVariation();
       }
-      const swing = this._step % 2 ? this._swing * this._stepDur : 0;
-      this._emit(this._step, this._nextTime + swing);
+      const local = this._step % this._loopLen;
+      // Inside the lead-in bar the step length slides toward the next section's
+      // tempo, so a change of gear is heard coming instead of just happening.
+      const leadFrom = this._loopLen - LEAD_IN_STEPS;
+      const inLead = this._changing && local >= leadFrom;
+      const dur = inLead
+        ? this._stepDur + (this._nextStepDur - this._stepDur) * ((local - leadFrom) / LEAD_IN_STEPS)
+        : this._stepDur;
+      const swing = this._step % 2 ? this._swing * dur : 0;
+      this._emit(this._step, this._nextTime + swing, inLead, dur);
       this._step++;
-      this._nextTime += this._stepDur;
+      this._nextTime += dur;
+      scheduled++;
     }
     this._timer = setTimeout(() => this._tick(), TICK_MS);
   },
 
-  _emit(step, at) {
+  _emit(step, rawAt, inLead = false, stepDur = this._stepDur) {
+    // Never hand the audio clock a time that has already gone by: some browsers
+    // throw on it, and the rest fire everything at once.
+    const at = Math.max(ctx.currentTime, rawAt);
     const v = this._variation;
     const drop = v.drop || [];
     const local = step % this._loopLen;
@@ -740,7 +831,7 @@ export const Music = {
       const note = voice.map.get(step % voice.len);
       if (!note) continue;
       const [semi, len] = note;
-      const dur = len * this._stepDur;
+      const dur = len * stepDur;
       const octave = (voice.octave || 0) + (voice.name === 'lead' ? (v.leadOctave || 0) : 0);
       const accent = voice.accent && voice.accent[(step % voice.len) % voice.accent.length] === 'x';
       const chord = Array.isArray(semi) ? semi : [semi];
@@ -764,24 +855,34 @@ export const Music = {
     const d = this._drums;
     if (!d || drop.includes('drums')) return;
 
-    // The last half-bar of a pass turns into a fill announcing the change, and
-    // when the key is about to move the fill carries the new key's dominant.
-    if (local >= this._loopLen - 4) {
-      snareAt(at, local % 2 ? 0.16 : 0.26);
-      if (local === this._loopLen - 1) hatAt(at, 0.16, true);
-      if (this._nextTranspose !== this._transpose && local >= this._loopLen - 2) {
+    /*
+     * The lead-in: a whole bar of snare building in density and volume, so the
+     * section change lands on something instead of arriving out of nowhere. A
+     * pass that is not changing anything gets the short half-bar fill instead.
+     */
+    if (inLead) {
+      const t = (local - (this._loopLen - LEAD_IN_STEPS)) / LEAD_IN_STEPS;
+      const dense = t > 0.5 || step % 2 === 0;
+      if (dense) snareAt(at, 0.1 + t * 0.22);
+      if (step % 4 === 0) kickAt(at, 0.34);
+      if (local === this._loopLen - 1) hatAt(at, 0.18, true);
+      if (this._nextTranspose !== this._transpose && t > 0.75) {
         const dominant = this._nextTranspose + 7 - 24;      // V of the target key
         tone({
           type: 'triangle',
           from: freq(dominant),
-          dur: this._stepDur * 1.6,
-          gain: 0.16,
+          dur: stepDur * 2,
+          gain: 0.15,
           attack: 0.01,
           hold: 0.5,
           bus: musicBus,
           delay,
         });
       }
+      return;
+    }
+    if (local >= this._loopLen - 2) {
+      snareAt(at, local % 2 ? 0.14 : 0.2);
       return;
     }
     // Patterns are read modulo their own length, so a 12-step ride over a

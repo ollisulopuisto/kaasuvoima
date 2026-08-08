@@ -75,8 +75,8 @@ export class TitleScene {
 
     // strolling cast
     const walkX = ((this.tick * 0.6 + 120) % 400) - 40;
-    drawWalker(ctx, walkX + 40, 168, Math.floor(this.tick / 8), 1, false);
-    drawPlayer(ctx, walkX, 158, {
+    drawWalker(ctx, walkX + 40, 156, Math.floor(this.tick / 8), 1, false);
+    drawPlayer(ctx, walkX, 146, {
       type: 'leaf',
       level: 1,
       facing: 1,
@@ -88,15 +88,19 @@ export class TitleScene {
       wag: this.tick / 8,
     });
     ctx.fillStyle = '#3ea23a';
-    ctx.fillRect(0, 184, 320, 6);
+    ctx.fillRect(0, 172, 320, 6);
     ctx.fillStyle = '#8c4c18';
-    ctx.fillRect(0, 190, 320, 50);
+    ctx.fillRect(0, 178, 320, 62);
 
+    // The menu grows with the number of options, so its box is measured rather
+    // than hard-coded — that is how it ended up under the control hints before.
+    const panelH = this.options.length * 13 + 6;
+    const panelY = 184;
     ctx.fillStyle = 'rgba(8,8,16,0.65)';
-    ctx.fillRect(72, 194, 176, this.options.length * 14 + 8);
+    ctx.fillRect(72, panelY, 176, panelH);
     this.options.forEach((option, i) => {
       const selected = i === this.cursor;
-      const y = 199 + i * 14;
+      const y = panelY + 4 + i * 13;
       drawText(ctx, option, 160, y, {
         color: selected ? '#ffd048' : '#c0c0d0',
         align: 'center',
@@ -107,10 +111,7 @@ export class TitleScene {
       }
     });
 
-    drawText(ctx, 'NUOLET TAI WASD   HYPPY Z / VALI / L', 160, 220, {
-      color: '#8890b0', align: 'center',
-    });
-    drawText(ctx, 'JUOKSU JA PIERU X / K   ENTER VALITSE', 160, 230, {
+    drawText(ctx, 'NUOLET/WASD  HYPPY Z/L/VALI  JUOKSU X/K', 160, panelY + panelH + 2, {
       color: '#8890b0', align: 'center',
     });
   }

@@ -1,11 +1,10 @@
-# SMB3-tarkka fysiikka (kokeiluhaara)
+# Liikkeen vakiot
 
-Tämä haara vaihtaa liikkeen vakiot Super Mario Bros. 3:n disassemblysta
-(`captainsouthbird/smb3`, `PRG/prg008.asm`) johdettuihin arvoihin ja
-generoi maailman 5 kentät uudelleen mitattua hyppybudjettia vasten.
+Pelin liikemalli on johdettu Super Mario Bros. 3:n julkisesti dokumentoidusta
+disassemblysta (`captainsouthbird/smb3`, `PRG/prg008.asm`). Vakiot **ovat
+käytössä**: ne kehitettiin haarassa `smb3-fysiikka`, joka on mergattu `main`iin.
 
-Haara on tarkoitettu **rinnakkain kokeiltavaksi**, ei automaattisesti
-mergattavaksi. Peli tuntuu selvästi erilaiselta.
+Alkuperää koskeva harkinta on [DESIGN.md](DESIGN.md) kohdassa 4.
 
 ## Mikä muuttui
 
@@ -51,25 +50,25 @@ siis vanhene fysiikan mukana.
 | P-nopeudella | 3.5 | 100 px (6.3) | 245 px (15.3) |
 | juosten + pieruhyppy | 2.5 | 240 px (15.0) | 387 px (24.2) |
 
-Suunnittelubudjetti on 70 % juoksuhypystä: **kuilu 8 ruutua**, pieruhypyllä 13,
-seinä 6. Aiempi budjetti oli 6 / 8 / 4, eli kentistä tulee väljempiä.
+Suunnittelubudjetti jättää varaa mitattuun maksimiin: **kuilu 8 ruutua** (70 %
+juoksuhypyn kantamasta), pieruhypyllä 13 (55 % sen kantamasta) ja seinä 6 (80 %
+nousukorkeudesta). Aiempi budjetti oli 6 / 8 / 4, eli kentistä tuli väljempiä.
 
 Huomaa että P-nopeus **madaltaa** hyppyä (kaari litistyy) mutta pidentää sitä —
 juuri kuten alkuperäisessä.
 
-## Mitä tämä tekee vanhoille kentille
+## Mitä tämä teki vanhoille kentille
 
-Maailmat 1–4 on suunniteltu vanhalle budjetille, joten ne muuttuvat
-helpommiksi: kaikki kuilut ovat nyt hyvin hypättävissä ja seinät matalia.
-Maailma 5 on generoitu uudelleen uudella budjetilla.
+Maailmat 1–4 on suunniteltu vanhalle budjetille, joten ne ovat nyt
+**helpompia**: kaikki kuilut ovat hyvin hypättävissä ja seinät matalia.
+Maailma 5 on generoitu uudella budjetilla.
 
-Jos fysiikka otetaan käyttöön, maailmat 1–4 kannattaa käydä läpi — tai
-generoida uudelleen samalla työkalulla.
+Tämä on tiedossa oleva avoin asia: maailmat 1–4 kannattaa joko käydä läpi käsin
+tai generoida uudelleen samalla työkalulla.
 
-## Kokeilu
+## Säätäminen
 
 ```bash
-git checkout smb3-fysiikka
 python3 -m http.server 8000
 node tools/measure-jump.mjs     # budjetti uusiksi jos säädät vakioita
 node tools/gen-levels.mjs       # kentät uusiksi budjetin mukaan

@@ -67,9 +67,12 @@ Käytännön suojatoimet:
 3. **Palikat ovat omia.** Generaattorin sanasto on tämän pelin mekaniikkoja:
    ummetusportti, kaasupilvikuilu, närästyssuihkut, nuottipalikat,
    hyppyradan piirtävä kolikkokaari.
-4. **Automaattinen samankaltaisuustarkistus.** Generaattori kanonisoi sekä oman
-   tuotoksensa että korpuksen samaan aakkostoon ja hylkää kentän, jos yksikään
-   **8 sarakkeen ikkuna** osuu korpukseen. Nykyisillä kentillä osumia on 0.
+4. **Samankaltaisuustarkistus.** Kun `VGLC_DIR` on asetettu, generaattori
+   kanonisoi sekä oman tuotoksensa että korpuksen samaan aakkostoon ja hylkää
+   kentän, jos yksikään **8 sarakkeen ikkuna** osuu korpukseen. Ilman
+   `VGLC_DIR`:iä tarkistusta ei voi tehdä, ja generaattori sanoo sen suoraan
+   (`not checked`). Nykyiset kentät on generoitu tarkistus päällä, osumia 0 —
+   **aja generaattori aina `VGLC_DIR` asetettuna.**
 5. **Skaalaus omaan hyppybudjettiin.** Kuilut mitoitetaan mitattuun
    hyppybudjettiin (`tools/jump-budget.json`), ei lähdepelin ruutuihin. Sama
    *vaikeus*, eri *mitat*.
@@ -95,7 +98,9 @@ kertoo tarkalleen mitä pitäisi säätää.
 ## 5. Kenttäsuunnittelun säännöt
 
 Nämä eivät ole tyylivalintoja vaan tarkistettavia sääntöjä: `tools/gen-levels.mjs`
-hylkää kentän joka rikkoo niitä.
+hylkää kentän joka rikkoo niitä. **Tarkistus koskee vain generoituja kenttiä**
+(5-1…5-3); käsintehdyissä säännöt ovat suunnitteluohje, ja jos ne joskus halutaan
+taata koko pelille, sama validaattori pitää ajaa `tools/verify.mjs`:stä.
 
 ### Tehostus avaa paikkoja, ei kenttää
 
@@ -119,14 +124,46 @@ pienimmällä koolla.
 
 Jos rakennat palikkapolun ylöspäin, sen päässä on jotain: kolikoita, tehostus
 tai nuottipalikka. Poikkeus on kuilun yli vievä astinkivi — ylipääsy on itsessään
-palkinto. Sääntö tarkistetaan takaperin: jokaisesta laattarykelmästä katsotaan
-onko sen yläpuolella neljän ruudun sisällä jotain saatavaa, ja jos ei ole,
-kenttä hylätään.
+palkinto. Sääntö tarkistetaan takaperin: jokaisesta **puulavarivistä** (`-`)
+katsotaan onko sen yläpuolella neljän ruudun sisällä jotain saatavaa, ja jos ei
+ole, kenttä hylätään. Tiilipinot eivät kuulu tarkistuksen piiriin.
 
 Syy: pelaaja oppii nopeasti mitä kannattaa tutkia. Yksikin tyhjä kiipeäminen
 opettaa ohittamaan seuraavatkin.
 
-## 6. Työskentelyperiaatteet
+## 6. Moottorin kompastuskivet
+
+Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
+
+- **`entity.level` on LevelScene, ei voimataso.** Pelaajan voimataso on
+  `player.power.level` / `player.powerLevel`. Jos lisäät `Player`-luokkaan
+  `level`-getterin, `Entity`-konstruktorin `this.level = level` heittää strict
+  modessa ja koko peli hajoaa.
+- **Uusi entiteettiluokka pitää lisätä `REGISTRY`-tauluun**
+  (`src/core/savestate.js`), muuten tilatallennus pudottaa sen hiljaa pois.
+- **Uusi spawn-merkki** lisätään `ENEMY_CHARS`-tauluun
+  (`src/entities/enemies.js`) eikä se saa törmätä ruutumerkkeihin
+  (`T` tiedostossa `src/gfx/tiles.js`).
+- **Palikan rivi ei saa ylittää ilmoitettua leveyttä** — `ck()` heittää heti
+  latauksessa. Se on tarkoituksellista: se pitää sarakkeet kohdallaan.
+- **Leijuvia vihollisia ei saa asettaa maahan.** `r` (ruskea pilvi) ja `f`
+  keinuvat spawn-korkeutensa ympärillä, joten maantasolla ne uppoavat lattiaan.
+  Ks. `ENEMY_ROW` tiedostossa `tools/gen-levels.mjs`.
+- **Taustakerrokset piirretään kerran välimuistiin.** `src/gfx/backdrop.js`
+  maalaa vuoret, kukkulat ja linnakkeen seinän offscreen-nauhoiksi ja toistaa
+  ne. Jos muutat nauhan sisältöä, muuta myös sen **avainta** — muuten vanha kuva
+  jää elämään.
+- **Sään hiukkasilla pitää olla eri siemen x- ja y-akselille.** Sama siemen
+  molempiin latoo hiukkaset siistiin diagonaaliin ruudun poikki.
+- **Kaikki nopeudet ovat pikseliä per frame** 60 Hz askeleella, eivät sekunnissa.
+- **ES-moduulit vaativat http-palvelimen**, `file://` ei toimi.
+- **localStorage-avaimet**: `sfb3.save.v2` (edistyminen), `sfb3.savestate.1..3`
+  (pikatallennukset) ja `sfb3.scores.v1` (pistetaulu). Jos muutat tallennuksen
+  muotoa, nosta versionumeroa.
+- **`window.sfb3` on elävä Game-olio.** Konsolista pääsee käsiksi kaikkeen, ja
+  `tools/verify.mjs` ajaa koko testistön juuri sen kautta.
+
+## 7. Työskentelyperiaatteet
 
 - **Muutosloki on osa työtä.** Jokainen merkittävä muutos kirjataan
   [CHANGELOG.md](CHANGELOG.md):hen *perusteluineen*. Perustelu on se osa joka

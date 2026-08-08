@@ -347,6 +347,45 @@ const report = await page.evaluate(async () => {
       `${breathing.size} breathing frames, ${performing.size} idle poses`);
   }
 
+  /* A tap that goes down and up inside one frame must still register: the
+   * event handler latches it, so the poll cannot look at an already-released
+   * key and drop the press. */
+  {
+    const { Input } = await import('/src/core/input.js');
+    Input.install();
+    Input.poll();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyZ' }));
+    Input.poll();
+    const sawIt = Input.pressed.jump;
+    Input.poll();
+    expect('a tap shorter than one frame still registers',
+      sawIt && !Input.pressed.jump && !Input.held.jump,
+      `pressed ${sawIt}, still held after ${Input.held.jump}`);
+  }
+
+  /* The world map has to look alive, not printed. */
+  {
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+    reset();
+    const map = new WorldMapScene(game);
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const g = canvas.getContext('2d');
+    const frames = new Set();
+    for (const t of [0, 20, 45, 70]) {
+      map.tick = t;
+      g.clearRect(0, 0, 320, 240);
+      map.draw(g);
+      const d = g.getImageData(0, 0, 320, 240).data;
+      let hash = 0;
+      for (let i = 0; i < d.length; i += 4 * 37) hash = (hash * 31 + d[i] + d[i + 1] * 3) | 0;
+      frames.add(hash);
+    }
+    expect('the world map animates', frames.size >= 3, `${frames.size} distinct frames`);
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');
@@ -391,6 +430,25 @@ const report = await page.evaluate(async () => {
 
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music } = await import('/src/core/audio.js');
+
+  /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
+   * seconds behind the audio clock. Playing that backlog would build thousands
+   * of oscillators in one turn of the event loop and freeze the keyboard. */
+  {
+    Sfx.resume();
+    Music.play('level');
+    const before = Music._step;
+    Music._nextTime -= 30;                 // pretend the tab was hidden
+    const t0 = performance.now();
+    let threw = null;
+    try { Music._tick(); } catch (err) { threw = err.message; }
+    const elapsed = performance.now() - t0;
+    const aligned = Music._step - before > 0 && Music._step % Music._loopLen < 8;
+    expect('the sequencer drops a backlog instead of playing it',
+      !threw && elapsed < 150 && aligned,
+      `${Math.round(elapsed)}ms${threw ? `, threw ${threw}` : ''}`);
+    Music.stop();
+  }
   {
     const { getLevel, levelIds } = await import('/src/data/levels.js');
     const missing = [...new Set(levelIds().map((id) => getLevel(id).music).filter(Boolean))]
