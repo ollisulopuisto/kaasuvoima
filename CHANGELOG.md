@@ -7,6 +7,49 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.23 — kenttäkohtainen tunnelma ja oikeampi kuvaputki
+
+### Lisätty
+- **Kenttäkohtaiset tunnelmaefektit** teeman mukaan: aavikossa ja tehtaassa
+  **kuumuuden väreily**, jäämaailmassa **huurre** joka kasvaa ruudun ylä- ja
+  alareunasta sahalaitaisina piikkeinä. *Miksi teemasta:* efekti joka kertoo
+  missä ollaan on sisältöä, sama efekti kaikkialla on ruudunsäästäjä.
+- **Kuvaputkesta oikeamman näköinen** (RetroArchin `crt-lottes`/`crt-royale`
+  -periaatteilla): varjomaski, vaakasuuntainen vuoto ja kirkkaudesta riippuva
+  juovan leveys.
+
+### Miksi kuvaputki muuttui juuri näin
+Kolme asiaa erottaa "tummat raidat kuvan päällä" siitä että kuva näyttää
+kuvaputkelta, ja kaikki kolme puuttuivat:
+
+1. **Lineaarinen valo.** Juovat kertovat, ja gamma-koodattujen arvojen kertominen
+   on juuri se mikä tekee naiivista CRT-suotimesta mutaisen. Nyt beam ja maski
+   lasketaan lineaarisessa avaruudessa ja tulos koodataan takaisin.
+2. **Juova levenee kirkkauden mukaan.** Oikeassa putkessa kirkas juova vuotaa
+   naapureidensa päälle ja rako sulkeutuu; vakiolevyinen juova vain himmentää
+   kaiken tasaisesti.
+3. **Vaakasuuntainen vuoto.** Yhtä johtoa pitkin syötetty kuva ei ehdi vaihtaa
+   väriä yhtä nopeasti kuin pikselit vaihtuvat, joten vierekkäiset pikselit
+   sekoittuvat — tämä on se "mössö" josta kuva alkaa näyttää televisiolta eikä
+   ruudukolta. Vain vaakasuunnassa: pystysuunta on juovia, ei kaistanleveyttä.
+
+**Varjomaski piirretään vain jos sille on oikeita pikseleitä.** Aukkomaski on
+kolmen pikselin kuvio, joten se tarvitsee kolme laitepikseliä lähdepikseliä
+kohti. Sen alle jäätäessä se ei olisi maski vaan kolmanneksen himmennys, jota
+kutsuttaisiin autenttisuudeksi. Sama sääntö kuin juovilla. Beam ja maski vievät
+valoa, joten `uGain` antaa takaisin suunnilleen sen mitä ne ottivat.
+
+### Testit
+- Tunnelma tulee teemasta ja nollautuu kun kentästä poistutaan.
+- **Tunnelma ei kosketa HUD-palkkia.** Kuumuus väristi ajastinta ja huurre kasvoi
+  pisteiden päälle — sellainen tunnelma tekee pelistä vaikealukuisen, ei
+  kauniimman. Testi vertaa HUD-riviä samaan kuvaan ilman tunnelmaa, joten bloom
+  ei sotke vertailua.
+- 2D-polku testataan erikseen (`fx.mode = '2d'`), koska siellä pystysuunnan
+  kääntäminen väärinpäin on helppoa — ja niin oli käynytkin.
+
+---
+
 ## v26.08.08.22 — kosketusohjaus kahdella mallilla
 
 ### Lisätty

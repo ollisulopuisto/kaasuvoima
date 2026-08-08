@@ -76,10 +76,9 @@ aikabudjetti vahdittuna (2,5 ms, toteuma 0,35 ms).
 2. **Palettisiirto tapahtumiin**: vahinkovälähdys, pomon huoneen sävy, tähden
    välkyntä. Shaderiin yksi uniform lisää; 2D-tilassa `globalCompositeOperation`.
    Vaatii että efekti voidaan ajastaa framen tarkkuudella pelilogiikasta.
-3. **Kuumuuden väreily aavikkoon ja aaltoilu veden alle.** Nämä ovat ne kaksi
-   asiaa joita 2D-tila *ei* voi tehdä, eli ensimmäiset joissa WebGL näkyy
-   sisältönä eikä pelkkänä suotimena. Silloin tarvitaan myös päätös siitä miltä
-   sama kohta näyttää ilman WebGL:ää — mieluiten samalta, vain ilman väreilyä.
+3. ✔ **Kuumuuden väreily ja huurre** tehty teemakohtaisina (v26.08.08.23), ja
+   molemmat toimivat myös ilman WebGL:ää. Veden alla ei ole vielä kenttiä, joten
+   aaltoilu odottaa niitä.
 4. **Spritekohtaiset efektit eivät kuulu tähän tiedostoon.** Jälkikäsittely näkee
    vain valmiin kuvan eikä tiedä mikä pikseli oli mikäkin olio, joten kaikki
    "vain tämä sprite" -efektit tehdään piirtokoodissa.

@@ -44,6 +44,29 @@ const SCANLINE_ALPHA = 0.24;
  */
 const BLOOM_THRESHOLD = 168;
 
+/**
+ * Per-level atmosphere, keyed by the level's theme.
+ *
+ * These belong to the level rather than to the effects setting, which is the
+ * whole point: heat haze in the desert says something about where you are,
+ * while the same haze sprinkled everywhere would just be a screensaver. A
+ * theme with nothing to say gets nothing.
+ */
+export const THEME_AMBIENCE = {
+  desert: 'heat',      // midday air over sand
+  factory: 'heat',     // the same trick, from furnaces instead of sun
+  ice: 'frost',        // the screen itself freezing over at the edges
+};
+/** Factory heat is half strength: indoors, and the levels are busy enough. */
+const AMBIENCE_STRENGTH = { desert: 1, factory: 0.5, ice: 1 };
+
+/**
+ * Height of the HUD strip along the bottom, mirroring `HUD_H` in
+ * scenes/level.js. Atmosphere stops here: the HUD is not air and not a window,
+ * and a wobbling timer is just a hard-to-read timer.
+ */
+const HUD_H = 32;
+
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -75,12 +98,28 @@ uniform float uCurve;
 uniform float uScan;
 uniform float uVignette;
 uniform float uAberration;
+uniform float uHeat;
+uniform float uFrost;
+uniform float uTime;
+uniform float uFloor;      // top edge of the HUD, in texture coords from below
+uniform float uMask;       // aperture grille strength
+uniform float uBleed;      // horizontal smear, i.e. composite bandwidth
+uniform float uGain;       // puts back the light the beam and mask remove
 
 void main() {
   vec2 uv = vUV * 2.0 - 1.0;
   vec2 offset = uv.yx * uv.yx * uCurve;
   uv += uv * offset;
   uv = uv * 0.5 + 0.5;
+
+  // Heat rises: the shimmer is strongest along the ground and dies out towards
+  // the sky. A uniform wobble reads as a broken screen, not as hot air.
+  if (uHeat > 0.0 && uv.y > uFloor) {
+    float ground = 1.0 - (uv.y - uFloor) / (1.0 - uFloor);
+    uv.x += sin(uv.y * 74.0 + uTime * 2.7) * 0.0022 * uHeat * ground * ground;
+    uv.y += sin(uv.x * 41.0 + uTime * 1.9) * 0.0009 * uHeat * ground;
+    uv.y = max(uv.y, uFloor);          // never drag the HUD up into the picture
+  }
 
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
     gl_FragColor = vec4(0.02, 0.02, 0.03, 1.0);
@@ -97,14 +136,80 @@ void main() {
     texture2D(uTex, uv - shift).b
   );
 
+  /* Composite bleed: a tube fed over one wire cannot change colour as fast as
+   * the pixels do, so neighbouring pixels smear into each other horizontally.
+   * This is the "mushing" that makes the picture look like a television rather
+   * than a grid — and it is horizontal only, because the vertical direction is
+   * scanlines, not bandwidth. */
+  if (uBleed > 0.0) {
+    float texel = 1.0 / uSource.x;
+    vec3 near = texture2D(uTex, uv + vec2(texel, 0.0)).rgb
+              + texture2D(uTex, uv - vec2(texel, 0.0)).rgb;
+    vec3 far = texture2D(uTex, uv + vec2(texel * 2.0, 0.0)).rgb
+             + texture2D(uTex, uv - vec2(texel * 2.0, 0.0)).rgb;
+    vec3 smeared = color * 0.44 + near * 0.20 + far * 0.08;
+    color = mix(color, smeared, uBleed);
+  }
+
   // One dark line per *source* row, not per screen pixel. Tying this to the
   // display size makes the frequency approach the pixel grid and the whole
   // screen dissolves into moiré rings.
-  float line = sin(uv.y * uSource.y * 3.14159);
-  color *= 1.0 - uScan * 0.5 * line * line;
+  /*
+   * Beam, mask and gamma, in the spirit of RetroArch's crt-lottes: the three
+   * things that separate "dark stripes over the picture" from something that
+   * reads as a tube.
+   *
+   *   1. Work in linear light. Scanlines multiply, and multiplying gamma-
+   *      encoded values is what makes naive CRT filters come out muddy.
+   *   2. The beam widens with brightness. On a real tube a bright line blooms
+   *      over its neighbours and the gap between lines closes; a fixed-width
+   *      line makes everything uniformly dim instead.
+   *   3. The mask only appears when there are real pixels to draw it with.
+   *      An aperture grille needs three device pixels per source pixel; below
+   *      that it is not a mask, it is a 30% brightness cut.
+   */
+  color = pow(color, vec3(2.2));
+
+  if (uScan > 0.0) {
+    float pos = uv.y * uSource.y;
+    float d = fract(pos) - 0.5;
+    float lum = dot(color, vec3(0.299, 0.587, 0.114));
+    float width = mix(0.30, 0.62, clamp(lum * 1.4, 0.0, 1.0));
+    float beam = exp(-(d * d) / (2.0 * width * width));
+    color *= mix(1.0, beam, uScan);
+  }
+
+  if (uMask > 0.0) {
+    float phase = mod(gl_FragCoord.x, 3.0);
+    vec3 grille = phase < 1.0 ? vec3(1.0, 0.62, 0.62)
+                : phase < 2.0 ? vec3(0.62, 1.0, 0.62)
+                              : vec3(0.62, 0.62, 1.0);
+    color *= mix(vec3(1.0), grille, uMask);
+  }
+
+  // Both of the above only ever remove light, so the gain puts back what an
+  // actual tube would have been driven harder to produce.
+  color *= uGain;
+  color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
 
   float v = 1.0 - uVignette * dot(uv - 0.5, uv - 0.5) * 1.9;
   color *= clamp(v, 0.0, 1.0);
+
+  /* Frost creeps in from the top and bottom edges with a sawtooth line, the
+   * way ice actually grows on a window: in spikes, not in a smooth band. The
+   * sides are left clear so the frost never eats the part of the screen you
+   * are running through. */
+  if (uFrost > 0.0 && uv.y > uFloor) {
+    float saw = abs(fract(uv.x * 7.0 + sin(uv.x * 3.0) * 0.2) - 0.5) * 2.0;
+    float reach = (0.05 + saw * 0.07) * uFrost;
+    // Half reach along the bottom: that is the row being run along, and frost
+    // that hides a spike stops being decoration and starts being a hazard.
+    float d = min((uv.y - uFloor) * 2.0, 1.0 - uv.y);
+    float f = smoothstep(reach, 0.0, d);
+    float sparkle = step(0.985, fract(sin(uv.x * 431.0 + uv.y * 917.0) * 4371.0));
+    color = mix(color, vec3(0.80, 0.92, 1.0), f * 0.62);
+    color += sparkle * f * 0.35;
+  }
 
   gl_FragColor = vec4(color, 1.0);
 }`;
@@ -130,7 +235,13 @@ export const PostFX = {
   /** The canvas that should actually be on screen and sized by the page. */
   displayCanvas: null,
   scale: 1,
+  /** Set from the level's theme; see THEME_AMBIENCE. */
+  ambience: null,
+  ambienceAmount: 0,
+  tick: 0,
   _gl: null,
+  _copy: null,
+  _copyCtx: null,
   _bloomCtx: null,
   _program: null,
   _tex: null,
@@ -177,6 +288,17 @@ export const PostFX = {
       /* private mode — the preset just won't stick between sessions */
     }
     return this.preset;
+  },
+
+  /**
+   * Sets the level atmosphere from a theme name. Anything unknown — the title
+   * screen, the world map, a theme with nothing to say — clears it.
+   */
+  setAmbience(theme) {
+    const kind = THEME_AMBIENCE[theme] || null;
+    this.ambience = kind;
+    this.ambienceAmount = kind ? (AMBIENCE_STRENGTH[theme] || 1) : 0;
+    return kind;
   },
 
   cyclePreset() {
@@ -237,6 +359,13 @@ export const PostFX = {
         scan: gl.getUniformLocation(program, 'uScan'),
         vignette: gl.getUniformLocation(program, 'uVignette'),
         aberration: gl.getUniformLocation(program, 'uAberration'),
+        floor: gl.getUniformLocation(program, 'uFloor'),
+        mask: gl.getUniformLocation(program, 'uMask'),
+        bleed: gl.getUniformLocation(program, 'uBleed'),
+        gain: gl.getUniformLocation(program, 'uGain'),
+        heat: gl.getUniformLocation(program, 'uHeat'),
+        frost: gl.getUniformLocation(program, 'uFrost'),
+        time: gl.getUniformLocation(program, 'uTime'),
       };
       this.displayCanvas = canvas;
       // The source canvas keeps drawing, it just stops being the thing on
@@ -284,11 +413,20 @@ export const PostFX = {
    * that kind of bug looks like a graphics glitch rather than a leak.
    */
   apply(ctx) {
+    this.tick++;
     if (this.preset === 'pois') return;
     const { source } = this;
     const smoothing = ctx.imageSmoothingEnabled;
     const alpha = ctx.globalAlpha;
     const op = ctx.globalCompositeOperation;
+
+    // Atmosphere is the level talking, not the filter, so it is done in 2D as
+    // well. Without WebGL you lose the curved glass — you should not also lose
+    // the desert being hot.
+    if (this.mode !== 'webgl' && this.ambience && this.ambienceAmount > 0) {
+      if (this.ambience === 'heat') this._heatPass(ctx, source);
+      else if (this.ambience === 'frost') this._frostPass(ctx, source);
+    }
 
     this._bloomPass(ctx, source);
     if (this.preset === 'crt' && this.mode !== 'webgl') {
@@ -346,6 +484,74 @@ export const PostFX = {
     ctx.drawImage(this._bloom, 0, 0, source.width, source.height);
   },
 
+  /**
+   * Heat haze without a shader: copy the frame aside, then paint it back in
+   * horizontal bands, each nudged sideways by a travelling sine. Twenty bands
+   * is where it stops reading as bands and starts reading as air.
+   *
+   * The copy is not optional. Shifting a canvas onto itself reads pixels that
+   * the same pass has already moved, and the smear compounds every frame.
+   */
+  _heatPass(ctx, source) {
+    const w = source.width;
+    const h = source.height;
+    if (!this._copy || this._copy.width !== w) {
+      this._copy = makeCanvas(w, h);
+      this._copyCtx = this._copy.getContext('2d');
+    }
+    this._copyCtx.clearRect(0, 0, w, h);
+    this._copyCtx.drawImage(source, 0, 0);
+
+    // Only the playfield shimmers. In canvas coordinates y grows downwards, so
+    // the ground — where the hot air is — is the *bottom* of the play area.
+    const play = h - HUD_H;
+    const bands = 20;
+    const band = play / bands;
+    const t = this.tick / 60;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = false;
+    for (let i = 0; i < bands; i++) {
+      const y = i * band;
+      const ground = y / play;
+      const dx = Math.sin(y * 0.42 + t * 2.7) * 1.8 * this.ambienceAmount * ground * ground;
+      ctx.drawImage(this._copy, 0, y, w, band, Math.round(dx), y, w, band);
+    }
+  },
+
+  /**
+   * Frost creeping in from the top and bottom edges in spikes rather than a
+   * smooth band — ice on a window grows in points. The sides stay clear so the
+   * frost never covers the lane you are running down.
+   */
+  _frostPass(ctx, source) {
+    const w = source.width;
+    const h = source.height - HUD_H;      // the HUD stays clear of the ice
+    const teeth = 14;
+    const step = w / teeth;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = false;
+
+    for (const top of [true, false]) {
+      ctx.beginPath();
+      ctx.moveTo(0, top ? 0 : h);
+      for (let i = 0; i <= teeth; i++) {
+        const x = i * step;
+        // Half reach along the bottom, for the same reason as in the shader.
+        const spike = (i % 2 === 0 ? 16 : 7) * this.ambienceAmount * (top ? 1 : 0.5);
+        ctx.lineTo(x, top ? spike : h - spike);
+      }
+      ctx.lineTo(w, top ? 0 : h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, top ? 0 : h, 0, top ? 22 : h - 22);
+      grad.addColorStop(0, 'rgba(214,238,255,0.78)');
+      grad.addColorStop(1, 'rgba(214,238,255,0.05)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+  },
+
   _scanlinePass(ctx, source) {
     if (!this._scanline) {
       const c = makeCanvas(1, 2);
@@ -392,15 +598,34 @@ export const PostFX = {
     // Scanlines need at least two real pixels each; below that they alias into
     // moiré instead of reading as lines, so they fade out rather than fight it.
     const room = this.displayCanvas.height / this.source.height;
+    const scan = crt ? Math.min(1, Math.max(0, room - 1)) : 0;
+    // The aperture grille is a three-pixel pattern, so it needs three real
+    // pixels per source pixel to be a pattern at all. Below that it would only
+    // dim the picture by a third and call it authenticity.
+    const roomX = this.displayCanvas.width / this.source.width;
+    const mask = crt ? Math.min(1, Math.max(0, (roomX - 2) / 2)) * 0.55 : 0;
     gl.uniform1f(this._uniforms.curve, crt ? 0.055 : 0);
-    gl.uniform1f(this._uniforms.scan, crt ? 0.55 * Math.min(1, Math.max(0, room - 1)) : 0);
+    gl.uniform1f(this._uniforms.scan, 0.85 * scan);
+    gl.uniform1f(this._uniforms.mask, mask);
+    gl.uniform1f(this._uniforms.bleed, crt ? 0.55 : 0);
+    // Beam and mask only ever subtract light. Roughly what they took, put back.
+    gl.uniform1f(this._uniforms.gain, 1 + 0.55 * scan + 0.42 * mask);
     gl.uniform1f(this._uniforms.vignette, crt ? 0.65 : 0);
     gl.uniform1f(this._uniforms.aberration, crt ? 2.2 : 0);
+    gl.uniform1f(this._uniforms.floor, HUD_H / this.source.height);
+    gl.uniform1f(this._uniforms.heat, this.ambience === 'heat' ? this.ambienceAmount : 0);
+    gl.uniform1f(this._uniforms.frost, this.ambience === 'frost' ? this.ambienceAmount : 0);
+    gl.uniform1f(this._uniforms.time, this.tick / 60);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return true;
   },
 
   diag() {
-    return { mode: this.mode, preset: this.preset, name: PRESET_NAMES[this.preset] };
+    return {
+      mode: this.mode,
+      preset: this.preset,
+      name: PRESET_NAMES[this.preset],
+      ambience: this.ambience,
+    };
   },
 };

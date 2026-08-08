@@ -63,6 +63,9 @@ class Game {
 
   setScene(scene) {
     this.scene = scene;
+    // Atmosphere belongs to the place you are in, so it is set from the scene
+    // rather than left for each scene to remember to turn off.
+    PostFX.setAmbience(scene.theme || null);
     if (scene.enter) scene.enter();
   }
 
@@ -341,7 +344,8 @@ class Game {
     lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
     const fx = PostFX.diag();
     const t = Touch.diag();
-    lines.push(`FX ${fx.mode.toUpperCase()} ${fx.preset.toUpperCase()}  (7 VAIHDA)`);
+    lines.push(`FX ${fx.mode.toUpperCase()} ${fx.preset.toUpperCase()}`
+      + `  TUNNELMA ${(fx.ambience || 'EI').toUpperCase()}  (7 VAIHDA)`);
     lines.push(`KOSKETUS ${t.visible ? t.layout.toUpperCase() : 'PIILOSSA'}`
       + `  SORMET ${t.pointers}  (6 VAIHDA)`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);

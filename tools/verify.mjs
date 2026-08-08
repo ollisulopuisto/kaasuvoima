@@ -972,6 +972,68 @@ const report = await page.evaluate(async () => {
         per < 2.5, `${per.toFixed(2)} ms / frame`);
     }
 
+    /* Per-level atmosphere comes from the level's theme, and nothing else must
+     * be able to set it — a shimmer on the world map would just be a bug. */
+    {
+      const { THEME_AMBIENCE } = await import('/src/gfx/postfx.js');
+      const { getLevel, levelIds } = await import('/src/data/levels.js');
+      const seen = new Set(levelIds().map((id) => THEME_AMBIENCE[getLevel(id).theme] || null));
+      expect('the desert shimmers and the ice world frosts over',
+        THEME_AMBIENCE.desert === 'heat' && THEME_AMBIENCE.ice === 'frost'
+        && seen.has('heat') && seen.has('frost') && seen.has(null),
+        [...seen].join(','));
+
+      reset();
+      const desert = new LevelScene(game, '2-1');
+      game.setScene(desert);
+      const inDesert = game.fx.ambience;
+      game.toWorldMap();
+      const onMap = game.fx.ambience;
+      expect('atmosphere follows the scene and clears when you leave',
+        inDesert === 'heat' && onMap === null, `${inDesert} -> ${onMap}`);
+    }
+
+    /* The HUD is not air and not a window. Heat used to wobble the timer and
+     * frost used to grow over the score, which is the kind of atmosphere that
+     * makes a game harder to read rather than better to look at. */
+    {
+      const fx = makeFX();
+      const c = testCanvas();
+      fx.init(c);
+      fx.setPreset('hehku');
+      const g = c.getContext('2d');
+      const hudRow = (canvas) => {
+        const d = canvas.getContext('2d').getImageData(0, 232, 320, 1).data;
+        return [...d].join(',');
+      };
+      // Force the Canvas 2D path: that is where the atmosphere is drawn by
+      // hand, and where getting the vertical direction wrong is easy.
+      fx.mode = '2d';
+      const shot = (theme) => {
+        const t = testCanvas();
+        const tg = t.getContext('2d');
+        // Mark the HUD strip so any distortion of it shows as a difference.
+        tg.fillStyle = '#000000';
+        tg.fillRect(0, 208, 320, 32);
+        tg.fillStyle = '#ffffff';
+        for (let x = 0; x < 320; x += 7) tg.fillRect(x, 230, 3, 5);
+        fx.source = t;
+        fx.setAmbience(theme);
+        fx.tick = 40;
+        fx.apply(tg);
+        return hudRow(t);
+      };
+      // The baseline has the same bloom, so only the atmosphere can differ.
+      const plain = shot(null);
+      const results = ['desert', 'ice'].map((theme) => ({
+        theme, same: shot(theme) === plain,
+      }));
+      expect('atmosphere never touches the HUD strip',
+        results.every((r) => r.same),
+        results.map((r) => `${r.theme}:${r.same ? 'ok' : 'muuttui'}`).join(' '));
+      fx.setAmbience(null);
+    }
+
     // And whatever the live game ended up with, it has to be a working mode.
     expect('the running game has a valid effect mode',
       ['webgl', '2d'].includes(game.fx.mode) && PRESETS.includes(game.fx.preset),
