@@ -396,6 +396,12 @@ export class Player extends Entity {
         if (maxed) {
           this.level.storeReserve(itemKind);
         } else {
+          // Swapping to a different power banks the one you were wearing.
+          // Losing a tail just because you walked into a mushroom is the kind
+          // of thing that feels like the game cheated you.
+          if (this.power.type && this.power.type !== itemKind) {
+            this.level.storeReserve(this.power.type);
+          }
           this.power = powerAfterItem(this.power, itemKind);
           this.applySize();
           this.frozen = 18;

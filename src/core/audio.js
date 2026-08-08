@@ -194,6 +194,83 @@ function farty({
   }
 }
 
+/**
+ * Cartoon vocals, synthesised — no samples, same as everything else here.
+ *
+ * A voice is a buzzy source shaped by formants: two resonant peaks whose
+ * positions are what make an "ee" an "ee" and an "ah" an "ah". Sliding the two
+ * filters between vowel targets while the pitch bends gives a recognisable
+ * "yeah" without anybody having to record one.
+ *
+ * Vowel formants (F1, F2) in Hz, rounded from the usual reference values.
+ */
+const VOWELS = {
+  a: [730, 1090],
+  e: [530, 1840],
+  i: [270, 2290],
+  o: [570, 840],
+  u: [325, 700],
+};
+
+/**
+ * @param {object} o
+ * @param {string} o.word vowels to glide through, e.g. 'iea' for "yeah"
+ * @param {number} o.pitch starting pitch in Hz
+ * @param {number} o.bend pitch multiplier at the end
+ */
+function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.28, delay = 0 }) {
+  if (muted || !ensure()) return;
+  const t0 = ctx.currentTime + delay;
+  const vowels = [...word].map((v) => VOWELS[v] || VOWELS.a);
+  const jitter = rnd(0.92, 1.1);
+  const f0 = pitch * jitter;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(f0, t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(40, f0 * bend), t0 + dur * 0.8);
+  // A little vibrato is most of what separates a voice from a buzzer.
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 5.5;
+  const lfoAmt = ctx.createGain();
+  lfoAmt.gain.value = f0 * 0.03;
+  lfo.connect(lfoAmt).connect(osc.frequency);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t0);
+  env.gain.exponentialRampToValueAtTime(gain, t0 + 0.03);
+  env.gain.setValueAtTime(gain, t0 + dur * 0.6);
+  env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  env.connect(sfxBus);
+
+  // Two formants, each sliding through the vowels in turn.
+  for (let band = 0; band < 2; band++) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = band === 0 ? 7 : 9;
+    filter.frequency.setValueAtTime(vowels[0][band] * jitter, t0);
+    vowels.forEach((v, i) => {
+      if (i === 0) return;
+      filter.frequency.linearRampToValueAtTime(
+        v[band] * jitter, t0 + (dur * 0.85 * i) / (vowels.length - 1),
+      );
+    });
+    const level = ctx.createGain();
+    level.gain.value = band === 0 ? 1 : 0.6;
+    osc.connect(filter).connect(level).connect(env);
+  }
+
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.03);
+  lfo.start(t0);
+  lfo.stop(t0 + dur + 0.03);
+}
+
+/** Says something roughly `chance` of the time, so it never gets tiresome. */
+function maybeVox(chance, opts) {
+  if (Math.random() < chance) vox(opts);
+}
+
 /* -------------------------------- drums -------------------------------- */
 
 function kickAt(t0, gain = 0.5) {
@@ -270,6 +347,8 @@ const SFX = {
   bigjump: () => {
     tone({ from: 240, to: 660, dur: 0.22, gain: 0.22, hold: 0.3, detune: 12 });
     farty({ dur: 0.16, base: 120, gain: 0.14, wobble: 30, wet: 0.3 });
+    // Only now and then: a grunt on every single jump would be unbearable.
+    maybeVox(0.18, { word: 'u', dur: 0.16, pitch: 300, bend: 0.8, gain: 0.14 });
   },
   fart: () => farty({ dur: 0.3, base: 150, gain: 0.32, wobble: 24 }),
   bigfart: () => farty({ dur: 0.46, base: 92, gain: 0.38, wobble: 17, wet: 0.8 }),
@@ -303,22 +382,33 @@ const SFX = {
   powerup: () => {
     [523, 659, 784, 1047, 1319].forEach((f, i) =>
       tone({ from: f, dur: 0.11, gain: 0.18, delay: i * 0.055, hold: 0.5, detune: 8 }));
+    vox({ word: 'iea', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.22, delay: 0.18 });
+  },
+  yeah: () => vox({ word: 'iea', dur: 0.4, pitch: 255, bend: 1.35, gain: 0.26 }),
+  oof: () => vox({ word: 'ou', dur: 0.3, pitch: 240, bend: 0.6, gain: 0.24 }),
+  letsgo: () => {
+    vox({ word: 'eo', dur: 0.22, pitch: 250, bend: 1.1, gain: 0.24 });
+    vox({ word: 'ou', dur: 0.26, pitch: 300, bend: 1.3, gain: 0.24, delay: 0.24 });
   },
   powerdown: () => {
     [784, 587, 440, 330].forEach((f, i) =>
       tone({ type: 'square', from: f, dur: 0.13, gain: 0.18, delay: i * 0.06 }));
     farty({ dur: 0.3, base: 110, gain: 0.16, wobble: 14, delay: 0.1, wet: 0.4 });
+    maybeVox(0.5, { word: 'ou', dur: 0.28, pitch: 245, bend: 0.65, gain: 0.2, delay: 0.05 });
   },
   oneup: () => {
     [659, 784, 1047, 1319].forEach((f, i) =>
       tone({ type: 'triangle', from: f, dur: 0.13, gain: 0.2, delay: i * 0.08, detune: 6 }));
+    vox({ word: 'uo', dur: 0.42, pitch: 280, bend: 1.5, gain: 0.24, delay: 0.24 });
   },
   die: () => {
+    vox({ word: 'ou', dur: 0.5, pitch: 260, bend: 0.45, gain: 0.26 });
     tone({ from: 440, to: 700, dur: 0.14, gain: 0.22, hold: 0.4 });
     tone({ from: 700, to: 90, dur: 0.75, gain: 0.24, delay: 0.16, hold: 0.2, vibrato: 12 });
     farty({ dur: 0.6, base: 130, gain: 0.24, wobble: 11, delay: 0.16, wet: 0.9, vary: 0.4 });
   },
   clear: () => {
+    vox({ word: 'iea', dur: 0.45, pitch: 260, bend: 1.4, gain: 0.26 });
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) =>
       tone({ from: f, dur: 0.17, gain: 0.2, delay: i * 0.12, detune: 8 }));
     [1, 3, 5].forEach((i) => hatAt2(i * 0.12));

@@ -502,6 +502,27 @@ const report = await page.evaluate(async () => {
     ruleReport = perLevel;
   }
 
+  /* Picking up a different power-up swaps: the one you were wearing goes into
+   * the reserve box rather than evaporating. */
+  {
+    reset({ type: 'leaf', level: 3 });
+    const s = new LevelScene(game, '1-1');
+    game.state.reserve = null;
+    s.player.collect('shroom');
+    expect('a different power-up swaps the old one into the box',
+      game.state.reserve === 'leaf' && s.player.type === 'shroom',
+      `varasto ${game.state.reserve}, voima ${s.player.type} ${s.player.powerLevel}`);
+
+    // Same type just levels up; nothing to bank.
+    reset({ type: 'shroom', level: 2 });
+    const s2 = new LevelScene(game, '1-1');
+    game.state.reserve = null;
+    s2.player.collect('shroom');
+    expect('the same power-up just levels up',
+      game.state.reserve === null && s2.player.powerLevel === 3,
+      `varasto ${game.state.reserve}, taso ${s2.player.powerLevel}`);
+  }
+
   /* ----------------------------- high scores --------------------------- */
   {
     const scores = await import('/src/core/scores.js');

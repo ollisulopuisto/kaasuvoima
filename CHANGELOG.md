@@ -7,6 +7,30 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.12 — kamera, vokaalit, tehostusten vaihto
+
+### Lisätty
+- **Kameraan kuollut alue ja katse eteenpäin.** Näkymä nojaa juoksusuuntaan ja
+  rauhoittuu pysähtyessä; keskellä on 8 pikselin kuollut alue jottei hyppy
+  tärisytä ruutua. *Miksi ei inertiaa:* kamera joka jatkaa liikettä kun pelaaja
+  pysähtyy on juuri se mikä tekee 2D-tasohyppelystä pahoinvoivan — kuva liikkuu
+  vaikka ohjattava ei.
+- **Vokaalit** ("jee!", "hup", "oof") — syntetisoituna, ei tiedostoina.
+  Formanttisuodattimet pulssiaallon päällä: kaksi resonanssihuippua joiden
+  paikka tekee "ee":stä ee:n ja "aa":sta aa:n, ja niiden liu'utus vokaalista
+  toiseen antaa tunnistettavan sanan. Hyppyäänet arvotaan (18 %), koska
+  murahdus joka hypyllä kävisi hermoille kolmannella kerralla.
+- **ROADMAP.md**: työlista ja perustelut talteen repoon, jottei tila elä vain
+  keskustelussa.
+
+### Korjattu
+- **Tehostuksen vaihto hukkasi vanhan voiman.** Jos päällä oli kaasulehti ja
+  poimi sienen, lehti katosi kokonaan. Nyt vanha voima menee varastolaatikkoon
+  ja uusi aktivoituu. *Miksi:* hännän menettäminen siksi että käveli sienen
+  päälle tuntuu siltä että peli huijasi.
+
+---
+
 ## v26.08.08.11 — linnakkeen ovi ja säännöt koko pelille
 
 ### Korjattu
