@@ -123,7 +123,9 @@ function compile(gl, type, src) {
 export const PostFX = {
   /** 'webgl' when a context was obtained, '2d' when we fell back. */
   mode: '2d',
-  preset: 'hehku',
+  /** Default is the full tube. It is the look the game is meant to have; the
+   * key that turns it off is one press away for anyone who disagrees. */
+  preset: 'crt',
   source: null,
   /** The canvas that should actually be on screen and sized by the page. */
   displayCanvas: null,
@@ -161,9 +163,9 @@ export const PostFX = {
   loadPreset() {
     try {
       const saved = localStorage.getItem(KEY);
-      return PRESETS.includes(saved) ? saved : 'hehku';
+      return PRESETS.includes(saved) ? saved : 'crt';
     } catch {
-      return 'hehku';
+      return 'crt';
     }
   },
 
@@ -248,13 +250,22 @@ export const PostFX = {
     }
   },
 
-  /** Called when the page scale changes so scanlines land on whole pixels. */
+  /**
+   * Sizes the presentation canvas in *device* pixels, not CSS pixels.
+   *
+   * This matters more than it sounds. A phone at 1x CSS scale gives a 320x240
+   * backing store, and 240 scanlines drawn onto 240 pixels means every second
+   * pixel is black — which the display then resamples into moiré curtains.
+   * Rendering at the device resolution gives each scanline two or three real
+   * pixels to live on, and the pattern comes out as a pattern.
+   */
   resize(scale) {
-    this.scale = Math.max(1, scale | 0);
+    this.scale = Math.max(1, scale);
     const canvas = this.displayCanvas;
     if (!canvas || !this._gl) return;
-    const w = this.source.width * this.scale;
-    const h = this.source.height * this.scale;
+    const dpr = Math.min(devicePixelRatio || 1, 3);
+    const w = Math.round(this.source.width * this.scale * dpr);
+    const h = Math.round(this.source.height * this.scale * dpr);
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
@@ -376,11 +387,13 @@ export const PostFX = {
     const crt = this.preset === 'crt';
     gl.bindTexture(gl.TEXTURE_2D, this._tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.source);
-    gl.uniform2f(this._uniforms.size, this.source.width * this.scale,
-      this.source.height * this.scale);
+    gl.uniform2f(this._uniforms.size, this.displayCanvas.width, this.displayCanvas.height);
     gl.uniform2f(this._uniforms.source, this.source.width, this.source.height);
+    // Scanlines need at least two real pixels each; below that they alias into
+    // moiré instead of reading as lines, so they fade out rather than fight it.
+    const room = this.displayCanvas.height / this.source.height;
     gl.uniform1f(this._uniforms.curve, crt ? 0.055 : 0);
-    gl.uniform1f(this._uniforms.scan, crt ? 0.55 : 0);
+    gl.uniform1f(this._uniforms.scan, crt ? 0.55 * Math.min(1, Math.max(0, room - 1)) : 0);
     gl.uniform1f(this._uniforms.vignette, crt ? 0.65 : 0);
     gl.uniform1f(this._uniforms.aberration, crt ? 2.2 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

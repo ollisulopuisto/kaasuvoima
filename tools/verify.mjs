@@ -706,6 +706,116 @@ const report = await page.evaluate(async () => {
     tele.clearTelemetry();
   }
 
+  /* --------------------------- kosketusohjaus -------------------------- */
+  {
+    const { Input } = await import('/src/core/input.js');
+    const touch = game.touch;
+    touch.reveal();
+
+    const rect = (act) => document.querySelector(`#touch [data-act="${act}"]`)
+      .getBoundingClientRect();
+    const send = (type, id, x, y) => {
+      document.getElementById('touch').dispatchEvent(new PointerEvent(type, {
+        pointerId: id, clientX: x, clientY: y, pointerType: 'touch', bubbles: true, cancelable: true,
+      }));
+    };
+    const at = (act) => {
+      const r = rect(act);
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    };
+    const held = () => {
+      Input.poll();
+      return Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    };
+    const letGo = () => {
+      touch._releaseAll();
+      Input.poll();
+      Input.poll();
+    };
+
+    touch.setLayout('napit');
+    letGo();
+    send('pointerdown', 1, ...at('left'));
+    const pressed = held();
+    send('pointerup', 1, ...at('left'));
+    const released = held();
+    expect('a touch key presses and releases',
+      pressed === 'left' && released === '', `alas "${pressed}", ylös "${released}"`);
+
+    /* Rolling a thumb from one key to the next has to work. The browser sends
+     * no leave event for that, which is why the hit-testing is done by hand. */
+    letGo();
+    send('pointerdown', 2, ...at('left'));
+    held();                                  // a frame passes, as it would in life
+    send('pointermove', 2, ...at('right'));
+    const rolled = held();
+    send('pointerup', 2, ...at('right'));
+    expect('sliding a thumb between keys switches the direction',
+      rolled === 'right', `"${rolled}"`);
+
+    // Steering, running and jumping at once is three fingers, and dropping any
+    // one of them would read as the game sticking.
+    letGo();
+    send('pointerdown', 3, ...at('right'));
+    send('pointerdown', 4, ...at('jump'));
+    send('pointerdown', 5, ...at('run'));
+    const three = held();
+    send('pointerup', 4, ...at('jump'));
+    const afterOne = held();
+    for (const id of [3, 5]) send('pointerup', id, 0, 0);
+    expect('three fingers work at once, and lifting one keeps the others',
+      three === 'jump,right,run' && afterOne === 'right,run',
+      `"${three}" -> "${afterOne}"`);
+
+    // A tap shorter than a frame still counts: on a touchscreen that is not an
+    // edge case, that is simply what tapping is.
+    letGo();
+    send('pointerdown', 6, ...at('jump'));
+    send('pointerup', 6, ...at('jump'));
+    expect('a tap shorter than one frame still registers', held().includes('jump'));
+
+    /* The thumb layout: no buttons, the halves of the screen are the control. */
+    touch.setLayout('peukalot');
+    letGo();
+    const lx = innerWidth * 0.25;
+    const ly = innerHeight * 0.7;
+    send('pointerdown', 7, lx, ly);
+    const neutral = held();
+    send('pointermove', 7, lx + 50, ly);
+    const right = held();
+    send('pointermove', 7, lx - 50, ly);
+    const left = held();
+    send('pointermove', 7, lx, ly - 60);
+    const up = held();
+    send('pointerup', 7, lx, ly);
+    expect('the floating stick steers from wherever the thumb landed',
+      neutral === '' && right === 'right' && left === 'left' && up === 'up',
+      `neutraali "${neutral}" oikea "${right}" vasen "${left}" ylös "${up}"`);
+
+    letGo();
+    send('pointerdown', 8, innerWidth * 0.8, innerHeight * 0.8);
+    const jump = held();
+    send('pointerup', 8, innerWidth * 0.8, innerHeight * 0.8);
+    send('pointerdown', 9, innerWidth * 0.8, innerHeight * 0.1);
+    const run = held();
+    send('pointerup', 9, innerWidth * 0.8, innerHeight * 0.1);
+    expect('the right half jumps low down and farts up top',
+      jump === 'jump' && run === 'run', `alhaalla "${jump}", ylhäällä "${run}"`);
+
+    // Switching layout mid-press must not leave an action stuck down.
+    letGo();
+    touch.setLayout('napit');
+    send('pointerdown', 10, ...at('left'));
+    touch.setLayout('peukalot');
+    const afterSwitch = held();
+    expect('switching layout mid-press does not leave a key stuck',
+      afterSwitch === '', `"${afterSwitch}"`);
+
+    touch.setLayout('napit');
+    letGo();
+    expect('the touch layout is remembered', touch.loadLayout() === 'napit', touch.loadLayout());
+  }
+
   /* ------------------------------ kuvaefektit -------------------------- */
   {
     const { PostFX, PRESETS } = await import('/src/gfx/postfx.js');

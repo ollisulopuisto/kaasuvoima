@@ -13,6 +13,7 @@ import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { qualifies } from './core/scores.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
+import { Touch, LAYOUT_NAMES } from './core/touch.js';
 
 const W = 320;
 const H = 240;
@@ -264,6 +265,11 @@ class Game {
     if (Input.pressed.quicksave) this.quickSave();
     if (Input.pressed.quickload) this.quickLoad();
     if (Input.pressed.export) this.exportTelemetry();
+    if (Input.pressed.touch) {
+      Touch.reveal();
+      this.toast(`KOSKETUSOHJAUS: ${LAYOUT_NAMES[Touch.toggleLayout()]}`);
+      Sfx.play('cursor');
+    }
     if (Input.pressed.fx) {
       this.toast(`KUVAEFEKTIT: ${PRESET_NAMES[PostFX.cyclePreset()]}`);
       Sfx.play('cursor');
@@ -334,7 +340,10 @@ class Game {
       + `  MUTE ${a.muted ? 1 : 0}`);
     lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
     const fx = PostFX.diag();
+    const t = Touch.diag();
     lines.push(`FX ${fx.mode.toUpperCase()} ${fx.preset.toUpperCase()}  (7 VAIHDA)`);
+    lines.push(`KOSKETUS ${t.visible ? t.layout.toUpperCase() : 'PIILOSSA'}`
+      + `  SORMET ${t.pointers}  (6 VAIHDA)`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
     if (scene && scene.id && scene.cam) {
       const t = levelSummary(scene.id);
@@ -389,13 +398,20 @@ const game = new Game(canvas);
 // itself and nothing below changes.
 const display = PostFX.init(canvas);
 
+/*
+ * Integer scaling is what keeps pixel art honest, but on a phone the honest
+ * answer is a postage stamp: a 844x390 landscape screen fits exactly 1x, and
+ * 1x on a modern display is unplayable. So integer scaling applies whenever
+ * there is room for 2x or more, and below that the picture is stretched to fit.
+ * The device pixel ratio does the smoothing work at those sizes anyway.
+ */
 function resize() {
-  const scale = Math.max(1, Math.min(
-    Math.floor(window.innerWidth / W),
-    Math.floor((window.innerHeight - 56) / H),
-  ));
-  display.style.width = `${W * scale}px`;
-  display.style.height = `${H * scale}px`;
+  // The keyboard hint strip only exists while there is a keyboard in the story.
+  const reserve = document.body.classList.contains('touching') ? 10 : 56;
+  const fit = Math.min(window.innerWidth / W, (window.innerHeight - reserve) / H);
+  const scale = fit >= 2 ? Math.floor(fit) : Math.max(1, fit);
+  display.style.width = `${Math.round(W * scale)}px`;
+  display.style.height = `${Math.round(H * scale)}px`;
   PostFX.resize(scale);
 }
 
@@ -403,6 +419,9 @@ window.addEventListener('resize', resize);
 resize();
 
 Input.install();
+// `?touch=1` forces the overlay up on a desktop, which is the only way to work
+// on it without holding a phone.
+Touch.install(Input, { force: new URLSearchParams(location.search).has('touch') });
 Input.onFirstInput = () => {
   Sfx.resume();
   if (!isMuted()) Music.play(Music.current || 'map');
@@ -417,3 +436,4 @@ window.sfb3 = game;
 // people without having to squint at the heatmap.
 game.telemetry = { summary: levelSummary, count: eventCount, clear: clearTelemetry };
 game.fx = PostFX;
+game.touch = Touch;

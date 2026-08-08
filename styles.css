@@ -57,3 +57,149 @@ html, body {
 @media (max-height: 480px) {
   #hint { display: none; }
 }
+
+/* ---------------------------- touch controls ---------------------------- */
+
+/* Hidden until a real finger shows up: plenty of laptops report touch support
+   they never use, and a d-pad over the game for those is pure loss. */
+#touch { display: none; }
+
+/* Once a finger has appeared: no keyboard hints, and the picture moves up so
+   the bottom of the screen belongs to the thumbs. */
+body.touching #hint { display: none; }
+
+body.touching #shell {
+  justify-content: flex-start;
+  padding-top: 5vh;
+}
+
+@media (max-height: 460px) {
+  body.touching #shell { justify-content: center; padding-top: 0; }
+}
+
+#touch.on {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  touch-action: none;          /* or Android turns a jump into a page scroll */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#touch .key {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font: 600 22px/1 system-ui, sans-serif;
+  color: #cfe8ff;
+  background: rgba(20, 26, 46, 0.44);
+  border: 2px solid rgba(143, 224, 74, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+#touch .key small {
+  font: 400 10px/1 system-ui, sans-serif;
+  opacity: 0.6;
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+
+#touch .key.big {
+  border-radius: 50%;
+  border-color: rgba(255, 208, 72, 0.45);
+}
+
+/* The d-pad: 72px keys with a 4px gap. Anything under about 44px is missed
+   often enough to feel like the game ignoring you rather than a miss. */
+#touch[data-layout="napit"] .pad .key { width: 72px; height: 72px; }
+#touch[data-layout="napit"] .pad [data-act="left"]  { left: 16px;  bottom: 96px; }
+#touch[data-layout="napit"] .pad [data-act="right"] { left: 168px; bottom: 96px; }
+#touch[data-layout="napit"] .pad [data-act="up"]    { left: 92px;  bottom: 172px; }
+#touch[data-layout="napit"] .pad [data-act="down"]  { left: 92px;  bottom: 20px; }
+
+#touch[data-layout="napit"] .acts .key { width: 86px; height: 86px; }
+#touch[data-layout="napit"] .acts [data-act="jump"] { right: 16px;  bottom: 32px; }
+#touch[data-layout="napit"] .acts [data-act="run"]  { right: 112px; bottom: 108px; }
+
+/* The thumb layout draws no buttons at all — the halves of the screen are the
+   controls, and the stick is drawn where the thumb lands. */
+#touch[data-layout="peukalot"] .pad,
+#touch[data-layout="peukalot"] .acts { display: none; }
+
+#touch .stick {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+#touch .stick::before,
+#touch .stick i {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#touch .stick::before {
+  width: 108px;
+  height: 108px;
+  background: rgba(20, 26, 46, 0.32);
+  border: 2px solid rgba(143, 224, 74, 0.3);
+}
+
+#touch .stick i {
+  width: 46px;
+  height: 46px;
+  background: rgba(143, 224, 74, 0.4);
+}
+
+#touch .bar {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+#touch .tool {
+  font: 600 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.05em;
+  color: #9fb4d8;
+  background: rgba(16, 20, 36, 0.72);
+  border: 1px solid rgba(120, 140, 180, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* A phone in portrait is only ~390px wide, and at the full size the d-pad and
+   the fart button collide in the middle. Everything shrinks and tucks in. */
+@media (max-width: 460px) {
+  #touch[data-layout="napit"] .pad .key { width: 64px; height: 64px; }
+  #touch[data-layout="napit"] .pad [data-act="left"]  { left: 8px;   bottom: 84px; }
+  #touch[data-layout="napit"] .pad [data-act="right"] { left: 136px; bottom: 84px; }
+  #touch[data-layout="napit"] .pad [data-act="up"]    { left: 72px;  bottom: 152px; }
+  #touch[data-layout="napit"] .pad [data-act="down"]  { left: 72px;  bottom: 16px; }
+  #touch[data-layout="napit"] .acts .key { width: 76px; height: 76px; }
+  #touch[data-layout="napit"] .acts [data-act="jump"] { right: 8px;  bottom: 28px; }
+  #touch[data-layout="napit"] .acts [data-act="run"]  { right: 92px; bottom: 108px; }
+}
+
+/* Landscape on a phone is short: drop the keys down and in so they clear the
+   canvas, which is the thing being played. */
+@media (max-height: 460px) {
+  #touch[data-layout="napit"] .pad .key { width: 60px; height: 60px; }
+  #touch[data-layout="napit"] .pad [data-act="left"]  { left: 10px;  bottom: 76px; }
+  #touch[data-layout="napit"] .pad [data-act="right"] { left: 138px; bottom: 76px; }
+  #touch[data-layout="napit"] .pad [data-act="up"]    { left: 74px;  bottom: 138px; }
+  #touch[data-layout="napit"] .pad [data-act="down"]  { left: 74px;  bottom: 14px; }
+  #touch[data-layout="napit"] .acts .key { width: 72px; height: 72px; }
+  #touch[data-layout="napit"] .acts [data-act="jump"] { right: 10px; bottom: 20px; }
+  #touch[data-layout="napit"] .acts [data-act="run"]  { right: 92px; bottom: 88px; }
+}

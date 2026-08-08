@@ -41,6 +41,7 @@ const KEYMAP = {
   Digit1: 'quicksave',
   Digit2: 'quickload',
   Digit3: 'slot',
+  Digit6: 'touch',
   Digit7: 'fx',
   Digit8: 'export',
   Digit9: 'debug',
@@ -70,7 +71,7 @@ const PADMAP = {
 };
 
 const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute',
-  'quicksave', 'quickload', 'slot', 'debug', 'export', 'fx'];
+  'quicksave', 'quickload', 'slot', 'debug', 'export', 'fx', 'touch'];
 
 function blank() {
   const o = {};
@@ -85,8 +86,33 @@ export const Input = {
   _raw: blank(),
   _latched: blank(),
   _prev: blank(),
+  /** Touch controls write here; see src/core/touch.js. */
+  _touch: blank(),
   anyKeyPressed: false,
   onFirstInput: null,
+
+  /**
+   * Sets an action from something that is not a key. Presses are latched the
+   * same way keys are, so a tap that starts and ends inside one frame still
+   * counts — on a touchscreen that is not an edge case, it is how tapping works.
+   */
+  setAction(action, down) {
+    if (!(action in this._touch)) return;
+    this._touch[action] = !!down;
+    if (down) this._latched[action] = true;
+  },
+
+  /**
+   * Forgets every touch action *and* the press latch. Called when the touch
+   * layout changes or a gesture is cancelled — cases where the presses that
+   * were in flight are no longer meant. Without clearing the latch, switching
+   * layout mid-press injects a phantom press on the next frame, which reads as
+   * the character twitching for no reason.
+   */
+  clearTouch() {
+    this._touch = blank();
+    this._latched = blank();
+  },
 
   install() {
     addEventListener('keydown', (e) => {
@@ -112,6 +138,7 @@ export const Input = {
     addEventListener('blur', () => {
       this._raw = blank();
       this._latched = blank();
+      this._touch = blank();
     });
     addEventListener('pointerdown', () => this._fireFirstInput());
   },
@@ -127,6 +154,7 @@ export const Input = {
   /** Folds gamepad state in and recomputes edges. Call once per fixed step. */
   poll() {
     const state = { ...this._raw };
+    for (const a of ACTIONS) if (this._touch[a]) state[a] = true;
     for (const a of ACTIONS) if (this._latched[a]) state[a] = true;
     this._latched = blank();
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];

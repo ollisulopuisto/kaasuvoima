@@ -17,6 +17,8 @@ ennen pushia on `node tools/verify.mjs`.
 - [x] **Vokaalit** ("jee!", "hup", "oof") formanttisynteesillä, hyppyäänet
       satunnaistettuna 18 %:iin.
 - [x] **Telemetria, vaiheet 1–2**: paikallinen kirjaus, lämpökartta, JSON-vienti.
+- [x] **Kosketusohjaus**: kaksi mallia (näppäimet / peukalot), oma osumatarkistus,
+      monikosketus, testattu. Ei enää "myöhemmin".
 - [x] **Kuvaefektit**: bloom, juovat, vinjetti ja WebGL-kuvaputki, esiasetukset
       näppäimessä 7, fallback testattuna. Jäljellä vain makuasiat, ks. kohta 1.
 
@@ -206,7 +208,6 @@ pääkaistaa — se on tämän työn kiperin kohta ja kannattaa ratkaista ensin.
 
 ## Myöhemmin
 
-- **Kosketusohjaus.** Tietoisesti pöydällä: työpöytäkokemus ensin.
 - **Lisää pomovariaatioita** — nyt neljä, ja 5-F on uusinta 4-F:stä.
 - **Kenttäsäännöt käsintehdyille kentille pakollisiksi.** Nyt ne kaatavat ajon
   vain generoiduissa; kun maailmat 1–4 on korjattu, kytke sama koko peliin.

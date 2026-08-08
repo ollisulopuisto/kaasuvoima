@@ -50,6 +50,7 @@ näppäimistöasettelu ei siirrä niitä.
 | M tai 0 | äänet päälle/pois |
 | 1 / 2 | tallenna tila / lataa tila |
 | 3 | vaihda tallennuspaikkaa (1–3) |
+| 6 | kosketusohjaus esiin / vaihda malli |
 | 7 | kuvaefektit: ei efektejä → hehku → kuvaputki |
 | 8 | vie pelidata tiedostoon (JSON) |
 | 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
@@ -173,6 +174,31 @@ git clone --depth 1 https://github.com/TheVGLC/TheVGLC /tmp/vglc
 VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
 ```
 
+## Kosketusohjaus
+
+Ohjaimet ilmestyvät **vasta ensimmäisestä oikeasta kosketuksesta** — moni
+kannettava ilmoittaa kosketustuen jota kukaan ei käytä, eikä sellaiselle
+koneelle kannata piirtää ristiohjainta pelin päälle. Työpöydällä ne saa esiin
+näppäimellä **6** tai osoitteella `?touch=1`.
+
+Kaksi mallia, ja **6** (tai OHJAUS-painike) vaihtaa niiden välillä:
+
+| Malli | Miten |
+| --- | --- |
+| `näppäimet` | Näkyvä ristiohjain vasemmalla, Z ja X oikealla. Tarkka, mutta vie ruudun alaosan. |
+| `peukalot` | Ei näkyviä nappeja. Vasen puoli on sauva joka ilmestyy siihen mihin peukalo osuu, oikean puolen alaosa hyppää ja yläosa pieruttaa. |
+
+Kumpi on parempi, ei ratkea pöydän ääressä, joten molemmat ovat mukana ja
+valinta muistetaan.
+
+Toteutuksen kolme sääntöä, jotka säästävät eniten harmia:
+- **Osumatarkistus on omaa koodia**, ei DOM-nappeja. Selain ei lähetä
+  `pointerleave`ia kun peukalo liukuu napilta pois, eikä ristiohjain jolla ei
+  voi rullata peukaloa ole ristiohjain.
+- **Jokainen sormi seurataan `pointerId`:llä.** Ohjaus + juoksu + hyppy on kolme
+  sormea, ja yhdenkin pudottaminen tuntuu pelin jumittumiselta.
+- **`touch-action: none`**, tai Android tekee hypystä sivun vierityksen.
+
 ## Kuvaefektit
 
 Näppäin **7** kiertää kolme esiasetusta:
@@ -232,7 +258,7 @@ vercel --prod   # käsin, jos automaattinen julkaisu ei ole käytössä
 ```
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
 src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
-src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
+src/core/           syöte, kosketus, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat, kuvaefektit
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
 src/entities/       pelaaja, viholliset, esineet, efektit

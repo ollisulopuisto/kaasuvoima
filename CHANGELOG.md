@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.22 — kosketusohjaus kahdella mallilla
+
+### Lisätty
+- **`src/core/touch.js`**: kosketusohjaus, kaksi mallia. `näppäimet` on näkyvä
+  ristiohjain + Z/X, `peukalot` ei piirrä nappeja lainkaan — vasen puoli on
+  sauva joka ilmestyy peukalon alle, oikean puolen alaosa hyppää. *Miksi kaksi:*
+  kumpi on parempi ei ratkea pöydän ääressä, joten valinta on pelaajan.
+- **Kuvaputki (`crt`) on nyt oletusefekti.** Se on se ilme joka pelillä on
+  tarkoitus olla, ja pois saa yhdellä painalluksella.
+- Näppäin **6** ja OHJAUS-painike vaihtavat mallia, `?touch=1` pakottaa
+  ohjaimet esiin työpöydällä.
+
+### Miksi näin
+- **Ohjaimet ilmestyvät vasta ensimmäisestä oikeasta kosketuksesta.** Moni
+  kannettava ilmoittaa kosketustuen jota kukaan ei käytä; pelkän tuen perusteella
+  piirretty ristiohjain olisi niille pelkkää haittaa.
+- **Osumatarkistus on omaa koodia, ei DOM-nappeja.** Selain ei lähetä
+  `pointerleave`ia kun peukalo liukuu napilta toiselle, eikä ristiohjain jolla ei
+  voi rullata peukaloa ole ristiohjain.
+- **Jokainen sormi seurataan `pointerId`:llä**, koska ohjaus + juoksu + hyppy on
+  kolme sormea ja yhdenkin pudottaminen tuntuu pelin jumittumiselta.
+- **`touch-action: none`**, tai Android tekee hypystä sivun vierityksen.
+
+### Korjattu samalla
+- **Canvas jäi puhelimessa 1× kokoon.** Kokonaislukuskaalaus on oikein isolla
+  ruudulla, mutta 844×390 vaakanäytöllä se tarkoitti postimerkkiä. Nyt
+  kokonaisluku käytössä kun tilaa on 2×:lle, sen alle venytetään täyteen.
+- **Skanviivat aliasoituivat moiré-verhoiksi** pienellä skaalalla. Esityscanvas
+  mitoitetaan nyt *laitepikseleihin*, ja jos viivalle ei jää kahta oikeaa
+  pikseliä, ne häivytetään pois sen sijaan että taisteltaisiin vastaan.
+- Näppäimistövihjeet piiloon ja kuva ylös kun kosketusohjaus on käytössä.
+
+### Testit
+Yhdeksän uutta tarkistusta: painallus ja vapautus, peukalon liu'utus napilta
+toiselle, kolme sormea yhtä aikaa, framea lyhyempi näpäytys, kelluva sauva
+kaikkiin suuntiin, oikean puolen jako, mallin vaihto kesken painalluksen ja
+valinnan muistaminen. Kaksi aitoa bugia jäi kiinni: liu'utus jätti edellisen
+suunnan latch-puskuriin ja mallin vaihto jätti näppäimen pohjaan. Korjaus:
+`clearTouch()` tyhjentää myös latchin.
+
+---
+
 ## v26.08.08.21 — kuvaefektit (bloom, juovat, kuvaputki)
 
 ### Lisätty
