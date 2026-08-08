@@ -389,6 +389,20 @@ export const CHUNKS = {
     14: G + G,
   }),
 
+  /* ------------------------------ night ------------------------------- */
+  // The moon sits above a staircase, so it is reachable without the fart jump
+  // but still asks for a climb.
+  moon_night: ck(16, {
+    3: '        O',
+    9: '   XX',
+    10: '  XXXX',
+    11: ' XXXXXX',
+    12: 'XXXXXXXX',
+    13: G,
+    14: G,
+  }),
+  dune_night: ck(16, { 9: '     o o o', 12: '        g', 13: G, 14: G }),
+
   /* -------------------------------- goal ------------------------------- */
   run_up: ck(16, { 9: '     o o o', 13: G, 14: G }),
   goal: ck(16, {

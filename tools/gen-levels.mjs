@@ -479,7 +479,7 @@ function buildLevel({ palette, targetWidth }) {
 /* ------------------------------ validation ------------------------------ */
 
 const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
-const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H']);
+const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 
 function validate(id, rows) {
   const problems = validateLevel(rows, budget);

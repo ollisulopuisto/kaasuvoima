@@ -49,6 +49,7 @@ export class LevelScene {
     this.stateTimer = 0;
     this.bossDefeated = false;
     this.shakeAmp = 0;
+    this.gust = 0;
     this.goal = null;
     this.cardIndex = 0;
     this.wonCard = null;
@@ -306,12 +307,27 @@ export class LevelScene {
       }
     }
 
+    if (this.def.wind) this.updateWind();
     if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
     this.updateCamera();
     this.updateBumps();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
+  }
+
+  /**
+   * Desert wind: long calm stretches broken by gusts that shove the player
+   * sideways. It has to be intermittent — a constant push is just a changed
+   * control scheme, while a gust you can see coming is a thing to play around.
+   */
+  updateWind() {
+    const cycle = this.tick % 600;
+    this.gust = cycle > 380 ? Math.sin(((cycle - 380) / 220) * Math.PI) : 0;
+    if (this.gust > 0.05 && this.state === 'play') {
+      const push = this.gust * 0.055 * (this.player.onGround ? 0.5 : 1);
+      this.player.vx -= push;
+    }
   }
 
   updateTimer() {

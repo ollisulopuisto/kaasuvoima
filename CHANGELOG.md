@@ -7,6 +7,23 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.18 — aavikon yö
+
+### Lisätty
+- **Yökenttä aavikkomaailmaan** (2-N "AAVIKON YÖ", oma solmu maailmankartalla):
+  uusi `night`-teema tummalla paletilla, tähtitaivas, kuu ja sinertävä
+  hiekkapöly. Pääsuunnittelijan pyyntö.
+- **Tuuli.** Pitkiä tyyniä jaksoja, jotka katkeaa puuska joka työntää sivuttain
+  — voimakkaammin ilmassa kuin maassa. Puuskan pitää olla ajoittainen: jatkuva
+  työntö on vain muutettu ohjaus, kun taas tuleva puuska on asia jonka ympärillä
+  voi pelata. Kentän `wind: true` kytkee sen.
+- **Kuu johon voi hypätä.** Roikkuu yötaivaalla, keinuu, eikä voi satuttaa —
+  haaste on päästä sinne. Päälle hyppääminen antaa tehostuksen ja 1000 pistettä,
+  ja käytetty kuu himmenee. Portaat sen alla tekevät siitä saavutettavan ilman
+  pieruhyppyä.
+
+---
+
 ## v26.08.08.17 — näyttötekstit
 
 ### Muutettu

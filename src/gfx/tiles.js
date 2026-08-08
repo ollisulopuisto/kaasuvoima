@@ -76,6 +76,16 @@ export const THEMES = {
     hill: '#c89040', hillDark: '#9c6a24',
     cloud: '#fff0dc',
   },
+  night: {
+    surface: 'sand',
+    sky: ['#0d1030', '#2a2350'],
+    ground: '#6a5030', groundDark: '#3e2c18', groundTop: '#8a6a3c', groundTopDark: '#5c4424',
+    brick: '#7a5a30', brickDark: '#4a3418', brickLight: '#a8804a',
+    hard: '#8a86a0', hardDark: '#4a4660', hardLight: '#b4b0c8',
+    pipe: '#7a5220', pipeDark: '#4a3010', pipeLight: '#a87a3a',
+    hill: '#3a2f52', hillDark: '#241d38',
+    cloud: '#3a3560',
+  },
   ice: {
     surface: 'snow',
     sky: ['#2c4c9c', '#8cb8e8'],

@@ -118,7 +118,7 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, viewW, viewH);
 
-  const night = themeName === 'factory' || themeName === 'fortress';
+  const night = themeName === 'factory' || themeName === 'fortress' || themeName === 'night';
   if (night) {
     for (let i = 0; i < 44; i++) {
       const sx = hashNoise(i, 3);
@@ -138,6 +138,7 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
   if (themeName === 'desert') disc(ctx, cx, cy, 15, '#fff2c0', '#ffd070', tick, true);
   else if (themeName === 'grass') disc(ctx, cx, cy, 12, '#fffde0', '#ffe98c', tick, true);
   else if (themeName === 'ice') disc(ctx, cx, cy, 11, '#ffffff', '#cfe6ff', tick, false);
+  else if (themeName === 'night') disc(ctx, cx, cy, 13, '#fff8d8', '#e8d89a', tick, false);
   else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
 }
 
@@ -186,7 +187,7 @@ function weather(ctx, themeName, camX, viewW, viewH, tick) {
     return;
   }
 
-  if (themeName === 'desert') {
+  if (themeName === 'desert' || themeName === 'night') {
     // sand streaking past on the wind
     for (let i = 0; i < 26; i++) {
       const seed = hashNoise(i, 5);
@@ -194,7 +195,9 @@ function weather(ctx, themeName, camX, viewW, viewH, tick) {
       const span = viewW + 60;
       const x = ((seed * span - tick * (1.8 + seed * 2.2) - camX * 0.3) % span + span) % span - 30;
       const y = 60 + sy * (viewH - 70) + Math.sin((tick + i * 20) / 26) * 3;
-      ctx.fillStyle = `rgba(255,228,180,${0.12 + seed * 0.18})`;
+      ctx.fillStyle = themeName === 'night'
+        ? `rgba(200,200,255,${0.10 + seed * 0.14})`
+        : `rgba(255,228,180,${0.12 + seed * 0.18})`;
       ctx.fillRect(Math.round(x), Math.round(y), 3 + Math.round(seed * 4), 1);
     }
     return;

@@ -61,6 +61,16 @@ const LEVEL_DEFS = {
       'note_pair', 'steps_down', 'run_up', 'goal', 'goal_end',
     ],
   },
+  // The desert world's night level: windy, and there is a moon to jump on.
+  '2-N': {
+    theme: 'night', bg: 'dunes', music: 'level', wind: true,
+    chunks: [
+      'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
+      'moon_night', 'coins', 'shell', 'plat_steps', 'pit_l', 'corks',
+      'dune_night', 'bricks', 'flyer', 'pit_plat', 'sun', 'steps_up',
+      'run_up', 'goal', 'goal_end',
+    ],
+  },
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level',
     chunks: [

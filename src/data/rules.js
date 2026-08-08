@@ -18,7 +18,7 @@ const FLOOR = 13;
 const HEAD = 3;
 
 const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
-const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H']);
+const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 
 /**
@@ -77,7 +77,7 @@ export function validateLevel(rows, budget) {
       // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
       // a tile high and drop in) have no footing to check. The player start is
       // likewise allowed to be in mid-air: the game drops them in.
-      if ('Apfrk'.includes(ch)) continue;
+      if ('ApfrkO'.includes(ch)) continue;
       if (!SOLID.has(at(x, y + 1))) problems.push(`${ch} at ${x},${y} is standing on nothing`);
     }
   }

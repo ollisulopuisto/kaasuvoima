@@ -6,6 +6,7 @@ import {
 } from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
+import { Item } from './items.js';
 
 export class Enemy extends Entity {
   constructor(level, x, y, w, h) {
@@ -727,6 +728,68 @@ export class Boss extends Enemy {
   }
 }
 
+/**
+ * Kuu — hangs in the night sky and bobs. Jump onto it and it hands over a
+ * power-up. It cannot hurt you; the challenge is getting up there at all.
+ * (Lead designer's request.)
+ */
+export class Moon extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 20, 20);
+    this.skyY = y;
+    this.score = 1000;
+    this.used = false;
+    this.alwaysActive = true;
+    this.active = true;
+  }
+
+  get harmless() { return true; }
+
+  update() {
+    this.tick++;
+    this.y = this.skyY + Math.sin(this.tick / 40) * 3;
+  }
+
+  stomp() {
+    if (this.used) return true;
+    this.used = true;
+    this.level.add(new Item(this.level, this.x + 2, this.y - 18, this.level.rollPowerup(this.level.player)));
+    this.level.awardScore(this.score, this.cx, this.y);
+    Sfx.play('powerup');
+    return true;
+  }
+
+  hitByProjectile() { /* it is the moon */ }
+  hitByShell() { }
+  hitByTail() { }
+
+  draw(ctx) {
+    const cx = Math.round(this.x) + 10;
+    const cy = Math.round(this.y) + 10;
+    const glow = this.used ? 0.05 : 0.12 + 0.05 * Math.sin(this.tick / 14);
+    ctx.fillStyle = `rgba(255,248,200,${glow})`;
+    for (let dy = -18; dy <= 18; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, 324 - dy * dy)));
+      ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+    }
+    ctx.fillStyle = this.used ? '#8a8470' : '#e8d89a';
+    for (let dy = -10; dy <= 10; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, 100 - dy * dy)));
+      ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+    }
+    ctx.fillStyle = this.used ? '#a8a290' : '#fff8d8';
+    for (let dy = -8; dy <= 6; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, 64 - dy * dy)) * 0.8);
+      ctx.fillRect(cx - half - 1, cy + dy - 1, half * 2, 1);
+    }
+    // craters, and a face only once it has been used up
+    ctx.fillStyle = this.used ? '#8a8470' : '#d8c88a';
+    ctx.fillRect(cx - 5, cy - 4, 3, 3);
+    ctx.fillRect(cx + 2, cy + 1, 4, 3);
+    ctx.fillRect(cx - 2, cy + 5, 2, 2);
+  }
+}
+
 export const ENEMY_CHARS = {
   g: (level, tx, ty) => new Walker(level, tx * TILE, ty * TILE),
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),
@@ -737,4 +800,5 @@ export const ENEMY_CHARS = {
   A: (level, tx, ty) => new AngrySun(level, tx * TILE, ty * TILE),
   H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
   b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),
+  O: (level, tx, ty) => new Moon(level, tx * TILE, ty * TILE),
 };
