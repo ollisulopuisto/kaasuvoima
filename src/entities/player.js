@@ -369,10 +369,10 @@ export class Player extends Entity {
   }
 
   /** @returns true when the hit actually landed (i.e. not invulnerable). */
-  hurt() {
+  hurt(cause = 'enemy') {
     if (this.invuln > 0 || this.dying || this.frozen > 0) return false;
     if (this.power.level === 0) {
-      this.die();
+      this.die(cause);
       return true;
     }
     this.power = makePower(this.power.level - 1 === 0 ? null : this.power.type,
@@ -433,7 +433,8 @@ export class Player extends Entity {
     }
   }
 
-  die() {
+  /** `cause` is only carried through to telemetry; it changes nothing in play. */
+  die(cause = 'enemy') {
     if (this.dying) return;
     this.dying = true;
     this.noclip = true;
@@ -442,7 +443,7 @@ export class Player extends Entity {
     this.vx = 0;
     this.flying = 0;
     Sfx.play('die');
-    this.level.onPlayerDied();
+    this.level.onPlayerDied(cause);
   }
 
   state() {

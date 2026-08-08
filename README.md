@@ -50,7 +50,8 @@ näppäimistöasettelu ei siirrä niitä.
 | M tai 0 | äänet päälle/pois |
 | 1 / 2 | tallenna tila / lataa tila |
 | 3 | vaihda tallennuspaikkaa (1–3) |
-| 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita |
+| 8 | vie pelidata tiedostoon (JSON) |
+| 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
 
 F5 / F8 / F6 / F3 toimivat myös, jos käyttöjärjestelmä ei vie niitä — macOS vie.
 Peliohjain (standard gamepad) toimii.
@@ -171,6 +172,25 @@ git clone --depth 1 https://github.com/TheVGLC/TheVGLC /tmp/vglc
 VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
 ```
 
+## Pelidata ja yksityisyys
+
+Peli kirjaa **selaimen omaan muistiin** (localStorage) sen mihin pelaaja kuolee,
+missä hän jää jumiin ja kuinka kauan kenttä kesti. Tarkoitus on yksi: nähdä missä
+kentät oikeasti kaatavat pelaajan — sitä ei näe pelaamalla omia kenttiään.
+
+Kaksi asiaa, joiden varaan koko kirjaus on rakennettu:
+
+- **Anonyymi rakenteeltaan.** Tallennettuna on kentän tunnus, ruutukoordinaatti,
+  kuolinsyy ja voimataso. Ei nimeä, ei kellonaikaa, ei tunnistetta. Dataa ei siis
+  voi yhdistää kehenkään, joten mitään lupausta ei tarvitse antaa eikä pitää.
+- **Mikään ei lähde selaimesta.** `src/core/telemetry.js`:ssä ei ole yhtään
+  verkkokutsua, ja `verify.mjs` tarkistaa sen jokaisella ajolla. Vienti on
+  tiedosto, jonka pelaaja itse antaa eteenpäin.
+
+Debug-ruudussa (**9**) kentän päälle piirtyy lämpökartta: punaiset pylväät ovat
+kuolemia, siniset viivat alalaidassa jumipaikkoja. **8** vie datan JSON-tiedostoon.
+Konsolista: `sfb3.telemetry.summary('1-1')` ja `sfb3.telemetry.clear()`.
+
 ## Julkaisu
 
 Repo on staattinen sivusto ilman build-vaihetta. `main`-haaran push julkaisee
@@ -186,7 +206,7 @@ vercel --prod   # käsin, jos automaattinen julkaisu ei ole käytössä
 ```
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
 src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
-src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus, pistetaulu
+src/core/           syöte, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
 src/entities/       pelaaja, viholliset, esineet, efektit

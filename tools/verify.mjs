@@ -615,6 +615,97 @@ const report = await page.evaluate(async () => {
     expect('loading a save state marks the run as assisted', game.state.usedSaveState === true);
   }
 
+  /* ------------------------------ telemetry ---------------------------- */
+  {
+    const tele = await import('/src/core/telemetry.js');
+    tele.clearTelemetry();
+
+    // A death has to land in the log with the right cause and the right column,
+    // because a heatmap pointing at the wrong tile is worse than no heatmap.
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 4; f++) s.update(i);
+    const column = Math.floor(s.player.cx / 16);
+    s.player.die('pit');
+    const deaths = tele.allEvents().filter((e) => e.e === 'die');
+    expect('a death is logged with its cause and column',
+      deaths.length === 1 && deaths[0].c === 'pit' && deaths[0].x === column
+      && deaths[0].l === '1-1',
+      JSON.stringify(deaths[0] || null));
+
+    // …and only once. A rewind used to be able to log the same death twice,
+    // which quietly doubled the weight of whatever spot someone was practising.
+    s.player.dying = false;
+    s.player.die('lava');
+    expect('one attempt logs one death',
+      tele.allEvents().filter((e) => e.e === 'die').length === 1);
+
+    // Falling out of the world reports as a pit, not as an enemy.
+    reset({ type: 'shroom', level: 1 });
+    const s2 = new LevelScene(game, '1-1');
+    game.setScene(s2);
+    s2.update(i);
+    s2.player.y = s2.heightPx + 200;
+    s2.player.noclip = true;
+    for (let f = 0; f < 3 && !s2.player.dying; f++) s2.update(i);
+    const fell = tele.allEvents().filter((e) => e.e === 'die').at(-1);
+    expect('falling out of the world is logged as a pit', fell && fell.c === 'pit',
+      fell ? fell.c : 'ei tapahtumaa');
+
+    // Standing still long enough is a stall, and it is logged once per column —
+    // a player who wanders off for a minute must not fill the log by himself.
+    tele.clearTelemetry();
+    reset({ type: 'shroom', level: 1 });
+    const s3 = new LevelScene(game, '1-1');
+    game.setScene(s3);
+    s3.entities = s3.entities.filter((e) => e.kind !== 'enemy');   // this is about standing, not dying
+    const idle = mkInput();
+    for (let f = 0; f < 1100; f++) { s3.update(idle); idle.pressed = blank(); }
+    const stalls = tele.allEvents().filter((e) => e.e === 'stuck');
+    expect('standing still is logged once as a stall',
+      stalls.length === 1 && stalls[0].l === '1-1',
+      `${stalls.length} kpl`);
+
+    // Walking on must not count as stuck at all.
+    tele.clearTelemetry();
+    const s4 = new LevelScene(game, '1-1');
+    game.setScene(s4);
+    s4.entities = s4.entities.filter((e) => e.kind !== 'enemy');
+    const walk = mkInput();
+    walk.held.right = true;
+    for (let f = 0; f < 600; f++) { s4.update(walk); walk.pressed = blank(); }
+    expect('a player who keeps moving is never called stuck',
+      tele.allEvents().filter((e) => e.e === 'stuck').length === 0);
+
+    // Clearing a level records what it cost.
+    tele.clearTelemetry();
+    expect('the game counts attempts per level', !!game.attempts);
+    if (game.attempts) game.attempts['1-1'] = 2;
+    const s5 = new LevelScene(game, '1-1');
+    game.setScene(s5);
+    s5.update(mkInput());
+    s5.completeLevel('shroom');
+    const clear = tele.allEvents().find((e) => e.e === 'clear');
+    expect('a cleared level records the attempts it took',
+      clear && clear.d === 2 && clear.l === '1-1' && game.attempts && game.attempts['1-1'] === 0,
+      JSON.stringify(clear || null));
+
+    // The export has to be valid JSON with the events in it, or phase 2 is a lie.
+    const dump = JSON.parse(tele.exportJSON());
+    expect('the export is valid JSON carrying the events',
+      dump.game === 'sfb3' && Array.isArray(dump.events) && dump.events.length > 0,
+      `${dump.events ? dump.events.length : '?'} tapahtumaa`);
+
+    // Nothing in this module may reach the network.
+    const src = await (await fetch('/src/core/telemetry.js')).text();
+    expect('telemetry never sends anything anywhere',
+      !/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket/.test(src));
+
+    tele.clearTelemetry();
+  }
+
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music } = await import('/src/core/audio.js');
 

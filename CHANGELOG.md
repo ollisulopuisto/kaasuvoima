@@ -7,6 +7,46 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.08.20 — pelidatan kirjaus ja lämpökartta
+
+### Lisätty
+- **Telemetria, vaihe 1 (`src/core/telemetry.js`)**: peli kirjaa kuolemat
+  (paikka ruutuina, syy, voimataso, kesto), jumipaikat ja läpäisyt selaimen
+  localStorageen. *Miksi:* omia kenttiään pelaamalla ei näe missä ne oikeasti
+  kaatavat pelaajan — yksi ruutu voi syödä puolet yrityksistä, ja sen näkee vain
+  datasta.
+- **Lämpökartta debug-ruudussa** (näppäin 9): punainen pylväs per kuolemasarake,
+  sininen viiva alalaidassa jumipaikoista. Piirretään entiteettien *alle*, jotta
+  se ei koskaan peitä sitä mitä pitää nähdä, ja lasketaan 30 framen välein —
+  debug-ruudulla ei ole asiaa syödä framebudjettia.
+- **Jumin tunnistus**: 480 framea (8 s) ilman uutta maastoa = jumi. Kuolemat
+  eivät riitä mittariksi, koska seinä jota ei pääse yli ei tuota yhtään kuolemaa.
+  Kirjataan kerran per sarake, jotta paikalleen jäänyt pelaaja ei täytä lokia.
+- **Vienti (vaihe 2)**: näppäin **8** kirjoittaa koko lokin JSON-tiedostoksi,
+  jonka voi syöttää generaattorille.
+
+### Periaatteet, joiden varaan tämä on rakennettu
+- **Anonyymi rakenteeltaan, ei lupauksella.** Tallennettuna on kenttä, ruutu,
+  syy ja voimataso — ei nimeä, ei kellonaikaa, ei tunnistetta. Kun dataa ei voi
+  yhdistää kehenkään, ei tarvita suostumusikkunaa eikä tietosuojalupausta jota
+  pitäisi valvoa.
+- **Mikään ei lähde selaimesta.** Moduulissa ei ole yhtään verkkokutsua, ja
+  `verify.mjs` tarkistaa lähdekoodista ettei sinne ilmesty `fetch`iä,
+  `sendBeacon`ia tai WebSocketia. Lähettäminen on erillinen päätös (ROADMAP §1
+  vaihe 3), ei sivutuote.
+- **Loki on rajattu 800 tapahtumaan.** Vanhat putoavat edestä pois, jotta pitkään
+  eläneessä selainprofiilissa `setItem` ei voi koskaan alkaa heittää.
+- Koordinaatit ruutuina, ei pikseleinä: se on tarkkuus jolla kentät oikeasti
+  tehdään, ämpärit osuvat kohdalleen ilmaiseksi ja loki on kertaluokkaa pienempi.
+
+### Testit (punainen → vihreä)
+Kahdeksan uutta tarkistusta `verify.mjs`:ssä, jotka kaikki oli ensin punaisia:
+kuolinsyy ja -sarake, yksi kuolema per yritys (tilalataus ei saa kirjata samaa
+kuolemaa kahdesti), kuilukuoleman syy, jumin kirjaus kerran, liikkuvaa pelaajaa
+ei kirjata jumiin, läpäisyn yritysmäärä, viennin JSON ja verkkokutsuttomuus.
+
+---
+
 ## v26.08.08.19 — linkin esikatselukortti
 
 ### Lisätty

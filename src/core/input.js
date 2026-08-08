@@ -41,6 +41,7 @@ const KEYMAP = {
   Digit1: 'quicksave',
   Digit2: 'quickload',
   Digit3: 'slot',
+  Digit8: 'export',
   Digit9: 'debug',
   Digit0: 'mute',
   Numpad1: 'quicksave',
@@ -68,7 +69,7 @@ const PADMAP = {
 };
 
 const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute',
-  'quicksave', 'quickload', 'slot', 'debug'];
+  'quicksave', 'quickload', 'slot', 'debug', 'export'];
 
 function blank() {
   const o = {};

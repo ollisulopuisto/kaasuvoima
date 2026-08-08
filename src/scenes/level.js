@@ -8,6 +8,7 @@ import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 import { Music, Sfx } from '../core/audio.js';
+import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { clamp, overlaps, padNum } from '../core/utils.js';
 
 export const VIEW_W = 320;
@@ -24,6 +25,12 @@ const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
 const CAM_LOOK_AHEAD = 34;    // px the view leans ahead at full running speed
 const CAM_LOOK_GAIN = 0.035;  // how fast the lean builds
 const CAM_LOOK_RETURN = 0.07; // and how fast it settles back when you stop
+
+/* Telemetry: "stuck" means no new ground gained for this many frames. Eight
+ * seconds is long enough that a careful player lining up a jump is not counted,
+ * and short enough that a wall someone cannot pass shows up on the first try. */
+const STUCK_FRAMES = 480;
+const STUCK_PROGRESS = 8;     // px of new ground that counts as progress
 
 export class LevelScene {
   constructor(game, levelId) {
@@ -55,8 +62,16 @@ export class LevelScene {
     this.wonCard = null;
     this.spawn = { x: 2 * TILE, y: 12 * TILE };
 
+    // Playtest telemetry, tracked per attempt. `bestX` is the furthest the
+    // player has got; `stallFrames` counts how long it has stood still.
+    this.bestX = 0;
+    this.stallFrames = 0;
+    this.stuckLogged = new Set();
+    this.telemetryDone = false;
+
     this.scanGrid();
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
+    this.bestX = this.player.x;
     this.centerCamera();
   }
 
@@ -212,10 +227,64 @@ export class LevelScene {
     this.addScorePop(this.player.cx, this.player.y - 12, 'OVI AUKI');
   }
 
-  onPlayerDied() {
+  onPlayerDied(cause = 'enemy') {
     this.state = 'dead';
     this.stateTimer = 0;
+    this.recordDeath(cause);
     Music.stop();
+  }
+
+  /* ----------------------------- telemetry ----------------------------- */
+
+  /**
+   * One event per attempt, guarded by `telemetryDone`. Without the guard a
+   * save-state rewind would log the same death twice and the heatmap would
+   * quietly overweight whichever spot someone was practising.
+   */
+  recordDeath(cause) {
+    if (this.telemetryDone) return;
+    this.telemetryDone = true;
+    this.game.attempts[this.id] = (this.game.attempts[this.id] || 0) + 1;
+    logDeath({
+      level: this.id,
+      tx: Math.floor(this.player.cx / TILE),
+      ty: Math.floor(this.player.cy / TILE),
+      cause,
+      power: this.player.powerLevel,
+      frames: this.tick,
+    });
+  }
+
+  recordClear() {
+    if (this.telemetryDone) return;
+    this.telemetryDone = true;
+    logClear({
+      level: this.id,
+      frames: this.tick,
+      deaths: this.game.attempts[this.id] || 0,
+      power: this.player.powerLevel,
+    });
+    this.game.attempts[this.id] = 0;
+  }
+
+  /**
+   * Watches for a player who is alive but getting nowhere. Only the first stall
+   * per column is logged: a player who gives up and stands there for a minute
+   * should count once, not six times.
+   */
+  updateProgress() {
+    const p = this.player;
+    if (p.x > this.bestX + STUCK_PROGRESS) {
+      this.bestX = p.x;
+      this.stallFrames = 0;
+      return;
+    }
+    if (++this.stallFrames < STUCK_FRAMES) return;
+    this.stallFrames = 0;
+    const tx = Math.floor(this.bestX / TILE);
+    if (this.stuckLogged.has(tx)) return;
+    this.stuckLogged.add(tx);
+    logStuck({ level: this.id, tx, ty: Math.floor(p.cy / TILE), frames: this.tick });
   }
 
   /* ------------------------------- bumping ----------------------------- */
@@ -291,6 +360,7 @@ export class LevelScene {
       this.updateTimer();
       this.player.update(input);
       this.playerTiles();
+      this.updateProgress();
     } else if (this.state === 'clear') {
       this.player.update(input);
       this.stateTimer++;
@@ -336,7 +406,7 @@ export class LevelScene {
       this.time--;
       if (this.time <= 0) {
         this.time = 0;
-        this.player.die();
+        this.player.die('time');
       } else if (this.time === HURRY_TIME) {
         Sfx.play('timewarn');
         Music.setHurry(true);
@@ -420,10 +490,10 @@ export class LevelScene {
           this.setTile(tx, ty, T.EMPTY);
           this.addCoin(tx * TILE + 8, ty * TILE);
         } else if (ch === T.LAVA) {
-          p.die();
+          p.die('lava');
           return;
         } else if (ch === T.SPIKE) {
-          if (p.hurt()) p.vy = -3;
+          if (p.hurt('spike')) p.vy = -3;
         } else if (ch === T.DOOR && this.bossDefeated) {
           this.completeLevel(null);
           return;
@@ -431,7 +501,7 @@ export class LevelScene {
       }
     }
 
-    if (p.y > this.heightPx + 8) p.die();
+    if (p.y > this.heightPx + 8) p.die('pit');
 
     if (this.goal && this.state === 'play') {
       const pole = { x: this.goal.x + 4, y: this.goal.y - 8, w: 10, h: GOAL_HEIGHT + 8 };
@@ -473,7 +543,7 @@ export class LevelScene {
       }
 
       if (e.kind === 'hazard') {
-        if (e.box.h > 0 && overlaps(p.box, e.box)) p.hurt();
+        if (e.box.h > 0 && overlaps(p.box, e.box)) p.hurt('hazard');
         continue;
       }
 
@@ -512,6 +582,7 @@ export class LevelScene {
     if (this.state !== 'play') return;
     this.state = 'clear';
     this.stateTimer = 0;
+    this.recordClear();
     this.wonCard = card;
     this.player.controllable = false;
     this.player.autoWalk = true;
@@ -540,6 +611,7 @@ export class LevelScene {
     ctx.translate(-camX, -camY);
 
     this.drawTiles(ctx, camX, camY);
+    if (this.game.debug) this.drawHeatmap(ctx, camX, camY);
     if (this.goal) {
       drawGoal(ctx, this.goal.x, this.goal.y, GOAL_HEIGHT, this.cardIndex, this.state !== 'play');
     }
@@ -553,6 +625,39 @@ export class LevelScene {
 
     ctx.restore();
     this.drawHud(ctx);
+  }
+
+  /**
+   * The playtest heatmap, drawn under the entities so it never hides anything
+   * you might need to see. Red columns are deaths, blue ones are stalls — the
+   * two mean different things and a single colour would blur them together.
+   *
+   * Recomputed on a timer rather than every frame: it is a whole-log scan, and
+   * a debug overlay has no business costing frame time.
+   */
+  drawHeatmap(ctx, camX, camY) {
+    if (!this._heat || this.tick - this._heatAt > 30) {
+      this._heat = levelSummary(this.id);
+      this._heatAt = this.tick;
+    }
+    const heat = this._heat;
+    if (!heat.total && !heat.stuckTotal) return;
+
+    const tx0 = Math.max(0, Math.floor(camX / TILE));
+    const tx1 = Math.min(this.w - 1, Math.floor((camX + VIEW_W) / TILE));
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const deaths = heat.deaths.get(tx) || 0;
+      const stuck = heat.stuck.get(tx) || 0;
+      if (!deaths && !stuck) continue;
+      if (deaths) {
+        ctx.fillStyle = `rgba(255,48,48,${0.12 + 0.5 * (deaths / heat.worst)})`;
+        ctx.fillRect(tx * TILE, camY, TILE, VIEW_H);
+      }
+      if (stuck) {
+        ctx.fillStyle = `rgba(64,160,255,${0.1 + 0.4 * (stuck / heat.worst)})`;
+        ctx.fillRect(tx * TILE, camY + VIEW_H - 6, TILE, 6);
+      }
+    }
   }
 
   drawTiles(ctx, camX, camY) {

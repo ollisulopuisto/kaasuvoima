@@ -16,26 +16,29 @@ ennen pushia on `node tools/verify.mjs`.
       — se on se mikä tekee 2D-tasohyppelystä pahoinvoivan.
 - [x] **Vokaalit** ("jee!", "hup", "oof") formanttisynteesillä, hyppyäänet
       satunnaistettuna 18 %:iin.
-- [ ] **Telemetria** (ks. alla) — seuraava työ.
+- [x] **Telemetria, vaiheet 1–2**: paikallinen kirjaus, lämpökartta, JSON-vienti.
 
 ## Seuraavaksi
 
 ### 1. Telemetria ja palautesilmukka
 
-Pelaajalta kysytään game overissa haluaako hän lähettää pelidatan kenttien
-säätämiseen. Kerätään **vain anonyymiä**: kuolinpaikat, jumipaikat, ajat per
-kenttä, voimataso kuollessa. Ei nimeä, ei pistetaulun nimimerkkiä — silloin
-yksityisyyslupauksia ei tarvitse kirjoittaa, koska dataa ei voi yhdistää
-kehenkään.
+Kerätään **vain anonyymiä**: kuolinpaikat, jumipaikat, ajat per kenttä, voimataso
+kuollessa. Ei nimeä, ei pistetaulun nimimerkkiä — silloin yksityisyyslupauksia ei
+tarvitse kirjoittaa, koska dataa ei voi yhdistää kehenkään.
 
 Vaiheet:
-1. Paikallinen kirjaus localStorageen + lämpökartta debug-ruutuun. Nolla infraa.
-2. Vientinappi (JSON), jonka voi syöttää generaattorille käsin.
-3. Vercel-funktio + KV vastaanottoon, cron joka ajaa `gen-levels.mjs`:n
-   päivitetyillä painoilla.
+1. ✔ Paikallinen kirjaus localStorageen + lämpökartta debug-ruutuun. Nolla infraa.
+2. ✔ Vienti (näppäin 8) JSON-tiedostoksi, jonka voi syöttää generaattorille.
+3. **Kesken:** generaattori lukee viedyn lokin ja säätää painoja sen mukaan.
+   Tähän tarvitaan `gen-levels.mjs`:ään lippu `--telemetry tiedosto.json` ja
+   sääntö sille *mitä* data muuttaa: kuolemakeskittymä leventää edeltävää
+   lepotasannetta, jumikeskittymä madaltaa seuraavaa estettä. Huom: dataa pitää
+   olla riittävästi ennen kuin se on signaalia — yhden pelaajan kymmenen kuolemaa
+   samassa paikassa voi olla vain se että hän harjoitteli siinä kohtaa.
+4. Vercel-funktio + KV vastaanottoon, cron joka ajaa generaattorin.
 
-Vaihe 3 rikkoo "ei ajonaikaisia riippuvuuksia" -periaatteen, joten se on oma
-päätöksensä. Vaiheet 1–2 eivät riko mitään.
+Vaihe 4 rikkoo "ei ajonaikaisia riippuvuuksia" -periaatteen ja vaatii sen
+suostumuskysymyksen, jota vaiheet 1–3 eivät tarvitse. Se on oma päätöksensä.
 
 ### 2. Maailmojen 1–4 uudistus uudelle hyppybudjetille
 
@@ -119,6 +122,34 @@ Toteutusjärjestys:
 tauluihin, tai validaattori pitää taivasaluetta yhtenä valtavana kuiluna ja
 hylkää jokaisen kentän. Todennäköisesti sääntöjen pitää katsoa vain
 pääkaistaa — se on tämän työn kiperin kohta ja kannattaa ratkaista ensin.
+
+### 5. Kuvaefektit: WebGL-jälkikäsittely, ei uudelleenkirjoitusta
+
+Kysymys oli "olisiko WebGL-rewrite liikaa". **Kokonaan uusi renderöijä on
+liikaa** — piirtokoodia on tuhansia rivejä (`src/gfx/`, jokainen ruutu, sprite ja
+tausta suorakaiteina) ja se pitäisi kirjoittaa uusiksi teksuuriatlaksena ja
+verteksipuskureina saamatta yhtään uutta ominaisuutta. Nykyinen 320×240-piirto
+maksaa mitatusti alle millisekunnin framessa, joten nopeusongelmaa ei ole,
+ja shaderit ovat ainoa asia jota WebGL toisi.
+
+**Hybridi on halpa ja antaa juuri sen shaderin.** Canvas 2D piirtää kuten nyt,
+mutta näkyvä canvas onkin WebGL, joka lataa 2D-canvasin tekstuuriksi ja piirtää
+sen yhtenä täysruudun kolmiona fragment-shaderin läpi. Työ on ~150 riviä ja yksi
+tiedosto; koko `src/gfx/` pysyy koskemattomana. Efektit joita se antaa:
+
+- CRT: skanviivat, varjomaski, reunan kaarevuus, vinjetti
+- palettisiirto (yökenttä, vahinkovälähdys, pomon huoneen sävy)
+- kuumuuden väreily aavikossa, aaltoilu veden alla, tärinä pomon iskuun
+- vaalean hehkun bloom kolikoista ja tulipalloista
+
+Ehdot: **`willReadFrequently`-canvas ei kelpaa lähteeksi joka framessa** ilman
+mittausta, ja **fallback pakollinen** — jos `getContext('webgl2')` palauttaa
+nullin, näytetään sama 2D-canvas suoraan. Peli ei saa mennä mustaksi ajurin takia.
+
+Ilman WebGL:ää saa jo nyt: `globalCompositeOperation = 'lighter'` hehkuun,
+offscreen-canvas + `drawImage` skanviivoihin ja vinjettiin, ja CSS-filtterit
+(`hue-rotate`, `contrast`) koko canvasille. Nämä kannattaa tehdä ensin, koska ne
+ovat tunnin työ ja kertovat kannattaako shaderiputki ollenkaan.
 
 ## Myöhemmin
 

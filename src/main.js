@@ -11,6 +11,7 @@ import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { qualifies } from './core/scores.js';
+import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 
 const W = 320;
 const H = 240;
@@ -35,6 +36,11 @@ class Game {
     this.flash = '';
     this.flashTimer = 0;
     this.pendingNode = null;
+
+    // Deaths per level in this sitting, so a clear can record what it cost.
+    // Deliberately not persisted: it is an input to one telemetry event, not
+    // part of the player's save.
+    this.attempts = {};
 
     // 9 / ` toggles the developer overlay.
     this.debug = false;
@@ -214,6 +220,21 @@ class Game {
     }
   }
 
+  /* ------------------------------ telemetry ---------------------------- */
+
+  /** Hands the local playtest log over as a file. Nothing is sent anywhere. */
+  exportTelemetry() {
+    const n = eventCount();
+    if (!n) {
+      this.toast('EI VIELÄ PELIDATAA');
+      Sfx.play('bump');
+      return;
+    }
+    downloadExport();
+    this.toast(`PELIDATA VIETY  ${n} TAPAHTUMAA`);
+    Sfx.play('select');
+  }
+
   /* -------------------------------- loop ------------------------------- */
 
   step() {
@@ -241,6 +262,7 @@ class Game {
     }
     if (Input.pressed.quicksave) this.quickSave();
     if (Input.pressed.quickload) this.quickLoad();
+    if (Input.pressed.export) this.exportTelemetry();
     if (this.flashTimer > 0) this.flashTimer--;
 
     const pausable = this.scene instanceof LevelScene;
@@ -302,6 +324,11 @@ class Game {
       + `  MUTE ${a.muted ? 1 : 0}`);
     lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
+    if (scene && scene.id && scene.cam) {
+      const t = levelSummary(scene.id);
+      lines.push(`TELE ${t.total} KUOLEMAA  ${t.stuckTotal} JUMIA  ${t.clears} LAPI`
+        + `  (8 VIE ${eventCount()})`);
+    }
 
     const width = Math.max(...lines.map((l) => l.length)) * 6 + 8;
     ctx.fillStyle = 'rgba(8,8,16,0.72)';
@@ -368,3 +395,6 @@ requestAnimationFrame((t) => game.frame(t));
 
 // Handy while tuning: `window.sfb3.state` in the console.
 window.sfb3 = game;
+// …and `window.sfb3.telemetry.summary('1-1')` to see where a level is killing
+// people without having to squint at the heatmap.
+game.telemetry = { summary: levelSummary, count: eventCount, clear: clearTelemetry };
