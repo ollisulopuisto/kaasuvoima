@@ -99,6 +99,21 @@ mikään järjestely ei saa tehdä ovea saavuttamattomaksi. Ilman noita kolmea s
 epäreiluuden generaattori.
 
 
+### ✔ Tehty 9.8.2026: haarautuva kartta (v26.08.09.13)
+
+Koneisto on olemassa ja maailma 2 on sen työkappale: `2-2` on risteys,
+`HIEKKATIE` ja `LAAVATIE` päätyvät molemmat linnakkeeseen, vaikeus tulee
+mitattuna tiedostosta jonka vanhentuminen kaataa portin, ja palkinto lukee
+risteyksessä sanoina.
+
+**Roadmapin ehdoista 1–3 ovat nyt graafin ominaisuuksia** eivätkä muistettavia:
+`worldProblems` hylkää kartan jossa jokin kenttä ei ole millään reitillä, jossa
+haara on ilmoittamatta, jossa palkitsematon reitti ei vie läpi, tai jossa
+palkinto ei ole mitatusti vaikeammalla reitillä.
+
+**Jäljellä:** muut maailmat ovat yhä haarattomia — koneisto on yleinen, joten se
+on kenttädataa. Ja minipomon solmu odottaa: tiili 13,3 on varattu sille.
+
 ### Päätetty 9.8.2026: haaran palkinto ja vaikeuden näyttäminen
 
 Kaksi ehtoa neljästä alla on nyt vastattu, ja vastaukset kytkevät kolme

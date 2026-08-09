@@ -7,6 +7,56 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.13 — haarautuva kartta, ja vaikeus näkyy ennen valintaa
+
+`2-N` oli solmu johon pääsi mutta josta ei päässyt pois. Nyt maailma 2 haarautuu
+oikeasti: `2-2` on risteys, `HIEKKATIE` kulkee `2-N`:n kautta ja `LAAVATIE`
+`2-3`:n, ja molemmat päätyvät linnakkeeseen.
+
+### Vaikeus tulee mittarista, ei näppäimistöltä
+
+`tools/difficulty.mjs --write` kirjoittaa `src/data/difficulty.js`:n, jota kartta
+lukee. **Kirjoittaminen on lipun takana** — raportoiva työkalu joka kirjoittaa
+syötteensä sivuvaikutuksena on juuri se ansa jonka `measure-jump.mjs` viritti
+tänä aamuna.
+
+Vanhentuminen huomataan **johtamalla uudelleen, ei tiivisteellä**: `verify.mjs`
+tuo mittarin oman funktion ja vertaa kenttä kentältä. Tiiviste sanoisi "jokin
+muuttui"; tämä sanoo `3-2: tiedossa 128,0, mitattu 133,4 — aja: node
+tools/difficulty.mjs --write`. Ero on siinä kumman viestin varassa joku korjaa
+asian oikein.
+
+### Kaksi keskiarvoa, jotka on perusteltu vastakkaisiin suuntiin
+
+- **Reitin sisällä: suurin.** Kierros kaatuu reitin pahimpaan kenttään, ja
+  keskiarvo antaa yhden lempeän kentän piilottaa yhden tappavan.
+- **Haaran reittien kesken: pienin.** Helpoin reitti on se jonka jokainen
+  pelaaja saa; käyrän veloittaminen vapaaehtoisesta tiestä raportoi rampin jota
+  kenenkään ei ole pakko kävellä.
+
+Seuraus: maailman 2 luku laski 149,0:sta 147,3:een. **Se ei ole viritys vaan
+seuraus** — `2-N` on nyt vaihtoehto `2-3`:lle eikä enää jokaisen pelaajan
+keskiarvossa.
+
+### Rakenne on tarkistettu, ei muistettu
+
+`worldProblems` vaatii että jokainen kenttä on jollain reitillä alusta
+linnakkeeseen, että jokainen haara on ilmoitettu, että **palkitsematon reitti
+vie läpi peliin** ja että palkinto on mitatusti vaikeammalla reitillä. Roadmapin
+ehto 3 on siis nyt graafin ominaisuus eikä asia joka pitää muistaa.
+
+### Piirtäminen
+
+Pisteet ovat viisi 2×3 palkkia, **ei kirjoitettuja merkkejä**: puuttuva merkki
+jättää aukon ja siirtää kohdistinta silti, joten merkkipohjainen piste läpäisisi
+leveystestit ja piirtyisi tyhjäksi. `*` oli toinen ehdokas ja tarkoittaa
+pistetaulussa jo "tilatallennus käytössä".
+
+Risteyksessä paneeli kertoo molemmat reitit ja **mitä ne maksavat sanoina**
+(`MURTAVA VOIMA` vs. `EI PALKINTOA` — tyhjä luettaisiin "ei vielä päätetty").
+Kultainen vinoneliö on palkitsevalla tiellä **risteyksessä**, ei sen tien
+päässä joka maksaa.
+
 ## v26.08.09.12 — generaattori oppi uudet merkit, maailma 5 arvottiin uusiksi
 
 Maailma 5 oli ainoa jossa aamun mekaniikat eivät näkyneet, koska generaattori ei

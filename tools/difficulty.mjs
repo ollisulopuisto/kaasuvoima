@@ -20,16 +20,20 @@
  * their contents as difficulty would say a level got harder because it hid a
  * reward in it.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getLevel } from '../src/data/levels.js';
-import { WORLDS } from '../src/data/worlds.js';
+import {
+  WORLDS, tiersOf, tierScore, branchesOf, worldProblems, pipsFor, PIPS, REWARDS,
+} from '../src/data/worlds.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 const RAW = args.includes('--raw');
 const JSON_OUT = args.includes('--json');
+const WRITE = args.includes('--write');
+const IS_MAIN = !!process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 
 const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
 
@@ -279,6 +283,7 @@ function score(metrics) {
  * actually walks and not the order the definitions happen to be written in. */
 const playOrder = WORLDS.map((world) => ({
   id: world.id,
+  world,
   levels: world.nodes.filter((n) => n.level).map((n) => ({ id: n.level, fortress: n.type === 'fortress' })),
 }));
 
@@ -286,22 +291,120 @@ const rows = [];
 for (const world of playOrder) {
   for (const { id, fortress } of world.levels) {
     const m = measure(getLevel(id).rows);
-    rows.push({ id, world: world.id, fortress, ...m, ...score(m.metrics) });
+    rows.push({
+      id, world: world.id, fortress, ...m, ...score(m.metrics),
+    });
   }
 }
 
-const worldMean = playOrder.map((world) => {
-  const own = rows.filter((r) => r.world === world.id);
-  return { id: world.id, mean: own.reduce((s, r) => s + r.total, 0) / own.length, levels: own };
-});
-
-if (JSON_OUT) {
-  console.log(JSON.stringify({ levels: rows, worlds: worldMean }, null, 2));
-  process.exit(0);
+/** The one number per level that leaves this tool. One decimal, and no more:
+ *  the heuristic does not have a second one, and printing it would suggest it
+ *  does. */
+export function difficultyTable() {
+  return Object.fromEntries(rows.map((r) => [r.id, Number(r.total.toFixed(1))]));
 }
 
+const SCORES = difficultyTable();
+
+/**
+ * Worlds as tiers. A tier is one step of progress — one level, or one branch
+ * whose routes are alternatives — and its number is `tierScore`: hardest level
+ * within a route, easiest route across a branch. The world's number is the mean
+ * over its tiers, fortress included, which is what it always was for a world
+ * with no branches and stays comparable across the change.
+ */
+const worldShape = playOrder.map(({ id, world }) => {
+  const tiers = tiersOf(world).map((t) => ({ ...t, score: tierScore(world, t, SCORES) }));
+  const mean = tiers.reduce((s, t) => s + t.score, 0) / (tiers.length || 1);
+  return {
+    id,
+    world,
+    tiers,
+    mean,
+    branches: branchesOf(world, SCORES),
+    levels: rows.filter((r) => r.world === id),
+  };
+});
+
+const problems = WORLDS.flatMap((w) => worldProblems(w, SCORES));
+
+/**
+ * The generated file the game reads. Written only when asked: a reporting tool
+ * that rewrites its own inputs as a side effect is exactly the trap
+ * `measure-jump.mjs` fell into, and this one is read by the world map.
+ */
+function renderDataFile(table) {
+  const header = `/**
+ * GENERATED FILE — do not edit by hand.
+ *
+ *   node tools/difficulty.mjs --write
+ *
+ * The measured difficulty of every level, as \`tools/difficulty.mjs\` scores it.
+ * 100 = a world 1 level; the scale and its frozen references live in the tool.
+ *
+ * This file exists because the map has to show difficulty BEFORE the player
+ * commits to a branch, and the game cannot run the tool: the tool is Node, it
+ * reads \`tools/jump-budget.json\` off disk, and the game is a static page. So
+ * the numbers are carried across in a data file, the same way
+ * \`tools/pacing-stats.json\` carries pacing to the generator.
+ *
+ * A carried number can go stale, which is the whole cost of doing it this way.
+ * That is caught rather than trusted: \`tools/verify.mjs\` re-runs the measurement
+ * and compares it with this file, and a single changed level fails the gate with
+ * the command that fixes it. Writing is a separate flag on purpose — a reporting
+ * tool that rewrites its own inputs as a side effect is the trap
+ * \`measure-jump.mjs\` already fell into.
+ */
+
+export const DIFFICULTY = {
+`;
+  const body = Object.entries(table)
+    .map(([id, v]) => `  '${id}': ${v.toFixed(1)},`).join('\n');
+  return `${header}${body}\n};\n`;
+}
+
+/** Stored vs measured, as a list of human-readable differences. */
+export function compareTable(stored, measured) {
+  const out = [];
+  for (const [id, v] of Object.entries(measured)) {
+    if (!(id in stored)) out.push(`${id}: puuttuu tiedostosta (mitattu ${v.toFixed(1)})`);
+    else if (Math.abs(stored[id] - v) > 0.05) {
+      out.push(`${id}: tiedostossa ${Number(stored[id]).toFixed(1)}, mitattu ${v.toFixed(1)}`);
+    }
+  }
+  for (const id of Object.keys(stored)) {
+    if (!(id in measured)) out.push(`${id}: tiedostossa mutta ei enää pelissä`);
+  }
+  return out;
+}
+
+if (WRITE && IS_MAIN) {
+  await writeFile(join(ROOT, 'src/data/difficulty.js'), renderDataFile(SCORES));
+  console.log('\n  kirjoitettu src/data/difficulty.js\n');
+}
+
+if (!IS_MAIN) {
+  // imported by verify.mjs for the freshness check; it wants the numbers, not
+  // the report.
+} else if (JSON_OUT) {
+  console.log(JSON.stringify({
+    levels: rows,
+    worlds: worldShape.map((w) => ({
+      id: w.id,
+      mean: w.mean,
+      tiers: w.tiers.map((t) => ({ id: t.id, levels: t.levels, score: t.score })),
+    })),
+    problems,
+  }, null, 2));
+  process.exit(0);
+} else {
+  report();
+}
+
+function report() {
 const pad = (s, n) => String(s).padEnd(n);
 const num = (v, n, d = 1) => String(v.toFixed(d)).padStart(n);
+const meter = (n) => '●'.repeat(n) + '○'.repeat(PIPS - n);
 
 console.log('\nVaikeusmittari — heuristiikka, ei totuus. Perusluku 100 = maailman 1 taso.\n');
 
@@ -318,25 +421,26 @@ if (RAW) {
 }
 
 console.log(`  ${pad('KENTTÄ', 8)}${pad('PISTEET', 9)}${pad('VIHUT', 7)}${pad('KUILUT', 8)}`
-  + `${pad('VAARAT', 8)}${pad('KUILU%', 8)}${pad('KUIVUUS', 9)}TARKKUUS`);
-for (const world of worldMean) {
+  + `${pad('VAARAT', 8)}${pad('KUILU%', 8)}${pad('KUIVUUS', 9)}${pad('TARKKUUS', 10)}KARTALLA`);
+for (const world of worldShape) {
   for (const r of world.levels) {
     const p = r.parts;
     console.log(`  ${pad(r.id, 8)}${num(r.total, 6)}   ${num(p.enemies, 5)}  ${num(p.gaps, 6)}  `
-      + `${num(p.hazards, 6)}  ${num(p.pit, 6)}  ${num(p.drought, 7)}  ${num(p.precision, 6)}`);
+      + `${num(p.hazards, 6)}  ${num(p.pit, 6)}  ${num(p.drought, 7)}  ${num(p.precision, 6)}`
+      + `    ${meter(pipsFor(r.total))}`);
   }
-  console.log(`  ${pad(world.id, 8)}${num(world.mean, 6)}   ← maailman keskiarvo\n`);
+  console.log(`  ${pad(world.id, 8)}${num(world.mean, 6)}   ← tasojen keskiarvo, helpoin reitti\n`);
 }
 
 /* Across worlds: strictly increasing, no ties. */
 let monotonic = true;
 console.log('  Maailmojen käyrä:');
-for (let i = 0; i < worldMean.length; i++) {
-  const prev = i ? worldMean[i - 1].mean : null;
-  const delta = prev === null ? null : worldMean[i].mean - prev;
+for (let i = 0; i < worldShape.length; i++) {
+  const prev = i ? worldShape[i - 1].mean : null;
+  const delta = prev === null ? null : worldShape[i].mean - prev;
   const mark = delta === null ? '   ' : delta > 0 ? ' ↑ ' : ' ↓ ';
   if (delta !== null && delta <= 0) monotonic = false;
-  console.log(`    ${pad(worldMean[i].id, 5)}${num(worldMean[i].mean, 6)}${mark}`
+  console.log(`    ${pad(worldShape[i].id, 5)}${num(worldShape[i].mean, 6)}${mark}`
     + `${delta === null ? '' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}`}`);
 }
 console.log(monotonic
@@ -344,26 +448,76 @@ console.log(monotonic
   : '\n  KÄYRÄ EI NOUSE — jokin maailma on edellistä helpompi.');
 
 /*
- * Within a world the target is the opposite of monotonic: generally up, with at
- * least one deliberate breather. A world that only climbs is a straight line,
- * and a straight line has no shape.
+ * The shape of a world, measured in TIERS rather than along a chain.
  *
- * The fortress is left out of the walk. It is always the peak and always last,
- * so counting it would make every world "rises overall" for free and hide
- * whether the numbered levels have any shape of their own.
+ * The old walk was the world's levels in the order they happen to be listed,
+ * and it was right only as long as the map was a queue. A branching map breaks
+ * it in a way that looks like a content bug: two alternatives get read as two
+ * consecutive steps, so an easy branch after a hard one reports as a dip that
+ * nobody plays, and a hard branch reports as a spike nobody has to survive.
+ * The tool would then complain about a correct map, and a gate that complains
+ * about correct data gets switched off.
+ *
+ * So a tier is one step of progress: one level, or one whole branch. Two levels
+ * inside one branch are one tier because a player plays one of them, and the
+ * tier's number is the EASIEST route's — that is what everybody walks. The
+ * branch's own inequality is a separate question, checked below.
+ *
+ * Unchanged, and still the point: generally up, with at least one deliberate
+ * breather, because a straight line has no shape. The fortress stays out of the
+ * walk — it is always the peak and always last, so counting it would make every
+ * world "rises overall" for free.
  */
-console.log('\n  Maailman sisäinen muoto, linnake pois lukien:');
-for (const world of worldMean) {
-  const walk = world.levels.filter((r) => !r.fortress);
-  const seq = walk.map((r) => r.total);
+console.log('\n  Maailman muoto tasoittain, linnake pois lukien:');
+for (const world of worldShape) {
+  const walk = world.tiers.filter((t) => !t.fortress);
+  const seq = walk.map((t) => t.score);
   const dips = seq.slice(1).filter((v, i) => v < seq[i]).length;
   const rises = seq[seq.length - 1] > seq[0];
-  const shape = seq.map((v) => v.toFixed(0)).join(' → ');
+  const shape = walk.map((t) => {
+    if (!t.branch) return t.score.toFixed(0);
+    const routes = world.branches.find((b) => b.from === t.branch.from);
+    return `[${[...routes.routes].sort((a, b) => a.score - b.score)
+      .map((r) => r.score.toFixed(0)).join('|')}]`;
+  }).join(' → ');
   const verdict = rises && dips > 0 ? 'ok'
     : !rises ? 'ei nouse kokonaisuutena'
       : 'suora viiva, ei hengähdystä';
-  console.log(`    ${pad(world.id, 5)}${pad(shape, 28)}${pad(`${dips} notkoa`, 12)}${verdict}`);
+  console.log(`    ${pad(world.id, 5)}${pad(shape, 30)}${pad(`${dips} notkoa`, 12)}${verdict}`);
+}
+console.log('    Hakasulje on haara: sen reitit helpoimmasta vaikeimpaan, ja tason');
+console.log('    luku on niistä ensimmäinen.');
+
+/*
+ * The branches themselves. A route's number is its hardest level, because a run
+ * dies on the worst thing on the way and an average would let one gentle level
+ * hide one lethal one. The reward has to be on the harder route or the choice
+ * is a punishment, and that is checked, not assumed.
+ */
+const branched = worldShape.filter((w) => w.branches.length);
+if (branched.length) {
+  console.log('\n  Haarat — reitin luku on sen vaikein kenttä, ei keskiarvo:');
+  for (const world of branched) {
+    for (const branch of world.branches) {
+      console.log(`    ${world.id}  ${branch.from} → ${branch.to}`);
+      for (const r of [...branch.routes].sort((a, b) => a.score - b.score)) {
+        const prize = r.reward ? (REWARDS[r.reward] || {}).label || r.reward : 'ei palkintoa';
+        console.log(`      ${pad(r.name, 14)}${num(r.score, 6)}  ${meter(r.pips)}  `
+          + `${pad(r.levels.join(' '), 12)}${prize}`);
+      }
+    }
+  }
+}
+
+if (problems.length) {
+  console.log('\n  KARTAN RAKENNE — korjattavaa:');
+  for (const p of problems) console.log(`    ${p}`);
+} else {
+  console.log('\n  Kartan rakenne kunnossa: jokainen kenttä on jollain reitillä alusta');
+  console.log('  linnakkeeseen, jokainen haara on ilmoitettu, palkitsematon reitti vie');
+  console.log('  läpi, ja palkinto on vaikeammalla reitillä.');
 }
 
 console.log('\n  Heuristiikka lukee ruudukkoa. Se ei tiedä mitään rytmistä, pomon');
 console.log('  liikesarjasta eikä siitä miltä hyppy tuntuu.\n');
+}
