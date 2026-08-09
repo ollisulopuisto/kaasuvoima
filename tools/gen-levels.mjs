@@ -752,6 +752,22 @@ function planTuning(hot, trace) {
  * it with the tiles they name.
  */
 const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+/*
+ * Juoksuhiekka, and it is here for the reason the comment above gives about
+ * `SOLID`: `canonOurs` below folds every character it does not recognise into
+ * air, so a tile missing from these sets is compared against the corpus as if
+ * the level had a hole where the tile is. Sand is not air and it is not rock —
+ * it is footing you sink through — so it canonicalises to its own symbol.
+ *
+ * The generator does not *emit* it: world 5 is a factory and quicksand belongs
+ * to the desert. That is exactly why the line has to be here anyway. The day
+ * somebody adds a sand chunk to the vocabulary, the two ways this could go
+ * wrong — the similarity check reading a pool as a pit, and `validate` blessing
+ * a pool with no bottom because `validateLevel` never saw the character — are
+ * both already closed. Kept character for character identical with the copy in
+ * `src/data/rules.js`; `verify.mjs` compares the two lines as strings.
+ */
+const SINK = new Set(['~']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 
 /**
@@ -790,7 +806,8 @@ async function originality(rows) {
   const dir = process.env.VGLC_DIR;
   if (!dir) return { checked: false };
 
-  const canonOurs = (ch) => (SOLID.has(ch) ? 'X' : ENEMY.has(ch) ? 'E' : ch === 'o' ? 'o' : '-');
+  const canonOurs = (ch) => (SOLID.has(ch) ? 'X' : SINK.has(ch) ? '~'
+    : ENEMY.has(ch) ? 'E' : ch === 'o' ? 'o' : '-');
   const canonCorpus = (ch) => ('XSQ?<>[]'.includes(ch) ? 'X' : ch === 'E' ? 'E' : ch === 'o' ? 'o' : '-');
 
   const windows = (grid, canon) => {

@@ -19,7 +19,8 @@ ja `node tools/difficulty.mjs` vaikeuskäyrän.
 **Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
 kuopalle/laavalle/kellolle) · kytkinruudut · murenevat lavat · murtava tehostus
-PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · pavunvarsi ja
+PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · **juoksuhiekka**
+aavikossa, kahdessa kentässä viidestä (v26.08.09.35) · pavunvarsi ja
 warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuuksia **59 kpl 21
 kentässä**, mitattuna `secretKeys`illä eikä muistista: 30 ladattua tiiltä, 7
 tähtilohkoa, 4 kytkintä ja 8 sisäänkäyntiä piilokaistalle (tässä luki pitkään
@@ -172,6 +173,37 @@ olisi ollut kuusi teemaa kertaa neljä ruutua eli 24 piirtofunktiota, ja
 vastineeksi olisi saanut riskin: pelaaja oppii maailmassa 1 miltä rikottava
 lohko näyttää, ja jokainen uusi siluetti on uusi opettelu. Vaihtelu materiaalissa
 oli aina oikea puolisko — ja se on jo tehty.
+
+### ✔ Tehty (v26.08.09.35): juoksuhiekka, ja miksi se ei ole joka kentässä
+
+**Tehty.** Omistajan pyyntö oli kaksiosainen — *"aavikkokentissä voisi olla
+juoksuhiekkaa. Ei kaikissa, mutta joissakin"* — ja jälkimmäinen puolisko on
+suunnittelua eikä aikataulua: uhka joka on joka kentässä on maastoa, ja maasto
+ei ole uhka. Aavikon viidestä kentästä kaksi sai hiekkaa: **2-1 opettaa** (yhden
+ruudun kuoppa jossa kukaan ei voi hukkua) ja **2-3 testaa** (kahden ruudun
+kuoppa joka hukuttaa voimatasot 0–2). 2-2, 2-N ja 2-M jäivät tarkoituksella
+ilman, syyt kenttien omissa kommenteissa.
+
+Käytös ratkesi omistajan lauseella *"vetää hitaasti alas, mutta reagoimiseen jää
+useita sekunteja"*, ja se on nyt mitattu väite: **182 framea (3,03 s)** pienimmällä
+keholla ensimmäisestä kosketuksesta kuolemaan, jos ei tee mitään. Hukkuminen on
+geometriaa eikä ajastinta — koko keho pinnan alle — mikä on syy siihen että
+matala kuoppa on todistettavasti turvallinen eikä vain lempeä.
+
+Neljä kohtaa jotka olisivat menneet pieleen hiljaa:
+
+1. **`SOLID` ei ole oikea vastaus, eikä `DEADLY` myöskään.** Hiekka on omassa
+   joukossaan (`SINK`), koska se on läpäistävää astinta: kiinteänä sen *pinta*
+   olisi mennyt lattiaprofiiliin ja pohjaton lammikko olisi mennyt läpi
+   tavallisena maana. Oma sääntö (`checkQuicksand`) vaatii pohjan ja reunan.
+2. **Vaikeusmittari näkee sen.** Sama virhe jonka piikkikävelijä teki samana
+   aamuna. 2-1 115,7 → 117,4 ja 2-3 156,1 → 159,3; maailman muoto ei muuttunut.
+3. **Maahanisku hautaa.** Syöksy hiekkaan peruu iskun ja aallon ja jättää
+   jälkeensä 20 framea nopeaa uppoamista: varoajasta katoaa **47 %**. Matalassa
+   kuopassa sekään ei tapa, koska pohja on pohja.
+4. **Tähti ei kanna yli.** Hiekka liittyi listaan *kuoppa, laava, kello* eikä
+   listaan *viholliset, piikit*: se ei ole huoneessa oleva asia joka lyö, se on
+   huone.
 
 ### ✔ Tehty (v26.08.09.31): maahanisku (ground pound)
 
@@ -741,7 +773,15 @@ kenttiä joita luetaan joka framessa.
 - Rytmitilastojen louhinta vaatii ulkoisen korpuksen (`VGLC_DIR`), jota ei
   säilytetä repossa. Aja generaattori aina `VGLC_DIR` asetettuna, jotta
   samankaltaisuustarkistus on päällä.
-- **Uusi ruutumerkki on kolme paikkaa eikä yksi.** `TILE_INFO`in lisäksi se pitää
+- **Uusi ruutumerkki on neljä paikkaa eikä yksi.** `TILE_INFO`in lisäksi se pitää
   lisätä `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai
   validaattori lukee esimerkiksi murenevan lavan kuiluna ja generoi mahdottomia
-  kenttiä.
+  kenttiä. **Neljäs on `tools/difficulty.mjs`** (v26.08.09.35): ruutu jota
+  mittari ei tunne maksaa nolla, jolloin jokainen sen sisältävä kenttä mitataan
+  helpommaksi kuin se on — ja koska maailman käyrän muoto on nyt portti
+  `verify.mjs`:ssä, väärä luku ei ole vain väärä raportti. Piikkikävelijä teki
+  tämän virheen ja juoksuhiekka olisi tehnyt sen perässä.
+  Ja kaikki neljä eivät ole sama päätös: ruutu voi olla jotain muuta kuin
+  kiinteä tai ilma. Juoksuhiekka ei ole kummassakaan joukossa vaan omassaan
+  (`SINK`), koska se on **läpäistävää astinta** — perustelu on kirjoitettu auki
+  `rules.js`:ään sen joukon viereen.

@@ -14,7 +14,7 @@ import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
-import { T } from '../gfx/tiles.js';
+import { T, TILE, info } from '../gfx/tiles.js';
 
 /*
  * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
@@ -86,6 +86,54 @@ const POUND_CHARGE = 12;
 const POUND_SPEED = 7.5;
 const POUND_LAG_MIN = 16;
 const POUND_LAG_RANGE = 20;
+
+/*
+ * JUOKSUHIEKKA — the desert's own hazard, and it is a *clock* rather than a
+ * touch.
+ *
+ * The owner's decision of 9.8.2026, in his words: "something that slowly pulls
+ * you under, but you get, like, several seconds worth of time to react to it."
+ * Everything below is that sentence turned into numbers, and the numbers are
+ * the design, so they are stated here with what each one buys:
+ *
+ *   QUICKSAND_SINK    px per frame downwards, and the only speed the sand
+ *                     allows. It replaces gravity rather than fighting it, so a
+ *                     body arriving at terminal velocity stops dead the frame
+ *                     it touches — which is the whole "it caught me" reading.
+ *                     0.16 px/frame is 9.6 px/s: visible, and slow enough that
+ *                     the eye reads it as being pulled rather than as falling.
+ *   QUICKSAND_GRACE   frames the head may stay under before it is over. This is
+ *                     the *second* half of the several seconds and it exists so
+ *                     that going under is a warning and not a verdict; the
+ *                     first half is the sinking itself, which for the smallest
+ *                     body is 17 px of travel. Measured end to end in
+ *                     `verify.mjs` at roughly 195 frames — 3.2 s — from first
+ *                     contact to death for a power-0 player who does nothing.
+ *   QUICKSAND_KICK    the struggle. Weaker than JUMP_BASE (-3.5) on purpose:
+ *                     the ordinary jump is *gone* in here, and getting out is
+ *                     several kicks rather than one press. That is the lesson
+ *                     the first pool teaches, and it is why the first pool has
+ *                     to be one you cannot drown in.
+ *   QUICKSAND_KICK_CD frames between kicks, so mashing has a ceiling and the
+ *                     climb rate is a property of the sand and not of the pad.
+ *   QUICKSAND_WADE    the horizontal cap. Well under MAX_WALK, so crossing is a
+ *                     slog whichever direction you picked.
+ *   QUICKSAND_PLUNGE_* what a ground pound costs in here. See `plungeIntoSand`.
+ *
+ * Death is geometric and not a timer on contact: it happens when the *whole
+ * body* is under the surface. That is the one rule which makes the shallow pool
+ * provably survivable — a body taller than the pool is deep can never have its
+ * top below the rim, whatever it does — and it is why the teaching pool in 2-1
+ * is one tile deep and the one in 2-3 is two.
+ */
+const QUICKSAND_SINK = 0.16;
+const QUICKSAND_GRACE = 88;
+const QUICKSAND_KICK = -2.6;
+const QUICKSAND_KICK_CD = 8;
+const QUICKSAND_WADE = 0.62;
+const QUICKSAND_WADE_ACC = 0.08;
+const QUICKSAND_PLUNGE_FRAMES = 20;
+const QUICKSAND_PLUNGE_SINK = 1.7;
 
 /**
  * How hard a dive landed, 0…1, and the one number the impact reads.
@@ -229,6 +277,20 @@ export class Player extends Entity {
     this.poundPhase = '';
     this.poundTimer = 0;
     this.poundFromY = 0;
+    /* Juoksuhiekka, as three plain numbers for the same reason the dive above
+     * is three: `savestate.js` serialises every own property of every entity,
+     * so a snapshot taken mid-sink comes back mid-sink with the same frames
+     * already spent under the surface and the same dive still burying him. A
+     * clever single field, or state parked on the scene, would both have needed
+     * save code — and the version that needs save code is the version that gets
+     * it wrong the first time somebody quicksaves in the wrong second.
+     *
+     * `sunk` counts frames with the whole body under the surface; `kickCd` is
+     * the struggle cooldown; `plunge` is what is left of a ground pound's extra
+     * burial. */
+    this.sunk = 0;
+    this.kickCd = 0;
+    this.plunge = 0;
     /* Frames before a warp pipe will take this player anywhere again. Without
      * it, holding the button on arrival sends you straight back.
      *
@@ -260,6 +322,41 @@ export class Player extends Entity {
 
   /** True from the moment down + jump is taken until he can steer again. */
   get pounding() { return this.poundPhase !== ''; }
+
+  /** Reported for the tests and the HUD-less picture; the physics use the y. */
+  get inQuicksand() { return this.quicksandSurface() !== null; }
+
+  /**
+   * The y of the surface of the quicksand this body is in, or null.
+   *
+   * The *surface* and not merely "yes": every question quicksand asks is about
+   * a height. Whether the head is under is the surface against `this.y`, how
+   * far there is to climb is the surface against the feet, and where the grains
+   * are thrown from is the surface again. Returning a boolean and looking the
+   * height up again at each of those would have been three chances to look up a
+   * different tile.
+   *
+   * The highest quicksand row the body overlaps wins, because a two-tile pool
+   * has two rows of it and only the top one has air over it. Reading the tile
+   * above rather than tracking pool extents keeps this a question about the
+   * body's own box, which is the only thing that stays true when a pool is
+   * dug into a slope or a chunk boundary.
+   */
+  quicksandSurface() {
+    const x0 = Math.floor(this.x / TILE);
+    const x1 = Math.floor((this.x + this.w - 1) / TILE);
+    const y0 = Math.floor(this.y / TILE);
+    const y1 = Math.floor((this.y + this.h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (!info(this.level.tileAt(tx, ty)).quicksand) continue;
+        let top = ty;
+        while (top > 0 && info(this.level.tileAt(tx, top - 1)).quicksand) top--;
+        return top * TILE;
+      }
+    }
+    return null;
+  }
 
   /**
    * Whether running into a brick from the side breaks it. Ummetus stops it for
@@ -356,6 +453,33 @@ export class Player extends Entity {
      * caught halfway by a passing vine would end with the move stuck in its
      * dive phase for the rest of the level.
      */
+    /* ------------------------------ juoksuhiekka ---------------------- */
+    /*
+     * Ahead of the dive and ahead of everything else, and it returns for the
+     * same reason the dive does: in the sand the player's walking, jumping,
+     * ducking, climbing and gravity are all replaced rather than modified, and
+     * one early return is the only way to be sure a later edit further down
+     * cannot quietly hand any of them back.
+     *
+     * Ahead of the dive *in particular*, because the dive is the interesting
+     * case: a body that is already in the sand may not keep diving through it,
+     * and a dive that reaches the sand is turned into a burial by
+     * `plungeIntoSand` rather than being allowed to land.
+     */
+    const sand = this.quicksandSurface();
+    if (sand !== null) {
+      if (this.pounding) this.plungeIntoSand();
+      this.updateQuicksand(sand, left, right, jumpPressed);
+      return;
+    }
+    /* Out of it: the counters are dropped rather than decayed. Getting your
+     * head back into the air is meant to be the whole answer, and a residue
+     * that carried over from the last pool would make the second one unfair by
+     * an amount nobody could see. */
+    this.sunk = 0;
+    this.plunge = 0;
+    if (this.kickCd > 0) this.kickCd--;
+
     if (this.pounding) {
       this.updatePound();
       return;
@@ -657,6 +781,15 @@ export class Player extends Entity {
       // The gas he is riding down on, one puff every third frame: enough to
       // read as a jet, cheap enough that a long fall is not a particle storm.
       if (this.tick % 3 === 0) this.level.spawnPuff(this.cx, this.y + this.h - 2);
+      /* Checked here and not only at the top of `update`, because the dive is
+       * the one thing that can cross a whole tile of sand and reach the floor
+       * under it inside a single frame. One frame late would mean a shockwave
+       * thrown from the bottom of a pool, which is the sand failing to swallow
+       * exactly the thing it is supposed to swallow. */
+      if (this.quicksandSurface() !== null) {
+        this.plungeIntoSand();
+        return;
+      }
       if (this.onGround) this.landPound();
       return;
     }
@@ -678,6 +811,108 @@ export class Player extends Entity {
     this.poundTimer = Math.round(POUND_LAG_MIN + POUND_LAG_RANGE * strength);
     this.vy = 0;
     this.level.poundImpact(this, strength);
+  }
+
+  /**
+   * One frame of being in the sand. Nothing else in `update` runs while this
+   * does, so this is the whole player.
+   *
+   * @param {number} surface y of the top of the pool, from `quicksandSurface`
+   */
+  updateQuicksand(surface, left, right, jumpPressed) {
+    const entering = this.sunk === 0 && this.vy > QUICKSAND_SINK;
+    if (this.plunge > 0) this.plunge--;
+    if (this.kickCd > 0) this.kickCd--;
+    this.climbing = false;
+    if (this.ducking) {
+      this.ducking = false;
+      this.applySize();
+    }
+    /* The picture and the sound of arriving, together (DESIGN.md §8), and only
+     * on the frame the sand actually takes the speed away — walking in off a
+     * rim at a crawl is not an event and must not fire one. */
+    if (entering) {
+      Sfx.play('upota');
+      this.level.spawnPuff(this.cx, surface + 2, true);
+    }
+
+    /* Sideways. Slower than a walk and with its own acceleration, so the sand
+     * is thick in both axes: a cap alone would let you reach it instantly and
+     * the wading would only *look* slow. */
+    const dir = (right ? 1 : 0) - (left ? 1 : 0);
+    if (dir !== 0) {
+      this.vx = approach(this.vx, QUICKSAND_WADE * dir, QUICKSAND_WADE_ACC);
+      this.facing = dir;
+    } else {
+      this.vx = approach(this.vx, 0, QUICKSAND_WADE_ACC * 2);
+    }
+
+    /* The struggle, and it is the *only* thing the jump button does in here.
+     * Replacing the jump rather than weakening it is the point: the move you
+     * have relied on for two worlds is gone, and finding out what replaced it
+     * is what the first pool is for. */
+    if (jumpPressed && this.kickCd === 0) {
+      this.jumpBuffer = 0;
+      this.vy = QUICKSAND_KICK;
+      this.kickCd = QUICKSAND_KICK_CD;
+      this.plunge = 0;                       // one kick cancels a dive's burial
+      Sfx.play('kahlaa');
+      this.level.spawnPuff(this.cx, this.y + this.h, true);
+    }
+
+    /* Gravity still runs, but the sand decides how fast down is allowed to be.
+     * Upwards is left alone: a kick has to carry, or the last one — the one
+     * that has to put the feet over the rim — would be swallowed too. */
+    const cap = this.plunge > 0 ? QUICKSAND_PLUNGE_SINK : QUICKSAND_SINK;
+    this.vy = Math.min(this.vy + GRAVITY, cap);
+    moveX(this, this.level);
+    moveY(this, this.level);
+
+    /*
+     * And the one thing that kills. Under means the top of the body is below
+     * the surface — geometry, not a timer on contact — so a pool shallower than
+     * the body cannot ever do it, however long you stand in one. The `+ 1` is
+     * not slack: a body resting on the floor of a pool exactly its own height
+     * has its top on the rim to the pixel, and that must read as "standing in
+     * it up to the neck" rather than as drowning.
+     */
+    if (this.y >= surface + 1) {
+      if (++this.sunk >= QUICKSAND_GRACE) this.die('quicksand');
+      // Grains thrown up from where he went under: the only sign left once the
+      // body is below the rim, and the reason the surface keeps churning.
+      if (this.sunk % 12 === 0) this.level.spawnPuff(this.cx, surface + 2, true);
+    } else {
+      this.sunk = 0;
+    }
+  }
+
+  /**
+   * A ground pound that reached the sand.
+   *
+   * The move's premise is that the higher you fall the harder you arrive, and
+   * the honest reading of that over quicksand is the unkind one: you arrive
+   * harder, so you go in deeper. So the dive is dropped where it is — no
+   * shockwave, no lag, no landing, because the sand swallowed all of it — and
+   * what is left of it is `plunge`, a few frames during which the sand's grip
+   * is ten times weaker and the body drops the way it meant to.
+   *
+   * That is a real price and it is measured rather than described: in the deep
+   * pool it takes roughly two fifths off the time between falling in and going
+   * under, which is most of the reacting time the hazard promises. It is also
+   * bounded by the level rather than by a number here — the plunge is speed and
+   * not teleportation, so the floor of the pool still stops it, and the pool in
+   * 2-1 stays one that cannot kill you even if you dive into it head first.
+   *
+   * A struggle cancels it (see `updateQuicksand`), because a player who reacts
+   * has to get the reaction he paid for.
+   */
+  plungeIntoSand() {
+    this.cancelPound();
+    this.plunge = QUICKSAND_PLUNGE_FRAMES;
+    this.vy = 0;
+    Sfx.play('upota');
+    this.level.spawnPuff(this.cx, this.y + this.h, true);
+    this.level.shake(1.5);
   }
 
   /** Drops the move on the floor wherever it was. */
@@ -994,3 +1229,11 @@ export class Player extends Entity {
  * read the price, not remember it. A number copied into a test is a number
  * that goes stale the first time the move is tuned. */
 export { MAX_WALK, MAX_RUN, MAX_P, POUND_CHARGE, POUND_SPEED };
+
+/* And the quicksand numbers, for exactly the same reason. "Several seconds" is
+ * a claim about `QUICKSAND_SINK` and `QUICKSAND_GRACE` together; a test that
+ * remembered either of them would keep passing after somebody halved one. */
+export {
+  QUICKSAND_SINK, QUICKSAND_GRACE, QUICKSAND_KICK, QUICKSAND_WADE,
+  QUICKSAND_PLUNGE_FRAMES,
+};

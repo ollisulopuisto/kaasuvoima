@@ -7,6 +7,160 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.35 — juoksuhiekka, ja kolme sekuntia aikaa tehdä jotain
+
+Aavikkoon uusi ruutu `~`, **JUOKSUHIEKKA**. Omistajan pyyntö oli kaksiosainen ja
+molemmat puoliskot ovat suunnittelua: *"aavikkokentissä voisi olla
+juoksuhiekkaa. Ei kaikissa, mutta joissakin."* Jälkimmäinen ei ole aikataulu.
+Uhka joka on joka kentässä on maastoa, ja maasto ei ole uhka — joten aavikon
+viidestä kentästä **kaksi** sai hiekkaa ja kolme jäi ilman, kirjatuista syistä.
+
+### Mitä se tekee, ja mistä numerot tulevat
+
+Käytöksen ratkaisi omistaja: *"vetää hitaasti alas, mutta reagoimiseen jää
+useita sekunteja."* Sen jälkeen kaikki oli mitattavaa.
+
+Hiekka **korvaa** fysiikan sen sijaan että säätäisi sitä. Sisällä painovoiman
+tilalla on 0,16 px/frame alaspäin — päätenopeudella saapuva keho pysähtyy siihen
+frameen jolla koskettaa, mikä on koko "se sai minut kiinni" -lukema — vaakaan
+jää 0,62 px/frame eli alle puolet kävelykatosta, ja **hyppy lakkaa olemasta
+hyppy**: nappi antaa heikon potkun (-2,6 vastaan hypyn -3,5) kahdeksan framen
+välein. Ulos pääsee rimpuilemalla, ja se on koko mekaniikka.
+
+Kuolema on **geometriaa eikä ajastinta**: koko keho pinnan alle, ja siitä 88
+framea armonaikaa. Mitattuna päästä päähän pienimmällä keholla, ilman yhtään
+näppäintä: **182 framea eli 3,03 sekuntia** ensimmäisestä kosketuksesta. Se on
+se lause numeroina.
+
+Ja siitä seuraa suoraan se mikä tekee ensimmäisestä kohtaamisesta reilun. Keho
+on 16 px, ja kuoppa jonka pohja on 16 px pinnasta ei mahdu hukuttamaan sitä —
+pää jää rajalle pikselilleen. **2-1:n kuoppa on yhden ruudun syvyinen**, eli sen
+turvallisuus on todistettavissa eikä luvattavissa: `verify.mjs` pudottaa
+voimatason 0 pelaajan siihen, ei paina mitään 900 framea ja toteaa hänen olevan
+yhä siinä. **2-3:n kuoppa on kahden ruudun**, 32 px, ja pelin kehot ovat
+16/26/30/34/38/43 px — joten voimatasot 0, 1 ja 2 voidaan vetää alle ja 3, 4 ja
+5 eivät. Sama kauppa kuin kaikilla muillakin uhilla, sanottuna geometriana.
+
+### Missä sitä on, ja missä ei
+
+- **2-1 opettaa.** `dune_sink` korvaa `coins`-palikan ja kantaa samat neljä
+  kolikkoa, joten kenttä on saman mittainen ja sama lattia; uutta on vain se
+  mitä kolikoiden alla on. Opetettava asia on se jota ei voi arvata: nappi ei
+  ole hiekassa hyppy. Se maksaa täällä pari sekuntia kelloa eikä mitään muuta.
+- **2-3 testaa.** `dune_sink_deep` korvaa toisen `walkers`-palikan ja pitää
+  molemmat kävelijänsä, joten vihollismäärä, pituus ja lattia ovat ennallaan ja
+  ainoa uusi asia kentässä on kaksi ruutua hiekkaa. Se on laavakenttä, eli
+  "lattia voi tappaa" on lause jota kenttä on jo sanonut neljätoista palikkaa —
+  ja hiekka on sen toinen lukutapa: laava on välitön eikä siihen ole vastausta,
+  hiekka antaa kolme sekuntia ja siihen on. Vastakkaiset opetukset, eri näköiset,
+  eri tuntuiset.
+- **Ei 2-2:een**, jonka ainoa tehtävä on piilokaistat. **Ei 2-N:ään**, jonka
+  paletissa tiili ja maa ovat 0,4 % päässä toisistaan — pelin heikoin pari ja
+  tiedossa oleva ongelma, eli väärin paikka ruudulle joka pitää tunnistaa
+  väristä. **Ei 2-M:ään**, jonka alkukävely on olemassa siksi ettei tappion
+  uusiminen maksaisi paljon. **Ei 2-F:ään**, koska linnakkeessa on kivilattia.
+
+### Kolme paikkaa oli neljä
+
+ROADMAP varoittaa että uusi ruutumerkki on kolme paikkaa eikä yksi. Se on nyt
+**neljä**, ja neljäs on `tools/difficulty.mjs`: ruutu jota mittari ei tunne
+maksaa nolla, ja piikkikävelijä teki tämän virheen samana aamuna. Koska käyrän
+muoto on nyt portti eikä tuloste, väärä luku ei olisi ollut vain väärä raportti.
+
+Hiekka maksaa **1,2 sarakkeelta kun se on syvä ja 0,5 kun se on matala** —
+matala ei voi tappaa, ja hinta on siitä mitä se ottaa: kellon, vauhdin ja sen
+mikä oli perässä. Laavan 1,5 alle koska laava on välitön; piikkipedin 1,0 yli
+koska piikkipeti on yksi hyppy ja yksi voimataso, kun taas kuopasta on
+kiivettävä ylös ilman sitä liikettä joka avaa kaiken muun tässä pelissä.
+**2-1 115,7 → 117,4** ja **2-3 156,1 → 159,3**; maailman 2 muoto on yhä
+`117 → 126 → [124|159]`, tasan yksi notko, ja käyrä nousee joka maailmassa.
+`src/data/difficulty.js` ajettu uusiksi.
+
+**Eikä `SOLID` ollut oikea vastaus, eikä `DEADLY` myöskään.** Hiekka on omassa
+joukossaan `SINK`, ja perustelu on kirjoitettu auki joukon viereen: kiinteänä
+sen *pinta* olisi mennyt lattiaprofiiliin, jolloin pohjaton lammikko — kuilu
+jonka päälle on maalattu hiekkaa — olisi mennyt läpi tavallisena maana.
+Kuolettavana taas vuotokartoitus olisi lakannut kulkemasta siitä läpi ja
+keksinyt ansan, mitä se on rakennettu olemaan keksimättä. Oma sääntö
+`checkQuicksand` vaatii kaksi asiaa jotka ruudukko osaa sanoa: **pohja** ja
+**reuna** — reuna mitattuna samaa hyppybudjettia vasten kuin kaikki muukin,
+koska varoaika tekee sijoittelusta koko työn. Hiekka aukealla on säikähdys;
+hiekka kuilun pohjalla on kuolemantuomio jonka lukemiseen annetaan kolme
+sekuntia.
+
+### Maahanisku hautaa, tähti ei kanna
+
+Kaksi samana päivänä liikkunutta asiaa, molemmat päätettyinä eikä sattumalta.
+
+**Maahanisku** (v26.08.09.31) ajaa alaspäin kovaa, ja rehellinen lukutapa
+hiekan päällä on epäystävällinen: kovempi tulo, syvemmälle. Syöksy hiekkaan
+peruu itsensä — ei aaltoa, ei jälkijähmeää, hiekka nieli koko liikkeen — ja
+jättää jälkeensä 20 framea kymmenen kertaa heikompaa otetta. **Varoajasta
+katoaa 47 %: 182 framea putoaa 97:ään.** Matalassa kuopassa sekään ei tapa,
+koska pohja on pohja eikä uppoama ole teleporttaus, ja yksi rimpuilu peruu sen —
+reagoinut pelaaja saa sen mistä maksoi.
+
+**Supertähti** liittyi listaan *kuoppa, laava, kello* eikä listaan *viholliset,
+maan piikit*. Hiekka ei ole huoneessa oleva asia joka lyö, se **on** huone. Ja
+tähtilohko on 2-1:ssä, eli sama kenttä joka opettaa hiekan jakaa myös sen
+kuolemattomuuden — väärä lukutapa olisi tehnyt uhasta näkymättömän kahdeksitoista
+sekunniksi juuri siellä missä se opetellaan.
+
+### Kuva ja ääni, kumpikin väistäen kolmea väärää lukutapaa
+
+Ruudulla hiekan piti hävitä kolmelle naapurille eikä yhdellekään: aavikon
+maalle, laavalle (ja jään railolle) ja kuilulle. Maa on valaistu ylhäältä ja
+*vaalenee* pintaa kohti; tämä tummenee eikä sillä ole lakkia lainkaan, mikä on
+se yksi asia joka saa lammikon lukemaan reikänä eikä lattiana. Mitattuna
+`verify.mjs`:ssä: **hiekka vastaan aavikon maa 38,7 %** ja **hiekka vastaan
+laava 24,3 %**, kun aavikon oma maa/tiili-pari on 8,6 % — kynnys on tuo pari,
+koska se on pelin heikoimpia eikä tavoite. Laava ja railo ovat molemmat
+*harjanne*: yksi kirkas viiva ruudun poikki, siniaallolla siirrettynä, kulkien
+sivusuuntaan. Harjanne on siis se muoto jota tällä ei saa olla, joten se
+**pyörii**: kaksi pientä rengasta vastakkaisiin suuntiin, mikä ei mene mihinkään
+ja lukee jonakin jota hämmennetään alta.
+
+Ääni on `upota`, ja sen koko suunnittelu on "ei pyyhkäisy eikä märkä". Laava ja
+vesi ovat molemmat pyyhkäisyjä — yksi suodin liukumassa yhtenäisen kohinan yli,
+sama muoto jota `dive` jo käyttää (2400 → 300 Hz puolessa sekunnissa, eli se
+läheltä piti) — ja märkä tulisi `farty`sta, joka on talon ääni kaasulle nesteen
+läpi. Jäljelle jää se mitä hiekka on: **rakeita.** Kuusi lyhyttä purskausta
+seitsemänkymmenen millisekunnin välein, kukin kapea (Q 9, joten se soi eikä
+suhise) ja kukin edellistä matalampi. Korva lukee jonon **aineena** eikä
+liikkeenä. Alla yksi hyvin matala runko ilman kuultavaa liukua. `verify.mjs`
+lukee lähdekoodia pitääkseen `farty`n poissa tästä rivistä — päätös joka muuten
+kumoutuisi hiljaa.
+
+Rimpuilulla on oma äänensä `kahlaa`, ja se **saa** olla kaasua, koska se on
+kaasua: 0,13 s ja 118 Hz lähes kuivana, kun `fart` on 0,3 s ja 150 Hz puoliksi
+märkänä. Lyhyt, matala, tukahtunut — hiekan alta.
+
+### Testit, ja mikä niistä oli punaista
+
+Ensimmäisellä ajolla punaisena: hiekkaa ei ollut yhdessäkään kentässä (0/26),
+uppoamistestit eivät päässeet ajoon asti (`Cannot read properties of undefined`),
+hiekka vastaan aavikon maa **0,0 %**, pohjaton lammikko ei tuottanut yhtään
+huomautusta (*"ei mitään"* — eli juuri se hiljainen lukutapa), seinien sisään
+kaivettu kuoppa ei tuottanut huomautusta, **vaikeusmittari 7,2 vastaan 7,2 eli
++0,0**, ja uusi merkki puuttui kaikista neljästä paikasta.
+
+Yksi testi oli vihreä liian helposti ja se korjattiin: kahlausnopeutta mitattiin
+pelaajalta joka oli puskemassa penkkaa vasten, jolloin lukema oli 0,00 px/frame
+riippumatta siitä hidastaako hiekka mitään. Nyt matka mitataan lammikon
+vasemmasta reunasta ja väite on sidottu olemassa olevaan vakioon eikä valittuun
+suhdelukuun: kahlauskaton on oltava alle puolet kävelykatosta. Samasta syystä
+ulospääsy mitataan **kuopan pohjalta** eikä reunalta — reunalta pääsee yhdellä
+potkulla, ja se ei ole se tapaus jota lupaus koskee.
+
+Uppoaminen on kolme tavallista numeroa pelaajassa (`sunk`, `kickCd`, `plunge`),
+joten `savestate.js` kantaa sen ilman riviäkään tallennuskoodia: pikatallennus
+kesken uppoamisen palaa kesken uppoamista, 43 framea pinnan alla molemmin puolin.
+
+`playable.mjs` ennallaan: 2-1 pysähtyy yhä sarakkeeseen 264, täsmälleen kuten
+ennen muutosta (todennettu ajamalla erikseen ilman muutoksia), eikä 2-3 pysähdy.
+
+---
+
 ## v26.08.09.34 — kamera ennakoi myös laskun
 
 Omistajan raportti v26.08.09.23:n jälkeen: *"pystykameran liike kun pudotaan

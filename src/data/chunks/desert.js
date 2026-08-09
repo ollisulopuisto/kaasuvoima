@@ -128,6 +128,81 @@ export const DESERT_CHUNKS = {
     14: G,
   }),
 
+  /* ---------------------------- juoksuhiekka --------------------------- */
+  /**
+   * The first quicksand in the game, and it is built so that it **cannot kill
+   * anybody**.
+   *
+   * One tile deep with sand under it, and that is the whole safety argument
+   * rather than a kindness: the engine drowns you when the *whole body* is
+   * below the surface, and the smallest body is 16 px — exactly one tile. A
+   * player standing on the floor of this pool has his head on the rim to the
+   * pixel, so there is no input, no power level and no ground pound that puts
+   * him under. Verified rather than reasoned: `verify.mjs` drops a power-0
+   * player in, does nothing for 900 frames, and asserts he is still there.
+   *
+   * That is what makes it a lesson. What it teaches is the one thing about the
+   * tile that a player cannot guess — **the jump button is not a jump in
+   * here**. Falling in takes your speed away in a single frame, the sand
+   * rustles, and the button you have relied on for two worlds gives you a
+   * feeble kick instead. Learning that costs a couple of seconds off the clock
+   * here, and it is what keeps the two-tile pool in 2-3 fair.
+   *
+   * The coins are directly over the pool on purpose, and they are the same four
+   * the `coins` chunk this replaces had. The greedy line and the safe line are
+   * the same line — a running jump takes all four and lands past the sand —
+   * and the player who stops to jump straight up for them falls in, which is
+   * precisely the harmless mistake this chunk exists to hand out.
+   *
+   * Four wide against a measured jump budget of six, so it is cleared without
+   * thinking by anyone who sees it coming. It is not a gap and the validator
+   * does not read it as one (see `checkQuicksand` in rules.js); the width is
+   * about the player, not the rule.
+   */
+  dune_sink: ck(16, {
+    9: '     oooo',
+    13: '#####~~~~#######',
+    14: '################',
+  }),
+
+  /**
+   * And the one that can. Two tiles deep, dug into a low sand bank.
+   *
+   * **The depth is the entire design and it is arithmetic, not taste.** The
+   * pool is 32 px; the bodies in this game are 16, 26, 30, 34, 38 and 43 px
+   * tall. So power levels 0, 1 and 2 can be pulled under it and 3, 4 and 5
+   * cannot — their heads stay over the rim standing on the bottom. That is the
+   * same bargain every other hazard in the game strikes, said in geometry
+   * instead of in hit points: being bigger is worth something, and it is worth
+   * exactly what it looks like it is worth.
+   *
+   * **Why it needs a bank at all.** A band is fifteen rows and the ground is
+   * the bottom two, so a pool dug into the ordinary floor can only ever be one
+   * tile deep before it runs out of level to have a bottom in — and a pool with
+   * no bottom is a pit with sand painted on it, which is the failure
+   * `checkQuicksand` reports by name. Raising the floor one row buys the second
+   * tile of depth honestly. The step up is one tile, against a measured wall
+   * budget of four.
+   *
+   * The banks are also the fence. Nothing in this game turns round at a ledge,
+   * so the two walkers stand on the flat either side of the dune and are
+   * stopped by its own sides — a walker that could wander into the pool would
+   * sink to the bottom and keep walking, invisible, which is a bug that looks
+   * like a joke. They are the same two walkers as the `walkers` chunk this
+   * replaces, in the same places, so the level's enemy count did not move.
+   *
+   * Three columns wide, with the coins two rows over the bank so the jump that
+   * takes them is the jump that clears the sand. Same trick as the shallow one
+   * and for the same reason: the reward is on the safe line, and the sand is
+   * what you get for being greedy in the wrong direction.
+   */
+  dune_sink_deep: ck(16, {
+    10: '       ooo',
+    12: ' g  XXX~~~XXXX g',
+    13: '####XXX~~~XXXX##',
+    14: '################',
+  }),
+
   /* --------------------------- minipomoareena -------------------------- */
   /**
    * The papuparoonit's arena: two stone plinths in a sand bowl, one baron on

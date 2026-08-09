@@ -831,6 +831,52 @@ const SFX = {
     tone({ type: 'sine', from: 1500, to: 420, dur: 0.06, gain: 0.28, hold: 0.2, curve: 'lin' });
     noise({ dur: 0.07, from: 3400, to: 900, q: 1.2, gain: 0.16, type: 'highpass', attack: 0.004 });
   },
+  upota: () => {
+    /*
+     * JUOKSUHIEKKA, the moment the sand takes hold — and the whole design of it
+     * is "not a sweep and not wet".
+     *
+     * DESIGN.md §8: a second signal that sounds like a first one is worse than
+     * no signal, and there are two first ones standing next to this. Lava and
+     * meltwater are both *sweeps*: one filter sliding across a continuous band
+     * of noise, which is exactly the shape `dive` and `flight` already use here
+     * (`dive` runs 2400 → 300 Hz over half a second and would have been the
+     * near-miss). Anything wet would come out of `farty`, which is the house
+     * sound for gas through liquid, so `farty` is banned from this line and
+     * `verify.mjs` reads the source to keep it banned.
+     *
+     * What is left is what sand actually is: **grains**. Six short bursts at
+     * seventy milliseconds, each one narrow (Q 9, so it rings rather than
+     * hisses) and each one lower than the last. Six of them make a rustle that
+     * falls, nothing else on this bus is a train of anything, and the ear reads
+     * a train as a *material* rather than as a movement.
+     *
+     * Under it, one very low body with no glide worth hearing (78 → 44 Hz over
+     * nearly half a second). It is the weight of the stuff, and it is the part
+     * that says the sound is about something big and slow — the same job the
+     * long tail does in `slam`, at a fifth of the level, because this is not an
+     * impact and must not land like one.
+     */
+    for (let i = 0; i < 6; i++) {
+      noise({
+        dur: 0.09, from: 1800 - i * 230, to: 900 - i * 120, q: 9,
+        gain: 0.11, delay: i * 0.07, attack: 0.012,
+      });
+    }
+    tone({ type: 'triangle', from: 78, to: 44, dur: 0.45, gain: 0.1, hold: 0.5, curve: 'lin' });
+  },
+  kahlaa: () => {
+    /*
+     * …and one struggle out of it. This one is allowed to be gas, because it
+     * *is* gas — the same push that carries the fart jump — but it is muffled
+     * by everything on top of it, and that is what keeps it from reading as the
+     * jump it is not: `fart` is 0.3 s at 150 Hz and half wet, this is 0.13 s at
+     * 118 Hz and almost dry. Short, low, choked. One grain on top of it ties it
+     * back to `upota`, so the two read as one place rather than two events.
+     */
+    farty({ dur: 0.13, base: 118, gain: 0.2, wobble: 14, wet: 0.15 });
+    noise({ dur: 0.1, from: 900, to: 320, q: 6, gain: 0.1, attack: 0.01 });
+  },
   cork: () => {
     // the pop of a bung going in, then the muffled protest of a blocked player
     tone({ type: 'sine', from: 900, to: 260, dur: 0.07, gain: 0.3, hold: 0.15, curve: 'lin' });
