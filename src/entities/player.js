@@ -155,8 +155,20 @@ export class Player extends Entity {
     this.morphTimer = 0;
     this.climbing = false;
     /* Frames before a warp pipe will take this player anywhere again. Without
-     * it, holding the button on arrival sends you straight back. */
+     * it, holding the button on arrival sends you straight back.
+     *
+     * It is **not** the thing that stops you acting mid-warp and never was —
+     * it counts down while you are running around perfectly in control. That
+     * is `transit`, below, and the two are separate because they answer
+     * different questions: one is "may this pipe fire", the other is "is there
+     * a player in the room at all". */
     this.warpLock = 0;
+    /* Set while the body is inside something — a pipe, the fortress door. The
+     * scene drives it (`LevelScene.updateTransit`); this class only stands
+     * aside. A plain object of numbers on purpose: `savestate.js` serialises
+     * every own property of every entity, so a snapshot taken mid-transit
+     * carries it without a line of save code. */
+    this.transit = null;
     this.applySize();
     this.y = y - this.h;   // spawn standing on the given tile top
   }
@@ -216,6 +228,19 @@ export class Player extends Entity {
     if (this.dying) {
       this.vy = Math.min(this.vy + 0.32, 9);
       this.y += this.vy;
+      return;
+    }
+
+    /* Inside a pipe or a doorway. No physics, no input, no attack, no size
+     * change — the scene moves the body and nothing else does. The timers
+     * above still run, because a star burning down while you take a shortcut
+     * is the same star. */
+    if (this.transit) {
+      this.vx = 0;
+      this.vy = 0;
+      this.jumpBuffer = 0;
+      this.flying = 0;
+      this.spin = 0;
       return;
     }
 
@@ -521,7 +546,7 @@ export class Player extends Entity {
 
   /** Ummetus: corks the gas off for a while. Not damage, but it stings. */
   cork(frames = 380) {
-    if (this.invuln > 0 || this.dying) return false;
+    if (this.invuln > 0 || this.dying || this.transit) return false;
     this.corked = Math.max(this.corked, frames);
     this.flying = 0;
     this.spin = 0;
@@ -532,7 +557,8 @@ export class Player extends Entity {
 
   /** @returns true when the hit actually landed (i.e. not invulnerable). */
   hurt(cause = 'enemy') {
-    if (this.invuln > 0 || this.dying || this.frozen > 0) return false;
+    // A body inside a pipe is not in the room; nothing in the room reaches it.
+    if (this.invuln > 0 || this.dying || this.frozen > 0 || this.transit) return false;
     if (this.power.level === 0) {
       this.die(cause);
       return true;
@@ -606,6 +632,32 @@ export class Player extends Entity {
     }
   }
 
+  /**
+   * Steps out of the world for a moment. The scene decides where the body goes
+   * and when it comes back — see `LevelScene.updateTransit`.
+   */
+  beginTransit(spec) {
+    this.transit = {
+      phase: 'in',
+      f: 0,
+      fromX: this.x,
+      fromY: this.y,
+      hide: null,
+      hideDir: 1,
+      /* Remembered rather than assumed true on the way out. A transit is not
+       * the only thing that takes the controls away — the clear sequence does
+       * too — and handing them back unconditionally would be a warp that
+       * cancelled a cutscene. */
+      wasControllable: this.controllable,
+      ...spec,
+    };
+    this.vx = 0;
+    this.vy = 0;
+    this.onGround = false;
+    this.climbing = false;
+    this.controllable = false;
+  }
+
   /** Remembers the body he is leaving, for the size-change flicker. */
   startMorph(fromLevel) {
     this.morphFrom = fromLevel;
@@ -615,6 +667,12 @@ export class Player extends Entity {
   /** `cause` is only carried through to telemetry; it changes nothing in play. */
   die(cause = 'enemy') {
     if (this.dying) return;
+    /* Nothing in the level can kill a travelling player — the clock stops, the
+     * collisions stand aside and `hurt` refuses — so this only fires for a
+     * death forced from outside (the debug keys, a test). Dropping the transit
+     * is the right answer there: the death animation is the thing to watch,
+     * and a half-finished slide is not. */
+    this.transit = null;
     this.dying = true;
     this.noclip = true;
     this.controllable = false;
