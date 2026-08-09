@@ -7,6 +7,13 @@ alipikselifysiikka, viholliset, viisiportaiset tehostukset, maalikortti).
 Ei riippuvuuksia, ei build-vaihetta, ei kuva- tai äänitiedostoja — kaikki
 grafiikka piirretään ja kaikki äänet syntetisoidaan ajossa.
 
+Grafiikka, kentät, hahmot ja nimet ovat omia. **Musiikki on omaa sävellystä tai
+tekijänoikeudesta vapautunutta sävelmistöä**, ja vapautunut nimetään aina
+säveltäjineen ja vuosineen — sävelet kirjoitetaan käsin nuotti kerrallaan, joten
+mukaan ei tule äänitettä eikä nuottilaitosta, jotka ovat omine oikeuksineen eri
+teoksia kuin vapautunut sävellys. Koko lista ja perustelu ovat
+[DESIGN.md](DESIGN.md):n kohdassa 1 b.
+
 **Pelattavissa: <https://sfb3.vercel.app>**
 
 | Dokumentti | Sisältö |
