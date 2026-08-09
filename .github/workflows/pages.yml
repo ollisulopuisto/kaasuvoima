@@ -1,0 +1,65 @@
+# Toinen osoite pelille, GitHub Pagesin kautta.
+#
+# Miksi tämä on olemassa: Vercelin ilmaisversiossa on 100 julkaisun päiväraja,
+# ja 9.8.2026 se tuli vastaan kesken työpäivän — peli jäi hetkeksi ilman tapaa
+# päivittyä. Pages on eri kiintiö ja eri palvelu, joten se on vara-ajotie eikä
+# korvaaja: Vercel pysyy ensisijaisena osoitteena (ks. `og:url` index.html:ssä).
+#
+# **Tämä työnkulku ei tee mitään ennen kuin Pages on kytketty päälle repolle**,
+# ja sen kytkeminen on omistajan päätös eikä tekninen kysymys: Pages toimii
+# ilmaisversiossa vain julkisella repolla. Tiedosto on täällä valmiina, jotta
+# päätöksen jälkeen ei tarvitse rakentaa mitään.
+#
+# Rakennusvaihetta ei ole, eikä sitä pidä tulla. Peli on staattisia tiedostoja
+# — se on DESIGN.md:n kohta 7, ei sattuma — joten julkaisu on repon juuren
+# lataamista sellaisenaan. Jos tähän joskus ilmestyy `npm run build`, jokin on
+# mennyt pieleen jossain muualla.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # Käsin ajettavissa, koska vara-ajotien pitää olla ajettavissa silloin kun
+  # sitä tarvitaan eikä vasta seuraavalla commitilla.
+  workflow_dispatch:
+
+# Vain luku lähdekoodiin, kirjoitus Pagesiin. `id-token` on se mitä
+# `deploy-pages` vaatii todistaakseen kutsuvansa tästä työnkulusta.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Yksi julkaisu kerrallaan, eikä keskeneräistä keskeytetä: puolivalmis
+# julkaisu on rikkinäinen sivu, ja se on huonompi kuin vanha sivu.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `enablement: true` yrittää kytkeä Pagesin päälle jos se ei jo ole.
+      # Yksityisellä repolla ilmaisversiossa tämä kaatuu, ja sen kuuluukin
+      # kaataa: hiljaa onnistuva julkaisu joka ei julkaise mitään on pahempi.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Repon juuri sellaisenaan. `tools/` ja `.claude/` eivät kuulu peliin,
+      # mutta ne ovat pieniä ja niiden poissulkeminen tarkoittaisi listaa jota
+      # pitää muistaa päivittää — ja unohdettu rivi on tässä juuri se vika
+      # jonka takia peli lakkaa toimimasta. Ladataan kaikki.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
