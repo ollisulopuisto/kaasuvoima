@@ -1,18 +1,100 @@
 import {
   WORLDS, findNode, startNode, linkPoints, linkCurve, routeByLink, branchAt, nodePips,
-  PIPS, REWARDS, TILE,
+  PIPS, REWARDS, TILE, BEND_MAX,
 } from '../data/worlds.js';
 import { drawText } from '../gfx/font.js';
 import { drawItem, drawPlayer } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
-import { hashNoise, padNum } from '../core/utils.js';
+import { clamp, hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
 import { secretTally } from '../core/secrets.js';
 
 const MAP_Y = 14;
 const MAP_H = 144;
+const VIEW_W = 320;
 const PANEL_Y = MAP_Y + MAP_H;
 const WALK_SPEED = 1.4;
+
+/*
+ * THE MAP SCROLLS SIDEWAYS, AND ONLY SIDEWAYS.
+ *
+ * A world's terrain grid used to be exactly the size of the view — 20x9 tiles,
+ * 320x144 px — so the map had never had to move. Eight level nodes, the roads
+ * between them and the corridor rule 8 keeps clear beside every road do not fit
+ * in twenty columns, so the grid is allowed to be wider than the window and the
+ * window follows the pawn. A world that is still twenty columns wide is exactly
+ * 320 px wide, `maxScroll()` is 0, and every pixel of it is drawn where it was.
+ *
+ * WHY NOT VERTICALLY, and what would have to be true first. The band is 144 px
+ * tall because that is what is left once the title bar (14) and the panel (82)
+ * have their rows, and both of those are sized against text that has to be
+ * readable — the band did not choose its height, it inherited it. Three things
+ * would have to be settled before a second axis could be added, and none of
+ * them is settled by this file:
+ *
+ *   1. A vertical dead zone would have to be smaller than 96 px, because the
+ *      band is 144 px and a zone of 96 leaves 48 px of travel. Small dead zones
+ *      are where jitter lives, so it would need its own measurement rather than
+ *      this one halved.
+ *   2. The panel and the title bar would have to stop being the map's frame.
+ *      Right now a node's difficulty bar ends at y=143 and the panel starts at
+ *      158, and that 15 px is checked; a map that can slide upward has no such
+ *      fixed relationship, so the check would have to be rewritten against the
+ *      view rather than against the grid.
+ *   3. Somebody would have to decide what a map taller than the window MEANS.
+ *      A world reads left to right — that is why sideways scrolling needs no
+ *      explanation. Up and down is a second dimension of progress, and a map
+ *      that has one is a different design, not a bigger picture.
+ *
+ * WHAT THIS CAMERA INHERITED FROM `level.js`, AND WHAT IT DID NOT.
+ *
+ * Inherited, and the reasoning is that file's:
+ *   - A DEAD ZONE, and the same arithmetic: the view moves only by the amount
+ *     the pawn has left the zone, so it can never be more than CAM_DEAD_ZONE
+ *     from centre and small moves inside the zone leave the screen still. On
+ *     this map that also kills the one wobble a map camera can have: a bend on
+ *     a vertical road pushes the pawn's x sideways by up to BEND_MAX px, and a
+ *     camera without a zone would sway left and right while the pawn walks
+ *     straight down.
+ *   - NO INERTIA. The drift is applied whole, on the frame it is measured, so
+ *     the view stops on the same frame the pawn does. A view that keeps
+ *     drifting after the thing you aim with has stopped is what makes 2D
+ *     platformers feel seasick, and it is no better when the thing that stopped
+ *     is a pawn arriving at a node.
+ *   - THE CUT ON ENTRY. `level.js` has exactly one cut, `centerCamera()`, and
+ *     it assigns rather than eases. So does `snapCamera()` here, and for the
+ *     same reason: on the frame the scene appears there is no "where the view
+ *     was", so there is nothing to ease from.
+ *
+ * NOT inherited, deliberately:
+ *   - LOOK-AHEAD. In a level the view leans the way you are running because you
+ *     are aiming at a gap you cannot see yet. On the map you are not aiming:
+ *     the move is chosen with one press, the destination is a node that is
+ *     already drawn, and the walk is short — a two-tile hop is 23 frames at
+ *     1.4 px/frame. A lean that builds over ~30 frames and returns over ~14
+ *     would still be settling after the pawn had arrived, which is inertia
+ *     wearing a different name.
+ *   - THE VERTICAL RULES. `cameraY`, the fall lead, the band clamp: all of them
+ *     answer questions this scene does not have. See above.
+ *
+ * CAM_DEAD_ZONE is 96 and that is measured against the map rather than chosen.
+ * The pawn is held within 96 px of the middle of a 320 px window, so there are
+ * always at least 64 px of map beyond it on the side it is walking towards. The
+ * longest hop between two nodes on any shipped map is three tiles (48 px) and a
+ * node stamp reaches 11 px past its centre, so 59 px is what it takes to see
+ * the whole of the next node before stepping off the one you are on — and 64
+ * clears that with the four pixels a bend can add.
+ */
+const CAM_DEAD_ZONE = 96;
+
+/*
+ * How far a node's stamp reaches past the right edge of its own tile. The
+ * difficulty bar is drawn from x-1 and is PIP_BAR_W + 2 = 20 px wide, so it
+ * ends 3 px past the tile. The map is that much wider than its grid, or a node
+ * in the last column would have its bar clipped by the window at full scroll.
+ * No shipped world has a node past column 18, so this widens none of them.
+ */
+const STAMP_BLEED = 3;
 
 const HOUSE_ITEMS = ['shroom', 'flower', 'leaf', 'soup'];
 
@@ -106,6 +188,98 @@ export class WorldMapScene {
     /* Which links belong to which branch route. Measured difficulty, read from
      * the generated table — nothing on this map is a hand-typed guess. */
     this.routeLinks = routeByLink(this.world);
+    this.snapCamera();
+  }
+
+  /* -------------------------------- camera ----------------------------- */
+
+  /**
+   * How wide the map is in pixels — the grid, plus whatever the drawing hangs
+   * over its right edge.
+   *
+   * Read from the data rather than from a constant, because the constant is the
+   * thing this change exists to stop believing. `MAP_W` in `worlds.js` says 20
+   * and every shipped grid is still 20, but the next one need not be, and a
+   * width that is a number somewhere else is a width that goes stale silently.
+   * Link waypoints count too: a road may be routed through a column no node
+   * stands in, and a road drawn off the end of the map is the same bug as a
+   * node drawn off it.
+   */
+  static mapWidthPx(world) {
+    let right = 0;
+    for (const row of world.terrain || []) right = Math.max(right, row.length * TILE);
+    for (const n of world.nodes) right = Math.max(right, n.tx * TILE + TILE + STAMP_BLEED);
+    for (const l of world.links) {
+      for (const [tx] of l.path || []) right = Math.max(right, tx * TILE + TILE);
+    }
+    return right;
+  }
+
+  mapWidthPx() {
+    return WorldMapScene.mapWidthPx(this.world);
+  }
+
+  /** The furthest left edge the window may have. 0 on a map 20 tiles wide. */
+  maxScroll() {
+    return Math.max(0, this.mapWidthPx() - VIEW_W);
+  }
+
+  /**
+   * The window's left edge in map pixels, rounded.
+   *
+   * Rounded because everything on this map is drawn on whole pixels and a
+   * fractional translate would soften every edge it moved: the plaque's border,
+   * the two-pixel seams inside the stamp, the four-pixel pips. Those gaps are
+   * measured from rendered pixels by the gate, so a blurred stamp is not merely
+   * uglier — it measures smaller, and the map would fail a rule it had not
+   * actually broken. `this.scroll` stays fractional so the follow itself does
+   * not quantise; only the drawing rounds.
+   *
+   * The four map-space drawers each `save()`, `translate()` and `restore()`
+   * unconditionally, including on the eight shipped maps where the offset is 0
+   * and the transform is the identity. Skipping the transform when it is zero
+   * was measured and it saves 0.04 ms of a 16.7 ms frame — and it would mean
+   * that the eight maps anybody actually plays are the ones that never execute
+   * the new code path, so the first world wide enough to scroll would also be
+   * the first to run it. A quarter of a percent is not worth buying that.
+   */
+  camX() {
+    return Math.round(this.scroll);
+  }
+
+  /**
+   * The cut. Centres the window on the pawn and clamps it to the map.
+   *
+   * Every arrival on this map comes through here, because every arrival builds
+   * a new scene: entering a world, coming back from a level, loading a save,
+   * the first frame of a new game. That is the point — the framing on arrival
+   * is a pure function of which node you are standing on, so there is nothing
+   * to remember and nothing that can arrive wrong and then slide into place.
+   *
+   * It is also the whole of the answer to "does the scroll belong in the save
+   * file". It does not: `sync()` derives it from `state.node`, which is already
+   * saved, and a second copy in the file could only ever disagree with the
+   * first. See `snapCamera`'s only caller.
+   */
+  snapCamera() {
+    this.scroll = clamp(this.pos.x - VIEW_W / 2, 0, this.maxScroll());
+  }
+
+  /**
+   * The follow: a dead zone, no easing, no lean. See the note at the top of the
+   * file for which half of `level.js`'s camera this is and which half it is not.
+   *
+   * Written as "move by the drift the pawn has beyond the zone" rather than
+   * "ease towards the pawn" on purpose, and it is the same line `level.js`
+   * uses. The two are not the same shape: an ease keeps moving after the pawn
+   * stops, this cannot, because the drift it is fed is zero on that frame.
+   */
+  updateCamera() {
+    const drift = (this.pos.x - VIEW_W / 2) - this.scroll;
+    if (Math.abs(drift) > CAM_DEAD_ZONE) {
+      this.scroll += drift - Math.sign(drift) * CAM_DEAD_ZONE;
+    }
+    this.scroll = clamp(this.scroll, 0, this.maxScroll());
   }
 
   /** The branch that starts where the player is standing, if any. */
@@ -139,7 +313,22 @@ export class WorldMapScene {
 
   /* -------------------------------- input ------------------------------ */
 
+  /**
+   * The camera runs after whatever moved the pawn, on every frame and in every
+   * mode, which is why the scene's own step is a separate method.
+   *
+   * Every mode: the banner, the house menu and the idle state cannot move the
+   * pawn, so on those frames `updateCamera` measures a drift of zero and does
+   * nothing at all — but "cannot move" is a claim about today's code, and a
+   * camera that only runs in the mode somebody remembered is how a view ends up
+   * one frame behind the thing it is following.
+   */
   update(input) {
+    this.step(input);
+    this.updateCamera();
+  }
+
+  step(input) {
     this.tick++;
     if (this.messageTimer > 0) this.messageTimer--;
 
@@ -307,7 +496,19 @@ export class WorldMapScene {
     if (this.mode === 'banner') this.drawBanner(ctx);
   }
 
-  /** Clouds and birds drifting over the map, on top of the terrain. */
+  /**
+   * Clouds and birds drifting over the map, on top of the terrain.
+   *
+   * The one thing on this map drawn in SCREEN pixels rather than map pixels,
+   * and it stays that way now the map scrolls. A cloud has no tile it belongs
+   * to: it is weather over the window, it already moves on its own, and it
+   * wraps at 320 + 60 px because that is the width of the window and not of the
+   * world. Scrolling it 1:1 with the ground would make it a painted cloud stuck
+   * to a hillside; scrolling it at some fraction is parallax, which is a real
+   * thing to want and a different change — it would need the wrap span to
+   * become the map's width so the same cloud did not reappear twice on a wide
+   * map, and it would need somebody to decide how far away the sky is.
+   */
   drawSky(ctx) {
     const th = this.world.theme;
     if (th === 'factory') return;                 // that sky is full of smoke
@@ -358,11 +559,31 @@ export class WorldMapScene {
       : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038'
         : th === 'cloud' ? '#b6c6e4' : th === 'fortress' ? '#26263a' : '#348a34';
     ctx.fillStyle = base;
-    ctx.fillRect(0, MAP_Y, 320, MAP_H);
+    ctx.fillRect(0, MAP_Y, VIEW_W, MAP_H);
+
+    /*
+     * Only the columns the window is over.
+     *
+     * Every glyph in the switch below draws inside its own 16 px tile — that is
+     * checked by the scenery clearance test, which measures from the drawn
+     * pixels — so the visible columns are exactly the columns the window
+     * overlaps, and a column of bleed on each side is insurance rather than
+     * need. Twenty columns is what this loop used to run and what it still runs
+     * at scroll 0 on a 20-tile map, so a narrow world draws the same tiles in
+     * the same order as before; a map twice as wide costs the same, which is
+     * the point of doing this at all rather than trusting that 270 tiles is
+     * cheap enough.
+     */
+    const cam = this.camX();
+    const from = Math.max(0, Math.floor(cam / TILE) - 1);
+    const to = Math.floor((cam + VIEW_W - 1) / TILE) + 1;
+    ctx.save();
+    ctx.translate(-cam, 0);
 
     for (let ty = 0; ty < this.world.terrain.length; ty++) {
       const row = this.world.terrain[ty];
-      for (let tx = 0; tx < row.length; tx++) {
+      const last = Math.min(to, row.length - 1);
+      for (let tx = from; tx <= last; tx++) {
         const x = tx * TILE;
         const y = MAP_Y + ty * TILE;
         const ch = row[tx];
@@ -631,6 +852,7 @@ export class WorldMapScene {
         }
       }
     }
+    ctx.restore();
   }
 
   /**
@@ -726,8 +948,47 @@ export class WorldMapScene {
     return { x: line[0].x, y: line[0].y };
   }
 
+  /**
+   * Is any of this on screen? `span` is a pair of map-x pixels.
+   *
+   * Everything the map draws is culled through this one predicate rather than
+   * each drawer inventing its own margin, because a cull is a claim about where
+   * a thing is drawn and two claims that drift apart is how something vanishes
+   * a frame before it leaves the window. Half a tile of slack on each side is
+   * there so the callers may pass tile edges and let this worry about the ink
+   * that hangs over them.
+   */
+  onView(x0, x1) {
+    const cam = this.camX();
+    return x1 >= cam - TILE / 2 && x0 <= cam + VIEW_W + TILE / 2;
+  }
+
+  /**
+   * The map-x range a link's drawing can occupy: the tiles it passes through,
+   * plus the bend that may push it sideways and the dark rim every dot carries.
+   *
+   * Measured from `linkPoints` and not from `linkCurve`, so the question can be
+   * asked before the curve is built — the curve is the expensive half and the
+   * point of asking is to not build it. That is safe because the bend is capped
+   * at BEND_MAX by construction (see `linkCurve`), which is the same reason
+   * rule 8 can reason about a road in whole tiles.
+   */
+  linkSpan(link) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const p of linkPoints(this.world, link)) {
+      lo = Math.min(lo, p.tx * TILE + 8);
+      hi = Math.max(hi, p.tx * TILE + 8);
+    }
+    return [lo - BEND_MAX - 3, hi + BEND_MAX + 3];
+  }
+
   drawLinks(ctx) {
+    ctx.save();
+    ctx.translate(-this.camX(), 0);
     for (const link of this.world.links) {
+      const span = this.linkSpan(link);
+      if (!this.onView(span[0], span[1])) continue;
       const open = this.isLinkOpen(link);
       const route = this.routeLinks.get(link);
       const lit = route ? TIER_COLORS[route.pips] : '#ffd048';
@@ -771,16 +1032,24 @@ export class WorldMapScene {
      * a choice, it is a surprise — ROADMAP condition 2. */
     for (const route of new Set(this.routeLinks.values())) {
       if (!route.reward || !route.links[0]) continue;
+      const span = this.linkSpan(route.links[0]);
+      if (!this.onView(span[0], span[1])) continue;
       const curve = linkCurve(this.world, route.links[0]);
       const line = route.links[0].b === route.via[0] ? curve : [...curve].reverse();
       const at = WorldMapScene.pointAlong(line, 1.5 * TILE);
       this.drawRewardMark(ctx, at.x, MAP_Y + at.y);
     }
+    ctx.restore();
   }
 
   drawNodes(ctx) {
+    ctx.save();
+    ctx.translate(-this.camX(), 0);
     for (const node of this.world.nodes) {
       const x = node.tx * TILE;
+      /* The stamp starts one pixel left of the tile and ends three past it —
+       * see STAMP_BLEED — and `onView` adds half a tile on top of that. */
+      if (!this.onView(x - 1, x + TILE + STAMP_BLEED)) continue;
       const y = MAP_Y + node.ty * TILE;
       const cleared = this.isCleared(node.id);
       /* The bar used to be squeezed inside the same 16 px cell as the plaque,
@@ -853,6 +1122,7 @@ export class WorldMapScene {
         }
       }
     }
+    ctx.restore();
   }
 
   drawToken(ctx) {
@@ -880,6 +1150,13 @@ export class WorldMapScene {
     const glance = this.standing > 260 && (this.standing % 420) > 300
       && (this.standing % 420) < 360;
 
+    /* The pawn is drawn in map pixels like everything else on the map, so the
+     * camera reaches it the same way — and so the two things that move at once
+     * while it walks a bend, the pawn and the window, cannot disagree about
+     * where the road is. `this.pos.x` stays fractional; the translate is whole,
+     * so the sprite lands exactly where it did before the camera existed. */
+    ctx.save();
+    ctx.translate(-this.camX(), 0);
     drawPlayer(ctx, this.pos.x - 6, MAP_Y + this.pos.y - lift + bob, {
       type: power.type,
       level: power.level,
@@ -893,6 +1170,7 @@ export class WorldMapScene {
       theme: this.world.theme,
       wag: this.tick / 20,
     });
+    ctx.restore();
   }
 
   drawTitleBar(ctx) {
