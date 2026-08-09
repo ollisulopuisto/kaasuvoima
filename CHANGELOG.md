@@ -7,6 +7,38 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.26 — portti ei enää heitä kolikkoa äänitestissä
+
+`a spoken line is loud enough to hear` kaatui satunnaisesti noin joka toinen
+ajo. Se ei ollut äänivika vaan mittausvika, ja **portti joka kaatuu sattumalta
+on pahempi kuin puuttuva testi**: se opettaa ohittamaan punaisen.
+
+Rivi mittasi väylän pohjakohinan odotettuaan kiinteät 900 ms. Perustelu oli
+oikea — suite on soittanut ääniä minuutin ajan, väylän pitää antaa rauhoittua —
+mutta luku oli arvaus siitä miten pitkä häntä viimeisellä äänellä sattuu
+olemaan. Mitattuna tausta oli milloin **0,000 ja milloin 3,029**: rivi ei
+mitannut kohinaa vaan sitä ehtikö edellinen ääni loppua. Vika on vanha, ei
+tämän aamun: todennettu ajamalla `230dacc` sellaisenaan (`ok` / `FAIL 3,029`).
+
+Nyt väylää kuunnellaan kunnes se on hiljaa, **samalla 200 ms:n ikkunalla jolla
+lopputulos mitataan** ja kaksi peräkkäistä ikkunaa. Molemmat ehdot ovat
+mittaustuloksia eivätkä makuasioita:
+
+- eri ikkuna hiljaisuudelle (60 ms) ja mittaukselle (200 ms) kaatui omaan
+  mittaansa — "hiljeni 182 ms, tausta 19,450", eli portti julisti hiljaisuuden
+  keskellä ryminää;
+- yksi ikkuna kahden sijaan osui `sprout`in **sisäiseen taukoon** (kopsahdus,
+  hiljaisuus, nouseva kahina): tausta 0,000 ja heti perään ääni 4,250, eli
+  mittaus luuli mittaavansa yhtä puhuttua riviä ja mittasi kahinaa sen päällä.
+
+Punainen tehtiin tahallaan, koska satunnaista vikaa ei voi muuten toistaa:
+neljä ääntä soi yhtä aikaa juuri ennen mittausta. Vanhalla odotuksella se
+kaataa rivin **3/3 ajossa** (tausta 0,104 / 0,116 / 0,104), uudella se menee
+läpi **5/5** ja tausta on joka kerta 0,000. Rauhoittuminen kestää mitattuna
+1473–1618 ms, eli 900 ms ei koskaan riittänyt.
+
+---
+
 ## v26.08.09.25 — pavunvarsi kasvaa lohkosta
 
 Varsi oli tähän asti **pysyvästi näkyvissä**: salaisuuden palkinto seisoi

@@ -6061,8 +6061,17 @@ const report = await page.evaluate(async () => {
     const tap = audioTap();
     let voice = 0;
     let floorNoise = 0;
+    let note = '';
     if (tap && tap.ctx.state === 'running') {
       Music.stop();
+      /* Punainen ennen vihreää, ja satunnaiselle vialle se tarkoittaa että
+       * vika pitää **tuottaa tahallaan**. Kaatuneissa ajoissa tausta oli 0,379
+       * … 3,029 — se ei ole yhden äänen häntä vaan muutama päällekkäinen ääni,
+       * eli suite itse jätti väylän soimaan. Neljä ääntä yhtä aikaa tekee
+       * saman joka ajolla ja pysyy siinä suuruusluokassa jonka oikeat
+       * kaatumiset näyttivät; kymmenen ääntä olisi tuottanut leikkaavan
+       * 19,450:n eli vian jota suite ei koskaan tuota itse. */
+      for (const s of ['sprout', 'bigfart', 'burst', 'flight']) Sfx.play(s);
       const an = tap.ctx.createAnalyser();
       an.fftSize = 2048;
       tap.bus.connect(an);
@@ -6077,18 +6086,53 @@ const report = await page.evaluate(async () => {
         }
         return peak;
       };
-      // The suite has been firing sounds for a minute; let the bus go quiet
-      // first, and measure what "quiet" actually is before trusting the reading.
-      await new Promise((r) => setTimeout(r, 900));
-      floorNoise = await peakFor(200);
+      /* Odota hiljaisuutta, älä kelloa.
+       *
+       * Tässä oli kiinteä 900 ms odotus ja perustelu "suite on soittanut ääniä
+       * minuutin ajan, annetaan väylän rauhoittua". Perustelu oli oikea, luku
+       * ei: 900 ms on arvaus siitä miten pitkä häntä edellisellä äänellä
+       * sattuu olemaan, ja arvaus meni pieleen noin joka toinen ajo. Mitattuna
+       * tausta oli milloin 0,000 ja milloin 3,029 — eli testi ei mitannut
+       * pohjakohinaa vaan sitä ehtiikö edellinen ääni loppua. Portti joka
+       * kaatuu satunnaisesti ei ole portti vaan kolikonheitto, ja se on
+       * pahempi kuin puuttuva testi: se opettaa ohittamaan punaisen.
+       *
+       * Nyt väylää kuunnellaan kunnes se on oikeasti hiljaa, ja **samalla
+       * ikkunalla jolla lopputulos mitataan**. Ensimmäinen yritys tarkkaili
+       * hiljaisuutta 60 ms:n ikkunalla ja mittasi sitten 200 ms:llä, mikä
+       * kaatui omaan mittaansa: ääni jossa on tauko näyttää 60 ms:n ikkunassa
+       * hiljaiselta ja jatkuu heti perään. Mitattu tulos oli "hiljeni 182 ms,
+       * tausta 19,450" — eli portti julisti hiljaisuuden keskellä ryminää.
+       * Yksi ikkuna, se jonka väite koskee, ei voi valehdella noin.
+       *
+       * **Kaksi peräkkäistä hiljaista ikkunaa, ei yhtä**, ja siihen on
+       * konkreettinen syy: `sprout` on ajastettu ääni jonka sisällä on tauko
+       * (kopsahdus, hiljaisuus, sitten nouseva kahina). Yhden ikkunan sääntö
+       * osui siihen taukoon — tausta 0,000 ja heti perään ääni 4,250, eli
+       * mittaus luuli mittaavansa yhtä puhuttua riviä ja mittasi kahinaa sen
+       * päällä. Neljäsataa millisekuntia yhtäjaksoista hiljaisuutta on
+       * pidempi kuin yksikään pelin äänen sisäinen tauko.
+       *
+       * Jos väylä ei rauhoitu kuudessa sekunnissa, sekin on tulos eikä
+       * oletus: silmukka päättyy, `tausta` jää suureksi ja rivi kaatuu
+       * kertoen syyn. */
+      const QUIET = 0.02;
+      const t0 = performance.now();
+      let calm = 0;
+      while (calm < 2 && performance.now() - t0 < 6000) {
+        floorNoise = await peakFor(200);
+        calm = floorNoise > QUIET ? 0 : calm + 1;
+      }
+      const waited = Math.round(performance.now() - t0);
       Sfx.play('yeah');
       voice = await peakFor(420);
       an.disconnect();
+      note = ` (hiljeni ${waited} ms)`;
     }
     const measured = tap && tap.ctx.state === 'running';
     expect('a spoken line is loud enough to hear',
       !measured || (floorNoise < 0.1 && voice > 0.25),
-      measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}` : 'ei mitattu');
+      measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}${note}` : 'ei mitattu');
   }
 
   /*

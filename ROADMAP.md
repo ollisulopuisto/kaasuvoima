@@ -653,6 +653,13 @@ kenttiä joita luetaan joka framessa.
 
 - Botti `verify.mjs`:ssä osaa vain juosta ja hypätä, joten sen kuolemat
   vihollisiin ovat normaalia. Vain FAILURES-rivit merkitsevät.
+- `playable.mjs` sanoo **4-3: EI LÄPI EDES TUPLAHYPYLLÄ** (kuilu sarakkeessa
+  235). Sama botin rajoitus: reitti kulkee kelluvien lavojen yli, ja botti
+  hyppää suoraan eteenpäin. Todennettu vanhaksi ajamalla `230dacc` erikseen.
+- **Ajastettua ääntä ei voi mitata kellolla.** `sprout`in sisällä on tauko,
+  joten "onko väylä hiljaa" pitää kysyä kahdelta peräkkäiseltä ikkunalta ja
+  samalta ikkunalta jolla tulos mitataan (v26.08.09.26). Jos uusia pitkiä
+  ääniä tulee lisää, tämä on se kohta joka pettää ensimmäisenä.
 - Pistetaulu on selainkohtainen (localStorage), ei jaettu laitteiden kesken.
 - Rytmitilastojen louhinta vaatii ulkoisen korpuksen (`VGLC_DIR`), jota ei
   säilytetä repossa. Aja generaattori aina `VGLC_DIR` asetettuna, jotta
