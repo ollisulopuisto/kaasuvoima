@@ -7,6 +7,91 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.34 — kamera ennakoi myös laskun
+
+Omistajan raportti v26.08.09.23:n jälkeen: *"pystykameran liike kun pudotaan
+maanpinnan yläpuolella olevalta tasolta on **edelleen** nykivää."* Nousu
+korjattiin ennakoimalla; tämä on sama akseli alaspäin, ja se oli yhä väärin.
+
+### Ankkuri oli jalat, eivätkä jalat ole asettunut viiva
+
+Pudotessa jalat laskevat TERMINALin vauhtia mutta ease sulkee vain neljänneksen
+erosta framea kohti, ja eksponentiaalinen ease asettuu tasan
+`(1 − 0,25)/0,25 = 3v` kohteensa taakse. Kuva siis kulki koko matkan **12 px
+velkaa** — ja koska jalat pysähtyvät osumassa kertaheitolla eikä kuva pysähdy,
+**velka maksettiin vasta laskeutumisen jälkeen.**
+
+Mitattuna, oikealta reunalta oikeassa kentässä käveltynä ja hypättynä: kuva
+liikkui vielä **10 framea ja 6,97 px** laskeutumisen jälkeen (4-1), 9 framea ja
+4,30 px (2-3), 9 ja 4,12 (2-1). Se on inertiaa, ja `updateCamera`in oma
+kommentti sanoo suoraan että inertia on juuri se mikä saa tasohyppelyn
+tuntumaan merenkäynniltä.
+
+**Miksi omistaja sanoi nimenomaan "maanpinnan yläpuolella olevalta tasolta":**
+tavalliset 15-rivin kentät piilottivat vian. 1-1 mittasi 2 framea ja 0,71 px —
+ei siksi että kamera käyttäytyi, vaan siksi että 208-rivin ikkunassa kameralla
+on vain 32 px pystyliikkumavaraa ja kentän oma raja pysäytti kohteen (ja maksoi
+velan) jo ennen kuin jalat ehtivät perille. Kirjekuorikentissä ja kaistoissa,
+joissa kameralla on tilaa, mekanismi näkyy sellaisena kuin se on.
+
+### Korjaus on CAM_TOP_LEADin peilikuva
+
+Ankkuri tähtää siihen **mihin jalat ovat menossa**, ei siihen missä ne ovat:
+`vy * 3`, kolme framea samalla laskutoimituksella kuin nousussa — kolmen framen
+ennakko kumoaa kolmen framen viiveen — **ja katkaistuna siihen pudotukseen joka
+oikeasti on alla**. `dropBelow()` katsoo jalkojen alla olevat ruudut samalla
+säännöllä jolla `moveY` laskeutuu, joten kun lattia tulee ennakon sisään,
+ankkuri pysähtyy sille viivalle jolle jalatkin pysähtyvät ja jää odottamaan.
+Kuva easettaa siis lopullista arvoaan kohti putoamisen viimeiset framet ja
+**saapuu pelaajan mukana** eikä hänen peräänsä.
+
+Tulos: pahimmillaan 2,94 px / 7 framea (4-1) entisen 6,97 / 10 sijaan, 1,81 / 6
+(2-3) entisen 4,30 / 9 sijaan, ja 1-1:ssä kuva pysähtyy framen sisällä, 0,36 px.
+Kuoppaan putoaminen ei vastaa mitään eikä sen tarvitse: ilman lattiaa katkaisu
+on ääretön, ennakko on `vy * 3`, ja putoamista seurataan kuten mitä tahansa.
+
+**Ennakko saa kasvaa vain sitä vauhtia jolla painovoima sen kasvattaisi**, ja
+juuri se rajoitus on syy siihen että `camLead` muistetaan framejen yli. Ennakko
+kertoo nopeuden, joten mikä tahansa joka muuttaa putoamisvauhtia yhdellä
+framella siirtää kohdetta kolminkertaisesti — sama ansa jonka CAM_TOP_LEAD
+dokumentoi pieruhypylle, ja tässä se on **maahanisku**, joka menee paikallaan
+roikkumisesta 7,5 px/frameen kahden framen välissä. Ilman rajoitusta kuvan oma
+nopeus muuttui **6,79 px kahden framen välissä** iskun alussa, siinä missä
+vanha koodi muutti sitä 1,87 — nykäisy omistajan omalla määritelmällä. Rajoitus
+painaa sen 1,75:een, alle sen mitä korvattava koodi teki. Tavallinen putoaminen
+ei muutu lainkaan, koska putoavan kappaleen vauhti
+kasvaa tasan GRAVITYn verran framessa eikä raja koskaan pure. Sama rajoitus
+kattaa toisenkin tavan jolla lattia voi kadota yhdessä framessa: murenevan
+lankun, tai sen reunan yli liukumisen jolle oli laskeutumassa.
+
+Isku maksaa turvallisuutensa ennakkona ja siis velkana: 8,47 px / 11 framea
+2-3:ssa entisen 11,51 / 12 sijaan. Parempi, ei poissa, ja luku on väitetty
+sellaisena kuin se on.
+
+### Punainen ennen vihreää, ja mitä punainen sanoi
+
+Kolme uutta testiä `verify.mjs`:ään. `a view that has fallen stops when the
+player stops` kaatui lukemiin `4-1 jump 6.97 px / 10 framea, 2-3 walk 4.30 px /
+9 framea` ja `a ground pound is not followed down by the view it landed under`
+lukemaan `2-3 pound 11.51 px / 12 framea`. Kolmas — että ennakko ei saa maksaa
+itseään maasta tai pidosta — oli vihreä jo ennen korjausta ja on sitä yhä.
+
+Nousun korjaus (v26.08.09.23) ei liikahtanut pikseliäkään: `a view that has to
+rise animates instead of snapping` lukee edelleen rivi riviltä saman, pahin
+frame 1,95 px.
+
+### Mitattu ja jätetty korjaamatta
+
+`CAM_SNAP` **ei osu yhteenkään putoamiseen**: leveintä eroa kuvan ja sen
+halutun paikan välillä mitattiin 14,5 px, kynnys on 48. Sen sijaan korotetulle
+tasolle **laskeutuminen** osuu siihen: 2-1:ssä aavikon lattia kehystyy kentän
+80 px liikkumavaran pohjalle ja neljän ruudun taso kohtaan 30, joten ankkurin
+askel kosketuksessa on 50 px ja `CAM_SNAP` leikkaa kaikki 50 yhdellä framella.
+Se on nouseva akseli eikä se mistä omistaja raportoi, joten se on kirjattu
+`level.js`:ään ja jätetty rauhaan sen sijaan että sitä korjattaisiin sokkona.
+
+---
+
 ## v26.08.09.33 — luulaakso, ja keskiyö joka lyö kaksitoista
 
 Maailma 6, **LUULAAKSO**: hautausmaa keskiyöllä, neljä kenttää, oma teema, oma

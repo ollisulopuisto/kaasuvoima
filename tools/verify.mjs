@@ -7331,6 +7331,160 @@ const report = await page.evaluate(async () => {
         rows.map((r) => `${r.id} ${r.below.toFixed(0)}px alla / ${r.lag.toFixed(0)}px jäljessä`).join(' '));
     }
 
+    /*
+     * Red before green (DESIGN.md §7) for the owner's third camera report:
+     * "vertical camera movement when falling down from a platform that is
+     * above the ground is still janky". The rise was fixed by anticipating
+     * (CAM_TOP_LEAD); this is the same axis falling, and it was still wrong.
+     *
+     * **The complaint stated as a number: how long does the camera keep moving
+     * after the player has stopped?** Feet stop dead on contact. An exponential
+     * ease chasing a target that moves at v settles a constant (1-e)/e = 3v
+     * behind it, so at TERMINAL the view was 12 px in debt at the moment of
+     * touchdown and paid it off afterwards, gliding on while the body it was
+     * following stood still. That is inertia, and the comment on `updateCamera`
+     * says in as many words that inertia is what makes a platformer seasick —
+     * the horizontal axis goes to real lengths to avoid it and the vertical
+     * axis had it.
+     *
+     * Measured before, walking or jumping off a real ledge in a real level:
+     * 6.97 px over 10 frames (4-1), 4.30 px over 9 (2-3), 4.12 px over 9 (2-1).
+     * The ordinary 15-row levels hid it — 0.71 px over 2 frames in 1-1 — not
+     * because the camera was well behaved but because those levels only have
+     * 32 px of vertical travel and the level's own limit paid the debt off
+     * mid-fall. It is the letterboxed and banded levels, where the camera has
+     * room, that show what the mechanism actually does.
+     *
+     * The fixture is a real ledge and not a teleport: the deepest edge in the
+     * level with four to eight tiles of air and a floor under it, walked off
+     * and jumped off. Both, because they are different: walking off starts the
+     * camera and the body from rest together, while jumping off means the body
+     * is already at TERMINAL by the time it passes the line it left.
+     *
+     * `CAM_SNAP` was measured too and it is **not** part of this: over every
+     * fall here the biggest gap between the view and where it wants to be is
+     * 14.5 px against a threshold of 48, so no real fall has ever reached the
+     * cut. (Landing *on* a raised platform does — see the note in level.js.)
+     */
+    {
+      /** The deepest walk-off edge in the level with a floor under it. */
+      const ledge = (s, minDrop, maxDrop) => {
+        let best = null;
+        for (let tx = 4; tx < s.w - 8; tx++) {
+          for (let ty = 2; ty < s.h - 3; ty++) {
+            if (!s.solidAt(tx, ty)) continue;
+            if (s.solidAt(tx, ty - 1) || s.solidAt(tx, ty - 2) || s.solidAt(tx, ty - 3)) continue;
+            if (s.solidAt(tx + 1, ty) || s.solidAt(tx + 1, ty - 1)) continue;
+            let d = 1;
+            while (ty + d < s.h && !s.solidAt(tx + 1, ty + d) && !s.solidAt(tx + 2, ty + d)) d++;
+            if (ty + d >= s.h || d < minDrop || d > maxDrop) continue;
+            if (!best || d > best.drop) best = { tx, ty, drop: d };
+          }
+        }
+        return best;
+      };
+
+      const fall = (id, mode) => {
+        reset();
+        const s = new LevelScene(game, id);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const spot = ledge(s, 4, 8);
+        if (!spot) return null;
+        const p = s.player;
+        p.x = spot.tx * TILE + 2;
+        p.y = spot.ty * TILE - p.h;
+        p.vx = 0;
+        p.vy = 0;
+        p.onGround = true;
+        s.centerCamera();
+        const input = mkInput();
+        for (let f = 0; f < 40; f++) s.update(input);   // let the view settle
+        let left = -1;
+        let landed = -1;
+        let after = 0;
+        let tail = 0;
+        let rise = 0;
+        let below = Infinity;
+        let pounded = false;
+        for (let f = 0; f < 240; f++) {
+          input.held = blank();
+          input.pressed = blank();
+          input.held.right = true;
+          if (mode === 'jump' && f === 0) input.pressed.jump = true;
+          if (mode === 'jump' && f < 14) input.held.jump = true;
+          if (mode === 'pound' && left >= 0 && !p.onGround && !pounded && f > left + 2) {
+            input.held.down = true;
+            input.pressed.jump = true;
+            input.held.jump = true;
+            pounded = true;
+          } else if (mode === 'pound' && pounded && !p.onGround) input.held.down = true;
+          const wasGround = p.onGround;
+          const camBefore = s.cam.y;
+          s.update(input);
+          const d = s.cam.y - camBefore;
+          if (left < 0 && wasGround && !p.onGround) left = f;
+          if (left >= 0) {
+            rise = Math.max(rise, -d);
+            below = Math.min(below, s.cam.y + s.viewH - (p.y + p.h));
+          }
+          if (left >= 0 && landed < 0 && p.onGround) landed = f;
+          if (landed >= 0 && f > landed) {
+            if (Math.abs(d) > 0.1) after = f - landed;
+            tail += Math.abs(d);
+          }
+          if (landed >= 0 && f > landed + 45) break;
+        }
+        return {
+          id, mode, drop: spot.drop, after, tail, rise, below, landed,
+          pounded: mode !== 'pound' || pounded,
+        };
+      };
+
+      const ids = ['1-1', '2-1', '2-3', '4-1', '5-1', '1-2'];
+      const rows = [];
+      for (const mode of ['walk', 'jump']) for (const id of ids) {
+        const r = fall(id, mode);
+        if (r) rows.push(r);
+      }
+      const say = (r) => `${r.id} ${r.mode} ${r.tail.toFixed(2)} px / ${r.after} framea`;
+
+      /* 3.5 px is the ceiling for the same reason 2.5 is the ceiling on the
+       * rising side: it is under the 6.97 px the debt produced and over the
+       * 2.94 px the anticipation leaves, so it is the inertia that cannot come
+       * back rather than the whole mechanism being frozen. */
+      expect('a view that has fallen stops when the player stops',
+        rows.length >= 10 && rows.every((r) => r.tail < 3.5 && r.after <= 8),
+        rows.map(say).join(', '));
+
+      /* And the anticipation must be bought out of itself, not out of the two
+       * things that were already right: the view still may not creep upward
+       * during a fall, and what you are falling towards still may not leave
+       * the bottom of the window. */
+      expect('anticipating the fall costs neither the ground below nor the hold',
+        rows.every((r) => r.rise < 0.01 && r.below > 24),
+        rows.map((r) => `${r.id} ${r.mode} ylös ${r.rise.toFixed(2)} px, `
+          + `alla ${r.below.toFixed(0)} px`).join(', '));
+
+      /*
+       * The ground pound gets its own line and its own number, and the number
+       * is bigger on purpose. The dive is 7.5 px/frame — 1.9x TERMINAL — and
+       * it starts from a dead hang, so its own lag is 22.5 px rather than 12.
+       * The lead may only grow as fast as gravity could grow it, which is what
+       * stops the dive's standing start from jerking the view (that costs the
+       * dive most of its lead), so this improves rather than disappears:
+       * 11.51 px over 12 frames before, 8.47 over 11 after, worst case 2-3.
+       */
+      const pounds = [];
+      for (const id of ids) {
+        const r = fall(id, 'pound');
+        if (r) pounds.push(r);
+      }
+      expect('a ground pound is not followed down by the view it landed under',
+        pounds.length >= 5 && pounds.every((r) => r.pounded && r.tail < 9.5),
+        pounds.map(say).join(', '));
+    }
+
     /* ---------------------------- vihainen aurinko ---------------------- */
     /*
      * The sun is the one enemy that positions itself against the camera, which
