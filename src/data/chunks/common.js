@@ -156,7 +156,30 @@ export const COMMON_CHUNKS = {
   }),
 
   /* -------------------------------- pipes ------------------------------ */
+  /**
+   * The two-tile pipe, and the reason it carries coins.
+   *
+   * A warp pipe is drawn as this pipe with a slow shine in its throat, so this
+   * is the tile a player compares against when they wonder whether a pipe goes
+   * anywhere. That comparison is the whole discoverability problem: the hint
+   * that gets somebody to stand on a warp pipe and press down has to be a hint
+   * about *pipes*, or it is a sign about one pipe. So `warp_pipe` carries this
+   * exact coin row — same three coins, same three columns — and the coins say
+   * "a pipe", never "this pipe".
+   *
+   * Which makes the coins here the load-bearing half, not the decoration: 1-1
+   * is where the habit is taught, and 1-1 hides nothing at all, so the first
+   * pipe a player is paid for standing on is one that leads nowhere. `verify.mjs`
+   * asserts the two chunks' coin rows are identical, because the way this
+   * breaks is somebody hinting the secret one and forgetting its twin.
+   *
+   * The row is the ordinary bump row, offset left rather than centred: the run
+   * approaches from the way you are walking and its last coin sits over the
+   * pipe's own left column, so the jump that takes it lands you on the lid.
+   * Centred coins either side of a thing is the oldest map marking there is.
+   */
   pipe_short: ck(16, {
+    9: '  o o o',
     11: '     []',
     12: '     {}',
     13: G,

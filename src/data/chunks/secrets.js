@@ -37,8 +37,41 @@ export const SECRET_CHUNKS = {
    * to it, so this cannot quietly become a beanstalk nobody can start.
    */
   beanstalk: ck(16, withVine({ 9: '   o     o   o', 13: G, 14: G }, 6, 0, 12)),
-  /** An ordinary-looking pipe. Press down on it and it is not one. */
+  /**
+   * An ordinary-looking pipe. Press down on it and it is not one.
+   *
+   * **The three coins are the hint, and they are `pipe_short`'s coins, tile for
+   * tile.** This chunk shipped with nothing at all while its factory twin
+   * `fac_duct_down` had a hint from the day it was written, which left the one
+   * secret in the game that a player cannot stumble into — a loaded brick is
+   * bumped by accident and a bean block is an ordinary `?` you hit out of habit,
+   * but nothing in ordinary play ever presses *down* on a pipe — as the only one
+   * with nothing to suggest it.
+   *
+   * Why coins and why these coins:
+   *
+   *   - **they pay whether or not anything is there.** Row 9 is four tiles over
+   *     the floor and a standing jump at power level 0 lifts 71 px, so the run
+   *     is free money to anybody walking past. That is the difference between a
+   *     hint and a sign: following it costs nothing when it leads nowhere.
+   *   - **they lead the feet, not the eye, and they lead them to a place rather
+   *     than to a thing.** The run comes in from the left and its last coin sits
+   *     over the pipe's own left column, so the jump that takes it lands you on
+   *     the lid — which is where you have to be standing to find out. Nothing
+   *     points at the mouth, and nothing is centred on it.
+   *   - **the same three coins sit on the ordinary pipe.** 2-2 puts a plain
+   *     `pipe_short` one chunk ahead of this one precisely so the warp is not a
+   *     signpost; hinting only this one would have undone that. Measured over
+   *     the whole game: 6 % of the coin rows in the bump band sit at a secret,
+   *     so a coin row is a common sight and a poor oracle.
+   *
+   * The `?` block that starts a beanstalk needs none of this and does not get
+   * it, for the same reason a star block does not: it looks like every other
+   * block and gets hit out of habit. A trail on a secret that already reads is
+   * noise, and noise is what stops the real hints working.
+   */
   warp_pipe: ck(16, {
+    9: '  o o o',
     11: '     ()',
     12: '     {}',
     13: G,
