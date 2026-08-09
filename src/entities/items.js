@@ -106,6 +106,25 @@ export class FartBall extends Entity {
       this.pop();
       return;
     }
+
+    /*
+     * Nothing happens off screen.
+     *
+     * At 5 px/frame with 200 frames of life the ball travels a thousand pixels
+     * — three screens — so it was trapping enemies the player had never seen.
+     * The camera would then scroll onto an enemy already sitting in a bubble,
+     * which reads as the game having played itself. A shot that leaves the view
+     * is spent, the same way it is spent on a wall.
+     */
+    // 320 mirrors `VIEW_W` in scenes/level.js. Importing it would close a
+    // cycle — level.js imports this file — and a cycle that happens to work
+    // because the value is read late is still a cycle.
+    const camL = this.level.cam.x - 8;
+    const camR = this.level.cam.x + 320 + 8;
+    if (this.x + this.w < camL || this.x > camR) {
+      this.remove = true;
+      return;
+    }
     if (moveX(this, this.level)) {
       this.pop();
       return;

@@ -1172,6 +1172,25 @@ const report = await page.evaluate(async () => {
       `pallo ${Math.abs(ball.vx)}, juoksu ${MAX_RUN}, P-katto 3.5`);
   }
 
+  /* --------------------- pallo ei toimi ruudun ulkopuolella -------------- */
+  /* Reported from play: the camera scrolls onto an enemy already sitting in a
+   * bubble. At 5 px/frame with 200 frames of life the ball crossed three
+   * screens, so it was trapping things the player never saw — the game playing
+   * itself just out of sight. */
+  {
+    const { FartBall } = await import('/src/entities/items.js');
+    reset({ type: 'flower', level: 2 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const ball = s.add(new FartBall(s, s.cam.x + 300, 100, 1));
+    ball.active = true;
+    let frames = 0;
+    while (!ball.remove && frames < 200) { ball.update(); frames++; }
+    expect('a fart ball is spent when it leaves the screen',
+      ball.remove && frames < 30 && ball.x < s.cam.x + 400,
+      `${frames} framea, x ${Math.round(ball.x)}, kamera ${Math.round(s.cam.x)}`);
+  }
+
   /* ------------------------------- kuori -------------------------------- */
   /* Reported from play: stomp a shell walker, walk into the shell, lose a power
    * level. The kick landed — and then the shell, having moved 3.4 px out of a
