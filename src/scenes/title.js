@@ -2,6 +2,7 @@ import { drawText, textWidth } from '../gfx/font.js';
 import { drawPlayer, drawWalker, drawGasPuff } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
+import { challengeLine } from '../core/challenge.js';
 
 /*
  * Silence this long and the cabinet starts playing by itself. Twenty seconds is
@@ -78,6 +79,26 @@ export class TitleScene {
     ctx.fillRect(0, 0, 320, 240);
 
     for (const p of this.puffs) drawGasPuff(ctx, p.x, p.y, 0.8, p.r);
+
+    /* Haaste ensin, koska haastelinkistä tullut pelaaja tuli lukemaan juuri
+     * tämän. Se piirretään taivaskaistaan rivien 11 ja 23 väliin: siihen
+     * mahtuu yksi rivi pelin omaa fonttia, ja se on ainoa vaakasuora kaista
+     * jossa ei ole jo logolaatikkoa (rivi 26), hahmoja tai valikkoa.
+     *
+     * Yksi rivi eikä kaksi, koska rivin leveys pitää pystyä **takaamaan**:
+     * nimi on suodatettu ja katkaistu kuuteen piirtyvään merkkiin, pisteet
+     * ovat enintään seitsemän numeroa ja kenttätunnus neljä, eli pisin
+     * mahdollinen rivi on 46 merkkiä = 275 px. Ilman katkaisua tähän riittäisi
+     * yksi pitkä nimi kaatamaan koko ruudun luettavuuden. */
+    const ch = this.game && this.game.challenge;
+    if (ch) {
+      const line = challengeLine(ch);
+      ctx.fillStyle = 'rgba(8,8,16,0.72)';
+      ctx.fillRect(0, 11, 320, 12);
+      drawText(ctx, line, 160, 13, {
+        color: ch.beaten ? '#8fe04a' : '#ffd048', align: 'center', shadow: '#101018',
+      });
+    }
 
     ctx.fillStyle = '#0e0e18';
     ctx.fillRect(20, 26, 280, 86);

@@ -741,7 +741,7 @@ const report = await page.evaluate(async () => {
     const scores = await import('/src/core/scores.js');
     const { HighScoreScene } = await import('/src/scenes/scores.js');
     const { Input } = await import('/src/core/input.js');
-    const { textWidth } = await import('/src/gfx/font.js');
+    const { textWidth, drawText: drawTextFn } = await import('/src/gfx/font.js');
 
     const settle = () => new Promise((r) => setTimeout(r, 0));
     const stub = (shareFn, clipFn) => {
@@ -864,7 +864,7 @@ const report = await page.evaluate(async () => {
     const both = await runShare(ok, ok);
     expect('jako ja leikepöytä: jakovalikko saa otsikon, rivin ja osoitteen',
       both.status === 'shared' && both.armed && both.left
-      && both.saw.share && both.saw.share.url === meta
+      && both.saw.share && both.saw.share.url.startsWith(meta)
       && both.saw.share.text.includes('12345') && both.saw.clip === null,
       `${both.status}, leikepöytä ${both.saw.clip === null ? 'koskematta' : 'kosketettu'}`);
 
@@ -881,7 +881,7 @@ const report = await page.evaluate(async () => {
 
     const shareOnly = await runShare(denied, null);
     expect('ilman leikepöytää kaatunut jako jättää osoitteen ruudulle',
-      shareOnly.status === 'manual' && shareOnly.scene.url === meta && shareOnly.left,
+      shareOnly.status === 'manual' && shareOnly.scene.url.startsWith(meta) && shareOnly.left,
       `${shareOnly.status}, ${shareOnly.scene.url}`);
 
     const clipOnly = await runShare(null, ok);
@@ -898,7 +898,7 @@ const report = await page.evaluate(async () => {
     const nothing = await runShare(null, null);
     expect('ilman jakoa ja leikepöytää ruutu näyttää osoitteen eikä lupaa nappia',
       nothing.status === 'manual' && nothing.scene.how === 'none'
-      && nothing.scene.url === meta && nothing.left,
+      && nothing.scene.url.startsWith(meta) && nothing.left,
       `${nothing.status}, ${nothing.scene.how}`);
 
     const threw = await runShare(() => { throw new Error('synkroninen'); }, ok);
@@ -921,7 +921,8 @@ const report = await page.evaluate(async () => {
 
     /* Mikään tässä ruudussa ei saa ottaa yhteyttä mihinkään. Sama peruste kuin
      * telemetrian palvelinlähetyksen jättämisessä tekemättä. */
-    const shareSrc = await (await fetch('/src/scenes/share.js')).text();
+    const shareSrc = await (await fetch('/src/scenes/share.js')).text()
+      + await (await fetch('/src/core/challenge.js')).text();
     const net = ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'img.src']
       .filter((n) => shareSrc.includes(n));
     expect('jakoruutu ei lähetä mitään minnekään', net.length === 0, net.join(', ') || 'ei verkkokutsuja');
@@ -963,6 +964,292 @@ const report = await page.evaluate(async () => {
       }
       expect('jakoruudun piirto jättää canvasin tilan ennalleen ja piirtää jotain',
         leaks.length === 0 && flat === 0, leaks.join(', ') || `${flat} tyhjää`);
+    }
+
+    /* ---------------------------- haastelinkki -------------------------- */
+    /* Tulos kulkee osoiteparametreissa (`?s=45200&n=OLLI&l=2-3`). Tässä
+     * lohkossa testataan luku, kirjoitus ja mitat; sivunlatauksen vaativat
+     * asiat — osoiterivin siivous ja "mitään ei kirjoiteta" — ovat omassa
+     * selainkontekstissaan tämän tiedoston lopussa. */
+    {
+      const ch = await import('/src/core/challenge.js');
+      const { TitleScene } = await import('/src/scenes/title.js');
+
+      const link = ch.appendChallenge(meta, { name: 'OLLI', score: 45200, level: '2-3' });
+      expect('jakolinkki kantaa tuloksen, nimen ja kentän',
+        link === `${meta}?s=45200&n=OLLI&l=2-3`, link);
+
+      /* Tyhjä taulu ei saa tuottaa `?s=0`. Nollan kehuminen on huonompi kuin
+       * kehumatta jättäminen, ja vastaanottaja saisi haasteen jonka voittaa
+       * kävelemällä ensimmäisen kolikon ohi. */
+      const bare = [
+        ch.appendChallenge(meta, null),
+        ch.appendChallenge(meta, { name: 'OLLI', score: 0, level: '1-1' }),
+        ch.appendChallenge(meta, { name: 'OLLI', score: -5 }),
+      ];
+      expect('tyhjä taulu jakaa pelkän osoitteen eikä nollatulosta',
+        bare.every((u) => u === meta), bare.join(' | '));
+
+      const round = ch.parseChallenge(new URL(
+        ch.appendChallenge(meta, { name: 'ÄÄKKÖS', score: 9999999, level: '5-F' }),
+      ).search);
+      expect('linkin tulos luetaan takaisin sellaisenaan, ääkkösineen',
+        round && round.score === 9999999 && round.name === 'ÄÄKKÖS' && round.level === '5-F',
+        JSON.stringify(round));
+
+      /* Roskaa parametreissa. Sääntö on yksi: haaste on väite ajosta jonka
+       * *tämä peli* olisi voinut tuottaa, ja jos väite ei ole sellainen, ei ole
+       * haastetta. Puolikas haaste ruudulla olisi pahempi kuin ei haastetta. */
+      const junk = ['', '?', '?n=OLLI&l=2-3', '?s=', '?s=abc', '?s=-5', '?s=1e999',
+        '?s=0', '?s=0000000', '?s=45200.5', '?s=45200x', '?s=+45200', '?s=%2045200',
+        '?s=99999999', '?s=NaN', '?s=Infinity', '?s=١٢٣'];
+      const wrong = junk.filter((q) => ch.parseChallenge(q) !== null);
+      expect('roska osoiteparametreissa ei tuota haastetta lainkaan',
+        wrong.length === 0, wrong.join(' ') || `${junk.length} roskatapausta`);
+
+      /* Nimi on ainoa vapaa teksti linkissä. Se piirretään pelin omalla
+       * fontilla, joten injektiopintaa ei ole — mutta 500 merkkiä levittäisi
+       * rivin ruudun ulkopuolelle, ja fontin tuntematon merkki vie leveyttä
+       * piirtämättä mitään. Siksi nimi sekä suodatetaan että katkaistaan. */
+      const longName = ch.parseChallenge(`?s=1000&n=${'A'.repeat(500)}`);
+      const emoji = ch.parseChallenge('?s=1000&n=%F0%9F%92%A9%F0%9F%92%A9');
+      const mixed = ch.parseChallenge('?s=1000&n=%F0%9F%92%A9olli%F0%9F%92%A9');
+      const rtl = ch.parseChallenge('?s=1000&n=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7');
+      expect('pitkä tai piirtokelvoton nimi katkaistaan ja suodatetaan',
+        longName && longName.name === 'AAAAAA'
+        && emoji && emoji.name === 'KAVERI'
+        && mixed && mixed.name === 'OLLI'
+        && rtl && rtl.name === 'KAVERI',
+        [longName, emoji, mixed, rtl].map((c) => c && c.name).join(' | '));
+
+      /* Kenttätunnus on kuvateksti eikä haasteen ehto, joten tuntematon tunnus
+       * jätetään pois eikä koko haastetta hylätä. */
+      const ghostLevel = ch.parseChallenge('?s=1000&n=OLLI&l=9-9');
+      const realLevel = ch.parseChallenge('?s=1000&n=OLLI&l=2-3');
+      expect('tuntematon kenttätunnus jätetään pois mutta haaste jää voimaan',
+        ghostLevel && ghostLevel.score === 1000 && ghostLevel.level === ''
+        && realLevel && realLevel.level === '2-3',
+        `${ghostLevel && ghostLevel.level}|${realLevel && realLevel.level}`);
+
+      /* Sama sääntö kuin pistetaululla: pisteet pitää *voittaa*, ei tasata. */
+      const target = ch.parseChallenge('?s=45200&n=OLLI&l=2-3');
+      expect('haasteen voittaa vain suuremmalla tuloksella',
+        ch.beats(45201, target) && !ch.beats(45200, target) && !ch.beats(0, target)
+        && !ch.beats(-1, target) && !ch.beats(999999, null),
+        `${ch.beats(45201, target)}/${ch.beats(45200, target)}`);
+
+      // Pisin mahdollinen haasterivi: kuusi kirjainta, seitsemän numeroa, linnake.
+      const widestCh = { name: 'ÄÄKKÖS', score: 9999999, level: '5-F' };
+      const lines = [
+        ch.challengeLine({ ...widestCh, beaten: false }),
+        ch.challengeLine({ ...widestCh, beaten: true }),
+        ch.challengeLine({ ...longName, name: 'AAAAAA' }),
+      ];
+      const over = lines.filter((l) => textWidth(l) > 300);
+      expect('pisin mahdollinen haasterivi mahtuu 320 pikselin ruudulle',
+        over.length === 0 && lines.every((l) => l.length > 0),
+        over.map((l) => `${textWidth(l)}px ${l}`).join(', ') || lines[0]);
+
+      /* Jokainen merkki haasterivillä pitää löytyä pelin fontista. Puuttuva
+       * glyyfi ei kaada mitään — `drawText` hyppää sen yli mutta siirtää silti
+       * kohdistinta — joten virhe olisi aukko tekstissä eikä poikkeus, ja se
+       * huomattaisiin vasta ruutukaappauksesta. Sen takia se mitataan
+       * musteesta eikä luetella käsin. */
+      {
+        const ink = document.createElement('canvas');
+        ink.width = 16;
+        ink.height = 12;
+        const ig = ink.getContext('2d');
+        const blank = new Set();
+        const board = [
+          `VOITIT HAASTEEN! ${widestCh.name} SAI 9 999 999`,
+          `${widestCh.name} JOHTAA YHÄ: 9 999 999`,
+          `HAASTE: ${widestCh.name} 9 999 999`,
+        ];
+        for (const text of [...lines, ...board]) {
+          for (const chr of new Set(text.toUpperCase())) {
+            if (chr === ' ') continue;
+            ig.clearRect(0, 0, 16, 12);
+            drawTextFn(ig, chr, 1, 1, { color: '#ffffff' });
+            const px = ig.getImageData(0, 0, 16, 12).data;
+            let lit = 0;
+            for (let p = 3; p < px.length; p += 4) if (px[p] > 0) lit++;
+            if (!lit) blank.add(chr);
+          }
+        }
+        const wideBoard = board.filter((l) => textWidth(l) > 300);
+        expect('haaste- ja pistetaulurivit piirtyvät kokonaan pelin omalla fontilla',
+          blank.size === 0 && wideBoard.length === 0,
+          blank.size ? `fontista puuttuu: ${[...blank].join(' ')}`
+            : `${lines.length + board.length} riviä, levein ${Math.max(...[...lines, ...board].map((l) => textWidth(l)))}px`);
+      }
+
+      // 45 200 eikä 45200: kolmen ryhmät ovat ainoa syy siihen että ruudulta
+      // näkee yhdellä silmäyksellä onko luku kymmeniä vai satojatuhansia.
+      expect('haasteen pisteet ryhmitellään luettavaan muotoon',
+        ch.groupThousands(45200) === '45 200' && ch.groupThousands(999) === '999'
+        && ch.groupThousands(9999999) === '9 999 999',
+        ch.groupThousands(45200));
+
+      /* Alkuruutu piirtää haasteen omalla fontillaan. Seisova peli saa oman
+       * seisojan (`Object.create`) samasta syystä kuin esittelytila: testin ei
+       * pidä jättää haastetta oikeaan peliin roikkumaan. */
+      {
+        const c = document.createElement('canvas');
+        c.width = 320;
+        c.height = 240;
+        const g = c.getContext('2d');
+        const leaks = [];
+        /* Sama ruutu samalla tikillä, haasteella ja ilman: erotus on juuri se
+         * mitä haaste piirtää. Pelkkä "onko tuolla jotain" ei erottaisi
+         * haastetta taivaan liukuväristä, ja se testi menisi läpi tyhjänäkin. */
+        const shot = (ch) => {
+          const stand = Object.create(game);
+          if (ch) stand.challenge = ch;
+          const title = new TitleScene(stand);
+          title.enter();
+          title.tick = 40;
+          title.puffs = [];
+          g.clearRect(0, 0, 320, 240);
+          title.draw(g);
+          if (g.globalAlpha !== 1) leaks.push(`alpha ${g.globalAlpha}`);
+          if (g.globalCompositeOperation !== 'source-over') leaks.push(g.globalCompositeOperation);
+          return new Uint8ClampedArray(g.getImageData(0, 0, 320, 240).data);
+        };
+        const diff = (a, b) => {
+          let n = 0;
+          let outside = 0;
+          for (let p = 0; p < a.length; p += 4) {
+            if (a[p] === b[p] && a[p + 1] === b[p + 1] && a[p + 2] === b[p + 2]) continue;
+            n++;
+            // Alkuruudun logolaatikko alkaa riviltä 26; haaste ei saa peittää
+            // sitä eikä valikkoa, joten muutoksen pitää mahtua taivaskaistaan.
+            if (Math.floor(p / 4 / 320) >= 26) outside++;
+          }
+          return { n, outside };
+        };
+        const plain = shot(null);
+        const openPx = shot({ ...widestCh, beaten: false });
+        const wonPx = shot({ ...widestCh, beaten: true });
+        const open = diff(plain, openPx);
+        const won = diff(plain, wonPx);
+        /* Kolmas vertailu on se joka oikeasti mittaa tekstin: taustapalkki
+         * muuttaa koko kaistan kummassakin tapauksessa, joten pelkkä "erosi
+         * tyhjästä" saturoituu palkkiin eikä näkisi tekstiä lainkaan. */
+        const wording = diff(openPx, wonPx);
+        expect('alkuruutu näyttää haasteen omalla rivillään eikä muuten muutu',
+          leaks.length === 0 && open.n > 200 && won.n > 200 && wording.n > 100
+          && open.outside === 0 && won.outside === 0 && wording.outside === 0
+          && !game.challenge,
+          leaks.join(', ')
+          || `avoin ${open.n}px, voitettu ${won.n}px, sanamuotoero ${wording.n}px`
+             + ` (väärässä paikassa ${open.outside}/${won.outside}/${wording.outside})`);
+      }
+
+      /* Pistetaulu on se ruutu joka kertoo voitosta: kierros päättyy sinne aina.
+       * Ilman tätä haaste on pelkkä kuvateksti. */
+      {
+        const stand = Object.create(game);
+        stand.challenge = { score: 45200, name: 'OLLI', level: '2-3', beaten: false };
+        const lost = new HighScoreScene(stand, -1, null, 45200);
+        const lostFlag = lost.beat;
+        const won = new HighScoreScene(stand, -1, null, 45201);
+        expect('pistetaulu kertoo kun haaste on voitettu, ja vasta silloin',
+          lostFlag === false && won.beat === true && stand.challenge.beaten === true,
+          `tasapeli ${lostFlag}, voitto ${won.beat}`);
+      }
+
+      /* …ja sama koko kierroksen mitalta, `finishRun`in kautta. Ero edelliseen
+       * on olennainen: yllä testattiin että ruutu osaa kertoa, tässä että
+       * tulos ylipäätään päätyy sinne. Kolme reittiä, ja ne menevät eri kautta:
+       * listalle päässyt kierros käy nimikysymyksen läpi, listan ulkopuolelle
+       * jäänyt ei, ja warpattu kierros ei saa voittaa haastetta lainkaan. */
+      {
+        const target = { score: 45200, name: 'OLLI', level: '2-3', beaten: false };
+        const finish = (score, extra = {}) => {
+          const stand = Object.create(game);
+          stand.challenge = { ...target };
+          stand.state = {
+            ...game.state, score, world: 1, continues: 0, usedSaveState: false, ...extra,
+          };
+          stand.pendingNode = { level: '2-3' };
+          stand.finishRun();
+          if (stand.scene.constructor.name === 'NameEntryScene') stand.scene.submit();
+          return stand.scene;
+        };
+
+        // Täysi taulu, jotta listan ulkopuolelle jäävä kierros on saatavissa.
+        scores.clearScores();
+        for (let i = 0; i < 10; i++) {
+          scores.addScore({ name: 'HUIPPU', score: 9999999 - i, world: 5, level: '5-F' });
+        }
+        const offBoard = finish(45201);
+        scores.clearScores();
+        const onBoard = finish(45201);
+        scores.clearScores();
+        const short = finish(45200);
+        scores.clearScores();
+        const warped = finish(9999999, { debugWarped: true });
+        scores.clearScores();
+
+        expect('haasteen voitto kerrotaan myös listan ulkopuolelle jääneelle kierrokselle',
+          offBoard.constructor.name === 'HighScoreScene' && offBoard.beat === true
+          && onBoard.constructor.name === 'HighScoreScene' && onBoard.beat === true
+          && short.beat === false && warped.beat === false,
+          `ulkona ${offBoard.beat}, listalla ${onBoard.beat}, tasapeli ${short.beat}, warpattu ${warped.beat}`);
+
+        scores.addScore({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+      }
+
+      /* Tämä on koko ominaisuuden vaarallisin kohta: jos vastaanottaja jakaa
+       * omasta jakoruudustaan, lähtevän linkin pitää kantaa *hänen* tuloksensa.
+       * Muuten linkki muuttuu matkalla ja kaveripiiri jakaa yhtä ja samaa
+       * pistemäärää ristiin. */
+      {
+        const stand = Object.create(game);
+        stand.challenge = { score: 45200, name: 'OLLI', level: '2-3', beaten: false };
+        const scene = new share.ShareScene(stand, null);
+        expect('vastaanotettu haaste ei matkusta eteenpäin omassa jakolinkissä',
+          scene.url.includes('s=12345') && !scene.url.includes('45200')
+          && !scene.url.includes('OLLI'), scene.url);
+      }
+
+      /* Osoitelaatikko on porras 3: se osoite jonka pelaaja kirjoittaa ylös kun
+       * jakovalikkoa ja leikepöytää ei ole. Jaettu linkki kantaa tuloksen,
+       * mutta laatikossa lukee perusosoite — koska pelin 5x7-fontissa **ei ole
+       * et-merkkiä**, ja kyselymerkkijono piirtyisi ilman sitä rikkinäisenä.
+       *
+       * Se ei ole mielipide vaan mitattavissa: piirretään jokainen laatikon
+       * merkki yksinään ja katsotaan jäikö mustetta. Puuttuva glyyfi jättää
+       * tyhjää mutta siirtää silti kohdistinta, eli virhe olisi näkymätön
+       * kaikille paitsi sille joka yrittää kirjoittaa osoitteen ylös. */
+      {
+        scores.clearScores();
+        scores.addScore({ name: 'ÄÄKKÖS', score: 9999999, world: 5, level: '5-F' });
+        const scene = new share.ShareScene(game, null);
+        const ink = document.createElement('canvas');
+        ink.width = 16;
+        ink.height = 12;
+        const ig = ink.getContext('2d');
+        const blank = [];
+        for (const chr of new Set(scene.shown.toUpperCase())) {
+          if (chr === ' ') continue;
+          ig.clearRect(0, 0, 16, 12);
+          drawTextFn(ig, chr, 1, 1, { color: '#ffffff' });
+          const px = ig.getImageData(0, 0, 16, 12).data;
+          let lit = 0;
+          for (let p = 3; p < px.length; p += 4) if (px[p] > 0) lit++;
+          if (!lit) blank.push(chr);
+        }
+        expect('osoitelaatikon osoite on kokonaan piirtokelpoinen ja mahtuu laatikkoon',
+          blank.length === 0 && textWidth(scene.shown) <= 268
+          && scene.shown === meta && scene.url !== scene.shown
+          && scene.carries === true && scene.url.includes('s=9999999'),
+          blank.length ? `fontista puuttuu: ${blank.join(' ')}`
+            : `laatikko ${scene.shown} (${textWidth(scene.shown)}px), lähtee ${scene.url}`);
+        scores.clearScores();
+        scores.addScore({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+      }
     }
 
     unstub();
@@ -3469,6 +3756,202 @@ const report = await page.evaluate(async () => {
   report.checks.push(...mobile.checks);
   report.failures.push(...mobile.failures);
   await phone.close();
+}
+
+/* --------------------- haastelinkki oikeana sivunlatauksena --------------- */
+/*
+ * Kolme asiaa haastelinkissä ei ole testattavissa funktiokutsuna, koska ne ovat
+ * sivunlatauksen tapahtumia: parametrien luku käynnistyksessä, niiden poisto
+ * osoiteriviltä ja se että vastaanotto **ei kirjoita mitään**. Ne vaativat
+ * oman selainkontekstin ja oikean `goto`:n kyselymerkkijonolla.
+ *
+ * Kontekstit ovat erillisiä tarkoituksella: roskatestit käynnistävät pelin ja
+ * kirjoittavat tallennuksen, ja se sotkisi kirjoitusmittauksen.
+ */
+{
+  const base = `http://127.0.0.1:${PORT}/`;
+  const expect = (name, ok, detail = '') => {
+    report.checks.push({ name, ok, detail });
+    if (!ok) report.failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  /* --- A: roska parametreissa ei saa estää peliä käynnistymästä --- */
+  {
+    const junkCtx = await browser.newContext();
+    const jp = await junkCtx.newPage();
+    const junkErrors = [];
+    jp.on('pageerror', (e) => junkErrors.push(`[haaste pageerror] ${e.message}`));
+    jp.on('console', (m) => {
+      const text = m.text();
+      if (m.type() === 'error' && !text.includes('favicon')) junkErrors.push(`[haaste console] ${text}`);
+    });
+
+    /* Jokainen rivi: kyselymerkkijono, odotettu haaste (null = ei haastetta)
+     * ja se mitä tapaus koettelee. Peruste kaikille: haaste on väite ajosta
+     * jonka tämä peli olisi voinut tuottaa. Jos väite ei ole sellainen, ei ole
+     * haastetta — ja alkuruutu on täsmälleen se mikä se on ilman linkkiäkin. */
+    const cases = [
+      ['', null, 'ei parametreja'],
+      ['?', null, 'tyhjä kysely'],
+      ['?s=abc&n=OLLI', null, 'kirjaimia pisteinä'],
+      ['?s=-5', null, 'negatiivinen tulos'],
+      ['?s=1e999', null, 'eksponentti eli ääretön'],
+      [`?s=1000&n=${'A'.repeat(500)}`, { score: 1000, name: 'AAAAAA', level: '' }, '500 merkin nimi'],
+      ['?s=1000&n=%F0%9F%92%A9%E4%B8%AD%E6%96%87', { score: 1000, name: 'KAVERI', level: '' }, 'unicode-nimi'],
+      ['?s=1000&n=OLLI&l=9-9', { score: 1000, name: 'OLLI', level: '' }, 'olematon kenttä'],
+      ['?s=45200&n=OLLI&l=2-3', { score: 45200, name: 'OLLI', level: '2-3' }, 'kunnollinen haaste'],
+    ];
+
+    const results = [];
+    for (const [query] of cases) {
+      await jp.goto(base + query, { waitUntil: 'networkidle' });
+      await jp.waitForTimeout(120);
+      results.push(await jp.evaluate(async () => {
+        const game = window.sfb3;
+        if (!game) return { booted: false };
+        // Alkuruutu piirtyy: haaste tai ei, ruudulla on peliä eikä mustaa.
+        game.render();
+        const px = game.ctx.getImageData(0, 0, 320, 240).data;
+        const seen = new Set();
+        for (let p = 0; p < px.length; p += 4 * 37) {
+          seen.add((px[p] << 16) | (px[p + 1] << 8) | px[p + 2]);
+        }
+        // …ja peli lähtee käyntiin. Se on se mitä roskalinkki ei saa estää.
+        const before = game.scene.constructor.name;
+        game.newGame();
+        const started = game.scene.constructor.name;
+        return {
+          booted: true,
+          challenge: game.challenge ? { ...game.challenge } : null,
+          colors: seen.size,
+          title: before,
+          started,
+          search: location.search,
+        };
+      }));
+    }
+
+    const bad = [];
+    cases.forEach(([query, want, why], i) => {
+      const got = results[i];
+      if (!got.booted) { bad.push(`${why}: ei bootannut`); return; }
+      if (got.title !== 'TitleScene') bad.push(`${why}: alkuruutu oli ${got.title}`);
+      if (got.colors < 5) bad.push(`${why}: ruutu tyhjä (${got.colors} väriä)`);
+      if (got.started !== 'WorldMapScene') bad.push(`${why}: peli ei lähtenyt (${got.started})`);
+      const c = got.challenge;
+      if (!want && c) bad.push(`${why}: haaste syntyi tyhjästä (${JSON.stringify(c)})`);
+      if (want && !c) bad.push(`${why}: haaste jäi lukematta`);
+      if (want && c && (c.score !== want.score || c.name !== want.name || c.level !== want.level)) {
+        bad.push(`${why}: ${JSON.stringify(c)} != ${JSON.stringify(want)}`);
+      }
+      if (got.search.includes('s=') || got.search.includes('n=') || got.search.includes('l=')) {
+        bad.push(`${why}: parametrit jäivät osoiteriville (${got.search})`);
+      }
+    });
+    expect('roskalinkki ei estä peliä käynnistymästä eikä keksi haastetta',
+      bad.length === 0 && junkErrors.length === 0,
+      [...bad, ...junkErrors].join('; ') || `${cases.length} tapausta`);
+
+    /* Osoiterivin siivous on kaksi lupausta yhdessä: päivitys ei herätä
+     * vanhentunutta haastetta, eikä `?touch=1` saa kadota siivouksen mukana —
+     * se on kehitystyökalu joka elää samassa kyselyssä. */
+    await jp.goto(`${base}?s=45200&n=OLLI&l=2-3&touch=1`, { waitUntil: 'networkidle' });
+    await jp.waitForTimeout(120);
+    const stripped = await jp.evaluate(() => ({
+      search: location.search,
+      challenge: window.sfb3.challenge ? { ...window.sfb3.challenge } : null,
+      entries: performance.getEntriesByType('navigation').length,
+    }));
+    await jp.reload({ waitUntil: 'networkidle' });
+    await jp.waitForTimeout(120);
+    const reloaded = await jp.evaluate(() => ({
+      search: location.search,
+      challenge: window.sfb3.challenge ? { ...window.sfb3.challenge } : null,
+    }));
+    expect('haasteparametrit katoavat osoiteriviltä eivätkä herää päivityksessä',
+      stripped.search === '?touch=1' && stripped.challenge
+      && stripped.challenge.score === 45200
+      && reloaded.search === '?touch=1' && reloaded.challenge === null,
+      `${stripped.search} -> ${reloaded.search}, haaste ${reloaded.challenge}`);
+
+    await junkCtx.close();
+  }
+
+  /* --- B: haasteen vastaanotto ei kirjoita yhtään tavua --- */
+  /*
+   * DESIGN.md kohta 6 luettelee kaikki kuusi localStorage-avainta. Ne kylvetään
+   * tunnetuilla arvoilla, sivu ladataan haastelinkillä ja avaimet luetaan
+   * uudelleen: haaste elää istunnon muistissa eikä koske tallennukseen,
+   * pistetauluun eikä pelidataan. Sama vaatimus kuin esittelytilalla, ja siksi
+   * se todistetaan samalla tavalla — mittaamalla, ei lupaamalla.
+   */
+  {
+    const cleanCtx = await browser.newContext();
+    const cp = await cleanCtx.newPage();
+    const quietErrors = [];
+    cp.on('pageerror', (e) => quietErrors.push(`[haaste pageerror] ${e.message}`));
+    cp.on('console', (m) => {
+      const text = m.text();
+      if (m.type() === 'error' && !text.includes('favicon')) quietErrors.push(`[haaste console] ${text}`);
+    });
+
+    await cp.goto(base, { waitUntil: 'networkidle' });
+    const before = await cp.evaluate(() => {
+      const seed = {
+        'sfb3.save.v2': JSON.stringify({
+          lives: 3, coins: 7, score: 111, power: { type: 'shroom', level: 2 },
+          reserve: null, world: 1, node: 'w2-1', cleared: { 'w1-1': true },
+          worldsOpen: 2, usedSaveState: false, continues: 1,
+        }),
+        'sfb3.savestate.1': JSON.stringify({ label: '2-1', at: 1 }),
+        'sfb3.savestate.2': JSON.stringify({ label: '3-2', at: 2 }),
+        'sfb3.savestate.3': JSON.stringify({ label: '4-3', at: 3 }),
+        'sfb3.scores.v1': JSON.stringify([
+          { name: 'MINÄ', score: 777, world: 1, level: '1-1', at: 1, version: 'x' },
+        ]),
+        'sfb3.telemetry.v1': JSON.stringify([{ t: 'death', id: '1-1', x: 5, y: 5 }]),
+        'sfb3.fx.v1': 'crt',
+        'sfb3.touch.v1': 'rulla',
+      };
+      localStorage.clear();
+      for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
+      // Avainjärjestys ei ole taattu, joten se lajitellaan ennen vertailua —
+      // muuten testi voisi punastua pelkästä järjestyksestä.
+      const all = [];
+      for (let i = 0; i < localStorage.length; i++) all.push(localStorage.key(i));
+      all.sort();
+      return JSON.stringify(all.map((k) => [k, localStorage.getItem(k)]));
+    });
+
+    await cp.goto(`${base}?s=45200&n=OLLI&l=2-3`, { waitUntil: 'networkidle' });
+    await cp.waitForTimeout(400);
+    const after = await cp.evaluate(() => {
+      const game = window.sfb3;
+      // Ruutuja pyöritetään hetki: haaste ei saa vuotaa tallennukseen
+      // myöskään sen jälkeen kun alkuruutu on ehtinyt piirtyä ja liikkua.
+      for (let f = 0; f < 120; f++) { game.step(); game.render(); }
+      game.toHighScores();
+      for (let f = 0; f < 30; f++) { game.step(); game.render(); }
+      game.toTitle();
+      const all = [];
+      for (let i = 0; i < localStorage.length; i++) all.push(localStorage.key(i));
+      all.sort();
+      return {
+        storage: JSON.stringify(all.map((k) => [k, localStorage.getItem(k)])),
+        challenge: game.challenge ? { ...game.challenge } : null,
+        keys: all.join(' '),
+      };
+    });
+
+    expect('haasteen vastaanotto ei kirjoita yhtään tavua selaimen muistiin',
+      before === after.storage && !!after.challenge && after.challenge.score === 45200
+      && quietErrors.length === 0,
+      before === after.storage
+        ? (after.challenge ? `${after.keys}` : 'haaste jäi lukematta')
+        : 'tallennus muuttui');
+
+    await cleanCtx.close();
+  }
 }
 
 await browser.close();

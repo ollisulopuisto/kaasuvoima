@@ -7,6 +7,47 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.10 — tulos kulkee jakolinkissä
+
+Omistajan päätös: pistetaulu ei mene palvelimelle, mutta tulos kulkee linkissä.
+`?s=45200&n=OLLI&l=2-3` liitettynä `og:url`iin, jolloin esikatselukortti säilyy.
+Perustelut ovat `ROADMAP.md`:ssä; lyhyesti: nimi on lapsen etunimi, pisteet
+laskee selain, ja palvelin olisi ensimmäinen ajonaikainen riippuvuus.
+
+**Roskaa ei tulkita puolittain.** Sääntö on että haaste on väite kierroksesta
+jonka tämä peli olisi voinut tuottaa, ja jos se ei ole, haastetta ei ole
+lainkaan — puolikas haaste näyttää rikkinäiseltä peliltä, ei rikkinäiseltä
+linkiltä. Pisteet luetaan **säännöllisellä lausekkeella eikä `Number`illa**,
+koska `Number` hyväksyy myös `1e999`:n, `+45200`:n, `45200.5`:n ja
+arabialais-intialaiset numerot, ja jokainen niistä pitäisi hylätä erikseen.
+
+**Parametrit poistetaan osoiteriviltä heti luettuaan** (`replaceState`, ei
+`pushState`, joten paluunappi ei herätä niitä). Tärkein syy ei ole päivitys
+vaan se että vastaanottajan **oma** jakolinkki ei saa kantaa lähettäjän tulosta
+eteenpäin — muuten linkki muuttuu matkalla kaveriporukan läpi.
+
+**Vastaanotto ei kirjoita mitään.** Testi täyttää kaikki DESIGN.md:n kohdan 6
+localStorage-avaimet tunnetuilla arvoilla, avaa haastelinkin, ajaa 150 framea ja
+käy pistetaulun kautta, ja vertaa avaimet tavulleen. Se myös varmistaa että
+haaste *luettiin*, jottei tyhjä toteutus läpäise testiä.
+
+Voitosta kerrotaan pistetaulussa, ja **kierroksen tulos kulkee sinne erillään
+`highlight`istä**: kierros voi jäädä listan ulkopuolelle ja silti voittaa
+haasteen. Warpattu kierros ei voita mitään — jos se ei kelpaa omalle taululle,
+se ei kelpaa kaverinkaan päihittämiseen.
+
+### Bugi jonka kuvakaappaus löysi ja testit eivät
+
+Ensimmäinen versio näytti koko haastelinkin jakoruudun osoitelaatikossa. Se
+piirtyi muodossa `?S=12345 N=PIKKU L=2-3`: **pelin omassa 5×7-fontissa ei ole
+`&`-merkkiä.** Puuttuva merkki ei kaada mitään — se jättää aukon ja siirtää
+kohdistinta silti, joten jokainen leveystesti meni läpi.
+
+Laatikko on se vaihe jossa lapsi kirjoittaa osoitteen ylös käsin, ja ruudulla
+näkyvä osoite joka ei toimi on huonompi kuin ei osoitetta. Laatikko näyttää nyt
+pelkän `og:url`in, jaettava linkki on täysi, ja ero sanotaan ruudulla ääneen.
+Puuttuvat merkit mitataan tästä lähtien musteesta merkki kerrallaan.
+
 ## v26.08.09.9 — hyppybudjetti mitattu oikeaksi, ja maailma 3 sen mukaan
 
 `tools/jump-budget.json` lupasi 121 px nousun ja 200 px kantaman. Mitattuna 71
