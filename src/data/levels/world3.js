@@ -15,7 +15,27 @@
  * editorial split rather than a pile — and it costs nothing on the curve,
  * because a switch and a secret are both optional and both score at or below
  * zero (see the numbers in the changelog entry).
+ *
+ * ## Kahdeksan kenttää (9.8.2026)
+ *
+ * Maailma on nyt kolme käsintehtyä, neljä generoitua (`3-4`…`3-7`) ja linnake.
+ * Perustelu tunnisteiden säilyttämiselle on sama kuin maailmassa 1 ja luettavissa
+ * sieltä; tässä maailmassa on lisäksi oma syynsä olla siirtämättä `3-2`:ta:
+ * siellä on maailman ainoa piilokaista, ja sekä sisään- että uloskäynti on
+ * mitattu sarakkeen tarkkuudella.
+ *
+ * Yksi luku kannattaa jättää tähän seuraavaa maailmaa varten: **generaattorin
+ * kuiluraja on tämän maailman oma oppi.** `3-1`:n pitkä perustelu alla kertoo
+ * mitä budjetin reunalla olevat kuilut tekivät sille, ja `gen-levels.mjs`:n
+ * `maxGap` on suoraan se sääntö numerona — hengähdyskenttä pyytää neljää ruutua
+ * kuudesta, huippukenttä kaikki kuusi.
  */
+
+import { GENERATED_LEVELS } from '../generated.js';
+
+/** Which of the generated levels belong to this world — the file holds them all. */
+const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
+  .filter(([id]) => id.startsWith('3-')));
 
 export const WORLD3_LEVELS = {
   /*
@@ -171,6 +191,8 @@ export const WORLD3_LEVELS = {
       'pit_croak', 'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /* `3-4`…`3-7`, generated; the spread's position is the play order. */
+  ...generated,
   '3-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 2,
     chunks: [

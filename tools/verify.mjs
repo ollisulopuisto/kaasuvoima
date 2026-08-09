@@ -3263,17 +3263,43 @@ const report = await page.evaluate(async () => {
   }
 
   /*
-   * 2. JOKAISEN MAAILMAN KÄYRÄ NOUSEE JA SIINÄ ON TASAN YKSI NOTKO.
+   * 2. JOKAISEN MAAILMAN KÄYRÄ NOUSEE, HENGÄHTÄÄ, EIKÄ KIIPEÄ KOLMEA PIDEMPÄÄN.
    *
    * `tools/difficulty.mjs` on tulostanut tämän rivin pitkään, mutta tulostus ei
    * ole portti: uuden maailman voisi committoida suoraviivaisena tai laskevana
    * eikä mikään sanoisi mitään ennen kuin joku katsoo. Nyt sanoo.
    *
-   * Luvut luetaan `src/data/difficulty.js`:stä, ei mitata täällä uudestaan —
-   * sen tuoreuden tarkistaa jo oma testinsä ajon lopussa, joten kahta mittaria
-   * ei tarvita. Linnake jätetään pois kävelystä samasta syystä kuin työkalussa:
-   * se on aina viimeinen ja aina huippu, joten sen kanssa jokainen maailma
-   * "nousee" ilmaiseksi.
+   * **TÄMÄ SÄÄNTÖ MUUTTUI 9.8.2026, ja se on tarkoituksellinen muutos eikä
+   * löysennys.** Vanha muoto oli `dips !== 1` — "tasan yksi notko" — ja se on
+   * nyt jaettu neljään väitteeseen. Syy on mittaus, ei maku:
+   *
+   *   **"Tasan yksi" ei sanonut mitään kolmen askelen maailmasta.** Kolmen
+   *   askelen kävelyssä on kaksi siirtymää, joten notkoja voi olla 0, 1 tai 2.
+   *   Kaksi notkoa tarkoittaa että molemmat siirtymät laskevat, eli viimeinen
+   *   luku on ensimmäistä pienempi — jonka `rises` hylkää jo. Eli maailmoissa
+   *   1–7 ehto `dips === 1` oli **täsmälleen sama ehto** kuin `dips >= 1`, ja
+   *   se ero näkyy vasta kun maailmassa on enemmän askelia. Sanan "tasan"
+   *   ainoa oikea kohde oli maailma 8 (viisi askelta), jossa se sattui
+   *   pitämään.
+   *
+   *   **Ja kahdeksan kentän maailmassa "tasan yksi" olisi väärä sääntö.**
+   *   Seitsemän askelta yhdellä hengähdyksellä on kuuden nousun putki jossa on
+   *   yksi tauko; ROADMAP pyytää kahdeksalta kentältä nimenomaan tilaa
+   *   hengähdyskentälle, eikä yhtä.
+   *
+   * Tilalle neljä väitettä, ja jokainen on mitattu tästä pelistä:
+   *
+   *   1  käyrä nousee kokonaisuutena           (ennallaan)
+   *   2  vähintään yksi notko                  (vanhan sisältö kolmella askelella)
+   *   3  ei kahta notkoa peräkkäin             — pelissä 0 tapausta tänään
+   *   4  ei yli kolmen nousun putkea           — pelin pisin on tasan 3 (maailma
+   *                                              8: 117→302→378→386)
+   *
+   * Kolme ja nolla ovat siis pelin omia lukuja eivätkä valittuja kattoja: sääntö
+   * kieltää sen mitä peli ei jo tee, ja päästää läpi kaiken minkä se tekee.
+   * Maailmoissa 1–7 uusi sääntö on merkki merkiltä sama kuin vanha (ks. todistus
+   * yllä), maailmassa 8 se sallii toisen hengähdyksen jos joku sellaisen joskus
+   * haluaa. Se on ainoa kohta jossa sääntö on väljempi, ja se on sanottu ääneen.
    */
   {
     const { tiersOf, tierScore } = await import('/src/data/worlds.js');
@@ -3281,16 +3307,78 @@ const report = await page.evaluate(async () => {
     const shapes = WORLDS.map((w) => {
       const walk = tiersOf(w).filter((t) => !t.fortress);
       const seq = walk.map((t) => tierScore(w, t, DIFFICULTY));
-      const dips = seq.slice(1).filter((v, i) => v < seq[i]).length;
+      const steps = seq.slice(1).map((v, i) => (v < seq[i] ? -1 : 1));
+      const dips = steps.filter((s) => s < 0).length;
+      const twice = steps.some((s, i) => i > 0 && s < 0 && steps[i - 1] < 0);
+      let climb = 0;
+      let longest = 0;
+      for (const s of steps) {
+        climb = s > 0 ? climb + 1 : 0;
+        longest = Math.max(longest, climb);
+      }
       return {
-        id: w.id, seq, dips, rises: seq[seq.length - 1] > seq[0],
+        id: w.id,
+        seq,
+        dips,
+        twice,
+        longest,
+        levels: w.nodes.filter((n) => n.level).length,
+        rises: seq[seq.length - 1] > seq[0],
       };
     });
-    const bad = shapes.filter((s) => s.dips !== 1 || !s.rises);
-    expect('jokaisen maailman vaikeuskäyrä nousee ja notkahtaa tasan kerran',
+    const bad = shapes.filter((s) => !s.rises || s.dips < 1 || s.twice || s.longest > 3);
+    expect('jokaisen maailman käyrä nousee, hengähtää, eikä kiipeä kolmea pidempään',
       bad.length === 0,
-      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa`)
-        .join(', '));
+      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} `
+        + `${s.dips} notkoa, pisin nousu ${s.longest}`).join(', '));
+
+    /*
+     * KAHDEKSAN KENTÄN MAAILMAN MUOTO, ja se on tämän päivän päätös kirjoitettuna
+     * porttiin eikä roadmapiin.
+     *
+     * ROADMAP piti kysymystä auki näin: *"Kahdeksan kenttää maailmassa on eri
+     * muoto kuin neljä. Nykyinen kaava on kolme kenttää ja linnake. Kahdeksan ei
+     * ole 'sama kaksi kertaa' vaan tila välipomolle, haaralle ja
+     * hengähdyskentälle."*
+     *
+     * Päätetty muoto: **seitsemän numeroitua kenttää ja linnake, ja kävelyssä
+     * kaksi hengähdystä.** Perustelu kolmessa osassa, ja kaikki kolme ovat
+     * mitattavissa:
+     *
+     *   **Miksi ei kahta kaarta.** "Sama kaksi kertaa" tarkoittaisi kahta
+     *   huippua, ja kahden huipun maailma on kaksi maailmaa joiden välistä
+     *   puuttuu linnake — pelaaja lukee toisen huipun lopuksi ja saa jatkoa.
+     *   Yksi maailma on yksi kaari yhteen huippuun, ja se huippu on linnake.
+     *   Kahdeksan kenttää ei siis muuta kaarta vaan venyttää sitä.
+     *
+     *   **Miksi kaksi hengähdystä eikä yksi.** Venytetty kaari on kuuden nousun
+     *   putki, ja sääntö 4 yllä sanoo pelin oman mittauksen: pisin kiipeäminen
+     *   jonka tämä peli on koskaan pyytänyt on kolme askelta. Kaksi notkoa on se
+     *   pienin määrä joka pitää seitsemän askelta sen mitan sisällä ilman että
+     *   ne ovat peräkkäin (3 + 2 + 1 tai 2 + 3 + 1 ja niin edelleen).
+     *
+     *   **Miksi ei haaraa ja välipomoa jokaiseen maailmaan**, vaikka ROADMAP
+     *   ne mainitsee: molemmat ovat jo sidottuja päätöksiä muualla. Haaran pitää
+     *   olla eriarvoinen ja vaikeamman haaran pitää maksaa jotain jota ei saa
+     *   muualta (omistajan päätös 9.8.2026), ja koko pelissä on **yksi** sellainen
+     *   palkinto (`REWARDS.break`), jonka ainoa lähde on maailman 2 välipomo.
+     *   Seitsemän uutta samanarvoista palkintoa keksittäisiin tässä vain muodon
+     *   täytteeksi, ja se on väärin päin. Haara ja välipomo pysyvät siis
+     *   **maailman ominaisuutena eivätkä muodon osana** — maailma 2 on
+     *   haarautuva kahdeksankin kentän mitassa, koska kahdeksan kentän muoto ei
+     *   sano mitään siitä montako askelta on haaroja.
+     *
+     * Väite on siksi askelina eikä kenttinä: kahdeksan kentän maailmassa on
+     * seitsemän askelta *jos* mikään niistä ei ole haara, ja maailma 2 saa olla
+     * kuusi askelta samalla kahdeksalla kentällä. Notkojen määrä on kaksi
+     * kummassakin tapauksessa.
+     */
+    const eight = shapes.filter((s) => s.levels === 8);
+    const wrong = eight.filter((s) => s.dips !== 2);
+    expect('kahdeksan kentän maailmassa on kaksi hengähdystä',
+      eight.length >= 2 && wrong.length === 0,
+      `${eight.length} kahdeksan kentän maailmaa `
+      + `(${eight.map((s) => `${s.id} ${s.seq.length} askelta, ${s.dips} notkoa`).join('; ') || '—'})`);
 
     /*
      * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
@@ -3716,21 +3804,41 @@ const report = await page.evaluate(async () => {
     };
 
     /*
-     * 1. KUUSI ASKELTA, EI NELJÄ.
+     * 1. JOKAINEN ASKEL ON TAPPELU, EIKÄ VAIN VIIMEINEN.
      *
-     * Kenttien lukumäärä ei kelpaisi väitteeksi: maailmassa 2 on kuusi kenttää
-     * ja se on silti tavallisen muotoinen, koska kaksi niistä on saman haaran
-     * kaksi vaihtoehtoa. Askel eli `tiersOf`in taso on se mitä pelaaja kävelee,
-     * ja siinä mitassa jokainen tähänastinen maailma on **neljä** — kolme
-     * kenttää ja linnake — myös se jossa on haara.
+     * **Tässä luki 9.8.2026 asti "viimeinen maailma on kuusi askelta, muut
+     * neljä", ja se väite jouduttiin vaihtamaan.** Syy kannattaa lukea, koska se
+     * on esimerkki portista joka mittasi oikein mutta väitti väärää asiaa.
+     *
+     * Väite oli **kahden luvun erotus**: kuusi vastaan neljä. Toinen puolisko
+     * niistä luvuista — muiden maailmojen neljä — ei ollut maailman 8
+     * ominaisuus lainkaan vaan sen ajan hetken ominaisuus jolloin jokainen muu
+     * maailma oli kolme kenttää ja linnake. ROADMAPin oma tavoite (kahdeksan
+     * kenttää joka maailmaan) tekee siitä epätoden ensimmäisenä päivänä jona
+     * joku alkaa tehdä sitä työtä, eikä maailmalle 8 tapahdu silloin mitään.
+     * Portti olisi siis kaatunut oikeasta työstä, ja portti joka kaatuu
+     * oikeasta työstä sammutetaan.
+     *
+     * Tilalle väite joka kestää minkä tahansa kenttämäärän, koska se on
+     * **osuus eikä lukumäärä**: viimeisessä linnakkeessa jokainen askel päättyy
+     * tappeluun, muualla vain viimeinen. Mitattuna maailma 8 on 6/6 = 100 % ja
+     * jokainen muu 1/n — ja kun maailmat kasvavat kahdeksaan kenttään, tämä
+     * väite **vahvistuu** eikä heikkene: nimittäjä kasvaa, osuus pienenee.
+     *
+     * Nollatestinä yhä muu peli, samalla koodilla. Jos jokainen maailma antaisi
+     * saman osuuden, väite ei erottaisi mitään.
      */
-    const steps = WORLDS.map((w) => ({ id: w.id, n: tiersOf(w).length }));
+    const steps = WORLDS.map((w) => {
+      const tiers = tiersOf(w);
+      const fights = tiers.filter((t) => t.levels.some((id) => getLevel(id).boss)).length;
+      return { id: w.id, n: tiers.length, fights, share: (fights / tiers.length) * 100 };
+    });
     const last = steps[steps.length - 1];
     const rest = steps.slice(0, -1);
-    expect('viimeinen maailma on kuusi askelta, muut neljä',
-      steps.length === 8 && last.id === 'w8' && last.n === 6
-      && rest.every((s) => s.n === 4),
-      steps.map((s) => `${s.id} ${s.n}`).join(', '));
+    expect('viimeisessä maailmassa jokainen askel on tappelu, muualla vain viimeinen',
+      steps.length === 8 && last.id === 'w8' && last.share === 100 && last.n >= 6
+      && rest.every((s) => s.fights === 1 && s.share <= 25),
+      steps.map((s) => `${s.id} ${s.fights}/${s.n} = ${s.share.toFixed(0)} %`).join(', '));
 
     /*
      * 2. EI ULKOPUOLTA.
@@ -7467,13 +7575,22 @@ const report = await page.evaluate(async () => {
     c.height = H;
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
-    /* Every colour the player is ever painted in. */
+    /* Every colour the player is ever painted in. It is a list and not a rule
+     * because the outline has to be told from the artwork, and the day the
+     * costume changed it was also the list that said what the costume was: the
+     * greens and whites of the old shirt left it, the slate, the purples, the
+     * gas green and the brass of POWER_LOOKS came in. A colour missing from
+     * here does not fail loudly — the audit below simply stops seeing that part
+     * of the body, and a sprite with an invisible middle counts as two pieces. */
     const ART = new Set([
-      '16,16,24', '240,184,144', '192,120,80', '62,162,58', '31,111,38',
+      '16,16,24', '240,184,144', '192,120,80', '31,111,38',
       '140,76,24', '90,44,12', '200,140,64', '248,248,248', '92,156,40',
       '255,208,72', '156,106,40', '224,76,60', '200,200,208', '192,90,36',
-      '140,60,28', '74,28,10', '44,76,20', '42,74,106', '127,200,240',
+      '140,60,28', '74,28,10', '42,74,106', '127,200,240',
       '232,248,255',
+      // POWER_LOOKS, the gas hose and the leaves.
+      '168,224,74', '160,76,160', '106,44,106', '60,24,64',
+      '106,116,136', '57,65,79', '76,86,102', '232,255,192', '216,168,96',
     ]);
 
     const poses = [
@@ -7632,6 +7749,132 @@ const report = await page.evaluate(async () => {
       same.length === 0, same.slice(0, 4).join('; '));
   }
 
+  /* ------------------------ hahmon oma ulkonäkö ------------------------- */
+  /*
+   * Two measurements that stand for a decision rather than for a bug: the hero
+   * is this game's own character and not the genre's most-copied costume. Both
+   * are shape and colour, not naming, because a sprite cannot be checked by
+   * asking it what it is called.
+   *
+   *  1. **The head is a head, not a peaked cap.** A brim is the one thing on a
+   *     platform hero that is wider than the skull it sits on, and the old
+   *     drawing made it exactly as wide as the whole character: 12 px of brim
+   *     across a 14 px body, 10 across a 12 px one, with the crown only 9 and 8.
+   *     The rule is therefore about *width*, not about colour — a red cap
+   *     repainted green is still a cap. The head, measured on the rows just
+   *     below the top of the box, has to be at least four pixels narrower than
+   *     the body: room for a skull and hair, no room for a brim.
+   *
+   *     The top row of the box is left out of the measurement on purpose. That
+   *     is where the kaasulehti's fronds sit, and they are a named exception in
+   *     the audit above for the same reason they are one here: they are not the
+   *     head, they are what the power-up put on it.
+   *
+   *  2. **The five power looks are five looks.** `POWER_LOOKS` used to change
+   *     the cap and nothing else between "no power" and the first mushroom, so
+   *     two of the five tiers were the same drawing with a hat repainted —
+   *     about a quarter of the body. A tier a player cannot name at a glance is
+   *     not a tier, and at 12x16 a quarter of the body is a detail. Measured as
+   *     the share of the character's own pixels that actually change between
+   *     every pair of tiers, at the smallest size and the largest, since those
+   *     are the two that could disagree.
+   *
+   * Both numbers are reported so that a future palette can be argued with in
+   * numbers: they are the floor, not the target.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const { PLAYER_SIZES, drawPlayer } = sprites;
+    const W = 80; const H = 80; const OX = 26; const OY = 14;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const TYPES = [null, 'shroom', 'flower', 'leaf', 'pop'];
+    /* Artwork is told apart from its own outline the same way the audit above
+     * does it: the outline only ever reaches full alpha where all four offsets
+     * stack, and there it lands on 16,16,23 — one blue short of C.ink. */
+    const shot = (type, level) => {
+      g.clearRect(0, 0, W, H);
+      drawPlayer(g, OX, OY, {
+        type, level, facing: 1, frame: 0, state: 'idle', running: false,
+        ducking: false, theme: 'grass', tick: 0, idle: 0, wag: 0,
+      });
+      const d = g.getImageData(0, 0, W, H).data;
+      const art = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) {
+        const q = i * 4;
+        if (d[q + 3] !== 255) continue;
+        if (d[q] === 16 && d[q + 1] === 16 && d[q + 2] === 23) continue;
+        art[i] = 1;
+      }
+      return { art, d };
+    };
+
+    const heads = [];
+    for (const level of [0, 1]) {
+      const box = PLAYER_SIZES[level];
+      let widest = 0;
+      for (const type of TYPES) {
+        const { art } = shot(type, level);
+        for (let row = 1; row <= 5; row++) {
+          let lo = -1; let hi = -1;
+          /* Only the box and the one pixel of shoulder it has always been
+           * allowed on each side. Anything further out is not the head: the
+           * kaasulehti's hose swings back eleven pixels and crosses these rows
+           * on its way up, and it would otherwise be measured as a hat. What
+           * leaves the box is the audit above's question, not this one's. */
+          for (let x = Math.max(0, OX - 1); x <= OX + box.w; x++) {
+            if (!art[(OY + row) * W + x]) continue;
+            if (lo < 0) lo = x;
+            hi = x;
+          }
+          if (hi >= 0) widest = Math.max(widest, hi - lo + 1);
+        }
+      }
+      heads.push({ level, widest, allow: box.w - 4 });
+    }
+    expect('the hero has a head and not a peaked cap',
+      heads.every((h) => h.widest <= h.allow),
+      heads.map((h) => `taso ${h.level}: pää ${h.widest}px, laatikko `
+        + `${PLAYER_SIZES[h.level].w}px, sallittu ${h.allow}px`).join(', '));
+
+    /* Every pair of tiers, both ends of the size range. The denominator is the
+     * character's own pixels rather than the canvas, so the number means "how
+     * much of him changed" and does not quietly improve when he grows. */
+    const shares = [];
+    for (const level of [0, 5]) {
+      const shots = TYPES.map((t) => shot(t, level));
+      let worst = 100;
+      let pair = '';
+      for (let a = 0; a < TYPES.length; a++) {
+        for (let b = a + 1; b < TYPES.length; b++) {
+          let own = 0;
+          let changed = 0;
+          for (let i = 0; i < W * H; i++) {
+            if (!shots[a].art[i] && !shots[b].art[i]) continue;
+            own++;
+            const q = i * 4;
+            for (let k = 0; k < 3; k++) {
+              if (shots[a].d[q + k] !== shots[b].d[q + k]) { changed++; break; }
+            }
+          }
+          const share = Math.round((changed / own) * 100);
+          if (share < worst) {
+            worst = share;
+            pair = `${TYPES[a] || 'none'}/${TYPES[b] || 'none'}`;
+          }
+        }
+      }
+      shares.push({ level, worst, pair });
+    }
+    expect('the five power looks are five looks and not one with a hat repainted',
+      shares.every((s) => s.worst >= 45),
+      shares.map((s) => `taso ${s.level}: lähimmät ${s.pair} ${s.worst}%`).join(', ')
+      + ', vaadittu 45%');
+  }
+
   /* ------------------ vihollisten laatikot ja hengitys ------------------- */
   /*
    * The audit above, pointed at the things that walk at him. Same method —
@@ -7666,15 +7909,21 @@ const report = await page.evaluate(async () => {
      * they only reach full alpha where they land on the stacked outline, and a
      * puff of gas behind an enemy is not part of its body. */
     const ART = new Set([
-      '160,104,40', '122,76,24', '76,44,8', '248,248,248', '16,16,24',
-      '62,162,58', '28,107,31', '248,232,160', '240,208,96', '200,160,48',
+      '122,76,24', '248,248,248', '16,16,24',
       '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
-      '232,224,200', '168,152,120', '224,64,64', '31,111,38', '160,32,32',
-      '112,16,16', '216,168,96', '156,106,40', '138,90,42', '92,58,22',
+      '232,224,200', '168,152,120', '216,168,96', '156,106,40',
+      '138,90,42', '92,58,22',
       '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
       '106,68,36',
       // kurnuttaja: suo-turkoosi, joka ei ole kenenkään muun väri tässä pelissä
       '30,90,76', '52,140,110', '108,200,160', '18,60,52',
+      // pöhö: suolenvärinen kaasupussi, joka korvasi ruskean kävelijän
+      '224,120,120', '248,168,168', '168,60,76', '112,28,48',
+      // pönttö: teräksinen painesäiliö ja se kalpea toukka joka asuu siinä
+      '32,80,192', '92,144,232', '16,48,108', '168,200,240',
+      '216,224,240', '140,156,192',
+      // nielu: märkä, lähes musta kurkku ja sen punainen sisus
+      '24,16,48', '52,44,104', '104,88,176', '32,24,64', '120,16,60', '200,40,108',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -7725,36 +7974,52 @@ const report = await page.evaluate(async () => {
     };
 
     const none = { over: {}, under: {} };
+    /*
+     * `stomp` is the rule the entity actually enforces (`Enemy.stompable`), and
+     * it is on this table rather than read out of the classes on purpose: the
+     * point of the crown audit below is to compare the *picture* against the
+     * rule, so the rule has to arrive from somewhere the picture cannot reach.
+     * `pit` marks the one enemy the player never arrives above.
+     */
     const subjects = [
-      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
         paint: (ox, t, f) => sprites.drawWalker(g, ox, OY, Math.floor(t / 8), f, false) },
       // A flattened walker is scenery for twenty-two frames and cannot hurt
       // anybody, so it is not held to the box it no longer fills.
-      { n: 'flyer', box: [0, 0, 16, 16], over: { left: 4, right: 4 }, under: {},
+      { n: 'flyer', box: [0, 0, 16, 16], stomp: true,
+        over: { left: 4, right: 4 }, under: {},
         paint: (ox, t, f) => sprites.drawFlyer(g, ox, OY, t, f) },
-      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1,
+      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1, stomp: true,
         over: {}, under: { top: 1 },
         paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'walk') },
-      { n: 'shell', box: [1, 0, 14, 14], over: { left: 1, right: 1 }, under: { top: 2 },
+      { n: 'shell', box: [1, 0, 14, 14], stomp: true,
+        over: { left: 1, right: 1 }, under: { top: 2 },
         paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'shell') },
-      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2,
+      /* The kicked one. It was never in this audit, which is a gap and not a
+       * decision: a shell that slides through a room is the one drawing in the
+       * game the player is asked to read while it is moving fastest. */
+      { n: 'shell sliding', box: [1, 0, 14, 14], stomp: true,
+        over: { left: 1, right: 1 }, under: { top: 2 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'sliding') },
+      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2, stomp: false,
         over: { top: 2 }, under: { left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawSpikeGuy(g, ox, OY, Math.floor(t / 2), f) },
-      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1,
+      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1, stomp: false,
         over: {}, under: { left: 1, right: 1 }, facings: [1],
         paint: (ox, t) => sprites.drawPlant(g, ox, OY, t) },
-      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1,
+      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1, stomp: true,
         over: {}, under: { top: 2, left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawCorkGuy(g, ox, OY, t, f) },
-      { n: 'stink cloud', box: [0, 0, 20, 14],
+      { n: 'stink cloud', box: [0, 0, 20, 14], stomp: true,
         over: {}, under: { top: 1, bottom: 1, left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawStinkCloud(g, ox, OY, t, f, true) },
-      { n: 'bean baron', box: [0, 0, 18, 26], ...none,
+      { n: 'bean baron', box: [0, 0, 18, 26], stomp: true, ...none,
         paint: (ox, t, f) => sprites.drawBeanBaron(g, ox, OY, Math.floor(t / 7), f, 0, false) },
       /* Kurnuttaja. Silmät ovat laatikon katto ja jalat sen lattia, ja hengitys
        * liikkuu niiden välissä — sama rakenne kuin kävelijällä, ja samasta
        * syystä: se on ainoa tapa täyttää laatikko jokaisella framella. */
-      { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+      { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8,
+        stomp: false, pit: true, ...none,
         paint: (ox, t, f) => sprites.drawKurnuttaja(g, ox, OY, t, f) },
     ];
 
@@ -7851,7 +8116,461 @@ const report = await page.evaluate(async () => {
     expect('everything alive breathes, and neighbours are not in step',
       flat.length === 0 && lockstep.length === 0,
       [...flat, ...lockstep, `naapurin ero / 4px:n siirtymä: ${measured.join(', ')}`].join('; '));
+
+    /* ------------- ylälaita kertoo saako päälle hypätä ------------------- */
+    /*
+     * Stomping is the one verb this game teaches in its first screen, and the
+     * whole verb rests on a yes/no the player has to read *before* the jump, at
+     * a distance, in a fraction of a second. There is exactly one place in a
+     * sprite where that answer can live: the top edge, because that is the part
+     * a falling player is aimed at.
+     *
+     * So the claim is not "the art looks different". It is that **the top edges
+     * of the two populations do not overlap** — that no enemy you must walk
+     * around offers a wider flat landing than the narrowest one you are meant to
+     * jump on, with a band of at least four pixels between them where nothing
+     * lives. That is a number, it is measured off the finished pixels, and it
+     * cannot be satisfied by choosing a nicer colour: colour has to be learned
+     * first, and a row of points does not (the same argument `drawSpines`
+     * already makes for the piikkiukko, now enforced instead of asserted).
+     *
+     * **What the red said, and it is worth reading twice.** Measured on the old
+     * art, the widest flat landing surface in the entire enemy roster belonged
+     * to the *plant* — 14 px of unbroken flat crown out of a 16 px box, wider
+     * than the walker's 10, tied with the shell that you are supposed to jump
+     * on — and the plant is the one enemy in the game that has never been
+     * stompable. The picture said "land here" in the largest type available and
+     * the rule said "this costs you a power level". The other unstompable, the
+     * piikkiukko, measured 1. So the populations were not merely close, they
+     * were inverted, and the game taught a lie in 1-2 to every player who had
+     * just been taught the truth in 1-1.
+     *
+     * `landing` is the widest run of columns whose topmost painted pixel is
+     * within one pixel of the sprite's own highest, over the box's columns only
+     * — a wing hanging off the side is not somewhere you can land. `points` is
+     * how many separate such runs there are, which is what tells a row of teeth
+     * apart from a plateau with a notch in it.
+     */
+    const crown = (paint, box) => {
+      const [dx, , bw] = box;
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const top = new Int32Array(bw).fill(1e9);
+      for (let y = 0; y < H; y++) {
+        for (let i = 0; i < bw; i++) {
+          const q = ((y * W) + OX + dx + i) * 4;
+          if (d[q + 3] !== 255) continue;
+          if (!ART.has(`${d[q]},${d[q + 1]},${d[q + 2]}`)) continue;
+          if (y < top[i]) top[i] = y;
+        }
+      }
+      let min = 1e9;
+      for (const v of top) if (v < min) min = v;
+      let landing = 0; let run = 0; let points = 0; let was = false;
+      for (let i = 0; i < bw; i++) {
+        const hi = top[i] <= min + 1;
+        if (hi) { run++; if (!was) points++; if (run > landing) landing = run; } else { run = 0; }
+        was = hi;
+      }
+      return { landing, points };
+    };
+    {
+      const read = [];
+      for (const s of subjects) {
+        if (s.stomp === undefined) continue;
+        let landing = 1e9; let points = 1e9;
+        for (const facing of (s.facings || [1, -1])) {
+          for (let t = 0; t < 176; t += 2) {
+            const m = crown(() => s.paint(OX, t, facing), s.box);
+            landing = Math.min(landing, m.landing);
+            points = Math.min(points, m.points);
+          }
+        }
+        read.push({ ...s, landing, points });
+      }
+      /* The kurnuttaja is the one exemption and it is named rather than
+       * tolerated. It is not stompable either, but it spends its life at the
+       * bottom of a pit: the player never arrives above it by choice, and the
+       * warning it owes is the column of bubbles `drawCroak` puts in the air
+       * over the hole — a signal in a place, not a shape on a crown. Its own
+       * number is printed anyway, because an exemption nobody can see the size
+       * of is just a hole in a test. Measured 6, which is inside the band this
+       * assertion keeps empty, and somebody may yet decide to narrow its eye
+       * turrets. */
+      const land = read.filter((s) => !s.pit);
+      const yes = land.filter((s) => s.stomp);
+      const no = land.filter((s) => !s.stomp);
+      const softest = yes.reduce((m, s) => (s.landing < m.landing ? s : m), yes[0]);
+      const flattest = no.reduce((m, s) => (s.landing > m.landing ? s : m), no[0]);
+      const blunt = no.filter((s) => s.points < 3);
+      const pit = read.find((s) => s.pit);
+      expect('vihollisen ylälaita kertoo saako sen päälle hypätä',
+        softest.landing >= flattest.landing + 4 && blunt.length === 0,
+        `tallattavista kapein ${softest.n} ${softest.landing} px, `
+        + `tallaamattomista levein ${flattest.n} ${flattest.landing} px`
+        + (blunt.length ? ` — piikittömät: ${blunt.map((s) => `${s.n} ${s.points}`).join(', ')}` : '')
+        + `; kaikki: ${read.map((s) => `${s.n} ${s.landing}/${s.points}`).join(', ')}`
+        + (pit ? ` (${pit.n} kuopan pohjalla, ei portissa)` : ''));
+    }
+
+    /* ------------ vihollinen erottuu siitä maasta jolla se seisoo -------- */
+    /*
+     * The tiles have had a per-theme contrast gate for a while and the enemies
+     * have not, which is the wrong way round: a brick that melts into the
+     * ground costs you a secret, an enemy that melts into the ground costs you
+     * a power level. Eight themes and one sprite each means eight chances for
+     * a species to disappear, and the one that disappears will be the one on
+     * the world nobody replayed.
+     *
+     * Same measure as the tile gate, deliberately — mean channel difference out
+     * of a full 255, crude but unbreakable, and worth more as *the same number*
+     * than as a better one nobody can compare against anything. Two differences,
+     * both forced by what is being measured:
+     *
+     *   - The outline is left out (`16,16,24`). Every sprite in the game wears
+     *     the same one, so it can only ever hide the thing being asked about,
+     *     which is whether the *body* has a colour of its own.
+     *   - The threshold is not typed in. It is the desert's own ground/brick
+     *     gap, computed here from the same tiles — the weakest pair the game
+     *     already ships and knowingly tolerates. "At least as separate as the
+     *     worst pair we already live with" is a claim that stays true when the
+     *     palette moves, which a hard-coded 8.6 would not.
+     *
+     * **What the red said.** The walker — the first enemy in the game, in 1-1,
+     * standing on grass — measured 6.0 % against grass and 5.7 % against the
+     * night ground of world 2, both under the 8.6 % floor. The plant measured
+     * 6.9 % against grass. Brown on brown, and it had been that way since the
+     * first sprite was written.
+     *
+     * Gated on the three species this pass redrew, and **measured on all of
+     * them**: the rest of the roster is printed with its worst theme so the
+     * ones still under the line are a decision somebody makes with a number in
+     * front of them rather than a thing this test quietly blesses.
+     */
+    {
+      const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
+      const bodyMean = (paint) => {
+        g.clearRect(0, 0, W, H);
+        paint();
+        const d = g.getImageData(0, 0, W, H).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let i = 0; i < W * H; i++) {
+          const q = i * 4;
+          if (d[q + 3] !== 255) continue;
+          const key = `${d[q]},${d[q + 1]},${d[q + 2]}`;
+          if (!ART.has(key) || key === '16,16,24') continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const tileMean = (ch, theme) => {
+        g.clearRect(0, 0, W, H);
+        drawTile(g, ch, 0, 0, theme, 3, 5, 0, ' ', {});
+        const d = g.getImageData(0, 0, 16, 16).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let q = 0; q < d.length; q += 4) {
+          if (d[q + 3] < 8) continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const sep = (a, b) => (!a || !b ? 0
+        : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
+      const floor = sep(tileMean(T.GROUND, 'desert'), tileMean(T.BRICK, 'desert'));
+      const grounds = Object.keys(THEMES).map((th) => [th, tileMean(T.GROUND, th)]);
+      /* The three species this pass redrew. The flyer is on the list because
+       * it *is* the walker — `drawFlyer` paints `walkerBody` and adds wings —
+       * so leaving it out would be pretending a body is two bodies. */
+      const owned = new Set(['walker', 'flyer', 'shell walking', 'shell', 'shell sliding', 'plant']);
+      const rows = [];
+      for (const s of subjects) {
+        const m = bodyMean(() => s.paint(OX, 0, 1));
+        let worst = { th: '?', v: 1e9 };
+        for (const [th, ground] of grounds) {
+          const v = sep(m, ground);
+          if (v < worst.v) worst = { th, v };
+        }
+        rows.push({ n: s.n, owned: owned.has(s.n), ...worst });
+      }
+      const mine = rows.filter((r) => r.owned);
+      const rest = rows.filter((r) => !r.owned);
+      const sunk = mine.filter((r) => r.v < floor);
+      expect('uudelleenpiirretty vihollinen erottuu jokaisen teeman maasta',
+        sunk.length === 0,
+        `kynnys ${floor.toFixed(1)} % = aavikon maa vs tiili; `
+        + `${mine.map((r) => `${r.n} ${r.v.toFixed(1)} (${r.th})`).join(', ')}`
+        + ` — mittaamatta portissa: ${rest.map((r) => `${r.n} ${r.v.toFixed(1)} (${r.th})`).join(', ')}`);
+    }
   }
+
+  /* ------------------ tehostusten laatikko, siluetti ja tausta ----------- */
+  /*
+   * The same audit as the two above, pointed at the things the player picks
+   * up. It is here because the pickups were the last set of sprites nobody had
+   * measured, and measuring them is what turned DESIGN.md §1's claim about the
+   * graphics from a sentence in a file header into something a machine checks.
+   *
+   * A pickup has one job and it is read in a tenth of a second: *which* power
+   * this is. That splits into four measurements, and every one of them is a
+   * number rather than an opinion:
+   *
+   *   1. **It fills the box it is picked up by.** `Item` is 16x16 (see
+   *      entities/items.js) and that box is also the frame of the goal card,
+   *      which is exactly 16 wide — so a sprite that paints outside the box
+   *      paints outside the card's border, and a sprite that leaves a band of
+   *      the box empty gets collected off thin air.
+   *   2. **No two of them are the same picture.** Measured the way the eye
+   *      asks the question: what fraction of the box actually *looks*
+   *      different — counting a pixel one of them paints and the other does
+   *      not, and a pixel both paint in colours less than a fifth apart as
+   *      the same. Shape and palette in one number, because the player is not
+   *      told which of the two is carrying the difference.
+   *   3. **It survives all eight themes.** The tile audit already forbids two
+   *      *tiles* from being the same colour; a pickup that matches the ground
+   *      it is lying on is the same fault one layer up, and the pickup is the
+   *      one the player is supposed to run towards.
+   *   4. **It breathes on the shared clock.** Everything else alive in this
+   *      game does (`breath`), and these are organs and fungi and a bowl of
+   *      something still cooking — a still one reads as a pasted-on icon.
+   *
+   * Translucency is deliberately not body: the wisp of gas leaking out of a
+   * pickup and the star's halo are light and vapour, not the thing you touch,
+   * so they are allowed outside the box and do not count towards filling it.
+   * That is the same line the enemy audit above draws for trailing gas.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const { THEMES } = await import('/src/gfx/tiles.js');
+    const KINDS = ['shroom', 'oneup', 'flower', 'leaf', 'soup', 'pop', 'star'];
+    const BOX = 16;
+    const W = 48; const H = 48; const OX = 16; const OY = 16;
+    const PERIOD = sprites.BREATH_PERIOD;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+
+    /** How far apart two colours are, on the same 0..100 scale the tile audit uses. */
+    const gap = (a, b) => ((Math.abs(((a >> 16) & 255) - ((b >> 16) & 255))
+      + Math.abs(((a >> 8) & 255) - ((b >> 8) & 255))
+      + Math.abs((a & 255) - (b & 255))) / 3 / 255) * 100;
+
+    /** One frame of one sprite, reduced to the colour of every pixel of its box. */
+    const shot = (paint) => {
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const px = new Int32Array(BOX * BOX).fill(-1);
+      const inside = new Uint8Array(BOX * BOX);
+      const colors = new Map();
+      let n = 0; let rows = 0; let far = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] !== 255) continue;
+          const dx = x - OX; const dy = y - OY;
+          if (dx >= 0 && dx < BOX && dy >= 0 && dy < BOX) {
+            const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+            px[dy * BOX + dx] = key;
+            inside[dy * BOX + dx] = 1;
+            n++;
+            rows += dy;
+            colors.set(key, (colors.get(key) || 0) + 1);
+          } else {
+            far = Math.max(far, -dx, dx - (BOX - 1), -dy, dy - (BOX - 1));
+          }
+        }
+      }
+      let cols = 0; let lines = 0;
+      for (let k = 0; k < BOX; k++) {
+        let anyCol = 0; let anyRow = 0;
+        for (let q = 0; q < BOX; q++) {
+          if (inside[q * BOX + k]) anyCol = 1;
+          if (inside[k * BOX + q]) anyRow = 1;
+        }
+        cols += anyCol;
+        lines += anyRow;
+      }
+      // `lift` is the body's vertical centre of mass in hundredths of a pixel,
+      // the same measure the enemy breath is read from.
+      return { px, inside, colors, n, far, cols, lines,
+        lift: n ? Math.round((rows / n) * 100) : -1 };
+    };
+
+    /**
+     * The smallest fraction of the box, over the whole cycle, on which two
+     * sprites do not look the same. A pixel counts as different when one of
+     * them paints it and the other does not, or when both paint it more than a
+     * fifth apart — the same fifth this file uses below to say a pickup is not
+     * its background.
+     */
+    const apart = (a, b) => {
+      let worst = 1e9;
+      for (let i = 0; i < a.length && i < b.length; i++) {
+        let diff = 0;
+        for (let q = 0; q < BOX * BOX; q++) {
+          const p = a[i].px[q]; const r = b[i].px[q];
+          if (p < 0 && r < 0) continue;
+          if (p < 0 || r < 0 || gap(p, r) >= 20) diff++;
+        }
+        worst = Math.min(worst, diff);
+      }
+      return (worst / (BOX * BOX)) * 100;
+    };
+
+    const seen = new Map();
+    for (const kind of KINDS) {
+      const frames = [];
+      for (let t = 0; t < PERIOD; t++) frames.push(shot(() => sprites.drawItem(g, kind, OX, OY, t)));
+      seen.set(kind, frames);
+    }
+
+    /* 1. the box */
+    const loose = [];
+    const filled = [];
+    for (const kind of KINDS) {
+      const frames = seen.get(kind);
+      let minFill = 1e9; let minCols = 16; let minRows = 16; let bleed = 0;
+      for (const f of frames) {
+        minFill = Math.min(minFill, f.n);
+        minCols = Math.min(minCols, f.cols);
+        minRows = Math.min(minRows, f.lines);
+        bleed = Math.max(bleed, f.far);
+      }
+      // 40 % of the box is the smallest a pickup can be and still be the thing
+      // the box belongs to; below that the player is collecting the air around
+      // it. All sixteen columns and rows must be touched at every frame.
+      if (minFill < 102 || minCols < BOX || minRows < BOX || bleed > 0) {
+        loose.push(`${kind}: ${Math.round((minFill / 256) * 100)} % täynnä, `
+          + `${minCols}/${BOX} saraketta, ${minRows}/${BOX} riviä`
+          + (bleed > 0 ? `, ${bleed} px laatikon ulkopuolella` : ''));
+      }
+      filled.push(`${kind} ${Math.round((minFill / 256) * 100)}%`);
+    }
+    expect('jokainen tehostus täyttää poimintalaatikkonsa eikä vuoda sen yli',
+      loose.length === 0, loose.length ? loose.join('; ') : filled.join(', '));
+
+    /*
+     * 2. no two pickups are the same picture, and the threshold is not invented.
+     *
+     * **Where 40 % comes from.** The same measurement was run over the five
+     * enemies that share this 16x16 box and that a player is already expected
+     * to tell apart across a room. The tightest pair of *species* is the spiky
+     * one and the kurnuttaja at 43.8 %; the loosest comparison in the game is
+     * the walker and the flyer at **0.8 %**, and that one is not a fault but
+     * the clearest possible statement of what this box can and cannot hold —
+     * inside it the flyer simply *is* the walker, and the wings that tell them
+     * apart are drawn outside the box entirely. So 40 % is a hair under what
+     * the game already ships and defends, and the enemy figure is measured
+     * again here rather than remembered, so that it is visible if it drifts.
+     *
+     * The old pickups had eight pairs under that line and the worst of them
+     * was the flower and the leaf at 29.7 %. The pair this was written for was
+     * the mushroom and the 1-up: one drawing, two hues, 35.9 % apart, and the
+     * difference between one more hit and one more life.
+     */
+    const APART = 40;
+    const pairs = [];
+    for (let a = 0; a < KINDS.length; a++) {
+      for (let b = a + 1; b < KINDS.length; b++) {
+        pairs.push({ pair: `${KINDS[a]}/${KINDS[b]}`,
+          d: apart(seen.get(KINDS[a]), seen.get(KINDS[b])) });
+      }
+    }
+    pairs.sort((p, q) => p.d - q.d);
+    const same = pairs.filter((p) => p.d < APART);
+    // The calibration, re-measured. Guarded because the enemies live in
+    // somebody else's file and a missing one must not fail the pickups.
+    const species = [
+      ['walker', sprites.drawWalker, (f, t) => f(g, OX, OY, Math.floor(t / 8), 1, false)],
+      ['spikeguy', sprites.drawSpikeGuy, (f, t) => f(g, OX, OY, Math.floor(t / 2), 1)],
+      ['corkguy', sprites.drawCorkGuy, (f, t) => f(g, OX, OY, t, 1)],
+      ['kurnuttaja', sprites.drawKurnuttaja, (f, t) => f(g, OX, OY, t, 1)],
+    ].filter(([, fn]) => typeof fn === 'function')
+      .map(([name, fn, call]) => [name, (t) => call(fn, t)]);
+    const beasts = new Map();
+    for (const [name, paint] of species) {
+      const frames = [];
+      for (let t = 0; t < PERIOD; t += 4) frames.push(shot(() => paint(t)));
+      beasts.set(name, frames);
+    }
+    let floor = { pair: '-', d: -1 };
+    for (let a = 0; a < species.length; a++) {
+      for (let b = a + 1; b < species.length; b++) {
+        const d = apart(beasts.get(species[a][0]), beasts.get(species[b][0]));
+        if (floor.d < 0 || d < floor.d) floor = { pair: `${species[a][0]}/${species[b][0]}`, d };
+      }
+    }
+    expect('kaksi tehostusta eivät ole sama kuva',
+      same.length === 0,
+      (same.length ? `${same.map((p) => `${p.pair} ${p.d.toFixed(1)} %`).join('; ')} — ` : '')
+        + `lähin pari ${pairs[0].pair} ${pairs[0].d.toFixed(1)} %, toiseksi lähin `
+        + `${pairs[1].pair} ${pairs[1].d.toFixed(1)} % (raja ${APART} %, `
+        + `vihollislajien tiukin pari ${floor.pair} ${floor.d.toFixed(1)} %)`);
+
+    /* 3. the eight themes, plus the two frames a pickup is drawn in */
+    const grounds = [];
+    for (const [name, th] of Object.entries(THEMES)) {
+      for (const [what, css] of [['taivas', th.sky[0]], ['horisontti', th.sky[1]],
+        ['maa', th.ground], ['pinta', th.groundTop], ['tiili', th.brick],
+        ['kova', th.hard], ['kukkula', th.hill]]) {
+        grounds.push({ name: `${name} ${what}`, rgb: [parseInt(css.slice(1, 3), 16),
+          parseInt(css.slice(3, 5), 16), parseInt(css.slice(5, 7), 16)] });
+      }
+    }
+    // The two backgrounds that are not a theme at all and are the extremes:
+    // the HUD's reserve box is nearly black and the goal card is nearly white.
+    grounds.push({ name: 'HUD-lokero', rgb: [0x20, 0x20, 0x38] });
+    grounds.push({ name: 'maalikortti', rgb: [0xf8, 0xf8, 0xf8] });
+    const vanish = [];
+    const worstBg = [];
+    for (const kind of KINDS) {
+      let worst = 1e9; let where = '';
+      for (const bg of grounds) {
+        let least = 1e9;
+        for (const f of seen.get(kind)) {
+          let stands = 0;
+          for (const [key, count] of f.colors) {
+            const dr = Math.abs(((key >> 16) & 255) - bg.rgb[0]);
+            const dg = Math.abs(((key >> 8) & 255) - bg.rgb[1]);
+            const db = Math.abs((key & 255) - bg.rgb[2]);
+            if (((dr + dg + db) / 3 / 255) * 100 >= 20) stands += count;
+          }
+          least = Math.min(least, stands);
+        }
+        if (least < worst) { worst = least; where = bg.name; }
+      }
+      // 40 px is a 6x7 patch — the smallest blob of this artwork that is still
+      // a shape and not a speck — and 20 % is twice the gap the tile audit
+      // already calls indistinguishable (fortress ground vs brick, 8.6 %).
+      if (worst < 40) vanish.push(`${kind}: vain ${worst} px erottuu taustasta ${where}`);
+      worstBg.push(`${kind} ${worst}px (${where})`);
+    }
+    expect('yksikään tehostus ei katoa yhteenkään taustaan',
+      vanish.length === 0, vanish.length ? vanish.join('; ') : worstBg.join(', '));
+
+    /* 4. the shared breath */
+    const still = [];
+    const beats = [];
+    for (const kind of KINDS) {
+      const frames = seen.get(kind);
+      let hi = 0; let hiN = 0; let lo = 0; let loN = 0;
+      for (let t = 0; t < PERIOD; t++) {
+        if (sprites.breath(t, OX, OY)) { hi += frames[t].lift; hiN++; } else { lo += frames[t].lift; loN++; }
+      }
+      // Positive means the body sits higher on the frames the shared clock is
+      // inhaling on, in hundredths of a pixel of centre of mass.
+      const rise = (loN && hiN) ? (lo / loN) - (hi / hiN) : 0;
+      if (rise < 20) still.push(`${kind} nousee ${(rise / 100).toFixed(2)} px`);
+      beats.push(`${kind} ${(rise / 100).toFixed(2)}`);
+    }
+    expect('jokainen tehostus hengittää muun pelin kellolla',
+      still.length === 0,
+      still.length ? still.join('; ') : `nousu hengityksen tahdissa: ${beats.join(', ')} px`);
+  }
+
   /* ------------------------ kävelyn ohitusasento ------------------------ */
   /*
    * A walk is contact, pass, contact, pass. The three leg frames were always
@@ -11604,6 +12323,160 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
  * them, so somebody else has to.
  */
 /*
+ * GENERAATTORI TUNTEE JOKAISEN TEEMAN EHDOT, JA NE ON KOETELTU RIKKINÄISELLÄ
+ * KENTÄLLÄ.
+ *
+ * Maailmat 6, 7 ja 8 kirjoittivat itselleen rakennesäännön — luussa taivas on
+ * auki eikä mikään roiku, pilvessä mikään ei seiso maassa eikä ohut pilvi ole
+ * tyhjän päällä, linnakkeessa ei ole ulkopuolta eikä lippua — ja jokainen niistä
+ * on portissa **palikkatiedostoa vasten**. Se riitti niin kauan kuin nuo
+ * maailmat olivat käsintehtyjä: palikka on se paikka jossa käsi tekee virheen.
+ *
+ * Generoitu kenttä ei kuitenkaan kokoa palikoita vaan kirjoittaa ruudukon, joten
+ * jokainen noista säännöistä menisi generaattorin ohi ilman että mikään sanoo
+ * mitään. Sääntö joka koskee sisältöä mutta ei sen konetta on puolikas sääntö.
+ *
+ * Tämä portti kysyy siis kolme asiaa, ja kolmas on se joka tekee kahdesta
+ * ensimmäisestä muuta kuin koristetta:
+ *
+ *   1  generaattori tuntee kaikki kahdeksan teemaa (ei seitsemää, ei yhdeksää —
+ *      lista luetaan `THEMES`istä eikä kirjoiteta tänne käsin)
+ *   2  jokainen generoitu kenttä läpäisee oman teemansa ehdon
+ *   3  **jokainen teeman ehto hylkää sitä rikkovan koekentän.** Ilman tätä
+ *      kohta 2 olisi tosi myös silloin kun tarkistus ei tarkista mitään — ja
+ *      juuri niin kävisi, koska generaattori ei tällä hetkellä tuota yhtään
+ *      kenttää luuhun, pilveen, tehtaaseen tai linnakkeeseen. Neljä ehtoa
+ *      viidestä olisi tyhjä lupaus ilman rikkinäistä koekenttää.
+ */
+{
+  let problems = [];
+  let themeNames = [];
+  let checked = 0;
+  let fixturesRun = 0;
+  try {
+    const gen = await import('./gen-levels.mjs');
+    const { GENERATED_LEVELS } = await import('../src/data/generated.js');
+    const tiles = await readFile(join(ROOT, 'src/gfx/tiles.js'), 'utf8');
+    const table = /export const THEMES = \{([\s\S]*?)\n\};/.exec(tiles);
+    themeNames = table ? [...table[1].matchAll(/^ {2}(\w+): \{/gm)].map((m) => m[1]) : [];
+
+    const missing = themeNames.filter((t) => !gen.THEME_RULES[t]);
+    const extra = Object.keys(gen.THEME_RULES).filter((t) => !themeNames.includes(t));
+    if (!themeNames.length) problems.push('THEMES-taulua ei löytynyt lähdetekstistä');
+    problems.push(...missing.map((t) => `generaattori ei tunne teemaa ${t}`));
+    problems.push(...extra.map((t) => `generaattori tuntee teeman ${t} jota ei ole`));
+
+    for (const [id, def] of Object.entries(GENERATED_LEVELS)) {
+      const bad = gen.themeProblems(def.theme, def.rows);
+      checked++;
+      problems.push(...bad.map((p) => `${id}: ${p}`));
+    }
+
+    /* Rikkinäinen koekenttä **sääntöä** kohti eikä teemaa kohti: sama pohja joka
+     * kerta, yksi vika kerrallaan, ja teeman oma ehto on ainoa asia joka erottaa
+     * ne. Pari per sääntö siksi että luussa, pilvessä ja linnakkeessa niitä on
+     * kaksi, ja portti joka koettelee niistä toisen näyttää täsmälleen samalta
+     * kuin portti joka koettelee molemmat. */
+    for (const [theme, rule] of Object.entries(gen.THEME_RULES)) {
+      if ((rule.fixtures || []).length !== rule.rules.length) {
+        problems.push(`${theme}: ${rule.rules.length} sääntöä mutta `
+          + `${(rule.fixtures || []).length} koekenttäparia`);
+      }
+      for (const make of rule.fixtures || []) {
+        const { clean, broken } = make();
+        fixturesRun++;
+        if (gen.themeProblems(theme, clean).length) {
+          problems.push(`${theme}: ehto hylkää oman kelvollisen koekenttänsä`);
+        }
+        if (!gen.themeProblems(theme, broken).length) {
+          problems.push(`${theme}: ehto siunaa koekentän joka rikkoo sen`);
+        }
+      }
+    }
+  } catch (err) {
+    problems.push(`teematarkistus ei päässyt ajoon: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'generaattori tuntee jokaisen teeman ehdot, ja ehdot hylkäävät rikkinäisen kentän',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 5).join('; ')
+      : `${themeNames.length} teemaa, ${checked} generoitua kenttää, ${fixturesRun} koekenttäparia`,
+  });
+  if (problems.length) report.failures.push(...problems);
+}
+
+/*
+ * ALKUPERÄISYYSTARKISTUS: MITÄ ON MITATTU JA MITÄ EI, EIKÄ MITÄÄN SILTÄ VÄLILTÄ.
+ *
+ * DESIGN.md kohta 3 sanoo että generaattori hylkää kentän jos yksikään **8
+ * sarakkeen ikkuna** osuu korpukseen, ja kohta 4 lisää käskyn: *aja generaattori
+ * aina `VGLC_DIR` asetettuna*. Korpus ei ole repossa eikä saa olla, joten käsky
+ * on ainoa mitä repo voi tehdä — ja käsky on juuri se muoto jonka kolmas tekijä
+ * unohtaa.
+ *
+ * **Miksi tämä ei ole kaatava portti "tarkistamattomalle sisällölle".** Sellainen
+ * portti olisi punainen jokaisessa ympäristössä jossa korpusta ei ole, eli tässä
+ * repossa aina — ja tämä tiedosto sanoo itse muualla mitä pysyvästi punaiselle
+ * portille tapahtuu: se sammutetaan. Pahempaa, se painostaisi merkitsemään
+ * kentän tarkistetuksi jotta ajo menisi läpi, mikä on tasan se valhe jota vastaan
+ * koko kohta 3 on kirjoitettu.
+ *
+ * Sen sijaan portti väittää **ympäristöstä ja tallenteesta yhdessä**, ja se on
+ * kaatava molempiin suuntiin:
+ *
+ *   - `VGLC_DIR` asetettu → korpus luetaan tässä ja nyt, ja jokaisen generoidun
+ *     kentän jokainen 8 sarakkeen ikkuna verrataan siihen. Yksikin osuma
+ *     kaataa. Tämä on se "kyllä vai ei" jonka omistaja saa yhdellä komennolla.
+ *   - `VGLC_DIR` asettamatta → tarkistusta ei voi tehdä, eikä sitä teeskennellä.
+ *     Portti vaatii silloin että **jokainen generoitu kenttä kantaa merkinnän
+ *     siitä ettei sitä ole tarkistettu**, ja kaataa ajon jos jokin kenttä
+ *     väittää olevansa tarkistettu ilman että kukaan voi todentaa sitä.
+ *
+ * Eli: repo saa olla vihreä ilman korpusta, mutta se ei saa **väittää** mitään
+ * ilman korpusta. Ero on koko kohta 3.
+ */
+{
+  const problems = [];
+  let detail = '';
+  try {
+    const { corpusHits, CORPUS_DIR } = await import('./originality.mjs');
+    const { GENERATED_LEVELS } = await import('../src/data/generated.js');
+    const levels = Object.entries(GENERATED_LEVELS);
+    if (!levels.length) problems.push('yhtään generoitua kenttää ei löytynyt');
+
+    if (CORPUS_DIR) {
+      let hits = 0;
+      let files = 0;
+      for (const [id, def] of levels) {
+        const r = await corpusHits(def.rows);
+        files = r.files;
+        hits += r.hits;
+        if (r.hits) problems.push(`${id}: ${r.hits} kahdeksan sarakkeen ikkunaa osuu korpukseen`);
+        if (def.origin !== 'checked') {
+          problems.push(`${id}: korpus on käytettävissä mutta kenttä on generoitu ilman sitä `
+            + '(merkintä "not checked") — aja: VGLC_DIR=… node tools/gen-levels.mjs');
+        }
+      }
+      detail = `${levels.length} kenttää, ${files} korpustiedostoa, ${hits} osumaa`;
+    } else {
+      const lying = levels.filter(([, def]) => def.origin !== 'not checked');
+      problems.push(...lying.map(([id, def]) => `${id}: merkintä "${def.origin}" ilman korpusta `
+        + '— tarkistusta ei ole tehty, joten se ei saa lukea tehdyksi'));
+      detail = `${levels.length} kenttää, kaikki merkitty "not checked" — `
+        + 'VGLC_DIR asettamatta, aja: VGLC_DIR=… node tools/originality.mjs';
+    }
+  } catch (err) {
+    problems.push(`alkuperäisyystarkistus ei päässyt ajoon: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'generoitu kenttä kantaa sen mitä sen alkuperästä on mitattu, ei enempää',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 3).join('; ') : detail,
+  });
+  if (problems.length) report.failures.push(...problems);
+}
+
+/*
  * JOKAISELLA VIHOLLISMERKILLÄ ON HINTA VAIKEUSMITTARISSA.
  *
  * Piikkiukko lähti tuotantoon pisteillä **0**: se puuttui `ENEMY_COST`-taulusta
@@ -11876,14 +12749,25 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     rules: await readFile(join(ROOT, 'src/data/rules.js'), 'utf8'),
     gen: await readFile(join(ROOT, 'tools/gen-levels.mjs'), 'utf8'),
     diff: await readFile(join(ROOT, 'tools/difficulty.mjs'), 'utf8'),
+    orig: await readFile(join(ROOT, 'tools/originality.mjs'), 'utf8'),
   };
   const sinkLine = /const SINK = new Set\(\[[^\]]*\]\);/;
   const inRules = (src.rules.match(sinkLine) || [])[0];
   const inGen = (src.gen.match(sinkLine) || [])[0];
+  const inOrig = (src.orig.match(sinkLine) || [])[0];
   const places = [
     ['src/gfx/tiles.js', /QUICKSAND: '~'/.test(src.tiles) && /\[T\.QUICKSAND\]:/.test(src.tiles)],
     ['src/data/rules.js', !!inRules && inRules.includes("'~'")],
     ['tools/gen-levels.mjs', !!inGen && inGen === inRules],
+    /* A FOURTH COPY APPEARED, and this line is what stops it from being the one
+     * that rots. `tools/originality.mjs` folds every character it does not
+     * recognise into air before comparing against the corpus, so a tile missing
+     * from its sets is compared as if the level had a hole where the tile is —
+     * exactly the failure the comment in rules.js describes, one module further
+     * out. The comment in gen-levels.mjs says the fourth copy is the moment to
+     * move the set into `src/gfx/tiles.js`; that is still true and still not
+     * done, so until it is, the copy is checked as a string like the others. */
+    ['tools/originality.mjs', !!inOrig && inOrig === inRules],
     ['tools/difficulty.mjs', /QUICKSAND_COST|'~'/.test(src.diff)],
   ];
   const missing = places.filter(([, ok]) => !ok).map(([f]) => f);

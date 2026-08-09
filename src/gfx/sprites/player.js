@@ -6,6 +6,11 @@
  * same drawing as the walk cycle seen from one frame further on, so keeping the
  * idle poses next to the body that performs them is the only way a change to
  * one is checked against the other.
+ *
+ * What he *looks* like is one table, `POWER_LOOKS`, and the argument for it is
+ * written there. The rest of this file draws shapes and reads its colours out
+ * of that table, so the way to disagree with the character's palette is to edit
+ * a hex in it — not to unpick the drawing.
  */
 
 import { C, outlined, flip, recolored, glowing } from './palette.js';
@@ -32,15 +37,58 @@ export const PLAYER_DUCK_SIZES = [
 const BASE_NORMAL = { w: 14, h: 26 };
 const BASE_DUCK = { w: 14, h: 16 };
 
-const PALETTES = {
-  none: { cap: C.green, shirt: C.green, shirtDark: C.greenDark, pants: C.brown, pantsDark: C.brownDark },
-  shroom: { cap: '#e04c3c', shirt: C.green, shirtDark: C.greenDark, pants: C.brown, pantsDark: C.brownDark, spots: true },
-  flower: { cap: C.white, shirt: C.white, shirtDark: '#c8c8d0', pants: C.green, pantsDark: C.greenDark },
-  leaf: { cap: C.tan, shirt: C.tan, shirtDark: '#9c6a28', pants: C.brown, pantsDark: C.brownDark },
-  /* Paukkupapu. The darkest, heaviest palette of the four, because the thing it
+/**
+ * The five power looks. **This is the whole colour story of the character, and
+ * it is a table so that it can be argued with in one line rather than in a
+ * revert.** Four colours and an optional marking per row; nothing below picks a
+ * garment colour of its own, so changing `suit` here changes the torso in the
+ * standing pose, the ducking pose, the climb, the buffer that the big power
+ * levels are scaled out of, the title cast, the map pawn and the victory card,
+ * all at once and by construction.
+ *
+ * **What each colour is.** `hair` is the top of the head. `suit` is the
+ * coverall from the shoulders to the belt. `shade` is the belt itself — two
+ * rows, the bottom of the coverall and the top of the trousers, which is why
+ * one colour does both. `legs` is the trousers. `mark` is what the power-up
+ * left on him, drawn on the coverall; only the mushroom has one, and the field
+ * is a colour rather than a flag so that the next power-up that wants a marking
+ * can have its own without touching the drawing.
+ *
+ * **Why he is dressed like this, and not the way he was dressed before.** The
+ * old table gave him a peaked cap, and at the first mushroom it was red with
+ * white spots over a shirt and trousers. That is the single most recognisable
+ * costume in this genre and it was not ours to use: DESIGN.md §2 says the genre
+ * is free and the expression is not, and a red-capped figure in a shirt is
+ * expression. Worse, it was the *only* thing the first mushroom changed, so two
+ * of the five tiers were one drawing with the hat repainted.
+ *
+ * What replaced it comes from what this game is actually about. He goes down
+ * into a world of bowels after the PIERUPRINSSI, so he is dressed for the job:
+ * a one-piece coverall, a belt with a brass pressure valve on it, and — with
+ * the kaasulehti — a gas hose that whips behind him and a pair of leaves. He
+ * has hair instead of a hat, which is also the honest drawing: the desert idle
+ * has always been called `hairFire` in this file and it used to set a cap
+ * alight.
+ *
+ * And the gas shows in him. The tiers are not a wardrobe, they are how much of
+ * the stuff he is carrying: drab slate when he has none, gas green at the
+ * mushroom with bubbles rising through the cloth, the flower's purple, the
+ * leaf's tan under green hair, and the bean's browns. That is why the hair
+ * changes colour with the tier and a hat would not have needed to — at 12x16
+ * the head is a quarter of the picture, and a tier you cannot name at a glance
+ * is not a tier.
+ */
+const POWER_LOOKS = {
+  none: { hair: C.brownDark, suit: '#6a7488', shade: '#39414f', legs: '#4c5666' },
+  shroom: { hair: C.greenDark, suit: C.gas, shade: C.greenDark, legs: C.gasDark, mark: '#e8ffc0' },
+  flower: { hair: C.purpleDark, suit: C.purple, shade: '#3c1840', legs: C.purpleDark },
+  leaf: { hair: C.gasDark, suit: C.tan, shade: C.brownDark, legs: C.brown },
+  /* Paukkupapu. The darkest, heaviest row of the five, because the thing it
    * does is walk through a wall — and it must not be mistaken for the mushroom,
-   * whose red is the one every player learns first. Bean brown over gas green. */
-  pop: { cap: '#c05a24', shirt: '#8c3c1c', shirtDark: '#4a1c0a', pants: C.gasDark, pantsDark: '#2c4c14' },
+   * which is the one every player learns first. That used to mean "not red";
+   * now that the mushroom is the gas green of this game's own signature, it
+   * means not green either, so the bean is bean all the way down. */
+  pop: { hair: '#4a1c0a', suit: '#8c3c1c', shade: '#4a1c0a', legs: '#c05a24' },
 };
 
 /**
@@ -81,7 +129,7 @@ export const DEEP_IDLE = 20 * 60;
  * character ran with less motion in his legs than he walked with.
  */
 function legs(ctx, x, y, w, pal, frame, running) {
-  ctx.fillStyle = pal.pants;
+  ctx.fillStyle = pal.legs;
   const spread = Math.min(running ? 4 : 3, (w - 6) >> 1);
   if (frame === 0) {
     ctx.fillRect(x + 2, y, spread, 3);
@@ -102,33 +150,113 @@ function legs(ctx, x, y, w, pal, frame, running) {
   }
 }
 
-/** Wagging raccoon tail, drawn behind the body (the sprite always faces +x). */
-function tail(ctx, x, y, wag) {
+/**
+ * The kaasulehti's gas hose, drawn behind the body (the sprite always faces
+ * +x), swinging on the same sine the leaf power has always swung.
+ *
+ * It is a hose and not a striped animal tail, and the difference is the whole
+ * point of the change: the leaf gives him the tail whip, the glide and the
+ * flight, and in a game about gas the thing that does all three is a hose with
+ * a brass nozzle on the end of it — he whips with the nozzle and he flies out
+ * of it. An animal's tail on a man is a costume, and there is exactly one
+ * costume in this genre that it reads as.
+ *
+ * The three blocks are the ones the wag was built around and they have not
+ * moved a pixel, because their overlap at every phase of the swing is what
+ * keeps the sprite a single piece — see the audit in `tools/verify.mjs`. What
+ * changed is what they are made of: green rubber, a rib across each segment so
+ * that the swing has something to read against, and the nozzle at the far end.
+ */
+function gasHose(ctx, x, y, wag) {
   const dx = Math.round(Math.sin(wag) * 2);
-  ctx.fillStyle = C.tan;
+  ctx.fillStyle = C.gasDark;
   ctx.fillRect(x - 4, y + 1, 5, 5);
   ctx.fillRect(x - 8, y - 1 + dx, 5, 5);
   ctx.fillRect(x - 11, y - 4 + dx * 2, 4, 5);
-  ctx.fillStyle = C.brownDark;
-  ctx.fillRect(x - 8, y + 3 + dx, 5, 1);
-  ctx.fillRect(x - 11, y + dx * 2, 4, 1);
-  ctx.fillRect(x - 11, y - 4 + dx * 2, 4, 1);
+  ctx.fillStyle = C.greenDark;
+  ctx.fillRect(x - 4, y + 3, 5, 1);
+  ctx.fillRect(x - 8, y + 1 + dx, 5, 1);
+  ctx.fillRect(x - 11, y - 2 + dx * 2, 4, 1);
+  // Brass, and only at the tip: a hose that is brass all along is a pipe.
+  ctx.fillStyle = C.cork;
+  ctx.fillRect(x - 11, y - 3 + dx * 2, 2, 3);
+  ctx.fillStyle = C.corkDark;
+  ctx.fillRect(x - 11, y - 2 + dx * 2, 1, 1);
 }
 
-function ears(ctx, x, y, w) {
-  ctx.fillStyle = C.tan;
+/**
+ * Two leaves either side of the head, which is the other half of what the
+ * kaasulehti puts on him. Same two 2x3 blocks the ears used to be — they touch
+ * the top of the head at the same pixels, and that adjacency is what keeps him
+ * one piece — repainted into the leaf's own green with a vein down each.
+ */
+function leafFronds(ctx, x, y, w) {
+  ctx.fillStyle = C.gas;
   ctx.fillRect(x + 1, y - 2, 2, 3);
   ctx.fillRect(x + w - 3, y - 2, 2, 3);
-  ctx.fillStyle = C.brownDark;
-  ctx.fillRect(x + 1, y - 2, 1, 1);
-  ctx.fillRect(x + w - 2, y - 2, 1, 1);
+  ctx.fillStyle = C.gasDark;
+  ctx.fillRect(x + 2, y - 2, 1, 3);
+  ctx.fillRect(x + w - 3, y - 2, 1, 3);
 }
 
-function capSpots(ctx, x, y, w) {
-  ctx.fillStyle = C.white;
-  ctx.fillRect(x + 4, y, 2, 2);
-  ctx.fillRect(x + 8, y + 1, 2, 2);
-  ctx.fillRect(x + w - 4, y, 2, 2);
+/**
+ * The marking the power-up left on the wearer, drawn on the coverall: gas
+ * rising through the cloth in three bubbles.
+ *
+ * The idea is inherited from the spots the mushroom used to put on the cap, and
+ * it is worth inheriting — a power-up whose markings appear on the person who
+ * took it is a thing this game does and nobody owns. What is not inherited is
+ * where they went: the old helper put two of its three spots in the same place
+ * and the third one a pixel off the side of the cap, which is a blob and not a
+ * marking, and it hung off the head at every power level for as long as it
+ * existed.
+ *
+ * Sized from the panel it is given rather than fixed, because the same three
+ * bubbles have to land on a 10x4 chest and on a ducking 12x3 one. They are
+ * placed off the panel's own corners so that the breath, which lifts the top of
+ * the chest by a pixel and leaves the belt where it is, cannot drag them.
+ */
+function gasMarks(ctx, col, x, y, w, h) {
+  ctx.fillStyle = col;
+  const s = h >= 4 ? 2 : 1;
+  ctx.fillRect(x + 1, y + h - 1 - s, s, s);
+  ctx.fillRect(x + (w >> 1) - 1, y, s, s);
+  ctx.fillRect(x + w - 2 - s, y + h - 1 - s, s, s);
+}
+
+/**
+ * The head: a skull with hair on it, at whichever size the pose needs. `x` and
+ * `w` are the head's own left edge and width — not the body's, because that is
+ * the difference this whole change is about.
+ *
+ * **A brim is what a cap has and a head does not.** The drawing this replaces
+ * was a crown and a brim, and the brim was as wide as the entire character: 12
+ * pixels across a 14 pixel body, 10 across a 12 pixel one. That silhouette is
+ * the borrowed one, and it is borrowed whatever colour it is painted, which is
+ * why `tools/verify.mjs` now measures the head's *width* against the hitbox and
+ * not its colour. The head here is the skull and never more: 9 wide on the big
+ * body, 7 on the small one, where the profile is genuinely narrower than the
+ * three-quarter view of the same head seen from behind on a vine.
+ *
+ * One function rather than the four copies the cap was drawn in, because four
+ * copies is how a hat gets left behind in one pose after being taken off in the
+ * other three. `back` is the climb: from behind there is no face, so the hair
+ * runs a row further down and the skin under it is the nape.
+ *
+ * The head always ends on the row the shoulders begin, at every size and with
+ * the nod applied — a head that stops a pixel short comes away from the body
+ * the moment the sprite is flood-filled, which is the check that owns this.
+ */
+function head(ctx, x, y, pal, w, hair, skin, back) {
+  ctx.fillStyle = pal.hair;
+  ctx.fillRect(x + 1, y, w - 2, 1);          // the crown, a pixel in on each side
+  ctx.fillRect(x, y + 1, w, hair - 1);
+  ctx.fillStyle = C.skin;
+  ctx.fillRect(x, y + hair, w, skin);
+  ctx.fillStyle = pal.hair;
+  // Down the back of the head, and — facing forward — over the brow.
+  ctx.fillRect(x, y + hair, 2, back ? skin - 2 : Math.min(4, skin - 1));
+  if (!back) ctx.fillRect(x + w - 3, y + hair, 3, 1);
 }
 
 /**
@@ -355,7 +483,7 @@ function armsUp(ctx, px, py, backTop, frontTop, pal, small) {
     ctx.fillRect(bx + w - 1, backTop, 1, shoulder - backTop);
     ctx.fillRect(fx, frontTop, 1, shoulder - frontTop);
   }
-  ctx.fillStyle = pal.shirt;
+  ctx.fillStyle = pal.suit;
 }
 
 /**
@@ -371,45 +499,39 @@ function armsUp(ctx, px, py, backTop, frontTop, pal, small) {
 function climbPose(ctx, px, py, pal, s, small) {
   const frame = (s.frame || 0) % 2;
   if (small) {
-    ctx.fillStyle = pal.cap;
-    ctx.fillRect(px + 2, py, 8, 3);
-    ctx.fillRect(px + 2, py + 3, 10, 1);
-    if (pal.spots) capSpots(ctx, px + 2, py, 8);
-    ctx.fillStyle = C.skin;
-    ctx.fillRect(px + 3, py + 4, 7, 5);
+    head(ctx, px + 2, py, pal, 8, 4, 5, true);
     ctx.fillStyle = C.skinDark;      // the nape, where the face is not
-    ctx.fillRect(px + 3, py + 7, 7, 2);
-    ctx.fillStyle = pal.shirt;
+    ctx.fillRect(px + 2, py + 7, 8, 2);
+    ctx.fillStyle = pal.suit;
     ctx.fillRect(px + 2, py + 9, 8, 3);
+    if (pal.mark) gasMarks(ctx, pal.mark, px + 2, py + 9, 8, 3);
     armsUp(ctx, px, py, frame ? py + 4 : py + 7, frame ? py + 7 : py + 4, pal, true);
-    ctx.fillStyle = pal.pants;
+    ctx.fillStyle = pal.legs;
     ctx.fillRect(px + 3, py + 11, 6, 3);
+    ctx.fillStyle = pal.shade;
+    ctx.fillRect(px + 3, py + 11, 6, 1);
     ctx.fillStyle = C.ink;
     ctx.fillRect(px + 2, frame ? py + 12 : py + 14, 4, 2);
     ctx.fillRect(px + 6, frame ? py + 14 : py + 12, 4, 2);
     return;
   }
-  ctx.fillStyle = pal.cap;
-  ctx.fillRect(px + 3, py, 9, 4);
-  ctx.fillRect(px + 2, py + 4, 12, 2);
-  if (pal.spots) capSpots(ctx, px + 3, py, 9);
-  ctx.fillStyle = C.skin;
-  ctx.fillRect(px + 3, py + 6, 9, 7);
+  head(ctx, px + 3, py, pal, 9, 6, 7, true);
   ctx.fillStyle = C.skinDark;
   ctx.fillRect(px + 3, py + 11, 9, 2);
-  ctx.fillStyle = pal.shirt;
+  ctx.fillStyle = pal.suit;
   ctx.fillRect(px + 2, py + 13, 10, 5);
-  ctx.fillStyle = pal.shirtDark;
+  if (pal.mark) gasMarks(ctx, pal.mark, px + 2, py + 13, 10, 4);
+  ctx.fillStyle = pal.shade;
   ctx.fillRect(px + 2, py + 17, 10, 1);
   armsUp(ctx, px, py, frame ? py + 6 : py + 11, frame ? py + 11 : py + 6, pal, false);
-  ctx.fillStyle = pal.pants;
+  ctx.fillStyle = pal.legs;
   ctx.fillRect(px + 2, py + 18, 10, 4);
-  ctx.fillStyle = pal.pantsDark;
+  ctx.fillStyle = pal.shade;
   ctx.fillRect(px + 2, py + 18, 10, 1);
   // Opposite the arms: the leg on the side of the low hand is the one drawn up.
   const backLift = frame ? 3 : 0;
   const frontLift = frame ? 0 : 3;
-  ctx.fillStyle = pal.pants;
+  ctx.fillStyle = pal.legs;
   ctx.fillRect(px + 3, py + 22 - backLift, 3, 2);
   ctx.fillRect(px + 8, py + 22 - frontLift, 3, 2);
   ctx.fillStyle = C.ink;
@@ -420,8 +542,12 @@ function climbPose(ctx, px, py, pal, s, small) {
 /**
  * Hair on fire. Gold core, red edge, and it grows and shrinks from the bottom
  * up, so `burn` is simply how many of the four rows are alight. It sits on the
- * cap and touches it — a flame floating a pixel clear of the head is a separate
+ * head and touches it — a flame floating a pixel clear of the head is a separate
  * object, and the check that says the player is one piece would be right.
+ *
+ * This function has been called `hairFire` since the day it was written, and
+ * until the cap came off it was setting fire to a hat. The drawing is unchanged;
+ * it is the head under it that finally matches the name.
  */
 function hairFire(ctx, c, y, burn) {
   /* [row, edge spans, gold span] — four rows tapering to a point. */
@@ -461,9 +587,9 @@ function icicle(ctx, x, y) {
   ctx.fillRect(x, y, 1, 1);
 }
 
-/** Draws the player at template scale. `s.type` picks the palette. */
+/** Draws the player at template scale. `s.type` picks the row of POWER_LOOKS. */
 function drawPlayerBase(ctx, x, y, s, small) {
-  const pal = PALETTES[s.type || 'none'] || PALETTES.none;
+  const pal = POWER_LOOKS[s.type || 'none'] || POWER_LOOKS.none;
   const ducking = s.ducking && !small;
   const w = small ? 12 : 14;
   const pose = idlePose(s);
@@ -476,32 +602,28 @@ function drawPlayerBase(ctx, x, y, s, small) {
     const py = Math.round(y);
 
     if (s.type === 'leaf') {
-      tail(ctx, px + (ducking ? 3 : 2), py + (small ? 7 : ducking ? 7 : 17), s.wag || 0);
+      gasHose(ctx, px + (ducking ? 3 : 2), py + (small ? 7 : ducking ? 7 : 17), s.wag || 0);
     }
 
     if (small) {
       if (s.state === 'climb') {
         climbPose(ctx, px, py, pal, s, true);
-        if (s.type === 'leaf') ears(ctx, px, py, 12);
+        if (s.type === 'leaf') leafFronds(ctx, px, py, 12);
         return;
       }
       const b = pose.breath;
       // Nodding off drops the head into the shoulders; nothing else moves.
       const hy = py + Math.min(2, pose.nod);
-      ctx.fillStyle = pal.cap;
-      ctx.fillRect(px + 2, hy, 8, 3);
-      ctx.fillRect(px + 2, hy + 3, 10, 1);
-      if (pal.spots) capSpots(ctx, px + 2, hy, 8);
-      ctx.fillStyle = C.skin;
-      ctx.fillRect(px + 3, hy + 4, 7, 5);
+      head(ctx, px + 3, hy, pal, 7, 3, 6, false);
       ctx.fillStyle = C.skinDark;
       ctx.fillRect(px + 3, hy + 7, 3, 2);
       ctx.fillStyle = C.ink;
       if (pose.blink) ctx.fillRect(px + 7, hy + 6, 2, 1);
       else ctx.fillRect(px + 7, hy + 5 + pose.eye, 1, 2);
       if (pose.puffs) ctx.fillRect(px + 9, hy + 7, 2, 1);   // the mouth it comes out of
-      ctx.fillStyle = pal.shirt;
+      ctx.fillStyle = pal.suit;
       ctx.fillRect(px + 2, py + 9 + b, 8, 3 - b);
+      if (pal.mark) gasMarks(ctx, pal.mark, px + 2, py + 9, 8, 3);
       if (pose.panic) {
         armsUp(ctx, px, py, pose.panic === 1 ? py + 4 : py + 7,
           pose.panic === 1 ? py + 7 : py + 4, pal, true);
@@ -510,12 +632,14 @@ function drawPlayerBase(ctx, x, y, s, small) {
         ctx.fillRect(px, py + 9 + b, 2, 3 - b);
         ctx.fillRect(px + 10 - pose.scratch, py + 9 + b + pose.scratch, 2, 3 - b);
       }
-      ctx.fillStyle = pal.pants;
+      ctx.fillStyle = pal.legs;
       ctx.fillRect(px + 3, py + 11, 6, 3);
-      ctx.fillStyle = pal.pantsDark;
+      ctx.fillStyle = pal.shade;
       ctx.fillRect(px + 3, py + 11, 6, 1);
-      // The ears belong to the head, so they nod with it.
-      if (s.type === 'leaf') ears(ctx, px, hy, 12);
+      /* The leaves belong to the head, so they nod with it. A pixel further in
+       * than the raccoon ears were: this head is the narrower profile one and
+       * they have to touch it, or the flood fill counts three characters. */
+      if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 10);
       if (pose.sweat >= 0) sweatBead(ctx, px + 11, hy + 2 + pose.sweat);
       if (pose.burn) hairFire(ctx, px + 6, hy, pose.burn);
       if (pose.smoke) hairSmoke(ctx, px + 6, hy);
@@ -523,7 +647,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
         icicle(ctx, px + 10 + Math.floor(t / 2), hy + 6 + Math.floor(t / 6));
       }
       if (s.state === 'jump') {
-        ctx.fillStyle = pal.pants;
+        ctx.fillStyle = pal.legs;
         ctx.fillRect(px + 2, py + 14, 4, 2);
         ctx.fillRect(px + 7, py + 13, 4, 3);
       } else if (s.state === 'walk') {
@@ -544,45 +668,39 @@ function drawPlayerBase(ctx, x, y, s, small) {
     }
 
     if (ducking) {
-      ctx.fillStyle = pal.cap;
-      ctx.fillRect(px + 2, py + 1, 9, 3);
-      ctx.fillRect(px + 2, py + 4, 12, 1);
-      if (pal.spots) capSpots(ctx, px + 2, py + 1, 9);
-      ctx.fillStyle = C.skin;
-      ctx.fillRect(px + 3, py + 5, 8, 5);
+      head(ctx, px + 3, py + 1, pal, 8, 3, 6, false);
       ctx.fillStyle = C.ink;
       ctx.fillRect(px + 8, py + 6, 1, 2);
-      ctx.fillStyle = pal.shirt;
+      ctx.fillStyle = pal.suit;
       ctx.fillRect(px + 1, py + 10, 12, 3);
-      ctx.fillStyle = pal.pants;
+      if (pal.mark) gasMarks(ctx, pal.mark, px + 1, py + 10, 12, 3);
+      ctx.fillStyle = pal.legs;
       ctx.fillRect(px + 2, py + 13, 10, 3);
-      if (s.type === 'leaf') ears(ctx, px, py + 1, 14);
+      ctx.fillStyle = pal.shade;
+      ctx.fillRect(px + 2, py + 13, 10, 1);
+      if (s.type === 'leaf') leafFronds(ctx, px + 1, py + 1, 12);
       return;
     }
 
     if (s.state === 'climb') {
       climbPose(ctx, px, py, pal, s, false);
-      if (s.type === 'leaf') ears(ctx, px + 1, py, 12);
+      if (s.type === 'leaf') leafFronds(ctx, px + 1, py, 12);
       return;
     }
 
     const b = pose.breath;
     const hy = py + pose.nod;
-    ctx.fillStyle = pal.cap;
-    ctx.fillRect(px + 3, hy, 9, 4);
-    ctx.fillRect(px + 2, hy + 4, 12, 2);
-    if (pal.spots) capSpots(ctx, px + 3, hy, 9);
-    ctx.fillStyle = C.skin;
-    ctx.fillRect(px + 3, hy + 6, 9, 7);
+    head(ctx, px + 3, hy, pal, 9, 5, 8, false);
     ctx.fillStyle = C.skinDark;
     ctx.fillRect(px + 3, hy + 11, 4, 2);
     ctx.fillStyle = C.ink;
     if (pose.blink) ctx.fillRect(px + 8, hy + 9, 3, 1);
     else ctx.fillRect(px + 8, hy + 7 + pose.eye, 2, 3);
     if (pose.puffs) ctx.fillRect(px + 10, hy + 11, 2, 1);   // the mouth it comes out of
-    ctx.fillStyle = pal.shirt;
+    ctx.fillStyle = pal.suit;
     ctx.fillRect(px + 2, py + 13 + b, 10, 5 - b);
-    ctx.fillStyle = pal.shirtDark;
+    if (pal.mark) gasMarks(ctx, pal.mark, px + 2, py + 13, 10, 4);
+    ctx.fillStyle = pal.shade;
     ctx.fillRect(px + 2, py + 17, 10, 1);
     if (pose.panic) {
       armsUp(ctx, px, py, pose.panic === 1 ? py + 6 : py + 11,
@@ -593,14 +711,21 @@ function drawPlayerBase(ctx, x, y, s, small) {
       // The front arm reaches round the back during the scratch.
       ctx.fillRect(px + 12 - pose.scratch * 2, py + 13 + b + pose.scratch * 2, 3, 5 - b);
     }
-    ctx.fillStyle = pal.pants;
+    ctx.fillStyle = pal.legs;
     ctx.fillRect(px + 2, py + 18, 10, 4);
-    ctx.fillStyle = pal.pantsDark;
+    ctx.fillStyle = pal.shade;
     ctx.fillRect(px + 2, py + 18, 10, 1);
+    /* The pressure valve on his belt, and the reason there is one is that the
+     * two gold pixels it replaces were a pair of buttons on a bib — the second
+     * half of the costume the cap was the first half of. A brass valve with a
+     * hole through it is the same two pixels of shine in the same place, doing
+     * the work of saying what this man does for a living: he goes down into a
+     * world of bowels with something on his belt to let the pressure out. */
     ctx.fillStyle = C.gold;
-    ctx.fillRect(px + 4, py + 19, 1, 1);
-    ctx.fillRect(px + 9, py + 19, 1, 1);
-    if (s.type === 'leaf') ears(ctx, px + 1, hy, 12);
+    ctx.fillRect(px + 6, py + 17, 3, 2);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(px + 7, py + 18, 1, 1);
+    if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 12);
     if (pose.sweat >= 0) sweatBead(ctx, px + 12, hy + 3 + pose.sweat);
     if (pose.burn) hairFire(ctx, px + 7, hy, pose.burn);
     if (pose.smoke) hairSmoke(ctx, px + 7, hy);
@@ -609,7 +734,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
     }
 
     if (s.state === 'jump') {
-      ctx.fillStyle = pal.pants;
+      ctx.fillStyle = pal.legs;
       ctx.fillRect(px + 2, py + 22, 4, 3);
       ctx.fillRect(px + 8, py + 21, 5, 4);
       ctx.fillStyle = C.ink;
@@ -620,7 +745,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
       // down every time he started moving.
       legs(ctx, px, py + 21, 14, pal, WALK_ORDER[s.frame % WALK_FRAMES], s.running);
     } else {
-      ctx.fillStyle = pal.pants;
+      ctx.fillStyle = pal.legs;
       ctx.fillRect(px + 3, py + 22, 3, 2);
       ctx.fillRect(px + 8, py + 22 - pose.tap, 3, 2);
       ctx.fillStyle = C.ink;

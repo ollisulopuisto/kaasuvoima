@@ -7,6 +7,634 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.47 — tehostukset piirretty uusiksi: muoto on ilmaisua
+
+Poimittavat esineet (`src/gfx/sprites/items.js`) on piirretty kokonaan
+uudelleen, ja mukana tuli neljä uutta porttia `tools/verify.mjs`:ään. Uusi
+[DESIGN.md](DESIGN.md) kohta **1 c** kertoo säännön, tämä merkintä sen mitä
+mitattiin.
+
+### Ongelma: taulukon ensimmäinen rivi oli puoliksi katettu
+
+DESIGN.md kohta 1 on aina sanonut että grafiikka on itse tuotettua, ja
+teknisesti se piti paikkansa: jokainen pikseli piirretään ajossa
+`fillRect`-kutsuilla eikä repossa ole kuvatiedostoja. Se ei silti ole koko
+väite. Kohta 2 sanoo että suojattua on *nimenomainen ilmaisu* — ja ilmaisu on
+se **mitä kuva esittää**, ei se millä työkalulla se maalattiin. Käsin
+kirjoitettu `fillRect` joka piirtää jonkun toisen pelin tunnistettavan esineen
+on kopio.
+
+Esineiden nimet olivat omia (pierusieni, kaasulehti, hernekeitto); muodot eivät
+olleet. `drawItem` piirsi lakillisen sienen valkoisine täplineen, silmällisen
+kukan varressa, vaahteranlehden ja tähden. Konventio — yksi esine kasvattaa,
+toinen antaa heitettävän, kolmas tekee hetkeksi haavoittumattomaksi — on vapaa
+ja jää. Piirros vaihtui.
+
+### Mitä tilalle, ja miksi juuri se
+
+Rekisteri on pelin oma: kaasua, ruoansulatusta, sisuskaluja, samasta perheestä
+kuin ummetuskorkki ja kurnuttaja. Jokainen muoto myös **selittää voimansa**:
+
+- **pierusieni → tuhkelo.** Sieni joka on pelkkä itiöpussi ja reikä päällä; sitä
+  puristamalla lähtee pilvi. Juuri sitä tämä tehostus tekee: sen antamat
+  lisähypyt ovat puhalluksia venttiilistä. Ei lakkia, ei jalkaa, ei kasvoja —
+  ja täplien tilalla **huokoset**, koska täplä on lakin päällä ja huokonen on
+  reikä pussissa.
+- **1-up → varapallo.** Solmittu ilmapallo. Vanha 1-up oli pierusieni vihreänä,
+  eli sama piirros kahdella värillä; lisäelämä ja lisäosuma eivät ole sama asia.
+- **pierukukka → torvikukka.** Kukka jonka terä on torven suu ja joka nojaa
+  sivuun. Se on ainoa tehostus joka lähtee pelaajan kehosta ulos, joten esine
+  on rakennettu aukon ympärille. Ei silmiä: silmät kuuluvat niille jotka
+  kävelevät päälle.
+- **kaasulehti → pavun parilehti.** Kaksi lehdykkää yhdessä varressa, kolme
+  riviä eri korkeudella. Pari lukee siipinä, ja peli on jo täynnä papuja
+  (pavunvarsi, paukkupapu, papuparooni).
+- **hernekeitto → pata ja kauha.** Kulho oli ennestään oma keksintö mutta se
+  jätti kahdeksan riviä laatikosta tyhjäksi ja oli vaalean taivaan väristä.
+- **paukkupapu** säilyi — se oli jo tämän pelin muoto — mutta kasvoi laatikkoon
+  ja sai halkeamaansa **läpinäkymättömän vihreän maltopinnan**.
+- **tähti → virvatuli.** Suokaasu joka syttyy: sama aine kuin koko peli, ja
+  suomalaista kansanperinnettä. **Metaani palaa sinisenä**, joten se on sininen
+  — ainoa väri jota mikään muu tässä pelissä ei käytä. Neljä kärkeä ja tylpät:
+  piikit tarkoittavat tässä pelissä muualla "tähän ei saa hypätä".
+
+### Punainen ennen vihreää, ja mitä punainen sanoi
+
+Testit kirjoitettiin ensin ja ne mittaavat kuvaa, eivät koodia. Vanhalla
+grafiikalla:
+
+| portti | vanha tulos |
+| --- | --- |
+| täyttää poimintalaatikkonsa (16x16, joka rivi ja sarake, ei ylivuotoa) | 6/7 esinettä rikki: keitto peitti 8/16 riviä, kukka 12/16 saraketta, lehti vuoti 1 px yli |
+| kaksi esinettä eivät ole sama kuva | 8 paria alle rajan; kukka/lehti 29,7 %, **sieni/1-up 35,9 %** |
+| ei katoa yhteenkään taustaan (8 teemaa + HUD + maalikortti) | lehti erottui aavikon maasta **0 pikselillä**, tähti ruohon tiilestä **0 pikselillä**, papu yön maasta 4 |
+| hengittää pelin jaetulla kellolla | **0,00 px, seitsemän seitsemästä** |
+
+Uudella: laatikko 44–61 % täynnä ja 16/16 joka framella, lähin pari
+papu/virvatuli **50,4 %**, huonoin tausta keitto yön maata vasten **48 px**,
+hengitys 0,31–0,63 px.
+
+### Mistä raja 40 % tulee — kalibrointi pelin omaan grafiikkaan
+
+"Näyttääkö tämä liikaa joltakin toiselta" on mielipide, joten se mitataan: kuinka
+suuri osa 16x16 laatikosta **näyttää erilaiselta**, kun eri pikseliksi lasketaan
+se jonka toinen maalaa ja toinen ei, ja se jonka molemmat maalaavat yli viidesosan
+päässä toisistaan. Muoto ja väri yhtenä lukuna, koska pelaajalle ei kerrota
+kumpi niistä kantaa eron.
+
+Raja otettiin vihollisista, jotka pelaaja on jo osannut erottaa kentässä:
+tiukin **laji**pari on piikikäs ja kurnuttaja **43,8 %**. Sama mittaus paljastaa
+myös pelin löysimmän parin, eikä se ole virhe vaan tarkin mahdollinen kuvaus
+siitä mitä tämä laatikko voi kantaa: **kävelijä ja lentäjä ovat 0,8 % erillään**,
+koska laatikon sisällä lentäjä *on* kävelijä — siivet jotka erottavat ne on
+piirretty laatikon ulkopuolelle. Portin raja 40 % on hiuksen verran sen alle
+mitä peli jo puolustaa, ja vihollisluku mitataan joka ajolla uudestaan niin että
+sen valuminen näkyy.
+
+### Sivuvaikutus jonka piti tulla mukana
+
+Maalikortti kasvoi 16x16:sta **20x20:een**. Esine on tasan 16 leveä, joten yhtä
+leveä kortti jäi kokonaan piirroksen alle sillä hetkellä kun piirros lakkasi
+olemasta pieni kuvio keskellä laatikkoaan. Neljä pikseliä marginaalia on sama
+suhde joka HUDin varalokerolla on ollut alusta asti.
+
+---
+
+## v26.08.09.46 — kahdeksan kentän maailma: muoto päätetty, generaattori osaa kaikki teemat, maailmat 1 ja 3 tehty
+
+Peli on nyt **8 maailmaa ja 44 kenttää** (oli 36). Maailmat 1 ja 3 ovat
+kahdeksan kentän mittaisia, ja se muoto on päätös eikä kokeilu: se on kirjattu
+tähän, se on portissa `tools/verify.mjs`:ssä, ja seitsemän puuttuvaa maailmaa
+voidaan tehdä sen mukaan koskematta generaattoriin.
+
+Tämä on **ensimmäinen vaihe kolmesta**: infrastruktuuri, muotopäätös ja kaksi
+todistettua maailmaa. Maailmat 2 ja 4–8 (20 kenttää) ovat jäljellä ja ovat
+tarkoituksella jäljellä — kahdeksan tekijää samassa generaattorissa yhtä aikaa
+on se tapa jolla tästä tulee sotku.
+
+### Päätös: kahdeksan kenttää on seitsemän numeroitua ja linnake, ja kävelyssä on kaksi hengähdystä
+
+ROADMAP piti kysymystä auki näin: *"Kahdeksan kenttää maailmassa on eri muoto
+kuin neljä. Nykyinen kaava on kolme kenttää ja linnake. Kahdeksan ei ole 'sama
+kaksi kertaa' vaan tila välipomolle, haaralle ja hengähdyskentälle."*
+
+**Muoto on: `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on kaksi
+notkoa.** Kolme perustelua, ja kaikki kolme ovat mitattavissa:
+
+**Miksi ei kahta kaarta.** "Sama kaksi kertaa" tarkoittaisi kahta huippua, ja
+kahden huipun maailma on kaksi maailmaa joiden välistä puuttuu linnake — pelaaja
+lukee ensimmäisen huipun lopuksi ja saa jatkoa. Yksi maailma on yksi kaari
+yhteen huippuun ja se huippu on linnake. Kahdeksan kenttää ei siis muuta kaarta
+vaan venyttää sitä.
+
+**Miksi kaksi hengähdystä eikä yksi.** Venytetty kaari on kuuden nousun putki.
+Pelin pisin kiipeäminen tähän asti on **tasan kolme askelta** (maailma 8:
+117 → 302 → 378 → 386), ja kaksi notkoa on pienin määrä joka pitää seitsemän
+askelta sen mitan sisällä ilman että notkot ovat peräkkäin.
+
+**Miksi ei haaraa ja välipomoa jokaiseen maailmaan**, vaikka ROADMAP ne
+mainitsee. Molemmat ovat jo sidottuja päätöksiä: haaran pitää olla eriarvoinen ja
+vaikeamman haaran pitää maksaa jotain jota ei saa muualta (omistajan päätös
+9.8.2026), ja koko pelissä on **yksi** sellainen palkinto (`REWARDS.break`),
+jonka **ainoa lähde on maailman 2 välipomo** — sekin omistajan päätös samalta
+päivältä. Seitsemän uutta samanarvoista palkintoa keksittäisiin tässä vain muodon
+täytteeksi. Haara ja välipomo pysyvät siis **maailman ominaisuutena eivätkä
+muodon osana**: maailma 2 saa olla haarautuva myös kahdeksan kentän mitassa,
+koska muoto puhuu askelista eikä kentistä (kahdeksan kenttää on seitsemän
+askelta *jos* mikään niistä ei ole haara).
+
+Uudet kentät tulivat **perään eivätkä väliin**, eli `1-4`…`1-7` ja `3-4`…`3-7`.
+Se ei ole laiskuutta: `1-1`…`1-3` on pelin opetusjärjestys jota
+`tools/curriculum.mjs` mittaa tunnisteittain, tallennus ja salaisuuslaskuri on
+avainnettu tunnisteella, ja **piilotetut tiilet ovat sijainnin hajautus** — eli
+kentän siirtäminen olisi arponut sen jokaisen salaisuuden uudelleen. Sama
+peruste jolla `1-2`:ta korjattiin vaihtamalla eikä lisäämällä (v26.08.09.38).
+
+### "Tasan yksi notko" ei sanonut kolmen askelen maailmasta mitään, ja se on nyt todistettu
+
+Portti oli `dips !== 1`. Se vaihdettiin, ja **vaihto on tarkoituksellinen eikä
+löysennys** — perustelu on todistus eikä maku:
+
+> Kolmen askelen kävelyssä on **kaksi siirtymää**. Notkoja voi siis olla 0, 1 tai
+> 2, ja kaksi notkoa tarkoittaa että molemmat siirtymät laskevat, eli viimeinen
+> luku on ensimmäistä pienempi — jonka sama testin toinen puolisko (`rises`)
+> hylkää jo. Maailmoissa 1–7 ehto `dips === 1` oli siis **merkki merkiltä sama
+> ehto** kuin `dips >= 1`. Sana "tasan" ei kieltänyt mitään mitä `rises` ei jo
+> kieltänyt.
+
+Sanan ainoa oikea kohde oli maailma 8 (viisi askelta), jossa se sattui pitämään.
+Ja seitsemän askelen maailmassa se olisi ollut **väärä** sääntö: se sallisi
+täsmälleen yhden hengähdyksen kuuden nousun putkessa, kun ROADMAP pyytää
+kahdeksalta kentältä nimenomaan tilaa hengähdyskentälle.
+
+Tilalle neljä väitettä, ja jokainen luku on pelin oma:
+
+| väite | mistä luku |
+| --- | --- |
+| käyrä nousee kokonaisuutena | ennallaan |
+| vähintään yksi notko | vanhan sisältö kolmella askelella |
+| ei kahta notkoa peräkkäin | pelissä **0** tapausta tänään |
+| ei yli kolmen nousun putkea | pelin pisin on **tasan 3** (maailma 8) |
+
+Sääntö kieltää sen mitä peli ei jo tee ja päästää läpi kaiken minkä se tekee.
+Maailmoissa 1–7 se on merkki merkiltä sama kuin vanha; **maailmassa 8 se on
+väljempi** (se sallisi toisen hengähdyksen), ja se on ainoa kohta jossa se on
+väljempi. Sanottu tässä ääneen, koska hiljaa löysätty kynnys on juuri se asia
+jota tämä repo ei tee.
+
+Lisäksi oma porttinsa muodolle: **kahdeksan kentän maailmassa on kaksi
+hengähdystä.** Se on tyhjä väite kunnes joku tekee tällaisen maailman, ja siksi
+se on tässä — se sitoo maailmat 2 ja 4–8 ennen kuin niitä aletaan tehdä.
+
+### Maailman 8 tunnistetesti oli epätosi rakenteeltaan, ja se vaihdettiin
+
+`verify.mjs` väitti: *"viimeinen maailma on kuusi askelta, muut neljä"*. Väitteen
+**toinen puolisko ei ollut maailman 8 ominaisuus lainkaan** vaan sen hetken
+ominaisuus jolloin jokainen muu maailma oli kolme kenttää ja linnake. ROADMAPin
+oma tavoite tekee siitä epätoden ensimmäisenä päivänä jona joku alkaa tehdä sitä
+työtä, eikä maailmalle 8 tapahdu silloin mitään. Portti olisi kaatunut oikeasta
+työstä, ja portti joka kaatuu oikeasta työstä sammutetaan.
+
+Tilalle väite joka on **osuus eikä lukumäärä**: *viimeisessä maailmassa jokainen
+askel on tappelu, muualla vain viimeinen.* Mitattuna w8 **6/6 = 100 %**, muut
+1/n. Kun maailmat kasvavat kahdeksaan kenttään tämä väite **vahvistuu** eikä
+heikkene — nimittäjä kasvaa, osuus pienenee, ja niin kävi jo tässä muutoksessa:
+maailmat 1 ja 3 putosivat 25 %:sta 13 %:iin. Maailman 8 kolme muuta väitettä
+(katto 100 %, 0 lippua / 6 ovea, jokainen pomovariantti) ovat koskemattomia,
+koska ne eivät koskaan puhuneet muiden maailmojen kenttämäärästä.
+
+### Generaattori tuntee kaikki kahdeksan teemaa, ja teeman ehto on portti eikä kommentti
+
+`tools/gen-levels.mjs` osasi kolme palettia — ne kolme joita maailma 5 sattuu
+käyttämään. Nyt se osaa kahdeksan teemaa, ja teema on tässä tiedostossa **kolme
+eri asiaa**: mitä palikoita saa esiintyä (`weights`), mitkä lajit siellä asuvat
+(`enemies`) ja **mitä valmiista ruudukosta on oltava totta** (`rules`).
+
+Se kolmas on se joka puuttui. Maailmat 6, 7 ja 8 kirjoittivat itselleen
+rakennesäännön ja jokainen niistä on portissa **palikkatiedostoa vasten** — mikä
+riitti niin kauan kuin ne maailmat olivat käsintehtyjä, koska palikka on se
+paikka jossa käsi tekee virheen. Generoitu kenttä ei kokoa palikoita vaan
+kirjoittaa ruudukon, joten jokainen noista säännöistä olisi mennyt generaattorin
+ohi ilman että mikään sanoo mitään.
+
+| teema | ehto valmiille ruudukolle |
+| --- | --- |
+| ruoho, aavikko, yö, jää | taivas on auki: rivit 0–1 tyhjiä joka sarakkeessa |
+| luu | taivas auki **viisi riviä** (kuu ja tähdet), ja jokainen `#`/`X` nojaa suoraan allaan olevaan |
+| pilvi | mikään ei seiso maassa, eikä yksikään `-` ole tyhjän päällä (eli yksikään lauta ei silloita kuoppaa) |
+| tehdas | katto joka sarakkeen yllä, riveillä 0–5 |
+| linnake | kiveä joka sarakkeen yllä riveillä 0–1, eikä yhtään lippua |
+
+Yksi noista riveistä on **mittaus eikä kopio**: tehtaan katto luetaan riveiltä
+0–5 eikä 0–1, ja se on tahallista. Maailman 8 väite *"joka sarakkeen yllä on
+kiveä"* mitataan riveiltä 0–1 ja sen lähin kilpailija on tehdas 57 %:lla.
+Kattaisi generoitu tehdaskenttä rivin 0, maailman 4 osuus kiipeäisi kohti sataa
+ja **finaalin väite lakkaisi erottamasta mitään** — ei siksi että maailma 8
+muuttui vaan siksi että joku täytti maailman 4. Tehtaan kansi roikkuu siis
+rivillä 2 ja alempana: sisätila jonka koneiston näkee.
+
+Ja koska generaattori ei tällä hetkellä tuota yhtään luu-, pilvi-, tehdas- tai
+linnakekenttää, **neljä ehtoa kuudesta olisi tarkistamaton lupaus**. Siksi
+jokaisella teemalla on koekenttäpari: sama pohja, yksi ruutu eroa, ja portti
+vaatii että ehto hyväksyy toisen ja hylkää toisen. Sääntö joka ei ole koskaan
+hylännyt mitään ei ole sääntö.
+
+### Kolme uutta säätönuppia, ja jokainen niistä on jonkin maailman oma mitattu luku
+
+Ennen oli yksi, `intensity`, ja se liikutti kahta asiaa kerralla. Mittaus kertoo
+miksi se ei riitä: maailman 1 käsintehdyt kentät kantavat **1,42 / 2,25 / 2,45
+vihollismerkkiä sadalla sarakkeella** ja maailman 5 generoidut 12,2–13,6
+*hintaa* sadalla — `intensity`llä ero olisi ollut jaettava viidellä, ja se jakaa
+myös lepopituuteen, joten maailman 1 tiheydellä olisi tullut nelinkertainen määrä
+tyhjää maata. Eri kenttä, ei loivempi kenttä.
+
+- **`enemiesPer100`** on maailman oma mitattu tiheys, ja se osuu **molemmista
+  suunnista**: generaattori täydentää alijäämän ja **karsii ylijäämän**.
+  Karsiminen on uutta; ilman sitä luku olisi ollut lattia joka esittää tavoitetta,
+  ja juuri niin maailma 1 olisi saanut maailman 5 vihollismäärän.
+- **`maxGap`** on maailman levein hyppy ruutuina. Maailman 3 oma historia on
+  perustelu: `3-1` oli maailmansa *vaikein* kenttä pelkästään siksi että kolme
+  sen kuiluista oli budjetin reunalla, ja korjaus oli kenttä eikä mittari.
+- **`minIntro`** on lattiaa ennen ensimmäistä haastetta, ja se on lattia siinä
+  toisessakin merkityksessä. Louhittu luku (5–17 saraketta) on mitattu tavalliselta
+  maalta. **Jää ei ole tavallista maata**, ja mittaus ei ole hienovarainen:
+  ensimmäinen versio maailman 3 kentistä pani kuilun sarakkeeseen 17 ja seinän
+  sarakkeeseen 22, ja voimatason 0 botti pääsi **5 % ja 7 %** läpi. Sama sanasto
+  ruohikolla (maailman 1 neljä kenttää) meni läpi **100 %**.
+
+Lisäksi `--world w1` ajaa yhden maailman kerrallaan, koska seuraavat tekijät
+ovat eri maailmoissa eikä kenenkään pitäisi joutua generoimaan toisen työtä
+uusiksi. Maailman 5 kolme kenttää ovat **tavu tavulta ennallaan**, ja se on
+tarkistettu eikä toivottu: siemenen laskukaava, hiekkakuilujen astinkivet,
+laavan sillat ja vihollisten karsinta on kaikki portitettu niin että vanha polku
+kulkee entistä reittiä. Yksi asia melkein liikutti niitä — piikkikävelijä `x`
+lisättiin jään lajilistaan, ja se yksin teki `5-3`:sta eri kentän. Poistettiin,
+ja syy on kirjattu siihen listaan.
+
+### Mitä `tools/playable.mjs` opetti, ja se on tämän päivän kallein oppi
+
+Kahdeksan uutta kenttää eivät saa liittyä tunnettujen vikojen listaan
+(DESIGN.md kohta 5). Ensimmäinen versio liittyi siihen kolmella kentällä, ja
+korjaukset ovat kaikki yhtä ja samaa asiaa:
+
+> **Botti ei osaa käyttää kelluvaa lautaa, joten lauta jota se ei osaa käyttää on
+> huonompi kuin ei lautaa lainkaan.**
+
+Kolme paikkaa joissa generaattori laski laudan puolitiehen:
+
+1. **Astinkivi kuilun päällä.** DESIGN.md kohta 5 sallii sen sanatarkasti
+   ("*tai siinä on astinkivi*"), mutta botille yhdeksän ruudun sillattu kuoppa on
+   sama kuin ylittämätön. `3-7` kuoli sarakkeeseen 70. Maailma joka nimeää
+   `maxGap`in ei enää silloita mitään — sama lause jonka maailma 7 jo maksoi.
+2. **Ummetusportin astinkivi.** Se laskettiin aina, vaikka portin kuilu on
+   rakenteeltaan hypättävissä. `1-4` kuoli sarakkeeseen 216 neljän ruudun
+   kuoppaan jonka se ylittää ilman lautaa.
+3. **Laavan silta.** Se oli kahden ruudun tynkiä joka kolmas sarake, mikä ei ole
+   ylitys eikä sen puute: botti laskeutuu tyngälle, saa kaksi ruutua vauhtia ja
+   putoaa laavaan. `3-6` kuoli sarakkeeseen 56 **kolme kertaa peräkkäin** — viiden
+   ruudun altaalla, neljän ruudun altaalla, ja neljän ruudun altaalla ilman
+   siltaa. Vastaus oli repossa jo: käsintehty `lava_gap` laskee **yhtenäisen**
+   laudan koko altaan yli ja ruudun yli kummankin huulen, ja `3-3` — jossa niitä
+   on kaksi, jäällä — menee läpi voimatasolla 0.
+
+Ja yksi kokoluokkasääntö: **tappava ruutu rajataan ruutua tiukemmin kuin kuoppa.**
+Kuopan kaukoreuna on huuli jolle voi raapaista hypyn jo mentyä, piikkirivin ja
+laavalammikon kaukoreuna on lattiaa jonka *yli* on laskeuduttava. Mitattuna jäällä
+tuo yksi ruutu on koko ero. Kumpikin oli ennen käsin valittu pari (3–5 piikkiä,
+4–7 laavaa), mikä on juuri se mitä DESIGN.md kohta 3 kieltää — koko on tultava
+mitatusta hyppybudjetista tai louhituista histogrammeista, ei mausta.
+
+Lopputulos: **1-4…1-7 ja 3-4…3-7 menevät kaikki läpi voimatasolla 0, jokainen
+100 %.** Tunnettu lista on ennallaan: `4-3` ei mene läpi edes tuplahypyllä, ja
+`2-1`, `3-F` ja `5-F` vaativat sen.
+
+### Maailman 1 sanasto on se minkä sen kolme ensimmäistä kenttää opettavat
+
+Ensimmäinen versio neljästä uudesta kentästä käytti koko ruohopalettia, ja
+`tools/curriculum.mjs` mittasi mitä se teki: **`1-4`:stä tuli pelin ensimmäinen
+paikka jossa kohdataan kytkinruutu (sarake 119), lentäjä (130) ja ruskea pilvi
+(108)** — kaksi paria niistä saman kahdenkymmenen laatan ruudun sisällä, mikä on
+se yksi opetusjärjestyksen ehto joka on portti. `1-5`:stä tuli ensimmäinen
+mureneva lava ja ensimmäinen nuottipalikka, `1-7`:stä ensimmäinen putkikasvi.
+
+Kuusi mekaniikkaa siirtyi maailmaan 1 vahingossa, ja **neljä niistä on täsmälleen
+ne neljä jotka `1-2`:sta oli samana päivänä tarkoituksella siirretty pois**
+(v26.08.09.38), kappale perusteluineen kutakin. Generaattori joka purkaa päivän
+toimitustyön hiljaa on huonompi kuin generaattori joka ei yllä niihin maailmoihin
+lainkaan.
+
+Maailma 1 pudottaa ne siis sanastostaan. Jäljelle jää se minkä `1-1`…`1-3` jo
+opettivat. Mitattuna jälkeenpäin: **nolla uutta esittelyä kentissä 1-4…1-6**, ja
+`1-7` esittelee yhden asian, paikan jossa maahaniskusta on hyötyä — mikä on
+geometriaa jonka mittari löytää eikä mekaniikkaa jonka joku sijoitti. Koko pelin
+turvaproxy palasi lukemaan **1/26** eli täsmälleen siihen mitä se oli ennen tätä
+muutosta.
+
+Pudotuslista on **vähentävä eikä salliva**, ja suunta on tarkoituksellinen:
+salliva lista olisi jättänyt jokaisen uuden palikan hiljaa pois jokaisesta
+maailmasta jolla lista on, eli sääntö rapautuisi siihen mitä palikoita sattui
+olemaan olemassa sinä päivänä kun se kirjoitettiin.
+
+### Kahdeksan solmua mahtuu kahteenkymmeneen sarakkeeseen, ja se on mitattu
+
+Kysymys oli oikea. Laattapäivitys (v26.08.09.26) kasvatti kenttäsolmun leimaa
+16×16:sta 20×21:een, ja hinta maksettiin sillä perusteella että kahden lähimmän
+solmun väli millä tahansa kartalla on kaksi ruutua eli 32 px, josta 20 px:n leima
+jättää **12 px** karttaa väliin.
+
+Kymmenen solmua (alku, seitsemän kenttää, talo, linnake) ei muuta sitä lukua vaan
+käyttää sen loppuun: molemmat uudet kartat on rakennettu niin että **jokainen
+peräkkäinen pari on tasan ne kaksi ruutua**. Mitattuna piirretyistä pikseleistä,
+`verify.mjs`:n omalla mittarilla: tiukin solmupari koko pelissä on yhä
+`w2-3`/`w2-m` **12 px**:llä, eli uudet kartat eivät ole tiukempia kuin se joka jo
+on tuotannossa — ne ovat yhtä väljiä koko pituudeltaan. Polun ja kaluston väli on
+yhä **7 px** ja polun ja vieraan solmun **17 px**, kumpikin ennallaan.
+
+Kartat eivät siis levenneet. Tie mutkittelee kahden rivin väliä, ja maailmojen 1
+ja 3 tiet kulkevat eri korkeudella eri suuntaan — maailmassa 1 alhaalla ja
+nousten, maailmassa 3 ylhäällä ja laskien — mikä on halvin tapa sanoa että nämä
+ovat kaksi eri paikkaa. Kalusto istutettiin säännön 8 mukaan kuten maailmoissa
+6–8: polun raivattu vyöhyke otettiin ensin pois. Maailmassa 1 **21 pyydettyä, 21
+istutettua**, maailmassa 3 **14 ja 14**, nolla hylättyä kummassakin.
+
+Yksi asia muuttui kasvamisen lisäksi: **maailman 3 hernetalo siirtyi tien varrelta
+sivuun.** Ennen reitti kulki `3-2` → talo → `3-3`, eli talo oli pakko-osuus
+keskellä maailmaa ja koko pelin ainoa sellainen; kahdeksan kentän mitassa se
+olisi ollut pakko-osuus keskellä pidempää maailmaa. `tiersOf` kävelee talon läpi
+kummassakin muodossa, joten vaikeuskäyrä ei liiku tästä lainkaan.
+
+### Vaikeuskäyrä, ennen ja jälkeen
+
+| maailma | ennen | nyt |
+| --- | --- | --- |
+| w1 | 125,6 | **111,3** |
+| w2 | 148,7 | 148,7 |
+| w3 | 174,6 | **171,8** |
+| w4 | 189,4 | 189,4 |
+| w5–w8 | 256,2 · 264,2 · 279,2 · 301,0 | ennallaan |
+
+**Maailma 1 laski, ja se on tulos eikä vahinko.** Sen sanastolla — neljä
+mekaniikkaa, kuiluja korkeintaan viisi ruutua kuudesta, ei murenevaa lavaa —
+kenttä ei yllä yli **112**:n, kun sen oman linnakkeen luku on 220. Vaikeusmittarin
+kaksi painavinta termiä ovat kuilut (0,30) ja tarkkuus (0,18), ja opetusmaailma
+kattaa ensimmäisen ja jättää toisen ruokkimatta. Kahdeksan kentän maailma 1 on
+siis **pidempi maailma 1 eikä kovempi**, ja se on oikea vastaus: se on yhä pelin
+helpoin ja yhä maailman 2 alapuolella (111,3 < 148,7).
+
+Muodot: w1 `70 → 115 → 98 → 104 → 77 → 95 → 112`, w3
+`162 → 130 → 187 → 134 → 166 → 178 → 198`. Kaksi notkoa kummassakin, pisin nousu
+kaksi ja kolme. Maailman 3 toinen hengähdys on `3-4` eikä myöhempi kenttä, ja
+sekin on mittauksen seuraus: `3-3` on käsintehty huippu 186,5:ssä, eikä botin
+kestävä jääsanasto voita sitä, joten hengähdys menee sinne missä pudotus jo on.
+
+Kahdeksan kenttää osuivat tavoitteisiinsa **korkeintaan 1,8 pisteen päähän**
+(104/78/96/112 ja 135/165/180/198 vastaan mitatut 104/77/95/112 ja
+134/166/178/198). Tavoite on suunnittelupäätös joka tehdään ensin ja kirjoitetaan
+tauluun; **siemen on ainoa asia jota haku liikuttaa**, ja jokainen ehdokas on
+kenttä joka on jo läpäissyt kaikki säännöt — haku ei siis voi ostaa lukua
+huonommalla kentällä.
+
+### ALKUPERÄISYYSTARKISTUSTA EI VOITU AJAA, JA SE LUKEE NYT DATASSA
+
+Tämä on tämän muutoksen tärkein varaus ja se on tässä ylhäällä eikä alaviitteessä.
+
+`VGLC_DIR` ei ole asetettu tässä ympäristössä eikä korpus ole repossa — se on
+DESIGN.md kohdan 3 alakohta 1 ja tarkoituksellista. Siitä seuraa että
+generaattorin samankaltaisuustarkistus, joka hylkää kentän jos yksikään **8
+sarakkeen ikkuna** osuu korpukseen, **ei voinut ajaa**. Kaikki yksitoista
+generoitua kenttää — myös maailman 5 kolme, jotka aikanaan generoitiin tarkistus
+päällä osumilla 0 — on kirjoitettu tässä ajossa merkinnällä `origin: 'not
+checked'`. **Se ei tarkoita "ei osumia" vaan vastauksen puuttumista.**
+
+Kolme asiaa tehtiin sen sijaan että olisi kirjoitettu kommentti:
+
+1. **`tools/originality.mjs`**, oma moduulinsa ja oma komentonsa. Ennen tarkistus
+   asui generaattorin sisällä, eli kysymykseen "onko se mikä on nyt committoituna
+   alkuperäistä" ei voinut vastata **korvaamatta samalla vastausta** — piti
+   generoida uusiksi. Nyt:
+   `VGLC_DIR="…" node tools/originality.mjs` lukee `src/data/generated.js`:n
+   sellaisenaan, tulostaa rivin per kenttä ja palaa nollasta poikkeavalla
+   koodilla jos yksikin ikkuna osuu.
+2. **Merkintä kulkee datassa.** Jokaisella generoidulla kentällä on
+   `origin`-kenttä, generaattorin kirjoittamana eikä käsin.
+3. **Portti joka väittää ympäristöstä ja tallenteesta yhdessä**, ja kaatuu
+   molempiin suuntiin. Jos `VGLC_DIR` on asetettu kun `verify.mjs` ajetaan,
+   korpus luetaan siinä ja siellä ja jokainen ikkuna verrataan — yksikin osuma
+   kaataa, ja niin kaataa myös kenttä joka on merkitty `not checked` ympäristössä
+   jossa tarkistuksen olisi voinut tehdä. Jos `VGLC_DIR` on asettamatta, portti
+   vaatii että **jokainen kenttä kantaa merkinnän ettei sitä ole tarkistettu**, ja
+   kaataa ajon jos jokin kenttä väittää olevansa tarkistettu.
+
+**Miksi ei kaatavaa porttia tarkistamattomalle sisällölle.** Sellainen portti
+olisi punainen jokaisessa ympäristössä jossa korpusta ei ole, eli tässä repossa
+aina — ja tämä tiedosto sanoo muualla itse mitä pysyvästi punaiselle portille
+tapahtuu: se sammutetaan. Pahempaa, se painostaisi merkitsemään kentän
+tarkistetuksi jotta ajo menisi läpi, mikä on tasan se valhe jota vastaan koko
+kohta 3 on kirjoitettu. Sen sijaan: **repo saa olla vihreä ilman korpusta, mutta
+se ei saa väittää mitään ilman korpusta.**
+
+**Omistajalle jäävä työ on yksi komento.** Aseta `VGLC_DIR` ja aja
+`node tools/gen-levels.mjs`; jos se menee läpi, merkinnät vaihtuvat muotoon
+`checked` ja `node tools/verify.mjs` samassa ympäristössä vahvistaa sen. Ennen
+sitä yksikään tämän muutoksen väite ei koske alkuperäisyyttä.
+
+### Mitä seuraava tekijä tarvitsee
+
+- **Muoto on portissa.** Maailma jonka teet on seitsemän numeroitua kenttää ja
+  linnake, ja kävelyssä kaksi notkoa. Älä keksi sitä uudestaan.
+- **Järjestys on: generoi ensin, kytke kartalle vasta sitten.** `gen-levels.mjs`
+  lataa `difficulty.mjs`:n, joka kävelee koko pelin — eli se kaatuu jos kartalla
+  on solmu kenttään jota ei vielä ole. Generaattori sanoo sen suoraan.
+- **Aja `--world wN`.** Muut maailmat jäävät koskematta, koska tiedosto
+  kirjoitetaan kokonaan committoidun sisällön päälle.
+- **Maailmojen 2 ja 8 muoto on eri kysymys.** Maailmassa 2 on haara, joten
+  kahdeksan kenttää on siellä kuusi tai seitsemän askelta; maailma 8 tarvitsee
+  neljä kenttää lisää ja jokaisen niistä pitää olla pomohuone — ja
+  **generaattorissa ei ole areenapalikkaa**, mikä on nimetty puute eikä yllätys.
+- **Kaksi lukua joita kannattaa varoa.** `w3 → w4` on nyt +17,5 ja `w4 → w5`
+  +66,8; maailman 4 täyttäminen puristuu siis kapeaan väliin alhaalta.
+  Ja maailman 4 katto-osuus (57 %) on maailman 8 väitteen lähin kilpailija —
+  generoitu tehdaskenttä ei saa kattaa riviä 0.
+
+---
+
+## v26.08.09.45 — pöhö, pönttö ja nielu: kolme vanhinta vihollista omiksi
+
+Pelin kolme ensimmäistä vihollista — ruskea mönkijä, kilpikonna kuorineen ja
+putkesta nouseva kasvi — oli piirretty jonkin toisen pelin hahmojen näköisiksi.
+Jokainen suorakulmio oli kyllä kirjoitettu tähän repoon käsin, mutta se ei ole
+sama asia: [DESIGN.md](DESIGN.md):n kohta 2 sanoo että suojattua on nimenomainen
+ilmaisu, ja tietty hahmo on juuri sitä. Ne on korvattu.
+
+### Mitä ne nyt ovat
+
+- **PÖHÖ** korvaa mönkijän. Kaasusta pullistunut suolipussi, solmittu kiinni
+  päältä ja vuotava takaa. Se on pelin ensimmäinen vihollinen 1-1:ssä ja se
+  ruumis jolla tallaaminen opetetaan, joten sen pitää näyttää siltä ettei se
+  aio tehdä sinulle mitään: puolittain suljetut silmät, ei kulmakarvoja, ei
+  kärkeä missään, ja kymmenen pikseliä tasaista solmua päällä. Solmu on myös se
+  osa säkkiä joka on tarkoitettu avattavaksi.
+- **PÖNTTÖ** korvaa kilpikonnan. Kalpea, sokea toukka joka asuu teräksisessä
+  painesäiliössä. Tallattuna pää ja jalat menevät sisään ja jäljelle jää
+  *esine* — kyljellään makaava tynnyri, ei kasvot missään, ja juuri se on koko
+  "nosta minut ja heitä" -lukema. Potkaistuna se ei vieri koska joku työnsi
+  sitä: se suihkuaa venttiilistään ja kylkiluut juoksevat ohi. Kahdeksan
+  asentoa neljän sijaan, koska nelivaiheinen rullaus 3,4 px/frame -vauhdissa
+  lukee välkkymisenä eikä ohi menevänä pintana.
+- **NIELU** korvaa kasvin. Putki on tässä pelissä suoli, ja suolessa asuu
+  kurkku: märkä, kylkiluinen, lähes musta tuubi jonka päällä on luuhampaiden
+  kehä. Se ei ole kasvi eikä ollut koskaan.
+
+### Mekaniikkaan ei koskettu, ja se on tarkoituksellista
+
+Päälle hyppääminen, kuoreksi litistyminen ja kuoren potkiminen ovat
+genrekonventioita eivätkä suojattua ilmaisua. Ne ovat myös se osa jonka varassa
+puolet kentistä lepää — `hitByShell`, `shellSweep`, liukuvan kuoren
+tiilenmurskaus ja `kickGrace` ovat ennallaan riviltä riviltä, eikä yhtään
+osumalaatikkoa muutettu. Vaihdettiin substantiivi, ei verbi.
+
+### Punainen ennen vihreää, ja se oli mitattava väite eikä makuasia
+
+Kaksi uutta porttia `tools/verify.mjs`:ssä, molemmat kirjoitettu ja katsottu
+punaisiksi ennen kuin yhtään pikseliä siirrettiin:
+
+1. **"vihollisen ylälaita kertoo saako sen päälle hypätä."** Väite on että
+   tallattavien ja tallaamattomien ylälaidat eivät mene päällekkäin, ja väliin
+   jää vähintään neljä pikseliä. Punainen sanoi: **tallaamattomista levein oli
+   kasvi 14 px** — koko vihollisjoukon levein tasainen laskeutumispinta 16
+   pikselin laatikossa, leveämpi kuin kävelijän 10 ja yhtä leveä kuin se kuori
+   jonka päälle nimenomaan kuuluu hypätä — kun taas tallattavista kapein oli 7.
+   Populaatiot eivät olleet lähellä toisiaan vaan **nurin päin**, ja peli opetti
+   1-2:ssa valheen niille jotka olivat juuri oppineet totuuden 1-1:ssä. Toinen
+   tallaamaton, piikkiukko, mittasi 1. Nielu mittaa nyt 1 ja kolme kärkeä.
+
+   Kärjet piirretään samalla `drawSpines`-funktiolla joka merkitsee piikkiukon
+   ja pörhistyvän pomon — ei kopiolla siitä. Peli saa yhden sanaston sille että
+   tähän ei lasketa, ja jokainen ylimääräinen murre maksaa yhden elämän.
+
+   Kurnuttaja (6 px, 2 kärkeä) on **nimetty poikkeus eikä hiljainen aukko**: se
+   elää kuopan pohjalla, pelaaja ei koskaan päädy sen yläpuolelle omasta
+   tahdostaan, ja sen varoitus on `drawCroak`in kuplapatsas ilmassa kuopan yllä.
+   Luku tulostetaan portin viestissä joka ajolla.
+
+2. **"uudelleenpiirretty vihollinen erottuu jokaisen teeman maasta."** Ruuduilla
+   on ollut teemakohtainen kontrastiportti pitkään, vihollisilla ei — väärin
+   päin, koska maahan sulava tiili maksaa salaisuuden ja maahan sulava
+   vihollinen maksaa voimatason. Sama mitta kuin ruuduilla (kanavakohtainen
+   keskiero 255:stä), ja **kynnystä ei kirjoitettu käsin**: se lasketaan
+   ajossa aavikon omasta maa/tiili-parista, eli heikoimmasta jonka peli jo
+   hyväksyy (8,6 %). Punainen sanoi: **kävelijä 5,7 % yön maata ja 6,0 % ruohoa
+   vasten, kasvi 6,9 % ruohoa vasten.** Pelin ensimmäinen vihollinen oli
+   samalla sen huonoiten näkyvä, ruskeaa ruskealla, ensimmäisestä spritestä
+   asti. Nyt pöhö 14,2 %, pönttö 11,8 / 14,6 %, nielu 12,1 %.
+
+   Portti koskee toistaiseksi näitä kolmea (ja lentäjää, joka *on* pöhö
+   siivillä), mutta mittaus koskee kaikkia ja loput tulostetaan pahimpine
+   teemoineen: piikkiukko 3,3 % (tehdas), papuparooni 3,3 % (yö),
+   ummetuskorkki 7,2 % (aavikko), ruskea pilvi 7,4 % (ruoho). Ne ovat
+   löydöksiä joista joku päättää numero edessään, eivät asioita jotka portti
+   siunaa.
+
+Mittauksesta yksi asia kannattaa kirjata, koska se ohjasi väriä eikä toisin
+päin: **keskiarvomitta rankaisee lämpimän ja kylmän sekoituksesta.** Säiliöllä
+oli ensin messinkiset päädyt sinisellä rungolla, ja jokainen väri siinä oli
+erikseen kunnossa — mutta puoliksi lämmintä ja puoliksi kylmää keskiarvoistuu
+täsmälleen siksi harmaaksi jota tehtaan lattia on, ja luku oli **2,8 %**, pelin
+huonoin. Teräs pitää koko spriten samalla puolella väriympyrää ja luku on 14,6.
+
+### Mikä pysyi mitattavasti ennallaan
+
+- **Osumalaatikot bitilleen.** Laatikkoauditointi tulostaa saman rivin kuin
+  ennen: kattamatta walker 0, flyer 0, shell walking 1, shell 2, spikeguy 1,
+  plant 1, corkguy 2, stink cloud 1, bean baron 0, kurnuttaja 0. Kävelijän
+  nolla on se joka kasvatettiin sinne tarkoituksella, eikä uusi piirros
+  kaventanut sitä.
+- **Hengitys bitilleen.** naapurin ero / 4 px:n siirtymä: walker 19/8, shell
+  walking 22/0, spikeguy 21/2, plant 22/2, corkguy 22/2, kurnuttaja 22/2 —
+  samat luvut kuin ennen. Solmu on laatikon katto, tyngät sen lattia, ja
+  hengitys liikkuu niiden välissä.
+- Liukuva kuori pääsi laatikkoauditointiin, josta se oli puuttunut. Potkaistu
+  kuori on se piirros jota pelaaja lukee kovimmassa vauhdissa.
+
+### Löydetty, ei korjattu
+
+Siluettien erottuvuus laatikon sisällä on **suorassa ristiriidassa**
+laatikkokattavuuden kanssa: kun kaksi lajia jakavat 16×16-laatikon ja
+molempien on täytettävä se joka framella, päällekkäisyys on pakotettu. Mitattu:
+kävelijä vastaan kurnuttaja 87,5 % (IoU). Siitä ei siksi tehty porttia — se
+olisi vaatinut toisen portin rikkomista. Ylälaita on se mitta joka jää
+voimaan, ja se on myös se jonka pelaaja oikeasti lukee.
+
+---
+
+## v26.08.09.44 — sankarilta lähti lakki: haalari, kaasuletku ja viisi omaa asua
+
+Pelaajahahmon ulkoasu on piirretty uusiksi. **Punainen pilkullinen lippalakki on
+poissa**, ja sen mukana koko lainattu puvustus: paita ja housut, haalarin kaksi
+kultaista nappia ja pesukarhun häntä korvineen. Tilalla on hiukset, yksiosainen
+haalari, vyö jossa on messinkinen paineventtiili ja kaasulehden mukana tuleva
+kaasuletku. [DESIGN.md](DESIGN.md):n kohta 1 kertoo saman lyhyesti.
+
+### Miksi, ja mikä nimenomaan piti vaihtaa
+
+Omistajan pyyntö oli poistaa lainatun näköiset spritet. Pelaaja on niistä isoin
+ja se ainoa jota hän ei nimennyt, mikä on syy tehdä tämä huolella eikä varovasti.
+Työ alkoi jaosta kolmeen, ja **vain ensimmäiseen ryhmään kosketaan**:
+
+| ryhmä | mitä siihen kuului | tehtiin |
+| --- | --- | --- |
+| lainattua ilmaisua | lippalakki (lippa oli tasan vartalon levyinen), sienen punainen + valkoiset pilkut, paita/housut-jako, haalarin kaksi nappia, pesukarhunhäntä ja -korvat | vaihdettiin |
+| genren kalustoa, ei kenenkään | ihminen jolla on pää, kädet ja jalat; kolmen framen kävely; kyykky; profiili | ei koskettu |
+| jo tämän pelin omaa | syväseisonta (torkahdus + ZZZ, jääpuikkohengitys, palava tukka), hengitys, räpytys, raapiminen, hikipisara, värinä, ummetuskorkki, paukkupavun paletti | ei koskettu |
+
+Hahmo tekee siis täsmälleen samat asiat kuin eilen ja näyttää samalta ihmiseltä
+tekemässä niitä. Vaihtui se mitä hänellä on päällä ja minkä värinen hän on.
+
+**Uusi asu tulee siitä mistä peli kertoo.** Hän laskeutuu suolistoon
+Pieruprinssin perään, joten hänet on puettu työhön: haalari, vyö ja venttiili
+josta paine pääsee ulos. Kaasulehti antaa häntäiskun, liidon ja lennon, ja
+kaasupelissä se esine joka tekee kaikki kolme on **letku jonka päässä on
+messinkisuutin** — sillä lyö ja siitä lentää. Eläimen häntä miehen takana on
+puku, ja tässä genressä on tasan yksi puku joksi se luetaan.
+
+Viisi voimatasoa ovat nyt viisi asua: haalari, vyö, housut ja hiukset vaihtuvat
+kaikki. Perustelu on että **kaasu näkyy hänessä** — tasot eivät ole vaatekaappi
+vaan se paljonko häntä on paineessa. Sienen valkoiset pilkut jäivät ideana
+(tehostuksen merkintä näkyy kantajassaan on tämän pelin oma tapa) mutta
+muuttuivat **kaasukupliksi haalarissa**.
+
+### Punainen ennen vihreää, kahdella mittarilla
+
+Taidemuutoksen rehellinen punainen on mitattava väite, ja tässä niitä on kaksi.
+Molemmat kaatuivat vanhalla piirroksella:
+
+1. **Pää saa olla enintään neljä pikseliä osumalaatikkoa kapeampi.** Lippa on se
+   asia lakissa joka on leveämpi kuin kallo jonka päällä se on, ja tässä
+   piirroksessa se oli tasan koko hahmon levyinen: **12 px 14:n vartalolla ja
+   10 px 12:n vartalolla**, kruunun ollessa 9 ja 8. Sääntö on leveydestä eikä
+   väristä, koska vihreäksi maalattu lippalakki on yhä lippalakki. Uudet luvut
+   ovat **9 px ja 7 px**.
+2. **Lähimmätkin kaksi voimatasoa eroavat vähintään 45 % hahmon omista
+   pikseleistä.** Vanha taulukko vaihtoi sienestä vain lakin värin, eli kaksi
+   viidestä tasosta oli sama piirros hattu maalattuna: **28 % pienimmällä koolla
+   ja 23 % suurimmalla**. Uudet luvut ovat **53 % ja 57 %**.
+
+Vanhat portit pysyivät vihreinä eivätkä ne ole tässä koristeena: sprite ei
+hajoa palasiksi yhdessäkään asennossa millään voimatasolla (0 rikki), mikään
+asento ei vuoda ulos laatikostaan (0 vuotoa), kävely kulkee edelleen
+ohitusasennon kautta ja kaikki hengittää. Osumalaatikoihin ei koskettu yhtään
+pikseliä — `PLAYER_SIZES` ja `PLAYER_DUCK_SIZES` ovat rivilleen samat.
+
+### Yksi vanha virhe joka löytyi matkalla
+
+Vanha `capSpots` piirsi kolme pilkkua joista **kaksi oli päällekkäin** ja kolmas
+kruunun reunan ohi: pienellä koolla se roikkui kokonaan lakin sivulla ja
+suurella yhden pikselin verran. Se oli ollut siellä niin kauan kuin pilkkuja on
+ollut. Uusi merkintä lasketaan sen paneelin mitoista johon se piirretään, joten
+sama kolme kuplaa osuu sekä seisovan 10x4-rinnuksen että kyykyn 12x3:n päälle.
+
+---
+
 ## v26.08.09.43 — kartta saa vieriä, ja kamera joka ei keinuta
 
 Maailmankartan maastoruudukko saa olla näkymää leveämpi, ja näkymä seuraa

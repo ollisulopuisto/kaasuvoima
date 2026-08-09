@@ -28,35 +28,68 @@ import { DIFFICULTY } from './difficulty.js';
  *   - the reward sits on the harder route, measured, not asserted
  */
 const WORLD_DEFS = [
+  /*
+   * PAPULAAKSO, maailma 1 — ja ensimmäinen kartta jolla on kahdeksan kenttää.
+   *
+   * KAHDEKSAN SOLMUA MAHTUU KAHTEENKYMMENEEN SARAKKEESEEN, JA SE ON MITATTU.
+   * Kysymys oli oikea: laattapäivitys (v26.08.09.26) kasvatti kenttäsolmun
+   * leimaa 16x16:sta 20x21:een, ja se hinta maksettiin sillä perusteella että
+   * kahden lähimmän solmun väli millä tahansa kartalla on kaksi ruutua eli 32
+   * px, josta 20 px leimaa jättää 12 px karttaa väliin. Kymmenen solmua ei
+   * muuta sitä lukua vaan käyttää sen loppuun: tämä kartta on rakennettu niin
+   * että **jokainen peräkkäinen pari on tasan ne kaksi ruutua**, mikä on sama
+   * väljyys kuin maailman 2 tiukimmalla parilla ennen tätä (`w2-3`/`w2-m`, 12
+   * px). Kartta ei siis ole tiukempi kuin se joka jo on tuotannossa — se on
+   * yhtä tiukka koko pituudeltaan. `verify.mjs` mittaa sen piirretyistä
+   * pikseleistä eikä ruudukosta.
+   *
+   * Reitti on siksi mutkitteleva eikä suora: yhdeksän solmua peräkkäin yhdellä
+   * rivillä olisi mahtunut myös (x = 1..17), mutta se on jono eikä maa. Nyt tie
+   * käy rivien 5 ja 7 väliä ja nousee lopuksi linnakkeeseen riville 4.
+   *
+   * Kalusto on istutettu säännön 8 mukaan kuten maailmoissa 6–8: polun raivattu
+   * vyöhyke otettiin ensin pois ja loput istutettiin siihen mikä jäi. Tila on
+   * pienempi kuin ennen, koska tietä on enemmän — ylimmät kolme riviä ja
+   * alimmat kaksi ovat se mikä jäi, ja se riittää: 21 pyydettyä, 21
+   * istutettua, nolla hylättyä.
+   */
   {
     id: 'w1',
     name: 'PAPULAAKSO',
     theme: 'grass',
     terrain: [
       'MMM.T..TT.......MMMM',
-      'MM......T....TT...MM',
-      '..,..T...T."..T...,.',
-      '..T....."......T..T.',
-      '...."...T........T..',
-      '.,.........,........',
-      '............".....T.',
-      '~~~.........TT....~~',
+      'MM.....T..T..TT...MM',
+      '..,.......T...T...,.',
+      '...........T........',
+      '....................',
+      '.,..................',
+      '....................',
+      '~~~.........,......~',
       '~~~~~~~~..~~~~~~~~~~',
     ],
     nodes: [
-      { id: 'w1-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
-      { id: 'w1-1', tx: 3, ty: 6, type: 'level', level: '1-1', name: 'PAPUPELTO' },
-      { id: 'w1-2', tx: 6, ty: 6, type: 'level', level: '1-2', name: 'MÖNKIJÄNIITTY' },
-      { id: 'w1-h', tx: 6, ty: 3, type: 'house', name: 'HERNETALO' },
-      { id: 'w1-3', tx: 10, ty: 4, type: 'level', level: '1-3', name: 'TUULINEN HARJU' },
-      { id: 'w1-f', tx: 14, ty: 6, type: 'fortress', level: '1-F', name: 'LINNAKE 1' },
+      { id: 'w1-s', tx: 1, ty: 7, type: 'start', name: 'ALKU' },
+      { id: 'w1-1', tx: 3, ty: 7, type: 'level', level: '1-1', name: 'PAPUPELTO' },
+      { id: 'w1-2', tx: 5, ty: 5, type: 'level', level: '1-2', name: 'MÖNKIJÄNIITTY' },
+      { id: 'w1-h', tx: 5, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w1-3', tx: 7, ty: 7, type: 'level', level: '1-3', name: 'TUULINEN HARJU' },
+      { id: 'w1-4', tx: 9, ty: 5, type: 'level', level: '1-4', name: 'KASTEHEINÄ' },
+      { id: 'w1-5', tx: 11, ty: 7, type: 'level', level: '1-5', name: 'OJANPOHJA' },
+      { id: 'w1-6', tx: 13, ty: 5, type: 'level', level: '1-6', name: 'PITKÄ PELTO' },
+      { id: 'w1-7', tx: 15, ty: 7, type: 'level', level: '1-7', name: 'MYLLYNMÄKI' },
+      { id: 'w1-f', tx: 17, ty: 4, type: 'fortress', level: '1-F', name: 'LINNAKE 1' },
     ],
     links: [
       { a: 'w1-s', b: 'w1-1' },
       { a: 'w1-1', b: 'w1-2' },
       { a: 'w1-2', b: 'w1-h' },
-      { a: 'w1-2', b: 'w1-3', path: [[10, 6]] },
-      { a: 'w1-3', b: 'w1-f', path: [[14, 4]] },
+      { a: 'w1-2', b: 'w1-3' },
+      { a: 'w1-3', b: 'w1-4' },
+      { a: 'w1-4', b: 'w1-5' },
+      { a: 'w1-5', b: 'w1-6' },
+      { a: 'w1-6', b: 'w1-7' },
+      { a: 'w1-7', b: 'w1-f', path: [[17, 6]] },
     ],
   },
   {
@@ -121,35 +154,63 @@ const WORLD_DEFS = [
       },
     ],
   },
+  /*
+   * JÄÄTÄVÄ VETO, maailma 3 — kahdeksan kenttää, ja tie kulkee ylhäältä.
+   *
+   * Sama kymmenen solmun mitta kuin maailmassa 1 ja tarkoituksella eri muoto:
+   * siellä tie kulkee kartan alalaidassa ja nousee lopussa, tässä se kulkee
+   * yläreunassa ja **laskeutuu** linnakkeeseen. Se on halvin tapa sanoa että
+   * nämä ovat kaksi eri paikkaa, ja se on ilmainen — sama ruudukko, samat
+   * välit, eri rivit.
+   *
+   * Hernetalo siirtyi tien varrelta sivuun, ja se on ainoa asia joka tässä
+   * kartassa muuttui muutenkin kuin kasvamalla. Ennen reitti kulki `3-2` →
+   * talo → `3-3`, eli talo oli pakko-osuus keskellä maailmaa; se oli koko
+   * pelin ainoa sellainen, ja kahdeksan kentän mitassa se olisi ollut pakko-
+   * osuus keskellä pidempää maailmaa. Nyt se roikkuu haarana kuten kaikissa
+   * muissa maailmoissa. `tiersOf` kävelee talon läpi kummassakin muodossa,
+   * joten vaikeuskäyrä ei liiku tästä lainkaan.
+   *
+   * Kalusto on istutettu säännön 8 mukaan: 14 pyydettyä, 14 istutettua,
+   * nolla hylättyä.
+   */
   {
     id: 'w3',
     name: 'JÄÄTÄVÄ VETO',
     theme: 'ice',
     terrain: [
-      'IIMIIIIIIIIIIIIIIMII',
-      'IIMMIIIPIIIIRIMMIIII',
-      'IIIIRIIIPIPIIPIIIRII',
-      'IIPIIIRIIIIIIIIPIIII',
-      'IIIIIIIIIIIIIIRIIPII',
+      'IIMIIIMIIIMIIIMIIMII',
       'IIIIIIIIIIIIIIIIIIII',
       'IIIIIIIIIIIIIIIIIIII',
-      'IIIIIIIIIIPIIIIIIIRI',
-      'IIPIIIRIIIIIIIIIIIII',
+      'IIIIIIIIIIIIIIIIIIII',
+      'IIIIIIIIIIIIIIIIIIII',
+      'IIIIIIIIIIIIIIIIIIII',
+      'IIPIIIRIIIIIIIRIIIPI',
+      'IIIIIIIIIIIIIIIIIIRI',
+      'IIPIIIRIIIIIPIIIIIPI',
     ],
     nodes: [
-      { id: 'w3-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
-      { id: 'w3-1', tx: 4, ty: 6, type: 'level', level: '3-1', name: 'KYLMÄ VIIMA' },
-      { id: 'w3-2', tx: 8, ty: 4, type: 'level', level: '3-2', name: 'JÄÄPUTOUS' },
-      { id: 'w3-h', tx: 12, ty: 4, type: 'house', name: 'HERNETALO' },
-      { id: 'w3-3', tx: 12, ty: 7, type: 'level', level: '3-3', name: 'HALKEAMA' },
-      { id: 'w3-f', tx: 16, ty: 5, type: 'fortress', level: '3-F', name: 'PIERUKUNINGAS' },
+      { id: 'w3-s', tx: 1, ty: 2, type: 'start', name: 'ALKU' },
+      { id: 'w3-1', tx: 3, ty: 2, type: 'level', level: '3-1', name: 'KYLMÄ VIIMA' },
+      { id: 'w3-2', tx: 5, ty: 4, type: 'level', level: '3-2', name: 'JÄÄPUTOUS' },
+      { id: 'w3-3', tx: 7, ty: 2, type: 'level', level: '3-3', name: 'HALKEAMA' },
+      { id: 'w3-4', tx: 9, ty: 4, type: 'level', level: '3-4', name: 'AHTOJÄÄ' },
+      { id: 'w3-h', tx: 9, ty: 7, type: 'house', name: 'HERNETALO' },
+      { id: 'w3-5', tx: 11, ty: 2, type: 'level', level: '3-5', name: 'TUISKU' },
+      { id: 'w3-6', tx: 13, ty: 4, type: 'level', level: '3-6', name: 'SULAMISVESI' },
+      { id: 'w3-7', tx: 15, ty: 2, type: 'level', level: '3-7', name: 'IKIROUTA' },
+      { id: 'w3-f', tx: 17, ty: 5, type: 'fortress', level: '3-F', name: 'PIERUKUNINGAS' },
     ],
     links: [
       { a: 'w3-s', b: 'w3-1' },
-      { a: 'w3-1', b: 'w3-2', path: [[8, 6]] },
-      { a: 'w3-2', b: 'w3-h' },
-      { a: 'w3-h', b: 'w3-3' },
-      { a: 'w3-3', b: 'w3-f', path: [[16, 7]] },
+      { a: 'w3-1', b: 'w3-2' },
+      { a: 'w3-2', b: 'w3-3' },
+      { a: 'w3-3', b: 'w3-4' },
+      { a: 'w3-4', b: 'w3-h' },
+      { a: 'w3-4', b: 'w3-5' },
+      { a: 'w3-5', b: 'w3-6' },
+      { a: 'w3-6', b: 'w3-7' },
+      { a: 'w3-7', b: 'w3-f', path: [[17, 3]] },
     ],
   },
   {

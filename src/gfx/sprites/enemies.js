@@ -66,59 +66,113 @@ export function breath(tick, x, y) {
   return Math.sin(tick / 26 + x * BREATH_X + y * BREATH_Y) > 0.55 ? 1 : 0;
 }
 
-/* -------------------------------- walkers ------------------------------- */
+/* --------------------------------- pöhö --------------------------------- */
 
 /**
+ * PÖHÖ — the first thing in the game that walks at you, in 1-1, and the body
+ * the stomp is taught on. It is a gut sack: a skin bag of fermenting gas,
+ * tied shut at the top with a pucker knot, leaking from a vent at the back,
+ * walking on two stubs it did not really choose the direction of.
+ *
+ * **Why it reads as stompable, and it is not a matter of taste.** The top of
+ * this sprite is ten unbroken pixels of flat, dark knot, and there is nothing
+ * pointed anywhere on it. `verify.mjs` measures exactly that and holds
+ * the whole roster to it: no enemy you have to walk around may offer a wider
+ * flat crown than the narrowest one you may jump on, with four pixels of empty
+ * band between the two populations. The knot is also *what a sack is closed
+ * with*, so the picture says press here twice: once as a shape a foot fits on,
+ * once as the one part of a bag that is meant to be undone.
+ *
+ * **Why pink and not brown.** Brown was the old colour and it measured 6,0 %
+ * against grass and 5,7 % against the night ground — under the 8,6 % that the
+ * game's weakest surviving tile pair manages. The first enemy in the game was
+ * the hardest one to see, on the two worlds where it appears most. Gut pink is
+ * this game's own register and it is far from every floor in every theme.
+ *
  * `lift` is 0 or 1: how far the body is up this frame.
  *
- * The crown is nailed to the top of the box and the feet to the bottom of it,
+ * The knot is nailed to the top of the box and the stubs to the bottom of it,
  * and the breath moves everything in between — so the drawing covers all
  * sixteen rows and all sixteen columns in every frame of every cycle. That is
- * deliberate and it is the whole reason this sprite was redrawn: it used to
+ * deliberate and it was the reason this sprite was first redrawn: it used to
  * paint x+1..+15 and y+3..+16 inside a 16x16 box, which left a three pixel
  * band above its head that could hurt you without being visible (DESIGN.md
  * §7). The fix grew the art into the box rather than shrinking the box onto
- * the art, because the walker is the enemy every other one is a variation of
- * and its box is the size of a stomp everywhere in the game.
+ * the art, because this is the enemy every other one is a variation of and its
+ * box is the size of a stomp everywhere in the game. Redrawing the creature
+ * did not touch that: the box is a contract and only the picture changed.
  *
  * It also means the breath cannot be a translation. A body that moves up as a
  * whole leaves the floor line empty and floats; one that moves down as a whole
- * empties the band this sprite was redrawn to fill. So the walker breathes the
- * way the player does: the shoulders rise and the legs stretch after them.
+ * empties the band this sprite was redrawn to fill. So the sack breathes the
+ * way the player does: the middle swells and the stubs stretch after it.
  */
 function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   if (squashed) {
-    ctx.fillStyle = '#8c5c28';
+    /* Emptied. A sack that has been stood on is a sack with the gas out of it,
+     * so this is the same skin with no shape left and the pale seam that used
+     * to be on top now lying flat across the middle of it. */
+    ctx.fillStyle = '#a83c4c';
     ctx.fillRect(px + 1, py + 11, 14, 5);
-    ctx.fillStyle = '#5a3410';
+    ctx.fillStyle = '#701c30';
     ctx.fillRect(px + 1, py + 14, 14, 2);
+    ctx.fillStyle = '#f8a8a8';
+    ctx.fillRect(px + 3, py + 12, 5, 1);
     return;
   }
   const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
-    ctx.fillStyle = '#a06828';
-    ctx.fillRect(bx + 3, py, 10, 3);
+    // The bag itself, widest across the middle because it is full.
+    ctx.fillStyle = '#e07878';
     ctx.fillRect(bx + 1, py + 2 - b, 14, 10);
     ctx.fillRect(bx, py + 5 - b, 16, 6);
-    ctx.fillStyle = '#7a4c18';
+    // The lit side of something under pressure: skin stretched thin enough to
+    // shine. It is on the front, so the sprite has a facing even standing still.
+    ctx.fillStyle = '#f8a8a8';
+    ctx.fillRect(bx + 9, py + 3 - b, 5, 3);
+    ctx.fillRect(bx + 13, py + 6 - b, 2, 3);
+    // The seam it is stitched along, low, with the stitches showing.
+    ctx.fillStyle = '#a83c4c';
     ctx.fillRect(bx + 1, py + 10 - b, 14, 2);
+    ctx.fillStyle = '#701c30';
+    for (let i = 0; i < 4; i++) ctx.fillRect(bx + 3 + i * 3, py + 10 - b, 1, 2);
+    // The vent, on the back, and it is where the leak below comes from. A
+    // creature that leaks from a hole nobody drew is a creature that leaks by
+    // magic; this one has the hole.
+    ctx.fillRect(bx, py + 7 - b, 2, 4);
+    /* Half-lidded, and no brows. Both are the same decision: this thing has to
+     * look like it is not going to do anything to you, because the lesson it
+     * teaches is that you may walk up to it and jump. An angry face on the
+     * first enemy in the game teaches caution, and caution is what the piikkiukko
+     * is for. */
     ctx.fillStyle = C.white;
-    ctx.fillRect(bx + 3, py + 6 - b, 4, 4);
-    ctx.fillRect(bx + 9, py + 6 - b, 4, 4);
+    ctx.fillRect(bx + 4, py + 6 - b, 4, 3);
+    ctx.fillRect(bx + 10, py + 6 - b, 4, 3);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(bx + 5, py + 7 - b, 2, 3);
-    ctx.fillRect(bx + 10, py + 7 - b, 2, 3);
-    ctx.fillRect(bx + 3, py + 4 - b, 4, 2);
-    ctx.fillRect(bx + 9, py + 4 - b, 4, 2);
+    ctx.fillRect(bx + 4, py + 6 - b, 4, 1);
+    ctx.fillRect(bx + 10, py + 6 - b, 4, 1);
+    ctx.fillRect(bx + 5, py + 7 - b, 2, 2);
+    ctx.fillRect(bx + 11, py + 7 - b, 2, 2);
+    /* The knot, painted last so it stays a knot rather than being swallowed by
+     * the swell underneath it, and painted flat because flat is the message. */
+    ctx.fillStyle = '#a83c4c';
+    ctx.fillRect(bx + 3, py, 10, 3);
+    ctx.fillStyle = '#701c30';
+    ctx.fillRect(bx + 3, py + 2, 2, 1);
+    ctx.fillRect(bx + 11, py + 2, 2, 1);
+    ctx.fillStyle = '#f8a8a8';
+    ctx.fillRect(bx + 6, py + 1, 3, 1);
+    // Two stubs. Not shoes, not feet — the bag has to stand on something and
+    // this is the least it can get away with.
+    ctx.fillStyle = '#701c30';
     const swap = frame % 2 === 0;
-    ctx.fillStyle = '#4c2c08';
     ctx.fillRect(bx + (swap ? 0 : 2), py + 12 - b, 6, 4 + b);
     ctx.fillRect(bx + (swap ? 10 : 8), py + 12 - b, 6, 4 + b);
     ctx.fillStyle = 'rgba(168,224,74,0.5)';
     const puff = (frame % 4) + 1;
-    ctx.fillRect(bx - 3 - puff, py + 9 - b, puff + 2, 3);
+    ctx.fillRect(bx - 3 - puff, py + 8 - b, puff + 2, 3);
   });
 }
 
@@ -128,48 +182,133 @@ export function drawWalker(ctx, x, y, frame, facing, squashed) {
   outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed, lift));
 }
 
+/* -------------------------------- pönttö -------------------------------- */
+
 /**
+ * PÖNTTÖ — the one whose whole point is that it has two states and a verb
+ * between them. Stomp it and it disappears into the thing it carries; kick
+ * that and it goes off across the room through everything in the way.
+ *
+ * The mechanic is a genre convention and stays exactly as it is (DESIGN.md §2:
+ * rules and conventions are not what copyright covers — expression is). What
+ * changed is what the two states are *pictures of*, and the answer this game
+ * gives is the one it gives to everything: gas.
+ *
+ * **It is a walking pressure tank.** A pale, blind grub lives inside a ribbed
+ * steel cylinder with its head out of the collar on top. Stomped, the head and
+ * the stubs go in and the collar seals — what is left on the floor is a
+ * *canister*, lying on its side, rolled rims at both ends and a valve on one
+ * of them. Kicked, it does not roll because somebody pushed it: it goes off
+ * venting from that valve, and the ribs streaming past are the only thing that
+ * says which way. Three readings out of one object, and none of them needs a
+ * colour to be learned first:
+ *
+ *   - **walking**: tall, off-centre, a head on top and feet under it. Alive.
+ *   - **shelled**: squat, symmetric, banded, no face anywhere on it. That is
+ *     the whole argument for *pick me up and throw me* — it stopped being a
+ *     creature and became a thing, and a thing has no front to feel sorry for.
+ *   - **sliding**: the same thing with its ribs streaming and a jet out the
+ *     back. Motion with a cause drawn on it.
+ *
+ * **Why blue.** It is the one hue nothing else in this game wears — the pöhö is
+ * gut pink, the piikkiukko purple-grey, the kurnuttaja swamp turquoise, the
+ * cork tan, the nielu near-black. It is also the only *manufactured* colour on
+ * the roster, and that is the point: everything else out there grew, and this
+ * one was made and then swallowed. The green dome it replaces was not failing
+ * any measurement — it was simply somebody else's shell, which is the whole
+ * reason for this pass.
+ *
  * The head is the top of this one's box, so the head is what stays put and the
- * shell rides up and down behind it — a turtle's breath rather than a walker's.
- * A shell with nobody in it does not breathe: it is a rolling object, and the
- * spin is its animation.
+ * tank rides up and down behind it — the breath of something carrying a weight
+ * rather than the walker's. A tank with nobody in it does not breathe: it is a
+ * rolling object, and the spin is its animation.
  */
 function shellBody(ctx, x, y, frame, facing, mode, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   const b = lift;
   if (mode === 'shell' || mode === 'sliding') {
-    const spin = mode === 'sliding' ? Math.floor(frame / 2) % 4 : 0;
-    ctx.fillStyle = C.shell;
-    ctx.fillRect(px + 1, py + 2, 14, 11);
-    ctx.fillStyle = C.shellDark;
-    ctx.fillRect(px + 1, py + 10, 14, 3);
-    ctx.fillStyle = C.rim;
-    ctx.fillRect(px, py + 11, 16, 3);
-    ctx.fillStyle = C.shellDark;
-    for (let i = 0; i < 3; i++) {
-      const sx = px + 3 + ((i * 4 + spin) % 11);
-      ctx.fillRect(sx, py + 5, 2, 3);
-    }
+    const sliding = mode === 'sliding';
+    const spin = sliding ? Math.floor(frame / 2) % 8 : 0;
+    flip(ctx, px, 16, facing < 0, (bx) => {
+      /* The jet, first, so it goes behind the metal. This is why a kicked one
+       * keeps going: not momentum, pressure. It is translucent, so it is not
+       * part of the body the box audit measures — a plume is not a hitbox. */
+      if (sliding) {
+        const jet = (Math.floor(frame / 2) % 4) + 1;
+        ctx.fillStyle = 'rgba(168,224,74,0.45)';
+        ctx.fillRect(bx - 2 - jet, py + 6, jet + 2, 3);
+      }
+      // The drum. Flat along the top from end to end, which is the promise:
+      // this is the one body in the game you are meant to land on twice.
+      ctx.fillStyle = '#2050c0';
+      ctx.fillRect(bx + 1, py + 2, 14, 12);
+      // Lit along the top and shaded along the bottom, because that is what
+      // makes a rectangle a cylinder lying on its side rather than a crate.
+      ctx.fillStyle = '#5c90e8';
+      ctx.fillRect(bx + 2, py + 2, 12, 2);
+      ctx.fillStyle = '#10306c';
+      ctx.fillRect(bx + 1, py + 11, 14, 3);
+      /* The ribs, and they are the whole animation. Eight positions rather
+       * than the old four: a kicked one crosses a room in about a second, and
+       * a four-step scroll at that speed reads as a flicker rather than as a
+       * surface going past. */
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(bx + 4 + ((i * 3 + spin) % 8), py + 3, 1, 9);
+      }
+      /* The two rolled ends, and they are why nothing on this is warm-coloured.
+       * Brass was drawn here first and it was wrong for a reason worth writing
+       * down: the theme gate measures the *mean* of the body against the mean of
+       * the ground, and equal masses of warm and cool average to exactly the
+       * mid-grey that the factory floor already is. The tin measured 2,8 % that
+       * way — the least visible thing in the game — while every single colour on
+       * it was separately fine. Steel keeps the whole sprite on one side of the
+       * wheel, and the number went to fourteen. */
+      ctx.fillStyle = '#10306c';
+      ctx.fillRect(bx + 1, py + 2, 3, 12);
+      ctx.fillRect(bx + 12, py + 2, 3, 12);
+      ctx.fillStyle = '#a8c8f0';
+      ctx.fillRect(bx + 2, py + 2, 1, 12);
+      ctx.fillRect(bx + 13, py + 2, 1, 12);
+      // The valve on the back end, which is the end the jet comes out of.
+      ctx.fillRect(bx + 1, py + 6, 2, 2);
+    });
     return;
   }
   flip(ctx, px, 16, facing < 0, (bx) => {
-    ctx.fillStyle = C.shell;
-    ctx.fillRect(bx + 1, py + 8 - b, 12, 12);
-    ctx.fillStyle = C.shellDark;
-    ctx.fillRect(bx + 2, py + 12 - b, 10, 3);
-    ctx.fillStyle = C.rim;
-    ctx.fillRect(bx + 1, py + 18 - b, 12, 3);
-    ctx.fillStyle = '#f0d060';
+    // The tank it walks around inside.
+    ctx.fillStyle = '#2050c0';
+    ctx.fillRect(bx + 1, py + 8 - b, 12, 13);
+    ctx.fillStyle = '#5c90e8';
+    ctx.fillRect(bx + 2, py + 9 - b, 2, 8);
+    ctx.fillStyle = '#10306c';
+    ctx.fillRect(bx + 1, py + 17 - b, 12, 4);
+    ctx.fillRect(bx + 6, py + 9 - b, 1, 11);
+    ctx.fillRect(bx + 9, py + 9 - b, 1, 11);
+    // The collar the head goes down into when it is stood on.
+    ctx.fillStyle = '#a8c8f0';
+    ctx.fillRect(bx + 5, py + 7 - b, 8, 2);
+    /* The grub. Pale, soft and blind — a thing that has never been out of its
+     * tin, which is the honest answer to what would live in one. It is the
+     * ceiling of the box, so it does not move with the breath, and it is seven
+     * pixels of flat across the top: the narrowest landing surface anything
+     * stompable in this game offers, and still six clear of the widest thing
+     * you must not land on. */
+    ctx.fillStyle = '#d8e0f0';
     ctx.fillRect(bx + 8, py + 1, 7, 7);
+    ctx.fillStyle = '#8c9cc0';
+    ctx.fillRect(bx + 8, py + 6, 7, 2);
+    ctx.fillRect(bx + 8, py + 1, 1, 6);
     ctx.fillStyle = C.ink;
     ctx.fillRect(bx + 12, py + 3, 2, 2);
-    ctx.fillStyle = '#c8a030';
-    ctx.fillRect(bx + 8, py + 6, 6, 2);
-    ctx.fillStyle = '#f0d060';
+    ctx.fillStyle = '#8c9cc0';
     const swap = Math.floor(frame / 4) % 2 === 0;
     ctx.fillRect(bx + (swap ? 1 : 3), py + 20 - b, 5, 4 + b);
     ctx.fillRect(bx + (swap ? 8 : 6), py + 20 - b, 5, 4 + b);
+    // It leaks while it walks, the same as everything else in here does.
+    ctx.fillStyle = 'rgba(168,224,74,0.45)';
+    const puff = (Math.floor(frame / 4) % 4) + 1;
+    ctx.fillRect(bx - 2 - puff, py + 13 - b, puff + 2, 3);
   });
 }
 
@@ -203,40 +342,77 @@ export function drawFlyer(ctx, x, y, frame, facing) {
   });
 }
 
+/* --------------------------------- nielu -------------------------------- */
+
 /**
- * The plant is bolted to a pipe, so its breath is the one part of it that can
- * move without moving the pipe: the head draws itself up off the stem and
- * settles back down onto it. Its crown is the top of its box — that is what
- * a stomp lands on — so the crown is exactly what may not move.
+ * NIELU — the thing that comes up out of a pipe, and the only enemy in the
+ * game that a falling player must never touch.
+ *
+ * It is not a plant and it never really was one: a pipe in this game is a gut,
+ * and what lives in a gut is a gullet. So this is a throat — a ribbed,
+ * near-black tube that rears out of the mouth of the pipe and opens a ring of
+ * hard fangs at whatever is above it.
+ *
+ * **The whole design is in the top edge, and it is measured.** A player decides
+ * to jump a fifth of a second before landing, and at that distance the only
+ * thing about an enemy that is legible is the shape of its crown. So the fangs
+ * are drawn with `drawSpines` — the same function, not a copy of it, that puts
+ * points on the piikkiukko and on a bristling boss — because a game gets one
+ * vocabulary for *do not land on this* and every extra dialect costs a life to
+ * learn. Where the piikkiukko wears bone on its back, this one wears it around
+ * a hole.
+ *
+ * **What was wrong before, in one number.** The old drawing was a red dome with
+ * white spots, and the top of that dome was **fourteen unbroken pixels of flat
+ * landing surface out of a sixteen pixel box** — the widest crown of any enemy
+ * in the game, wider than the walker's ten, and the walker is the one you are
+ * *taught* to jump on in the screen before. The picture said land here in the
+ * largest type available and the rule took a power level for believing it. The
+ * other unstompable, the piikkiukko, measured one. `verify.mjs` now holds the
+ * two populations apart with four pixels of empty band between them, so this
+ * cannot come back quietly.
+ *
+ * The fangs never close and the gape never leaves — a gullet with its mouth
+ * shut is a picture of something at rest, and this is never at rest. What the
+ * cycle does instead is swallow: the throat pulls its lips down over the red
+ * and lets them back up.
+ *
+ * It is bolted to a pipe, so its breath is the one part of it that can move
+ * without moving the pipe: the head draws itself up off the throat and settles
+ * back down onto it. Its crown is the top of its box — that is what a falling
+ * player arrives at — so the crown is exactly what may not move.
  */
 function plantBody(ctx, x, y, frame, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   const b = lift;
-  ctx.fillStyle = C.greenDark;
-  ctx.fillRect(px + 5, py + 10 - b, 6, 22 + b);
-  ctx.fillStyle = C.green;
-  ctx.fillRect(px + 6, py + 10 - b, 3, 22 + b);
-  const open = Math.floor(frame / 12) % 2 === 0;
-  ctx.fillStyle = '#e04040';
-  ctx.fillRect(px + 1, py, 14, 11 - b);
-  // Polka dots, not eyes. The plant is a plant; giving it a face made it read
-  // as a character rather than a hazard. (Lead designer's call.)
-  ctx.fillStyle = '#f8f8f8';
-  ctx.fillRect(px + 2, py + 1, 2, 2);
-  ctx.fillRect(px + 11, py + 2, 3, 2);
-  ctx.fillRect(px + 6, py + 0, 2, 2);
-  ctx.fillStyle = '#a02020';
-  ctx.fillRect(px + 1, py, 14, 1);
-  if (open) {
-    ctx.fillStyle = '#701010';
-    ctx.fillRect(px + 3, py + 5 - b, 10, 4);
-    ctx.fillStyle = C.white;
-    for (let i = 0; i < 4; i++) ctx.fillRect(px + 3 + i * 3, py + 5 - b, 2, 2);
-  } else {
-    ctx.fillStyle = '#a02020';
-    ctx.fillRect(px + 2, py + 6 - b, 12, 3);
-  }
+  // The throat, running back down into the pipe. Eight wide rather than the
+  // old six: a stalk is thin and a gullet is not, and the extra two columns are
+  // also what carries this sprite's colour far enough from the night ground.
+  ctx.fillStyle = '#181030';
+  ctx.fillRect(px + 4, py + 12 - b, 8, 20 + b);
+  ctx.fillStyle = '#342c68';
+  for (let r = py + 14 - b; r < py + 32; r += 3) ctx.fillRect(px + 4, r, 8, 1);
+  // Wet, and it has to be: dry and dark reads as masonry, and masonry is
+  // scenery. A highlight down one side is the cheapest way to say membrane.
+  ctx.fillStyle = '#6858b0';
+  ctx.fillRect(px + 5, py + 12 - b, 1, 20 + b);
+  // The lips, which are the part that swallows.
+  const swallow = Math.floor(frame / 12) % 2 === 0;
+  ctx.fillStyle = '#201840';
+  ctx.fillRect(px + 1, py + 6, 14, 7 - b);
+  ctx.fillStyle = '#342c68';
+  ctx.fillRect(px + 1, py + 11 - b, 14, 2);
+  // The gullet. Never fully hidden — the red is the reason to keep away, and a
+  // hazard that switches off for half of its cycle is a hazard that gets
+  // somebody killed on the frame it looked harmless.
+  ctx.fillStyle = '#78103c';
+  ctx.fillRect(px + 3, py + 7, 10, swallow ? 5 - b : 3 - b);
+  ctx.fillStyle = '#c8286c';
+  ctx.fillRect(px + 5, py + 8, 6, swallow ? 3 - b : 1);
+  // And the fangs, last, because they are the answer to the only question a
+  // falling player is asking. Tips land exactly on the top of the box.
+  drawSpines(ctx, px + 1, py + 7, 14, 1, frame);
 }
 
 export function drawPlant(ctx, x, y, frame) {
