@@ -343,12 +343,20 @@ jälkeen ja paremmin tiedoin.
   bugi: **hylly ei ole maareitillä**, alla oleva lattia on kuljettava, eikä
   kenttä ole missään koossa mahdoton. Isoin pelaaja vain törmää näkymättömään
   kattoon jos kiipeää sinne.
-- **Bonushuoneita ei validoi mikään.** `rules.js` lukee vain sen kaistan jossa
-  aloitusmerkki on, joten taivas- ja luolakaistan huoneet menevät läpi
-  tarkistamatta — ja juuri siellä liian matala katto olisi pahin, koska
-  `secrets.js`:n oma sääntö on että bonus josta ei pääse pois on ansa.
-  Maailmojen 2–4 uudet huoneet on tarkistettu ajamalla moottoria kaikilla
-  kuudella koolla, mutta se oli käsityötä eikä portti.
+- ✔ **Bonushuoneet validoidaan nyt** (v26.08.09.11). Säännöt lajiteltu yleisiin
+  ja reittikohtaisiin, ja bonuskaistoille kolme omaa: sisääntulo, uloskäynti
+  **isoimmalla koolla**, ja lattia niiden välillä. Mitä ruudukosta ei voi
+  todistaa, on kirjattu `rules.js`:n alkuun — tarkistus voi jäädä huomaamatta
+  ansa mutta ei keksiä sellaista.
+
+  Löysi neljännen tapauksen jo tunnetusta pääntilamuodosta: `tomb_cave`n
+  `?B!B?`-rivi on kaksi riviä katon alla. **Ei ansa** — hyllylle ei pääse
+  isoimmalla koolla, joten sinne ei myöskään jää jumiin, ja huoneen lattia ja
+  reitti ovat vapaat kaikilla kuudella koolla. Pääntilasääntö rajattiin
+  tarkoituksella kaistan *maahan* eikä jokaiseen seisottavaan hyllyyn juuri
+  tästä syystä: "jokainen hylly" -versio hälyttäisi näistä neljästä eikä
+  mistään muusta, ja sääntö joka valittaa kolmesta linnakkeesta ja yhdestä
+  oikeasta bonushuoneesta vaimennetaan viikossa.
 - **Yön paletissa tiili ja maa ovat lähes sama ruskea** (27,8 / 34 %, heikoin
   pari kaikista kuudesta teemasta). Uusi kuvakieli paransi eron joka teemassa,
   mutta tämä jäljelle jäänyt on **paletti eikä muoto**, joten se ei korjaannu

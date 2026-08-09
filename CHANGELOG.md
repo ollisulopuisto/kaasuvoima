@@ -7,6 +7,43 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.11 — kaikki kolme kaistaa validoidaan
+
+`rules.js` tarkisti vain sen kaistan jossa aloitusmerkki on, joten **jokainen
+pelin bonushuone oli validoimatta** — ja juuri siellä liian matala katto on
+pahin, koska `secrets.js`:n oma sääntö on että bonus josta ei pääse pois on ansa.
+
+Työ ei ollut tarkistusten kopiointia vaan säännöiden lajittelua kahteen
+lajiin. **Yleiset** (rivien pituus, vihollisten jalansija, pääntila) pätevät
+missä tahansa kaistassa. **Reittikohtaiset** (kuilun leveys, seinän korkeus,
+ei portaita tyhjään, tehostus ensimmäisessä neljänneksessä) eivät tarkoita
+bonushuoneessa mitään — taivaskaistan lattiarivit ovat tyhjät, joten koko kaista
+lukisi yhtenä pohjattomana kuiluna ja `cave_room`in sivuseinä on seinä
+tarkoituksella. Ne olisivat taatusti vääriä hälytyksiä, ja väärä hälytys
+vaimennetaan viikossa, minkä jälkeen sääntö ei suojaa mitään.
+
+Kolme uutta sääntöä, jotka koskevat vain bonuskaistoja: **sisääntulo**
+(laillinen warp tai saumasta läpi kulkeva pavunvarsi), **uloskäynti isoimmalla
+koolla**, ja **lattia näiden kahden välillä**.
+
+**Epäsymmetria on koko juju:** sisääntulo tarkistetaan pienimmällä keholla,
+uloskäynti suurimmalla. Jokaisessa pelin salahuoneessa on `!`, joten se joka
+lähtee ei ole se joka tuli — sisään pudotaan pienenä, siellä kasvetaan, ja
+sitten putken on vedettävä 21×43.
+
+Warpin laillisuus lasketaan `LevelScene.tryWarp`in omista ehdoista (`fits`,
+`footingWithin`) eikä toisesta mielipiteestä.
+
+**Mitä ruudukosta ei voi todistaa, on kirjattu tiedoston omaan alkuun:**
+yhtenäisyys on ilmaa eikä kävelyä (ei painovoimaa, joten liian korkea hylly on
+yhä ilmaa), tiili on täytölle seinä vaikka iso pelaaja rikkoo sen, ja vain ne
+tiet tunnetaan jotka ruudukko nimeää. Tarkistus voi siis **jäädä huomaamatta
+ansa mutta ei keksiä sellaista.**
+
+Samalla korjattu: `*` (tähtilohko) puuttui `SOLID`-joukosta vaikka `TILE_INFO`
+antaa sille `solid: true`. Merkityksetöntä niin kauan kuin säännöt mittasivat
+lattioita, kantava heti kun ne kysyvät mahtuuko keho.
+
 ## v26.08.09.10 — tulos kulkee jakolinkissä
 
 Omistajan päätös: pistetaulu ei mene palvelimelle, mutta tulos kulkee linkissä.
