@@ -7,6 +7,58 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.40 — yön lauta näkyy vihdoin: 0,4 % → 17,8 %
+
+Pelin heikoin pari korjattu. Yön tiili oli `#7a5a30` ja yön maa on `#6a5030`:
+kaksi nimeä samalle ruskealle, mitattuna **0,4 %** erossa, eli 2-N:n rikottava
+lohko oli lattiaa vasten käytännössä näkymätön. Ongelma ehti ohjata kahta muuta
+päätöstä ennen kuin se korjattiin — juoksuhiekka jätettiin pois 2-N:stä ja
+pilviteema rakennettiin 25 %:n kynnykseen juuri ettei sama toistuisi.
+
+**Tiili liikkui, maa ei.** Omistajan päätös, ja se maksaa molempiin suuntiin:
+2-N:n lattia näyttää täsmälleen entiseltä, mutta koko ero on ostettava tiilen
+puolelta paletissa joka on tarkoituksella puristettu pimeään päähän. Uusi tiili
+on `#c88a62` (varjo `#684230`, valo `#f4c4a0`) — **kuunvalon haalistamaa
+lautaa**, vaaleampaa ja kuivempaa kuin maan lämmin multa, eli kaksi eri ainetta
+eikä saman aineen kaksi sävyä. Sama vastaus kuin luulaaksossa ja
+pilvikerroksessa, vain hillitympi, koska tässä maailmassa ei ole päivänvaloa
+myytävänä. Mitattu ero maahan **17,8 %**.
+
+### Kynnys 17 %, ja miksi ei jään 22,3 %
+
+Kynnys on **kaksi kertaa pelin heikoin selviytynyt pari** (aavikko 8,6 %). Jään
+22,3 % harkittiin ja hylättiin mitattuna: jään koko paletti asuu
+luminanssivälillä 145–224, eli sillä on 80 tasoa liikkumavaraa, kun taas yön
+paletti on puristettu pimeään päähän — ja juuri se puristus **on** se mikä
+tekee yöstä yön. Jään lukuun yltävä lauta mitattiin: se vaati luminanssin
+**142**, mikä on kirkkaampi kuin yön oma kivi (133,1) ja yhtä kirkas kuin
+keskipäivän aavikon tiili (141,0). Se olisi ollut numero ilman yötä.
+
+### "Vieläkö se on yö" on nyt mitattu eikä katsottu
+
+Uusi väite `verify.mjs`:ssä: **kova palikka on jokaisen kahdeksan teeman
+kirkkain kiinteä ruutu**, maata ja tiiltä myöten. Mitattuna kova/maa/tiili:
+ruoho 192/99/106, aavikko 187/166/141, yö 133/87/130, jää 224/204/146, tehdas
+162/110/102, luu 211/178/52, pilvi 233/227/118, linnake 171/138/116.
+
+Se on kaksi asiaa yhdessä. Fysiikan puolella kova palikka on se pinta jonka
+taivas valaisee kirkkaimmin, joten mikä tahansa sitä kirkkaampi ruutu tekee
+valonsa itse — ja juuri se on "hehkuu sisältäpäin" mitattuna eikä arvioituna.
+Luettavuuden puolella se on opittu merkki: **kirkkain on se jota ei voi
+rikkoa**, ja yksi teema joka kääntää sen nurin opettaa väärän lukutavan
+kaikkien muiden jäljiltä. Yön uudelle tiilelle jää pelivaraa 2,9 luminanssia.
+
+Sivutuote, joka on syytä sanoa ääneen: tiilen ja **kovan palikan** ero yössä
+putosi 23,5 %:sta 13,9 %:iin samalla mitalla. Se on mitan heikkous eikä uusi
+näkymättömyys — ero on nyt lämpimän ja kylmän välillä (72 tasoa siniessä),
+mitä kanavakohtainen keskiero aliarvioi ja mitä silmä lukee helpommin kuin
+kirkkauseroa. Luumaailman väite koko pelin selvimmästä parista pitää yhä:
+48,7 % vastaan yön 17,8 %.
+
+## v26.08.09.38 — laatikko kuvaputken ympäriltä pois, kuvasta ei pikseliäkään
+
+---
+
 ## v26.08.09.39 — laatikko kuvaputken ympäriltä pois, kuvasta ei pikseliäkään
 
 Omistajan havainto Chromella GitHub Pagesista: **"kuvaputkiruudun ympärillä on

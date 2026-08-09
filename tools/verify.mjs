@@ -9347,10 +9347,11 @@ const report = await page.evaluate(async () => {
      *
      * **Mitattu ennen kuin luuteemaa oli olemassa**, ja luku kannattaa lukea:
      * ruoho 9,3 %, aavikko 8,6 %, yö **0,4 %**, jää 22,3 %, tehdas 17,9 %,
-     * linnake 7,9 %. Yön tiili ja yön maa ovat siis käytännössä sama väri —
-     * `#7a5a30` vastaan `#6a5030` — eli 2-N:ssä rikottava lohko sulautuu
-     * maahan. Se on löydös eikä tämän työn korjattava: yön paletin muuttaminen
-     * muuttaisi valmiin kentän ulkonäön, ja se on oma päätöksensä.
+     * linnake 7,9 %. Yön tiili ja yön maa olivat siis käytännössä sama väri —
+     * `#7a5a30` vastaan `#6a5030` — eli 2-N:ssä rikottava lohko sulautui
+     * maahan. Se oli pitkään löydös eikä korjattava, koska yön paletin
+     * muuttaminen muuttaa valmiin kentän ulkonäön; omistaja päätti sen
+     * erikseen, ja korjaus on **tiilessä eikä maassa** (ks. oma kohtansa alla).
      *
      * Siksi väite on se jonka tämä työ omistaa ja joka on rikottavissa:
      * **luumaailman pari on koko pelin selvin.** Ei "riittävän hyvä" vaan
@@ -9431,6 +9432,73 @@ const report = await page.evaluate(async () => {
           (gaps.find((x) => x.theme === 'ice') || {}).gap.toFixed(1)} %, yö ${
           (gaps.find((x) => x.theme === 'night') || {}).gap.toFixed(1)} %`
           : 'ei pilviteemaa lainkaan');
+
+      /*
+       * JA YÖ. Pelin heikoin pari, 0,4 %, ja koko päivän tiedossa ollut ongelma:
+       * `#7a5a30` tiiltä `#6a5030` maata vasten on kaksi nimeä samalle ruskealle,
+       * eli 2-N:n rikottava lohko on käytännössä näkymätön. Se on ehtinyt ohjata
+       * kahta suunnittelupäätöstä — juoksuhiekka jätettiin pois 2-N:stä ja
+       * pilviteema rakennettiin 25 %:n kynnykseen juuri ettei tämä toistuisi.
+       *
+       * **Omistaja päätti että tiili vaalenee ja maa jää.** Se on tärkeä puoli:
+       * 2-N:n lattia näyttää tämän jälkeen täsmälleen siltä miltä ennenkin.
+       *
+       * Kynnys on 17 %, ja se on **kaksi kertaa pelin heikoin selviytynyt pari**
+       * (aavikko 8,6 %). Se ei ole jään 22,3 % eikä sitä yritetäkään: jään koko
+       * paletti asuu luminanssivälillä 145–224, eli sillä on 80 tasoa
+       * liikkumavaraa, kun taas yön paletti on tarkoituksella puristettu pimeään
+       * päähän — ja juuri se puristus **on** se mikä tekee yöstä yön. Kynnys ei
+       * myöskään ole "hiukan yli nykyisen": se on lähellä sitä maksimia jonka
+       * paletti antaa alla olevan pimeysehdon vallitessa, ja mitattu paras
+       * puumainen sävy sen alla oli 19,2 %.
+       */
+      const night = gaps.find((x) => x.theme === 'night');
+      expect('yön tiili erottuu yön omasta maasta',
+        !!night && night.gap >= 17,
+        night ? `yö ${night.gap.toFixed(1)} %, kynnys 17 % = 2 × aavikko `
+          + `(${(gaps.find((x) => x.theme === 'desert') || {}).gap.toFixed(1)} %) `
+          + `— ennen korjausta 0,4 %` : 'ei yöteemaa lainkaan');
+
+      /*
+       * Ja tässä on se puolisko joka estää helpon vastauksen.
+       *
+       * Vaalentamisella on raja, ja ilman rajaa tämän testin voisi läpäistä
+       * maalaamalla yön tiilen niin kirkkaaksi että se hehkuu sisältäpäin — yksi
+       * bugi vaihdettuna toiseen. Raja on mitattu eikä keksitty: **kova palikka
+       * on jokaisen kahdeksan teeman kirkkain kiinteä ruutu**, maata ja tiiltä
+       * myöten (mitattuna luminanssina ruoho 192,3 / 99,5 / 105,6; aavikko
+       * 186,7 / 166,2 / 141,0; yö 133,1 / 86,6; jää 224,3; tehdas 162,5;
+       * luu 211,0; pilvi 232,6; linnake 171,0).
+       *
+       * Se on kaksi asiaa yhdessä. Fysiikan puolella kova palikka on se pinta
+       * jonka taivas valaisee kirkkaimmin, joten mikä tahansa sitä kirkkaampi
+       * ruutu tekee valonsa itse — juuri se on "hehkuu sisältäpäin" mitattuna.
+       * Luettavuuden puolella se on opittu merkki: **kirkkain on se jota ei voi
+       * rikkoa.** Yksi teema joka kääntää sen nurin opettaa väärän lukutavan
+       * kaikkien muiden jäljiltä.
+       *
+       * Väite koskee kaikkia teemoja eikä vain yötä, koska sääntö on koko pelin
+       * eikä yhden korjauksen — ja koska juuri niin se pysyy voimassa myös
+       * seuraavan paletin kohdalla.
+       */
+      const lumOf = (ch, theme) => {
+        const m = meanOf(ch, theme);
+        return m ? 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2] : 0;
+      };
+      const lit = Object.keys(THEMES).map((theme) => ({
+        theme,
+        hard: lumOf(T.HARD, theme),
+        ground: lumOf(T.GROUND, theme),
+        brick: lumOf(T.BRICK, theme),
+      }));
+      const glowing = lit.filter((x) => x.hard <= x.brick || x.hard <= x.ground);
+      const nightLit = lit.find((x) => x.theme === 'night');
+      expect('kova palikka on jokaisen teeman kirkkain kiinteä ruutu',
+        glowing.length === 0,
+        `${lit.map((x) => `${x.theme} ${x.hard.toFixed(0)}/${x.ground.toFixed(0)}/`
+          + `${x.brick.toFixed(0)}`).join(', ')} (kova/maa/tiili)`
+        + (nightLit ? ` — yön tiilelle jää ${(nightLit.hard - nightLit.brick).toFixed(1)} `
+          + 'luminanssia pelivaraa' : ''));
     }
 
     /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
