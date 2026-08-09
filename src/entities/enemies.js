@@ -661,12 +661,27 @@ export class StinkCloud extends Enemy {
     return true;
   }
 
+  /**
+   * Kulmakarvat kertovat karkulaisen, eivät lajia.
+   *
+   * Molemmat kutsut antoivat tähän asti kirjaimellisen `true`:n, joten
+   * `stinkBody`n rauhallista ilmettä ei piirretty koskaan — ja se ilme oli
+   * juuri se paikka johon kuplasta karkatun pilven nopeutuminen (`escape`,
+   * `ANGRY_SPEED` 1,6×) kuului. Peli siis kiihdytti vihollisen ja jätti
+   * kertomatta sen: pelaaja näki saman naaman ennen ja jälkeen.
+   *
+   * Myös kuoleva pilvi piirtyy nyt omalla tilallaan eikä vihaisena. Se ei ole
+   * siisteyttä vaan §8: kaksi samannäköistä merkkiä opettaa lukemaan väärin,
+   * ja kulmakarvat jotka tarkoittavat sekä "nopeutui" että "kaatui" eivät
+   * tarkoita kumpaakaan.
+   */
   draw(ctx) {
+    const face = (g) => drawStinkCloud(g, this.x, this.y, this.tick, this.facing, this.angry);
     if (this.dying) {
-      this.drawFlipped(ctx, () => drawStinkCloud(ctx, this.x, this.y, this.tick, this.facing, true));
+      this.drawFlipped(ctx, () => face(ctx));
       return;
     }
-    this.drawSprite(ctx, (g) => drawStinkCloud(g, this.x, this.y, this.tick, this.facing, true));
+    this.drawSprite(ctx, face);
   }
 }
 

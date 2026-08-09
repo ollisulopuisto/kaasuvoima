@@ -7,6 +7,31 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.24 — ruskea pilvi näyttää vihdoin siltä miltä se käyttäytyy
+
+Kuolleiden lippujen auditoinnin (9.8.2026) **taso A, kohta 1** — ainoa löydös
+jonka pelaaja huomaa — on korjattu.
+
+`StinkCloud.draw` antoi `drawStinkCloud`ille kirjaimellisen `true`:n
+**molemmilta kutsupaikoiltaan**, joten `stinkBody`n rauhallista ilmettä ei
+piirtynyt kertaakaan. Sillä ilmeellä oli tehtävä: kuplasta karannut pilvi
+liikkuu `ANGRY_SPEED`in verran eli **1,6 kertaa nopeammin**, ja kulmakarvat
+olivat se paikka jossa peli kertoo sen. Kiihdytys tapahtui, kertominen ei.
+Nyt naama seuraa oliota, ja kaksi kertaa kymmenessä sekunnissa kohdattu
+vihollinen näyttää siltä kummalla tavalla se kulloinkin liikkuu.
+
+Myös **kuoleva pilvi piirtyy omalla tilallaan** eikä pysyvästi vihaisena. Se ei
+ole siisteyttä vaan [DESIGN.md](DESIGN.md) §8: kaksi samannäköistä merkkiä
+opettaa lukemaan väärin, ja kulmakarvat jotka tarkoittavat sekä "nopeutui" että
+"kaatui" eivät tarkoita kumpaakaan.
+
+Testi vertaa kahta muuten identtistä pilveä pikseli pikseliltä, koska juuri se
+ero oli nolla — ja mittaa sen: **ennen 0 px, nyt 8 px** (kaksi 4×1 kulmakarvaa,
+eikä mitään muuta). Vertailu tehdään framella 0, koska karkulainen myös vilkkuu
+(`get tint`) ja vilkkuva framen valinta olisi mitannut vilkun eikä ilmettä.
+
+---
+
 ## v26.08.09.23 — putken suunta kenttiin asti, ja kamera ennakoi nousun
 
 ### `WARP_COMPAT` on poissa
