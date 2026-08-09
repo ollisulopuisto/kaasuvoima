@@ -629,6 +629,21 @@ pystykamera olisi vierittänyt joka hypyllä (kamera pysyy jalkojen kaistassa).
 
 ## Myöhemmin
 
+- **Päätetty 9.8.2026: jokaiselle pomolle oma ääni.** Nyt niitä on yksi:
+  `Sfx.play('boss')` soi kaikille neljälle linnakevariantille, nyrkkeilijälle ja
+  jättiläiselle.
+
+  **Ääni voi kertoa kuka tämä on tai mitä juuri tapahtui, ja ne ovat eri työt.**
+  Päätös: **oma ääni, jaetut toimintaäänet.** Jokainen pomo saa oman äänensä —
+  tulon huudon, murahduksen osumasta, kuolinparkaisun — omalla korkeudellaan,
+  omilla formanteillaan ja omilla sanoillaan. Mutta iskuaalto, laskeutuminen ja
+  piikit kuulostavat samalta joka pomolla, jotta "tuo tarkoittaa iskuaaltoa"
+  opitaan kerran eikä kuutta kertaa. Tämä on sama sääntö joka on jo kirjattu
+  maahaniskun kohdalla: kaksi samannäköistä "jotain tapahtui" -signaalia
+  opettavat lukemaan väärää.
+
+  Rakentuu konsonanttien päälle (ks. muutosloki): puheääni jolla on vain
+  vokaaleja ei voi sanoa eri asioita, se voi vain huutaa eri korkeuksilla.
 - **Lisää pomovariaatioita** — nyt neljä, ja 5-F on uusinta 4-F:stä.
 - **Kenttäsäännöt käsintehdyille kentille pakollisiksi.** Nyt ne kaatavat ajon
   vain generoiduissa; kun maailmat 1–4 on korjattu, kytke sama koko peliin.
