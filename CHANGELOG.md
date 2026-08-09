@@ -7,6 +7,32 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.28 — kaksi teosta lisää vapautuneiden listalle
+
+Omistajan valinta, jatkoa kohdan 1 b avaukselle. Sävellyksiä ei ole vielä
+kirjoitettu; tämä on lista ja sen perustelu.
+
+**Edvard Grieg (k. 1907), *Vuorenkuninkaan luolassa* (Peer Gynt, 1875)** —
+vapautui 1.1.1978. Menee **luolakaistaan**, ja se on ainoa näistä kolmesta jolle
+on käyttö jo tänään: piilokaistat ovat olemassa (`cave_room`, `fac_cellar`,
+`tomb_cave`) eikä niillä ole omaa musiikkia. Teoksen oma rakenne on syy valita
+juuri se: se **kiihtyy**, eli se sanoo "älä jää tänne" ilman että kukaan
+kirjoittaa sitä ruudulle. Bonushuone josta ei ole kiire on bonushuone jossa
+pelaaja seisoo.
+
+**Modest Mussorgski (k. 1881), *Yö Autiovuorella* (1867), Rimski-Korsakovin
+sovitus 1886** — vapautui 1.1.1952, sovitus 1.1.1979. Menee **viimeiseen
+linnakkeeseen**, kun sellainen on.
+
+**Kaksi säveltäjää yhdellä rivillä ei ole huolimattomuutta**, ja tämä on koko
+kohdan 1 b idea toiminnassa: *Yö Autiovuorella* tunnetaan lähes yksinomaan
+Rimski-Korsakovin sovituksena, ja **sovitus on oma teoksensa omine
+suoja-aikoineen**. Juuri siinä "tämähän on vanhaa musiikkia" menee useimmiten
+pieleen. Molemmat ovat vapaita — mutta se on kaksi tarkistusta eikä yksi, ja
+siksi molemmat lukevat DESIGN.md:n taulukossa.
+
+---
+
 ## v26.08.09.27 — vapautunut sävelmistö sallitaan, nimettynä
 
 Sääntömuutos, ei koodimuutos. [DESIGN.md](DESIGN.md) sai kohdan **1 b**, ja
