@@ -22,7 +22,7 @@ export const WORLD2_LEVELS = {
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
-      'start', 'plat_float', 'power', 'walkers', 'spikes', 'pit_twin',
+      'start', 'plat_float', 'power', 'sun', 'spikes', 'pit_twin',
       'walkers', 'sky_run', 'coin_stack', 'pit_bridge', 'clouds', 'brick_wall',
       'heartburn_pair', 'plat_hi', 'shell', 'pit_l', 'power_hi', 'walkers',
       'note_pair', 'steps_down', 'run_up', 'goal', 'goal_end',
@@ -51,7 +51,7 @@ export const WORLD2_LEVELS = {
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
-      'start', 'flat', 'power', 'sun', 'lava_gap', 'walker',
+      'start', 'flat', 'power', 'walkers', 'lava_gap', 'walker',
       'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'soup_stop',
       'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'walkers', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',
