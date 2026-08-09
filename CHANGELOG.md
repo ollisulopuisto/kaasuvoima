@@ -47,6 +47,16 @@ tarkistettavissa ja "kaikki on itse tehtyä" ei ole — ja ankaran säännön ai
 vika on että se unohtuu kolmannella kerralla. Nyt ei unohdu. Raita ilman
 `source`-kenttää on omaa sävellystä eikä sitä kysytä miltään.
 
+**Ja se unohtui heti ensimmäisellä kerralla**, mikä on paras mahdollinen
+todiste portin tarpeesta. Griegin `cave` (v26.08.09.32) kirjoitettiin tuntia
+ennen kuin mekanismi oli olemassa, joten se oli hetken ajan juuri se tapaus
+jota kohta 1 b pelkää: lainattu sävelmä jonka nimeäminen on kiinni siitä että
+joku muistaa. `TRACK_SOURCES` ei nähnyt sitä lainkaan, eli portti raportoi
+tyytyväisenä **"1 lainattua raitaa"** kun niitä oli kaksi. `cave` sai
+`source`-kenttänsä samassa yhteydessä, ja luku on nyt **2**. Portti joka kattaa
+puolet tapauksista on huonompi kuin puuttuva portti, koska se näyttää kattavan
+kaikki.
+
 Yksi asia mitataan datasta eikä korvasta: **valssi on kolmijakoinen jokaista
 ääntä myöten.** Sekvensserin tahti on 16 askelta eli neljäjakoinen, joten
 kolmijakoisuus tehdään niin että jokainen ääni ja jokainen rumpukuvio on kuuden

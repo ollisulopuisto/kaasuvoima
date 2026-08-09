@@ -1613,6 +1613,17 @@ const TRACKS = {
    * the tonic. Two phrases and not four, because the piece has one tune.
    */
   cave: {
+    /* Sama ehto kuin `bone`illa, ja tämä raita on syy sanoa se ääneen: `cave`
+     * kirjoitettiin tuntia ennen kuin nimeämisestä tuli portti, joten se oli
+     * hetken ajan juuri se tapaus jota kohta 1 b pelkää — lainattu sävelmä
+     * jonka nimeäminen on kiinni siitä että joku muistaa. `TRACK_SOURCES` ei
+     * nähnyt sitä lainkaan, eli portti raportoi "1 lainattua raitaa" kun niitä
+     * oli kaksi. Portti joka kattaa puolet tapauksista on huonompi kuin
+     * puuttuva portti, koska se näyttää kattavan kaikki. */
+    source: {
+      composer: 'Edvard Grieg',
+      work: 'Vuorenkuninkaan luolassa',
+    },
     tempo: 88,
     /*
      * The accelerando, as a rate rather than a switch: `per` is how much of the
