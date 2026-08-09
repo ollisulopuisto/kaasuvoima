@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.39 — laatikko kuvaputken ympäriltä pois, kuvasta ei pikseliäkään
+
+Omistajan havainto Chromella GitHub Pagesista: **"kuvaputkiruudun ympärillä on
+laatikko"**. Se oli siellä, ja se oli meidän.
+
+### Syy, mitattuna eikä pääteltynä
+
+`styles.css` piirsi esityskankaalle suorakulmaisen renkaan (`box-shadow: 0 0 0
+2px #23233a`), ja `postfx.js`:n tynnyrivääristymä vetää kuvaa **sisäänpäin**
+(`uv += uv * offset`, ja rajan yli mennyt näyte piirtyy kehysvärillä). Suora
+rengas ja kaareva kuva eivät siis kohtaa missään muualla kuin reunojen
+keskellä. Mitattu esityskankaan pikseleistä: nurkassa kuva alkaa **15 pikselin**
+päästä elementin kulmasta (640×480 esityskoolla), reunan keskellä **0 pikselin**
+päästä. Rako on siis puhtaasti nurkkailmiö — täsmälleen se mikä
+ruutukaappauksessa näkyi.
+
+Renkaan puoli mitattiin oikeasta ruutukaappauksesta, koska rengas ei ole
+kankaalla vaan sivulla: kirkkain pikseli elementin ulkopuolisessa kahden
+pikselin nauhassa oli **37,6** luminanssia sivun oman taustan ollessa **10,9**
+— eli kolminkertainen viiva pimeän ympärillä. Korjauksen jälkeen sama mittaus
+antaa **9,8**, eli nauha on nyt taustaa tummempi (pudotusvarjo) eikä kirkkaampi.
+
+### Ratkaisu: kehys seuraa kuvaa, ei elementtiä
+
+Uusi luokka `#screen.curved`, jonka `PostFX._syncFrame` asettaa samasta
+tiedosta josta `uCurve`kin päätetään: rengas ja pyöristetyt kulmat lähtevät
+täsmälleen silloin kun varjostin taivuttaa kuvaa. Jäljelle jää pudotusvarjo,
+joka on pehmeä ja elementin ulkopuolella eikä sen reunassa.
+
+**Kolme kuvamoodia, kolme oikeaa vastausta.** `7` kiertää pois → hehku →
+kuvaputki, ja vain viimeinen kaartaa; ilman WebGL:ää mikään ei kaarra. Suora
+kuva pitää siis kehyksensä, ja se on oma väitteensä `verify.mjs`:ssä (mitattu
+37,6 vs. tausta 10,9 molemmissa suorissa moodeissa). Ilman sitä väitettä bugin
+olisi voinut "korjata" poistamalla rivin, ja silloin juuri se kone jolle koko
+varajärjestelmä on olemassa olisi saanut reunattoman kankaan mustalla sivulla.
+
+**Ylipyyhkäisy harkittiin ja hylättiin.** Varjostin voisi zoomata niin että
+kaareva kuva peittää elementin suorakulmion, mutta se maksaa kuvaa: nurkkien
+peittämiseen tarvittava kerroin 1/1,055 syö **8 px kuvan molemmilta laidoilta
+ja 6 px ylhäältä ja alhaalta** (lähdepikseleinä, 320×240), eli myös HUD-palkin
+alareunan — ja kuva vaihtaisi kokoa kesken efektikierron, mikä on oma bugi.
+Kehyksen pudottaminen maksaa nolla pikseliä kuvaa.
+
+---
+
 ## v26.08.09.38 — yksi ruutu, yksi uusi asia
 
 `tools/curriculum.mjs` on mitannut elokuun 9. päivästä lähtien missä kukin pelin

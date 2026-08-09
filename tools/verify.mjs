@@ -9657,6 +9657,176 @@ const report = await page.evaluate(async () => {
   await phone.close();
 }
 
+/* ------------------------ kehys kaarevan kuvan ympärillä ------------------ */
+/*
+ * Omistajan havainto Chromella: "kuvaputkiruudun ympärillä on laatikko".
+ *
+ * Syy on kahden asian törmäys, ja molemmat mitataan tässä ennen kuin kumpaakaan
+ * uskotaan. `styles.css` piirtää esityskankaalle suorakulmaisen renkaan
+ * (`box-shadow: 0 0 0 2px`), kun taas `postfx.js`:n tynnyrivääristymä vetää
+ * kuvan **sisäänpäin** (`uv += uv * offset`, ja rajan yli menevä näyte on
+ * kehystä). Suora rengas jää siis seisomaan kaarevan kuvan ympärille, ja rako
+ * niiden välissä on suurimmillaan nurkissa — juuri siellä missä se ruutukaappauksessa näkyy.
+ *
+ * Mittaus on kaksiosainen, koska rengas ei ole kankaalla vaan sivulla: kaarevuus
+ * luetaan esityskankaan pikseleistä (lähde valkoiseksi, yksi `present`, ja
+ * katsotaan mistä kuva alkaa), ja rengas oikeasta ruutukaappauksesta, jonka
+ * selain on jo yhdistänyt varjoineen päivineen. Kaappaus puretaan takaisin
+ * sivulla `createImageBitmap`illa — se on sama kaksikko joka repossa jo on
+ * (`tools/make-card.mjs` kuvaa elementin, testistö lukee pikseleitä).
+ *
+ * Vaatimus on nimenomaan ehdollinen eikä "poista kehys". Kuvamoodeja on kolme
+ * (`7`: pois → hehku → kuvaputki) ja vain kuvaputki kaartaa, eikä WebGL:tä
+ * vailla olevalla koneella kaareva kuva ole edes mahdollinen. Suora kuva saa
+ * siis pitää kehyksensä, ja se on toinen tämän kohdan väitteistä: pelkkä rivin
+ * poistaminen tiedostosta kaataa sen.
+ */
+{
+  const expect = (name, ok, detail = '') => {
+    report.checks.push({ name, ok, detail });
+    if (!ok) report.failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const glThere = await page.evaluate(async () => {
+    const { PostFX } = await import('/src/gfx/postfx.js');
+    return PostFX.mode === 'webgl';
+  });
+
+  if (!glThere) {
+    // Kelvollista WebGL:ää vailla ei ole kaarevaa kuvaa eikä siis tätä bugia.
+    // Ohitus sanotaan ääneen: hiljaa ohitettu testi on vihreä joka ei mittaa.
+    report.checks.push({
+      name: 'kaareva kuva ei kanna suoraa kehystä',
+      ok: true,
+      detail: 'ei WebGL-kontekstia, ei kaarevuutta — ohitettu',
+    });
+  } else {
+    /* 1. Kaarevuus: kuinka kauas kuva vetäytyy elementin reunasta.
+     *
+     * Lähde maalataan valkoiseksi, jotta ero kuvan ja kehysvärin
+     * (`vec4(0.02, 0.02, 0.03, 1.0)`) välillä on suurin mahdollinen eikä mittaus
+     * riipu siitä mikä kohtaus sattuu olemaan ruudulla. Nurkasta lähdetään
+     * lävistäjää pitkin sisään ja reunan keskeltä suoraan sisään: ero näiden
+     * kahden välillä **on** koko bugi, koska suora kehys sopii vain siihen
+     * jälkimmäiseen. */
+    const curve = await page.evaluate(async () => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      const game = window.sfb3;
+      const src = game.canvas;
+      const g = src.getContext('2d');
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, src.width, src.height);
+      PostFX.setPreset('crt');
+      PostFX.present();
+      const disp = PostFX.displayCanvas;
+      // Piirtopuskuria luetaan saman tehtävän sisällä kuin se piirrettiin:
+      // ilman `preserveDrawingBuffer`ia se on tyhjä heti kun selain on ehtinyt
+      // yhdistää ruudun.
+      const probe = document.createElement('canvas');
+      probe.width = disp.width;
+      probe.height = disp.height;
+      const p = probe.getContext('2d');
+      p.drawImage(disp, 0, 0);
+      const d = p.getImageData(0, 0, probe.width, probe.height).data;
+      const sum = (x, y) => {
+        const i = (y * probe.width + x) * 4;
+        return d[i] + d[i + 1] + d[i + 2];
+      };
+      // Kehysväri on summana 18; 40 on sen yläpuolella ja kaukana valkoisesta.
+      let diag = 0;
+      while (diag < probe.height / 2 && sum(diag, diag) < 40) diag++;
+      let mid = 0;
+      const my = probe.height >> 1;
+      while (mid < probe.width / 2 && sum(mid, my) < 40) mid++;
+      game.render();                     // takaisin siihen mitä ruudulla oli
+      return { w: probe.width, h: probe.height, diag, mid };
+    });
+    expect('kuvaputken kuva vetäytyy nurkista mutta ei reunojen keskeltä',
+      curve.diag >= 8 && curve.mid === 0,
+      `nurkassa ${curve.diag} px sisään, reunan keskellä ${curve.mid} px `
+      + `(${curve.w}x${curve.h})`);
+
+    /* 2. Rengas: kirkkain pikseli siinä kahden pikselin nauhassa joka jää heti
+     * elementin ulkopuolelle. Siellä asuu `box-shadow`in levitys, ja siellä
+     * asuu myös pudotusvarjo — joka vain tummentaa, joten sivun oma tausta on
+     * oikea vertailukohta molempiin suuntiin. */
+    const band = async (preset) => {
+      await page.evaluate(async (name) => {
+        const { PostFX } = await import('/src/gfx/postfx.js');
+        PostFX.setPreset(name);
+        window.sfb3.render();
+      }, preset);
+      await page.waitForTimeout(80);
+      const box = await page.evaluate(() => {
+        const el = document.getElementById('screen') || document.getElementById('game');
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      });
+      const pad = 6;
+      const png = await page.screenshot({
+        clip: {
+          x: Math.round(box.x - pad),
+          y: Math.round(box.y - pad),
+          width: Math.round(box.w + pad * 2),
+          height: Math.round(box.h + pad * 2),
+        },
+      });
+      return page.evaluate(async ({ b64, edge }) => {
+        const blob = await (await fetch(`data:image/png;base64,${b64}`)).blob();
+        const bmp = await createImageBitmap(blob);
+        const c = document.createElement('canvas');
+        c.width = bmp.width;
+        c.height = bmp.height;
+        const g = c.getContext('2d');
+        g.drawImage(bmp, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const lum = (x, y) => {
+          const i = (y * c.width + x) * 4;
+          return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        };
+        let max = 0;
+        for (let x = edge; x < c.width - edge; x++) {
+          max = Math.max(max, lum(x, edge - 1), lum(x, edge - 2),
+            lum(x, c.height - edge), lum(x, c.height - edge + 1));
+        }
+        for (let y = edge; y < c.height - edge; y++) {
+          max = Math.max(max, lum(edge - 1, y), lum(edge - 2, y),
+            lum(c.width - edge, y), lum(c.width - edge + 1, y));
+        }
+        const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number);
+        return { max, bg: 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2] };
+      }, { b64: png.toString('base64'), edge: pad });
+    };
+
+    const wasPreset = await page.evaluate(async () => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      return PostFX.preset;
+    });
+    const crt = await band('crt');
+    const flat = await band('pois');
+    const glow = await band('hehku');
+    await page.evaluate(async (name) => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      PostFX.setPreset(name);
+      window.sfb3.render();
+    }, wasPreset);
+
+    expect('kaareva kuva ei kanna suoraa kehystä',
+      crt.max <= crt.bg,
+      `kirkkain kehyspikseli ${crt.max.toFixed(1)}, sivun tausta ${crt.bg.toFixed(1)} `
+      + `— kuva vetäytyy nurkassa ${curve.diag} px`);
+
+    /* Ja toinen puolisko: suora kuva on suora, ja suoran kuvan ympärille kehys
+     * kuuluu. Ilman tätä väitettä bugin voisi "korjata" poistamalla rivin, ja
+     * silloin ilman WebGL:ää pelaava — sama kone jolle koko varajärjestelmä on
+     * olemassa — saisi reunattoman kankaan mustalla sivulla. */
+    expect('suora kuva pitää kehyksensä molemmissa muissa moodeissa',
+      flat.max > flat.bg && glow.max > glow.bg,
+      `pois ${flat.max.toFixed(1)}, hehku ${glow.max.toFixed(1)}, `
+      + `tausta ${flat.bg.toFixed(1)}`);
+  }
+}
+
 /* --------------------- haastelinkki oikeana sivunlatauksena --------------- */
 /*
  * Kolme asiaa haastelinkissä ei ole testattavissa funktiokutsuna, koska ne ovat
