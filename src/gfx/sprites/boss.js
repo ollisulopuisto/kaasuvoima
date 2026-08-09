@@ -162,6 +162,28 @@ function bossRank(r, bx, py, variant) {
       r(bx + ex, py + 9, 5, 2, goldDark);
       for (let i = 0; i < 3; i++) r(bx + ex + i * 2, py + 11, 1, 3, gold);
     }
+    return;
+  }
+  if (variant === 4) {
+    /*
+     * Taskukello ketjussa, ja sen viisarit osoittavat kahtatoista.
+     *
+     * The skeleton's rank is the hour. *Danse macabre* is midnight — the piece
+     * opens with twelve strokes, and the level's music opens with them too — so
+     * the one thing he wears is the clock that says so, and the two halves of
+     * the world's presentation point at the same joke without either of them
+     * saying it out loud.
+     *
+     * It obeys the rule every mark of rank in this file obeys: round, below the
+     * eyeline, and nothing above the head. Anything gold and pointed up there
+     * means exactly one thing in this game, and it is not "boss".
+     */
+    r(bx + 14, py + 22, 2, 2, goldDark);            // ketju
+    r(bx + 15, py + 24, 2, 2, goldDark);
+    r(bx + 12, py + 25, 8, 8, goldDark);            // kuori
+    r(bx + 13, py + 26, 6, 6, gold);
+    r(bx + 15, py + 27, 1, 3, goldDark);            // minuuttiviisari, ylös
+    r(bx + 15, py + 28, 2, 1, goldDark);            // tuntiviisari, lyhyt
   }
 }
 
@@ -206,11 +228,23 @@ function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose) {
 export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1, crown = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
-  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20'];
-  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c'];
+  /*
+   * Viisi väriä, ja viides on luuvalkoinen.
+   *
+   * `% 4` oli tässä ennen ja se olisi antanut varianttille 4 nyrkkeilijän
+   * violetin — eli uusi pomo olisi näyttänyt maailman 1 pomolta ilman että
+   * mikään olisi kertonut siitä. Modulo lasketaan nyt taulukon pituudesta,
+   * joten seuraava variantti joko saa oman värinsä tai kiertää tarkoituksella.
+   *
+   * Luurangon tumma sävy on **kylmä harmaa eikä ruskea**: luu vanhenee
+   * kellertäväksi, mutta ruudulla ruskea varjo vaalean päällä lukee likaisena
+   * puuna. Sama valinta kuin `THEMES.bone`issa, ja samasta syystä.
+   */
+  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc'];
+  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88'];
   const flashing = hurt && Math.floor(frame / 2) % 2 === 1;
-  const body = flashing ? '#e07070' : bodyColors[variant % 4];
-  const dark = flashing ? body : darkColors[variant % 4];
+  const body = flashing ? '#e07070' : bodyColors[variant % bodyColors.length];
+  const dark = flashing ? body : darkColors[variant % darkColors.length];
   const S = scale;
   const pose = crownPose(crown);
   // The hurt flash has to win over every local colour, or a boss taking a hit

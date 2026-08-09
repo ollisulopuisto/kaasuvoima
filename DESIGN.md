@@ -54,7 +54,7 @@ Käytetty sävelmistö, tässä on koko lista:
 | teos | säveltäjä | vapautui | missä |
 | --- | --- | --- | --- |
 | *Vuorenkuninkaan luolassa* (Peer Gynt, 1875) | Edvard Grieg, k. 1907 | 1.1.1978 | luolakaista (`cave`) |
-| *Danse macabre* op. 40 (1874) | Camille Saint-Saëns, k. 1921 | 1.1.1992 | luumaailma (tulossa) |
+| *Danse macabre* op. 40 (1874) | Camille Saint-Saëns, k. 1921 | 1.1.1992 | luumaailma (`bone`, maailma 6) |
 | *Yö Autiovuorella* (1867), Rimski-Korsakovin sovitus 1886 | Modest Mussorgski, k. 1881; N. Rimski-Korsakov, k. 1908 | 1.1.1952 / 1.1.1979 | viimeinen linnake (tulossa) |
 
 **Kaksi säveltäjää yhdellä rivillä ei ole huolimattomuutta.** *Yö
@@ -67,6 +67,14 @@ mutta se on kaksi tarkistusta eikä yksi, ja siksi molemmat lukevat tässä.
 20.9.1957, joten hänen teoksensa vapautuvat vasta **1.1.2028**. *Finlandia* ja
 *Karelia* ovat juuri se hylly johon suomalaisessa pelissä ensimmäisenä
 kurkotetaan, ja se on ainoa hylly josta ei vielä saa ottaa.
+
+**Nimeäminen on nyt portti eikä lupaus.** Raita kantaa lähteensä mukanaan
+(`source` `TRACKS`-taulussa, ks. `TRACK_SOURCES`), ja `tools/verify.mjs` vaatii
+että sekä säveltäjän nimi että teoksen nimi lukevat **sekä tässä tiedostossa
+että muutoslokissa**. Ehto oli tarkoituksella ankarampi kuin vanha sääntö, ja
+ankaran säännön ainoa vika on että se unohtuu kolmannella kerralla — nyt ei
+unohdu. Raita ilman `source`-kenttää on tätä peliä varten sävelletty eikä sitä
+kysytä miltään: sääntö koskee lainattua, ei kaikkea.
 
 > Kohta 1 b kuvaa miten ratkaisut on tehty. Se ei ole oikeudellinen neuvo, ja
 > suoja-ajat lasketaan maakohtaisesti.

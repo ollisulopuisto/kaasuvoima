@@ -141,6 +141,34 @@ export const THEMES = {
     hill: '#3a3450', hillDark: '#282238',
     cloud: '#5a5470',
   },
+  /**
+   * LUUMAAILMA — maailma 6, tehtaan jälkeen.
+   *
+   * Kaksi päätöstä, ja molemmat ovat vastaus siihen että teemakohtaiset
+   * ruutumuodot on peruttu (ROADMAP ✘ 9.8.2026). Kun siluetti on kaikissa
+   * maailmoissa sama, koko ero on aineessa ja värissä, eli aine kantaa sen
+   * työn jonka muoto olisi kantanut:
+   *
+   *   - **maa on luuta ja tiili on hautamultaa.** Ne eivät ole saman värin
+   *     kaksi sävyä vaan kaksi eri ainetta, ja `verify.mjs` mittaa eron: tässä
+   *     teemassa se on koko pelin suurin. Se ei ole makuasia — tiili hajoaa ja
+   *     maa ei, ja se on ainoa erotus jonka pelaaja ehtii tehdä hypyn aikana.
+   *   - **taivas on keskiyö.** Danse macabre on kello kaksitoista yöllä, ja
+   *     `drawBackdrop` osaa jo tähdet ja kuun — teema vain pyytää niitä.
+   *
+   * Vihreä putki on tarkoituksella jäänyt pois: luulaakson putki on patinoitua
+   * kuparia (`pipe`), koska ruohon vihreä putki hautausmaalla lukisi kasvina.
+   */
+  bone: {
+    surface: 'bone',
+    sky: ['#0a0a18', '#2c2440'],
+    ground: '#b8b09c', groundDark: '#6e6858', groundTop: '#efe8d4', groundTopDark: '#a8a08c',
+    brick: '#4a3020', brickDark: '#281a10', brickLight: '#6e4a30',
+    hard: '#e8e0cc', hardDark: '#8a8270', hardLight: '#fffaf0',
+    pipe: '#4a8a78', pipeDark: '#1e4a40', pipeLight: '#7cc0a8',
+    hill: '#2a2a40', hillDark: '#1a1a2c',
+    cloud: '#3c3a52',
+  },
   fortress: {
     surface: 'stone',
     sky: ['#101018', '#282840'],
@@ -226,6 +254,30 @@ function surfaceCap(ctx, x, y, th, tx, ty) {
       ctx.fillRect(x + 12, y + 1, 2, 2);
       break;
 
+    /*
+     * Luu: kalkkikuori, jonka alla on tummempi sauma, ja siitä nousee silloin
+     * tällöin sirpale. Sirpale on sama idea kuin ruohon korsi ja jään puikko —
+     * yksi pikseli ruudun ulkopuolella, jotta reuna ei ole viivotinsuora — mutta
+     * se osoittaa YLÖS eikä alas: jään puikko roikkuu, luunsirpale seisoo.
+     * Muotoa tämä ei muuta, koska muoto on yhä 16x16 laatta.
+     */
+    case 'bone':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 4);
+      ctx.fillStyle = th.hardLight;
+      ctx.fillRect(x, y, TILE, 1);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 4, TILE, 2);
+      if (n > 0.66) {
+        const sx = x + 2 + Math.floor(n * 11);
+        ctx.fillStyle = th.hardLight;
+        ctx.fillRect(sx, y - 2, 1, 2);
+        ctx.fillRect(sx, y - 3, 1, 1);
+        ctx.fillStyle = th.groundTopDark;
+        ctx.fillRect(sx + 1, y - 1, 1, 1);
+      }
+      break;
+
     default:                                 // stone
       ctx.fillStyle = th.groundTop;
       ctx.fillRect(x, y, TILE, 4);
@@ -270,6 +322,25 @@ function drawGround(ctx, x, y, th, openAbove, tx, ty) {
     }
     ctx.fillStyle = 'rgba(255,255,255,0.28)';
     ctx.fillRect(x + 1, y + 7, 3, 1);
+  } else if (th.surface === 'bone') {
+    /*
+     * Huokoinen luu: pystysuora ydinontelo ja sen ympärillä huokosia. Tämä on
+     * ainoa maapinta pelissä jonka kuvio on PYSTY — hiekan kerrokset, metallin
+     * paneelit ja kiven saumat ovat kaikki vaakaan — ja se on koko syy miksi
+     * luulaakso erottuu kävellessä eikä vain paikallaan seistessä: vaakakuvio
+     * liukuu kameran mukana, pystykuvio pilkkoutuu sarakkeisiin.
+     */
+    const n = hashNoise(tx, ty);
+    ctx.fillStyle = th.groundDark;
+    ctx.fillRect(x + 4 + Math.floor(n * 3), y + 6, 2, TILE - 6);
+    ctx.fillRect(x + 11, y + 8, 1, TILE - 8);
+    for (let i = 0; i < 4; i++) {
+      const hn = hashNoise(tx * 5 + i, ty * 9 + i * 2);
+      ctx.fillRect(x + 1 + Math.floor(hn * 13), y + 7 + Math.floor(hn * 7), 1, 1);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(x + 2, y + 9, 1, 4);
+    ctx.fillRect(x + 13, y + 7, 1, 5);
   } else if (th.surface === 'stone') {
     ctx.fillStyle = th.groundDark;
     const off = (tx + ty) % 2 ? 0 : 8;
@@ -489,6 +560,17 @@ function drawHard(ctx, x, y, th, tx, ty) {
     ctx.fillStyle = th.hardDark;
     ctx.fillRect(x + 10, y + 9, 3, 1);
     ctx.fillRect(x + 12, y + 6, 1, 4);
+  } else if (th.surface === 'bone') {              // hiottu luu, halkeama pituussuuntaan
+    ctx.fillStyle = th.hardDark;
+    ctx.fillRect(x + 7, y + 2, 1, 12);
+    ctx.fillRect(x + 5, y + 5, 2, 1);
+    ctx.fillRect(x + 8, y + 9, 2, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillRect(x + 3, y + 3, 2, 9);
+    if (hashNoise(tx, ty) > 0.6) {
+      ctx.fillStyle = th.hardDark;
+      ctx.fillRect(x + 11, y + 4, 2, 2);
+    }
   } else {
     ctx.fillStyle = th.hardDark;
     ctx.fillRect(x + 3, y + 3, 2, 2);

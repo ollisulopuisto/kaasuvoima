@@ -99,6 +99,32 @@ function cactus(g, x, baseY, h, body, dark) {
   g.fillRect(x + 5, baseY - h, 1, h);
 }
 
+/**
+ * Kylkiluut, luulaakson horisontin oma kasvi.
+ *
+ * Piirretään samalla `plant`-koneistolla kuin männyt ja kaktukset, koska se on
+ * juuri se paikka jossa maailma saa oman kasvustonsa — ja koska kylkiluut ovat
+ * täsmälleen sitä: jotain joka on kasvanut kukkulan rinteeseen ja jäänyt
+ * sinne. Selkäranka pystyyn, luut siitä ulos pareittain ja kaartuen alaspäin,
+ * ylin pari lyhin. Ei kalloa: kallo tekisi tästä hahmon, ja horisontti ei ole
+ * hahmo.
+ */
+function ribcage(g, x, baseY, h, body, dark) {
+  const pairs = Math.max(3, Math.round(h / 5));
+  g.fillStyle = dark;
+  g.fillRect(x, baseY - h, 2, h);                    // selkäranka
+  for (let i = 0; i < pairs; i++) {
+    const t = i / (pairs - 1);
+    const y = Math.round(baseY - h + 2 + t * (h - 5));
+    const w = Math.max(2, Math.round(3 + (1 - Math.abs(t - 0.55) * 1.6) * (h * 0.28)));
+    g.fillStyle = i % 2 ? dark : body;
+    g.fillRect(x - w, y, w, 1);
+    g.fillRect(x + 2, y, w, 1);
+    g.fillRect(x - w, y + 1, 1, 2);                  // kaarre alaspäin kummassakin päässä
+    g.fillRect(x + 1 + w, y + 1, 1, 2);
+  }
+}
+
 function deadTree(g, x, baseY, h, color) {
   g.fillStyle = color;
   g.fillRect(x + 3, baseY - h, 2, h);
@@ -118,7 +144,8 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, viewW, viewH);
 
-  const night = themeName === 'factory' || themeName === 'fortress' || themeName === 'night';
+  const night = themeName === 'factory' || themeName === 'fortress' || themeName === 'night'
+    || themeName === 'bone';
   if (night) {
     for (let i = 0; i < 44; i++) {
       const sx = hashNoise(i, 3);
@@ -139,6 +166,9 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
   else if (themeName === 'grass') disc(ctx, cx, cy, 12, '#fffde0', '#ffe98c', tick, true);
   else if (themeName === 'ice') disc(ctx, cx, cy, 11, '#ffffff', '#cfe6ff', tick, false);
   else if (themeName === 'night') disc(ctx, cx, cy, 13, '#fff8d8', '#e8d89a', tick, false);
+  // Luulaakson kuu on pelin suurin ja kylmin: Danse macabre on keskiyö, ja
+  // keskiyö on tässä maailmassa kellonaika eikä tunnelma.
+  else if (themeName === 'bone') disc(ctx, cx, cy, 16, '#f4f0e0', '#b0b4c8', tick, false);
   else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
 }
 
@@ -199,6 +229,35 @@ function weather(ctx, themeName, camX, viewW, viewH, tick) {
         ? `rgba(200,200,255,${0.10 + seed * 0.14})`
         : `rgba(255,228,180,${0.12 + seed * 0.18})`;
       ctx.fillRect(Math.round(x), Math.round(y), 3 + Math.round(seed * 4), 1);
+    }
+    return;
+  }
+
+  if (themeName === 'bone') {
+    /*
+     * Virvatulia: kylmiä valopisteitä jotka nousevat maasta ja sammuvat.
+     *
+     * Sama hiukkasmoottori kuin tehtaan kekäleillä ja tarkoituksella: molemmat
+     * nousevat, joten ero on väri ja tahti eikä liike. Kekäle on oranssi ja
+     * nopea, virvatuli sinivalkoinen ja hidas — ja se sykkii matkalla, mikä on
+     * se yksi asia jota kuumasta noussut hiukkanen ei tee.
+     */
+    for (let i = 0; i < 16; i++) {
+      const seed = hashNoise(i, 61);
+      const phase = hashNoise(i * 29 + 7, 71);
+      const cycle = 260 + Math.floor(phase * 160);
+      const age = (tick + Math.floor(phase * cycle)) % cycle;
+      const t = age / cycle;
+      const span = viewW + 40;
+      const x = ((seed * span - camX * 0.3 + Math.sin((tick + i * 17) / 34) * 9) % span + span)
+        % span - 20;
+      const y = viewH - 12 - t * (viewH * 0.7);
+      const pulse = 0.55 + 0.45 * Math.sin((tick + i * 40) / 9);
+      const a = (1 - t) * 0.7 * pulse;
+      ctx.fillStyle = `rgba(190,235,255,${a})`;
+      ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+      if (seed > 0.7) ctx.fillStyle = `rgba(140,200,230,${a * 0.5})`;
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) + 1, 3, 1);
     }
     return;
   }
@@ -532,6 +591,16 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0)
         if (n > 0.55) cactus(g, x, y, Math.round(13 + n * 11), body, dark);
         else deadTree(g, x, y, Math.round(11 + n * 8), mix(th.hill, '#000000', 0.45));
       }, 3, 28);
+    } else if (theme === 'bone') {
+      /* Vaaleaa luuta tummaa kukkulaa vasten, eli päinvastoin kuin muualla,
+       * missä kasvusto on maisemaa tummempaa. Se on tarkoitus: keskiyön
+       * siluetti erottuu vain jos se on taustaansa VAALEAMPI. */
+      const body = mix(th.hill, '#e8e0cc', 0.62);
+      const dark = mix(th.hill, '#e8e0cc', 0.3);
+      plant((x, y, n) => {
+        if (n > 0.5) ribcage(g, x, y, Math.round(16 + n * 12), body, dark);
+        else deadTree(g, x, y, Math.round(12 + n * 9), body);
+      }, 3, 30);
     }
   });
   tileStrip(ctx, nearStrip, -camX * 0.5, groundY - NEAR_H, viewW);
@@ -540,7 +609,10 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0)
   const haze = ctx.createLinearGradient(0, groundY - 30, 0, groundY);
   haze.addColorStop(0, 'rgba(0,0,0,0)');
   haze.addColorStop(1, theme === 'ice' ? 'rgba(200,225,255,0.35)'
-    : theme === 'desert' ? 'rgba(240,190,120,0.3)' : 'rgba(20,30,20,0.22)');
+    : theme === 'desert' ? 'rgba(240,190,120,0.3)'
+      // Hautausmaan sumu makaa maassa: kylmä ja selvästi paksumpi kuin muualla,
+      // koska se on ainoa asia joka erottaa keskiyön taustan mustasta ruudusta.
+      : theme === 'bone' ? 'rgba(150,160,190,0.34)' : 'rgba(20,30,20,0.22)');
   ctx.fillStyle = haze;
   ctx.fillRect(0, groundY - 30, viewW, 30);
 

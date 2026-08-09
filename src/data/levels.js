@@ -5,6 +5,7 @@ import { WORLD2_LEVELS } from './levels/world2.js';
 import { WORLD3_LEVELS } from './levels/world3.js';
 import { WORLD4_LEVELS } from './levels/world4.js';
 import { WORLD5_LEVELS } from './levels/world5.js';
+import { WORLD6_LEVELS } from './levels/world6.js';
 
 /**
  * A level is a chunk playlist plus presentation data. `boss: true` means the
@@ -22,6 +23,7 @@ const LEVEL_DEFS = {
   ...WORLD3_LEVELS,
   ...WORLD4_LEVELS,
   ...WORLD5_LEVELS,
+  ...WORLD6_LEVELS,
 };
 
 const cache = new Map();

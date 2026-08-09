@@ -636,11 +636,18 @@ const report = await page.evaluate(async () => {
     }
 
     /* 10. Pomon piikkisykli voittaa maahaniskun täsmälleen kuten tallauksen —
-     *     ja avoimena ottaa osuman täsmälleen kuten tallauksesta. */
-    {
+     *     ja avoimena ottaa osuman täsmälleen kuten tallauksesta.
+     *
+     *     Kahdella pomolla eikä yhdellä, ja jälkimmäinen on tässä siksi että
+     *     luurankopomo (6-F, variantti 4) on ensimmäinen uusi pomo maahaniskun
+     *     jälkeen. Sääntö "piikit voittavat senkin" on kirjoitettu
+     *     `poundImpact`iin `e.spiky`-lipun varaan eikä varianttiluetteloon, eli
+     *     sen *pitäisi* päteä uuteen pomoon ilmaiseksi — ja juuri sellainen
+     *     väite kannattaa mitata, koska se on se joka rapautuu hiljaa. */
+    for (const bossLevel of ['1-F', '6-F']) {
       const bossDive = (spiky) => {
         reset({ type: 'shroom', level: 3 });
-        const s = new LevelScene(game, '1-F');
+        const s = new LevelScene(game, bossLevel);
         game.setScene(s);
         const i = mkInput();
         const boss = s.entities.find((e) => e.constructor.name === 'Boss');
@@ -666,7 +673,7 @@ const report = await page.evaluate(async () => {
       };
       const spikyRun = bossDive(true);
       const openRun = bossDive(false);
-      expect('pomon piikit voittavat maahaniskun, avoin pomo ottaa siitä osuman',
+      expect(`${bossLevel}: pomon piikit voittavat maahaniskun, avoin pomo ottaa siitä osuman`,
         spikyRun.hits === 0 && spikyRun.lost === 1 && openRun.hits >= 1 && openRun.lost === 0,
         `piikeissä osumia ${spikyRun.hits} ja pelaaja menetti ${spikyRun.lost} tasoa`
         + `, avoinna osumia ${openRun.hits} ja menetti ${openRun.lost}`);
@@ -1072,11 +1079,11 @@ const report = await page.evaluate(async () => {
      * `drawTerrain`in omista suorakulmioista, ruudun yläreunasta laskien:
      *   T puu     y+1..y+14   P mänty  y+1..y+14   M vuori  y+3..y+15
      *   C kaktus  y+3..y+14   R kivi   y+8..y+13   " pensas y+6..y+13
-     *   E koneisto y+1..y+14
+     *   E koneisto y+1..y+14  K kallo  y+4..y+14
      * Polun pisteen oma muste on y+5..y+10 ruudun sisällä, joten jokainen näistä
      * osuu siihen suoraan jos se seisoo samassa ruudussa.
      */
-    const TALL = 'TPMCR"E';
+    const TALL = 'TPMCR"EK';
     const bare = new RegExp(`[${TALL}]`, 'g');
 
     const rgbaOf = (paint) => {
@@ -1191,7 +1198,7 @@ const report = await page.evaluate(async () => {
       }
     }
     expect('yksikään puu, kivi tai koneisto ei seiso polulla eikä sen vieressä',
-      planted.length === 0, planted.length ? `${planted.length}: ${planted.slice(0, 6).join(' ')}` : '5 maailmaa');
+      planted.length === 0, planted.length ? `${planted.length}: ${planted.slice(0, 6).join(' ')}` : `${WORLDS.length} maailmaa`);
 
     /* Ja sama pikseleinä: piirretään maasto kahdesti, kerran oikeana ja kerran
      * ilman korkeaa kalustoa, ja erotus ON kaluston muste. Sitten mitataan
@@ -1909,6 +1916,188 @@ const report = await page.evaluate(async () => {
       stumpy.slice(0, 3).join(' / ') || 'ei yhtään');
     expect('the same beanstalk fixture with none of the faults passes',
       grown.length === 0, grown.slice(0, 3).join(' / '));
+  }
+
+  /* ------------------------------ luumaailma ------------------------------ */
+  /*
+   * Maailma 6, ja kolme väitettä joita se ei saa rikkoa. Ne ovat tässä eikä
+   * hajallaan siksi että ne ovat sama väite kolmesta suunnasta: luumaailma on
+   * oma maailmansa eikä toisen maailman uudelleenmaalaus.
+   */
+  {
+    const { BONE_CHUNKS } = await import('/src/data/chunks/bone.js');
+    const { FACTORY_CHUNKS } = await import('/src/data/chunks/factory.js');
+
+    /*
+     * 1. LUUPALIKOIDEN EHTO, ja se on tehtaan ehdon peilikuva.
+     *
+     * `chunks/factory.js` perustelee olemassaolonsa yhdellä lauseella: jokaisella
+     * sen palikalla on katto, koska tehdas on sisätila, ja avotaivaan kenttään
+     * pudotettu tehdaspalikka jättäisi katon roikkumaan tyhjän päälle. Luumaailma
+     * on tehtaan jälkeen ja sen sääntö kulkee toiseen suuntaan:
+     *
+     *   **luulaaksossa ei ole kattoa, eikä siellä roiku mikään.**
+     *
+     * Kaksi puoliskoa, ja molemmat mitataan alla:
+     *
+     *   - **taivas on auki**: rivit 0..4 ovat tyhjiä jokaisessa luupalikassa.
+     *     Se on se puolisko joka kieltää lainaamisen: `fac_*` ei kelpaa tänne,
+     *     koska sen katto peittäisi juuri sen kuun ja tähdet joiden takia tämä
+     *     maailma näyttää keskiyöltä. Sääntö on siis aita edellisen maailman
+     *     ympärillä eikä tämän — ja se on tarkoituksellisesti eri asia kuin
+     *     tehtaan aita, koska kysymys "kummasta suunnasta lainataan" on eri
+     *     kysymys kuin "saako lainata".
+     *   - **luu seisoo**: jokainen `X` ja jokainen `#` lattiarivien yläpuolella
+     *     nojaa johonkin suoraan allaan. Luuranko on määritelmän mukaan asia
+     *     joka kannattaa itsensä, joten luulaakson pystysuunta tulee maasta
+     *     ylöspäin eikä katosta alaspäin. Lohkot, laudat ja kolikot leijuvat
+     *     kuten kaikkialla muualla — ne eivät ole luuta.
+     *
+     * Molemmat ovat rikottavissa yhdellä huolimattomalla rivillä, ja kumpikaan
+     * ei näkyisi missään muussa testissä: kattopalikka luukentässä on täysin
+     * kelvollinen kenttä `rules.js`:n mielestä.
+     */
+    const SKY_ROWS = 5;
+    const STRUCTURE = '#X';
+    const noSky = [];
+    const floating = [];
+    for (const [name, chunk] of Object.entries(BONE_CHUNKS)) {
+      for (let y = 0; y < SKY_ROWS; y++) {
+        if (/\S/.test(chunk.rows[y])) noSky.push(`${name} rivi ${y}`);
+      }
+      for (let y = 0; y < 13; y++) {
+        for (let x = 0; x < chunk.w; x++) {
+          if (!STRUCTURE.includes(chunk.rows[y][x])) continue;
+          if (!STRUCTURE.includes(chunk.rows[y + 1][x])) floating.push(`${name} ${x},${y}`);
+        }
+      }
+    }
+    /* Tehtaan puoli luetaan kuudelta ylimmältä riviltä eikä pelkältä rivi
+     * nollalta: `fac_cellar` ja `fac_loft` ovat kellari ja ullakko, ja niiden
+     * katto on rivillä 5. Ne ovat yhtä lailla sisätilaa — mitattuna 10/12
+     * roikkuisi rivillä 0 ja 12/12 roikkuu kuuden ylimmän sisällä. */
+    const ceilinged = Object.values(FACTORY_CHUNKS)
+      .filter((c) => c.rows.slice(0, 6).some((row) => /\S/.test(row))).length;
+    expect('luupalikoissa on taivas auki ja tehdaspalikoissa katto',
+      noSky.length === 0 && ceilinged === Object.keys(FACTORY_CHUNKS).length,
+      `${Object.keys(BONE_CHUNKS).length} luupalikkaa, kattoja ${noSky.length}`
+      + ` — tehtaassa katto ${ceilinged}/${Object.keys(FACTORY_CHUNKS).length}:ssa`);
+    expect('luumaailmassa mikään luu ei roiku ilmassa',
+      floating.length === 0,
+      floating.length ? `${floating.length}: ${floating.slice(0, 5).join(' ')}` : 'kaikki nojaa maahan');
+  }
+
+  /*
+   * 2. JOKAISEN MAAILMAN KÄYRÄ NOUSEE JA SIINÄ ON TASAN YKSI NOTKO.
+   *
+   * `tools/difficulty.mjs` on tulostanut tämän rivin pitkään, mutta tulostus ei
+   * ole portti: uuden maailman voisi committoida suoraviivaisena tai laskevana
+   * eikä mikään sanoisi mitään ennen kuin joku katsoo. Nyt sanoo.
+   *
+   * Luvut luetaan `src/data/difficulty.js`:stä, ei mitata täällä uudestaan —
+   * sen tuoreuden tarkistaa jo oma testinsä ajon lopussa, joten kahta mittaria
+   * ei tarvita. Linnake jätetään pois kävelystä samasta syystä kuin työkalussa:
+   * se on aina viimeinen ja aina huippu, joten sen kanssa jokainen maailma
+   * "nousee" ilmaiseksi.
+   */
+  {
+    const { tiersOf, tierScore } = await import('/src/data/worlds.js');
+    const { DIFFICULTY } = await import('/src/data/difficulty.js');
+    const shapes = WORLDS.map((w) => {
+      const walk = tiersOf(w).filter((t) => !t.fortress);
+      const seq = walk.map((t) => tierScore(w, t, DIFFICULTY));
+      const dips = seq.slice(1).filter((v, i) => v < seq[i]).length;
+      return {
+        id: w.id, seq, dips, rises: seq[seq.length - 1] > seq[0],
+      };
+    });
+    const bad = shapes.filter((s) => s.dips !== 1 || !s.rises);
+    expect('jokaisen maailman vaikeuskäyrä nousee ja notkahtaa tasan kerran',
+      bad.length === 0,
+      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa`)
+        .join(', '));
+  }
+
+  /*
+   * 3. LUUMAAILMAN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
+   *
+   * DESIGN.md kohta 5 sanoo sen näin: tehostus avaa paikkoja, ei kenttää.
+   * `tools/playable.mjs` mittaa juuri tätä koko pelistä, mutta se on raportti
+   * eikä portti, ja siinä on jo kolme tunnettua nimeä. Uusi maailma ei saa
+   * liittyä siihen listaan huomaamatta, joten sen kolme numeroitua kenttää ja
+   * linnake ajetaan täällä ja tulos on kaatava.
+   *
+   * Botti on sama tyhmä botti: juoksee oikealle ja hyppää. Viholliset ja
+   * vaarat poistetaan, koska kysymys on maastosta — vihollisen alle jääminen on
+   * eri testi ja se on jo olemassa. Tehostuksia ei anneta yhtään: voimataso 0
+   * on se koko jolle lupaus on annettu.
+   */
+  {
+    const bone = levelIds().filter((id) => id.startsWith('6-'));
+    const rows = [];
+    for (const id of bone) {
+      reset({ type: null, level: 0 });
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      if (/F$/.test(id)) s.bossDefeated = true;   // ovi on maali; tappelu on eri testi
+      s.time = 9999;
+      const i = mkInput();
+      let prevJump = false;
+      let hold = 0;
+      let maxX = s.player.x;
+      for (let f = 0; f < 7000 && !finished; f++) {
+        const p = s.player;
+        const footY = Math.floor((p.y + p.h) / 16);
+        const aheadX = Math.floor((p.x + p.w + 6) / 16);
+        const solid = (tx, ty) => isSolid(s.tileAt(tx, ty));
+        const lethal = (tx, ty) => '^W'.includes(s.tileAt(tx, ty));
+        const wall = solid(aheadX, footY - 1) || solid(aheadX, footY - 2);
+        let obstacle = -1;
+        for (let d = 0; d <= 5 && obstacle < 0; d++) {
+          const tx = aheadX + d;
+          if (lethal(tx, footY) || lethal(tx, footY - 1)) obstacle = d;
+          else if (!solid(tx, footY) && !solid(tx + 1, footY)) obstacle = d;
+        }
+        const takeOff = p.onGround && (wall || (obstacle >= 0 && obstacle <= 2));
+        if (takeOff) {
+          let span = 0;
+          if (obstacle >= 0) {
+            const start = aheadX + obstacle;
+            while (span < 14 && (!solid(start + span, footY)
+              || lethal(start + span, footY) || lethal(start + span, footY - 1))) span++;
+          }
+          hold = wall ? 16 : Math.max(5, Math.min(16, 3 + span * 1.1)) | 0;
+        }
+        const wantJump = takeOff || (hold > 0 && p.vy < 0);
+        if (hold > 0) hold--;
+        i.held = blank();
+        i.held.right = true;
+        i.held.run = true;
+        i.held.jump = wantJump;
+        i.pressed = blank();
+        i.pressed.jump = takeOff && !prevJump;
+        prevJump = wantJump;
+        s.update(i);
+        maxX = Math.max(maxX, p.x);
+        if (s.state === 'dead') break;
+      }
+      rows.push({
+        id,
+        cleared: !!(finished && finished.cleared),
+        reach: Math.round((maxX / (s.w * 16)) * 100),
+        stopped: s.state === 'dead' ? `kuoli sarakkeessa ${Math.floor(s.player.cx / 16)}`
+          : `jumissa ${Math.round((maxX / (s.w * 16)) * 100)} %`,
+      });
+    }
+    const stuck = rows.filter((r) => !r.cleared);
+    expect('luumaailman jokainen kenttä on läpäistävissä voimatasolla 0',
+      rows.length === 4 && stuck.length === 0,
+      rows.length
+        ? `${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+        : 'ei 6-kenttiä lainkaan');
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -3829,7 +4018,7 @@ const report = await page.evaluate(async () => {
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
-    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F'];
+    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F'];
 
     const arena = (power) => {
       reset(power);
@@ -4013,6 +4202,87 @@ const report = await page.evaluate(async () => {
       }
       expect('the level clock holds far more windows than the boss has health',
         worst >= 4, `${rows.join(' ')} — huonoin ${worst.toFixed(1)} per osuma`);
+    }
+
+    /* ------------------------------ luuranko ----------------------------- */
+    /*
+     * LUURANKOPOMO, 6-F, `bossVariant: 4`.
+     *
+     * Kaksi asiaa erottaa hänet muista pomoista, ja molemmat mitataan tässä
+     * eikä uskota:
+     *
+     *   1. **Osuma hajottaa hänet.** Muut pomot ottavat osuman ja kiihtyvät;
+     *      luuranko lentää palasiksi ja kokoaa itsensä, ja se näkyy kahtena
+     *      iskuaaltona jotka lähtevät hänestä ulos. Aalto on olemassa oleva
+     *      `Shockwave` — sama esine jonka pelaaja jo osaa lukea "väistä" —
+     *      eikä uusi entiteetti, joten `REGISTRY` ja tilatallennus pysyvät
+     *      koskemattomina. Nyrkkeilijä on verrokki: hän ei tee tätä.
+     *   2. **Hänellä on oma ääni.** `VOICES` on ollut taulussa yhtä puhujaa
+     *      varten siitä asti kun se kirjoitettiin, ja sen oma kommentti sanoo
+     *      että ääni jota kukaan ei puhu on sama virhe kuin ääni jota mikään ei
+     *      soita. Luuranko on luonteva ensimmäinen toinen puhuja: hän nauraa
+     *      **silloin kun kruunu lähtee päästä**, eli täsmälleen sillä hetkellä
+     *      kun häneen voi taas osua. Se on ilkkumista eikä varoitus, ja siksi
+     *      se saa olla oma äänensä — varoitusäänet pysyvät jaettuina, kuten
+     *      `VOICES`in kommentti vaatii.
+     *
+     * Naurun ajoitus mitataan soittolokista eikä lipusta: `Sfx.play` kääritään
+     * hetkeksi, pomoa ajetaan monta piikkisykliä, ja lokista katsotaan että
+     * ääni tuli kerran sykliä kohti ja tuli oikeassa vaiheessa.
+     */
+    {
+      const { VOICES, Sfx: audio } = await import('/src/core/audio.js');
+      reset();
+      const s = new LevelScene(game, '6-F');
+      game.setScene(s);
+      const bone = s.entities.find((e) => e instanceof E.Boss);
+      const boxerScene = new LevelScene(game, '1-F');
+      const boxer = boxerScene.entities.find((e) => e instanceof E.Boss);
+
+      const waves = (sc) => sc.entities.filter((e) => e instanceof E.Shockwave).length;
+      const hit = (sc, b) => {
+        b.spikePhase = 'open';
+        b.spikeTimer = 1e6;
+        b.invuln = 0;
+        const before = waves(sc);
+        b.stomp();
+        return waves(sc) - before;
+      };
+      const boneWaves = hit(s, bone);
+      const boxerWaves = hit(boxerScene, boxer);
+      expect('luurankoon osuminen hajottaa hänet — kaksi aaltoa, nyrkkeilijällä ei yhtään',
+        boneWaves === 2 && boxerWaves === 0 && bone.variant === 4,
+        `luuranko ${boneWaves} aaltoa, nyrkkeilijä ${boxerWaves}, variantti ${bone.variant}`);
+
+      /* Ja ääni: oma puhuja, matalampi kuin pelaaja, ja se kuuluu vasta kun
+       * kruunu on pois — ei sitä laittaessa, koska silloin se olisi toinen
+       * varoitus samasta asiasta (DESIGN.md kohta 8). */
+      const log = [];
+      const realPlay = audio.play;
+      audio.play = (name) => { log.push({ name, phase: bone.spikePhase }); };
+      /* Aloitus avoimesta vaiheesta, jotta laskurit ovat vertailukelpoiset:
+       * yksi sykli on tasan yksi `spikes` (kruunu päähän) ja yksi nauru
+       * (kruunu pois). Piikkivaiheesta aloittaminen antaisi yhden naurun
+       * enemmän kuin syklejä, mikä olisi totta mutta mittaisi aloitusta. */
+      bone.hp = bone.maxHp;
+      bone.spikePhase = 'open';
+      bone.spikeTimer = 2;
+      bone.doffTimer = 0;
+      for (let f = 0; f < 900; f++) bone.updateSpikes();
+      audio.play = realPlay;
+      const laughs = log.filter((e) => e.name === 'luuranko');
+      /* Yksi nauru per kruunun riisuminen, ja riisuminen tunnistetaan siitä
+       * äänestä joka sitä on aina merkinnyt (`pipe`). Näin luku ei riipu siitä
+       * mihin kohtaan sykliä silmukan framebudjetti sattuu loppumaan. */
+      const doffs = log.filter((e) => e.name === 'pipe').length;
+      const donned = log.filter((e) => e.name === 'spikes').length;
+      expect('luurangolla on oma ääni, ja hän nauraa vasta kun kruunu on pois',
+        !!VOICES.luuranko && VOICES.luuranko.pitchScale < VOICES.player.pitchScale
+        && laughs.length > 0 && laughs.length === doffs
+        && laughs.every((e) => e.phase === 'open'),
+        `naurua ${laughs.length}, kruunu pois ${doffs} kertaa, päähän ${donned}, vaiheet `
+        + `${[...new Set(laughs.map((e) => e.phase))].join('/') || '-'}, `
+        + `sävelkorkeus ${VOICES.luuranko ? VOICES.luuranko.pitchScale : 'ei ääntä'}`);
     }
 
     /* ------------------------ jättiläisen kannet ------------------------ */
@@ -7659,6 +7929,58 @@ const report = await page.evaluate(async () => {
     expect('every level names a real music track', missing.length === 0, missing.join(', '));
   }
 
+  /*
+   * DANSE MACABRE, ELI SE ETTÄ VALSSI ON DATASSA EIKÄ KOMMENTISSA.
+   *
+   * Luumaailman raita on Saint-Saëns'n *Danse macabre* (1874, vapautunut
+   * 1.1.1992), ja DESIGN.md kohta 1 b sanoo millä ehdoilla: sävelet käsin
+   * `TRACKS`-tauluun, ei äänitettä eikä nuottilaitosta, ja lähde nimetään.
+   * Nimeäminen tarkistetaan ajon lopussa tiedostoista; tässä tarkistetaan se
+   * mikä on tarkistettavissa itse datasta.
+   *
+   * Kaksi väitettä, ja molemmat ovat sellaisia jotka voi rikkoa vahingossa
+   * yhdellä nuotilla eikä kumpikaan näkyisi missään muualla:
+   *
+   *   - **Teos on kolmijakoinen.** Sekvensseri laskee kuudestoistaosia ja sen
+   *     tahti on 16 askelta eli neljäjakoinen. Valssi tehdään tässä niin että
+   *     jokainen ääni ja jokainen rumpukuvio on kuuden askeleen monikerta —
+   *     kuusi kuudestoistaosaa on yksi 3/4-tahti. Yksikin ääni väärän
+   *     mittaisena, ja raita alkaa vaeltaa omaa tahtiaan muita vasten. Se
+   *     kuulostaisi rikkinäiseltä eikä väärältä, mikä on juuri se vika jota
+   *     kukaan ei osaa etsiä.
+   *   - **Keskiyö lyö kaksitoista.** Teos alkaa kahdellatoista lyönnillä, ja
+   *     ne ovat tässä ensimmäisenä fraasina. Se on koko sovituksen tunnistettavin
+   *     yksittäinen asia, joten se on myös se jonka pitää olla luettavissa
+   *     datasta eikä vain kuultavissa.
+   */
+  {
+    Sfx.resume();
+    Music.play('bone');
+    const track = Music._track;
+    const lens = [
+      ...(Music._voices || []).map((v) => `${v.name} ${v.len}`),
+      ...(Music._phrases || []).map((p, i) => `fraasi${i} ${p.len}`),
+      ...Object.entries((track && track.drums) || {}).map(([k, p]) => `${k} ${p.length}`),
+    ];
+    const numbers = lens.map((s) => Number(s.split(' ')[1]));
+    const inThree = numbers.length > 0 && numbers.every((n) => n % 6 === 0);
+
+    const first = track && track.lead && track.lead.phrases ? track.lead.phrases[0] : [];
+    let run = 0;
+    let best = 0;
+    let prev = null;
+    for (const [semi] of first) {
+      run = semi !== null && semi === prev ? run + 1 : 1;
+      prev = semi;
+      best = Math.max(best, run);
+    }
+    expect('luumaailman raita on kolmijakoinen jokaista ääntä myöten',
+      inThree, lens.join(', ') || 'ei raitaa');
+    expect('keskiyö lyö kaksitoista ennen kuin tanssi alkaa',
+      best === 12, `pisin toisto ${best} lyöntiä, fraasissa ${first.length} nuottia`);
+    Music.stop();
+  }
+
   /* ------------------------------ rendering ---------------------------- */
   {
     const { drawBackdrop } = await import('/src/gfx/backdrop.js');
@@ -7676,7 +7998,7 @@ const report = await page.evaluate(async () => {
     };
     const badBg = [];
     for (const theme of Object.keys(THEMES)) {
-      for (const bg of ['hills', 'dunes', 'peaks', 'factory', 'none']) {
+      for (const bg of ['hills', 'dunes', 'peaks', 'bones', 'factory', 'none']) {
         try {
           const near = shot(bg, theme, 0, 24);
           const far = shot(bg, theme, 640, 24);
@@ -7710,6 +8032,62 @@ const report = await page.evaluate(async () => {
       }
     }
     expect('every tile type draws in every theme', badTile.length === 0, badTile.join(' '));
+
+    /*
+     * Ja teeman ruutujen pitää erottua TOISISTAAN, ei vain piirtyä.
+     *
+     * Tämä on se puolisko jonka jäljelle jäi kun teemakohtaiset ruutumuodot
+     * peruttiin (ROADMAP, ✘ 9.8.2026): jos siluetti on kaikissa maailmoissa
+     * sama, koko ero on materiaalissa ja värissä — ja silloin väri on
+     * mekaniikkaa eikä koristetta. Tiili hajoaa ja maa ei, joten pelaajan on
+     * nähtävä kumpi on kumpi yhdellä silmäyksellä.
+     *
+     * Mitta on kanavakohtainen keskiero täydestä 255:stä, mikä on karkea mutta
+     * rikkomaton: se ei osaa sanoa mitään muodosta, ja juuri siksi se mittaa
+     * sitä yhtä asiaa joka teemasta toiseen muuttuu.
+     *
+     * **Mitattu ennen kuin luuteemaa oli olemassa**, ja luku kannattaa lukea:
+     * ruoho 9,3 %, aavikko 8,6 %, yö **0,4 %**, jää 22,3 %, tehdas 17,9 %,
+     * linnake 7,9 %. Yön tiili ja yön maa ovat siis käytännössä sama väri —
+     * `#7a5a30` vastaan `#6a5030` — eli 2-N:ssä rikottava lohko sulautuu
+     * maahan. Se on löydös eikä tämän työn korjattava: yön paletin muuttaminen
+     * muuttaisi valmiin kentän ulkonäön, ja se on oma päätöksensä.
+     *
+     * Siksi väite on se jonka tämä työ omistaa ja joka on rikottavissa:
+     * **luumaailman pari on koko pelin selvin.** Ei "riittävän hyvä" vaan
+     * mitattuna paras, koska sen maa on luuta ja sen tiili hautamultaa — kaksi
+     * eri ainetta eikä saman aineen kaksi sävyä. Kynnyksenä on nykyinen paras
+     * (jää), joten tämä ei voi mennä läpi vahingossa.
+     */
+    {
+      const meanOf = (ch, theme) => {
+        g.clearRect(0, 0, 320, 208);
+        drawTile(g, ch, 0, 16, theme, 3, 5, 0, ' ', {});
+        const d = g.getImageData(0, 16, 16, 16).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let q = 0; q < d.length; q += 4) {
+          if (d[q + 3] < 8) continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const gapOf = (theme) => {
+        const a = meanOf(T.GROUND, theme);
+        const b = meanOf(T.BRICK, theme);
+        if (!a || !b) return 0;
+        return ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255)
+          * 100;
+      };
+      const gaps = Object.keys(THEMES).map((theme) => ({ theme, gap: gapOf(theme) }));
+      const others = gaps.filter((x) => x.theme !== 'bone');
+      const worst = others.reduce((m, x) => (x.gap < m.gap ? x : m), others[0]);
+      const best = others.reduce((m, x) => (x.gap > m.gap ? x : m), others[0]);
+      const bone = gaps.find((x) => x.theme === 'bone');
+      expect('luumaailman tiili ja maa erottuvat selvemmin kuin minkään muun teeman',
+        !!bone && bone.gap > best.gap,
+        `${gaps.map((x) => `${x.theme} ${x.gap.toFixed(1)} %`).join(', ')}`
+        + ` — muista paras ${best.theme}, huonoin ${worst.theme}`);
+    }
 
     /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
      * enforces is invisible and the warp reads as broken. The tile knows from
@@ -7809,7 +8187,7 @@ const report = await page.evaluate(async () => {
         sprites.drawBeanBomb(g, 20, 40, 12);
         check('beanbomb');
       }
-      for (const v of [0, 1, 2, 3]) {
+      for (const v of [0, 1, 2, 3, 4]) {
         sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
         check(`boss ${v} spiny`);
       }
@@ -7818,9 +8196,11 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  const { TRACK_SOURCES } = await import('/src/core/audio.js');
   return {
     levels, checks, failures, worlds: WORLDS.length, ruleReport,
     audio: { sfx: Sfx.names(), music: Music.names() },
+    trackSources: TRACK_SOURCES || {},
   };
 });
 
@@ -8459,6 +8839,41 @@ report.checks.push({
   detail: unknownAudio.length ? unknownAudio.join(', ') : `${audioRefs.length} call sites`,
 });
 if (unknownAudio.length) report.failures.push(...unknownAudio);
+
+/*
+ * VAPAUTUNUT SÄVELMISTÖ ON NIMETTÄVÄ, JA TÄSSÄ SE EHTO ON AJETTAVA.
+ *
+ * DESIGN.md kohta 1 b (9.8.2026) päästää tekijänoikeudesta vapautuneen
+ * sävellyksen sisään yhdellä ehdolla: **lähde nimetään**, sekä DESIGN.md:hen
+ * että CHANGELOG.md:hen. Se ehto oli tähän asti lupaus, ja lupaus on juuri se
+ * asia joka unohtuu kolmannella kerralla — kohta itse sanoo miksi tämä on
+ * ankarampi kuin vanha sääntö: "kaikki on itse tehtyä" on väite jota kukaan ei
+ * voi tarkistaa, ja nimetty teos on lause jonka kuka tahansa voi todentaa.
+ *
+ * Joten raita kantaa lähteensä mukanaan (`source` `TRACKS`-taulussa) ja tämä
+ * tarkistaa, että sekä säveltäjä että teoksen nimi lukevat molemmissa
+ * dokumenteissa. Raita ilman `source`-kenttää on omaa sävellystä eikä sitä
+ * kysytä miltään — sääntö koskee lainattua, ei kaikkea.
+ */
+{
+  const design = await readFile(join(ROOT, 'DESIGN.md'), 'utf8');
+  const changelog = await readFile(join(ROOT, 'CHANGELOG.md'), 'utf8');
+  const unnamed = [];
+  for (const [track, source] of Object.entries(report.trackSources || {})) {
+    for (const part of [source.composer, source.work]) {
+      if (!design.includes(part)) unnamed.push(`${track}: "${part}" puuttuu DESIGN.md:stä`);
+      if (!changelog.includes(part)) unnamed.push(`${track}: "${part}" puuttuu CHANGELOG.md:stä`);
+    }
+  }
+  const named = Object.keys(report.trackSources || {});
+  report.checks.push({
+    name: 'jokainen lainattu sävelmä on nimetty DESIGN.md:ssä ja muutoslokissa',
+    ok: unnamed.length === 0,
+    detail: unnamed.length ? unnamed.join('; ')
+      : `${named.length} lainattua raitaa: ${named.join(', ') || 'ei yhtään'}`,
+  });
+  if (unnamed.length) report.failures.push(...unnamed);
+}
 
 /*
  * The map's difficulty numbers must be the ones the measurement produces today.

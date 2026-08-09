@@ -347,9 +347,9 @@ export class WorldMapScene {
     const sway = (tx, ty, amount) =>
       Math.round(Math.sin(this.tick / 24 + tx * 0.8 + ty * 0.5) * amount);
     const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff'
-      : th === 'factory' ? '#4a4460' : '#4cb04c';
+      : th === 'factory' ? '#4a4460' : th === 'bone' ? '#5a5c50' : '#4cb04c';
     const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
-      : th === 'factory' ? '#332f44' : '#348a34';
+      : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038' : '#348a34';
     ctx.fillStyle = base;
     ctx.fillRect(0, MAP_Y, 320, MAP_H);
 
@@ -478,6 +478,40 @@ export class WorldMapScene {
             ctx.fillStyle = '#b0b0c0';
             ctx.fillRect(x + 4, y + 8, 6, 3);
             break;
+          case 'b': {
+            // Paljasta luumaata: murtuneita palasia sinne tänne, ei kuviota.
+            // Tämä on tasainen merkki, eli se kuuluu tien alle — mitään mikä
+            // nousisi ruudun keskiriveille ei tähän saa piirtää.
+            const n = hashNoise(tx * 7, ty * 11);
+            if (n > 0.74) {
+              ctx.fillStyle = '#8e9080';
+              ctx.fillRect(x + 3, y + 11, 5, 2);
+              ctx.fillRect(x + 9, y + 13, 3, 1);
+            } else if (n < 0.2) {
+              ctx.fillStyle = '#3e4038';
+              ctx.fillRect(x + 5, y + 12, 6, 1);
+            }
+            break;
+          }
+          case 'K': {
+            /* Kallo, luulaakson oma kalusto. Piirretty y+4..y+14, eli se osuu
+             * polun pisteen musteeseen (y+5..y+10) täsmälleen kuten puu ja
+             * vuori — siksi se on `TALL_TERRAIN`issa eikä siksi että se on
+             * korkea. Leuka nyökkää hitaasti: kaikki mikä elää tässä pelissä
+             * liikkuu, ja tämä on kuollut, joten se liikkuu vähemmän. */
+            const nod = Math.round((Math.sin(this.tick / 30 + tx * 0.9) + 1) / 2);
+            ctx.fillStyle = '#ded6c0';
+            ctx.fillRect(x + 4, y + 4, 8, 7);
+            ctx.fillRect(x + 5, y + 11 + nod, 6, 2);
+            ctx.fillStyle = '#2a2820';
+            ctx.fillRect(x + 6, y + 6, 2, 3);
+            ctx.fillRect(x + 9, y + 6, 2, 3);
+            ctx.fillRect(x + 8, y + 9, 1, 2);
+            ctx.fillStyle = '#8e8878';
+            ctx.fillRect(x + 4, y + 10, 8, 1);
+            ctx.fillRect(x + 6, y + 13 + nod, 4, 1);
+            break;
+          }
           case '"': {
             const s1 = sway(tx, ty, 1);
             ctx.fillStyle = '#2a8a30';

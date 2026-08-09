@@ -7,6 +7,204 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.33 — luulaakso, ja keskiyö joka lyö kaksitoista
+
+Maailma 6, **LUULAAKSO**: hautausmaa keskiyöllä, neljä kenttää, oma teema, oma
+musiikki ja luurankopomo. Peli on nyt **6 maailmaa ja 26 kenttää**.
+
+Teema tehtiin sen listan mukaan jonka roadmap itse antoi — *"teema on paletti +
+taustat + palikat + musiikki, ei pelkkä väri"* — ja neljä osaa ovat
+`THEMES.bone`, `bg: 'bones'`, `src/data/chunks/bone.js` ja `TRACKS.bone`.
+
+### Musiikki: Saint-Saëns, ja ehto joka lakkasi olemasta lupaus
+
+**Camille Saint-Saëns (1835–1921), *Danse macabre* op. 40, 1874.** Vapautui
+1.1.1992 (suoja = elinaika + 70 vuotta). Valinta oli päätetty jo 9.8.2026 ja se
+on aihevalinta eikä tyylivalinta: teos *on* tanssivia luurankoja keskiyöllä, ja
+sen kuuluisin yksityiskohta — ksylofonin kalisteleva kuvio — on nimenomaan
+luut. Saint-Saëns käytti saman vitsin uudestaan "Fossiles"-osassa, eli hän piti
+sitä itsekin luiden äänenä.
+
+DESIGN.md kohdan 1 b ehdot täyttyvät kahdesti: **sävelet on kirjoitettu käsin**
+`TRACKS`-tauluun ja syntetisoidaan ajossa, joten repoon ei tullut sampleja,
+MIDI-rippiä eikä skannattua nuottia — vapautuminen koskee sävellystä, ja
+yksittäinen äänite tai nuottilaitos on eri teos omine oikeuksineen. Ja lähde on
+**nimetty**. Rehellisyyden nimissä yksi asia sanottava ääneen: tämä on
+*sovitus*, ei transkriptio. Kolme ääntä ja rummut eivät ole orkesteri.
+
+Sovituksen neljä fraasia ovat teoksen neljä ajatusta: **keskiyö** (kaksitoista
+lyöntiä D:tä, sitten viulun tritonus A–Es), **tanssi** (laskeva d-mollivalssi,
+jossa nouseva johtosävel kääntää seitsemännen tahdin dominantiksi), **ksylofoni**
+(kromaattisesti alas kalisevat kuudestoistaosaparit, kolmioaallolla ja lähes
+olemattomalla pidolla — lyömäsoitin on isku ja vaimeneminen) ja **laulava teema**
+(pitkiä nuotteja vastapainoksi).
+
+**Ja ehto muuttui portiksi.** Raita kantaa nyt lähteensä mukanaan (`source`
+`TRACKS`-taulussa, ulos `TRACK_SOURCES`), ja `verify.mjs` vaatii että sekä
+säveltäjän että teoksen nimi lukevat **sekä DESIGN.md:ssä että tässä
+tiedostossa**. Kohta 1 b perusteli oman ankaruutensa sillä että nimetty lause on
+tarkistettavissa ja "kaikki on itse tehtyä" ei ole — ja ankaran säännön ainoa
+vika on että se unohtuu kolmannella kerralla. Nyt ei unohdu. Raita ilman
+`source`-kenttää on omaa sävellystä eikä sitä kysytä miltään.
+
+Yksi asia mitataan datasta eikä korvasta: **valssi on kolmijakoinen jokaista
+ääntä myöten.** Sekvensserin tahti on 16 askelta eli neljäjakoinen, joten
+kolmijakoisuus tehdään niin että jokainen ääni ja jokainen rumpukuvio on kuuden
+askeleen monikerta (kuusi kuudestoistaosaa = yksi 3/4-tahti). Yksikin ääni
+väärän mittaisena ja raita alkaisi vaeltaa muita vasten — se kuulostaisi
+rikkinäiseltä eikä väärältä, eli vialta jota kukaan ei osaa etsiä. Mitattu:
+`lead 48, harm 48, bass 48, fraasit 48, kick 6, snare 6, hat 6`.
+
+### Palikoiden ehto on tehtaan ehdon peilikuva
+
+`chunks/factory.js` perustelee olemassaolonsa yhdellä lauseella: jokaisella sen
+palikalla on katto. Luumaailma tulee heti tehtaan jälkeen, ja sen sääntö kulkee
+toiseen suuntaan: **ei kattoa, eikä mitään roikkumassa.**
+
+- **Taivas on auki**: rivit 0–4 ovat tyhjiä jokaisessa luupalikassa. Tämä
+  puolisko on aita *edellisen* maailman ympärillä eikä tämän — `fac_*` ei kelpaa
+  tänne, koska sen katto peittäisi kuun ja tähdet joiden takia maailma näyttää
+  keskiyöltä. Se on rehellisempi muotoilu kuin symmetrinen aita: liikenne joka
+  pitää pysäyttää kulkee tehtaalta luulaaksoon.
+- **Luu seisoo**: jokainen `X` ja `#` lattiarivien yläpuolella nojaa johonkin
+  suoraan allaan. Luuranko on määritelmän mukaan asia joka kannattaa itsensä.
+
+Jälkimmäinen maksoi jotain, ja se on koko syy kirjoittaa sääntö ylös: se sulki
+pois ilmeisen ensimmäisen idean, **kylkiluukaaren reitin yli**. Kaari tarvitsee
+jalat, jalat kävelylattialla ovat seinä, ja mitattua `wallTiles`-budjettia
+korkeampi seinä on kenttä jota pienin koko ei läpäise. Niinpä kylkiluut ovat
+tyngät haudan vieressä ja reitin yli menee lauta — lauta ei ole luuta ja saa
+leijua. Molemmat puoliskot ovat `verify.mjs`:ssä eivätkä pelkässä kommentissa.
+
+### Botti saneli geometrian, ja se on kirjattu palikka palikalta
+
+`tools/playable.mjs` on suunnittelulupaus ajettavassa muodossa: maareitin pitää
+aueta voimatasolla 0. Ensimmäinen versio maailmasta kaatui siihen **neljästi**,
+ja jokainen kaatuminen muutti yhtä palikkaa. Ne ovat kirjattuina niihin
+palikoihin joita ne muuttivat, koska niistä jokainen on sama oppi eri suunnasta
+— *mitattu hyppybudjetti on se mihin kentät leikataan, ei se mitä vasten ne
+leikataan*:
+
+| vika | mitattu | korjaus |
+| --- | --- | --- |
+| hautakivi kuopan huulella | `kuilu sarakkeessa 136`, myöh. 56 ja 104 | kivet pois nousukiidosta; kolikkokaari on merkki |
+| nelirivinen tiiliseinä ennen kuoppaa | `kuilu sarakkeessa 215` | seinä kolmeen riviin (`brick_wall` pitää neljänsä, maailmassa 1 on tilaa) |
+| kolme kuoppaa peräkkäin | `kuilu sarakkeessa 93` | enintään kaksi ketjussa, väliin `flat8` |
+| viiden levyinen piikkipeti sillan alla | `maasto sarakkeessa 130` | kaksi nelosen petiä, silta vain ensimmäisen yli |
+
+Kokonaan pois jäi `bone_twin`, kahden kuopan pari. Kolme mittausta (5+5 kahden
+ruudun saarella, 5+5 kolmen, 4+4 neljän) kaatuivat kaikki **toiseen hyppyyn**,
+ja syy on `jump-budget.json`:ssa eikä botissa: paikaltaan hyppy kantaa
+vaakasuunnassa **0 px**, joten saari on täsmälleen niin hyvä kuin sen jättämä
+nousukiito. Maailma 6 ostaa vaikeutensa useammalla yksittäisellä kuopalla.
+
+### Vaikeus, mitattuna
+
+| kenttä | pisteet | mikä siinä on |
+| --- | --- | --- |
+| 6-1 | 242,5 | haudat: yksi kuoppamuoto opetettuna ja sitten kysyttynä |
+| 6-2 | 147,5 | notko — leuat ja lohkot, vain kaksi kuoppaa |
+| 6-3 | 271,5 | tanssi: kaikki mitä maailmassa on |
+| 6-F | 395,4 | krypta ja luuranko |
+| **w6** | **264,2** | ↑ +8,0 maailmasta 5 |
+
+Käyrä nousee ja notkahtaa tasan kerran, kuten jokaisessa muussakin maailmassa
+(`243 → 148 → 272`). Nousu maailmasta 5 on **pienin nousu koko pelissä** (+8,0
+vastaan +18,8 / +25,1 / +17,0 / +66,8), ja se kannattaa sanoa ääneen eikä
+piilottaa: maailman 5 kentät ovat generoituja ja lyhyitä (205–245 saraketta),
+ja mittari laskee kaiken per sata saraketta, joten maailma 5 on asteikolla
+korkeammalla kuin se on kädessä. Käsintehty maailma ei voi kilpailla siitä
+ilman että siitä tulee gauntlet.
+
+Ja **käyrän muoto on nyt portti eikä tuloste.** `difficulty.mjs` on tulostanut
+rivin "1 notkoa / ok" pitkään, mutta tulosteen voi ohittaa; uuden maailman voisi
+committoida suoraviivaisena tai laskevana eikä mikään sanoisi mitään ennen kuin
+joku katsoisi. `verify.mjs` tarkistaa nyt jokaisen maailman muodon.
+
+### Luurankopomo
+
+`bossVariant: 4`, ja hän on olemassa olevaa koneistoa kahta asiaa lukuun
+ottamatta:
+
+- **Osuma hajottaa hänet.** Muut pomot vastaavat osumaan kiihtymällä, mikä on
+  luku jonka pelaaja tuntee kolmen sekunnin päästä. Luuranko vastaa samalla
+  framella: hän lentää palasiksi, luut kalisevat lattiaa pitkin ulos ja hän
+  seisoo taas siihen mennessä kun ne ovat poissa. Osuma siis **maksaa myös
+  tietoa** — näet että se osui — ja esittää laskun, koska aallot ovat kaksi
+  asiaa joiden alta pitää päästä pois. Aalto on olemassa oleva `Shockwave` eikä
+  uusi entiteetti: se on esine jonka pelaaja jo lukee oikein, ja `REGISTRY`
+  pysyy koskemattomana. Mitattu: luuranko 2 aaltoa per osuma, nyrkkeilijä 0.
+- **Hänellä on oma ääni**, ja se on `VOICES`-taulun ensimmäinen käyttö sen
+  jälkeen kun taulu kirjoitettiin. Taulun oma kommentti sanoi että ääni jota
+  kukaan ei puhu on sama virhe kuin ääni jota mikään ei soita; luuranko on
+  luonteva toinen puhuja, koska hän on ainoa hahmo joka sanoo jotain *pelaajalle*.
+  Ääni on kanttiaalto oktaavia alempaa, loivilla formanteilla (q 3,5/4,5 vastaan
+  pelaajan 7/9 — kallossa ei ole pehmytkudosta) ja kaksinkertaisella
+  konsonantilla, koska luurangossa kolisevat juuri ne osat jotka koskevat
+  toisiinsa.
+
+**Nauru tulee silloin kun kruunu lähtee päästä**, ei sitä laitettaessa. Kruunun
+nousu on varoitus ja varoituksella on jo äänensä (`spikes`), joka tarkoittaa
+samaa jokaisen pomon kohdalla; toinen ääni sen päälle olisi kaksi merkkiä
+samasta asiasta, mikä on täsmälleen se mitä DESIGN.md kohta 8 kieltää. Kruunun
+laskeminen taas on hetki jolloin häneen voi taas osua, ja siihen kuuluu
+ilkkuminen. Mitattu soittolokista: yksi nauru per riisuminen, kaikki `open`-
+vaiheessa.
+
+Piikit voittavat maahaniskun myös hänellä, eikä se ollut ilmaista vaan
+tarkistettu: sääntö on kirjoitettu `poundImpact`iin `e.spiky`-lipun varaan eikä
+varianttiluetteloon, joten sen *pitäisi* päteä uuteen pomoon itsestään — ja
+juuri sellainen väite rapautuu hiljaa. Mitattu 6-F:ssä: piikkivaiheessa 0 osumaa
+ja pelaaja menetti tason, avoinna 1 osuma eikä menettänyt mitään.
+
+Arvomerkki on **taskukello, jonka viisarit osoittavat kahtatoista**. Se
+noudattaa samaa sääntöä kuin jokainen muu arvomerkki tässä tiedostossa — pyöreä,
+silmien alapuolella, eikä mitään pään yläpuolella — ja se osoittaa samaan
+vitsiin kuin musiikin kaksitoista lyöntiä sanomatta sitä ääneen.
+
+### Teeman luettavuus, ja yksi löydös joka ei ole tämän työn korjattava
+
+Kun teemakohtaiset ruutumuodot peruttiin (✘ 9.8.2026), koko ero maailmojen
+välillä jäi aineeseen ja väriin — eli väristä tuli mekaniikkaa. Tiili hajoaa ja
+maa ei, ja pelaajan on nähtävä kumpi on kumpi hypyn aikana. `verify.mjs` mittaa
+nyt tuon parin kanavakohtaisena keskierona, ja luvut kannattaa lukea:
+
+| teema | tiilen ja maan ero |
+| --- | --- |
+| yö | **0,4 %** |
+| linnake | 7,9 % |
+| aavikko | 8,6 % |
+| ruoho | 9,3 % |
+| tehdas | 17,9 % |
+| jää | 22,3 % |
+| **luu** | **48,7 %** |
+
+Luumaailman maa on luuta ja sen tiili hautamultaa — kaksi eri ainetta eikä saman
+aineen kaksi sävyä — ja testi vaatii että se on koko pelin selvin pari, eli
+kynnyksenä on nykyinen paras eikä jokin luku. **Yön 0,4 % on löydös eikä tämän
+työn korjattava:** `#7a5a30` ja `#6a5030` ovat käytännössä sama väri, eli 2-N:ssä
+rikottava lohko sulautuu maahan. Yön paletin muuttaminen muuttaisi valmiin
+kentän ulkonäön, ja se on oma päätöksensä.
+
+### Muuta samassa erässä
+
+- **Kartalle kaksi uutta maastomerkkiä**: `b` paljas luumaa ja `K` kallo, joka
+  on `TALL_TERRAIN`issa (piirtoala y+4…y+14 osuu polun pisteen musteeseen
+  y+5…y+10 kuten puu ja vuori). Ruudukko rakennettiin **säännöstä käsin**: tien
+  raivausalue laskettiin ensin ja kalusto istutettiin siihen mikä jäi jäljelle —
+  21 pyydettyä, 21 istutettua, 0 hylättyä.
+- **Taustalle `bones`**: kylkiluita ja kuolleita puita horisontin kukkuloilla,
+  ja ne ovat maisemaa **vaaleampia** — päinvastoin kuin muualla, koska keskiyön
+  siluetti erottuu vain jos se on taustaansa vaaleampi. Sää on virvatulia:
+  sama hiukkasmoottori kuin tehtaan kekäleillä, mutta sinivalkoinen, hitaampi ja
+  matkalla sykkivä. Kuu on pelin suurin.
+- **Maapinnan kuvio on pystysuora** (`surface: 'bone'`), ainoana pelissä. Hiekan
+  kerrokset, metallin paneelit ja kiven saumat ovat kaikki vaakaan; pystykuvio
+  pilkkoutuu sarakkeisiin kameran liikkuessa, mikä on se ero joka näkyy
+  kävellessä eikä vain paikallaan seistessä.
+
+---
+
 ## v26.08.09.32 — luolalla on oma ääni: Grieg, ja miksi se ei ole löytymisen merkki
 
 Piilokaistan luolahuoneet (`cave_room`, `fac_cellar`, `tomb_cave`) ovat olleet
