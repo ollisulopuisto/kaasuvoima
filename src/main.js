@@ -24,6 +24,12 @@ const STEP = 1000 / 60;
 
 const CARD_BONUS = { shroom: 2, flower: 3, star: 5 };
 
+/*
+ * Kertojan ääni siitä mitä selain ei suostu tekemään. Ks. `updateAudioHint`.
+ * Rivi on 38 merkkiä eli 228 pikseliä, mahtuu keskitettynä 320:een.
+ */
+const AUDIO_HINT = 'OHJAIN EI AVAA ÄÄNTÄ - PAINA NÄPPÄINTÄ';
+
 class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -39,6 +45,15 @@ class Game {
     this.slot = 1;
     this.flash = '';
     this.flashTimer = 0;
+    /* Onko `flash`-rivillä juuri nyt ääniloukun vihje vai oikea ilmoitus.
+     * Ks. `updateAudioHint` — se on koko etuoikeusjärjestys. */
+    this.flashIsHint = false;
+    this.audioHintWasUp = false;
+    /* Pelaaja on kuitannut vihjeen. **Vain muistissa**: tämä ei ole asetus vaan
+     * yhden istunnon vastaus yhteen kysymykseen, eikä selaimen muistiin kirjoiteta
+     * uutta avainta sen takia. Seuraava lataus kysyy uudestaan, ja kysyy oikein,
+     * koska seuraavalla kerralla ensimmäinen ele voi hyvinkin olla näppäin. */
+    this.audioHintOff = false;
     this.pendingNode = null;
 
     /* Kaverin tulos, jos tänne tultiin haastelinkistä. Se asetetaan
@@ -66,6 +81,7 @@ class Game {
   toast(text, frames = 90) {
     this.flash = text;
     this.flashTimer = frames;
+    this.flashIsHint = false;
   }
 
   /* ------------------------------ lifecycle ---------------------------- */
@@ -390,6 +406,94 @@ class Game {
     Sfx.play('select');
   }
 
+  /* ------------------------------ ääniloukku --------------------------- */
+
+  /**
+   * Mitä selain sanoo ääniluvasta. Yhdessä paikassa siksi että se on ainoa
+   * asia tässä tiedostossa jota testi ei voi asettaa itse — se on selaimen oma
+   * tila — ja tämän kautta se voi.
+   */
+  audioState() {
+    return audioDiag().state;
+  }
+
+  /**
+   * Yritetään avata ääni. Turvallinen kutsua niin usein kuin haluaa: ilman
+   * käyttäjän elettä se ei onnistu, ja eleen kanssa se onnistuu heti.
+   */
+  unlockAudio() {
+    if (this.audioState() === 'running') return true;
+    Sfx.resume();
+    if (!isMuted() && Music.current) {
+      const track = Music.current;
+      Music.current = null;
+      Music.play(track);
+    }
+    return this.audioState() === 'running';
+  }
+
+  /** Onko ääniloukun vihje juuri nyt ruudulla. */
+  get audioHintVisible() {
+    return this.flashTimer > 0 && this.flashIsHint;
+  }
+
+  /**
+   * Ääniloukku: peliohjaimella pelaava ei saa ääniä ollenkaan, eikä sille voi
+   * mitään.
+   *
+   * Selain avaa AudioContextin vain käyttäjän eleestä, ja **ohjaimen napin
+   * painallus ei ole ele** — ei ole, vaikka `Input.anyKeyPressed` on sen
+   * jälkeen tosi. `unlockAudio()` kutsutaan silti joka framella, koska se on
+   * juuri se joka onnistuu sillä sekunnilla kun oikea ele tulee. Mutta pelkkä
+   * yrittäminen ei riitä: pelaaja joka nostaa ohjaimen käteensä eikä koske
+   * näppäimistöön pelaisi koko istunnon hiljaisuudessa tietämättä miksi.
+   *
+   * Siksi asia sanotaan ääneen. Ehto on **syy eikä kello**: vihje näkyy vain
+   * kun ohjaimelta oikeasti tulee syötettä ja ääni on silti kiinni. Näppäimistö-
+   * tai kosketuspelaaja avaa äänen ensimmäisellä painalluksellaan, joten hän ei
+   * näe tätä koskaan — ei edes framen välähdyksenä, koska ehto ei katso hänen
+   * syötettään vaan ohjaimen. Nolla väärää hälytystä on koko valinnan pointti.
+   *
+   * Etuoikeus: oikea ilmoitus voittaa. `TILA 1 LADATTU` on vastaus siihen mitä
+   * pelaaja juuri teki, ja vastaus saa tulla ennen huomautusta jonka aihe ei ole
+   * mihinkään menossa. Vihje odottaa rivin vapautumista ja palaa itse.
+   *
+   * Kuittaus: yksi painallus riittää, ohjaimenkin nappi. Näppäimellä kuittaava
+   * avaa samalla äänen eikä kuittaus siksi tarkoita mitään; ohjaimella kuittaava
+   * on valinnut hiljaisuuden, ja se on hänen valintansa. Kuittaus vaatii että
+   * vihje oli ruudulla jo edellisellä framella — muuten sama painallus joka
+   * ehdon täytti sulkisi sen ennen kuin kukaan ehtii lukea.
+   */
+  updateAudioHint() {
+    const state = this.audioState();
+    if (state === 'running') {
+      // Ääni lähti: vihje katoaa samalla framella, ei sekuntia myöhemmin.
+      if (this.flashIsHint) { this.flashTimer = 0; this.flashIsHint = false; }
+      this.audioHintWasUp = false;
+      return;
+    }
+    /* `none` tarkoittaa ettei AudioContextia ole ollenkaan — selaimessa ei ole
+     * Web Audiota. Silloin mikään painallus ei auta eikä siitä sanota mitään. */
+    const stuck = (state === 'suspended' || state === 'interrupted')
+      && Input.padInput && !isMuted();
+    if (!stuck) {
+      this.audioHintWasUp = this.audioHintVisible;
+      return;
+    }
+    if (this.audioHintWasUp && Input.anyKeyPressed) {
+      this.audioHintOff = true;
+      if (this.flashIsHint) { this.flashTimer = 0; this.flashIsHint = false; }
+    }
+    if (!this.audioHintOff && (this.flashTimer <= 0 || this.flashIsHint)) {
+      // Uusitaan joka kerta kun se on umpeutumassa: ilmoitusrivi on tarkoituksella
+      // ohimenevä, ja tämä asia ei mene ohi ennen kuin se korjataan.
+      this.flash = AUDIO_HINT;
+      this.flashTimer = 90;
+      this.flashIsHint = true;
+    }
+    this.audioHintWasUp = this.audioHintVisible;
+  }
+
   /* -------------------------------- loop ------------------------------- */
 
   step() {
@@ -399,14 +503,7 @@ class Game {
     // mistimed gesture used to mean silence for the rest of the session.
     const anyInput = Input.anyKeyPressed
       || Input.held.jump || Input.held.left || Input.held.right || Input.held.start;
-    if (anyInput && audioDiag().state !== 'running') {
-      Sfx.resume();
-      if (!isMuted() && Music.current) {
-        const track = Music.current;
-        Music.current = null;
-        Music.play(track);
-      }
-    }
+    if (anyInput && this.audioState() !== 'running') this.unlockAudio();
 
     /* Attract mode hands the machine back the instant anyone touches it. This
      * sits ahead of every other key on purpose: the press that ends the demo
@@ -439,6 +536,9 @@ class Game {
       Sfx.play('cursor');
     }
     if (this.flashTimer > 0) this.flashTimer--;
+    /* Vasta tässä, eli kaikkien oikeiden ilmoitusten jälkeen: tällä framella
+     * annettu ilmoitus varaa rivin ja vihje odottaa vuoroaan. */
+    this.updateAudioHint();
 
     /* Jakoruutu avataan juoksunapilla eikä numerolla, ja se on puhelimen takia:
      * numerorivi on siellä missä muutkin apunäppäimet, mutta puhelimessa ei ole
@@ -516,7 +616,9 @@ class Game {
     const a = audioDiag();
     lines.push(`MUS ${a.track.toUpperCase()} (${Music.variation().toUpperCase()})`
       + `  MUTE ${a.muted ? 1 : 0}`);
-    lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`);
+    lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`
+      + `  OHJAIMET ${Input.pads}${Input.padInput ? '*' : ''}`
+      + `${this.audioHintOff ? '  VIHJE KUITATTU' : ''}`);
     const fx = PostFX.diag();
     const t = Touch.diag();
     lines.push(`FX ${fx.mode.toUpperCase()} ${fx.preset.toUpperCase()}`
@@ -615,6 +717,12 @@ Input.install();
 // `?touch=1` forces the overlay up on a desktop, which is the only way to work
 // on it without holding a phone.
 Touch.install(Input, { force: new URLSearchParams(location.search).has('touch') });
+/* Ääni avataan tapahtumasta eikä pollatusta tilasta, koska juuri tapahtuma
+ * kantaa käyttäjän eleen: `keydown` ja `pointerdown` ajetaan selaimen mielestä
+ * eleen sisällä, `requestAnimationFrame` ei. Askeleen oma yritys jää silti
+ * paikalleen — se on se joka hoitaa tapaukset joissa konteksti syntyi liian
+ * myöhään ensimmäiseen eleeseen nähden. */
+Input.onGesture = () => game.unlockAudio();
 Input.onFirstInput = () => {
   Sfx.resume();
   if (!isMuted()) Music.play(Music.current || 'map');

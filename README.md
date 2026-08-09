@@ -63,7 +63,33 @@ fyysinen paikka, mutta **mikä fyysinen paikka riippuu siitä onko näppäimist�
 ANSI vai ISO**, ja ne eroavat juuri vasemmasta alakulmasta jossa toimintonäppäimet
 ovat. Debug oli aiemmin myös `Backquote`illa, joka on Macin ISO-näppäimistöllä
 vasemman vaihdon ja Z:n välissä — yhden näppäimen päässä hypystä.
-Peliohjain (standard gamepad) toimii.
+### Peliohjain
+
+Standard-kuvauksen mukainen ohjain toimii yhtä aikaa näppäimistön kanssa, eikä
+mitään tilaa tarvitse valita: napit 0 ja 1 ovat hyppy, 2 ja 3 juoksu, 9 start
+(tauko), 12–15 ristiohjain ja vasen tatti ohjaa 0,4:n kuolleen alueen jälkeen.
+
+**Ohjain ei kuitenkaan saa ääniä päälle.** Selain avaa äänen vain käyttäjän
+eleestä, ja ohjaimen napin painallus ei ole sellainen — ei millään selaimella,
+eikä sitä voi kiertää yrittämällä uudestaan. Jos siis nostat ohjaimen käteesi
+etkä koske näppäimistöön, peli on hiljaa. Peli sanoo sen itse ruudun yläreunassa
+(`OHJAIN EI AVAA ÄÄNTÄ - PAINA NÄPPÄINTÄ`) heti kun ohjaimelta tulee syötettä ja
+ääni on silti kiinni. **Yksi näppäimen painallus tai ruudun kosketus riittää
+lopullisesti.** Vihjeen saa pois yhdellä painalluksella, ohjaimenkin napilla —
+silloin peli jää hiljaiseksi, ja se on kuitenkin oma valinta eikä yllätys.
+
+**Apunäppäimet eivät ole ohjaimessa.** Tallennus, latauspaikka, kuvaefektit,
+pelidatan vienti, mykistys ja debug-ruutu ovat numerorivillä, koska ohjaimessa
+ei ole yhdeksää nappia joita peukalo ei osu kesken hypyn. Ohjaimella pelataan,
+näppäimistöllä myös hallitaan.
+
+**Ei-standardi ohjain** (`mapping !== 'standard'`) luetaan vain napeista: silloin
+selain itse ilmoittaa ettei tiedä mitä akselit ovat, ja akseli 0 voi olla tatti,
+hattukytkin tai liipaisin joka lepää arvossa -1 — jolloin hahmo kävelisi vasemmalle
+ikuisesti ilman että kukaan koskee mihinkään. Väärä nappi on hiljaa kunnes sitä
+painetaan, väärä akseli painaa itse itseään. Tukematta jäävät siis ei-standardin
+ohjaimen tatit ja akselille ilmoitettu ristiohjain; uudelleenmäärittelyä ei ole
+lainkaan.
 
 ## Pisteet, kolikot ja mittarit
 

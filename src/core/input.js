@@ -68,7 +68,14 @@ const KEYMAP = {
   F3: 'debug',
 };
 
-// Standard gamepad layout: face buttons, then d-pad.
+/*
+ * Standard gamepad layout: face buttons, then d-pad.
+ *
+ * The utility actions are **not** here, and that is on purpose: quicksave,
+ * slot, effects, telemetry, mute and the debug overlay live on the number row
+ * because a pad has nowhere to put nine more actions that a thumb will not hit
+ * by accident mid-jump. A pad plays the game; a keyboard also administers it.
+ */
 const PADMAP = {
   0: 'jump',
   1: 'jump',
@@ -80,6 +87,9 @@ const PADMAP = {
   14: 'left',
   15: 'right',
 };
+
+/** How far a stick has to leave the middle before it is a direction. */
+const DEADZONE = 0.4;
 
 const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute',
   'quicksave', 'quickload', 'slot', 'debug', 'export', 'fx', 'touch', 'warp'];
@@ -101,6 +111,16 @@ export const Input = {
   _touch: blank(),
   anyKeyPressed: false,
   onFirstInput: null,
+  /**
+   * Called on **every** real user gesture — a key or a pointer, never a pad.
+   * Audio is the only caller and the reason the distinction exists: a browser
+   * starts an AudioContext only inside a gesture, and a gamepad button is not
+   * one. See src/main.js.
+   */
+  onGesture: null,
+  /** Live pads seen in the last poll, and whether any of them said anything. */
+  pads: 0,
+  padInput: false,
 
   /**
    * Sets an action from something that is not a key. Presses are latched the
@@ -136,6 +156,10 @@ export const Input = {
         // key and drop the press entirely.
         this._latched[action] = true;
       }
+      // Gesture first, first-input second: the gesture handler is the one that
+      // may still be trying to unlock the audio, and it must not find a track
+      // already started by `onFirstInput` and restart it for nothing.
+      this._fireGesture();
       this._fireFirstInput();
     });
     addEventListener('keyup', (e) => {
@@ -151,7 +175,14 @@ export const Input = {
       this._latched = blank();
       this._touch = blank();
     });
-    addEventListener('pointerdown', () => this._fireFirstInput());
+    addEventListener('pointerdown', () => {
+      this._fireGesture();
+      this._fireFirstInput();
+    });
+  },
+
+  _fireGesture() {
+    if (this.onGesture) this.onGesture();
   },
 
   _fireFirstInput() {
@@ -168,18 +199,52 @@ export const Input = {
     for (const a of ACTIONS) if (this._touch[a]) state[a] = true;
     for (const a of ACTIONS) if (this._latched[a]) state[a] = true;
     this._latched = blank();
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    /*
+     * `getGamepads()` is a snapshot of slots, not a list of pads: an unplugged
+     * slot is `null`, the array can be shorter or longer than the pads on the
+     * desk, and a browser without the API at all returns nothing. Everything
+     * below therefore assumes the object is a stranger.
+     */
+    const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
+    let live = 0;
+    let fromPad = false;
     for (const pad of pads) {
-      if (!pad) continue;
+      if (!pad || pad.connected === false) continue;
+      live++;
+      const buttons = pad.buttons || [];
       for (const [index, action] of Object.entries(PADMAP)) {
-        if (pad.buttons[index] && pad.buttons[index].pressed) state[action] = true;
+        const b = buttons[index];
+        // Old implementations exposed a button as a bare number, not an object.
+        const down = b && (typeof b === 'object' ? b.pressed : b > 0.5);
+        if (down) { state[action] = true; fromPad = true; }
       }
-      const [ax, ay] = pad.axes;
-      if (ax < -0.4) state.left = true;
-      if (ax > 0.4) state.right = true;
-      if (ay < -0.4) state.up = true;
-      if (ay > 0.4) state.down = true;
+      /*
+       * **Axes are read only from a pad that claims the standard mapping.**
+       *
+       * With `mapping !== 'standard'` the browser is saying it does not know
+       * what the axes are. Axis 0 might be a stick, or a hat switch, or a
+       * trigger that rests at -1 — and a trigger resting at -1 on axis 0 means
+       * the player walks left forever without touching anything. The asymmetry
+       * is the whole argument: **a wrong button is silent until you press it, a
+       * wrong axis presses itself.** So the buttons above stay (a missing index
+       * simply reads `undefined` and is skipped) and the sticks go quiet.
+       *
+       * Still unsupported, deliberately: hat-switch d-pads reported as an axis,
+       * sticks on a non-standard pad, and remapping of any kind. The keyboard is
+       * always there and it is always right.
+       */
+      if (pad.mapping !== 'standard') continue;
+      const axes = pad.axes || [];
+      const axis = (i) => (typeof axes[i] === 'number' && Number.isFinite(axes[i]) ? axes[i] : 0);
+      const ax = axis(0);
+      const ay = axis(1);
+      if (ax < -DEADZONE) { state.left = true; fromPad = true; }
+      if (ax > DEADZONE) { state.right = true; fromPad = true; }
+      if (ay < -DEADZONE) { state.up = true; fromPad = true; }
+      if (ay > DEADZONE) { state.down = true; fromPad = true; }
     }
+    this.pads = live;
+    this.padInput = fromPad;
 
     this.anyKeyPressed = false;
     for (const a of ACTIONS) {

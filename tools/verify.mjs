@@ -4558,6 +4558,310 @@ const report = await page.evaluate(async () => {
   }
 }
 
+/* ----------------------------- peliohjain -------------------------------- */
+/*
+ * Playwrightissa ei ole ohjainemulaatiota, mutta peli lukee ohjaimen
+ * `navigator.getGamepads()`:sta joka pollilla eikä missään muualla. Siksi
+ * valeohjain sivulla on rehellinen testi eikä kiertotie: se syöttää
+ * täsmälleen sen rajapinnan jota oikea ohjain käyttää, ja oikea `Input.poll()`
+ * lukee sen.
+ *
+ * Mukana on myös ääniluvan aukko, koska se on ohjaimen ominaisuus eikä äänen:
+ * selain avaa AudioContextin vain käyttäjän eleestä, ja **ohjaimen napinpainallus
+ * ei ole ele**. Sitä ei voi korjata yrittämällä uudestaan, joten testataan se
+ * mitä oikeasti tehdään — kerrotaan asiasta ruudulla.
+ */
+{
+  const gamepad = await page.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name, ok, detail });
+      if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+    };
+    const { Input } = await import('/src/core/input.js');
+    const { Music, isMuted, toggleMute } = await import('/src/core/audio.js');
+    const game = window.sfb3;
+
+    const realGetGamepads = navigator.getGamepads.bind(navigator);
+    let pads = [];
+    navigator.getGamepads = () => pads;
+
+    /** Standardin muotoinen ohjain: 16 nappia, kaksi akselia. */
+    const mkPad = (down = [], axes = [0, 0], mapping = 'standard') => ({
+      index: 0, id: 'testipad', connected: true, mapping, timestamp: 0,
+      buttons: Array.from({ length: 16 }, (_, i) => ({
+        pressed: down.includes(i), touched: down.includes(i), value: down.includes(i) ? 1 : 0,
+      })),
+      axes,
+    });
+
+    const clear = () => {
+      pads = [];
+      dispatchEvent(new Event('blur'));   // nollaa näppäimet ja latchin
+      Input.poll();
+      Input.poll();
+    };
+    const held = () => {
+      Input.poll();
+      return Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    };
+    const key = (type, code) => dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
+
+    /* --- napit tulevat perille oikeina toimintoina --- */
+    clear();
+    pads = [mkPad([0])];
+    const jump = held();
+    pads = [mkPad([2])];
+    const run = held();
+    pads = [mkPad([9])];
+    const start = held();
+    pads = [mkPad([14])];
+    const dpadLeft = held();
+    expect('ohjaimen napit tulevat peliin oikeina toimintoina',
+      jump === 'jump' && run === 'run' && start === 'start' && dpadLeft === 'left',
+      `0="${jump}" 2="${run}" 9="${start}" 14="${dpadLeft}"`);
+
+    /* --- tatti: kuollut alue pitää ja sen yli ohjaa --- */
+    clear();
+    pads = [mkPad([], [-1, 0])];
+    const stickLeft = held();
+    pads = [mkPad([], [-0.2, 0])];
+    const stickIdle = held();
+    pads = [mkPad([], [0, 0.9])];
+    const stickDown = held();
+    pads = [mkPad([], [0, -0.39])];
+    const stickAlmost = held();
+    expect('tatti ohjaa kuolleen alueen ulkopuolella eikä sisäpuolella',
+      stickLeft === 'left' && stickIdle === '' && stickDown === 'down' && stickAlmost === '',
+      `-1="${stickLeft}" -0.2="${stickIdle}" +0.9="${stickDown}" -0.39="${stickAlmost}"`);
+
+    /* --- molemmat elossa yhtä aikaa: kumpikaan ei kumoa toista --- */
+    clear();
+    key('keydown', 'ArrowRight');
+    const keyOnly = held();
+    pads = [mkPad([0])];
+    const both = held();
+    key('keyup', 'ArrowRight');
+    const padOnly = held();
+    clear();
+    expect('näppäimistö ja ohjain ovat elossa yhtä aikaa',
+      keyOnly === 'right' && both === 'jump,right' && padOnly === 'jump',
+      `näppäin "${keyOnly}" molemmat "${both}" ohjain "${padOnly}"`);
+
+    /* --- irronnut tai vajaa ohjain ei saa kaataa pollia --- */
+    clear();
+    let crash = '';
+    const survives = (label, value) => {
+      pads = value;
+      try { Input.poll(); } catch (e) { crash += `${label}: ${e.message}; `; }
+    };
+    survives('null-paikka', [null]);
+    survives('tyhjä lista', []);
+    survives('undefined-paikka', [undefined]);
+    survives('connected=false', [{ ...mkPad([0]), connected: false }]);
+    survives('ei nappeja eikä akseleita', [{ index: 0, id: 'rikki', connected: true, mapping: 'standard' }]);
+    survives('lyhyt akselilista', [{ ...mkPad([]), axes: [] }]);
+    survives('yhden akselin ohjain', [{ ...mkPad([]), axes: [0.9] }]);
+    survives('NaN akselilla', [{ ...mkPad([]), axes: [NaN, NaN] }]);
+    navigator.getGamepads = () => null;
+    try { Input.poll(); } catch (e) { crash += `getGamepads null: ${e.message}; `; }
+    navigator.getGamepads = () => pads;
+    pads = [];
+    Input.poll();
+    const leftovers = Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).join(',');
+    expect('irronnut tai vajaa ohjain ei kaada eikä jätä nappeja pohjaan',
+      crash === '' && leftovers === '', crash || `jäi pohjaan: ${leftovers}`);
+
+    /* --- ei-standardi kuvaus: napit luetaan, akseleita ei --- */
+    clear();
+    pads = [mkPad([0], [-1, 0], '')];
+    const odd = held();
+    clear();
+    pads = [mkPad([], [0, -1], 'vendor-specific')];
+    const oddAxis = held();
+    clear();
+    expect('ei-standardi ohjain ei ohjaa akseleillaan mutta napit toimivat',
+      odd === 'jump' && oddAxis === '',
+      `napit+akseli "${odd}" pelkkä akseli "${oddAxis}"`);
+
+    /* --- ohjaimen nappi ei ole ele, näppäin on --- */
+    clear();
+    const realGesture = Input.onGesture;
+    let gestures = 0;
+    Input.onGesture = () => { gestures++; if (realGesture) realGesture(); };
+    pads = [mkPad([0])];
+    Input.poll();
+    Input.poll();
+    const afterPad = gestures;
+    key('keydown', 'KeyZ');
+    key('keyup', 'KeyZ');
+    const afterKey = gestures;
+    dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    const afterPointer = gestures;
+    Input.onGesture = realGesture;
+    clear();
+    /* Lukumäärä ei ole yksi vaan kaksi, koska tämä testitiedosto kutsuu itse
+     * `Input.install()`in uudestaan ylempänä ja kuuntelijoita on siksi kaksi
+     * kerrosta. Väite ei ole "tasan kerran" vaan se mikä oikeasti ratkaisee:
+     * **ohjaimesta ei nolla kertaa, näppäimestä ja osoittimesta joka kerta.** */
+    expect('ääniluvan yritys lähtee eleestä, ei ohjaimen napista',
+      afterPad === 0 && afterKey > 0 && afterPointer > afterKey,
+      `ohjain ${afterPad} näppäin ${afterKey} osoitin ${afterPointer}`);
+
+    /* --- ääniloukku: mitä ruudulla lukee, milloin ja kenelle --- */
+    const wasMuted = isMuted();
+    if (wasMuted) toggleMute();
+    const realScene = game.scene;
+    const realTrack = Music.current;
+    const realAudioState = game.audioState;
+    Music.current = null;               // ei aloiteta samaa raitaa satoja kertoja
+    game.scene = { update() {}, draw() {} };
+    // Tunnelmaefektit pois: kuumuuden väreily muuttaa pikseleitä joka framella
+    // ja tekisi alla olevasta pikselivertailusta arpapeliä.
+    game.fx.setAmbience(null, null);
+    const resetHint = () => {
+      game.audioHintOff = false;
+      game.audioHintWasUp = false;
+      game.flashTimer = 0;
+      game.flashIsHint = false;
+      game.flash = '';
+    };
+    const steps = (n) => { for (let i = 0; i < n; i++) game.step(); };
+
+    // (a) ääni käynnissä: ohjaimella pelataan pitkään eikä mitään sanota
+    game.audioState = () => 'running';
+    resetHint();
+    clear();
+    pads = [mkPad([0])];
+    steps(300);
+    const whenFine = game.audioHintVisible === true;
+
+    // (b) ääni kiinni ja ohjaimelta tulee syötettä: sanotaan heti, ei kellon jälkeen
+    game.audioState = () => 'suspended';
+    resetHint();
+    game.step();
+    const atOnce = game.audioHintVisible === true;
+    const text = game.flash;
+    steps(300);
+    const stillUp = game.audioHintVisible === true;   // uusitaan, ei umpeudu alta
+
+    // (c) ääni lähtee: vihje katoaa samalla framella
+    game.audioState = () => 'running';
+    game.step();
+    const gone = game.audioHintVisible === true;
+
+    // (d) selaimessa ei ole Web Audiota ollenkaan: ei nalkuteta turhaan
+    game.audioState = () => 'none';
+    resetHint();
+    steps(300);
+    const noWebAudio = game.audioHintVisible === true;
+
+    expect('ääniloukun vihje näkyy heti kun ääni on kiinni ja ohjain puhuu',
+      !whenFine && atOnce && text === 'OHJAIN EI AVAA ÄÄNTÄ - PAINA NÄPPÄINTÄ'
+      && stillUp && !gone && !noWebAudio,
+      `käynnissä ${whenFine} heti ${atOnce} pysyy ${stillUp} äänen jälkeen ${gone}`
+      + ` ei-audiota ${noWebAudio} teksti "${text}"`);
+
+    /* (e) Väärä hälytys on se mitä tässä ratkaisussa nimenomaan ei saa olla:
+     * näppäimistöpelaaja avaa äänen ensimmäisellä painalluksellaan, ja jos
+     * ehto katsoisi pelkkää "syötettä" hän näkisi vilauksen siitä muutaman
+     * framen ajan sillä välin kun `resume()` etenee. Ohjain saa olla kytkettynä
+     * — se ei ole rikos, se on pöydällä. */
+    game.audioState = () => 'suspended';
+    resetHint();
+    clear();
+    pads = [mkPad()];                 // kytketty, mutta kukaan ei koske siihen
+    key('keydown', 'ArrowRight');
+    steps(300);
+    const keyboardNagged = game.audioHintVisible === true;
+    key('keyup', 'ArrowRight');
+    clear();
+    expect('näppäimistöpelaaja ei näe ääniloukun vihjettä vaikka ohjain on kiinni',
+      !keyboardNagged, `näkyi ${keyboardNagged}`);
+
+    // (f) oikea ilmoitus voittaa: se on vastaus siihen mitä pelaaja juuri teki
+    game.audioState = () => 'suspended';
+    resetHint();
+    pads = [mkPad([0])];
+    steps(3);
+    const hintFirst = game.audioHintVisible === true;
+    game.toast('TILA 1 LADATTU');
+    steps(3);
+    const realWins = game.flash === 'TILA 1 LADATTU' && game.audioHintVisible === false;
+    steps(120);                        // ilmoitus umpeutuu
+    const hintReturns = game.audioHintVisible === true;
+    expect('oikea ilmoitus voittaa vihjeen, ja vihje palaa itse',
+      hintFirst && realWins && hintReturns,
+      `vihje ${hintFirst} ilmoitus "${game.flash}" voitti ${realWins} palasi ${hintReturns}`);
+
+    // (g) vihje on oikeasti ruudulla eikä vain lipussa
+    const strip = () => Array.from(game.ctx.getImageData(0, 0, 320, 14).data).join(',');
+    game.audioState = () => 'running';
+    resetHint();
+    game.render();
+    const without = strip();
+    game.render();
+    const withoutAgain = strip();
+    game.audioState = () => 'suspended';
+    resetHint();
+    steps(2);
+    game.render();
+    const withHint = strip();
+    game.audioState = () => 'running';
+    game.step();
+    game.render();
+    const afterUnlock = strip();
+    expect('vihje piirtyy ilmoitusriville ja katoaa kun ääni lähtee',
+      without === withoutAgain && withHint !== without && afterUnlock === without,
+      `vakaa ${without === withoutAgain}, erosi ${withHint !== without},`
+      + ` palasi ${afterUnlock === without}`);
+
+    /* (h) Kuittaus ohjaimen napilla. Se on ainoa kuittaus jolla on merkitystä:
+     * näppäimellä kuittaava avaa samalla äänen, joten vihje olisi mennyt
+     * muutenkin. Ohjaimella kuittaava on valinnut hiljaisuuden — eikä ääni
+     * lähde siitä painalluksesta, joten valinnan pitää pysyä. */
+    game.audioState = () => 'suspended';
+    resetHint();
+    clear();
+    pads = [mkPad([14])];              // ristiohjain vasemmalle: ehto täyttyy
+    steps(4);
+    const upBeforePress = game.audioHintVisible === true;
+    pads = [mkPad([14, 0])];           // ja nyt hyppynappi eli uusi painallus
+    game.step();
+    const afterPress = game.audioHintVisible === true;
+    const dismissed = game.audioHintOff === true;
+    steps(300);
+    const stayedGone = game.audioHintVisible === true;
+    const stillStuck = game.audioState() !== 'running';
+    expect('ohjaimen napilla kuittaaminen sulkee vihjeen koko istunnoksi',
+      upBeforePress && !afterPress && dismissed && !stayedGone && stillStuck,
+      `ennen ${upBeforePress} jälkeen ${afterPress} kuitattu ${dismissed}`
+      + ` pysyi poissa ${!stayedGone}`);
+
+    // (i) kuittaus elää vain muistissa, ei selaimen muistissa
+    const stored = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (/audio|hint|vihje|gamepad|ohjain/i.test(k)) stored.push(k);
+    }
+    expect('vihjeen kuittaus ei jätä uutta avainta selaimen muistiin',
+      stored.length === 0, stored.join(' '));
+
+    if (realAudioState) game.audioState = realAudioState; else delete game.audioState;
+    resetHint();
+    game.scene = realScene;
+    Music.current = realTrack;
+    if (wasMuted !== isMuted()) toggleMute();
+    clear();
+    navigator.getGamepads = realGetGamepads;
+
+    return { checks, failures };
+  });
+  report.checks.push(...gamepad.checks);
+  report.failures.push(...gamepad.failures);
+}
+
 await browser.close();
 server.close();
 
