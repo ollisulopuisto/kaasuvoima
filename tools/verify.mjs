@@ -3648,7 +3648,11 @@ const report = await page.evaluate(async () => {
   {
     const sprites = await import('/src/gfx/sprites.js');
     const { PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer } = sprites;
-    const W = 96; const H = 76; const OX = 36; const OY = 15;
+    /* Twelve rows taller and the sprite twelve lower than this used to be: the
+     * sleeper's ZZZ climbs 21 px above his head, and a picture that runs off
+     * the top of the sheet counts as one piece fewer rather than as a leak,
+     * which is a check quietly measuring the canvas instead of the drawing. */
+    const W = 96; const H = 88; const OX = 36; const OY = 27;
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
@@ -3677,10 +3681,41 @@ const report = await page.evaluate(async () => {
       { n: 'walk 0', s: { state: 'walk', frame: 0 } },
       { n: 'walk 1', s: { state: 'walk', frame: 1 } },
       { n: 'walk 2', s: { state: 'walk', frame: 2 } },
+      { n: 'walk 3', s: { state: 'walk', frame: 3 } },
       { n: 'run 0', s: { state: 'walk', frame: 0, running: true } },
       { n: 'run 2', s: { state: 'walk', frame: 2, running: true } },
       { n: 'jump', s: { state: 'jump', frame: 0 } },
       { n: 'duck', s: { state: 'duck', ducking: true } },
+      /* Hand over hand up a vine, seen from behind. Nothing leaves the box
+       * that the standing pose does not already send out: the raised arms sit
+       * on the same columns the hanging ones do. */
+      { n: 'climb 0', s: { state: 'climb', frame: 0 } },
+      { n: 'climb 1', s: { state: 'climb', frame: 1 } },
+      /*
+       * The second-tier idle, one per theme. Each is sampled at the frame of
+       * its own cycle that reaches furthest, so the numbers below are the
+       * animation's maxima and not one convenient still: `px` is template
+       * pixels and grows with the sprite, `screen` is finished pixels and does
+       * not, and `comps` is the exact number of pieces the picture is allowed
+       * to be in. Every one of them was measured off the drawing rather than
+       * chosen, and none of them is round.
+       *
+       * The icicles and the flame are the room acting on the character, so
+       * they are drawn by the body and grow with it. The ZZZ is a symbol and
+       * is not part of the body, so it is drawn beside it at a fixed size —
+       * see the note in sprites/player.js.
+       */
+      { n: 'sleep', s: { state: 'idle', tick: 5, idle: 1319 }, a: { screen: { above: 21, front: 12 }, comps: 4 } },
+      /* Two samples of the icicle breath: the first one still on his lip, and
+       * the frame where all three are clear of him and as far out as they go. */
+      { n: 'frost 1', s: { state: 'idle', tick: 5, idle: 1244, theme: 'ice' }, a: { px: { front: 2 } } },
+      { n: 'frost 3', s: { state: 'idle', tick: 5, idle: 1263, theme: 'ice' }, a: { px: { front: 11 }, comps: 4 } },
+      { n: 'alight', s: { state: 'idle', tick: 5, idle: 1218, theme: 'desert' }, a: { px: { above: 2 } } },
+      /* The panic beats the body a pixel sideways as well as the arms, so the
+       * back arm reaches one further out than a hanging one — the same pixel
+       * the shiver is already allowed on the ice, for the same reason. */
+      { n: 'panic', s: { state: 'idle', tick: 5, idle: 1260, theme: 'desert' }, a: { px: { above: 4, back: 1 } } },
+      { n: 'smoke', s: { state: 'idle', tick: 5, idle: 1355, theme: 'desert' }, a: { px: { above: 4 } } },
     ];
 
     const leaks = [];
@@ -3724,11 +3759,13 @@ const report = await page.evaluate(async () => {
             const ice = s.theme === 'ice';
             const sweaty = s.theme === 'desert' || s.theme === 'factory';
             const up = (n, k) => (n <= 0 ? 0 : Math.ceil(n * k));
+            const px = (p.a && p.a.px) || {};
+            const scr = (p.a && p.a.screen) || {};
             const allow = {
-              above: up(type === 'leaf' ? 2 : 0, sy),           // raccoon ears
+              above: up((type === 'leaf' ? 2 : 0) + (px.above || 0), sy) + (scr.above || 0),
               below: 0,                                        // the floor line is the floor line
-              front: up((sweaty ? 2 : 1) + (ice ? 1 : 0), sx), // hand, bead, shiver
-              back: up((type === 'leaf' ? 9 : 1) + (ice ? 1 : 0), sx), // tail, hand, shiver
+              front: up((sweaty ? 2 : 1) + (ice ? 1 : 0) + (px.front || 0), sx) + (scr.front || 0),
+              back: up((type === 'leaf' ? 9 : 1) + (ice ? 1 : 0) + (px.back || 0), sx) + (scr.back || 0),
             };
             const over = {
               above: OY - y0,
@@ -3758,7 +3795,8 @@ const report = await page.evaluate(async () => {
                 if (q < W * (H - 1) && art[q + W] && !seen[q + W]) { seen[q + W] = 1; stack.push(q + W); }
               }
             }
-            if (comps !== 1) pieces.push(`${where}: ${comps} pieces`);
+            const wantComps = (p.a && p.a.comps) || 1;
+            if (comps !== wantComps) pieces.push(`${where}: ${comps} pieces, ${wantComps} named`);
           }
         }
       }
@@ -3997,6 +4035,205 @@ const report = await page.evaluate(async () => {
     expect('everything alive breathes, and neighbours are not in step',
       flat.length === 0 && lockstep.length === 0,
       [...flat, ...lockstep, `naapurin ero / 4px:n siirtymä: ${measured.join(', ')}`].join('; '));
+  }
+  /* ------------------------ kävelyn ohitusasento ------------------------ */
+  /*
+   * A walk is contact, pass, contact, pass. The three leg frames were always
+   * right — 0 and 2 are the two contacts, 1 is the pass — but the driver ran
+   * them with `% 3`, so once every stride the cycle wrapped 2 straight back to
+   * 0 and the character put both feet down twice in a row.
+   *
+   * Measured on the pictures a player who is actually walking asks for, not on
+   * the counter: the counter can be renumbered, the limp cannot be argued with.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 40;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (frame) => {
+      g.clearRect(0, 0, 40, 40);
+      sprites.drawPlayer(g, 8, 4, {
+        type: 'shroom', level: 1, facing: 1, frame, state: 'walk',
+        running: false, tick: 5, idle: 0, wag: 0,
+      });
+      const d = g.getImageData(0, 0, 40, 40).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] * 5 + d[i + 3]) | 0;
+      return h;
+    };
+
+    reset({ type: 'shroom', level: 1 });
+    const scene = new LevelScene(game, '1-1');
+    const input = mkInput();
+    input.held.right = true;
+    const asked = [];
+    for (let f = 0; f < 400; f++) {
+      scene.update(input);
+      const p = scene.player;
+      if (p.state() === 'walk') asked.push(p.animFrame);
+    }
+    // The pictures, with repeats of the same picture collapsed.
+    const pics = [];
+    for (const f of asked) {
+      const h = shot(f);
+      if (pics.length === 0 || pics[pics.length - 1] !== h) pics.push(h);
+    }
+    const pass = shot(1);
+    const contacts = new Set(pics.filter((h) => h !== pass));
+    let doubled = 0;
+    for (let i = 1; i < pics.length; i++) {
+      if (pics[i] !== pass && pics[i - 1] !== pass) doubled++;
+    }
+    expect('the walk passes through the closed-legs frame between every contact',
+      pics.length > 8 && contacts.size === 2 && doubled === 0,
+      `${pics.length} kuvaa, ${contacts.size} kosketusasentoa, ${doubled} peräkkäin`);
+  }
+
+  /* ------------------------- kiipeilyn oma asento ----------------------- */
+  /*
+   * Half of this was already in the engine and thrown away: `animFrame` was
+   * being driven as a two-frame hand-over-hand cycle while `state()` reported
+   * `jump`, so the vine showed a frozen jump pose that never changed. Both
+   * halves are checked here — the state the engine reports, and that the two
+   * frames are actually two different pictures and neither of them is the jump.
+   */
+  {
+    const { T } = await import('/src/gfx/tiles.js');
+    const sprites = await import('/src/gfx/sprites.js');
+    reset({ type: 'shroom', level: 1 });
+    let scene = null;
+    let vine = null;
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      for (let ty = 1; ty < sc.h && !vine; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          if (sc.rawTileAt(tx, ty) === T.VINE && sc.rawTileAt(tx, ty + 1) === T.VINE) {
+            vine = { tx, ty }; scene = sc; break;
+          }
+        }
+      }
+      if (vine) break;
+    }
+    let climbState = 'ei köyttä';
+    let moved = false;
+    if (vine) {
+      const p = scene.player;
+      p.x = vine.tx * 16 + (16 - p.w) / 2;
+      p.y = vine.ty * 16;
+      p.onGround = false;
+      const input = mkInput();
+      input.held.up = true;
+      const seen = new Set();
+      for (let f = 0; f < 40; f++) {
+        scene.update(input);
+        if (p.climbing) { climbState = p.state(); seen.add(p.animFrame); }
+      }
+      moved = seen.size === 2;
+    }
+
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 40;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (o) => {
+      g.clearRect(0, 0, 40, 40);
+      sprites.drawPlayer(g, 8, 4, {
+        type: 'shroom', level: 1, facing: 1, frame: 0, state: 'idle',
+        running: false, tick: 5, idle: 0, wag: 0, ...o,
+      });
+      const d = g.getImageData(0, 0, 40, 40).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] * 5 + d[i + 3]) | 0;
+      return h;
+    };
+    const a = shot({ state: 'climb', frame: 0 });
+    const b = shot({ state: 'climb', frame: 1 });
+    const jump = shot({ state: 'jump', frame: 0 });
+    expect('a player on a vine climbs instead of hanging in a jump pose',
+      climbState === 'climb' && moved && a !== b && a !== jump && b !== jump,
+      `tila "${climbState}", kaksi framea ${moved}, framet eroavat ${a !== b}, `
+      + `ei hyppyasento ${a !== jump && b !== jump}`);
+  }
+
+  /* --------------------- toisen tason seisonta-animaatiot --------------- */
+  /*
+   * Twenty seconds of standing still — the same wait the title screen makes
+   * before the cabinet starts playing by itself — and the character starts a
+   * bigger performance: he falls asleep in an ordinary level, breathes icicles
+   * on the ice and sets his hair on fire in the desert.
+   *
+   * Three things are checked, and the first two are the whole joke:
+   *  1. Nothing at all changes before the twenty seconds are up. The first-tier
+   *     idle keeps its own 360-frame cycle, so a shot at 1199 must be identical
+   *     to the same phase 360 frames earlier.
+   *  2. It ends in one frame when anything comes near, exactly as the attract
+   *     demo hands the machine back.
+   *  3. All three are different performances, not one with a repaint.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (o) => {
+      g.clearRect(0, 0, 64, 64);
+      sprites.drawPlayer(g, 22, 26, {
+        type: null, level: 1, facing: 1, state: 'idle', frame: 0, wag: 0,
+        running: false, ducking: false, theme: 'grass', tick: 100, ...o,
+      });
+      return g.getImageData(0, 0, 64, 64).data;
+    };
+    const diff = (a, b) => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]
+          || a[i + 3] !== b[i + 3]) n++;
+      }
+      return n;
+    };
+    const quiet = diff(shot({ idle: 1199 }), shot({ idle: 839 }));
+    const wakes = diff(shot({ idle: 1199 }), shot({ idle: 1300 }));
+    const sleep = shot({ idle: 1300 });
+    const frost = shot({ idle: 1263, theme: 'ice' });
+    const fire = shot({ idle: 1260, theme: 'desert' });
+    const own = Math.min(diff(sleep, frost), diff(sleep, fire), diff(frost, fire));
+    // …and it must be an animation, not a still.
+    const alive = diff(shot({ idle: 1300 }), shot({ idle: 1340 }));
+    expect('the second-tier idle waits twenty seconds and then puts on a show',
+      quiet === 0 && wakes > 30 && own > 20 && alive > 10,
+      `ennen ${quiet}px, laukeaa ${wakes}px, teemojen ero ${own}px, elää ${alive}px`);
+
+    /* Breaking in a single frame is the same promise the attract demo makes. */
+    reset({ type: 'shroom', level: 1 });
+    const scene = new LevelScene(game, '1-1');
+    const p = scene.player;
+    const idleInput = mkInput();
+    for (let f = 0; f < 30; f++) scene.update(idleInput);
+    // Nothing in the room to begin with, so the twenty seconds can run out.
+    const foes = scene.entities.filter((e) => e.kind === 'enemy');
+    for (const e of foes) e.x += 4000;
+    p.idle = 1400;
+    scene.update(idleInput);
+    const undisturbed = p.idle;
+    let broke = -1;
+    if (foes.length) {
+      const foe = foes[0];
+      foe.x = p.x + 40;
+      foe.y = p.y;
+      foe.active = true;
+      p.idle = 1400;
+      scene.update(idleInput);
+      broke = p.idle;
+    }
+    expect('the second-tier idle stops dead the frame something comes near',
+      undisturbed > 1400 && broke === 0,
+      `häiriöttä ${undisturbed}, vihollinen lähellä ${broke}`);
   }
 
   /* ---------------------------- voittoruutu ----------------------------- */

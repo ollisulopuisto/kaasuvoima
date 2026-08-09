@@ -5,6 +5,12 @@ import {
 import {
   drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES, TINTS, STAR_TINTS, GLOWS,
 } from '../gfx/sprites.js';
+/* Straight from the sprite rather than through the barrel: these two belong to
+ * the animation they drive, and there must be exactly one of each. The frame
+ * count decides how long a stride is and the dead time decides when the second
+ * tier of idle starts — both are the drawing's business, and a copy kept here
+ * would go stale the first time either is tuned. */
+import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -415,17 +421,51 @@ export class Player extends Entity {
     // drives the idle performance in the sprite.
     if (this.onGround && Math.abs(this.vx) < 0.05 && dir === 0 && !this.ducking) this.idle++;
     else this.idle = 0;
+    /* …and the second tier of that performance ends the moment anything comes
+     * near, in one frame and mid-cycle, exactly as the attract demo hands the
+     * machine back. It adds particles and takes the eye, so a player who looks
+     * up to find an enemy arriving must never also have to wait for a gag to
+     * finish. Only asked once the clock is nearly up, so the ordinary case
+     * costs nothing. */
+    if (this.idle >= DEEP_IDLE - 60 && this.threatNear()) this.idle = 0;
 
     const speed = Math.abs(this.vx);
     if (this.onGround && speed > 0.1) {
-      this.animTimer += 0.12 + speed * 0.14;
+      /*
+       * `* WALK_FRAMES / 3` keeps the cadence the frame order changed. Contacts
+       * used to fall 1 and 2 advances apart in a three-frame cycle — 1.5 on
+       * average, and uneven, which is the stutter — and fall 2 apart in the
+       * four-frame one. Left alone that is a third fewer steps for the same
+       * ground speed: measured at the walk cap it is 6.8 px of travel per step
+       * against a 7 px gap between the boot prints, which is as close to not
+       * sliding as this sprite gets, and 9.1 px against the same 7 px if the
+       * rate is not scaled with the cycle.
+       */
+      this.animTimer += (0.12 + speed * 0.14) * (WALK_FRAMES / 3);
       if (this.animTimer >= 1) {
         this.animTimer = 0;
-        this.animFrame = (this.animFrame + 1) % 3;
+        this.animFrame = (this.animFrame + 1) % WALK_FRAMES;
       }
     } else if (this.onGround) {
       this.animFrame = 0;
     }
+  }
+
+  /**
+   * Anything in the room that could be on top of him shortly. Six tiles is
+   * about a second and a half of walker at full tilt — far enough that the
+   * performance is over before the thing that ended it arrives, close enough
+   * that it does not fire at everything on the screen.
+   */
+  threatNear() {
+    const list = this.level && this.level.entities;
+    if (!list) return false;
+    for (const e of list) {
+      if (e === this || e.remove || !e.active) continue;
+      if (e.kind !== 'enemy' && e.kind !== 'hazard' && e.kind !== 'projectile') continue;
+      if (Math.abs(e.cx - this.cx) < 96 && Math.abs(e.cy - this.cy) < 64) return true;
+    }
+    return false;
   }
 
   /**
@@ -685,6 +725,10 @@ export class Player extends Entity {
 
   state() {
     if (this.dying) return 'jump';
+    /* Before `ducking` and before `onGround`: a body on a vine is neither
+     * standing nor falling, and reporting `jump` here was the whole reason the
+     * hand-over-hand counter below was computed every frame and thrown away. */
+    if (this.climbing) return 'climb';
     if (this.ducking) return 'duck';
     if (!this.onGround) return 'jump';
     if (Math.abs(this.vx) > 0.1) return 'walk';
