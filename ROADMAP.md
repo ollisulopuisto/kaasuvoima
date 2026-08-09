@@ -97,7 +97,8 @@ mutta muuttuvan ruudukon tarkistaminen on uusi asia: jokaisen *mahdollisen*
 järjestelyn on kelvattava, ei vain sen jossa taistelu alkaa.
 
 
-muokkaa areenaa — nostaa pilareita, avaa kuiluja — ja pelaajan pitää sopeutua.
+Itse idea: vaihe jossa pomo muokkaa areenaa — nostaa pilareita, avaa kuiluja —
+ja pelaajan pitää sopeutua.
 Tämä on aito neljännen seinän rikkominen siinä mielessä että vihollinen koskee
 siihen mitä pelaaja luuli vakioksi. Vaatii että muutos on **ennakoitu, palautuva
 ja validoitu**: pelaaja näkee sen tulevan, areena palautuu jos pomo kaatuu, ja
