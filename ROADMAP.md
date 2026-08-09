@@ -272,7 +272,8 @@ tuota mekaniikattomia kenttiä.
 
 Alkuperäiset neljä, tila merkittynä:
 
-1. **Käsin ei tehdä 42 uutta kenttää.** Nykyiset käsintehdyt ovat maailman
+1. **Käsin ei tehdä 38 uutta kenttää.** (Luku oli 42 ennen luumaailmaa.)
+   Nykyiset käsintehdyt ovat maailman
    parasta sisältöä, mutta ne ovat myös hidas tapa. Generaattori on olemassa
    ja tekee jo maailman 5:n, telemetria syöttää sitä, ja tässä mittakaavassa
    se lakkaa olemasta bonusmaailman kikka ja alkaa olla se tapa jolla peli
