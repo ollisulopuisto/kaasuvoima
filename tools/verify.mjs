@@ -2050,7 +2050,46 @@ const report = await page.evaluate(async () => {
   }
 
   /* -------------------------------- audio ------------------------------ */
-  const { Sfx, Music } = await import('/src/core/audio.js');
+  const { Sfx, Music, audioTap } = await import('/src/core/audio.js');
+
+  /* The vocals are synthesised through two narrow bandpass filters, so their
+   * `gain` argument is applied to whatever survives the filters — it never
+   * meant what it said. Measured, a nominal 0.44 came out at a third the
+   * loudness of a coin, which is why they were reported as inaudible three
+   * times. This asserts the measurement, because the constant cannot. */
+  {
+    const tap = audioTap();
+    let voice = 0;
+    let floorNoise = 0;
+    if (tap && tap.ctx.state === 'running') {
+      Music.stop();
+      const an = tap.ctx.createAnalyser();
+      an.fftSize = 2048;
+      tap.bus.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const peakFor = async (ms) => {
+        let peak = 0;
+        const t0 = performance.now();
+        while (performance.now() - t0 < ms) {
+          an.getFloatTimeDomainData(buf);
+          for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+          await new Promise((r) => setTimeout(r, 8));
+        }
+        return peak;
+      };
+      // The suite has been firing sounds for a minute; let the bus go quiet
+      // first, and measure what "quiet" actually is before trusting the reading.
+      await new Promise((r) => setTimeout(r, 900));
+      floorNoise = await peakFor(200);
+      Sfx.play('yeah');
+      voice = await peakFor(420);
+      an.disconnect();
+    }
+    const measured = tap && tap.ctx.state === 'running';
+    expect('a spoken line is loud enough to hear',
+      !measured || (floorNoise < 0.1 && voice > 0.25),
+      measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}` : 'ei mitattu');
+  }
 
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
    * seconds behind the audio clock. Playing that backlog would build thousands

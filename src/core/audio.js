@@ -224,6 +224,19 @@ const VOWELS = {
  * @param {number} o.pitch starting pitch in Hz
  * @param {number} o.bend pitch multiplier at the end
  */
+/**
+ * Makeup gain for the formant filters.
+ *
+ * `gain` is applied *after* two bandpass filters at Q 7 and 9, which throw away
+ * most of a sawtooth's energy — so the number never meant what it said. Measured
+ * on the sfx bus: a nominal 0.44 came out at a peak of 0.109, against 0.32 for a
+ * coin and 0.57 for the death sound. Voices were a third the loudness of the
+ * smallest sound effect in the game, which is why nobody could hear them.
+ *
+ * This is the measured ratio, not a guess. Re-measure it if the filters change.
+ */
+const VOX_MAKEUP = 4.0;
+
 function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.44, delay = 0 }) {
   if (muted || !ensure()) return;
   const t0 = ctx.currentTime + delay;
@@ -242,10 +255,11 @@ function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.44, del
   lfoAmt.gain.value = f0 * 0.03;
   lfo.connect(lfoAmt).connect(osc.frequency);
 
+  const peak = gain * VOX_MAKEUP;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0.0001, t0);
-  env.gain.exponentialRampToValueAtTime(gain, t0 + 0.03);
-  env.gain.setValueAtTime(gain, t0 + dur * 0.6);
+  env.gain.exponentialRampToValueAtTime(peak, t0 + 0.03);
+  env.gain.setValueAtTime(peak, t0 + dur * 0.6);
   env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   env.connect(sfxBus);
 
@@ -460,6 +474,11 @@ function hatAt2(delay) {
 }
 
 /** What the audio engine is actually doing, for the debug overlay. */
+/** The sfx bus and its context, for measuring loudness from a test harness. */
+export function audioTap() {
+  return ensure() ? { ctx, bus: sfxBus } : null;
+}
+
 export function audioDiag() {
   return {
     state: ctx ? ctx.state : 'none',
