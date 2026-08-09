@@ -409,6 +409,18 @@ const SFX = {
     noise({ dur: 0.2, from: 2600, to: 380, q: 1.1, gain: 0.28, type: 'highpass' });
     tone({ type: 'square', from: 260, to: 90, dur: 0.1, gain: 0.14, hold: 0.2 });
   },
+  burst: () => {
+    /* A wall going down under a shoulder, not a brick popping off a bump.
+     *
+     * `brick` is already the sound of one tile letting go, and the charge fires
+     * it once per tile — so this is the layer that says "that was a wall", and
+     * it has to sit *under* the rubble rather than compete with it: a low
+     * thump with a long gassy tail, where `brick` is a short bright crack.
+     * Playing the same sound louder would only have sounded like a bug. */
+    tone({ type: 'triangle', from: 150, to: 44, dur: 0.3, gain: 0.3, hold: 0.35, curve: 'lin' });
+    noise({ dur: 0.34, from: 900, to: 160, q: 1.3, gain: 0.24 });
+    farty({ dur: 0.26, base: 84, gain: 0.2, wobble: 10, wet: 0.6, delay: 0.05 });
+  },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
   spikes: () => {
     // Bone sliding out of a back. Rising, so it reads as a warning rather than

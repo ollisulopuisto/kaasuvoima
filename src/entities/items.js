@@ -30,7 +30,7 @@ const FART_LIGHT_R = 44;
 const FART_LIGHT_I = 0.78;
 
 export class Item extends Entity {
-  /** @param {'shroom'|'flower'|'leaf'|'soup'|'star'|'oneup'} itemKind */
+  /** @param {'shroom'|'flower'|'leaf'|'pop'|'soup'|'star'|'oneup'} itemKind */
   constructor(level, x, y, itemKind, { emerge = true } = {}) {
     super(level, x, y, 16, 16);
     this.kind = 'item';
@@ -56,7 +56,12 @@ export class Item extends Entity {
 
     switch (this.itemKind) {
       case 'shroom':
-      case 'oneup': {
+      case 'oneup':
+      /* The paukkupapu rolls like a mushroom rather than sitting still like a
+       * flower. It is dropped in the middle of an arena the player is still
+       * moving through, and a prize that stays exactly where the last enemy
+       * fell can land somewhere awkward — a rolling one comes to meet you. */
+      case 'pop': {
         this.vx = 0.85 * this.facing;
         if (moveX(this, this.level)) this.facing *= -1;
         applyGravity(this, 0.8);

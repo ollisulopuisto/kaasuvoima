@@ -3,7 +3,7 @@ import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
 import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
-  drawBubble, bubbleRadius, recolored, TINTS,
+  drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
 } from '../gfx/sprites.js';
 import { TILE, T } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
@@ -1148,6 +1148,240 @@ export class Boss extends Enemy {
   }
 }
 
+/*
+ * PAPUPAROONI — the desert mini-boss, and there are always two of them.
+ *
+ * The barons are the pieruprinssi's tax collectors in the dunes, and what they
+ * are collecting is beans. Between them they are sitting on the only
+ * paukkupapu in the game (see POWER_TYPES in player.js): beat both, and the
+ * last one drops it. Nothing else in the game hands that power-up out, which is
+ * why the drop is written here and not in `rollPowerup` — a block that could
+ * roll it would make the whole fight optional.
+ *
+ * What makes it a fight rather than an enemy, in three decisions:
+ *
+ *   - **Two of them, on separate plinths.** One thrower is a timing puzzle; two
+ *     is a crossfire, and the arena has to be read rather than walked through.
+ *     They also share one drop, so beating the first one is progress and not a
+ *     reward — the fight has a middle.
+ *   - **Two health each, and a stomp still works.** Every boss in this game is
+ *     beatable at power level 0 and this one is no exception: the default
+ *     answer is the right answer, it just has to land twice. Spines would have
+ *     closed that door, and the door is the promise.
+ *   - **The throw is telegraphed.** The bean goes up over the baron's head for
+ *     half a second before it leaves, and the arc is slow. What can hurt you has
+ *     to be visible (DESIGN.md 7), and a lobbed thing you cannot destroy has to
+ *     be a thing you can read.
+ */
+/** Frames between lobs, and how long the arm is up before one leaves. */
+const BARON_THROW = 132;
+const BARON_WINDUP = 34;
+/** How close the player has to be to be worth a bean. */
+const BARON_RANGE = 210;
+/**
+ * And how far from its plinth a baron will wander. Measured against the arena
+ * rather than picked: a plinth is five tiles (80 px) and a baron is 18 px wide,
+ * so 28 px either side of the middle is as far as one can go with its whole
+ * body still on the stone. Further than that it teeters over the edge, which
+ * looks like a bug in the fight rather than a boss taking a step.
+ */
+const BARON_PATROL = 28;
+/** The lob: rise, gravity, and the ceiling on how hard one can be thrown. */
+const BOMB_LIFT = -4.2;
+const BOMB_GRAVITY = 0.18;
+const BOMB_FLIGHT = (2 * -BOMB_LIFT) / BOMB_GRAVITY;
+const BOMB_MAX_VX = 3.0;
+
+/**
+ * Papupommi — a bean thrown by a baron, arcing, bouncing once, and bursting.
+ *
+ * A hazard rather than an enemy, and that is the same call `Heartburn` makes:
+ * it cannot be stomped, trapped or killed, so calling it an enemy would put it
+ * in every loop that offers the player a way to remove it and then refuse. The
+ * answer to it is to not be there.
+ */
+export class BeanBomb extends Entity {
+  constructor(level, x, y, vx) {
+    super(level, x, y, 10, 10);
+    this.kind = 'hazard';
+    this.vx = vx;
+    this.vy = BOMB_LIFT;
+    this.bounces = 1;
+    this.life = 260;
+    this.active = true;
+    Sfx.play('squeak');
+  }
+
+  burst() {
+    this.remove = true;
+    this.level.spawnPuff(this.cx, this.cy, true);
+    Sfx.play('pop');
+  }
+
+  update() {
+    this.tick++;
+    if (--this.life <= 0) {
+      this.burst();
+      return;
+    }
+    if (moveX(this, this.level)) {
+      this.burst();
+      return;
+    }
+    this.vy = Math.min(this.vy + BOMB_GRAVITY, 5);
+    const hit = moveY(this, this.level);
+    // One bounce, so a bean that lands short is still a thing to step over for
+    // a moment. The second landing is where it goes off.
+    if (hit.ground) {
+      if (this.bounces-- > 0) this.vy = -2.4;
+      else this.burst();
+    }
+    if (hit.ceiling) this.vy = 0.5;
+    if (this.y > this.level.heightPx + 16) this.remove = true;
+  }
+
+  draw(ctx) {
+    drawBeanBomb(ctx, this.x, this.y, this.tick);
+  }
+}
+
+export class BeanBaron extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 18, 26);
+    this.speed = 0.45;
+    this.score = 2000;
+    this.hp = 2;
+    this.invuln = 0;
+    this.throwTimer = BARON_THROW;
+    this.windup = 0;
+    this.hopTimer = 70 + Math.floor(Math.random() * 60);
+    /* Where it was put. A baron that wandered off would take the game's only
+     * paukkupapu with it — and, worse, could follow the player to the flag,
+     * which turns an arena into an escort. Same reasoning as the boss's
+     * out-of-bounds catch, applied before it happens rather than after. */
+    this.homeX = x;
+    /* Part of the level's state, not scenery near the camera: the drop must not
+     * be tidied away because the player backtracked past the arena. */
+    this.alwaysActive = true;
+    this.active = true;
+  }
+
+  /* A bubble would carry a mini-boss off its plinth and hand the player the
+   * kill for one shot. It takes its hits like the sun does: two, from
+   * anything. */
+  get bubbleable() { return false; }
+
+  takeHit(dir) {
+    if (this.invuln > 0 || this.dying) return;
+    this.hp--;
+    this.invuln = 48;
+    this.windup = 0;
+    this.throwTimer = Math.max(this.throwTimer, 40);
+    if (this.hp > 0) {
+      Sfx.play('bump');
+      return;
+    }
+    this.defeat(dir);
+  }
+
+  hitByProjectile(dir) { this.takeHit(dir); }
+  hitByShell(dir) { this.takeHit(dir); }
+  hitByTail(dir) { this.takeHit(dir); }
+
+  stomp() {
+    this.takeHit(this.facing * -1 || 1);
+    return true;
+  }
+
+  /**
+   * The end of the fight — but only when it is the end of the fight.
+   *
+   * The prize belongs to the pair and not to either baron, so it is the last
+   * one standing that drops it. Checking for a live sibling rather than
+   * counting kills means a baron removed some other way (a save state loaded
+   * mid-fight, a fall out of the world) cannot leave the drop owed to nobody.
+   */
+  defeat(dir) {
+    this.tumble(dir);
+    this.level.awardScore(this.score, this.cx, this.y);
+    const other = this.level.entities.some((e) => e instanceof BeanBaron
+      && e !== this && !e.dying && !e.remove);
+    if (other) {
+      Sfx.play('kick');
+      return;
+    }
+    this.level.add(new Item(this.level, this.cx - 8, this.y + 2, 'pop', { emerge: false }));
+    this.level.addScorePop(this.cx, this.y - 12, 'PAUKKUPAPU');
+    this.level.shake(3);
+    Sfx.play('powerup');
+  }
+
+  /** Lobs one bean at where the player is standing. @returns the bomb. */
+  throwBomb() {
+    const player = this.level.player;
+    const dx = player ? player.cx - this.cx : 80 * this.facing;
+    const aim = Math.max(-BOMB_MAX_VX, Math.min(BOMB_MAX_VX, dx / BOMB_FLIGHT));
+    if (aim !== 0) this.facing = Math.sign(aim);
+    const bomb = new BeanBomb(this.level, this.cx - 5, this.y - 6, aim);
+    this.level.add(bomb);
+    return bomb;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.invuln > 0) this.invuln--;
+
+    const player = this.level.player;
+    const near = player && Math.abs(player.cx - this.cx) < BARON_RANGE;
+
+    if (this.windup > 0) {
+      // Rooted while the arm is up: the telegraph is a promise about where the
+      // throw comes from, and a baron that walked during it would break it.
+      this.vx = 0;
+      if (--this.windup === 0) this.throwBomb();
+    } else {
+      if (near && --this.throwTimer <= 0) {
+        this.windup = BARON_WINDUP;
+        this.throwTimer = BARON_THROW + Math.floor(Math.random() * 50);
+        this.facing = player.cx < this.cx ? -1 : 1;
+        Sfx.play('boss');
+      }
+      this.vx = this.speed * this.facing;
+      if (moveX(this, this.level)) this.facing *= -1;
+      // Careful about ledges like the shell walkers, and kept near home on top
+      // of that: the terrain answer alone would let one hop off its plinth.
+      if (this.onGround
+        && !footingAhead(this.level, this.x + this.facing * 3, this.y, this.w, this.h)) {
+        this.facing *= -1;
+      }
+      if (Math.abs(this.x - this.homeX) > BARON_PATROL) {
+        this.facing = Math.sign(this.homeX - this.x) || 1;
+      }
+      // A hop, so a stomp is a matter of timing rather than of walking up to it.
+      if (this.onGround && --this.hopTimer <= 0) {
+        this.vy = -3.6;
+        this.hopTimer = 80 + Math.floor(Math.random() * 70);
+      }
+    }
+
+    applyGravity(this, 0.95);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  draw(ctx) {
+    const frame = Math.floor(this.tick / 7);
+    const lift = this.windup > 0 ? 1 - this.windup / BARON_WINDUP : 0;
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawBeanBaron(ctx, this.x, this.y, frame, this.facing, 0, false));
+      return;
+    }
+    drawBeanBaron(ctx, this.x, this.y, frame, this.facing, lift,
+      this.invuln > 0 && Math.floor(this.tick / 3) % 2 === 0);
+  }
+}
+
 /**
  * Kuu — hangs in the night sky and bobs. Jump onto it and it hands over a
  * power-up. It cannot hurt you; the challenge is getting up there at all.
@@ -1269,4 +1503,10 @@ export const ENEMY_CHARS = {
   H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
   b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),
   O: (level, tx, ty) => new Moon(level, tx * TILE, ty * TILE),
+  /* The baron is taller than a tile, so its marker is the square it *stands
+   * in*: the body is hung from the bottom of that square rather than dropped
+   * from its top. Chunks then read the way the eye reads them, and the
+   * "enemies inside walls" check in verify.mjs — which looks at the tile under
+   * the sprite's feet — is asking about the tile the level author meant. */
+  P: (level, tx, ty) => new BeanBaron(level, tx * TILE - 1, (ty + 1) * TILE - 26),
 };

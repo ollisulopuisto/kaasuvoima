@@ -75,9 +75,13 @@ const WORLD_DEFS = [
       { id: 'w2-2', tx: 7, ty: 5, type: 'level', level: '2-2', name: 'HIEKKAMYRSKY' },
       { id: 'w2-n', tx: 9, ty: 7, type: 'level', level: '2-N', name: 'AAVIKON YÖ' },
       { id: 'w2-3', tx: 11, ty: 3, type: 'level', level: '2-3', name: 'LAAVAKUILU' },
-      /* Tile 13,3 on the upper road is kept free for the desert mini-boss.
-       * Dropping a node there splits w2-3 → w2-f into two links and needs
-       * nothing else: it is already inside the rewarded route's `via`. */
+      /* The desert mini-boss, on the upper road because that is the measured
+       * harder one — 156 against 124. The fight's own author proposed hanging
+       * it off 2-N instead, reasoning that the night level is "the harder way";
+       * the meter disagrees, and the reward has to sit on the road that
+       * actually costs more or `worldProblems` rejects the map. Which is the
+       * point of measuring it rather than remembering it. */
+      { id: 'w2-m', tx: 13, ty: 3, type: 'level', level: '2-M', name: 'PAROONIEN KUOPPA' },
       { id: 'w2-f', tx: 15, ty: 5, type: 'fortress', level: '2-F', name: 'LINNAKE 2' },
     ],
     links: [
@@ -87,7 +91,8 @@ const WORLD_DEFS = [
       { a: 'w2-2', b: 'w2-n', path: [[7, 7]] },
       { a: 'w2-n', b: 'w2-f', path: [[15, 7]] },
       { a: 'w2-2', b: 'w2-3', path: [[11, 5]] },
-      { a: 'w2-3', b: 'w2-f', path: [[15, 3]] },
+      { a: 'w2-3', b: 'w2-m' },
+      { a: 'w2-m', b: 'w2-f', path: [[15, 3]] },
     ],
     /*
      * The first fork in the game. 2-N used to hang off the road with no way
@@ -105,7 +110,7 @@ const WORLD_DEFS = [
         to: 'w2-f',
         routes: [
           { name: 'HIEKKATIE', via: ['w2-n'] },
-          { name: 'LAAVATIE', via: ['w2-3'], reward: 'break' },
+          { name: 'LAAVATIE', via: ['w2-3', 'w2-m'], reward: 'break' },
         ],
       },
     ],

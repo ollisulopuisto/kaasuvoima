@@ -72,6 +72,14 @@ const ENEMY_COST = {
              * costs 1.1; the jet costs more only because it erupts out of open
              * floor instead of a pipe you can see from a screen away. */
   A: 3.0,   // angry sun: unkillable by stomp and follows you for the rest of the level
+  P: 3.0,   /* bean baron: survives being hit, so clearing it is two actions under
+             * pressure — above the flyer's 1.6 — and it throws something that
+             * cannot be removed at all, above the plant and the cloud. But it is
+             * bolted to its plinth and can be left behind, so it is not the
+             * boss's 5.0. Level with the sun, which trades "no stomp answer and
+             * it follows you" against "two hits and a crossfire, but it stays
+             * put". Added with the enemy rather than after it, because a
+             * mini-boss worth zero is the exact bug the spiky walker had. */
   O: 0.0,   // moon: harmless, it is a trampoline with a power-up in it
   b: 5.0,   /* boss: one entity, but it is the level. The real spread between
              * bosses is bossVariant's move set, which is code and not grid, so
