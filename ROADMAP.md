@@ -230,7 +230,13 @@ generaattorista, joten kaista syntyy sinne vain opettamalla `gen-levels.mjs`:lle
 kolmikerroksinen kokoonpano — ja uusi generointiajo arpoo maailman uusiksi, eli
 kolmen kentän mitattu vaikeus muuttuu kerralla. Oma päätöksensä.
 
-### Kaikki elävä hengittää, ei vain liiku sivuttain
+### ✔ Tehty (v26.08.09.21): kaikki elävä hengittää
+
+**Tehty.** Maasta kävelevät viholliset hengittävät nyt 163 framen jaksolla,
+vaihesiirto oliokohtaisesti, 1 px:n amplitudi laatikon sisällä. Kuvaus alla on
+jätetty siksi että se kertoo *miksi* luvut ovat mitä ovat.
+
+#### Alkuperäinen kuvaus
 
 Omistajan pyyntö, hänen sanoinaan: *yleinen läpikäynti joka saa kaiken elävän
 hengittämään vähän, samaan tapaan kuin karttasolmut jo tekevät — niin että
@@ -288,7 +294,14 @@ Suositus: yksi jaettu apufunktio piirtokoodin puolelle (`src/gfx/sprites.js`),
 1 px:n amplitudi, vaihesiirto oliokohtaisesti, laatikot koskematta — ja
 jaksonpituus säädettynä silmällä ennen kuin se kirjataan vakioksi.
 
-### Toisen tason seisonta-animaatiot: kolme, teemoittain
+### ✔ Tehty (v26.08.09.22): toisen tason seisonta-animaatiot
+
+**Tehty.** Nukahtaminen, jääpuikkohengitys ja palava tukka, laukeavat 1200
+framen jälkeen (sama kuollut aika kuin esittelytilalla) ja katkeavat yhdessä
+framessa. ZZZ:n symboliluonne ratkaistiin: se kuuluu samaan kerrokseen kuin
+`addScorePop`, eikä skaalaudu voimatason mukana.
+
+#### Alkuperäinen kuvaus
 
 Pelaajalla on jo seisonta-animaatio (hengitys) ja teemakohtaiset lisät
 (väristys jäässä, hiki aavikossa). Omistaja haluaa **toisen tason**: isomman,
