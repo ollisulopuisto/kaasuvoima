@@ -389,6 +389,213 @@ const report = await page.evaluate(async () => {
     expect('the world map animates', frames.size >= 3, `${frames.size} distinct frames`);
   }
 
+  /* ------------------- haarautuva kartta ja mitattu vaikeus ---------------- */
+
+  /*
+   * The map's shape rules. These are the ROADMAP's branch conditions turned
+   * into something the data cannot get around: every level lies on a way from
+   * the start to the fortress, every fork is described, and blocking every
+   * rewarded route still leaves a way through.
+   *
+   * Red before green (DESIGN.md 7): the six broken worlds below come first, and
+   * every one of them was checked to be reported before the real map was
+   * changed to satisfy the same rules. The one that matters most is the second
+   * — a level hanging off the road with no way back is exactly what 2-N was,
+   * and it is the shape a half-finished branch has.
+   */
+  {
+    const worlds = await import('/src/data/worlds.js');
+    const real = WORLDS.flatMap((w) => worlds.worldProblems(w));
+    expect('every world map is a shape the game can actually be played through',
+      real.length === 0, real.slice(0, 4).join(' / '));
+
+    /* 1-2 scores 122.8 and 1-3 scores 101.2, so `b` is the harder road. Reusing
+     * real levels keeps the fixture honest about the measured table. */
+    const mk = (over) => ({
+      id: 'wT',
+      name: 'TESTI',
+      theme: 'grass',
+      terrain: [],
+      nodes: [
+        { id: 's', tx: 0, ty: 0, type: 'start', name: 'ALKU' },
+        { id: 'a', tx: 1, ty: 0, type: 'level', level: '1-1', name: 'A' },
+        { id: 'b', tx: 2, ty: 0, type: 'level', level: '1-2', name: 'B' },
+        { id: 'c', tx: 2, ty: 1, type: 'level', level: '1-3', name: 'C' },
+        { id: 'f', tx: 3, ty: 0, type: 'fortress', level: '1-F', name: 'F' },
+      ],
+      links: [
+        { a: 's', b: 'a' }, { a: 'a', b: 'b' }, { a: 'a', b: 'c' },
+        { a: 'b', b: 'f' }, { a: 'c', b: 'f' },
+      ],
+      branches: [{
+        from: 'a',
+        to: 'f',
+        routes: [
+          { name: 'HELPPO', via: ['c'] },
+          { name: 'VAIKEA', via: ['b'], reward: 'break' },
+        ],
+      }],
+      ...over,
+    });
+
+    expect('a well-formed branching world reports nothing',
+      worlds.worldProblems(mk({})).length === 0,
+      worlds.worldProblems(mk({})).join(' / '));
+
+    const cases = [
+      ['umpikuja', 'umpikuja', mk({
+        nodes: [...mk({}).nodes, { id: 'd', tx: 4, ty: 2, type: 'level', level: '2-N', name: 'D' }],
+        links: [...mk({}).links, { a: 'b', b: 'd' }],
+      })],
+      ['ilmoittamaton haara', 'haarautuu ilmoittamatta', mk({ branches: [] })],
+      ['reitti ilman linkkiä', 'puuttuu linkki', mk({
+        links: mk({}).links.filter((l) => !(l.a === 'b' && l.b === 'f')),
+      })],
+      ['palkinto helpolla reitillä', 'ei ole vaikeampi', mk({
+        branches: [{
+          from: 'a',
+          to: 'f',
+          routes: [
+            { name: 'HELPPO', via: ['c'], reward: 'break' },
+            { name: 'VAIKEA', via: ['b'] },
+          ],
+        }],
+      })],
+      ['kaikki reitit palkittuja', 'helppo reitti ei vie linnakkeeseen', mk({
+        branches: [{
+          from: 'a',
+          to: 'f',
+          routes: [
+            { name: 'HELPPO', via: ['c'], reward: 'break' },
+            { name: 'VAIKEA', via: ['b'], reward: 'break' },
+          ],
+        }],
+      })],
+      ['tuntematon palkinto', 'tuntematon palkinto', mk({
+        branches: [{
+          from: 'a',
+          to: 'f',
+          routes: [
+            { name: 'HELPPO', via: ['c'] },
+            { name: 'VAIKEA', via: ['b'], reward: 'kultaharkko' },
+          ],
+        }],
+      })],
+    ];
+    const missed = cases.filter(([, needle, world]) =>
+      !worlds.worldProblems(world).some((p) => p.includes(needle)));
+    expect('a broken map is reported rather than drawn',
+      missed.length === 0, missed.map(([name]) => name).join(', ') || `${cases.length} tapausta`);
+  }
+
+  /* Every string the map data asks the map to print has to exist in the font.
+   * A missing glyph does not throw — it leaves a hole and moves the cursor on —
+   * so this draws each character alone and looks for ink, the same way the
+   * challenge link's address box is checked. */
+  {
+    const worlds = await import('/src/data/worlds.js');
+    const font = await import('/src/gfx/font.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 12;
+    const g = canvas.getContext('2d');
+    const missing = new Set();
+    for (const s of WORLDS.flatMap((w) => worlds.mapStrings(w))) {
+      for (const ch of String(s).toUpperCase()) {
+        if (ch === ' ') continue;
+        g.clearRect(0, 0, 16, 12);
+        font.drawText(g, ch, 2, 2, { color: '#ffffff' });
+        const d = g.getImageData(0, 0, 16, 12).data;
+        let ink = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) ink++;
+        if (!ink) missing.add(ch);
+      }
+    }
+    expect('every name the map prints is spellable in the font',
+      missing.size === 0, missing.size ? `puuttuu: ${[...missing].join('')}` : '');
+  }
+
+  /* The measured difficulty has to reach the screen, not just the data file. */
+  {
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+    const worlds = await import('/src/data/worlds.js');
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const g = canvas.getContext('2d');
+    const shot = (nodeId, cleared = {}) => {
+      reset();
+      game.state.world = 1;
+      game.state.node = nodeId;
+      game.state.cleared = cleared;
+      const map = new WorldMapScene(game);
+      map.mode = 'idle';
+      map.tick = 30;
+      g.clearRect(0, 0, 320, 240);
+      map.draw(g);
+      return g.getImageData(0, 0, 320, 240).data;
+    };
+    const count = (data, [r, gg, b], y0, y1) => {
+      let n = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = 0; x < 320; x++) {
+          const i = (y * 320 + x) * 4;
+          if (data[i] === r && data[i + 1] === gg && data[i + 2] === b) n++;
+        }
+      }
+      return n;
+    };
+
+    const w2 = WORLDS[1];
+    const branch = worlds.branchAt(w2, 'w2-2');
+    const easy = branch && branch.easiest;
+    const hard = branch && branch.hardest;
+    expect('world 2 forks, and the two roads measure differently',
+      !!branch && easy.pips !== hard.pips && hard.score > easy.score,
+      branch ? `${easy.name} ${easy.score.toFixed(1)} (${easy.pips}) vs `
+        + `${hard.name} ${hard.score.toFixed(1)} (${hard.pips})` : 'ei haaraa');
+
+    /* Tier 2 is #c8e048 and belongs to nothing else on this map, so its pixels
+     * are the gentler road's own: its path dots and the bars under 2-N. */
+    const atFork = shot('w2-2', { 'w2-2': true });
+    expect('the gentler road is drawn in its measured tier colour',
+      count(atFork, [200, 224, 72], 14, 158) > 30,
+      `${count(atFork, [200, 224, 72], 14, 158)} px`);
+
+    /* The board only exists where the roads part. Off the fork the same band is
+     * the ordinary panel, so the difference is the board itself. */
+    const off = shot('w2-1', { 'w2-2': true });
+    const goldHere = count(atFork, [255, 208, 72], 200, 226);
+    const goldThere = count(off, [255, 208, 72], 200, 226);
+    expect('standing on the fork spells out both roads and what they pay',
+      goldHere > 100 && goldThere === 0,
+      `palkintotekstiä haarassa ${goldHere} px, muualla ${goldThere} px`);
+
+    /* And the branch has to be walkable in both directions, or it is a picture
+     * of a choice rather than one. */
+    reset();
+    game.state.world = 1;
+    game.state.node = 'w2-2';
+    game.state.cleared = { 'w2-2': true, 'w2-n': true, 'w2-3': true };
+    const map = new WorldMapScene(game);
+    const walkTo = (dir) => {
+      map.mode = 'idle';
+      map.tryMove(dir);
+      for (let f = 0; f < 4000 && map.mode === 'walk'; f++) map.update({
+        pressed: blank(), held: blank(), released: blank(), consume() {},
+      });
+      return map.node.id;
+    };
+    const low = walkTo('down');
+    const toFort = walkTo('right');
+    map.node = worlds.findNode(w2, 'w2-2');
+    map.pos = { x: map.node.tx * 16 + 8, y: map.node.ty * 16 + 8 };
+    const high = walkTo('right');
+    expect('both roads out of the fork are walkable and both reach the fortress',
+      low === 'w2-n' && toFort === 'w2-f' && high === 'w2-3',
+      `alas ${low}, sieltä ${toFort}, oikealle ${high}`);
+  }
+
   /* Standing still on solid ground must read as grounded on EVERY frame. If it
    * flickers, jumps silently vanish: the press lands on a frame where the game
    * thinks the player is in mid-air. */
@@ -4112,6 +4319,65 @@ report.checks.push({
   detail: unknownAudio.length ? unknownAudio.join(', ') : `${audioRefs.length} call sites`,
 });
 if (unknownAudio.length) report.failures.push(...unknownAudio);
+
+/*
+ * The map's difficulty numbers must be the ones the measurement produces today.
+ *
+ * `src/data/difficulty.js` is a carried copy: the tool is Node and reads
+ * `tools/jump-budget.json` off disk, the game is a static page, so the numbers
+ * cross in a data file the way `tools/pacing-stats.json` crosses to the
+ * generator. A carried copy is the whole cost of doing it that way — edit one
+ * chunk of one level and the map keeps promising yesterday's difficulty, which
+ * is worse than showing none, because the player has no way to tell.
+ *
+ * So it is not trusted, it is re-derived. This imports the measurement itself
+ * rather than a hash of the inputs: a hash would tell you something moved, this
+ * tells you which level and by how much. Same lesson as the jump budget, and
+ * for the same reason — the numbers are read by something that cannot recompute
+ * them, so somebody else has to.
+ */
+{
+  const { difficultyTable, compareTable } = await import('./difficulty.mjs');
+  const { DIFFICULTY } = await import('../src/data/difficulty.js');
+  const measured = difficultyTable();
+  const drift = compareTable(DIFFICULTY, measured);
+  report.checks.push({
+    name: 'the map difficulty table is what the tool measures now',
+    ok: drift.length === 0,
+    detail: drift.length
+      ? `${drift.slice(0, 3).join('; ')} — aja: node tools/difficulty.mjs --write`
+      : `${Object.keys(measured).length} kenttää`,
+  });
+  if (drift.length) {
+    report.failures.push(...drift.map((d) => `vaikeustaulu vanhentunut — ${d}`),
+      'korjaus: node tools/difficulty.mjs --write');
+  }
+
+  /* Red before green: the comparison has to notice all three ways a copy goes
+   * stale, or the check above is a decoration that always passes. Built off the
+   * measurement rather than off the file, so this stays a test of the
+   * comparison even on a run where the file is the thing that is wrong. */
+  const first = Object.keys(measured)[0];
+  const nudged = { ...measured, [first]: measured[first] + 5 };
+  const dropped = { ...measured };
+  delete dropped[first];
+  const extra = { ...measured, '9-9': 1 };
+  report.checks.push({
+    name: 'a stale difficulty table is detected, not blessed',
+    ok: compareTable(nudged, measured).length === 1
+      && compareTable(dropped, measured).length === 1
+      && compareTable(extra, measured).length === 1
+      && compareTable(measured, measured).length === 0,
+    detail: `muutettu ${compareTable(nudged, measured).length}, puuttuva `
+      + `${compareTable(dropped, measured).length}, ylimääräinen `
+      + `${compareTable(extra, measured).length}`,
+  });
+  if (!(compareTable(nudged, measured).length === 1
+    && compareTable(dropped, measured).length === 1
+    && compareTable(extra, measured).length === 1)) {
+    report.failures.push('vaikeustaulun vertailu ei huomaa vanhentumista');
+  }
+}
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);

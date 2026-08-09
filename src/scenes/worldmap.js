@@ -1,4 +1,6 @@
-import { WORLDS, findNode, startNode, linkPoints } from '../data/worlds.js';
+import {
+  WORLDS, findNode, startNode, linkPoints, routeByLink, branchAt, nodePips, PIPS, REWARDS,
+} from '../data/worlds.js';
 import { drawText } from '../gfx/font.js';
 import { drawItem, drawPlayer } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
@@ -12,6 +14,24 @@ const PANEL_Y = MAP_Y + MAP_H;
 const WALK_SPEED = 1.4;
 
 const HOUSE_ITEMS = ['shroom', 'flower', 'leaf', 'soup'];
+
+/*
+ * The difficulty ramp, one colour per pip count.
+ *
+ * Three at #ffd048 is the gold every ordinary path on this map has always been,
+ * so an average branch looks like the rest of the world instead of announcing
+ * itself, and the ends of the ramp are what read as unusual.
+ *
+ * Colour is the WEAKEST channel here (DESIGN.md §8 is about sound, but the same
+ * rule runs through the whole map: two signals that look alike teach the player
+ * to read the wrong one). So colour never carries this alone. Every level node
+ * draws the same count as filled bars, and standing on the fork spells both
+ * routes out in words. A player who cannot tell the green path from the red one
+ * still counts three bars against five.
+ */
+const TIER_COLORS = ['#8890b0', '#6ad04a', '#c8e048', '#ffd048', '#f09030', '#e05038'];
+const TIER_SHADE = ['#3a3a50', '#2f7a24', '#7a8420', '#c07c20', '#8a4c14', '#7a2418'];
+const PIP_OFF = '#3a3a52';
 
 export class WorldMapScene {
   constructor(game) {
@@ -32,6 +52,14 @@ export class WorldMapScene {
     this.node = findNode(this.world, nodeId) || startNode(this.world);
     this.game.state.node = this.node.id;
     this.pos = { x: this.node.tx * TILE + 8, y: this.node.ty * TILE + 8 };
+    /* Which links belong to which branch route. Measured difficulty, read from
+     * the generated table — nothing on this map is a hand-typed guess. */
+    this.routeLinks = routeByLink(this.world);
+  }
+
+  /** The branch that starts where the player is standing, if any. */
+  branchHere() {
+    return branchAt(this.world, this.node.id);
   }
 
   enter() {
@@ -407,9 +435,60 @@ export class WorldMapScene {
     }
   }
 
+  /**
+   * Five bars, `n` of them lit. The difficulty display, everywhere it appears:
+   * under a level node, on the fork's route board, and nowhere else.
+   *
+   * Drawn rather than typed. The 5x7 font is missing glyphs (`&` is the one
+   * that got caught), and a missing glyph does not throw — it leaves a hole and
+   * advances the cursor anyway, so a text pip could pass every width test and
+   * still render as nothing. `*` was the other candidate and it is spoken for:
+   * on the high-score table it means "save state used".
+   */
+  drawPips(ctx, x, y, n) {
+    ctx.fillStyle = 'rgba(16,14,20,0.85)';
+    ctx.fillRect(x - 1, y - 1, PIPS * 3, 5);
+    for (let i = 0; i < PIPS; i++) {
+      ctx.fillStyle = i < n ? TIER_COLORS[n] : PIP_OFF;
+      ctx.fillRect(x + i * 3, y, 2, 3);
+    }
+  }
+
+  /** The prize on a rewarded route, marked on the path itself. */
+  drawRewardMark(ctx, cx, cy) {
+    ctx.fillStyle = 'rgba(24,20,16,0.8)';
+    ctx.fillRect(cx - 4, cy - 4, 9, 9);
+    ctx.fillStyle = '#ffd048';
+    for (let i = 0; i < 4; i++) ctx.fillRect(cx - 3 + i, cy - 3 + Math.abs(i - 3), 1, 7 - 2 * Math.abs(i - 3));
+    for (let i = 0; i < 3; i++) ctx.fillRect(cx + 1 + i, cy - 1 + i, 1, 5 - 2 * i);
+    ctx.fillStyle = '#fff8d0';
+    ctx.fillRect(cx - 1, cy - 1, 2, 2);
+  }
+
+  /** Point `d` tiles along a link's polyline from its `a` end. */
+  static pointAlong(pts, d) {
+    let left = d * TILE;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i].tx * TILE + 8;
+      const ay = pts[i].ty * TILE + 8;
+      const bx = pts[i + 1].tx * TILE + 8;
+      const by = pts[i + 1].ty * TILE + 8;
+      const len = Math.hypot(bx - ax, by - ay);
+      if (left <= len || i === pts.length - 2) {
+        const t = len ? Math.min(1, left / len) : 0;
+        return { x: Math.round(ax + (bx - ax) * t), y: Math.round(ay + (by - ay) * t) };
+      }
+      left -= len;
+    }
+    return { x: pts[0].tx * TILE + 8, y: pts[0].ty * TILE + 8 };
+  }
+
   drawLinks(ctx) {
     for (const link of this.world.links) {
       const open = this.isLinkOpen(link);
+      const route = this.routeLinks.get(link);
+      const lit = route ? TIER_COLORS[route.pips] : '#ffd048';
+      const shade = route ? TIER_SHADE[route.pips] : '#c07c20';
       const pts = linkPoints(this.world, link);
       for (let i = 0; i < pts.length - 1; i++) {
         const ax = pts[i].tx * TILE + 8;
@@ -430,12 +509,23 @@ export class WorldMapScene {
            * dark edge and stops depending on what is behind it. */
           ctx.fillStyle = 'rgba(24,20,16,0.72)';
           ctx.fillRect(x - 3, y - 3, 6, 6);
-          ctx.fillStyle = open ? '#ffd048' : '#6a6a86';
+          ctx.fillStyle = open ? lit : '#6a6a86';
           ctx.fillRect(x - 2, y - 2, 4, 4);
-          ctx.fillStyle = open ? '#c07c20' : '#3a3a50';
+          ctx.fillStyle = open ? shade : '#3a3a50';
           ctx.fillRect(x - 2, y + 1, 4, 1);
         }
       }
+    }
+
+    /* The prize, marked where the two roads part rather than at the end of the
+     * one that pays it. A reward the player only meets after committing is not
+     * a choice, it is a surprise — ROADMAP condition 2. */
+    for (const route of new Set(this.routeLinks.values())) {
+      if (!route.reward || !route.links[0]) continue;
+      const pts = linkPoints(this.world, route.links[0]);
+      const line = route.links[0].b === route.via[0] ? pts : [...pts].reverse();
+      const at = WorldMapScene.pointAlong(line, 1.5);
+      this.drawRewardMark(ctx, at.x, MAP_Y + at.y);
     }
   }
 
@@ -444,6 +534,12 @@ export class WorldMapScene {
       const x = node.tx * TILE;
       const y = MAP_Y + node.ty * TILE;
       const cleared = this.isCleared(node.id);
+      /* Levels and fortresses were drawn two pixels lower and two taller. They
+       * lost those pixels to the difficulty bar, which lives inside the same
+       * 16 px cell rather than spilling onto the tile below — nodes sit as
+       * close as three tiles apart and a bar that overflowed would land on the
+       * neighbouring terrain, or on another node's bar. */
+      const pips = nodePips(node);
       switch (node.type) {
         case 'start':
           ctx.fillStyle = '#c8c8d8';
@@ -453,17 +549,18 @@ export class WorldMapScene {
           break;
         case 'fortress':
           ctx.fillStyle = '#8a8aa0';
-          ctx.fillRect(x + 1, y + 4, 14, 11);
+          ctx.fillRect(x + 1, y + 2, 14, 9);
           ctx.fillStyle = '#6a6a84';
-          ctx.fillRect(x + 1, y + 2, 3, 3);
-          ctx.fillRect(x + 7, y + 1, 3, 4);
-          ctx.fillRect(x + 12, y + 2, 3, 3);
+          ctx.fillRect(x + 1, y + 1, 3, 2);
+          ctx.fillRect(x + 7, y + 0, 3, 3);
+          ctx.fillRect(x + 12, y + 1, 3, 2);
           ctx.fillStyle = '#301818';
-          ctx.fillRect(x + 6, y + 9, 5, 6);
+          ctx.fillRect(x + 6, y + 6, 5, 5);
           if (cleared) {
             ctx.fillStyle = '#8fe04a';
-            ctx.fillRect(x + 6, y + 11, 5, 2);
+            ctx.fillRect(x + 6, y + 8, 5, 2);
           }
+          this.drawPips(ctx, x + 1, y + 12, pips);
           break;
         case 'house':
           ctx.fillStyle = cleared ? '#9a6a6a' : '#e04040';
@@ -478,16 +575,17 @@ export class WorldMapScene {
           break;
         default: {
           ctx.fillStyle = cleared ? '#404060' : '#f8f8f8';
-          ctx.fillRect(x + 2, y + 3, 12, 11);
+          ctx.fillRect(x + 2, y + 1, 12, 10);
           ctx.fillStyle = '#202038';
-          ctx.fillRect(x + 2, y + 3, 12, 1);
-          ctx.fillRect(x + 2, y + 13, 12, 1);
-          ctx.fillRect(x + 2, y + 3, 1, 11);
-          ctx.fillRect(x + 13, y + 3, 1, 11);
+          ctx.fillRect(x + 2, y + 1, 12, 1);
+          ctx.fillRect(x + 2, y + 10, 12, 1);
+          ctx.fillRect(x + 2, y + 1, 1, 10);
+          ctx.fillRect(x + 13, y + 1, 1, 10);
           const label = node.level ? node.level.split('-')[1] : '?';
-          drawText(ctx, label, x + 8, y + 5, {
+          drawText(ctx, label, x + 8, y + 3, {
             color: cleared ? '#8fe04a' : '#202038', align: 'center',
           });
+          this.drawPips(ctx, x + 1, y + 12, pips);
           break;
         }
       }
@@ -563,17 +661,46 @@ export class WorldMapScene {
     drawText(ctx, `SFB *${this.game.state.lives}`, 208, PANEL_Y + 10, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 208, PANEL_Y + 20, { color: '#ffd048' });
 
+    const branch = this.branchHere();
     const hint = this.messageTimer > 0 && this.message
       ? this.message
       : 'NUOLET LIIKU   Z ALOITA   ENTER KAYTA ESINE';
-    drawText(ctx, hint, 160, PANEL_Y + 40, {
+    drawText(ctx, hint, 160, PANEL_Y + (branch ? 68 : 40), {
       color: this.messageTimer > 0 ? '#ffd048' : '#8890b0',
       align: 'center',
     });
 
+    if (branch) {
+      this.drawRouteBoard(ctx, branch);
+      return;
+    }
+
     const cleared = this.world.nodes.filter((n) => n.level && this.isCleared(n.id)).length;
     const total = this.world.nodes.filter((n) => n.level).length;
     drawText(ctx, `SELVITETTY ${cleared}/${total}`, 160, PANEL_Y + 54, { color: '#8890b0', align: 'center' });
+  }
+
+  /**
+   * Both roads, side by side, while the player is still standing on the fork.
+   *
+   * This is the whole point of the branch: a route you learn about by dying on
+   * it is not a choice. So the board is not a hint that fades — it is on screen
+   * for as long as the player stands where the roads part, and it says three
+   * things per route in three different channels: a name, a bar count, and what
+   * it pays. "EI PALKINTOA" is spelled out rather than left blank, because a
+   * blank reads as "not known yet" and this is known.
+   */
+  drawRouteBoard(ctx, branch) {
+    drawText(ctx, 'HAARA - VALITSE REITTI', 10, PANEL_Y + 32, { color: '#8890b0' });
+    const order = [...branch.routes].sort((a, b) => a.score - b.score);
+    order.forEach((route, i) => {
+      const y = PANEL_Y + 44 + i * 12;
+      drawText(ctx, route.name, 14, y, { color: TIER_COLORS[route.pips] });
+      this.drawPips(ctx, 120, y + 2, route.pips);
+      const prize = route.reward ? (REWARDS[route.reward] || {}).label : 'EI PALKINTOA';
+      drawText(ctx, prize, 148, y, { color: route.reward ? '#ffd048' : '#5a5a76' });
+      if (route.reward) this.drawRewardMark(ctx, 140, y + 3);
+    });
   }
 
   drawHouse(ctx) {
