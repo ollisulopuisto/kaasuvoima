@@ -9,7 +9,7 @@ import { Item } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 import { Music, Sfx } from '../core/audio.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
-import { clamp, overlaps, padNum } from '../core/utils.js';
+import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 
 export const VIEW_W = 320;
 export const VIEW_H = 208;
@@ -44,6 +44,25 @@ const CRUMBLE_REGROW = 220;
 const SWITCH_FRAMES = 600;
 /** It starts flashing this long before it ends, so the end is never a surprise. */
 const SWITCH_WARN = 150;
+
+/** The star's HUD readout cycles the same colours the player does. */
+const STAR_HUD_COLORS = ['#fff070', '#ffffff', '#8fe04a', '#78c0ff'];
+
+/*
+ * Some ordinary bricks are hiding something.
+ *
+ * Which ones is a pure function of the tile's position, so it is the same brick
+ * every time anyone plays that level — a secret you can learn and then show a
+ * friend, rather than a lottery. It also needs no level data and no save-state
+ * field, and it applies to every world at once, including generated ones.
+ *
+ * The rates are deliberately mean. At roughly one coin brick in forty and one
+ * power brick in three hundred, a level has a handful of surprises in it and
+ * hitting every brick you pass is still a waste of time — which is what keeps
+ * them surprises instead of a chore.
+ */
+const SECRET_COIN_RATE = 0.025;
+const SECRET_POWER_RATE = 0.0035;
 
 export class LevelScene {
   constructor(game, levelId) {
@@ -415,13 +434,30 @@ export class LevelScene {
         this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
         this.addCoin(tx * TILE + 8, ty * TILE);
       } else {
-        this.add(new Item(this, tx * TILE, ty * TILE - TILE, this.rollPowerup(player)));
+        // A star block promises a star; everything else rolls.
+        const kind = meta.question === 'star' ? 'star' : this.rollPowerup(player);
+        this.add(new Item(this, tx * TILE, ty * TILE - TILE, kind));
         Sfx.play('bump');
       }
       return;
     }
 
     if (ch === T.BRICK) {
+      const secret = this.brickSecret(tx, ty);
+      if (secret) {
+        // A brick with something in it behaves like a question block: it never
+        // smashes, whatever size you are, so the reward cannot be lost by
+        // being too strong.
+        this.setTile(tx, ty, T.USED);
+        if (secret === 'coin') {
+          this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
+          this.addCoin(tx * TILE + 8, ty * TILE);
+        } else {
+          this.add(new Item(this, tx * TILE, ty * TILE - TILE, this.rollPowerup(player)));
+          Sfx.play('powerup');
+        }
+        return;
+      }
       if (player.big) {
         this.bumps.delete(key);
         this.smashBrick(tx, ty);
@@ -445,6 +481,15 @@ export class LevelScene {
     }
 
     Sfx.play('bump');
+  }
+
+  /** @returns 'coin' | 'power' | null — see SECRET_COIN_RATE for the reasoning. */
+  brickSecret(tx, ty) {
+    // Offset the two draws so a brick can never be both, and so the two rates
+    // stay independent of each other.
+    if (hashNoise(tx * 7 + 13, ty * 11 + 5) < SECRET_POWER_RATE) return 'power';
+    if (hashNoise(tx * 3 + 1, ty * 5 + 2) < SECRET_COIN_RATE) return 'coin';
+    return null;
   }
 
   /**
@@ -814,6 +859,22 @@ export class LevelScene {
         continue;
       }
 
+      /*
+       * Supertähti. It replaces exactly one thing — the hit an enemy would
+       * land — and nothing else, which is why it lives here and not in
+       * `hurt`. Pits, lava, spikes, heartburn and the clock all reach the
+       * player down their own paths and are untouched by it: the star is
+       * protection from the inhabitants, never from the level.
+       *
+       * Delivered as a shell hit rather than a `flipDie` so the tough
+       * customers stay tough — the boss still needs his three, the sun still
+       * needs her three — and so one death path serves every enemy type.
+       */
+      if (p.star > 0) {
+        e.hitByShell(e.cx >= p.cx ? 1 : -1);
+        continue;
+      }
+
       if (e.corks) p.cork();
       else p.hurt();
     }
@@ -1027,7 +1088,15 @@ export class LevelScene {
     drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
       color: '#ffffff', align: 'right',
     });
-    if (this.switchTimer > 0) {
+    if (this.player.star > 0) {
+      // Top of the pile: it is the shortest-lived of the three and the only one
+      // whose ending gets you killed.
+      const secs = Math.ceil(this.player.star / 60);
+      drawText(ctx, `TÄHTI ${secs}`, VIEW_W - 6, y + 17, {
+        color: STAR_HUD_COLORS[Math.floor(this.tick / 4) % STAR_HUD_COLORS.length],
+        align: 'right',
+      });
+    } else if (this.switchTimer > 0) {
       const secs = Math.ceil(this.switchTimer / 60);
       drawText(ctx, `KYTKIN ${secs}`, VIEW_W - 6, y + 17, {
         color: this.switchTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2

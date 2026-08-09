@@ -215,6 +215,18 @@ const TINTS = {
   spent: makeTint('#8c8878', 0.5, 0.65),
 };
 
+/**
+ * The star cycles through these. The drain is high on purpose: a player who
+ * only *shifts* colour still reads as the same character in a bad moment, and
+ * the whole point of the star is that you can tell at a glance you have it.
+ */
+const STAR_TINTS = [
+  makeTint('#fff070', 0.85, 0.7),
+  makeTint('#ffffff', 0.85, 0.8),
+  makeTint('#8fe04a', 0.8, 0.7),
+  makeTint('#78c0ff', 0.8, 0.7),
+];
+
 const GLOWS = {
   star: { scale: 1.9, alpha: 0.28, tint: null },
   // Not a full substitution: the halo keeps some of the ball's own colour, so a
@@ -362,9 +374,12 @@ function drawPlayerBase(ctx, x, y, s, small) {
       } else if (s.state === 'walk') {
         legs(ctx, px, py + 14, 12, pal, s.frame % 3, s.running);
       } else {
-        ctx.fillStyle = pal.pants;
-        ctx.fillRect(px + 3, py + 14, 2, 2);
-        ctx.fillRect(px + 7, py + 14, 2, 2);
+        /* Standing still uses the walk cycle's closed-legs frame rather than a
+         * pose of its own. The pose of its own was two 2x2 stubs of trouser
+         * colour with no boots, against a walk cycle that is five pixels tall
+         * and ends in a dark sole — so the legs appeared to vanish the moment
+         * you stopped, on the small size where two pixels is the whole leg. */
+        legs(ctx, px, py + 14, 12, pal, 1, false);
       }
       return;
     }
@@ -453,10 +468,19 @@ function scratch() {
 }
 
 /**
- * @param {object} s { type, level, facing, frame, state, ducking, running, wag, tint }
+ * @param {object} s { type, level, facing, frame, state, ducking, running, wag, tint, glow }
  */
 export function drawPlayer(ctx, x, y, s) {
   const level = Math.max(0, Math.min(5, s.level ?? 0));
+  if (s.glow) {
+    // The halo is what carries across a busy screen; the tint alone is easy to
+    // lose against bright scenery. Drawn by replaying the sprite, so it is the
+    // character that glows and not a blob behind it.
+    const box = (s.ducking ? PLAYER_DUCK_SIZES : PLAYER_SIZES)[level];
+    glowing(ctx, x + box.w / 2, y + box.h / 2, s.glow,
+      (g) => drawPlayer(g, x, y, { ...s, glow: null }));
+    return;
+  }
   if (level === 0) {
     outlined(ctx, (g) => drawPlayerBase(recolored(g, s.tint), x, y, s, true));
     return;
@@ -749,6 +773,55 @@ export function drawHeartburn(ctx, x, y, height, tick) {
   ctx.fillRect(px + 2, base - 3, 12, 4);
 }
 
+/**
+ * World 1's boss, to the lead designer's specification: a boxer.
+ *
+ * The gloves are the whole character, so they are drawn biggest, brightest and
+ * furthest forward, and they alternate — one guarding the chin, one cocked to
+ * throw. Everything else (crownless head, mouthguard, taped wrists) exists to
+ * make the gloves read as gloves rather than as red blobs.
+ */
+function drawBoxerBoss(r, bx, py, body, dark, frame) {
+  const jab = Math.floor(frame / 6) % 2 === 0;
+
+  // stance: knees bent, one foot back
+  r(bx + (jab ? 4 : 6), py + 27, 9, 5);
+  r(bx + (jab ? 19 : 17), py + 27, 9, 5);
+
+  r(bx + 5, py + 8, 22, 20);          // torso
+  r(bx + 8, py + 1, 16, 9);           // head, no crown — this one fights for it
+
+  // championship belt, the only gold on him
+  const gold = '#f0c040';
+  r(bx + 5, py + 21, 22, 4, gold);
+
+  // brows down, eyes narrowed: he is not pleased to see you
+  r(bx + 10, py + 4, 5, 4, '#ffffff');
+  r(bx + 17, py + 4, 5, 4, '#ffffff');
+  r(bx + 12, py + 5, 3, 3, '#101018');
+  r(bx + 18, py + 5, 3, 3, '#101018');
+  r(bx + 9, py + 2, 7, 2, dark);
+  r(bx + 16, py + 2, 7, 2, dark);
+
+  // mouthguard
+  r(bx + 12, py + 9, 8, 3, '#e8e0c0');
+
+  // taped wrists, then the gloves themselves
+  r(bx + (jab ? 25 : 21), py + 13, 4, 4, '#e8e0c0');
+  r(bx + 2, py + 17, 4, 4, '#e8e0c0');
+
+  const glove = '#e03828';
+  const gloveDark = '#8c1c10';
+  // lead glove: out in front when jabbing, tucked when guarding
+  r(bx + (jab ? 26 : 22), py + 10, 7, 8, glove);
+  r(bx + (jab ? 26 : 22), py + 16, 7, 2, gloveDark);
+  r(bx + (jab ? 27 : 23), py + 11, 3, 2, '#f07868');
+  // rear glove, held at the chin
+  r(bx + 1, py + 15, 7, 8, glove);
+  r(bx + 1, py + 21, 7, 2, gloveDark);
+  r(bx + 2, py + 16, 3, 2, '#f07868');
+}
+
 export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1) {
   const px = Math.round(x);
   const py = Math.round(y);
@@ -757,8 +830,26 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1)
   const body = hurt && Math.floor(frame / 2) % 2 ? '#e07070' : bodyColors[variant % 4];
   const dark = darkColors[variant % 4];
   const S = scale;
-  const r = (rx, ry, rw, rh) => ctx.fillRect(
-    Math.round(rx * S), Math.round(ry * S), Math.round(rw * S), Math.round(rh * S));
+  const r = (rx, ry, rw, rh, color) => {
+    if (color) ctx.fillStyle = color;
+    ctx.fillRect(
+      Math.round(rx * S), Math.round(ry * S), Math.round(rw * S), Math.round(rh * S));
+  };
+
+  if (variant === 0) {
+    ctx.save();
+    flip(ctx, px, 32 * S, facing < 0, (bx) => {
+      ctx.translate(bx - bx * S, py - py * S);
+      ctx.fillStyle = body;
+      drawBoxerBoss((rx, ry, rw, rh, color) => {
+        // The hurt flash has to win over every local colour, or a boss taking a
+        // hit would flash everywhere except his gloves.
+        r(rx, ry, rw, rh, hurt && Math.floor(frame / 2) % 2 ? body : color);
+      }, bx, py, body, dark, frame);
+    });
+    ctx.restore();
+    return;
+  }
 
   ctx.save();
   flip(ctx, px, 32 * S, facing < 0, (bx) => {
@@ -956,4 +1047,4 @@ export function drawBrickShard(ctx, x, y, color) {
   ctx.fillRect(Math.round(x), Math.round(y) + 4, 6, 2);
 }
 
-export { C as SPRITE_COLORS, CARD_ICONS, TINTS, GLOWS };
+export { C as SPRITE_COLORS, CARD_ICONS, TINTS, STAR_TINTS, GLOWS };

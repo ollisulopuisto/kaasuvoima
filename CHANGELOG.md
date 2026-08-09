@@ -7,6 +7,54 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.5 — supertähti, nyrkkeilijäpomo, salaiset tiilet ja jalat takaisin
+
+Neljä pääsuunnittelijan toivetta ja yksi bugiraportti.
+
+### Supertähti
+Kerättävä tähti (`*`-lohko kentässä 1-3) tekee **kuolemattomaksi vihollisille
+noin 12 sekunniksi**, ja hahmo vaihtaa väriä neljän sävyn kierrossa hehkun
+kanssa, jotta yhdellä silmäyksellä näkee että se on päällä.
+
+**Putoaminen tappaa yhä.** Niin tappaa laava, piikit, närästys ja ajan
+loppuminen. Tämä oli toiveen toinen puoli eikä yksityiskohta, joten ohitus ei
+ole `hurt()`:ssa eikä `die()`:ssä — ne ovat koskemattomat — vaan yhdessä
+haarassa `collisions()`:ssa. Testi kysyy jokaista kuolintietä erikseen, koska
+jokainen niistä on eri koodia.
+
+### Nyrkkeilijäpomo
+Maailman 1 linnakkeen pomo on nyt nyrkkeilijä: isot punaiset hanskat, joista
+toinen suojaa leukaa ja toinen on koukussa lyötäväksi, mestaruusvyö, suojakumi ja
+teipatut ranteet. Ei kruunua — tämä tappelee siitä. Hanskat ovat hahmon koko
+idea, joten ne piirretään suurimpina ja kirkkaimpina; kaikki muu on siellä jotta
+hanskat lukisivat hanskoina eikä punaisina möykkyinä.
+
+### Salaisuuksia tavallisissa tiilissä
+Osa tavallisista tiilistä kätkee kolikon tai tehostuksen. **Mikä tiili, lasketaan
+ruudun sijainnista** — se on siis sama tiili joka kerta kaikille, salaisuus jonka
+voi opetella ja näyttää kaverille eikä arpajaiset. Ei vaadi kenttädataa eikä
+tallennuskenttää, ja toimii kaikissa maailmoissa kerralla, myös generoiduissa.
+
+Taajuus on tahallaan nuuka (noin 1/40 kolikko, 1/300 tehostus): jokaisen tiilen
+hakkaaminen on silti ajanhukkaa, mikä on juuri se mikä pitää nämä yllätyksinä
+eikä rutiinina. Salainen tiili ei myöskään hajoa isolla koolla, joten palkintoa
+ei voi menettää olemalla liian vahva.
+
+### Bugi: pienen hahmon jalat katosivat paikallaan
+Raportti oli tarkka ja oikea. Syy ei ollut animaatio vaan se että **seisonta
+piirtyi eri koodilla kuin kävely**: kävelyssä jalat ovat viisi pikseliä korkeat
+ja päättyvät tummaan pohjaan, seisonnassa ne olivat kaksi 2×2 housunväristä
+tönköä ilman pohjaa. Pienimmässä koossa kaksi pikseliä on koko jalka, joten ne
+katosivat sillä hetkellä kun pysähtyi. Seisonta käyttää nyt kävelysyklin
+suljettua ruutua.
+
+### Suorituskyky
+Debug-ruutu laski telemetrian yhteenvedon **joka framessa**, eli skannasi koko
+lokin 60 kertaa sekunnissa. Nyt se on välimuistissa. Debug-ruutu on viimeinen
+asia joka saa olla syy hitaaseen frameen.
+
+---
+
 ## v26.08.09.4 — maailma 5 uusiksi, siemen valittu mittaamalla
 
 Kentät 5-1…5-3 on generoitu uudelleen siemenellä **60606**. Vanhat korvattiin,

@@ -11,7 +11,7 @@ const FART_STYLE = { glow: GLOWS.fart };
 const FART_STYLE_SPENT = { glow: GLOWS.fart, tint: TINTS.spent };
 
 export class Item extends Entity {
-  /** @param {'shroom'|'flower'|'leaf'|'soup'|'oneup'} itemKind */
+  /** @param {'shroom'|'flower'|'leaf'|'soup'|'star'|'oneup'} itemKind */
   constructor(level, x, y, itemKind, { emerge = true } = {}) {
     super(level, x, y, 16, 16);
     this.kind = 'item';
@@ -42,6 +42,15 @@ export class Item extends Entity {
         if (moveX(this, this.level)) this.facing *= -1;
         applyGravity(this, 0.8);
         moveY(this, this.level);
+        break;
+      }
+      case 'star': {
+        // It bounces, and that is the point: a star that plodded along the
+        // floor like a mushroom would be a mushroom in a different hat.
+        this.vx = 1.2 * this.facing;
+        if (moveX(this, this.level)) this.facing *= -1;
+        applyGravity(this, 0.6);
+        if (moveY(this, this.level).ground) this.vy = -3.4;
         break;
       }
       case 'leaf': {

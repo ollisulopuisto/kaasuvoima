@@ -817,6 +817,101 @@ const report = await page.evaluate(async () => {
       `cam.y ${Math.round(worst)}`);
   }
 
+  /* ------------------------------ supertähti ---------------------------- */
+  /* It kills what it touches, and it protects you from enemies and from nothing
+   * else. The three "still kills" cases are the whole point of the feature —
+   * the lead designer specified them — so each lethal path is asked separately,
+   * because each one lives in different code. */
+  {
+    const { Walker } = await import('/src/entities/enemies.js');
+    const { T } = await import('/src/gfx/tiles.js');
+
+    reset({ type: 'shroom', level: 2 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    const p = s.player;
+    p.collect('star');
+
+    const scoreBefore = game.state.score;
+    const powerBefore = p.powerLevel;
+    const w = new Walker(s, p.x + p.w - 4, p.y + p.h - 16);
+    w.active = true; w.alwaysActive = true; w.vx = 0;
+    s.entities.push(w);
+    s.collisions();
+    expect('the star kills the enemy it touches and leaves the player alone',
+      (w.dying || w.remove) && !p.dying && p.powerLevel === powerBefore
+      && game.state.score > scoreBefore,
+      `power ${powerBefore}->${p.powerLevel}, score ${scoreBefore}->${game.state.score}`);
+
+    const survived = [];
+    for (const [what, kill] of [
+      ['kuoppa', (sc) => { sc.player.y = sc.heightPx + 40; sc.playerTiles(); }],
+      ['laava', (sc) => {
+        sc.setTile(Math.floor(sc.player.cx / 16), Math.floor(sc.player.cy / 16), T.LAVA);
+        sc.playerTiles();
+      }],
+      ['aika', (sc) => { sc.time = 1; sc.timeSub = 23; sc.updateTimer(); }],
+    ]) {
+      reset({ type: 'shroom', level: 2 });
+      const sc = new LevelScene(game, '1-1');
+      game.setScene(sc);
+      for (let f = 0; f < 6; f++) sc.update(mkInput());
+      sc.player.collect('star');
+      kill(sc);
+      if (!sc.player.dying) survived.push(what);
+    }
+    expect('the star does not save you from the level itself',
+      survived.length === 0,
+      survived.length ? `selvisi: ${survived.join(', ')}` : 'kuoppa/laava/aika tappavat yhä');
+  }
+
+  {
+    const { T } = await import('/src/gfx/tiles.js');
+    reset({ type: 'shroom', level: 2 });
+    const s = new LevelScene(game, '1-1');
+    game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+    s.player.collect('star');
+    const full = s.player.star;
+
+    const snap = JSON.parse(JSON.stringify(captureState(game)));
+    s.player.star = 0;
+    restoreState(game, snap);
+    const r = game.scene;
+    expect('a save state keeps the star running', r.player.star === full,
+      `${full} vs ${r.player.star}`);
+
+    let ran = 0;
+    while (r.player.star > 0 && ran < 3000) { r.update(i); ran++; }
+    expect('the star runs out', r.player.star === 0 && ran < 3000, `${ran} framea`);
+
+    const blocks = [];
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      for (let ty = 0; ty < sc.h; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          if (sc.rawTileAt(tx, ty) === T.QSTAR) blocks.push({ id, tx, ty });
+        }
+      }
+    }
+    expect('a star block exists in a hand-made level', blocks.length > 0,
+      blocks.map((b) => `${b.id} ${b.tx},${b.ty}`).join(' '));
+    if (blocks.length) {
+      reset();
+      const sc = new LevelScene(game, blocks[0].id);
+      game.setScene(sc);
+      sc.bumpTile(blocks[0].tx, blocks[0].ty, sc.player);
+      const item = sc.entities.find((e) => e.kind === 'item');
+      expect('a star block yields a star and not a rolled power-up',
+        !!item && item.itemKind === 'star', item ? item.itemKind : 'ei mitään');
+    }
+  }
+
   /* ----------------------------- kytkinruudut --------------------------- */
   {
     const { T } = await import('/src/gfx/tiles.js');
@@ -1407,6 +1502,15 @@ const report = await page.evaluate(async () => {
           });
           check(`player ${level}${tint ? ' tinted' : ''}`);
         }
+      }
+      // The star draws the whole player a second time, additively — the most
+      // likely place for a composite mode to escape.
+      for (const t of (sprites.STAR_TINTS || [])) {
+        sprites.drawPlayer(g, 20, 20, {
+          type: 'leaf', level: 5, facing: 1, state: 'walk', frame: 1, tick: 12,
+          tint: t, glow: sprites.GLOWS && sprites.GLOWS.star,
+        });
+        check('player starred');
       }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));

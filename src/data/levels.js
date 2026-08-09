@@ -40,7 +40,7 @@ const LEVEL_DEFS = {
     chunks: [
       'start_high', 'plat_hi', 'power', 'sky_run', 'coins', 'flyer',
       'pit_plat', 'plat_steps', 'walkers', 'pipe_pair', 'bricks', 'pit_l',
-      'corks', 'shell', 'coin_stack', 'spikes', 'steps_up', 'clouds',
+      'star_block', 'corks', 'shell', 'coin_stack', 'spikes', 'steps_up', 'clouds',
       'power', 'run_up', 'goal', 'goal_end',
     ],
   },

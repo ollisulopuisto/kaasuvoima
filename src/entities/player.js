@@ -2,7 +2,9 @@ import { Entity } from './entity.js';
 import {
   moveX, moveY, GRAVITY, GRAVITY_HELD, GRAVITY_HELD_CUTOFF, TERMINAL,
 } from '../level/physics.js';
-import { drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES, TINTS } from '../gfx/sprites.js';
+import {
+  drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES, TINTS, STAR_TINTS, GLOWS,
+} from '../gfx/sprites.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -58,6 +60,15 @@ const P_SEGMENTS = 7;
 const P_FILL = P_METER_MAX / P_SEGMENTS / 8;
 const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
 
+/*
+ * Supertähti. Long enough to be worth having — about twelve seconds, three or
+ * four chunks at a run — and short enough that the level is not handed over.
+ *
+ * It is not a power level and never touches one: it protects you from enemies
+ * and from nothing else, so losing it costs you nothing you had before.
+ */
+export const STAR_FRAMES = 700;
+
 export const MAX_POWER_LEVEL = 5;
 export const POWER_TYPES = ['shroom', 'flower', 'leaf'];
 export const POWER_NAMES = {
@@ -110,6 +121,7 @@ export class Player extends Entity {
     this.invuln = 0;
     this.frozen = 0;
     this.corked = 0;
+    this.star = 0;
     this.airJumps = 0;
     this.dying = false;
     this.animTimer = 0;
@@ -166,6 +178,7 @@ export class Player extends Entity {
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
     if (this.corked > 0) this.corked--;
+    if (this.star > 0) this.star--;
     if (this.warpLock > 0) this.warpLock--;
     if (this.wag !== 0 || this.type === 'leaf') this.wag += this.flying > 0 ? 0.5 : 0.12;
 
@@ -488,6 +501,14 @@ export class Player extends Entity {
         Sfx.play('soup');
         break;
       }
+      case 'star': {
+        // Restarted, not extended: the timer is the promise on the HUD, and a
+        // second star that added twelve seconds to nine would make it a lie.
+        this.star = STAR_FRAMES;
+        Sfx.play('yeah');
+        this.level.awardScore(1000, this.cx, this.y);
+        break;
+      }
       case 'oneup':
         this.level.gainLife(this.cx, this.y);
         break;
@@ -523,7 +544,10 @@ export class Player extends Entity {
     // flicker still reads as i-frames, but the character stays on screen and
     // the freeze after a power change is now its own colour.
     let tint = null;
-    if (this.frozen > 0) tint = TINTS.frozen;
+    // The star wins over both: it lasts longer than either and it is the one
+    // state where being hard to read is actually dangerous.
+    if (this.star > 0) tint = STAR_TINTS[Math.floor(this.tick / 3) % STAR_TINTS.length];
+    else if (this.frozen > 0) tint = TINTS.frozen;
     else if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) tint = TINTS.flash;
     const spinning = this.spin > 0;
     drawPlayer(ctx, this.x, this.y, {
@@ -538,6 +562,7 @@ export class Player extends Entity {
       wag: this.wag,
       idle: this.idle,
       tint,
+      glow: this.star > 0 ? GLOWS.star : null,
     });
     if (this.corked > 0) {
       drawCork(ctx, this.x + this.w / 2 - 4, this.y - 10, this.tick);

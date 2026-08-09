@@ -350,9 +350,17 @@ class Game {
       + `  SORMET ${t.pointers}  (6 VAIHDA)`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
     if (scene && scene.id && scene.cam) {
-      const t = levelSummary(scene.id);
+      // Cached: this scans the whole telemetry log, and the overlay is the one
+      // thing on screen that must never be the reason the frame is slow.
+      if (!this._teleCache || this._teleCache.id !== scene.id
+        || this._teleAt === undefined || this.fps === 0
+        || (scene.tick - this._teleAt) > 30) {
+        this._teleCache = { id: scene.id, data: levelSummary(scene.id), n: eventCount() };
+        this._teleAt = scene.tick;
+      }
+      const t = this._teleCache.data;
       lines.push(`TELE ${t.total} KUOLEMAA  ${t.stuckTotal} JUMIA  ${t.clears} LAPI`
-        + `  (8 VIE ${eventCount()})`);
+        + `  (8 VIE ${this._teleCache.n})`);
     }
 
     const width = Math.max(...lines.map((l) => l.length)) * 6 + 8;

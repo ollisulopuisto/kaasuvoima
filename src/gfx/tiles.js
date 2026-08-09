@@ -10,6 +10,7 @@ export const T = {
   BRICK: 'B',
   QCOIN: '?',
   QPOWER: '!',
+  QSTAR: '*',
   USED: 'u',
   COIN: 'o',
   PLATFORM: '-',
@@ -38,6 +39,9 @@ export const TILE_INFO = {
   [T.BRICK]: { ...S, breakable: true, bumpable: true },
   [T.QCOIN]: { ...S, question: 'coin', bumpable: true },
   [T.QPOWER]: { ...S, question: 'power', bumpable: true },
+  /* Looks exactly like the other two on purpose. A block that announced what
+   * is in it would turn the one big surprise in a level into an errand. */
+  [T.QSTAR]: { ...S, question: 'star', bumpable: true },
   [T.USED]: { ...S, bumpable: true },
   [T.NOTE]: { ...S, note: true, bumpable: true },
   [T.PIPE_TL]: { ...S, pipe: true },
@@ -650,7 +654,8 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.HARD: drawHard(ctx, x, y, th, tx, ty); break;
     case T.BRICK: drawBrick(ctx, x, y, th, tx, ty); break;
     case T.QCOIN:
-    case T.QPOWER: drawQuestion(ctx, x, y, tick); break;
+    case T.QPOWER:
+    case T.QSTAR: drawQuestion(ctx, x, y, tick); break;
     case T.USED: drawUsed(ctx, x, y, th); break;
     case T.NOTE: drawNote(ctx, x, y, tick, false); break;
     case T.PIPE_TL:

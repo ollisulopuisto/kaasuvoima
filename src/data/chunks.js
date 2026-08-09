@@ -335,6 +335,20 @@ export const CHUNKS = {
     13: G,
     14: G,
   }),
+  /**
+   * Supertähti, and then somewhere to spend it.
+   *
+   * The block sits on the ordinary bump row, so the star is not a reward for
+   * reaching anywhere — it is a reward for hitting a block that looks like
+   * every other block. What follows it is the point: a walker and a cork in
+   * open ground, which is a nuisance normally and a straight run with a star.
+   */
+  star_block: ck(16, {
+    9: '   *',
+    12: '        g   c',
+    13: G,
+    14: G,
+  }),
   soup_stop: ck(16, {
     9: '      !',
     12: '   g       c',
