@@ -273,6 +273,455 @@ const report = await page.evaluate(async () => {
       + `${s.player.dying ? ', died' : ''}`);
   }
 
+  /* ------------------------------ maahanisku ---------------------------- */
+  /*
+   * Maahanisku on tasapainoväite ennen kuin se on mekaniikka, ja väite on se
+   * mikä voi mennä rikki. "Liike on olemassa" menisi läpi myös silloin kun
+   * liike on korvannut tallauksen, joten alla mitataan hintaa ja rajoja:
+   * montako framea ohjausta menetetään, tainnuttaako tavallisen hypyn mittainen
+   * isku vai tappaako se, voittavatko piikit, ja mihin korkeusasteikko on
+   * normalisoitu.
+   *
+   * Koko lohko on try/catchissa siksi että ensimmäinen ajo on tarkoituksella
+   * punainen: puuttuva nimetty vienti kaataisi dynaamisen importin ja sen
+   * mukana kaikki tämän jälkeen tulevat tarkistukset, jolloin punaisesta ei
+   * näkisi mitään.
+   */
+  try {
+    const { SpikeGuy, Walker, Shockwave } = await import('/src/entities/enemies.js');
+    const { poundScale, POUND_CHARGE, POUND_SPEED } = await import('/src/entities/player.js');
+    const { PoundWave } = await import('/src/entities/effects.js');
+
+    /**
+     * Korkein y johon pelaajan pää yltää siinä sarakkeessa jossa hän seisoo.
+     * Katto (`ty < 0` on kiinteä) on 0, joten tyhjässä sarakkeessa tämä on
+     * täsmälleen se suurin mahdollinen pudotus jota vastaan asteikko
+     * normalisoidaan — mitattuna kentästä eikä arvattuna vakiona.
+     */
+    const roomAbove = (s, p) => {
+      const tx0 = Math.floor(p.x / 16);
+      const tx1 = Math.floor((p.x + p.w - 1) / 16);
+      const blocked = (ty) => {
+        for (let tx = tx0; tx <= tx1; tx++) if (s.solidAt(tx, ty)) return true;
+        return false;
+      };
+      let ty = Math.floor(p.y / 16);
+      while (ty - 1 >= 0 && !blocked(ty - 1)) ty--;
+      return ty * 16;
+    };
+
+    /** Kenttä pystyyn, viholliset pois, pelaaja seisomaan omalle lattialleen. */
+    const setup = (opts = {}) => {
+      const { id = '1-1', power = { type: null, level: 0 } } = opts;
+      reset(power);
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      return { s, i, standY: s.player.y };
+    };
+
+    const lift = (s, y) => {
+      s.player.y = y;
+      s.player.vy = 0;
+      s.player.onGround = false;
+    };
+
+    /** Painaa alas + hyppy ja ajaa kunnes isku on osunut maahan. */
+    const pound = (s, i, cap = 400) => {
+      i.held.down = true;
+      i.pressed.jump = true;
+      i.held.jump = true;
+      s.update(i);
+      i.pressed = blank();
+      i.held.jump = false;
+      let f = 1;
+      while (f < cap && !s.lastPound) { s.update(i); f++; }
+      return f;
+    };
+
+    /* 1. Perusliikkeen pitää toimia voimatasolla 0. Tehostus avaa paikkoja,
+     *    ei kenttää — ja siksi ei myöskään liikettä. */
+    {
+      const { s, i, standY } = setup();
+      lift(s, standY - 70);
+      const frames = pound(s, i);
+      const lp = s.lastPound;
+      expect('maahanisku toimii voimatasolla 0',
+        !!lp && s.player.powerLevel === 0 && lp.reach > 0 && lp.strength > 0,
+        lp ? `voimataso 0, pudotus ${Math.round(lp.fall)}/${Math.round(lp.room)} px`
+          + `, voima ${lp.strength.toFixed(2)}, säde ${lp.reach} px, ${frames} framea`
+          : `iskua ei tullut ${frames} framessa`);
+    }
+
+    /* 2. Hinta numeroina: syöksy ei ohjaudu, ja siihen menee aikaa. Sama
+     *    korkeus, sama nappi pohjassa, kaksi eri tapaa tulla alas. */
+    {
+      const free = setup();
+      lift(free.s, free.standY - 70);
+      free.i.held.right = true;
+      const freeX = free.s.player.x;
+      let freeFrames = 0;
+      while (freeFrames < 400 && !free.s.player.onGround) { free.s.update(free.i); freeFrames++; }
+      const freeDrift = free.s.player.x - freeX;
+
+      const dive = setup();
+      lift(dive.s, dive.standY - 70);
+      dive.i.held.right = true;
+      const diveX = dive.s.player.x;
+      let diveFrames = pound(dive.s, dive.i);
+      // ...ja maassa vielä se hetki jona ei pääse mihinkään.
+      while (diveFrames < 400 && dive.s.player.poundPhase !== '') {
+        dive.s.update(dive.i);
+        diveFrames++;
+      }
+      const diveDrift = dive.s.player.x - diveX;
+
+      expect('maahanisku maksaa ohjaamattoman ajan, tavallinen putoaminen ei',
+        diveDrift < 1 && freeDrift > 10 && diveFrames > freeFrames + 20,
+        `vapaa pudotus ${freeFrames} framea ja ${Math.round(freeDrift)} px sivuun`
+        + `, maahanisku ${diveFrames} framea ja ${Math.round(diveDrift)} px`
+        + ` (lataus ${POUND_CHARGE} framea, syöksy ${POUND_SPEED} px/frame)`);
+    }
+
+    /* 3. Eikä se korvaa tallausta. Sama korkeus, sama kävelijä, ja kumpikin
+     *    liike saa oman parhaan tapauksensa: tallaus laskeutuu vihollisen
+     *    päälle, maahanisku maahan sen viereen — päälle syöksyminen olisi
+     *    tallaus eikä maahanisku, koska `bounce` peruu iskun. Mitataan kaksi
+     *    asiaa: montako framea pelaaja on ilman ohjausta, ja kuoleeko vihollinen
+     *    vai jääkö se henkiin tainnutettuna. */
+    {
+      const stomp = setup({ power: { type: 'shroom', level: 1 } });
+      const feetY = stomp.standY + stomp.s.player.h;
+      const walkerA = new Walker(stomp.s, stomp.s.player.x + 2, feetY - 16);
+      walkerA.active = true; walkerA.alwaysActive = true; walkerA.vx = 0; walkerA.speed = 0;
+      stomp.s.entities.push(walkerA);
+      lift(stomp.s, stomp.standY - 70);
+      stomp.i.held.right = true;
+      let stompStill = 0;
+      for (let f = 0; f < 120; f++) {
+        stomp.s.update(stomp.i);
+        stomp.i.pressed = blank();
+        if (stomp.s.player.vx === 0) stompStill++;
+      }
+
+      const slam = setup({ power: { type: 'shroom', level: 1 } });
+      const walkerB = new Walker(slam.s, slam.s.player.x + 22, slam.standY + slam.s.player.h - 16);
+      walkerB.active = true; walkerB.alwaysActive = true; walkerB.vx = 0; walkerB.speed = 0;
+      slam.s.entities.push(walkerB);
+      lift(slam.s, slam.standY - 70);
+      slam.i.held.right = true;
+      slam.i.held.down = true;
+      slam.i.pressed.jump = true;
+      slam.i.held.jump = true;
+      let slamStill = 0;
+      /* Iskun lopputulos luetaan siltä framelta jolla isku osui, ei lopusta:
+       * pelaaja kävelee oikealle vielä kymmeniä frameja sen jälkeen ja
+       * puhkaisisi kuplan itse, mikä näyttäisi siltä että isku tappoi. */
+      let outcome = null;
+      let gap = 0;
+      for (let f = 0; f < 120; f++) {
+        slam.s.update(slam.i);
+        slam.i.pressed = blank();
+        slam.i.held.jump = false;
+        // Alas irti heti käskyn jälkeen: kyykky pysäyttäisi pelaajan omasta
+        // syystään, ja silloin mittari laskisi kyykkyä eikä maahaniskua.
+        slam.i.held.down = false;
+        if (slam.s.player.vx === 0) slamStill++;
+        if (slam.s.lastPound && !outcome) {
+          outcome = {
+            killed: walkerB.remove || walkerB.dying,
+            stunned: walkerB.bubbled || walkerB.harmless,
+          };
+          gap = Math.round(walkerB.cx - slam.s.player.cx);
+        }
+      }
+
+      const lp = slam.s.lastPound;
+      const stompKilled = walkerA.remove || walkerA.dying || walkerA.squash > 0;
+      const slamKilled = !!outcome && outcome.killed;
+      const slamStunned = !!outcome && outcome.stunned;
+      expect('maahanisku ei korvaa tallausta: se maksaa ohjaamattomia frameja',
+        slamStill - stompStill >= 24,
+        `tallaus ${stompStill} framea ilman ohjausta, maahanisku ${slamStill}`
+        + ` (ero ${slamStill - stompStill})`);
+      expect('tavallisen hypyn korkeudelta isku tainnuttaa, tallaus tappaa',
+        !!lp && stompKilled && !slamKilled && slamStunned,
+        `voima ${lp ? lp.strength.toFixed(2) : 'ei iskua'}`
+        + `, säde ${lp ? lp.reach : '-'} px ja kävelijä ${gap} px sivussa`
+        + `, tallaus tappoi ${stompKilled}, isku tappoi ${slamKilled}`
+        + `, isku tainnutti ${slamStunned}`);
+    }
+
+    /* 4. Piikit voittavat senkin — sekä sen alle jäänyt piikkiukko että se joka
+     *    seisoo säteen sisällä. Muuten piikikkyys lakkaa tarkoittamasta mitään. */
+    {
+      /* a) Säteen sisällä mutta ei alla. Isku osuu maahan asti, joten säde on
+       *    mitattavissa, ja piikkiukon pitää seistä siinä ehjänä vaikka aalto
+       *    yltää sen yli. */
+      const beside = setup({ power: { type: 'shroom', level: 3 } });
+      const bp = beside.s.player;
+      const guard = new SpikeGuy(beside.s, bp.x + 30, beside.standY + bp.h - 16);
+      guard.active = true; guard.alwaysActive = true; guard.speed = 0; guard.vx = 0;
+      beside.s.entities.push(guard);
+      lift(beside.s, roomAbove(beside.s, bp));
+      pound(beside.s, beside.i, 400);
+      const lp = beside.s.lastPound;
+      const gap = Math.round(guard.cx - bp.cx);
+      expect('maahaniskun aalto ei kaada piikkiukkoa vaikka se yltää sen yli',
+        !!lp && lp.reach >= gap && !guard.remove && !guard.dying && !guard.bubbled,
+        lp ? `säde ${lp.reach} px, piikkiukko ${gap} px päässä, voima`
+          + ` ${lp.strength.toFixed(2)}, hengissä ${!guard.remove && !guard.dying}`
+          : 'iskua ei tullut');
+
+      /* b) Ja suoraan piikkien päälle syöksyminen häviää täsmälleen kuten
+       *    tallaus häviää. `sawDive` on siksi että pelkkä "pelaaja sattui" olisi
+       *    yhtä hyvin voinut tarkoittaa että hän käveli päin. */
+      const onto = setup({ power: { type: 'shroom', level: 3 } });
+      const op = onto.s.player;
+      const target = new SpikeGuy(onto.s, op.x, onto.standY + op.h - 16);
+      target.active = true; target.alwaysActive = true; target.speed = 0; target.vx = 0;
+      onto.s.entities.push(target);
+      const levelBefore = op.powerLevel;
+      lift(onto.s, onto.standY - 70);
+      onto.i.held.down = true;
+      onto.i.pressed.jump = true;
+      onto.i.held.jump = true;
+      let sawDive = false;
+      for (let f = 0; f < 90; f++) {
+        onto.s.update(onto.i);
+        onto.i.pressed = blank();
+        onto.i.held.jump = false;
+        if (op.poundPhase === 'dive') sawDive = true;
+      }
+      expect('piikit voittavat maahaniskun täsmälleen kuten ne voittavat tallauksen',
+        sawDive && !target.remove && !target.dying && !target.bubbled
+        && op.powerLevel === levelBefore - 1,
+        `syöksy nähtiin ${sawDive}, piikkiukko hengissä`
+        + ` ${!target.remove && !target.dying}, voimataso ${levelBefore}->${op.powerLevel}`);
+    }
+
+    /* 5. Korkeusasteikko. Katto on `ty < 0`, joten suurin mahdollinen pudotus
+     *    on laskeutumiskohdan oma y — mitattu luku, ei arvattu vakio. Kaksi
+     *    kenttää joissa se luku on eri, ja molemmista katosta tehty isku on
+     *    täydet 1,00. Vakioon sidottu asteikko ei voi antaa kumpaakin. */
+    {
+      const ceiling = [];
+      for (const id of levelIds()) {
+        if (ceiling.length >= 2 && Math.abs(ceiling[0].fall - ceiling[1].fall) > 60) break;
+        let probe;
+        try { probe = setup({ id }); } catch { continue; }
+        const { s, i } = probe;
+        if (roomAbove(s, s.player) !== 0) continue;
+        lift(s, 0);
+        pound(s, i, 400);
+        if (!s.lastPound) continue;
+        const row = { id, fall: s.lastPound.fall, room: s.lastPound.room, t: s.lastPound.strength };
+        if (ceiling.length < 2) ceiling.push(row);
+        else if (Math.abs(row.fall - ceiling[0].fall) > Math.abs(ceiling[1].fall - ceiling[0].fall)) {
+          ceiling[1] = row;
+        }
+      }
+      const both = ceiling.length === 2;
+      const spread = both ? Math.abs(ceiling[0].fall - ceiling[1].fall) : 0;
+      const full = ceiling.every((c) => c.t > 0.995);
+      expect('korkeusasteikko on normalisoitu mitattuun kattoon eikä vakioon',
+        both && full && spread > 40,
+        ceiling.map((c) => `${c.id} pudotus ${Math.round(c.fall)}/${Math.round(c.room)} px`
+          + ` = ${c.t.toFixed(3)}`).join(', ') + ` — ero ${Math.round(spread)} px`);
+      // Ja sama väite puhtaana laskutoimituksena, ilman kenttää välissä.
+      expect('asteikon laskukaava kestää kaksi eri kattoa ja puolikkaan pudotuksen',
+        poundScale(0, 176) === 1 && poundScale(0, 400) === 1 && poundScale(88, 176) === 0.5
+        && poundScale(176, 176) === 0,
+        `176px->${poundScale(0, 176)}, 400px->${poundScale(0, 400)}`
+        + `, puolikas ${poundScale(88, 176)}, nolla ${poundScale(176, 176)}`);
+    }
+
+    /* 6. Mitä korkeammalta, sitä kovempaa — sekä vahingoltaan että ruudulla. */
+    {
+      const low = setup();
+      lift(low.s, low.standY - 40);
+      pound(low.s, low.i, 200);
+      const a = low.s.lastPound;
+
+      const high = setup();
+      lift(high.s, roomAbove(high.s, high.s.player));
+      pound(high.s, high.i, 400);
+      const b = high.s.lastPound;
+
+      expect('isku kovenee korkeuden mukana: säde, tärinä ja vahinko',
+        !!a && !!b && b.strength > a.strength && b.reach > a.reach && b.shake > a.shake
+        && !a.kills && b.kills,
+        a && b ? `matala ${a.strength.toFixed(2)}: säde ${a.reach} tärinä ${a.shake.toFixed(1)}`
+          + ` tappaa ${a.kills} — korkea ${b.strength.toFixed(2)}: säde ${b.reach}`
+          + ` tärinä ${b.shake.toFixed(1)} tappaa ${b.kills}`
+          : 'iskuja ei tullut');
+    }
+
+    /* 7. Iskuaalto on voimatason vahvistama eikä avaama: voimatasolla 0
+     *    ylimmästä mahdollisesta korkeudesta se syntyy, ja voimataso vain
+     *    laskee kynnystä. */
+    {
+      const bare = setup();
+      lift(bare.s, roomAbove(bare.s, bare.s.player));
+      pound(bare.s, bare.i, 400);
+      const top = bare.s.lastPound;
+
+      const mid = setup();
+      lift(mid.s, mid.standY - 70);
+      pound(mid.s, mid.i, 200);
+      const weak = mid.s.lastPound;
+
+      const strong = setup({ power: { type: 'shroom', level: 5 } });
+      lift(strong.s, strong.standY - 70);
+      pound(strong.s, strong.i, 200);
+      const boosted = strong.s.lastPound;
+
+      expect('iskuaalto: voimataso 0 saa sen korkeudella, voimataso 5 halvemmalla',
+        !!top && top.wave && !!weak && !weak.wave && !!boosted && boosted.wave,
+        top && weak && boosted
+          ? `voima 0 katosta ${top.strength.toFixed(2)} aalto ${top.wave}`
+          + `, voima 0 hypystä ${weak.strength.toFixed(2)} aalto ${weak.wave}`
+          + `, voima 5 hypystä ${boosted.strength.toFixed(2)} aalto ${boosted.wave}`
+          : 'iskuja ei tullut');
+    }
+
+    /* 8. Ummetus tukkii kaasun, ja maahanisku on kaasua. Sama sääntö kuin
+     *    pieruhypyllä, tehostushyökkäyksellä ja lennolla. */
+    {
+      const { s, i, standY } = setup({ power: { type: 'shroom', level: 2 } });
+      lift(s, standY - 60);
+      s.player.cork(300);
+      i.held.down = true; i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      const corkedPhase = s.player.poundPhase;
+      s.player.collect('soup');
+      for (let f = 0; f < 24; f++) { s.update(i); i.pressed = blank(); }
+      lift(s, standY - 60);
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      expect('ummetus tukkii maahaniskun, hernekeitto avaa sen',
+        corkedPhase === '' && s.player.poundPhase !== '',
+        `tukossa "${corkedPhase}", keiton jälkeen "${s.player.poundPhase}"`);
+    }
+
+    /* 9. Pikatallennus kesken syöksyn palaa kesken syöksyn — muuten
+     *    savestate.js:n REGISTRY pudottaa liikkeen hiljaa pois. */
+    {
+      const { s, i, standY } = setup();
+      game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-1');
+      lift(s, standY - 90);
+      i.held.down = true; i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank(); i.held.jump = false;
+      let guard = 0;
+      while (guard < 60 && s.player.poundPhase !== 'dive') { s.update(i); guard++; }
+      for (let f = 0; f < 3; f++) s.update(i);
+      const phase = s.player.poundPhase;
+      const fromY = s.player.poundFromY;
+      const midY = Math.round(s.player.y);
+      const snap = captureState(game);
+      restoreState(game, JSON.parse(JSON.stringify(snap)));
+      const r = game.scene;
+      const kept = r.player.poundPhase === phase && r.player.poundFromY === fromY
+        && Math.round(r.player.y) === midY;
+      let f = 0;
+      while (f < 200 && !r.lastPound) { r.update(mkInput()); f++; }
+      expect('pikatallennus kesken syöksyn palaa kesken syöksyn ja laskeutuu loppuun',
+        kept && !!r.lastPound,
+        `vaihe "${phase}" y ${midY} lähtö ${Math.round(fromY)}`
+        + ` -> "${r.player.poundPhase}" y ${Math.round(r.player.y)}`
+        + `, laskeutui ${f} framessa voimalla`
+        + ` ${r.lastPound ? r.lastPound.strength.toFixed(2) : '-'}`);
+    }
+
+    /* 10. Pomon piikkisykli voittaa maahaniskun täsmälleen kuten tallauksen —
+     *     ja avoimena ottaa osuman täsmälleen kuten tallauksesta. */
+    {
+      const bossDive = (spiky) => {
+        reset({ type: 'shroom', level: 3 });
+        const s = new LevelScene(game, '1-F');
+        game.setScene(s);
+        const i = mkInput();
+        const boss = s.entities.find((e) => e.constructor.name === 'Boss');
+        boss.speed = 0;
+        boss.jumpTimer = 1e6;
+        boss.chargeTimer = 1e6;
+        boss.spikePhase = spiky ? 'spiky' : 'open';
+        const p = s.player;
+        p.x = boss.cx - p.w / 2;
+        p.y = boss.y - p.h - 56;
+        p.vy = 0;
+        p.onGround = false;
+        const hp0 = boss.hp;
+        const lvl0 = p.powerLevel;
+        i.held.down = true; i.pressed.jump = true; i.held.jump = true;
+        s.update(i); i.pressed = blank(); i.held.jump = false;
+        for (let f = 0; f < 90; f++) {
+          boss.spikeTimer = 1e6;
+          boss.doffTimer = 0;
+          s.update(i);
+        }
+        return { hits: hp0 - boss.hp, lost: lvl0 - p.powerLevel };
+      };
+      const spikyRun = bossDive(true);
+      const openRun = bossDive(false);
+      expect('pomon piikit voittavat maahaniskun, avoin pomo ottaa siitä osuman',
+        spikyRun.hits === 0 && spikyRun.lost === 1 && openRun.hits >= 1 && openRun.lost === 0,
+        `piikeissä osumia ${spikyRun.hits} ja pelaaja menetti ${spikyRun.lost} tasoa`
+        + `, avoinna osumia ${openRun.hits} ja menetti ${openRun.lost}`);
+    }
+
+    /* 11. DESIGN.md kohta 8: iskuaalto ei saa näyttää pomon iskuaallolta.
+     *     Väri ja rytmi mitataan pikseleistä, koska "eri väriä" on väite jonka
+     *     voi tarkistaa ja "näyttää erilaiselta" ei ole. */
+    {
+      const stage = setup();
+      const c = document.createElement('canvas');
+      c.width = 96;
+      c.height = 40;
+      const g = c.getContext('2d');
+      const shot = (entity, tick) => {
+        g.clearRect(0, 0, 96, 40);
+        entity.tick = tick;
+        if (entity instanceof PoundWave) entity.life = entity.maxLife - tick;
+        entity.draw(g);
+        return g.getImageData(0, 0, 96, 40).data;
+      };
+      const mean = (px) => {
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let q = 0; q < px.length; q += 4) {
+          if (px[q + 3] < 8) continue;
+          r += px[q]; gg += px[q + 1]; b += px[q + 2]; n++;
+        }
+        return n ? [Math.round(r / n), Math.round(gg / n), Math.round(b / n)] : [0, 0, 0];
+      };
+      const distinct = (entity) => {
+        const seen = new Set();
+        for (let t = 0; t < 12; t++) seen.add([...shot(entity, t)].join(','));
+        return seen.size;
+      };
+
+      const wave = new PoundWave(stage.s, 48, 24, 30);
+      const boss = new Shockwave(stage.s, 42, 18, 1);
+      const waveColor = mean(shot(wave, 3));
+      const bossColor = mean(shot(boss, 3));
+      const waveFrames = distinct(wave);
+      const bossFrames = distinct(boss);
+      // Kaasu on vihreää, pomon aalto ruskeaa: vihreän ja punaisen erotus on
+      // se yksi luku joka erottaa ne toisistaan katsomatta kuvaa.
+      const waveTilt = waveColor[1] - waveColor[0];
+      const bossTilt = bossColor[1] - bossColor[0];
+      expect('maahaniskun aalto on eri väriä ja eri rytmiä kuin pomon aalto',
+        waveTilt > 20 && bossTilt < 0 && waveFrames >= 8 && bossFrames <= 3,
+        `isku rgb(${waveColor.join(',')}) vihreä-punainen ${waveTilt}`
+        + `, pomo rgb(${bossColor.join(',')}) ${bossTilt}`
+        + `; eri ruutuja 12 framessa: isku ${waveFrames}, pomo ${bossFrames}`);
+    }
+  } catch (e) {
+    expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* A piranha hidden inside its pipe must not hurt anybody. Its box collapses
    * to zero height while it is down, but a zero-height box still straddles the
    * player's, so standing on the pipe mouth used to be lethal. */

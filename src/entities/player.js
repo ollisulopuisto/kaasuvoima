@@ -52,6 +52,62 @@ const COYOTE_FRAMES = 5;
 const JUMP_BUFFER_FRAMES = 6;
 
 /*
+ * MAAHANISKU — the ground pound. Down + jump in the air, and the gas that
+ * normally lifts him instead shoves him at the floor.
+ *
+ * The whole move is an argument about price, so the constants are the argument.
+ * The stomp is this game's basic verb: it kills, it bounces you clear, and you
+ * keep every pixel of steering while it happens. A ground pound that was simply
+ * bigger would end the stomp's career on the day it shipped, so this one buys
+ * its width and its noise with time in which the player is not driving:
+ *
+ *   POUND_CHARGE  frames hanging still in the air before the drop. It is also
+ *                 the telegraph — the one moment anything on screen has to
+ *                 read the move and get out from under it.
+ *   POUND_SPEED   the dive, and it is a constant rather than gravity because
+ *                 the fiction is a push and not a fall. Nearly twice TERMINAL
+ *                 (4.0), so it visibly outruns anything else in the level that
+ *                 is falling. Well under one tile per frame, so `moveY` cannot
+ *                 skip a floor row: at 16 px a frame a dive would start passing
+ *                 through planks.
+ *   POUND_LAG_*   and then the landing, where he is stuck and — this is the
+ *                 part that matters — *not* invulnerable. The window grows with
+ *                 the height of the fall, so the version that hits hardest is
+ *                 also the version that leaves you standing there longest. A
+ *                 flat lag would have made the best case strictly the best.
+ *
+ * Nothing here is gated on a power level. Requirement, not preference: a
+ * power-up opens places, not the level (DESIGN.md §5), so the base move works
+ * at power 0 and the level only widens the reach and lowers the bar for the
+ * shockwave — see `LevelScene.poundImpact`, which owns everything that happens
+ * once the feet arrive.
+ */
+const POUND_CHARGE = 12;
+const POUND_SPEED = 7.5;
+const POUND_LAG_MIN = 16;
+const POUND_LAG_RANGE = 20;
+
+/**
+ * How hard a dive landed, 0…1, and the one number the impact reads.
+ *
+ * The scale is normalised against something the engine guarantees rather than
+ * against a number somebody picked. `LevelScene.tileAt` answers `T.HARD` for
+ * every `ty < 0`, so the sky is a lid and no body's top edge can ever be above
+ * y = 0. The greatest fall that could possibly end at `toY` is therefore `toY`
+ * itself, measured in the same pixels as the fall — which makes 1.0 mean "from
+ * the ceiling of this room" in a fifteen-tile level and in a thirty-tile one
+ * alike, with no constant to go stale when a level gets taller.
+ *
+ * Both arguments are the *top* of the body, so the height of the player cancels
+ * out of both sides and a big Pieruprinssi and a small one measure the same
+ * jump identically.
+ */
+export function poundScale(fromY, toY) {
+  if (!(toY > 0)) return 0;
+  return Math.max(0, Math.min(1, (toY - fromY) / toY));
+}
+
+/*
  * Beanstalk climbing. Constant speeds, no acceleration and no gravity: a vine
  * is a place where the physics stop, which is what makes it read as climbing
  * rather than as slow flying. Sideways movement is deliberately kept — without
@@ -160,6 +216,19 @@ export class Player extends Entity {
     this.morphFrom = 0;
     this.morphTimer = 0;
     this.climbing = false;
+    /* The ground pound, as three plain fields rather than one clever one.
+     *
+     * `poundPhase` is '' | 'charge' | 'dive' | 'lag', `poundTimer` counts the
+     * two phases that end on a clock, and `poundFromY` is the height the dive
+     * was committed at — the thing the roadmap says has to be remembered,
+     * because without it "the higher the fall, the harder it hits" has nothing
+     * to measure. Numbers and a string on purpose: `savestate.js` serialises
+     * every own property of every entity, so a snapshot taken in mid-dive comes
+     * back in mid-dive without a line of save code, and the restored player
+     * finishes the same dive from the same remembered height. */
+    this.poundPhase = '';
+    this.poundTimer = 0;
+    this.poundFromY = 0;
     /* Frames before a warp pipe will take this player anywhere again. Without
      * it, holding the button on arrival sends you straight back.
      *
@@ -188,6 +257,9 @@ export class Player extends Entity {
 
   /** Extra mid-air jumps granted by the fart mushroom, one per level. */
   get airJumpsMax() { return this.type === 'shroom' && !this.corked ? this.power.level : 0; }
+
+  /** True from the moment down + jump is taken until he can steer again. */
+  get pounding() { return this.poundPhase !== ''; }
 
   /**
    * Whether running into a brick from the side breaks it. Ummetus stops it for
@@ -269,6 +341,29 @@ export class Player extends Entity {
     else if (this.jumpBuffer > 0) this.jumpBuffer--;
     const jumpPressed = this.jumpBuffer > 0;
     const jumpHeld = this.controllable ? input.held.jump : false;
+
+    /* ------------------------------ maahanisku ------------------------ */
+    /*
+     * Ahead of everything else, and it returns rather than falls through. A
+     * dive is not a jump with a different velocity: while it runs, the player's
+     * own walking, ducking, climbing, gravity, tail, gun and animation are
+     * simply not happening, and that is exactly the price the move charges.
+     * Expressing it as one early return is also the only way to be sure a later
+     * edit further down cannot quietly hand steering back.
+     *
+     * Above the beanstalk in particular, because `down` is held throughout a
+     * dive and mid-air `down` is also what grabs a vine. A dive that could be
+     * caught halfway by a passing vine would end with the move stuck in its
+     * dive phase for the rest of the level.
+     */
+    if (this.pounding) {
+      this.updatePound();
+      return;
+    }
+    if (this.canPound(down, jumpPressed)) {
+      this.startPound();
+      return;
+    }
 
     /* ------------------------------- climbing ------------------------- */
     const vine = this.level.climbAt(this);
@@ -485,6 +580,112 @@ export class Player extends Entity {
     this.onGround = false;
   }
 
+  /**
+   * Whether down + jump starts a dive this frame.
+   *
+   * The airborne test is what keeps the move from stealing the duck: on the
+   * ground the same two buttons are still crouch-and-jump, which is where they
+   * have always been. Climbing is excluded because a vine is a place where the
+   * physics stop and `down` there means "climb down".
+   *
+   * Ummetus blocks it for the same reason it blocks the gas jump, the tail and
+   * the shoulder charge: the dive is a fart, and a cork is a cork. That is not
+   * a power gate and does not touch the promise in DESIGN.md §5 — a cork is a
+   * timer somebody put on you, not a level you failed to collect, and the move
+   * works at power 0 the moment it runs out.
+   */
+  canPound(down, jumpPressed) {
+    if (!this.controllable || !down || !jumpPressed) return false;
+    if (this.onGround || this.climbing || this.frozen > 0 || this.corked) return false;
+    return true;
+  }
+
+  /**
+   * Commits to the dive: hangs, and remembers how high the hanging happened.
+   *
+   * The height is taken here rather than when the drop starts even though the
+   * body does not move in between, because *this* is the frame the player chose
+   * — and if a later change ever lets something nudge him during the wind-up,
+   * the measurement should still be the height he was looking at when he
+   * pressed, not the one the nudge left him at.
+   */
+  startPound() {
+    this.poundPhase = 'charge';
+    this.poundTimer = POUND_CHARGE;
+    this.poundFromY = this.y;
+    this.vx = 0;
+    this.vy = 0;
+    // Everything else the gas was doing stops. A tail float or a flight that
+    // survived into the dive would be a way of steering it.
+    this.jumpBuffer = 0;
+    this.jumpHeld = false;
+    this.flying = 0;
+    this.spin = 0;
+    Sfx.play('dive');
+  }
+
+  updatePound() {
+    /* A press held or repeated through the unsteerable window must not be
+     * waiting when it ends: the buffer exists so a jump asked for just before
+     * landing is not lost, and the whole point here is that this landing costs
+     * you the frames. */
+    this.jumpBuffer = 0;
+    this.vx = 0;
+
+    if (this.poundPhase === 'charge') {
+      // Held exactly still, not slowed: a body that drifted during the wind-up
+      // would make the remembered height a lie by the time it is used.
+      this.y = this.poundFromY;
+      this.vy = 0;
+      if (--this.poundTimer <= 0) {
+        this.poundPhase = 'dive';
+        this.level.spawnPuff(this.cx, this.y + this.h);
+      }
+      return;
+    }
+
+    if (this.poundPhase === 'dive') {
+      this.vy = POUND_SPEED;
+      /*
+       * `dropThrough` is deliberately false even though `down` is certainly
+       * held — it is what started this. Planks are dropped through by holding
+       * down while falling, and a dive that kept that rule would sail through
+       * the first platform under it every time, which makes the move unaimable
+       * and hands the player a hole they did not ask for.
+       */
+      moveY(this, this.level, { dropThrough: false });
+      // The gas he is riding down on, one puff every third frame: enough to
+      // read as a jet, cheap enough that a long fall is not a particle storm.
+      if (this.tick % 3 === 0) this.level.spawnPuff(this.cx, this.y + this.h - 2);
+      if (this.onGround) this.landPound();
+      return;
+    }
+
+    /* The landing. Stuck, and pointedly not invulnerable: `invuln` is not
+     * touched here and no tint is drawn, because a tint in this game means
+     * "cannot be hurt" and this is the one moment the move promises you can
+     * be. Gravity still runs so that pounding onto a crumbling plank drops
+     * with it rather than leaving him standing on air. */
+    this.vy = Math.min(this.vy + GRAVITY, TERMINAL);
+    moveY(this, this.level);
+    if (--this.poundTimer <= 0) this.poundPhase = '';
+  }
+
+  /** Feet down. The scene owns everything that happens next. */
+  landPound() {
+    const strength = poundScale(this.poundFromY, this.y);
+    this.poundPhase = 'lag';
+    this.poundTimer = Math.round(POUND_LAG_MIN + POUND_LAG_RANGE * strength);
+    this.vy = 0;
+    this.level.poundImpact(this, strength);
+  }
+
+  /** Drops the move on the floor wherever it was. */
+  cancelPound() {
+    this.poundPhase = '';
+    this.poundTimer = 0;
+  }
+
   /** Mid-air fart jump: a burst of gas that also knocks out whatever is below. */
   fartJump() {
     this.airJumps++;
@@ -582,6 +783,12 @@ export class Player extends Entity {
     this.vy = STOMP_BOUNCE;
     this.onGround = false;
     this.airJumps = 0;
+    /* A dive that found something to land on before it found the floor is a
+     * stomp, and a stomp gives the controls straight back. Leaving the pound
+     * running would have pinned the player in mid-air with a bounce underneath
+     * him, and it would also have let one dive collect a stomp *and* the ground
+     * blast on the way through. One landing, one answer. */
+    this.cancelPound();
   }
 
   /** Ummetus: corks the gas off for a while. Not damage, but it stings. */
@@ -607,6 +814,10 @@ export class Player extends Entity {
     this.power = makePower(this.power.level - 1 === 0 ? null : this.power.type,
       this.power.level - 1);
     this.ducking = false;
+    // A dive that ran into spines on the way down is over: the freeze and the
+    // knock-back below own the body now, and a pound still counting frames
+    // underneath them would take the controls again the moment they end.
+    this.cancelPound();
     this.applySize();
     this.invuln = 110;
     this.frozen = 20;
@@ -695,6 +906,10 @@ export class Player extends Entity {
     this.vy = 0;
     this.onGround = false;
     this.climbing = false;
+    // A dive interrupted by a pipe does not resume on the far side: the body
+    // that comes out is somewhere else entirely, and the height it remembered
+    // belongs to a room it has left.
+    this.cancelPound();
     this.controllable = false;
   }
 
@@ -713,6 +928,7 @@ export class Player extends Entity {
      * is the right answer there: the death animation is the thing to watch,
      * and a half-finished slide is not. */
     this.transit = null;
+    this.cancelPound();
     this.dying = true;
     this.noclip = true;
     this.controllable = false;
@@ -773,4 +989,8 @@ export class Player extends Entity {
   }
 }
 
-export { MAX_WALK, MAX_RUN, MAX_P };
+/* The two ground-pound constants leave the module for the same reason
+ * `WALK_FRAMES` comes into it: whoever reports the price of the move has to
+ * read the price, not remember it. A number copied into a test is a number
+ * that goes stale the first time the move is tuned. */
+export { MAX_WALK, MAX_RUN, MAX_P, POUND_CHARGE, POUND_SPEED };

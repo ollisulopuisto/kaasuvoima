@@ -51,6 +51,7 @@ näppäimistöasettelu ei siirrä niitä.
 | Näppäin | Toiminto |
 | --- | --- |
 | hyppy ilmassa uudestaan | **pierupomppu** (pierusieni) |
+| **alas + hyppy ilmassa** | **maahanisku** — toimii joka voimatasolla |
 | juoksunäppäin | pierupallo (kukka) · häntäisku (lehti) |
 | alas | kyykky · pudotus puulavan läpi |
 | Enter | tauko kentässä · kartalla käytä varastoesine |

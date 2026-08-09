@@ -741,6 +741,52 @@ const SFX = {
     });
     noise({ dur: 1.3, from: 260, to: 2600, q: 4, gain: 0.13, delay: 0.06, attack: 0.22 });
   },
+  dive: () => {
+    /*
+     * MAAHANISKU, the fall. A dive lasts, so this lasts — the same argument
+     * `sprout` makes above, run the other way up.
+     *
+     * `sprout` is the one block sound with a length to it because a beanstalk
+     * climbs for a second and a half and the player has to know it is still
+     * going on up there. A ground pound is the same shape of event and the
+     * opposite motion: a wind-up you cannot cancel, then a drop you cannot
+     * steer, and both of them are time the player spends waiting for something
+     * they have already committed to. A short bark would have said "done" at
+     * the moment nothing is done yet.
+     *
+     * So it is deliberately built as `sprout` inverted, and that is what keeps
+     * the two apart in the ear rather than a difference in timbre: the glide
+     * falls where the beanstalk's rises, the filter closes where the
+     * beanstalk's opens, and the whole thing tightens instead of blooming. The
+     * short attack at the front is the gas letting go; the fall is the ride.
+     */
+    farty({ dur: 0.22, base: 210, gain: 0.24, wobble: 30, wet: 0.3 });
+    tone({
+      type: 'triangle', from: 520, to: 120, dur: 0.55, gain: 0.12, hold: 0.6,
+      delay: 0.04, curve: 'lin', vibrato: 6, vibratoRate: 9,
+    });
+    noise({ dur: 0.5, from: 2400, to: 300, q: 3.5, gain: 0.14, delay: 0.05, attack: 0.1 });
+  },
+  slam: () => {
+    /*
+     * MAAHANISKU, the arrival — and an arrival does not last.
+     *
+     * Fifth of a second against the dive's half, and everything about it is
+     * front-loaded: the point of the pair is that the ear can tell the moment
+     * the falling stops, which it can only do if the second sound is the shape
+     * the first one is not.
+     *
+     * It also has to be distinguishable from `stomp`, which is the move this
+     * one is not allowed to replace and which is playing constantly. `stomp` is
+     * a 700→130 Hz brush with a 200 Hz body; this sits a whole octave under it
+     * (110→34 Hz) and carries a wide low thud instead of a brush, so the two
+     * read as "landed on something" versus "the floor took it". The farty layer
+     * on the tail is what says whose floor it was.
+     */
+    tone({ type: 'triangle', from: 110, to: 34, dur: 0.2, gain: 0.34, hold: 0.3, curve: 'lin' });
+    noise({ dur: 0.16, from: 520, to: 70, q: 0.9, gain: 0.3, attack: 0.004 });
+    farty({ dur: 0.2, base: 70, gain: 0.22, wobble: 9, wet: 0.7, delay: 0.02 });
+  },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
   spikes: () => {
     // Bone sliding out of a back. Rising, so it reads as a warning rather than

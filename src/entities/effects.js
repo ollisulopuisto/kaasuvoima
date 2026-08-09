@@ -179,6 +179,75 @@ export class BrickPiece extends Entity {
   }
 }
 
+/**
+ * MAAHANISKUN ISKUAALTO — the ring a hard ground pound leaves on the floor.
+ *
+ * It is not the boss's `Shockwave` and it must never be mistaken for one.
+ * DESIGN.md §8 is explicit that a new "something happened" signal which looks
+ * like an old one teaches the player to read the wrong thing, and this game
+ * already spends the boss's shockwave on a specific promise: a tan-brown blob
+ * that *runs along the floor at you* and will hurt you if it arrives. So the
+ * three things that carry a signal are all different here, on purpose:
+ *
+ *   - **colour.** Gas green, the same `rgba(150,220,90)` family every fart in
+ *     the game is drawn in, against the boss's tan-brown. That keeps the
+ *     existing reading intact — brown is his, green is yours.
+ *   - **rhythm.** His flickers between two pictures every three frames and
+ *     keeps going for ninety. This swells outward once, smoothly, and is gone:
+ *     no two frames of it are ever the same picture.
+ *   - **shape and errand.** His is a body that travels and collides. This is a
+ *     ring that opens around a point and touches nothing — the damage was
+ *     already dealt at the moment of impact by `LevelScene.poundImpact`. It is
+ *     a report of something that has happened, not a thing that is coming, and
+ *     therefore an `effect` and not an `enemy`.
+ *
+ * `reach` is the blast's own radius, so what the player sees is the size of
+ * what actually hit: DESIGN.md §7, what can hurt should be what is shown.
+ */
+export class PoundWave extends Entity {
+  constructor(level, x, y, reach) {
+    super(level, x - reach, y - 8, reach * 2, 8);
+    this.kind = 'effect';
+    this.alwaysActive = true;
+    this.active = true;
+    this.originX = x;
+    this.originY = y;
+    this.reach = reach;
+    /* Short. A ring that lingers stops being an impact and starts being a
+     * pool of gas lying on the floor, and the impact is the whole message. */
+    this.maxLife = 22;
+    this.life = this.maxLife;
+  }
+
+  update() {
+    this.tick++;
+    if (--this.life <= 0) this.remove = true;
+  }
+
+  draw(ctx) {
+    // 0 at the moment of impact, 1 as it dies. Eased out, because a ring that
+    // opens at a constant rate reads as a drawn circle growing and one that
+    // opens fastest at the start reads as something having been released.
+    const t = 1 - Math.max(0, this.life) / this.maxLife;
+    const ease = 1 - (1 - t) ** 2;
+    const r = Math.round(6 + (this.reach - 6) * ease);
+    const fade = 1 - t;
+    const y = Math.round(this.originY);
+    const x = Math.round(this.originX);
+    // Two arms leaving the landing spot, each a low bar that thins as it goes:
+    // the gas is being squeezed out sideways along the ground, which is what a
+    // ring seen edge-on in a side-scroller actually looks like.
+    const h = Math.max(1, Math.round(5 * fade));
+    ctx.fillStyle = `rgba(150,220,90,${(0.55 * fade).toFixed(3)})`;
+    ctx.fillRect(x - r, y - h, r * 2, h);
+    ctx.fillStyle = `rgba(210,255,150,${(0.7 * fade).toFixed(3)})`;
+    // The bright leading edge — three pixels at each end, which is the part
+    // the eye actually tracks outwards.
+    ctx.fillRect(x - r, y - h - 1, 3, h + 1);
+    ctx.fillRect(x + r - 3, y - h - 1, 3, h + 1);
+  }
+}
+
 /** The coin that pops out of a bumped block. */
 export class CoinPop extends Entity {
   constructor(level, x, y) {
