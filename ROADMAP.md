@@ -81,7 +81,16 @@ Riski jonka tiedämme etukäteen: `rules.js` validoi kentän *lähtötilan*, jot
 pomo joka rikkoo lattian voi tehdä areenasta läpäisemättömän. Vaatii saman
 takaisinkasvun kuin mureneva lava, ja samasta syystä.
 
-**4. Pomo järjestää kentän uusiksi (kallis, ja paras idea).** Vaihe jossa pomo
+**4. Pomo järjestää kentän uusiksi — PÄÄTETTY TEHDÄ 9.8.2026.** Omistaja valitsi
+tämän eikä halvempaa kohtaa 3:a. Kolme ehtoa alla eivät ole toiveita vaan
+hyväksymiskriteerit, ja niistä **validointi on se joka pitää ratkaista ensin**:
+`rules.js` tarkistaa kentän *lähtötilan*, joten areena joka muuttuu kesken
+taistelun on juuri se tapaus jota mikään portti ei tällä hetkellä katso. Aamun
+kaistavalidointi antaa siihen mallin (yleiset vs. tilannekohtaiset säännöt),
+mutta muuttuvan ruudukon tarkistaminen on uusi asia: jokaisen *mahdollisen*
+järjestelyn on kelvattava, ei vain sen jossa taistelu alkaa.
+
+
 muokkaa areenaa — nostaa pilareita, avaa kuiluja — ja pelaajan pitää sopeutua.
 Tämä on aito neljännen seinän rikkominen siinä mielessä että vihollinen koskee
 siihen mitä pelaaja luuli vakioksi. Vaatii että muutos on **ennakoitu, palautuva
@@ -89,6 +98,28 @@ ja validoitu**: pelaaja näkee sen tulevan, areena palautuu jos pomo kaatuu, ja
 mikään järjestely ei saa tehdä ovea saavuttamattomaksi. Ilman noita kolmea se on
 epäreiluuden generaattori.
 
+
+### Päätetty 9.8.2026: haaran palkinto ja vaikeuden näyttäminen
+
+Kaksi ehtoa neljästä alla on nyt vastattu, ja vastaukset kytkevät kolme
+roadmapin kohtaa yhdeksi työksi:
+
+- **Palkinto on murtava tehostus, jonka pudottaa minipomotaistelu.** Kohta 6
+  sanoi jo että minipomo on sen *ainoa* lähde, joten taistelun sijoittaminen
+  vaikeampaan haaraan ei luo ristiriitaa vaan poistaa sen: kohdat 5, 6 ja
+  haarautuva kartta ovat yksi työ kolmen kilpailevan sijaan. Taistelu on myös
+  helppo näyttää kartalla ennen sitoutumista.
+- **Vaikeus näytetään kahdella tavalla yhtä aikaa:** haaran polku värjätään ja
+  jokainen kenttäsolmu saa pisteet. Polku vastaa kysymykseen "kumpi on
+  vaikeampi" siinä hetkessä kun valinta tehdään, pisteet kysymykseen "kuinka
+  vaikea tämä on" kun perille tullaan. Väri yksin on heikoin kanava, joten
+  pisteet ovat se mikä tekee värin turvalliseksi.
+- **Haaran vaikeus on sen vaikein kenttä**, ei keskiarvo: kierroksen kaataa
+  reitin pahin kenttä eikä sen keskiarvo.
+
+Huom: pisteitä ei piirretä `*`-merkillä — se tarkoittaa pistetaulussa jo
+"tilatallennus käytössä" — eikä oletetuilla fonttimerkeillä, koska fontin
+merkkivalikoima ei ole täydellinen ja puuttuva merkki jättää aukon kaatumatta.
 
 ### Päätetty: haarautuva kartta, eriarvoiset haarat
 
@@ -167,6 +198,11 @@ pomon hyökkäys), ja `scene.shake` on olemassa. Suurin osa palasista on siis
 paikallaan.
 
 Neljä asiaa jotka pitää ratkaista, ja kaksi niistä on tasapainoa:
+
+**Päätetty 9.8.2026: tehdään, ja kohdat 1 ja 3 alla ovat päätettyjä eivätkä
+avoimia.** Maahanisku maksaa ohjaamattoman putoamisajan ja haavoittuvan hetken
+maassa, ja **piikit voittavat sen** — muuten piikikkyys lakkaa tarkoittamasta
+mitään ja juuri rakennettu pomon piikkisykli menettää merkityksensä.
 
 1. **Se ei saa korvata tallausta.** Tallaus on pelin perusliike. Maahanisku saa
    olla laajempi ja kovempi mutta sen pitää maksaa jotain — putoamisaika jonka
@@ -284,12 +320,25 @@ jälkeen ja paremmin tiedoin.
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
   tuplahypyn. **4-3 on tarkistettu käsin eikä ole rikki** — kuilun yli mennään
   kelluvia lavoja pitkin, joita botti ei osaa käyttää. Muita ei ole tarkistettu.
-- **5-F sai vaikeuspisteet 295**, selvästi muita korkeammalle. Suurin yksittäinen
-  tulkinta vaikeuskäyrätyössä, ja ansaitsee ihmisen silmät.
-- **Jättiläispomo kasvaa ulottumattomiin.** Voimatason 0 hyppy kantaa ~71 px;
-  kahden osuman jälkeen jättiläisen pää on lattiatasolta saavuttamattomissa, ja
-  loput osumat vaativat areenan yläkannen lavoja. Vanha suunnittelu, ei uusi
-  bugi, mutta se on nyt kirjattu.
+- ✔ **5-F:n vaikeuspisteet: päätetty 9.8.2026 jättää.** Se on pelin viimeinen
+  taistelu ja uusinta jo kertaalleen kaadetusta pomosta, joten piikki lopussa on
+  tarkoitus eikä vika. Luku jää kirjatuksi mittaustulokseksi. Muistettavaa jos
+  tähän palataan: mittari ei näe pomon liikesarjaa lainkaan (jokainen pomo on
+  5,0), joten osa luvusta mittaa kaivantoja eikä taistelua.
+- ✔ **Jättiläispomo: päätetty 9.8.2026 että se on suunnittelua.** Areenan
+  yläkannet *ovat* vastaus, joten ongelma on opastus eikä ulottuvuus: pelaaja
+  joka ei huomaa kansia päättelee että taistelu on rikki. Työ on siis saada
+  kannet lukemaan vastauksena eikä lavasteena — ei pomon koon rajaaminen.
+  (Voimatason 0 hyppy kantaa ~71 px; kahden osuman jälkeen pää on lattiatasolta
+  saavuttamattomissa.)
+- ✔ **Kävelijän osumalaatikko: päätetty 9.8.2026 kasvattaa piirros laatikkoon.**
+  `Walker` on 16×16 mutta piirtyy `+1..+15` leveänä ja `+3..+16` korkeana, eli
+  pään yllä on 3 px vyöhyke joka satuttaa näkymättä — vastoin DESIGN.md kohdan 7
+  lupausta. Korjataan **piirrosta suurentamalla eikä laatikkoa kutistamalla**:
+  laatikko on nyt anteliaampi kuin miltä näyttää, joten kutistaminen tekisi
+  tallauksesta tiukempaa kaikkialla missä kävelijöitä on — ja kävelijä on se
+  olio jonka muunnelmia kaikki muut ovat. Piirroksen kasvattaminen täyttää
+  saman lupauksen muuttamatta yhtäkään törmäystä.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
 - ✔ **Hyppybudjetti korjattu 9.8.2026** (oli: vanhentunut alusta asti). Tiedosto
@@ -411,8 +460,10 @@ aikabudjetti vahdittuna (2,5 ms, toteuma 0,35 ms).
 
 **Jäljellä — makuasiat ja kohdistetut efektit:**
 
-1. **Kysy lapselta mikä esiasetus on oletus.** Hän on pääsuunnittelija, ja
-   kuvaputki on makuasia jota kukaan ei voi päättää hänen puolestaan.
+1. ✔ **Kysytty 9.8.2026: kuvaputki.** Pääsuunnittelijan valinta, ja **se oli jo
+   oletus** (`postfx.js:333`, sama varalla rivillä 387) — eli koodiin ei
+   tarvittu muutosta, mutta valinta on nyt tehty eikä peritty. Ero on se että
+   sitä ei enää muuteta vahingossa.
 2. **Palettisiirto tapahtumiin**: vahinkovälähdys, pomon huoneen sävy, tähden
    välkyntä. Shaderiin yksi uniform lisää; 2D-tilassa `globalCompositeOperation`.
    Vaatii että efekti voidaan ajastaa framen tarkkuudella pelilogiikasta.
