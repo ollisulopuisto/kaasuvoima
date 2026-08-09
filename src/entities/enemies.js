@@ -4,6 +4,7 @@ import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
+  SUN_TRAIL_LIFE,
 } from '../gfx/sprites.js';
 import { TILE, T } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
@@ -669,15 +670,73 @@ export class StinkCloud extends Enemy {
   }
 }
 
+/*
+ * The angry sun's sky, in numbers.
+ *
+ * `SUN_SKY_TOP` and `SUN_SKY_LOW` bound where it may rest, and both are
+ * measured down from the top of **the band the player can actually see** —
+ * `scene.viewH`, never the constant VIEW_H. 2-1 is letterboxed, so its window
+ * is 160 rows rather than 208, and anything that positions itself against
+ * VIEW_H in that level is aiming at 48 px nobody will ever look at.
+ *
+ * The lower bound is a share of the window rather than a fixed drop, so the two
+ * framings read the same: a third of the way down the picture is a third of the
+ * way down in cinemascope too.
+ */
+const SUN_SKY_TOP = 18;
+const SUN_SKY_LOW = 0.3;
+/*
+ * How fast the resting height corrects, in px per frame.
+ *
+ * Following has to beat the camera or the sun trails out of the top of the
+ * picture on every descent: the view eases a 16 px step at CAM_V_EASE = 0.25,
+ * which is 4 px on the first frame. Leaving is deliberately slower than
+ * following, because the retreat is the one movement the player is *meant* to
+ * watch — it is the picture of having got away.
+ */
+const SUN_FOLLOW = 6;
+const SUN_LEAVE = 2.5;
+/*
+ * The dive's wind-up, in frames.
+ *
+ * The same 34 as the barons' throw and for the same reason: half a second is
+ * long enough to react to and short enough to be a warning rather than a pause.
+ * It is taken **out of** the hover wait and not added to it, so the dive still
+ * launches on exactly the frame it always did — the fight's cadence does not
+ * move, only the warning is new.
+ */
+const SUN_WINDUP = 34;
+/*
+ * The burning wake: how many embers, and how far the sun has to move before it
+ * drops another one.
+ *
+ * A sample only when it has actually moved, so a sun hanging still does not
+ * stack fourteen embers on one spot; each one dies of old age
+ * (`SUN_TRAIL_LIFE`, a drawing constant, since how long an ember burns is a
+ * question about the picture), so a sun that stops leaves no permanent smear.
+ */
+const SUN_TRAIL = 14;
+const SUN_TRAIL_STEP = 3;
+/* One screenful, mirroring `VIEW_W` in scenes/level.js. Importing it would
+ * close a cycle — level.js imports this file — for the same reason and with
+ * the same answer as the fart ball's cull in entities/items.js. */
+const SCREEN_W = 320;
+
 /**
  * Vihainen aurinko. Hangs in the sky next to the player, then swoops down
  * through them in an arc and climbs back up. Cannot be stomped; three fart
  * balls (or tail whacks) put it out.
+ *
+ * It is the game's one enemy that follows you across a whole level, so it is
+ * also the one that has to know where it does *not* belong: out of the picture,
+ * out of its own band, and past the flag. See `quitReason`.
  */
 export class AngrySun extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
+    /** Where the level put it; the resting height is this, clamped into view. */
+    this.homeY = y;
     this.hp = 3;
     this.score = 1000;
     this.stompable = false;
@@ -689,6 +748,92 @@ export class AngrySun extends Enemy {
     this.toX = x;
     this.diveDepth = 0;
     this.invuln = 0;
+    /** '' while it is hunting, otherwise why it stopped. See `quitReason`. */
+    this.quit = '';
+    /** The burning wake: {x, y, life}, oldest first. Drawn, never collided. */
+    this.trail = [];
+  }
+
+  /** The band the sun belongs to — the one the level put it in. */
+  get bandTop() {
+    const bands = this.level.def.bands;
+    if (!bands) return 0;
+    const span = bands.rows * TILE;
+    return Math.floor(this.homeY / span) * span;
+  }
+
+  /**
+   * Where it wants to hang while it is hunting, in world pixels.
+   *
+   * Its own spawn height when that is inside the picture, and the camera's
+   * otherwise — **clamped both ways**. What was here before was
+   * `Math.min(skyY, cam.y + 18)`, which is a ratchet: `skyY` could only ever
+   * rise, so the first time the view panned down the sun kept its old, higher
+   * world position and stayed above the top of the frame for the rest of the
+   * level. The comment said "so it never gets left behind" and the code could
+   * only leave it behind in one of the two directions.
+   */
+  restY() {
+    const { cam, viewH } = this.level;
+    return Math.min(cam.y + viewH * SUN_SKY_LOW,
+      Math.max(cam.y + SUN_SKY_TOP, this.homeY));
+  }
+
+  /**
+   * Why it has stopped hunting, or '' while it is still on you.
+   *
+   * **The flag.** The threshold is what the player can see rather than a column
+   * counted out of the level data: the moment the goal is inside the window the
+   * chase is over, and the two things then happen in the same picture — the
+   * flag comes in from the right, the sun goes up and out. The run-up to the
+   * flag is deliberately calm in every level in the game, and a dive that lands
+   * on the pole would be a death after the level was already won.
+   *
+   * **Its own band.** A tall level is sky / route / cave. Following the camera
+   * down a warp pipe would park an unkillable, unavoidable thing inside a
+   * sealed room, which is nonsense twice over — the sun is the sky's. Which
+   * band the player is in is read off the **feet**, the same rule and for the
+   * same reason as `LevelScene.cameraY`.
+   */
+  quitReason() {
+    const level = this.level;
+    if (level.goal && level.goal.x < level.cam.x + SCREEN_W) return 'flag';
+    const bands = level.def.bands;
+    if (bands) {
+      const span = bands.rows * TILE;
+      const p = level.player;
+      const feet = Math.floor((p.y + p.h - 1) / span) * span;
+      if (feet !== this.bandTop) return 'band';
+    }
+    return '';
+  }
+
+  /**
+   * 0..1 through the dive's telegraph, for the drawing — one number, the way
+   * the boss's crown reads its whole animation off `crownOn`. It is already
+   * above zero on the frame the warning sound plays, so the two halves start
+   * together rather than a frame apart.
+   */
+  get windUp() {
+    if (this.phase !== 'hover' || this.quit || this.timer > SUN_WINDUP) return 0;
+    return Math.max(0, Math.min(1, (SUN_WINDUP + 1 - this.timer) / SUN_WINDUP));
+  }
+
+  /** Moves the resting height toward `target`, at most `speed` px this frame. */
+  toward(target, speed) {
+    const d = target - this.skyY;
+    return Math.abs(d) <= speed ? target : this.skyY + Math.sign(d) * speed;
+  }
+
+  /** Lays down the burning wake. See SUN_TRAIL. */
+  trace() {
+    const trail = this.trail;
+    for (const s of trail) s.life--;
+    while (trail.length && trail[0].life <= 0) trail.shift();
+    const last = trail[trail.length - 1];
+    if (last && Math.abs(last.x - this.x) + Math.abs(last.y - this.y) < SUN_TRAIL_STEP) return;
+    trail.push({ x: this.x, y: this.y, life: SUN_TRAIL_LIFE });
+    if (trail.length > SUN_TRAIL) trail.shift();
   }
 
   update() {
@@ -699,24 +844,64 @@ export class AngrySun extends Enemy {
     const player = this.level.player;
     if (!player) return;
 
-    if (this.phase === 'hover') {
-      const target = player.cx + 84 * this.side - this.w / 2;
-      this.x += (target - this.x) * 0.035;
+    if (this.phase === 'hover') this.updateHover(player);
+    else this.updateDive();
+    this.trace();
+  }
+
+  updateHover(player) {
+    this.quit = this.quitReason();
+    const target = player.cx + 84 * this.side - this.w / 2;
+    /*
+     * A sun waiting out a trip underground keeps station over the player, so it
+     * is overhead again the moment they surface — and so the scene's own
+     * off-screen cull does not quietly tidy away an enemy that is merely
+     * waiting. One that has given up at the flag does not: being left behind is
+     * the whole point, and being cleaned up a screen back is the right end.
+     */
+    if (this.quit !== 'flag') this.x += (target - this.x) * 0.035;
+    if (this.quit) {
+      /*
+       * Giving up is a picture and not a switch. A sun that simply stopped
+       * updating would read as a bug; one that climbs out of the top of the
+       * frame reads as an ending, and that is the reward for surviving it. It
+       * parks just above its own band and waits there, so coming back up the
+       * pipe brings it back down — retreating is a state, not a death.
+       */
+      this.skyY = this.toward(this.bandTop - this.h - 8, SUN_LEAVE);
       this.y = this.skyY + Math.sin(this.tick / 22) * 5;
-      // The sky follows the camera so it never gets left behind.
-      this.skyY = Math.min(this.skyY, this.level.cam.y + 18);
-      if (--this.timer <= 0) {
-        this.phase = 'dive';
-        this.diveT = 0;
-        this.fromX = this.x;
-        this.toX = player.cx - 60 * this.side - this.w / 2;
-        this.diveDepth = Math.max(40, player.y - this.skyY + 10);
-        Sfx.play('boss');
-      }
+      // It leaves with a full wait on the clock: coming back into its reach
+      // must not buy an instant dive out of a sun that was already counting.
+      this.timer = 150;
       return;
     }
 
-    // one smooth arc down through the player's level and back up
+    this.skyY = this.toward(this.restY(), SUN_FOLLOW);
+    this.y = this.skyY + Math.sin(this.tick / 22) * 5;
+    if (--this.timer <= 0) {
+      this.phase = 'dive';
+      this.diveT = 0;
+      this.fromX = this.x;
+      this.toX = player.cx - 60 * this.side - this.w / 2;
+      this.diveDepth = Math.max(40, player.y - this.skyY + 10);
+    } else if (this.timer === SUN_WINDUP) {
+      /*
+       * The warning, both halves in the same beat — DESIGN.md §8 is explicit
+       * that a sound without a picture goes unnoticed in noise and a picture
+       * without a sound reads as a glitch. The sound is the one the barons
+       * already use to mean "an arm is going up"; the picture is the sun going
+       * white-hot and bristling, drawn in sprites/enemies.js off `windUp`.
+       *
+       * It is a *warning* and not a feint: nothing about the sun's position or
+       * hitbox changes during it, so what can hurt you is still exactly what
+       * you see, and the dive leaves on the frame it always did.
+       */
+      Sfx.play('boss');
+    }
+  }
+
+  /** One smooth arc down through the player's level and back up. */
+  updateDive() {
     this.diveT = Math.min(1, this.diveT + 0.014);
     this.x = this.fromX + (this.toX - this.fromX) * this.diveT;
     this.y = this.skyY + Math.sin(this.diveT * Math.PI) * this.diveDepth;
@@ -725,6 +910,9 @@ export class AngrySun extends Enemy {
       this.timer = 140 + Math.floor(Math.random() * 60);
       this.side *= -1;
     }
+    // A dive that has already been announced finishes, even if the player
+    // crosses into the flag's screen while it is in the air. Cancelling a
+    // telegraphed attack halfway is the other way to teach the wrong lesson.
   }
 
   takeHit(dir) {
@@ -749,7 +937,8 @@ export class AngrySun extends Enemy {
       this.drawFlipped(ctx, () => drawAngrySun(ctx, this.x, this.y, this.tick, false, false));
       return;
     }
-    drawAngrySun(ctx, this.x, this.y, this.tick, this.phase === 'dive', this.invuln > 0);
+    drawAngrySun(ctx, this.x, this.y, this.tick, this.phase === 'dive', this.invuln > 0,
+      { trail: this.trail, windUp: this.windUp });
   }
 }
 

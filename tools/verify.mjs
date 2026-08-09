@@ -4261,6 +4261,190 @@ const report = await page.evaluate(async () => {
         rows.map((r) => `${r.id} ${r.below.toFixed(0)}px alla / ${r.lag.toFixed(0)}px jäljessä`).join(' '));
     }
 
+    /* ---------------------------- vihainen aurinko ---------------------- */
+    /*
+     * The sun is the one enemy that positions itself against the camera, which
+     * makes it the one the letterbox can break: `viewH` is 160 in 2-1 and 208
+     * in 2-2, so a sun that aims at the uncropped height aims at 48 px the
+     * player never sees. Both levels are measured, because the same enemy in
+     * the two framings is the only A/B this game has for the crop.
+     *
+     * What this caught: `skyY = Math.min(skyY, cam.y + 18)` is a ratchet. It
+     * could only ever raise the sun, so the first descent left it above the
+     * frame for the rest of the level — 0 of 390 hunting frames on screen in
+     * 2-1, and clipped through the top edge on every bob in 2-2.
+     */
+    /* The wait between dives is the one random number in the sun, and a gate
+     * that measures a retreat cannot afford to sample a different dive on every
+     * run. Seeded for this block and put back at the end of it. */
+    const realRandom = Math.random;
+    let sunSeed = 20260809;
+    Math.random = () => {
+      sunSeed = (sunSeed * 1103515245 + 12345) & 0x7fffffff;
+      return sunSeed / 0x7fffffff;
+    };
+
+    const sunRun = (id, place, frames = 420, walk = false) => {
+      // Power 3, because the bot is standing under a thing that dives at it and
+      // a level-0 death would end the sample after the first hit — this block
+      // is measuring where the sun is, not how long the bot lives.
+      reset({ type: 'leaf', level: 3 });
+      const s = new LevelScene(game, id);
+      const sun = s.entities.find((e) => e.constructor.name === 'AngrySun');
+      const input = mkInput();
+      const out = {
+        id, sun, scene: s, hunting: 0, seen: 0, hover: 0, whole: 0, dives: 0,
+        wind: 0, windAtDive: -1, quitAt: -1, gone: -1, quitY: 0, endY: 0, ran: 0,
+        low: -Infinity, after: 0,
+      };
+      if (!sun) return out;
+      place(s, sun);
+      s.centerCamera();
+      let prevY = sun.y;
+      let prevPhase = sun.phase;
+      for (let f = 0; f < frames; f++) {
+        // A cleared level keeps updating its entities, and that is the point:
+        // the retreat is meant to be watched while the flag animation plays.
+        if (s.state === 'dead') break;
+        /* Jumping on the spot is the harder case and the deliberate one: a jump
+         * swings the vertical camera through its whole range and back, which is
+         * exactly the pan the old `Math.min` could only follow in one
+         * direction. Walking is for the runs that have to reach the flag. */
+        input.held.right = walk;
+        input.held.run = walk;
+        input.pressed.jump = f % 41 === 0;
+        input.held.jump = f % 41 < 14;
+        s.update(input);
+        if (f < 30) { prevY = sun.y; continue; }   // the drop and the camera settle
+        const top = sun.y - s.cam.y;
+        if (sun.quit) {
+          if (out.quitAt < 0) { out.quitAt = f; out.quitY = sun.y; }
+          if (out.gone < 0 && top + sun.h < 0) out.gone = f;
+        } else {
+          out.hunting++;
+          if (top + sun.h > 0 && top < s.viewH) out.seen++;
+          if (sun.phase === 'hover') {
+            out.hover++;
+            if (top >= 0 && top + sun.h <= s.viewH) out.whole++;
+          }
+        }
+        if (sun.phase === 'dive' && prevPhase === 'hover') {
+          out.dives++;
+          if (out.quitAt >= 0) out.after++;
+          out.windAtDive = out.wind;
+          out.wind = 0;
+        } else if (sun.windUp > 0) {
+          out.wind++;
+        }
+        out.low = Math.max(out.low, sun.y + sun.h);
+        out.endY = sun.y;
+        out.ran = f;
+        prevPhase = sun.phase;
+        prevY = sun.y;
+      }
+      return out;
+    };
+    /* Walk it in under the sun: the level puts it five chunks in, and the spawn
+     * row is the one band the ground route runs along. */
+    const underSun = (s, sun) => {
+      s.player.x = sun.x;
+      s.player.y = s.spawn.y;
+      s.player.vy = 0;
+    };
+
+    {
+      const runs = ['2-1', '2-2'].map((id) => sunRun(id, underSun));
+      expect('vihainen aurinko pysyy näkyvässä kaistassa myös laajakuvassa',
+        runs.every((r) => r.hunting > 200 && r.seen === r.hunting && r.whole === r.hover),
+        runs.map((r) => `${r.id} viewH ${r.scene.viewH}: ruudulla ${r.seen}/${r.hunting}, `
+          + `kokonaan ${r.whole}/${r.hover}`).join(' | '));
+
+      /* The dive is telegraphed. Both halves in the same beat (DESIGN.md §8),
+       * and the warning is taken out of the wait rather than added to it: the
+       * launch frame does not move, so the fight is no harder than it was. */
+      expect('sukellusta edeltää puolen sekunnin ennakkovaroitus, eikä se siirrä lähtöä',
+        runs.every((r) => r.dives >= 1 && r.windAtDive === 34)
+        && runs.every((r) => r.low < r.scene.cam.y + r.scene.viewH + 40),
+        runs.map((r) => `${r.id} ${r.dives} sukellusta, varoitus ${r.windAtDive} framea`).join(' | '));
+    }
+
+    /*
+     * Most persistent enemies give up before the flag, and the sun is the game's
+     * only one that follows you the whole way. It has to be *seen* leaving —
+     * that is the reward for surviving it — so the retreat is a climb out of
+     * frame and not a switch, and it is measured as one.
+     */
+    {
+      const flag = sunRun('2-1', (s, sun) => {
+        // Far enough out that it is genuinely hunting when the flag arrives.
+        s.player.x = s.goal.x - 900;
+        s.player.y = s.spawn.y;
+        s.player.vy = 0;
+        sun.x = s.player.x - 84;
+      }, 700, true);
+      const climb = flag.quitY - flag.endY;
+      /* Nine tenths and not all of them: this run walks the level, and a dive
+       * is a fixed arc that does **not** chase the camera. Descend a staircase
+       * mid-dive and the tail of the arc is briefly above the frame — the
+       * alternative is a dive that follows you down, which is a harder fight,
+       * and the wind-up is a promise about where the thing is coming from. */
+      expect('aurinko luovuttaa lipun näkyessä ja nousee näkyvästi pois',
+        flag.hunting > 100 && flag.seen > flag.hunting * 0.9
+        && flag.quitAt > 0 && flag.sun.quit === 'flag' && flag.after === 0
+        // Out of the top of the frame, and by climbing there: a cut would be a
+        // bug wearing the same end state, so the travel is measured too.
+        && flag.gone > 0 && flag.gone - flag.quitAt < 120
+        && flag.ran - flag.quitAt > 60 && climb > 40,
+        `jahtasi ${flag.hunting} framea (${flag.seen} ruudulla), luovutti framella `
+        + `${flag.quitAt}, poissa framella ${flag.gone}, nousi ${climb.toFixed(0)} px, `
+        + `sukelluksia luovutuksen jälkeen ${flag.after}`);
+    }
+
+    /*
+     * And it is the *sky's*. A tall level is sky / route / cave; following the
+     * camera down a warp pipe would park an unkillable, unavoidable thing
+     * inside a sealed room. No desert level has a pipe today — the tall ones
+     * are worlds 1-4's secrets — so this is unreachable in the shipped game and
+     * built anyway: containment that depends on nobody adding a pipe is a trap
+     * for whoever adds one. 2-2 is tall, so it can be asked directly.
+     */
+    {
+      reset();
+      const s = new LevelScene(game, '2-2');
+      const sun = s.entities.find((e) => e.constructor.name === 'AngrySun');
+      const input = mkInput();
+      const span = s.def.bands.rows * TILE;
+      const cave = 2 * span;
+      // Into the sealed tomb room under column 224, where the warp pipe lands,
+      // with the sun overhead and awake — it wakes with the camera, and the
+      // level puts it eleven chunks earlier.
+      s.player.x = 230 * TILE;
+      s.player.y = cave + 10 * TILE;
+      s.player.vy = 0;
+      sun.x = s.player.x - 84;
+      sun.active = true;
+      s.centerCamera();
+      let deepest = -Infinity;
+      for (let f = 0; f < 240; f++) s.update(input), deepest = Math.max(deepest, sun.y + sun.h);
+      const left = sun.quit === 'band' && sun.y + sun.h <= span && deepest < cave;
+      // …and it comes back when the player does.
+      s.player.x = sun.x;
+      s.player.y = s.spawn.y;
+      s.player.vy = 0;
+      s.centerCamera();
+      let back = -1;
+      for (let f = 0; f < 240; f++) {
+        s.update(input);
+        const top = sun.y - s.cam.y;
+        if (back < 0 && !sun.quit && top >= 0 && top + sun.h <= s.viewH) back = f;
+      }
+      expect('aurinko ei seuraa maan alle vaan odottaa oman kaistansa yllä',
+        left && back >= 0 && back < 120,
+        `luovutus ${sun.quit || 'ei'}, alin ${Math.round(deepest)} vs luola ${cave}, `
+        + `paluu framella ${back}`);
+    }
+    Math.random = realRandom;
+
     /* The lamp. It is an ambience like the heat and the frost, so it has to work
      * on a machine with no WebGL — and it must never be the reason a hazard is
      * invisible, which is the one thing this game does not do. */
@@ -4726,6 +4910,18 @@ const report = await page.evaluate(async () => {
       }
       sprites.drawSpikeGuy(g, 20, 40, 7, -1);
       check('spikeguy');
+      // The sun's wake and its wind-up halo are both additive, which is the
+      // one thing in this file that switches the composite mode mid-sprite.
+      {
+        const trail = [];
+        for (let i = 0; i < 14; i++) trail.push({ x: 20 + i * 3, y: 40 + i, life: 26 - i });
+        for (const wind of [0, 0.4, 0.9, 1]) {
+          sprites.drawAngrySun(g, 20, 40, 12, wind > 0.9, false, { trail, windUp: wind });
+          check(`angrysun ${wind}`);
+        }
+        sprites.drawAngrySun(g, 20, 40, 12, false, true);
+        check('angrysun bare');
+      }
       if (sprites.drawBeanBaron) {
         for (const wind of [0, 0.5, 1]) {
           sprites.drawBeanBaron(g, 20, 40, 12, -1, wind, false);
