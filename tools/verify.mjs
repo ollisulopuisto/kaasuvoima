@@ -7801,15 +7801,21 @@ const report = await page.evaluate(async () => {
      * they only reach full alpha where they land on the stacked outline, and a
      * puff of gas behind an enemy is not part of its body. */
     const ART = new Set([
-      '160,104,40', '122,76,24', '76,44,8', '248,248,248', '16,16,24',
-      '62,162,58', '28,107,31', '248,232,160', '240,208,96', '200,160,48',
+      '122,76,24', '248,248,248', '16,16,24',
       '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
-      '232,224,200', '168,152,120', '224,64,64', '31,111,38', '160,32,32',
-      '112,16,16', '216,168,96', '156,106,40', '138,90,42', '92,58,22',
+      '232,224,200', '168,152,120', '216,168,96', '156,106,40',
+      '138,90,42', '92,58,22',
       '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
       '106,68,36',
       // kurnuttaja: suo-turkoosi, joka ei ole kenenkään muun väri tässä pelissä
       '30,90,76', '52,140,110', '108,200,160', '18,60,52',
+      // pöhö: suolenvärinen kaasupussi, joka korvasi ruskean kävelijän
+      '224,120,120', '248,168,168', '168,60,76', '112,28,48',
+      // pönttö: teräksinen painesäiliö ja se kalpea toukka joka asuu siinä
+      '32,80,192', '92,144,232', '16,48,108', '168,200,240',
+      '216,224,240', '140,156,192',
+      // nielu: märkä, lähes musta kurkku ja sen punainen sisus
+      '24,16,48', '52,44,104', '104,88,176', '32,24,64', '120,16,60', '200,40,108',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -8165,8 +8171,10 @@ const report = await page.evaluate(async () => {
         : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
       const floor = sep(tileMean(T.GROUND, 'desert'), tileMean(T.BRICK, 'desert'));
       const grounds = Object.keys(THEMES).map((th) => [th, tileMean(T.GROUND, th)]);
-      // The three this pass owns. Everything else is measured and printed.
-      const owned = new Set(['walker', 'shell walking', 'shell', 'shell sliding', 'plant']);
+      /* The three species this pass redrew. The flyer is on the list because
+       * it *is* the walker — `drawFlyer` paints `walkerBody` and adds wings —
+       * so leaving it out would be pretending a body is two bodies. */
+      const owned = new Set(['walker', 'flyer', 'shell walking', 'shell', 'shell sliding', 'plant']);
       const rows = [];
       for (const s of subjects) {
         const m = bodyMean(() => s.paint(OX, 0, 1));

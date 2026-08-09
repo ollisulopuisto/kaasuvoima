@@ -16,7 +16,7 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 | Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä. |
 | Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. Melodiat ovat omia **tai** tekijänoikeudesta vapaata sävelmistöä, nimettynä (kohta 1 b). | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita **suojatuista** sävelmistä. |
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
-| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
+| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti, piikkiukko, papuparooni, kurnuttaja, sääherra, luuranko, **pöhö**, **pönttö**, **nielu**. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
 
 **Päähahmon ulkonäkö rakennettiin uusiksi 9.8.2026.** Hahmolla oli lippalakki,
 ja pierusienen jälkeen se oli punainen valkoisine pilkkuineen paidan ja housujen
@@ -105,6 +105,44 @@ kysytä miltään: sääntö koskee lainattua, ei kaikkea.
 
 > Kohta 1 b kuvaa miten ratkaisut on tehty. Se ei ole oikeudellinen neuvo, ja
 > suoja-ajat lasketaan maakohtaisesti.
+
+## 1 c. Kolme vanhinta vihollista piirrettiin uusiksi
+
+Päätetty 9.8.2026. Yllä oleva taulukko sanoi jo että grafiikka on itse tehtyä,
+ja se piti paikkansa siinä mielessä että jokainen suorakulmio oli kirjoitettu
+tähän repoon käsin. Kolme vanhinta vihollista oli silti *piirretty jonkin
+toisen pelin hahmojen näköisiksi*, ja se on eri asia: kohta 2 sanoo että
+suojattua on nimenomainen ilmaisu, ja tietty hahmo on juuri sitä. Ne on nyt
+korvattu tämän pelin omilla:
+
+| oli | on nyt | mikä se on |
+| --- | --- | --- |
+| ruskea mönkijä | **pöhö** | kaasusta pullistunut suolipussi, solmittu kiinni päältä, vuotaa takaa |
+| kilpikonna ja sen kuori | **pönttö** | kalpea toukka joka asuu teräksisessä painesäiliössä — tallattuna se vetäytyy säiliöön, potkaistuna säiliö suihkuaa venttiilistään |
+| putkesta nouseva kasvi | **nielu** | märkä, luuhampainen kurkku — putki on suoli, ja suolessa asuu nielu |
+
+**Mekaniikkaan ei koskettu, ja se on tarkoituksellista.** Päälle hyppääminen,
+kuoreksi litistyminen ja kuoren potkiminen ovat genrekonventioita eivätkä
+suojattua ilmaisua (kohta 2), ja ne ovat myös se osa jonka varassa puolet pelin
+kentistä lepää: `hitByShell`, liukuva kuori ja `shellSweep` ovat ennallaan
+riviltä riviltä. Vaihdettiin **substantiivi, ei verbi**.
+
+Samalla käyttöön tuli kaksi mittaa jotka pitävät tämän voimassa
+(`tools/verify.mjs`), koska "näyttää omalta" ei ole tarkistettavissa mutta nämä
+ovat:
+
+- **Ylälaita kertoo saako päälle hypätä.** Tallattavien ja tallaamattomien
+  ylälaidat eivät saa mennä päällekkäin. Vanha kasvi tarjosi 14 pikseliä
+  tasaista laskeutumispintaa 16 pikselin laatikossa — koko vihollisjoukon
+  levein, leveämpi kuin kävelijän 10 — eikä sen päälle ole koskaan saanut
+  hypätä. Nielu mittaa 1 ja kantaa kolmea luupiikkiä, samasta `drawSpines`
+  -funktiosta jolla piikkiukko on merkitty: peli saa yhden sanaston sille että
+  tähän ei lasketa.
+- **Vihollinen erottuu siitä maasta jolla se seisoo, kaikissa kahdeksassa
+  teemassa.** Sama mitta kuin ruutujen teemaportilla ja kynnys laskettuna
+  aavikon omasta maa/tiili-parista. Vanha kävelijä mittasi 5,7 % yön maata
+  vasten ja 6,0 % ruohoa vasten eli oli pelin ensimmäinen vihollinen ja samalla
+  sen huonoiten näkyvä.
 
 ## 2. Genre on vapaa, ilmaisu ei
 

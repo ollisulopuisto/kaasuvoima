@@ -7,6 +7,115 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.45 — pöhö, pönttö ja nielu: kolme vanhinta vihollista omiksi
+
+Pelin kolme ensimmäistä vihollista — ruskea mönkijä, kilpikonna kuorineen ja
+putkesta nouseva kasvi — oli piirretty jonkin toisen pelin hahmojen näköisiksi.
+Jokainen suorakulmio oli kyllä kirjoitettu tähän repoon käsin, mutta se ei ole
+sama asia: [DESIGN.md](DESIGN.md):n kohta 2 sanoo että suojattua on nimenomainen
+ilmaisu, ja tietty hahmo on juuri sitä. Ne on korvattu.
+
+### Mitä ne nyt ovat
+
+- **PÖHÖ** korvaa mönkijän. Kaasusta pullistunut suolipussi, solmittu kiinni
+  päältä ja vuotava takaa. Se on pelin ensimmäinen vihollinen 1-1:ssä ja se
+  ruumis jolla tallaaminen opetetaan, joten sen pitää näyttää siltä ettei se
+  aio tehdä sinulle mitään: puolittain suljetut silmät, ei kulmakarvoja, ei
+  kärkeä missään, ja kymmenen pikseliä tasaista solmua päällä. Solmu on myös se
+  osa säkkiä joka on tarkoitettu avattavaksi.
+- **PÖNTTÖ** korvaa kilpikonnan. Kalpea, sokea toukka joka asuu teräksisessä
+  painesäiliössä. Tallattuna pää ja jalat menevät sisään ja jäljelle jää
+  *esine* — kyljellään makaava tynnyri, ei kasvot missään, ja juuri se on koko
+  "nosta minut ja heitä" -lukema. Potkaistuna se ei vieri koska joku työnsi
+  sitä: se suihkuaa venttiilistään ja kylkiluut juoksevat ohi. Kahdeksan
+  asentoa neljän sijaan, koska nelivaiheinen rullaus 3,4 px/frame -vauhdissa
+  lukee välkkymisenä eikä ohi menevänä pintana.
+- **NIELU** korvaa kasvin. Putki on tässä pelissä suoli, ja suolessa asuu
+  kurkku: märkä, kylkiluinen, lähes musta tuubi jonka päällä on luuhampaiden
+  kehä. Se ei ole kasvi eikä ollut koskaan.
+
+### Mekaniikkaan ei koskettu, ja se on tarkoituksellista
+
+Päälle hyppääminen, kuoreksi litistyminen ja kuoren potkiminen ovat
+genrekonventioita eivätkä suojattua ilmaisua. Ne ovat myös se osa jonka varassa
+puolet kentistä lepää — `hitByShell`, `shellSweep`, liukuvan kuoren
+tiilenmurskaus ja `kickGrace` ovat ennallaan riviltä riviltä, eikä yhtään
+osumalaatikkoa muutettu. Vaihdettiin substantiivi, ei verbi.
+
+### Punainen ennen vihreää, ja se oli mitattava väite eikä makuasia
+
+Kaksi uutta porttia `tools/verify.mjs`:ssä, molemmat kirjoitettu ja katsottu
+punaisiksi ennen kuin yhtään pikseliä siirrettiin:
+
+1. **"vihollisen ylälaita kertoo saako sen päälle hypätä."** Väite on että
+   tallattavien ja tallaamattomien ylälaidat eivät mene päällekkäin, ja väliin
+   jää vähintään neljä pikseliä. Punainen sanoi: **tallaamattomista levein oli
+   kasvi 14 px** — koko vihollisjoukon levein tasainen laskeutumispinta 16
+   pikselin laatikossa, leveämpi kuin kävelijän 10 ja yhtä leveä kuin se kuori
+   jonka päälle nimenomaan kuuluu hypätä — kun taas tallattavista kapein oli 7.
+   Populaatiot eivät olleet lähellä toisiaan vaan **nurin päin**, ja peli opetti
+   1-2:ssa valheen niille jotka olivat juuri oppineet totuuden 1-1:ssä. Toinen
+   tallaamaton, piikkiukko, mittasi 1. Nielu mittaa nyt 1 ja kolme kärkeä.
+
+   Kärjet piirretään samalla `drawSpines`-funktiolla joka merkitsee piikkiukon
+   ja pörhistyvän pomon — ei kopiolla siitä. Peli saa yhden sanaston sille että
+   tähän ei lasketa, ja jokainen ylimääräinen murre maksaa yhden elämän.
+
+   Kurnuttaja (6 px, 2 kärkeä) on **nimetty poikkeus eikä hiljainen aukko**: se
+   elää kuopan pohjalla, pelaaja ei koskaan päädy sen yläpuolelle omasta
+   tahdostaan, ja sen varoitus on `drawCroak`in kuplapatsas ilmassa kuopan yllä.
+   Luku tulostetaan portin viestissä joka ajolla.
+
+2. **"uudelleenpiirretty vihollinen erottuu jokaisen teeman maasta."** Ruuduilla
+   on ollut teemakohtainen kontrastiportti pitkään, vihollisilla ei — väärin
+   päin, koska maahan sulava tiili maksaa salaisuuden ja maahan sulava
+   vihollinen maksaa voimatason. Sama mitta kuin ruuduilla (kanavakohtainen
+   keskiero 255:stä), ja **kynnystä ei kirjoitettu käsin**: se lasketaan
+   ajossa aavikon omasta maa/tiili-parista, eli heikoimmasta jonka peli jo
+   hyväksyy (8,6 %). Punainen sanoi: **kävelijä 5,7 % yön maata ja 6,0 % ruohoa
+   vasten, kasvi 6,9 % ruohoa vasten.** Pelin ensimmäinen vihollinen oli
+   samalla sen huonoiten näkyvä, ruskeaa ruskealla, ensimmäisestä spritestä
+   asti. Nyt pöhö 14,2 %, pönttö 11,8 / 14,6 %, nielu 12,1 %.
+
+   Portti koskee toistaiseksi näitä kolmea (ja lentäjää, joka *on* pöhö
+   siivillä), mutta mittaus koskee kaikkia ja loput tulostetaan pahimpine
+   teemoineen: piikkiukko 3,3 % (tehdas), papuparooni 3,3 % (yö),
+   ummetuskorkki 7,2 % (aavikko), ruskea pilvi 7,4 % (ruoho). Ne ovat
+   löydöksiä joista joku päättää numero edessään, eivät asioita jotka portti
+   siunaa.
+
+Mittauksesta yksi asia kannattaa kirjata, koska se ohjasi väriä eikä toisin
+päin: **keskiarvomitta rankaisee lämpimän ja kylmän sekoituksesta.** Säiliöllä
+oli ensin messinkiset päädyt sinisellä rungolla, ja jokainen väri siinä oli
+erikseen kunnossa — mutta puoliksi lämmintä ja puoliksi kylmää keskiarvoistuu
+täsmälleen siksi harmaaksi jota tehtaan lattia on, ja luku oli **2,8 %**, pelin
+huonoin. Teräs pitää koko spriten samalla puolella väriympyrää ja luku on 14,6.
+
+### Mikä pysyi mitattavasti ennallaan
+
+- **Osumalaatikot bitilleen.** Laatikkoauditointi tulostaa saman rivin kuin
+  ennen: kattamatta walker 0, flyer 0, shell walking 1, shell 2, spikeguy 1,
+  plant 1, corkguy 2, stink cloud 1, bean baron 0, kurnuttaja 0. Kävelijän
+  nolla on se joka kasvatettiin sinne tarkoituksella, eikä uusi piirros
+  kaventanut sitä.
+- **Hengitys bitilleen.** naapurin ero / 4 px:n siirtymä: walker 19/8, shell
+  walking 22/0, spikeguy 21/2, plant 22/2, corkguy 22/2, kurnuttaja 22/2 —
+  samat luvut kuin ennen. Solmu on laatikon katto, tyngät sen lattia, ja
+  hengitys liikkuu niiden välissä.
+- Liukuva kuori pääsi laatikkoauditointiin, josta se oli puuttunut. Potkaistu
+  kuori on se piirros jota pelaaja lukee kovimmassa vauhdissa.
+
+### Löydetty, ei korjattu
+
+Siluettien erottuvuus laatikon sisällä on **suorassa ristiriidassa**
+laatikkokattavuuden kanssa: kun kaksi lajia jakavat 16×16-laatikon ja
+molempien on täytettävä se joka framella, päällekkäisyys on pakotettu. Mitattu:
+kävelijä vastaan kurnuttaja 87,5 % (IoU). Siitä ei siksi tehty porttia — se
+olisi vaatinut toisen portin rikkomista. Ylälaita on se mitta joka jää
+voimaan, ja se on myös se jonka pelaaja oikeasti lukee.
+
+---
+
 ## v26.08.09.44 — sankarilta lähti lakki: haalari, kaasuletku ja viisi omaa asua
 
 Pelaajahahmon ulkoasu on piirretty uusiksi. **Punainen pilkullinen lippalakki on
