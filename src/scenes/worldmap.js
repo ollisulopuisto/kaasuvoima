@@ -6,6 +6,15 @@ import { drawItem, drawPlayer } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
+import { secretTally, watchSecrets } from '../core/secrets.js';
+import { LevelScene } from './level.js';
+
+/* Where finds get recorded, until level.js can say it itself.
+ *
+ * The map is what needs the numbers, so the map is what turns the recorder on;
+ * `main.js` imports this file at startup, so it is on before any level exists.
+ * See `watchSecrets` for why it is a wrapper and what replaces it. */
+watchSecrets(LevelScene);
 
 const TILE = 16;
 const MAP_Y = 14;
@@ -32,6 +41,17 @@ const HOUSE_ITEMS = ['shroom', 'flower', 'leaf', 'soup'];
 const TIER_COLORS = ['#8890b0', '#6ad04a', '#c8e048', '#ffd048', '#f09030', '#e05038'];
 const TIER_SHADE = ['#3a3a50', '#2f7a24', '#7a8420', '#c07c20', '#8a4c14', '#7a2418'];
 const PIP_OFF = '#3a3a52';
+
+/*
+ * The secret mark, two states and four colours: gold while something is still
+ * hidden in that level, green once it is all found — and a dark shade of each
+ * for the white plaque an uncleared level wears, because gold on white is not a
+ * colour difference. Both hues are the ones this map already speaks: gold is
+ * what is worth having (coins, the branch prize), green is what is done (the
+ * cleared label, the fortress flag).
+ */
+const SECRET_LEFT = ['#c07c20', '#ffd048'];   // [on white plaque, on dark]
+const SECRET_DONE = ['#2f7a24', '#8fe04a'];
 
 export class WorldMapScene {
   constructor(game) {
@@ -454,6 +474,35 @@ export class WorldMapScene {
     }
   }
 
+  /** `{ found, total }` for a node that is a level, or null for the rest. */
+  secretsAt(node) {
+    return node.level ? secretTally(this.game.state, node.level) : null;
+  }
+
+  /**
+   * A three-pixel sparkle saying "something is hidden in here" — and, once it
+   * turns green, "not any more". It never says where, and it cannot: it is
+   * drawn from two counts, and the pixel test in `verify.mjs` holds it to that.
+   *
+   * Why a sparkle and not a second row of bars: the bars under every node are
+   * the difficulty, and two bar readings in one 16 px cell would be read as one
+   * (DESIGN.md §8 — two signals that look alike teach the player to read the
+   * wrong one). The exact count is spelled out in words in the panel instead,
+   * the same two-channel split the branch already uses.
+   *
+   * It sits in the plaque's top-left corner, x+3..x+5. That is not decoration:
+   * the label glyph starts at x+6 and the plaque border is x+2, so this is the
+   * only 3x3 hole in the cell that the difficulty bar (y+11 down) and the level
+   * number do not already own.
+   */
+  drawSecretMark(ctx, x, y, tally, dark) {
+    if (!tally || tally.total === 0) return;
+    const done = tally.found >= tally.total;
+    ctx.fillStyle = (done ? SECRET_DONE : SECRET_LEFT)[dark ? 1 : 0];
+    ctx.fillRect(x + 4, y + 0, 1, 3);
+    ctx.fillRect(x + 3, y + 1, 3, 1);
+  }
+
   /** The prize on a rewarded route, marked on the path itself. */
   drawRewardMark(ctx, cx, cy) {
     ctx.fillStyle = 'rgba(24,20,16,0.8)';
@@ -540,6 +589,7 @@ export class WorldMapScene {
        * close as three tiles apart and a bar that overflowed would land on the
        * neighbouring terrain, or on another node's bar. */
       const pips = nodePips(node);
+      const secrets = this.secretsAt(node);
       switch (node.type) {
         case 'start':
           ctx.fillStyle = '#c8c8d8';
@@ -560,6 +610,7 @@ export class WorldMapScene {
             ctx.fillStyle = '#8fe04a';
             ctx.fillRect(x + 6, y + 8, 5, 2);
           }
+          this.drawSecretMark(ctx, x, y + 3, secrets, true);
           this.drawPips(ctx, x + 1, y + 12, pips);
           break;
         case 'house':
@@ -585,6 +636,7 @@ export class WorldMapScene {
           drawText(ctx, label, x + 8, y + 3, {
             color: cleared ? '#8fe04a' : '#202038', align: 'center',
           });
+          this.drawSecretMark(ctx, x, y + 2, secrets, cleared);
           this.drawPips(ctx, x + 1, y + 12, pips);
           break;
         }
@@ -660,6 +712,7 @@ export class WorldMapScene {
 
     drawText(ctx, `SFB *${this.game.state.lives}`, 208, PANEL_Y + 10, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 208, PANEL_Y + 20, { color: '#ffd048' });
+    this.drawSecretCount(ctx);
 
     const branch = this.branchHere();
     const hint = this.messageTimer > 0 && this.message
@@ -678,6 +731,33 @@ export class WorldMapScene {
     const cleared = this.world.nodes.filter((n) => n.level && this.isCleared(n.id)).length;
     const total = this.world.nodes.filter((n) => n.level).length;
     drawText(ctx, `SELVITETTY ${cleared}/${total}`, 160, PANEL_Y + 54, { color: '#8890b0', align: 'center' });
+  }
+
+  /**
+   * The number, in words, for the level the player is standing on.
+   *
+   * "EI SALAISUUKSIA" is spelled out rather than left blank, for the reason the
+   * route board spells out "EI PALKINTOA": a blank line reads as "not known
+   * yet", and this is known. It is also the difference the player most needs —
+   * between a level with nothing in it and a level with three things in it and
+   * none of them found — and that difference must not be one character wide.
+   *
+   * The counts are all it says. It never names a secret and never says where
+   * one is, because that is the only mystery this game has, and a map that
+   * answers it has ended it.
+   *
+   * Under the coin line, below the reserve box, at a row that survives the
+   * branch board too — the fork in world 2 is a level with six secrets in it,
+   * so this is exactly the node where the readout must not vanish.
+   */
+  drawSecretCount(ctx) {
+    const tally = this.secretsAt(this.node);
+    if (!tally) return;
+    const done = tally.total > 0 && tally.found >= tally.total;
+    drawText(ctx,
+      tally.total === 0 ? 'EI SALAISUUKSIA' : `SALAISUUDET ${tally.found}/${tally.total}`,
+      208, PANEL_Y + 30,
+      { color: tally.total === 0 ? '#5a5a76' : (done ? '#8fe04a' : '#ffd048') });
   }
 
   /**

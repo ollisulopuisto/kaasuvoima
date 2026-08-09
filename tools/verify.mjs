@@ -2821,6 +2821,134 @@ const report = await page.evaluate(async () => {
       `${secrets}/${bricks} tiiltä = ${Math.round(share * 100)} %`);
   }
 
+  /* ---------------- salaisuudet kartalla: kertoo että, ei missä ----------- */
+  /*
+   * Four things have to hold at once, and the last two are the design:
+   *
+   *   1. the count is right, and right WITHOUT loading the level — the map has
+   *      to draw it for every node at once;
+   *   2. finding one moves it, and the move survives a save;
+   *   3. a save written before any of this existed still loads, and reads as
+   *      nothing found, which is the truth;
+   *   4. the map shows HOW MANY and never WHICH. That one is tested by pixels,
+   *      because it is the only way to prove a negative: two saves that found
+   *      different secrets but the same number of them must draw the same map.
+   */
+  {
+    reset();
+    const {
+      secretKeys, secretTotal, secretTally, foundKeys, noteSecret, brickHides, SKY, CAVE,
+    } = await import('/src/core/secrets.js');
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+    const { Save, DEFAULT_SAVE } = await import('/src/core/save.js');
+    const { getLevel } = await import('/src/data/levels.js');
+
+    /* 1a. A level with a known secret, and one with none. 1-2 is the tall level
+     * of world 1: a room above, a cave below and three loaded bricks. 1-1 is
+     * the opening level and hides nothing at all. */
+    const tall = secretKeys('1-2');
+    expect('salaisuuslaskenta osaa kentän jossa on salaisuuksia ja kentän jossa ei ole',
+      secretTotal('1-2') === 5 && tall.includes(SKY) && tall.includes(CAVE)
+      && secretTotal('1-1') === 0,
+      `1-2: ${tall.join(' ')} / 1-1: ${secretTotal('1-1')}`);
+
+    /* 1b. Counted from level data alone, so it must agree with the engine's own
+     * reading of the loaded grid. This is what keeps the copied brick rates
+     * honest: they drift, this fails. */
+    const drift = [];
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      let bricksHere = 0; let stars = 0; let switches = 0;
+      for (let ty = 0; ty < sc.h; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          const ch = sc.rawTileAt(tx, ty);
+          if (ch === 'B' && sc.brickSecret(tx, ty)) {
+            bricksHere++;
+            if (!brickHides(tx, ty)) drift.push(`${id} ${tx},${ty}`);
+          }
+          if (ch === '*') stars++;
+          if (ch === 'S') switches++;
+        }
+      }
+      const keys = secretKeys(id);
+      const mine = { b: 0, s: 0, w: 0, band: 0 };
+      for (const k of keys) {
+        if (k === SKY || k === CAVE) mine.band++;
+        else if (k[0] === 'B') mine.b++;
+        else if (k[0] === '*') mine.s++;
+        else if (k[0] === 'S') mine.w++;
+      }
+      if (mine.b !== bricksHere || mine.s !== stars || mine.w !== switches) {
+        drift.push(`${id} ${mine.b}/${bricksHere} ${mine.s}/${stars} ${mine.w}/${switches}`);
+      }
+      const bands = getLevel(id).bands ? 1 : 0;
+      if (!bands && mine.band) drift.push(`${id} kaistaton mutta ${mine.band} aluetta`);
+    }
+    expect('kartan laskenta ja moottorin luenta ovat samaa mieltä joka kentässä',
+      drift.length === 0, drift.slice(0, 4).join(' · '));
+
+    /* 2. Found means "the game gave you what it was hiding". A block pays out;
+     * a hidden area is where your feet are. */
+    reset();
+    const scene = new LevelScene(game, '1-2');
+    const brick = secretKeys('1-2').find((k) => k[0] === 'B') || 'B0,0';
+    const [bx, by] = brick.slice(1).split(',').map(Number);
+    scene.bumpTile(bx, by, scene.player);
+    const afterBrick = secretTally(game.state, '1-2');
+    scene.player.y = 5 * 16;
+    scene.player.x = 150 * 16;
+    scene.update(mkInput());
+    const afterSky = secretTally(game.state, '1-2');
+    expect('salaisuus löytyy silloin kun se antaa sen mitä se kätki',
+      afterBrick.found === 1 && afterBrick.total === 5
+      && afterSky.found === 2 && foundKeys(game.state, '1-2').includes(SKY),
+      `tiili ${afterBrick.found}/${afterBrick.total} → alue ${afterSky.found}`);
+
+    /* …and it has to still be there tomorrow. */
+    const before = localStorage.getItem('sfb3.save.v2');
+    Save.write(game.state);
+    const reloaded = Save.load();
+    expect('löydetty salaisuus kestää tallennuksen',
+      secretTally(reloaded, '1-2').found === 2, JSON.stringify(reloaded.secrets || null));
+
+    /* 3. The save format did not get a new version number, so this is the case
+     * that has to work: a save written yesterday, with no secret field at all. */
+    localStorage.setItem('sfb3.save.v2', JSON.stringify({
+      lives: 3, coins: 7, score: 4200, power: { type: 'shroom', level: 2 },
+      reserve: null, world: 0, node: 'w1-2', cleared: { 'w1-1': true }, worldsOpen: 1,
+    }));
+    let old = null; let oldErr = '';
+    try { old = Save.load(); } catch (e) { oldErr = e.message; }
+    const oldReads = old && secretTally(old, '1-2');
+    expect('vanha tallennus ilman salaisuustietoa latautuu ja lukee nollaksi',
+      !!old && old.lives === 3 && !!old.secrets && oldReads.found === 0
+      && oldReads.total === 5 && DEFAULT_SAVE().secrets
+      && noteSecret(old, '1-2', brick) === true,
+      oldErr || `lives ${old && old.lives}  ${oldReads && oldReads.found}/${oldReads && oldReads.total}`);
+    if (before === null) localStorage.removeItem('sfb3.save.v2');
+    else localStorage.setItem('sfb3.save.v2', before);
+
+    /* 4. Same map, drawn three ways. */
+    const shot = (found) => {
+      const g = Object.create(game);
+      g.state = { ...DEFAULT_SAVE(), world: 0, node: 'w1-2', secrets: { '1-2': found } };
+      const map = new WorldMapScene(g);
+      const cv = document.createElement('canvas');
+      cv.width = 320; cv.height = 240;
+      const c2 = cv.getContext('2d');
+      map.draw(c2);
+      return c2.getImageData(0, 0, 320, 240).data.join(',');
+    };
+    const bricksOf = secretKeys('1-2').filter((k) => k[0] === 'B').concat('B0,0');
+    const none = shot([]);
+    const oneA = shot([bricksOf[0]]);
+    const oneB = shot([SKY]);
+    expect('kartta kertoo montako salaisuutta on löytynyt',
+      none !== oneA, `${none.length} vs ${oneA.length} tavua`);
+    expect('kartta ei kerro mikä salaisuus löytyi',
+      oneA === oneB, 'sama määrä, eri salaisuus, sama kuva');
+  }
+
   /* ------------------- generoitujen kenttien uusi sanasto ---------------- */
   /*
    * The generated world gets its own assertions, and they are here rather than

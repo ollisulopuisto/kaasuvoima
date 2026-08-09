@@ -12,6 +12,18 @@ export const DEFAULT_SAVE = () => ({
   worldsOpen: 1,    // how many worlds are reachable
   usedSaveState: false,   // set once a run has been rewound from a save state
   continues: 0,           // continues this run has used; the board shows the count
+  /*
+   * levelId -> the keys of the secrets found in it (see core/secrets.js).
+   *
+   * Added WITHOUT raising the key from v2, and that is the argument: an old
+   * save simply has no `secrets`, the spread below hands it `{}`, and `{}` is
+   * not a guess — it is the truth, because nothing was ever recorded for that
+   * player. No existing field changes meaning and nothing is re-read as
+   * something else, which is the case DESIGN.md §6 is about. Bumping the
+   * version would delete somebody's lives, score and world progress in order to
+   * add a counter that starts at zero anyway. `continues` went in the same way.
+   */
+  secrets: {},
 });
 
 export const Save = {
@@ -39,6 +51,7 @@ export const Save = {
         worldsOpen: state.worldsOpen,
         usedSaveState: !!state.usedSaveState,
         continues: state.continues || 0,
+        secrets: state.secrets || {},
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */
