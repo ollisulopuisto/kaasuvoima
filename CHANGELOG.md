@@ -7,6 +7,177 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.41 — hiekka ei tiedä kuka siihen astuu, ja kamera lakkaa leikkaamasta noustessaan
+
+Kaksi bugia, molemmat eilen mitattuja ja tarkoituksella jätettyjä. Ne eivät
+liity toisiinsa mitenkään muuten kuin siinä, että kummankin korjaus oli
+*mittaus* eikä idea.
+
+### 1. Viholliset uppoavat juoksuhiekkaan
+
+Juoksuhiekka (v26.08.09.35) tuli sisään tietäen tasan yhdestä kehosta.
+**Kaikki muu mikä seisoo lattialla käveli lammikon yli**, putosi läpi koska
+hiekka ei ole `SOLID`, laskeutui lammikon alla olevalle lattialle ja jatkoi
+kävelyä siellä — koko keho pinnan alla, näkymättömänä ja yhä tappavana.
+Mitattuna 2-3:n kahden ruudun lammikossa: **890 framea 900:sta pinnan alla,
+eikä yksikään laji kadonnut koskaan.** Se ei näytä bugilta vaan vitsiltä.
+
+Julkaistuissa kentissä se ei tapahtunut, ja juuri se oli ongelma: 2-1:n ja
+2-3:n penkat aitaavat kävelijät ulos lammikoista. Sijoittelurajoite on rajoite
+vain niin kauan kuin kukaan ei siirrä mitään.
+
+**Sääntö on että hiekka ei tiedä mitä siinä on.** `Enemy.sink()` on pelaajan
+frame ilman hänen kahta kykyään. Sama pintahaku (`quicksandSurface` siirtyi
+`Player`ista `Entity`yn, jotta niitä on yksi eikä kaksi), sama vajoamisnopeus,
+sama kahlauskatto, sama armoaika ja ennen kaikkea **sama geometrinen kuolema**:
+hukut kun koko keho on pinnan alla, et hetkeäkään aiemmin. Se ei ole koodin
+säästämistä vaan koko suunnittelu — siitä seuraa suoraan, että 2-1:n matala
+lammikko ei voi hukuttaa kävelijää täsmälleen siitä syystä josta se ei voi
+hukuttaa voimatason 0 pelaajaa, ja kenttäsuunnittelija oppii yhden säännön
+eikä kahta. Mitattuna: pelaaja **182 framea**, kävelijä **185**, piikkiukko
+185, korkki 185, lentäjä 186, kuori 235 (se on lyhyempi ja lähtee matalammalta).
+
+**Kykyä ne eivät saa.** Pelaajan vastaus hiekkaan on potku, ja potku on se asia
+jota ensimmäinen lammikko on olemassa opettamaan; millään muulla ei ole nappia.
+Siksi tarpeeksi syvä lammikko lopulta aina hautaa vihollisen — ja siksi
+lammikosta tulee paikka johon jotain voi ajaa.
+
+**Ketkä uppoavat, ja miksi juuri ne.** Kävelijä, kuori, piikkiukko,
+ummetuskorkki ja lentäjä. Sääntö on "painovoima pitää sitä lattiassa", ja
+lentäjä on siinä se joka näyttää tulkinnalta eikä ole: hiekka ei ole kiinteä,
+joten uppoamaton lentäjä putoaisi pinnan läpi ja pomppisi lammikon pohjasta
+hiekan sisältä — sama bugi eri spritellä. **Eivät** putki-kasvi, närästys,
+ruskea pilvi, aurinko, kuu (paikallaan tai ilmassa), kurnuttaja (mitoitettu
+yhdestä kiinteästä viivasta, ja `checkQuicksand` ei sallisi hiekkaa sen kuopan
+pohjalla), papuparooni (pultattu jalustalleen, ja mukanaan menisi pelin ainoa
+murtava voima) eikä pomo (**se on kenttä**; lattiaan piilotettu voittonappi
+tekisi taistelun sääntöjen arvoksi nolla). Iskuaalto ei uppoa koska se ei ole
+keho vaan rintama.
+
+**Portti, ettei tämä unohdu kolmannella kerralla.** Sama kuin `ENEMY_COST`:
+luokka joka käyttää `applyGravity`ä on **ilmoitettava** `sinks`-arvo omanaan,
+eikä oletusta ole kummallakaan puolella — `true` upottaisi hiljaa seuraavan
+lentävän, `false` jättäisi seuraavan kävelijän kävelemään pohjalla. `verify.mjs`
+lukee luokan oman `update`in lähdetekstin ajossa (ei käännösvaihetta) ja vaatii
+myös, että uppoavaksi ilmoittautunut oikeasti kysyy hiekalta.
+
+**Hukkuminen ei maksa mitään**, eikä se ole mielipide vaan olemassa oleva rivi:
+kentän pohjan läpi kävellyt vihollinen katoaa jo nyt ilmaiseksi, ja hukkuminen
+on sama tapahtuma kansi päällä. Piste maksetaan tässä pelissä siitä mitä pelaaja
+teki — tallaus, potku, laukaus, häntä, puhjennut kupla. Huoneen geometriasta
+maksaminen tekisi "astu sivuun ja anna kentän hoitaa" parhaiten pisteitä
+tuottavaksi vastaukseksi vihollista vastaan, mikä hinnoittelisi lätäkön jokaisen
+annetun välineen yläpuolelle.
+
+**Kuva ja ääni, ja tässä ne eroavat tahallaan** (DESIGN.md kohta 8). Merkki on
+hiekan oma rae, sama jonka se heittää pelaajankin päälle, koska sen tekee hiekka
+ja hiekka on huoneessa. Ääni **ei** ole jaettu: `upota` ja `kahlaa` ovat
+pelaajan ilmoitus siitä että hänet saatiin kiinni, aavikko on kirjekuoressa, ja
+kaksi ruutua taaksepäin rapiseva lammikko opettaisi katsomaan alas silloin kun
+alla ei ole mitään. Näkymättömästä syystä laukeava signaali on huonompi kuin ei
+signaalia — ja kuilu on tässäkin ennakkotapaus: mikään ei soi kun kenttä nielee
+vihollisen. Mitattuna: 36 pölyhiukkasta, 0 pelaajan ääntä.
+
+**Se on tavoitettavissa julkaistussa kentässä.** 2-1:n ainoa kuori seisoo
+sarakkeessa 166 ja opetuslammikko on sarakkeissa 149–152, yhden palikan
+takana. Vasemmalle potkaistu kuori liukuu sisään, pysähtyy sarakkeeseen 152 ja
+on poissa **238 framen** kuluttua. Väline muuttuu roskikseksi, kauppa on auki
+näkyvillä, ja se maksaa juuri siellä missä sen oppiminen on halvinta.
+
+**Sijoittelu jäi ennalleen, ja penkat eivät ole enää kantavia.**
+`dune_sink_deep`in kommentti sanoi että kävelijät on pidettävä ulkona koska
+muuten ne kävelisivät pohjalla; nyt moottori tietää, joten penkka on
+kenttäsuunnittelua eikä turvatoimi. Kävelijät jäivät silti paikoilleen: ne ovat
+samat kaksi jotka `walkers`-palikassakin olivat, eli kentän vihollismäärä,
+mitattu vaikeus ja rytmi ovat ne jotka on mitattu. Julkaistun kentän
+uudelleensuunnittelu korjauksen esittelemiseksi olisi nämä kaksi asiaa väärässä
+järjestyksessä.
+
+**Vaikeusmittari ei liikkunut**, eikä sen pitänytkään: `difficulty.mjs` lukee
+ruudukkoa, ruudukko ei muuttunut, ja käyrä on rivi riviltä sama
+(`w2 121 → 126 → [124|159]`, yksi notko, nousee joka maailmassa).
+`src/data/difficulty.js` ennallaan.
+
+Pikatallennus kulkee ilman riviäkään tallennuskoodia: `sunk` on tavallinen luku
+oliossa, ja `REGISTRY` kantaa sen — 42 framea pinnan alla molemmin puolin.
+
+### 2. Kamera ei enää leikkaa noustessaan korotetulle tasolle
+
+Löydetty ja mitattu eilen (v26.08.09.34) ja jätetty korjaamatta sokkona, koska
+`CAM_SNAP` oli olemassa tarkoituksella ja korjaus vaati oman mittauksensa
+siitä **mitä se suojeli**. Mittaus tehtiin, ja vastaus on: ei mitään.
+
+`CAM_SNAP = 48` väitti suojelevansa tapausta "kuva on kokonaan toisaalla eikä
+vain jäljessä — uudelleensyntymä, putki, kuilu". Kaikki kolme menevät ohi:
+
+- **Uudelleensyntymää ja putkea ei pehmennetä lainkaan.** Molemmat päätyvät
+  `centerCamera()`iin, joka sijoittaa `cam.y`:n suoraan. Se on se oikea
+  leikkaus, sillä ei ole kynnystä, ja se teki tämän työn koko ajan.
+- **Kuilun rajaa kentän oma clamp**: pahin ero kuvan ja sen halutun paikan
+  välillä yhdessäkään pudotuksessa on 14,5 px.
+- **Kaistanvaihto ei koskaan päässyt sille riville**, koska `updateCamera`
+  testaa kaistat ensin. Mitattuna se haluaa liikkua 240 px.
+
+Ja **26 kentässä 30:stä kynnys on aritmeettisesti saavuttamaton**: 15 rivin
+kenttä on 240 px 208 px:n ikkunassa, eli pystyliikkumavaraa on yhteensä 32 px
+eikä 48:aa voi pyytää. Loput neljä ovat kaistakenttiä. Jäljelle jäävät tasan
+kirjekuorikentät 2-1 ja 2-3, joissa rajaus ostaa kameralle 80 px — ja ainoa
+asia joka siellä koskaan ylitti kynnyksen oli se bugi jota se piilotti.
+
+**Bugi: korotetulle tasolle laskeutuminen.** Ankkuri pidetään paikallaan koko
+hypyn ajan ja se siirtyy sillä framella jolla jalat koskettavat, joten neljän
+ruudun tasolle laskeutuminen siirtää sitä kerralla tason koko korkeuden.
+Aavikon lattia kehystyy 80:een ja taso 30:een, eli kuvalla on 50 px matkaa — ja
+50 > 48 leikkasi kaiken yhdellä framella. Mitattuna pelaamalla hyppy padilla
+voimatasoilla 0 ja 3: **50,00 px yhdellä framella, asettui 1 framessa.**
+Täsmälleen sama tapahtuma tavallisessa kentässä on 32 px:n askel joka liukuu
+7,10 px vilkkaimmalla framellaan ja asettuu 12:ssa.
+
+Korjaus on kynnyksen poisto, ja se tekee näistä kahdesta kentästä muiden 28:n
+kaltaisia: **12,50 px ensimmäisellä framella, asettui 14 framessa.** Se on 1,6×
+tavallisen laskeutumisen ensimmäinen frame koska taso on 1,6× askel — eli ease
+on johdonmukainen eikä venytetty — ja neljäsosa siitä mitä kaistan oma ease
+tekee ensimmäisellä framellaan pelin siunauksella.
+
+**Miksi tähän ei tullut ennakkoa, vaikka kaksi muuta akselia sai sellaisen.**
+`CAM_TOP_LEAD` ja `CAM_FALL_LEAD` tähtäävät siihen mihin keho on menossa
+akselilla jota kuva jo seuraa. Tällä akselilla kuva **tarkoituksella ei seuraa**
+kehoa: ankkuri pysyy paikallaan kaaren yli, jotta lähtöruutu pysyy ruudulla
+(mitattu ja väitetty). Ennakko joka aloittaisi nousun ennen kosketusta olisi
+kameran ratsastaminen hypyllä — juuri se mitä pito on olemassa estämään — ja se
+maksaisi ruudun alareunasta sen minkä ostaisi yläreunasta.
+
+**Punainen ennen vihreää, ja mitä punainen sanoi.** Uusi testi `a view that has
+to rise on landing animates instead of cutting` kaatui lukemiin `2-1 taso 0:
+50.00 px/frame, asettui 1 framessa` ja `2-3 taso 0: 50.00 px/frame, asettui 1
+framessa`, kun samat rivit 1-1:stä ja 4-1:stä lukivat `7.10 px/frame, asettui
+12 framessa` — sama tapahtuma, kaksi käytöstä.
+
+Vihollispuolen punainen sanoi: `g: ei koskaan, 890 framea pinnan alla` (ja
+sama neljälle muulle lajille), `ennen uppoama undefined framea`,
+`0 pölyhiukkasta`, ja `päättämättä: BeanBaron, Boss, CorkGuy, Flyer, ShellGuy,
+Shockwave, SpikeGuy, Walker`.
+
+**Kumpikaan aiempi kamerakorjaus ei regressoinut.** `a view that has to rise
+animates instead of snapping` lukee rivi riviltä saman, pahin frame edelleen
+**1,95 px** (yksi rivi liikkui 0,00 → 0,02 px), ja `a view that has fallen
+stops when the player stops` on identtinen pikselilleen, pahin 2,94 px / 7
+framea. Maahaniskun rivi sama, 8,47 px / 11 framea.
+
+**Yksi testi jouduttiin korjaamaan, ja se on kirjattava.** `the view does not
+ride a jump upward` alkoi lukea 2,65 px. Ei siksi että kamera ratsastaisi
+kaarella, vaan siksi että laskeutumisen liuku voi nyt olla vielä kesken kun
+seuraava hyppy lähtee — leikkaus oli ohi yhdessä framessa eikä voinut mennä
+päällekkäin. Testiin lisättiin sama "vain asettuneesta kuvasta lähtevät hypyt
+lasketaan" -suodatin joka sen sisarella on ollut `CAM_TOP_LEAD`ista asti ja
+täsmälleen samasta syystä. Suodatettuna: **0,00 / 0,27 / 0,00 px/frame.**
+*Maa*-luku pitää edelleen jokaisen framen: lähtöruudun on pysyttävä ruudulla
+myös kesken liukua otetuissa hypyissä.
+
+`playable.mjs` ennallaan: 2-1 pysähtyy yhä sarakkeeseen 264.
+
+---
+
 ## v26.08.09.40 — yön lauta näkyy vihdoin: 0,4 % → 17,8 %
 
 Pelin heikoin pari korjattu. Yön tiili oli `#7a5a30` ja yön maa on `#6a5030`:

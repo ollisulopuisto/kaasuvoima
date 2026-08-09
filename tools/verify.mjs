@@ -1071,6 +1071,245 @@ const report = await page.evaluate(async () => {
         `ennen uppoama ${before.sunk} framea y=${before.y}, `
         + `jälkeen ${p2.sunk} framea y=${Math.round(p2.y)}`);
     }
+
+    /* ------------------- 10. hiekka ja se mikä siihen kävelee ------------ */
+    /*
+     * Punainen ennen vihreää (DESIGN.md kohta 7) toiselle puoliskolle:
+     * **hiekka ei tiennyt vihollisista mitään.**
+     *
+     * Hiekka on ruutu eikä osuma, joten se koskee kaikkea mikä seisoo lattialla
+     * — ja siihen asti se koski vain pelaajaa. Kävelijä joka päätyi lammikkoon
+     * putosi sen pohjalle ja jatkoi kävelyä siellä, koko keho pinnan alla,
+     * näkymättömänä. Se ei näyttänyt bugilta vaan vitsiltä, ja tänään sen esti
+     * pelkkä sijoittelu: 2-1:n ja 2-3:n penkat aitaavat kävelijät lammikoiden
+     * ulkopuolelle. Sijoittelurajoite on rajoite vain niin kauan kuin kukaan ei
+     * siirrä mitään, ja juuri se on se laji jota testi on olemassa varten.
+     *
+     * Mitattavat väitteet, ja jokainen niistä on päätös eikä sivutuote:
+     *
+     *   a. syvässä lammikossa vihollinen uppoaa ja katoaa — samalla kellolla
+     *      kuin pelaaja, koska se on sama hiekka
+     *   b. matalassa se ei voi hukkua, koska geometria on sama molemmille
+     *   c. hukkuminen ei maksa pisteitä (ks. kuilu: sekään ei maksa)
+     *   d. pikatallennus kesken vihollisen uppoamista palaa kesken uppoamista
+     *   e. merkkinä on hiekan oma pöly, ei pelaajan hukkumisääni
+     *   f. jokainen painovoiman varassa liikkuva vihollinen on **päättänyt**
+     *      uppoamisestaan — sama portti kuin `ENEMY_COST`
+     *   g. ja koko kauppa on tavoitettavissa julkaistussa kentässä eikä vain
+     *      koeasetelmassa: 2-1:n kuori potkaistuna vasemmalle
+     */
+    {
+      const enemies = await import('/src/entities/enemies.js');
+      const { Sfx } = await import('/src/core/audio.js');
+
+      /** Kaikki neljä lattiakävelijää ja lentäjä, merkkeineen. */
+      const species = [['g', enemies.Walker], ['k', enemies.ShellGuy],
+        ['x', enemies.SpikeGuy], ['c', enemies.CorkGuy], ['f', enemies.Flyer]];
+
+      /**
+       * Yksi vihollinen lammikon keskelle, jalat täsmälleen pinnalla — sama
+       * lähtöasento kuin `dropInto` antaa pelaajalle, jotta luvut ovat
+       * vertailukelpoisia sen kanssa.
+       */
+      const dropEnemy = (s, pool, Ctor) => {
+        const mid = Math.round(((pool.tx0 + pool.tx1 + 1) / 2) * 16);
+        const e = new Ctor(s, mid, pool.top * 16);
+        e.x = mid - e.w / 2;
+        e.y = pool.top * 16 - e.h;
+        e.vx = 0;
+        e.vy = 0;
+        e.active = true;
+        e.alwaysActive = true;
+        s.add(e);
+        return e;
+      };
+
+      /** Ajaa lammikkoa kunnes vihollinen katoaa, ja kertoo mitä matkalla tapahtui. */
+      const sinkRun = (id, pool, Ctor, cap = 900) => {
+        const s = sandScene(id);
+        s.player.x = 16;
+        s.player.y = 8 * 16;
+        const e = dropEnemy(s, pool, Ctor);
+        const i = mkInput();
+        const startX = e.x;
+        let buried = 0;
+        let gone = null;
+        for (let f = 0; f < cap; f++) {
+          s.update(i);
+          if (e.y >= pool.top * 16 + 1) buried++;
+          if (e.remove || !s.entities.includes(e)) { gone = f; break; }
+        }
+        return { gone, buried, dx: Math.round(e.x - startX), e, s };
+      };
+
+      /* a. Syvä lammikko: uppoaa ja katoaa, eikä kävele pohjalla. Yläraja on
+       *    pelaajan oma lukema — sama hiekka, sama kello — ja alaraja on se
+       *    että uppoaminen on uppoamista eikä katoamista kosketuksesta. */
+      {
+        const rows = [];
+        for (const [ch, Ctor] of species) {
+          const r = sinkRun(deepest.id, deepest.pool, Ctor);
+          rows.push({ ch, gone: r.gone, buried: r.buried });
+        }
+        expect('syvä hiekka ottaa myös vihollisen, eikä se jää kävelemään pohjalle',
+          rows.every((r) => r.gone !== null && r.gone > 60 && r.gone < 400),
+          rows.map((r) => `${r.ch}: ${r.gone === null ? 'ei koskaan' : `${r.gone} framea`}`
+            + `, ${r.buried} framea pinnan alla`).join(', '));
+      }
+
+      /* b. Matala lammikko ei hukuta ketään, ja se on sama geometria jolla se
+       *    ei hukuta pelaajaakaan: keho on kuoppaa pidempi. Tämä on vihreä jo
+       *    ennen korjausta ja on se puoli jota korjaus ei saa rikkoa. */
+      {
+        const rows = [];
+        for (const [ch, Ctor] of species) {
+          const r = sinkRun(shallowest.id, shallowest.pool, Ctor, 600);
+          rows.push({ ch, gone: r.gone, top: Math.round(r.e.y - shallowest.pool.top * 16) });
+        }
+        const depth = (shallowest.pool.bottom - shallowest.pool.top + 1) * 16;
+        expect('matala hiekka ei hukuta vihollista sen enempää kuin pelaajaa',
+          rows.every((r) => r.gone === null),
+          `kuoppa ${depth} px — ` + rows.map((r) => `${r.ch} ${r.gone === null ? 'jäi' : 'katosi'}`
+            + ` (pää ${r.top > 0 ? '+' : ''}${r.top} px pinnasta)`).join(', '));
+      }
+
+      /* c. Hiekkaan hukkunut vihollinen ei maksa mitään. Ennakkotapaus on
+       *    kuilu: kentän pohjan läpi pudonnut vihollinen katoaa ilmaiseksi jo
+       *    nyt, ja hukkuminen on sama tapahtuma kansi päällä. Piste maksetaan
+       *    tässä pelissä siitä mitä pelaaja teki, ei siitä mitä huone teki. */
+      {
+        reset();
+        const r = sinkRun(deepest.id, deepest.pool, enemies.Walker);
+        expect('hiekkaan hukkunut vihollinen ei maksa pisteitä',
+          r.gone !== null && game.state.score === 0,
+          `kävelijä katosi ${r.gone === null ? 'ei koskaan' : `${r.gone} framessa`}, `
+          + `pisteet ${game.state.score}`);
+      }
+
+      /* d. Pikatallennus kesken vihollisen uppoamista. Sama väite kuin
+       *    kohdassa 9 pelaajalle, ja samasta syystä: uppoaminen on tavallisia
+       *    lukuja oliossa, joten `REGISTRY` kantaa sen ilman tallennuskoodia. */
+      {
+        const s = sandScene(deepest.id);
+        game.setScene(s);
+        s.player.x = 16;
+        s.player.y = 8 * 16;
+        const e = dropEnemy(s, deepest.pool, enemies.Walker);
+        const i = mkInput();
+        for (let f = 0; f < 140; f++) { s.update(i); i.pressed = blank(); }
+        const before = { sunk: e.sunk, y: Math.round(e.y) };
+        const snap = captureState(game);
+        restoreState(game, snap);
+        const e2 = game.scene.entities.find((z) => z.constructor.name === 'Walker');
+        expect('pikatallennus kesken vihollisen uppoamista palaa kesken uppoamista',
+          before.sunk > 0 && !!e2 && e2.sunk === before.sunk && Math.round(e2.y) === before.y,
+          `ennen uppoama ${before.sunk} framea y=${before.y}, jälkeen `
+          + `${e2 ? `${e2.sunk} framea y=${Math.round(e2.y)}` : 'ei kävelijää'}`);
+      }
+
+      /* e. Kuva ja ääni (DESIGN.md kohta 8). Uppoava vihollinen tarvitsee
+       *    merkin, mutta se ei saa olla **pelaajan oma** merkki: `upota` ja
+       *    `kahlaa` ovat lauseita "sinut sai kiinni", ja aavikossa lammikko voi
+       *    olla ruudun ulkopuolella. Ääni ilman näkyvää syytä opettaisi
+       *    katsomaan alas silloin kun mitään ei ole. Jäljelle jää hiekan oma
+       *    pöly, joka on sama pöly kummalle tahansa keholle. */
+      {
+        const heard = [];
+        const realPlay = Sfx.play;
+        Sfx.play = function (name, ...rest) { heard.push(name); return realPlay.call(this, name, ...rest); };
+        let puffs = 0;
+        try {
+          const s = sandScene(deepest.id);
+          s.player.x = 16;
+          s.player.y = 8 * 16;
+          const e = dropEnemy(s, deepest.pool, enemies.Walker);
+          const i = mkInput();
+          const seen = new Set();
+          for (let f = 0; f < 400; f++) {
+            s.update(i);
+            for (const z of s.entities) {
+              if (z.constructor.name === 'Puff' && !seen.has(z.id)) { seen.add(z.id); puffs++; }
+            }
+            if (e.remove) break;
+          }
+        } finally {
+          Sfx.play = realPlay;
+        }
+        const borrowed = heard.filter((n) => n === 'upota' || n === 'kahlaa');
+        expect('uppoavan vihollisen merkki on hiekan pöly, ei pelaajan hukkumisääni',
+          puffs >= 8 && borrowed.length === 0,
+          `${puffs} pölyhiukkasta, pelaajan ääniä ${borrowed.length}`
+          + `${heard.length ? ` (kuultiin: ${[...new Set(heard)].join(',') || 'ei mitään'})` : ''}`);
+      }
+
+      /* f. Portti, ja se on sama portti kuin `ENEMY_COST`.
+       *
+       * Vihollinen joka putoaa painovoiman varassa on vihollinen joka voi
+       * päätyä hiekkaan, joten sen on **sanottava** kumpaa se on. Oletusarvoa
+       * ei ole kummallakaan puolella: `true` oletuksena upottaisi hiljaa
+       * seuraavan lentävän, `false` oletuksena jättäisi seuraavan kävelijän
+       * kävelemään pohjalla — ja juuri jälkimmäinen on se bugi jota tämä lohko
+       * korjaa. Kysymys esitetään vain niiltä joita se koskee: luokan oma
+       * `update` kertoo lähdetekstissään käyttääkö se `applyGravity`ä, ja koodi
+       * on ajossa sellaisenaan (ei käännösvaihetta, DESIGN.md kohta 7).
+       */
+      {
+        const classes = Object.entries(enemies)
+          .filter(([, v]) => typeof v === 'function' && v.prototype instanceof enemies.Enemy);
+        const undecided = [];
+        const silent = [];
+        for (const [name, Ctor] of classes) {
+          const src = String(Ctor.prototype.update || '');
+          const owns = Object.prototype.hasOwnProperty.call(Ctor.prototype, 'sinks');
+          if (/applyGravity\(/.test(src) && !owns) undecided.push(name);
+          if (owns && Ctor.prototype.sinks && !/this\.sink\(\)/.test(src)) silent.push(name);
+        }
+        const sinkers = classes.filter(([, C]) => C.prototype.sinks).map(([n]) => n);
+        expect('jokainen painovoiman varassa oleva vihollinen on päättänyt hiekasta',
+          undecided.length === 0 && silent.length === 0 && sinkers.length >= 4,
+          undecided.length || silent.length
+            ? `päättämättä: ${undecided.join(',') || '-'}; ilmoittaa uppoavansa muttei kysy `
+              + `hiekalta: ${silent.join(',') || '-'}`
+            : `${classes.length} luokkaa, uppoavat: ${sinkers.join(' ')}`);
+      }
+
+      /* g. Ja se että tämä on tavoitettavissa oikeassa kentässä eikä vain
+       *    koeasetelmassa. 2-1:n ainoa kuori seisoo lammikon oikealla puolella,
+       *    joten vasemmalle potkaistu kuori päätyy hiekkaan — ja se on koko
+       *    kauppa jonka mekaniikka tarjoaa: väline vaihtuu roskikseen. Jos
+       *    joku joskus siirtää kumpaa tahansa palikkaa, tämä kertoo sen. */
+      {
+        reset({ type: 'leaf', level: 3 });
+        const s = new LevelScene(game, '2-1');
+        game.setScene(s);
+        s.time = 9999;
+        const shell = s.entities.find((e) => e.constructor.name === 'ShellGuy');
+        const sand = [];
+        for (let tx = 0; tx < s.w; tx++) {
+          if (s.rawTileAt(tx, 13) === T.QUICKSAND) sand.push(tx);
+        }
+        let gone = null;
+        let col = null;
+        if (shell && sand.length) {
+          shell.alwaysActive = true;
+          shell.active = true;
+          shell.toShell();
+          shell.kick(-1);
+          s.player.x = shell.x + 60;
+          s.player.y = shell.y - 40;
+          const i = mkInput();
+          for (let f = 0; f < 600; f++) {
+            s.update(i);
+            if (shell.remove) { gone = f; break; }
+          }
+          col = Math.floor(shell.cx / 16);
+        }
+        expect('2-1:ssä vasemmalle potkaistu kuori päätyy hiekkaan eikä ohi',
+          gone !== null && sand.includes(col),
+          `kuori sarakkeessa ${col}, hiekka ${sand[0]}–${sand[sand.length - 1]}, `
+          + `katosi ${gone === null ? 'ei koskaan' : `${gone} framessa`}`);
+      }
+    }
   } catch (e) {
     expect('juoksuhiekan testit pääsevät ajoon asti', false, String(e && e.message));
   }
@@ -8215,6 +8454,7 @@ const report = await page.evaluate(async () => {
         let seen = 0;
         let rise = 0;
         let takeoff = null;
+        let counted = false;
         for (let f = 0; f < 1200; f++) {
           input.held = blank();
           input.pressed = blank();
@@ -8225,15 +8465,19 @@ const report = await page.evaluate(async () => {
           else if (phase > 40 && phase < 74) input.held.jump = true;
           const wasGround = s.player.onGround;
           const camBefore = s.cam.y;
+          /* Whether the view had finished its last move before this take-off.
+           * See the assertion below for why an unfinished one has to be left
+           * out of the *rise* number and stays in the *ground* number. */
+          const settled = Math.abs(s.cam.y - s.cameraY()) < 0.5;
           s.update(input);
           const p = s.player;
           if (p.dying) break;
-          if (wasGround && !p.onGround) takeoff = p.y + p.h;
+          if (wasGround && !p.onGround) { takeoff = p.y + p.h; counted = settled; }
           if (!p.onGround && takeoff !== null) {
             air++;
             if (takeoff < s.cam.y + s.viewH) seen++;
             // How far the view climbed on a single airborne frame.
-            rise = Math.max(rise, camBefore - s.cam.y);
+            if (counted) rise = Math.max(rise, camBefore - s.cam.y);
           }
           if (p.onGround) takeoff = null;
         }
@@ -8251,7 +8495,22 @@ const report = await page.evaluate(async () => {
        * tops out 16.4 px from the top of the letterbox band, 0.4 px short of
        * forcing the old hard clamp, so it was always going to move the view —
        * it now moves it 0.93 px over the whole 85 px arc instead of stepping.
-       * The power-0 row has 20.4 px of headroom and stays at 0.00. */
+       * The power-0 row has 20.4 px of headroom and stays at 0.00.
+       *
+       * **Only jumps that start from a settled view count**, which is the same
+       * filter its sibling below has had since `CAM_TOP_LEAD` and for the same
+       * reason: landing moves the anchor and the view then glides up to it at
+       * `CAM_V_EASE`, so a jump taken while that glide is still running carries
+       * the glide into the air with it and the number stops being about the
+       * arc. It only started mattering here when the letterboxed levels stopped
+       * cutting their big landings — a cut was over inside one frame and could
+       * never overlap the next take-off, so this filter was free before and is
+       * load-bearing now. Unfiltered the bot reads 2.65 px in 2-1, and every
+       * pixel of it is the previous landing finishing.
+       *
+       * The *ground* number deliberately keeps every frame: the take-off tile
+       * must stay on screen through jumps taken mid-glide as well, and that is
+       * a promise about the picture rather than about which mechanism moved it. */
       expect('the view does not ride a jump upward',
         rows.every((r) => r.rise < 2),
         rows.map((r) => `${r.id} ${r.rise.toFixed(2)} px/frame`).join(', '));
@@ -8574,6 +8833,155 @@ const report = await page.evaluate(async () => {
       expect('a ground pound is not followed down by the view it landed under',
         pounds.length >= 5 && pounds.every((r) => r.pounded && r.tail < 9.5),
         pounds.map(say).join(', '));
+    }
+
+    /*
+     * Red before green (DESIGN.md §7) for the fourth camera report, which is
+     * the one the previous fix measured and deliberately did not fix blind:
+     * **jumping onto a raised platform cuts.**
+     *
+     * The two fixes above are the falling axis and the top-of-frame axis. This
+     * is the third and it is the one nobody complained about, because it does
+     * not look like a camera bug — it looks like the level jumping. Landing is
+     * `onGround` on the frame the feet touch, so the anchor moves the whole
+     * height of the platform in one frame and `CAM_V_EASE` glides the view up
+     * to it. That is by design and it is what every ordinary level does: the
+     * biggest landing in a 208-row level moves the view 32 px and its first
+     * frame is 8 px. In the two letterboxed levels the same landing is bigger
+     * than the old `CAM_SNAP` threshold and was cut instead of glided.
+     *
+     * **A cut is the whole distance on one frame; a glide is a decaying series
+     * over many.** So the measurement is the same one the rising fix used: the
+     * largest single-frame upward move of the view over a real jump onto a real
+     * platform, driven with the pad rather than teleported, because a teleport
+     * would prove a step the player cannot actually take.
+     *
+     * The fixture picks, per level, the platform whose landing moves the view
+     * furthest — in 2-1 and 2-3 alike that is a four-tile top at row 9 over the
+     * desert floor at row 13, which frames at 30 against the floor's 80, so the
+     * step is 50 px of the level's 80 px of travel.
+     */
+    {
+      /**
+       * The landing in this level that moves the view furthest, jumped for real.
+       *
+       * Candidates are ranked by how far the framing would move — `cameraY()`
+       * asked twice, once with the feet on the lower floor and once with them
+       * on the platform — rather than by how tall the platform is, because the
+       * level's own clamp is what decides whether a tall step is a big move or
+       * no move at all. Then the best few are jumped at with the pad, and the
+       * first one the player genuinely lands on is the answer.
+       */
+      const climb = (id, power) => {
+        reset(power);
+        const probe = new LevelScene(game, id);
+        const frameAt = (feet) => {
+          probe.player.y = feet - probe.player.h;
+          probe.player.onGround = true;
+          probe.camAnchor = feet;
+          return probe.cameraY();
+        };
+        const tops = [];
+        for (let tx = 3; tx < probe.w - 3; tx++) {
+          for (let ty = 3; ty < probe.h - 2; ty++) {
+            if (!probe.solidAt(tx, ty) || probe.solidAt(tx, ty - 1)) continue;
+            if (!probe.solidAt(tx + 1, ty)) continue;
+            let fy = ty + 1;
+            while (fy < probe.h && !probe.solidAt(tx - 2, fy)) fy++;
+            /* Two to four tiles of step. Below two there is nothing to measure;
+             * above four the jump does not reach the top and the run would be
+             * measuring a landing that never happened — the measured budget is
+             * 100 px of rise, and clearing a rim needs more than just reaching
+             * its height. */
+            if (fy >= probe.h || fy - ty < 2 || fy - ty > 4) continue;
+            tops.push({ tx, ty, fy, move: frameAt(fy * TILE) - frameAt(ty * TILE) });
+          }
+        }
+        tops.sort((a, b) => b.move - a.move);
+        /* Several run-ups, because how much room a jump needs depends on the
+         * platform and not on this fixture's opinion: four tiles clears the
+         * four-tile step in 2-1 and lands short of the same step in 2-3. */
+        for (const spot of tops.slice(0, 10)) for (const runUp of [4, 6, 8, 3]) {
+          reset(power);
+          const s = new LevelScene(game, id);
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const p = s.player;
+          p.x = (spot.tx - runUp) * TILE;
+          p.y = spot.fy * TILE - p.h;
+          p.vx = 0;
+          p.vy = 0;
+          p.onGround = true;
+          s.centerCamera();
+          const input = mkInput();
+          for (let f = 0; f < 40; f++) s.update(input);   // let the view settle
+          let jumped = false;
+          let step = 0;
+          let settle = 0;
+          let landed = -1;
+          let onTop = false;
+          for (let f = 0; f < 140; f++) {
+            input.held = blank();
+            input.pressed = blank();
+            /* The pad is dropped the moment the feet touch. The complaint is
+             * about the settling and not about what happens next, and a player
+             * who keeps running off the far side would fold a second landing
+             * into the number. */
+            if (landed < 0) {
+              input.held.right = true;
+              input.held.run = true;
+              if (p.onGround && !jumped) {
+                input.pressed.jump = true;
+                input.held.jump = true;
+                jumped = true;
+              } else if (jumped && p.vy < 0) input.held.jump = true;
+            }
+            const wasAir = !p.onGround;
+            const camBefore = s.cam.y;
+            s.update(input);
+            const d = camBefore - s.cam.y;
+            if (landed < 0 && jumped && wasAir && p.onGround) {
+              landed = f;
+              onTop = p.y + p.h <= spot.ty * TILE + 1;
+              if (!onTop) break;                              // landed short
+              /* Stopped dead on touchdown. The complaint is vertical, and a
+               * body that slides on and off the far rim would fold a second
+               * landing and a fall into a number that is meant to be about
+               * one rise. */
+              p.vx = 0;
+            }
+            if (landed >= 0) {
+              step = Math.max(step, d);
+              // How long the view took to arrive: a cut arrives on the frame it
+              // happens, an animation does not.
+              if (!settle && Math.abs(s.cam.y - s.cameraY()) <= 1) settle = f - landed + 1;
+            }
+            if (p.dying) break;
+            if (landed >= 0 && (settle || f > landed + 40)) break;
+          }
+          if (onTop) return { id, level: power.level, top: spot.ty, step, settle };
+        }
+        return null;
+      };
+
+      const rows = [];
+      for (const [id, power] of [['2-1', { type: null, level: 0 }],
+        ['2-1', { type: 'leaf', level: 3 }], ['2-3', { type: null, level: 0 }],
+        ['2-3', { type: 'leaf', level: 3 }], ['1-1', { type: null, level: 0 }],
+        ['4-1', { type: null, level: 0 }]]) {
+        const r = climb(id, power);
+        if (r) rows.push(r);
+      }
+      /* 13 px is the ceiling for the same reason 2.5 and 3.5 are the ceilings
+       * on the other two axes: it is far under the 50 px the cut produced and
+       * just over the 12.5 px the ease produces on its first frame, so it is
+       * the cut that cannot come back rather than the mechanism being frozen.
+       * 12.5 is `CAM_V_EASE` × 50 and nothing else, which is exactly what an
+       * ordinary level's 32 px landing already does at 8 px. */
+      expect('a view that has to rise on landing animates instead of cutting',
+        rows.length >= 5 && rows.every((r) => r.step < 13 && r.settle > 4),
+        rows.map((r) => `${r.id} taso ${r.level}: ${r.step.toFixed(2)} px/frame, `
+          + `asettui ${r.settle || '>40'} framessa`).join(', '));
     }
 
     /* ---------------------------- vihainen aurinko ---------------------- */

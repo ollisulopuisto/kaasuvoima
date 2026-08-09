@@ -101,19 +101,62 @@ const CAM_STAND = 26;         // the body height that framing assumes
  * used to stand here called the lag harmless because the ground you are
  * falling towards stayed on screen, which was true and was not the problem.
  *
- * `CAM_SNAP` is for the view being somewhere else entirely rather than behind
- * — a respawn, a warp, a pit — and those cut rather than glide. **Measured: no
- * fall reaches it.** Walking or jumping off every ledge four to eight tiles
- * high in 1-1, 2-1, 2-3, 4-1, 5-1 and 1-2, the widest the view was ever from
- * where it wanted to be is 14.5 px, against the 48 here. Landing *on* a raised
- * platform is a different story and is a real cut: in 2-1 the desert floor
- * frames at the bottom of the level's 80 px of travel and a four-tile platform
- * frames at 30, so the anchor's step on touchdown is 50 px and this line cuts
- * all 50 in one frame. That is the rising axis and it is not what the owner
- * reported, so it is recorded here and left alone rather than fixed blind.
+ * **AND IT IS THE ONLY RULE ON THIS AXIS. THERE USED TO BE A SECOND ONE.**
+ *
+ * A `CAM_SNAP = 48` sat here, and past it the view cut instead of easing. The
+ * case it named was "the view is somewhere else entirely rather than behind —
+ * a respawn, a warp, a pit". That reads perfectly and it was measured, once,
+ * and the measurement says it never protected any of the three:
+ *
+ *   - **a respawn and a warp are not eased at all.** Both build or re-place a
+ *     body and then call `centerCamera()`, which assigns `cam.y` outright.
+ *     That is the real cut, it has no threshold, and it always did the work
+ *     this constant was credited with.
+ *   - **a pit is bounded by the level's own clamp.** Walking or jumping off
+ *     every ledge four to eight tiles high in 1-1, 2-1, 2-3, 4-1, 5-1 and 1-2,
+ *     the furthest the view was ever from where it wanted to be is 14.5 px.
+ *   - **a band change never reached this line**, because `updateCamera` tests
+ *     for bands first and eases at `CAM_BAND_EASE` — measured, a band change
+ *     wants to move 240 px and is the one big vertical move meant to be
+ *     watched.
+ *
+ * And in 26 of the 30 levels the threshold is **arithmetically unreachable**:
+ * a 15-row level is 240 px tall in a 208 px window, so `clampCamY` allows 32 px
+ * of travel in total and 48 cannot be asked for. The remaining four are the
+ * banded ones, which take the other branch. That leaves exactly the two
+ * letterboxed levels, 2-1 and 2-3, where the crop buys the camera 80 px of
+ * travel — and the only thing that ever reached the threshold there was the
+ * bug it was hiding.
+ *
+ * **The bug: landing on a raised platform.** The anchor is held through a jump
+ * and moves on the frame the feet touch (see below), so touching down on a
+ * four-tile platform moves it the whole height of the platform at once. In 2-1
+ * and 2-3 the desert floor frames at the bottom of the 80 px range and that
+ * platform frames at 30, so the view has 50 px to travel — and 50 > 48 cut all
+ * of it on one frame. Measured by jumping onto it with the pad at power 0 and
+ * power 3: **50.00 px on a single frame, settled in 1 frame.** The identical
+ * event in an ordinary level is a 32 px step that glides at 7.10 px on its
+ * busiest frame and settles in 12, which is what a landing is supposed to look
+ * like and what the letterbox was accidentally opting out of.
+ *
+ * Removing the threshold makes the two levels behave like the other 28: 50 px
+ * eased at 0.25 is **12.50 px on the first frame**, decaying, settled in 13.
+ * That is 1.6x the ordinary landing's first frame because the platform is 1.6x
+ * the step, which is the ease being consistent rather than the ease being
+ * strained — and it is a quarter of what the band ease does on its own first
+ * frame with the game's blessing.
+ *
+ * **Why not a lead here, when both other axes got one.** `CAM_TOP_LEAD` and
+ * `CAM_FALL_LEAD` both aim at where the body is going on an axis the view is
+ * already following. On this one the view is deliberately *not* following the
+ * body: the anchor holds through the arc so the tile you took off from stays
+ * on screen (measured, and asserted). Any lead that started the rise before
+ * touchdown would be the camera riding the jump — the exact thing the hold
+ * exists to prevent — and it would take the take-off ground off the bottom of
+ * the frame to buy smoothness at the top. So the rise gets no warning, and
+ * because it gets no warning it gets the ease and nothing else.
  */
 const CAM_V_EASE = 0.25;
-const CAM_SNAP = 48;
 
 /*
  * ...but it does not follow a jump.
@@ -1605,7 +1648,10 @@ export class LevelScene {
    * towards), standing on something, and hanging off a vine. A jump is none of
    * them, so the anchor sits still through the whole arc and the ground stays
    * where it was. Landing on a platform above the old line is `onGround` on the
-   * frame the feet touch, and `CAM_V_EASE` then glides the view up to it.
+   * frame the feet touch, and `CAM_V_EASE` then glides the view up to it — the
+   * whole height of the platform in one step of the anchor and a dozen frames
+   * of the view, in every level and not only in the ones whose step happened to
+   * be small enough. See `CAM_V_EASE`.
    *
    * While falling the line is not the feet but where the feet are **going**:
    * three frames ahead of them, or the floor they are about to stop on,
@@ -1676,17 +1722,17 @@ export class LevelScene {
     }
     this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.widthPx - VIEW_W));
 
+    /* Two eases and no cut. A band change is the one vertical move that is a
+     * whole change of room — 240 px of it — so it gets its own slower rate and
+     * is meant to be watched; everything else is a step down off a ledge or up
+     * onto one, and those get `CAM_V_EASE`. Nothing here is ever assigned: the
+     * moments where the view really is somewhere else are cuts made by
+     * `centerCamera`, which does not come through this function at all. See
+     * `CAM_V_EASE` for the measurement that retired the threshold that used to
+     * sit between these two lines. */
     const want = this.cameraY();
     const fall = want - this.cam.y;
-    if (this.def.bands) {
-      // A band change is the one big vertical move that is meant to be watched
-      // rather than cut, so it is the one that is never snapped.
-      this.cam.y += fall * CAM_BAND_EASE;
-    } else if (Math.abs(fall) > CAM_SNAP) {
-      this.cam.y = want;
-    } else {
-      this.cam.y += fall * CAM_V_EASE;
-    }
+    this.cam.y += fall * (this.def.bands ? CAM_BAND_EASE : CAM_V_EASE);
 
     /* And the headroom is a limit, not a destination: the ease does its work
      * and then this has the last word. It only ever moves the view up, and
@@ -1750,8 +1796,13 @@ export class LevelScene {
   }
 
   centerCamera() {
-    // A cut is the one moment the held line is simply wrong: wherever the body
-    // has been put, that is where it has settled.
+    /* A cut is the one moment the held line is simply wrong: wherever the body
+     * has been put, that is where it has settled.
+     *
+     * **And this is the only cut there is.** Level entry, a respawn and the far
+     * end of a warp all arrive here and all assign outright, with no threshold
+     * to clear and no ease to outrun — which is why `updateCamera` needs no
+     * rule for "the view is somewhere else entirely". It never sees one. */
     this.camAnchor = this.player.y + this.player.h;
     this.camLead = 0;
     this.camLook = 0;

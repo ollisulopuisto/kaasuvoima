@@ -1,5 +1,13 @@
 import { Entity } from './entity.js';
-import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
+import { moveX, moveY, applyGravity, footingAhead, GRAVITY } from '../level/physics.js';
+/* The sand's own numbers. They are imported from the player rather than copied
+ * because they are the *sand's* and not his: `QUICKSAND_SINK` is how fast this
+ * tile pulls, full stop, and a walker that sank at its own private rate would
+ * be teaching the player a second speed for the same picture. They live in
+ * player.js because that is where they were first written and where the
+ * paragraph explaining each of them still stands; there is nothing about them
+ * that is about a Pieruprinssi. */
+import { QUICKSAND_SINK, QUICKSAND_WADE, QUICKSAND_GRACE } from './player.js';
 import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
@@ -54,6 +62,126 @@ export class Enemy extends Entity {
     this.facing = -1;
     this.bubbleTimer = 0;
     this.angry = false;
+    /* Frames with the whole body under the surface of a quicksand pool — the
+     * same counter, the same name and the same units as the player's `sunk`,
+     * and a plain number for the same reason his is one: `savestate.js`
+     * serialises every own property of every entity, so a snapshot taken while
+     * a walker is going under comes back with the walker still going under and
+     * the same frames already spent. State parked on the scene, or a clever
+     * derived value, would both have needed save code — and the version that
+     * needs save code is the version somebody gets wrong. */
+    this.sunk = 0;
+  }
+
+  /*
+   * JUOKSUHIEKKA, from the other side of it.
+   *
+   * The tile shipped knowing about exactly one body. Everything else that
+   * stands on a floor walked over a pool, fell through it because sand is not
+   * `SOLID`, landed on the floor underneath and carried on walking with its
+   * whole body below the surface — invisible, still lethal, and looking far
+   * more like a joke than like a bug. Nothing in the shipped levels did it,
+   * because the banks in 2-1 and 2-3 fence the walkers away from the pools:
+   * a placement constraint, held in place by nobody moving anything.
+   *
+   * **The rule is that the sand does not know what is in it.** `sink()` is the
+   * player's frame with his two abilities removed. Same surface scan (on
+   * `Entity`, so there is one), same sink rate, same wade cap, same grace, and
+   * above all the same *geometric* death: you drown when the whole body is
+   * under the surface, never before. That is not a saving of code, it is the
+   * whole design — it is what makes the shallow pool in 2-1 provably unable to
+   * kill a walker for exactly the reason it cannot kill a power-0 player, and
+   * it means a level author who digs a pool learns one rule instead of two.
+   *
+   * What the enemies do **not** get is the struggle. The player's answer to the
+   * sand is the kick, and the kick is the thing the first pool exists to teach;
+   * nothing else in the game has a button. So a pool deep enough to bury an
+   * enemy always eventually does, and that is what turns a pool from scenery
+   * into a place you can herd something into — see `sinks` for who can be
+   * herded, and note that the price of using it is real: a shell you push into
+   * the sand is a shell you no longer have.
+   *
+   * **It pays nothing**, and the precedent is not an opinion but an existing
+   * line of code: an enemy that walks off the bottom of the level is removed
+   * for free, and drowning is the same event with a lid on it. Score in this
+   * game is paid for something the player did — a stomp, a kick, a shot, a
+   * tail, a burst bubble — and paying for the room's own geometry would make
+   * "stand back and let the level do it" the best-scoring answer to an enemy,
+   * which prices a puddle above every tool the player was handed.
+   *
+   * **The picture, and the silence** (DESIGN.md kohta 8). The sign is the grain
+   * the sand throws up, which is the same grain it throws for the player,
+   * because it is the sand doing it and the sand is in the room. The sound is
+   * deliberately *not* shared: `upota` and `kahlaa` are the player's report
+   * that he has been caught, the desert is letterboxed, and a pool two screens
+   * back that rustles because a walker fell into it teaches him to look down
+   * when there is nothing under him. A signal that fires for something you
+   * cannot see is worse than no signal, so the enemy's sink is seen and not
+   * heard — and the pit, again, is the precedent: nothing sounds when the level
+   * swallows an enemy.
+   */
+
+  /**
+   * What this species is trying to do sideways before the sand caps it.
+   *
+   * A hook rather than `this.speed` directly, because "what it is trying to do"
+   * is not the same question for everything that walks: a shell at rest and a
+   * shell in flight both have a walking speed on them and neither is walking.
+   */
+  get driftSpeed() { return this.speed || 0; }
+
+  /**
+   * One frame of being in quicksand.
+   *
+   * @returns true when the sand took the frame, and the species' own update
+   *          must not run — the sand replaces walking, hopping, sliding and
+   *          gravity rather than modifying them, and one early return in each
+   *          caller is the only way to be sure a later edit cannot hand any of
+   *          them back. Same shape as `Player.update`, on purpose.
+   */
+  sink() {
+    if (!this.sinks) return false;
+    const surface = this.quicksandSurface();
+    if (surface === null) {
+      // Out of it: dropped rather than decayed, exactly as the player's is.
+      this.sunk = 0;
+      return false;
+    }
+
+    /* Sideways, capped. A walker walks at 0.55 and the cap is 0.62, so the sand
+     * takes nothing from it here and everything from its footing — which is
+     * honest: the cap is a speed limit and the things already slower than it
+     * are not slowed. What the cap really catches is the kicked shell at 3.4,
+     * and catching that is the point. */
+    this.vx = Math.min(this.driftSpeed, QUICKSAND_WADE) * this.facing;
+    if (moveX(this, this.level)) this.facing *= -1;
+
+    // Down, at the sand's rate and no faster. Up is left alone for the same
+    // reason it is for the player: nothing in here should swallow a rise.
+    this.vy = Math.min(this.vy + GRAVITY, QUICKSAND_SINK);
+    moveY(this, this.level);
+
+    if (this.y >= surface + 1) {
+      /* Under. The `+ 1` is not slack — a body resting on the floor of a pool
+       * exactly its own height has its top on the rim to the pixel, and that
+       * has to read as standing in it up to the neck.
+       *
+       * `|| 0` because a save state written before enemies could sink carries
+       * entities with no counter on them at all, and `undefined + 1` is a NaN
+       * that never reaches the grace — an enemy the sand could hold forever and
+       * never finish. Same forgiveness `savestate.js` already extends to
+       * `crumbles` for the same reason. */
+      const under = this.sunk || 0;
+      if (under % 12 === 0) this.level.spawnPuff(this.cx, surface + 2, true);
+      this.sunk = under + 1;
+      if (this.sunk >= QUICKSAND_GRACE) {
+        this.level.spawnPuff(this.cx, surface + 2, true);
+        this.remove = true;
+      }
+    } else {
+      this.sunk = 0;
+    }
+    return true;
   }
 
   /**
@@ -214,6 +342,9 @@ export class Walker extends Enemy {
 
   get bubbleable() { return true; }
 
+  /** The unit, and the one the whole thing was written for: it walks in. */
+  get sinks() { return true; }
+
   /*
    * A flattened walker is scenery for the rest of its animation — and a walker
    * that has just been shaken out of a flyer is untouchable for a moment.
@@ -238,6 +369,10 @@ export class Walker extends Enemy {
       if (--this.squash === 0) this.remove = true;
       return;
     }
+    /* After the squash and not before it: a flattened walker is already a
+     * corpse on a two-thirds-of-a-second timer, and having it wade first would
+     * be the sand taking credit for a stomp that has already been paid for. */
+    if (this.sink()) return;
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     applyGravity(this, 0.9);
@@ -277,6 +412,38 @@ export class ShellGuy extends Enemy {
   }
 
   get bubbleable() { return true; }
+
+  /**
+   * Yes — and this is the one where sinking changes a rule rather than just
+   * removing an enemy.
+   *
+   * A shell is a tool: the player stomps it, kicks it, and it mows down the row
+   * of things behind it. A pool turns that tool into ammunition you can spend,
+   * because a shell pushed into sand is a shell that is gone.
+   *
+   * **This is not hypothetical, it is 2-1.** The level's only shell stands at
+   * column 166 and the teaching pool is at columns 149–152, one chunk back, so
+   * kicking a shell left is a thing a real player does on a real afternoon:
+   * measured, it slides in, stops at column 152 and is gone 238 frames later.
+   * That is a fair trade to offer and it is offered in the open — the sand is
+   * visible, it is the tile the level has just spent four coins teaching him
+   * about, and the shell crawls into it slowly enough to watch. Losing it there
+   * costs nothing but the shell, which is the right place to learn it.
+   *
+   * The careful walkers never wander in by themselves, and that is not luck
+   * either: `footingAhead` reads a pool as no footing, so a shell *walker* and
+   * a piikkiukko both turn round at the rim. Being careful about a floor that
+   * swallows you is exactly what being careful should mean.
+   */
+  get sinks() { return true; }
+
+  /**
+   * A shell has no legs whichever mode it is in, so only the walking one is
+   * trying to go anywhere. A shell kicked into sand therefore stops dead on the
+   * frame it touches — the same "it caught me" reading the player gets when the
+   * sand takes his terminal velocity away in one frame — and then goes down.
+   */
+  get driftSpeed() { return this.mode === 'walk' ? this.speed : 0; }
 
   trap() {
     // A shell caught mid-slide comes out of the bubble at rest. Left sliding it
@@ -362,6 +529,7 @@ export class ShellGuy extends Enemy {
     if (this.kickGrace > 0) this.kickGrace--;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
+    if (this.sink()) return;
 
     if (this.mode === 'walk') {
       this.vx = this.speed * this.facing;
@@ -434,10 +602,24 @@ export class Flyer extends Enemy {
 
   get bubbleable() { return true; }
 
+  /**
+   * Yes, and it is the one that looks like a judgement call and is not.
+   *
+   * A flyer is a hopper: gravity holds it down and it pushes off again on the
+   * frame it touches. Sand is not solid, so a flyer that did *not* sink would
+   * fall through the surface, find the floor of the pool, and bounce off it
+   * from inside the sand — the buried-walker bug wearing a different sprite and
+   * popping in and out of the ground. There is no third option here. What it
+   * loses by sinking is its hop, which is right: the hop needs a floor to push
+   * against and the sand is not one.
+   */
+  get sinks() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
+    if (this.sink()) return;
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     applyGravity(this, 0.85);
@@ -491,10 +673,16 @@ export class SpikeGuy extends Enemy {
 
   get bubbleable() { return true; }
 
+  /** It walks on the floor like the unit does, so the floor gets it. It will
+   * rarely be seen doing it: like the shell walker it is careful about ledges,
+   * and a pool is not footing. */
+  get sinks() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
+    if (this.sink()) return;
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
@@ -721,6 +909,21 @@ export class Kurnuttaja extends Enemy {
     if (this.phase !== 'warn') return 0;
     return Math.max(0, Math.min(1, (KURN_WARN + 1 - this.timer) / KURN_WARN));
   }
+
+  /**
+   * No — declared even though the gate does not ask, because this is the one
+   * where the answer is arguable and an unasked question is how the walkers
+   * ended up walking along the bottom of a pool in the first place.
+   *
+   * It integrates its own gravity rather than borrowing `applyGravity`, and it
+   * never leaves its column: `restY`, `lipY` and the whole cycle are measured
+   * from one fixed line, which is the promise that makes the creature learnable.
+   * Sand at the bottom of its pit would delete the level's furniture on the
+   * first beat, and it is a placement the validator will not accept anyway —
+   * `checkQuicksand` wants a rim within jumping reach of every pool, and the
+   * bottom of a kurnuttaja's hole is not that.
+   */
+  get sinks() { return false; }
 
   /** True once enough of it is over the rim to be worth being afraid of. */
   get exposed() { return this.y <= this.lipY - KURN_RIM; }
@@ -1138,10 +1341,15 @@ export class CorkGuy extends Enemy {
 
   get bubbleable() { return true; }
 
+  /** It walks and it hops, and neither works in sand. Same reasoning as the
+   * flyer: the hop needs something to push against. */
+  get sinks() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
+    if (this.sink()) return;
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     if (this.onGround && --this.hopTimer <= 0) {
@@ -1262,6 +1470,15 @@ export class Shockwave extends Enemy {
     this.alwaysActive = true;
     this.active = true;
   }
+
+  /**
+   * No. It is not a body standing on a floor, it is a *front* travelling along
+   * one, and it lives a second and a half. Sand that swallowed it would be sand
+   * that blocks a boss's attack, which is a fight rule invented by scenery — and
+   * boss arenas are stone anyway, so the only way this could ever be asked is
+   * by a future arena that had better answer it on purpose.
+   */
+  get sinks() { return false; }
 
   update() {
     this.tick++;
@@ -1400,6 +1617,19 @@ export class Boss extends Enemy {
   }
 
   get giant() { return this.variant === 3; }
+
+  /**
+   * No, and the reason is not that it would be hard to draw.
+   *
+   * The boss **is** the level: one entity worth 5.0 on the difficulty meter
+   * against a walker's 1.0, several hit points, and a room built around it. A
+   * quicksand pool in a boss arena that could remove it would be an instant win
+   * button hidden in the floor, and the fight's own rules — the open window, the
+   * spikes, the growth — would be worth nothing next to it. If a future arena
+   * ever wants sand in it, the honest way is to make it a hazard the boss uses,
+   * not a bin the boss falls into.
+   */
+  get sinks() { return false; }
 
   /** How long the vulnerable window is at the current health. */
   get openFrames() {
@@ -1778,6 +2008,17 @@ export class BeanBaron extends Enemy {
    * kill for one shot. It takes its hits like the sun does: two, from
    * anything. */
   get bubbleable() { return false; }
+
+  /**
+   * No, and it is the same sentence as `bubbleable` in a different tile.
+   *
+   * It is bolted to its plinth on purpose — `homeX` exists so it cannot wander
+   * off — and a mini-boss that could be walked into a puddle would be a
+   * two-hit fight with a one-step answer. It also carries the game's only
+   * paukkupapu, so removing it for free removes the reward for the harder
+   * branch, which is the whole point of 2-M.
+   */
+  get sinks() { return false; }
 
   takeHit(dir) {
     if (this.invuln > 0 || this.dying) return;
