@@ -7,6 +7,69 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.17 — salaisuudet kartalle: kertoo että, ei missä
+
+Peli kätkee nyt paljon: salainen alue maailmoissa 1–4, tähtilohkot, kytkinseinät
+ja salaisuudet tavallisissa tiilissä. **Pelaaja joka ei tiedä niiden olemassaolosta
+ei etsi niitä koskaan**, ja linkki on lähdössä kavereille jotka eivät tiedä.
+
+Kartta kertoo nyt että kentässä on salaisuuksia ja montako niistä on löytynyt.
+**Ei koskaan missä.** Se ero on koko suunnittelu: `0/1` kutsuu etsimään, merkki
+kartalla on vastauskirja ja lopettaa pelin ainoan arvoituksen.
+
+### Yksi salaisuus = yksi asia jonka peli kätkee ja joka maksaa löytyessään
+
+**Salainen alue on yksi**, oli siihen montako reittiä tahansa. 1-2:ssa
+pavunvarsi on 22 ruutua, putki alas kaksi ja putki takaisin kaksi lisää —
+yhdessä ne ovat yksi löytö ("tämän kentän yllä on huone"). Erikseen laskettuna
+pelaaja joka löysi huoneen kerran olisi laskurille kolme velkaa.
+
+Ulkopuolelle jätettiin **murenevat lavat** (vaara näkyvissä, mitään ei löydy
+seisomalla) ja **varret ja putket itsessään** (tie salaisuuteen, laskettu jo
+sinä alueena jonne se vie). Yhteensä 59 salaisuutta.
+
+**Löytynyt = sillä hetkellä kun peli antaa sen mitä se kätki.** Lohko kun se
+maksaa sisältönsä, alue kun **jalat ovat siellä** — ei varteen koskettaessa,
+mikä tapahtuu ohi kävellessä, eikä kenttää läpäistäessä.
+
+### Tallennusversiota ei nostettu
+
+Vanhassa tallennuksessa ei ole `secrets`-kenttää, ja `{}` ei ole arvaus vaan
+totuus: sille pelaajalle ei ole koskaan kirjattu mitään. Mikään olemassa oleva
+kenttä ei vaihda merkitystä — se on se tapaus jota DESIGN.md kohta 6 oikeasti
+koskee. Vastakkainen valinta olisi **poistanut jonkun elämät, pisteet ja
+läpäisyt** jotta laskuri voi alkaa nollasta.
+
+Tallennettuja avaimia verrataan lisäksi kentän nykyisiin: tallennus joka muistaa
+tiilen joka on sittemmin siirtynyt lukee "ei löytynyt" eikä 6/5.
+
+### Kaksi kanavaa, sama jako kuin haaralla
+
+Solmussa **3 pikselin kimallus** kilven vasemmassa yläkulmassa — kultainen kun
+jotain on vielä kätkössä, vihreä kun kaikki on löytynyt, ei mitään kun kenttä ei
+kätke mitään. Se on ainoa 3×3 aukko 16 pikselin ruudussa jota vaikeuspalkki tai
+kenttätunnus ei jo omista. **Tarkoituksella ei toista palkkiriviä**: kaksi
+palkkilukemaa samassa ruudussa luettaisiin yhtenä.
+
+Tarkka luku on sanoina paneelissa: `SALAISUUDET 2/5`. Tyhjä kenttä lukee
+`EI SALAISUUKSIA` eikä tyhjää — samasta syystä kuin reittitaulu kirjoittaa
+`EI PALKINTOA`: tyhjä luetaan "ei vielä tiedossa", ja ero "täällä ei ole mitään"
+ja "täällä on kolme, yhtään ei löytynyt" välillä ei saa olla yhden merkin
+levyinen.
+
+### Velka joka on kirjattu eikä piilotettu
+
+Laskenta tarvitsee tiedon salaisuustiilien todennäköisyyksistä, ja ne ovat nyt
+kolmessa paikassa (`level.js`, `gen-levels.mjs`, `secrets.js`), koska
+`LevelScene` ei lataudu selaimen ulkopuolella. **Ei luotettu vaan vahdittu:**
+portti vertaa laskennan tulosta moottorin omaan `brickSecret`iin tiili tiileltä
+kaikissa kentissä ja kertoo koordinaatit jos ne eroavat.
+
+Löytymisen kirjaus tehdään toistaiseksi kietomalla `LevelScene.prototype`
+(`watchSecrets`), koska `level.js` oli toisen työn alla. Loppusijoitus:
+`bumpTile` ja `tryWarp` kutsuvat itse, ja kääre katoaa — `secrets.js` ottaa
+luokan argumenttina juuri siksi että se päivä on poisto eikä moduulisykli.
+
 ## v26.08.09.16 — puhesyntetisaattori sai konsonantit
 
 `vox()` osasi viisi vokaalia, joten jokainen repliikki oli vokaaliliuku: `'iea'`
