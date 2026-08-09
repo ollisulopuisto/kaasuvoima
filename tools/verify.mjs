@@ -3051,6 +3051,179 @@ const report = await page.evaluate(async () => {
       `jää ${cold}px, aavikko ${hot}px, värinä ${shivers}px, niitty ${plainSame}px`);
   }
 
+  /* --------------------- animaatiokierrokset, viisi kokoa ---------------- */
+  /*
+   * Every pose the player can be in, at all five power levels and in all four
+   * power types, measured against the box the game actually hits things with.
+   * Two rules, and both of them were broken when this was written:
+   *
+   *  1. Nothing may be drawn outside the box except the exceptions named here.
+   *     The walk cycle drew its feet 3px below the floor line at level 0 and
+   *     1-2px below it at levels 1-5, and the idle breath lifted the cap out
+   *     through the top of the head.
+   *  2. The character is one piece. The breath pulled the shirt off the
+   *     trousers at every level above 0, so for a third of every breath he came
+   *     apart at the waist, and the walk's third frame left the back leg
+   *     floating a pixel below the hip at every size.
+   *
+   * Neither was visible to any numeric test before this one and both were
+   * obvious the moment the poses were laid out as a sheet — which is why this
+   * measures the picture and not the numbers that made it.
+   *
+   * Artwork is told apart from its own outline by colour, not by alpha: the
+   * outline is rgba(16,16,24,0.85), translucent everywhere except where all
+   * four offsets stack, and there it lands on 16,16,23 — one blue short of
+   * C.ink, and therefore not a colour the player is ever painted in.
+   *
+   * The exceptions are named rather than tolerated as slack, because slack
+   * hides the next bug: a raccoon has ears above his head and a tail behind
+   * him, a bead of sweat leaves the face on its way down, the shoulders are a
+   * pixel wider than the box on each side (see the report — closing that one
+   * means moving PLAYER_SIZES, which moves every collision in the game), and
+   * the shiver displaces the whole body a pixel sideways because that is what
+   * a shiver is. Allowances are given in template pixels and scaled up with
+   * the sprite, since that is how the drawing itself grows.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const { PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer } = sprites;
+    const W = 96; const H = 76; const OX = 36; const OY = 15;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    /* Every colour the player is ever painted in. */
+    const ART = new Set([
+      '16,16,24', '240,184,144', '192,120,80', '62,162,58', '31,111,38',
+      '140,76,24', '90,44,12', '200,140,64', '248,248,248', '92,156,40',
+      '255,208,72', '156,106,40', '224,76,60', '200,200,208', '192,90,36',
+      '140,60,28', '74,28,10', '44,76,20', '42,74,106', '127,200,240',
+      '232,248,255',
+    ]);
+
+    const poses = [
+      { n: 'idle', s: { state: 'idle', tick: 0, idle: 0 } },
+      { n: 'breath', s: { state: 'idle', tick: 40, idle: 60 } },
+      { n: 'look up', s: { state: 'idle', tick: 5, idle: 230 } },
+      { n: 'scratch', s: { state: 'idle', tick: 5, idle: 320 } },
+      { n: 'tap', s: { state: 'idle', tick: 5, idle: 497 } },
+      { n: 'shiver-', s: { state: 'idle', tick: 100, idle: 210, theme: 'ice' } },
+      { n: 'shiver+', s: { state: 'idle', tick: 102, idle: 210, theme: 'ice' } },
+      { n: 'sweat 0', s: { state: 'idle', tick: 5, idle: 231, theme: 'desert' } },
+      { n: 'sweat 7', s: { state: 'idle', tick: 5, idle: 385, theme: 'desert' } },
+      { n: 'wipe', s: { state: 'idle', tick: 5, idle: 620, theme: 'desert' } },
+      { n: 'walk 0', s: { state: 'walk', frame: 0 } },
+      { n: 'walk 1', s: { state: 'walk', frame: 1 } },
+      { n: 'walk 2', s: { state: 'walk', frame: 2 } },
+      { n: 'run 0', s: { state: 'walk', frame: 0, running: true } },
+      { n: 'run 2', s: { state: 'walk', frame: 2, running: true } },
+      { n: 'jump', s: { state: 'jump', frame: 0 } },
+      { n: 'duck', s: { state: 'duck', ducking: true } },
+    ];
+
+    const leaks = [];
+    const pieces = [];
+    const hashes = {};
+    for (const level of [0, 1, 2, 3, 4, 5]) {
+      for (const type of [null, 'shroom', 'flower', 'leaf', 'pop']) {
+        for (const p of poses) {
+          for (const facing of [1, -1]) {
+            const s = {
+              type, level, facing, frame: 0, running: false, wag: 1.1,
+              ducking: false, theme: 'grass', tick: 5, idle: 0, ...p.s,
+            };
+            const box = (s.ducking ? PLAYER_DUCK_SIZES : PLAYER_SIZES)[level];
+            g.clearRect(0, 0, W, H);
+            drawPlayer(g, OX, OY, s);
+            const d = g.getImageData(0, 0, W, H).data;
+            const art = new Uint8Array(W * H);
+            let x0 = 1e9; let y0 = 1e9; let x1 = -1; let y1 = -1;
+            let hash = 0;
+            for (let y = 0; y < H; y++) {
+              for (let x = 0; x < W; x++) {
+                const i = (y * W + x) * 4;
+                hash = (hash * 33 + d[i] * 7 + d[i + 1] * 3 + d[i + 3]) | 0;
+                if (d[i + 3] !== 255) continue;
+                if (!ART.has(`${d[i]},${d[i + 1]},${d[i + 2]}`)) continue;
+                art[y * W + x] = 1;
+                if (x < x0) x0 = x;
+                if (y < y0) y0 = y;
+                if (x > x1) x1 = x;
+                if (y > y1) y1 = y;
+              }
+            }
+            if (facing === 1) hashes[`${level}|${type}|${p.n}`] = hash;
+            const where = `L${level} ${type || 'none'} ${p.n} f${facing}`;
+            if (x1 < 0) { leaks.push(`${where}: nothing drawn at all`); continue; }
+
+            /* Named allowances, in template pixels. */
+            const sx = level < 2 ? 1 : box.w / 14;
+            const sy = level < 2 ? 1 : box.h / (s.ducking ? 16 : 26);
+            const ice = s.theme === 'ice';
+            const sweaty = s.theme === 'desert' || s.theme === 'factory';
+            const up = (n, k) => (n <= 0 ? 0 : Math.ceil(n * k));
+            const allow = {
+              above: up(type === 'leaf' ? 2 : 0, sy),           // raccoon ears
+              below: 0,                                        // the floor line is the floor line
+              front: up((sweaty ? 2 : 1) + (ice ? 1 : 0), sx), // hand, bead, shiver
+              back: up((type === 'leaf' ? 9 : 1) + (ice ? 1 : 0), sx), // tail, hand, shiver
+            };
+            const over = {
+              above: OY - y0,
+              below: y1 - (OY + box.h - 1),
+              [facing > 0 ? 'front' : 'back']: x1 - (OX + box.w - 1),
+              [facing > 0 ? 'back' : 'front']: OX - x0,
+            };
+            for (const k of ['above', 'below', 'front', 'back']) {
+              if (over[k] > allow[k]) leaks.push(`${where}: ${over[k]}px ${k} of the box, ${allow[k]} allowed`);
+            }
+
+            /* One character, not a pile of parts. */
+            let comps = 0;
+            const seen = new Uint8Array(W * H);
+            const stack = [];
+            for (let q0 = 0; q0 < W * H; q0++) {
+              if (!art[q0] || seen[q0]) continue;
+              comps++;
+              stack.push(q0);
+              seen[q0] = 1;
+              while (stack.length) {
+                const q = stack.pop();
+                const qx = q % W;
+                if (qx > 0 && art[q - 1] && !seen[q - 1]) { seen[q - 1] = 1; stack.push(q - 1); }
+                if (qx < W - 1 && art[q + 1] && !seen[q + 1]) { seen[q + 1] = 1; stack.push(q + 1); }
+                if (q >= W && art[q - W] && !seen[q - W]) { seen[q - W] = 1; stack.push(q - W); }
+                if (q < W * (H - 1) && art[q + W] && !seen[q + W]) { seen[q + W] = 1; stack.push(q + W); }
+              }
+            }
+            if (comps !== 1) pieces.push(`${where}: ${comps} pieces`);
+          }
+        }
+      }
+    }
+    expect('every pose at every power level stays inside its own box',
+      leaks.length === 0, `${leaks.length} poses leak: ${leaks.slice(0, 4).join('; ')}`);
+    expect('the player is one piece in every pose at every power level',
+      pieces.length === 0, `${pieces.length} broken: ${pieces.slice(0, 4).join('; ')}`);
+
+    /* The paukkupapu landed as the fourth power type on the day this audit was
+     * written, and a new type that inherits another one's drawing looks exactly
+     * like a working feature until somebody collects it. */
+    const same = [];
+    for (const level of [0, 1, 2, 3, 4, 5]) {
+      for (const p of poses) {
+        for (const t of [null, 'shroom', 'flower', 'leaf']) {
+          if (hashes[`${level}|pop|${p.n}`] === hashes[`${level}|${t}|${p.n}`]) {
+            same.push(`L${level} ${p.n} == ${t || 'none'}`);
+          }
+        }
+      }
+    }
+    expect('the paukkupapu has a body of its own at every level and pose',
+      same.length === 0, same.slice(0, 4).join('; '));
+  }
+
   /* ---------------------------- voittoruutu ----------------------------- */
   /* Clearing a castle used to leave the player standing on the edge of the
    * arena while the map loaded. The card must appear, must be skippable, and

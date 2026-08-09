@@ -43,9 +43,20 @@ const PALETTES = {
   pop: { cap: '#c05a24', shirt: '#8c3c1c', shirtDark: '#4a1c0a', pants: C.gasDark, pantsDark: '#2c4c14' },
 };
 
+/**
+ * The three-frame leg cycle: apart, together, apart the other way. Five pixels
+ * tall from the top of the thigh to the sole, so it is called at the point that
+ * leaves the sole on the last row of the body box and not one below it.
+ *
+ * The stride is capped by the width it has to fit in. A run opens the legs one
+ * pixel wider than a walk, which on the 14px body leaves a two pixel gap
+ * between them — but on the 12px body of power level 0 it closed the gap
+ * completely, so the running frames merged into one block and the small
+ * character ran with less motion in his legs than he walked with.
+ */
 function legs(ctx, x, y, w, pal, frame, running) {
   ctx.fillStyle = pal.pants;
-  const spread = running ? 4 : 3;
+  const spread = Math.min(running ? 4 : 3, (w - 6) >> 1);
   if (frame === 0) {
     ctx.fillRect(x + 2, y, spread, 3);
     ctx.fillRect(x + w - 2 - spread, y, spread, 3);
@@ -111,8 +122,18 @@ function idlePose(s) {
   };
   if (!still) return pose;
 
-  // Breathing: the torso rises and settles about once every one and a half
-  // seconds. One pixel is plenty at this size.
+  /*
+   * Breathing: the torso rises and settles about once every one and a half
+   * seconds. One pixel is plenty at this size.
+   *
+   * `breath` lifts the *shoulders* and stretches the shirt down to the belt,
+   * and it moves nothing else. It used to be added to the head and the shirt
+   * together, which broke the character twice over: the cap left the top of the
+   * hitbox for a third of every breath, and since the trousers stayed put, a
+   * one pixel gap opened at the waist and the whole lower half came away as a
+   * separate piece at every power level above 0. A chest that expands is what
+   * the animation was always described as; a body that separates is not.
+   */
   pose.breath = Math.sin(tick / 26) > 0.55 ? -1 : 0;
   // A blink every couple of seconds, three frames long.
   pose.blink = tick % 150 < 4;
@@ -199,21 +220,21 @@ function drawPlayerBase(ctx, x, y, s, small) {
     if (small) {
       const b = pose.breath;
       ctx.fillStyle = pal.cap;
-      ctx.fillRect(px + 2, py + b, 8, 3);
-      ctx.fillRect(px + 2, py + 3 + b, 10, 1);
-      if (pal.spots) capSpots(ctx, px + 2, py + b, 8);
+      ctx.fillRect(px + 2, py, 8, 3);
+      ctx.fillRect(px + 2, py + 3, 10, 1);
+      if (pal.spots) capSpots(ctx, px + 2, py, 8);
       ctx.fillStyle = C.skin;
-      ctx.fillRect(px + 3, py + 4 + b, 7, 5);
+      ctx.fillRect(px + 3, py + 4, 7, 5);
       ctx.fillStyle = C.skinDark;
-      ctx.fillRect(px + 3, py + 7 + b, 3, 2);
+      ctx.fillRect(px + 3, py + 7, 3, 2);
       ctx.fillStyle = C.ink;
-      if (pose.blink) ctx.fillRect(px + 7, py + 6 + b, 2, 1);
-      else ctx.fillRect(px + 7, py + 5 + b + pose.eye, 1, 2);
+      if (pose.blink) ctx.fillRect(px + 7, py + 6, 2, 1);
+      else ctx.fillRect(px + 7, py + 5 + pose.eye, 1, 2);
       ctx.fillStyle = pal.shirt;
-      ctx.fillRect(px + 2, py + 9 + b, 8, 3);
+      ctx.fillRect(px + 2, py + 9 + b, 8, 3 - b);
       ctx.fillStyle = C.skin;
-      ctx.fillRect(px, py + 9 + b, 2, 3);
-      ctx.fillRect(px + 10 - pose.scratch, py + 9 + b + pose.scratch, 2, 3);
+      ctx.fillRect(px, py + 9 + b, 2, 3 - b);
+      ctx.fillRect(px + 10 - pose.scratch, py + 9 + b + pose.scratch, 2, 3 - b);
       ctx.fillStyle = pal.pants;
       ctx.fillRect(px + 3, py + 11, 6, 3);
       ctx.fillStyle = pal.pantsDark;
@@ -225,14 +246,18 @@ function drawPlayerBase(ctx, x, y, s, small) {
         ctx.fillRect(px + 2, py + 14, 4, 2);
         ctx.fillRect(px + 7, py + 13, 4, 3);
       } else if (s.state === 'walk') {
-        legs(ctx, px, py + 14, 12, pal, s.frame % 3, s.running);
+        // 16 - 5: the sole lands on the last row of the box. At py+14 the whole
+        // small body was 19px tall in a 16px box, so he walked and stood with
+        // his boots three pixels down in the floor at every power level 0 —
+        // idle as well as walking, since standing borrows the same cycle.
+        legs(ctx, px, py + 11, 12, pal, s.frame % 3, s.running);
       } else {
         /* Standing still uses the walk cycle's closed-legs frame rather than a
          * pose of its own. The pose of its own was two 2x2 stubs of trouser
          * colour with no boots, against a walk cycle that is five pixels tall
          * and ends in a dark sole — so the legs appeared to vanish the moment
          * you stopped, on the small size where two pixels is the whole leg. */
-        legs(ctx, px, py + 14, 12, pal, 1, false);
+        legs(ctx, px, py + 11, 12, pal, 1, false);
       }
       return;
     }
@@ -256,24 +281,24 @@ function drawPlayerBase(ctx, x, y, s, small) {
 
     const b = pose.breath;
     ctx.fillStyle = pal.cap;
-    ctx.fillRect(px + 3, py + b, 9, 4);
-    ctx.fillRect(px + 2, py + 4 + b, 12, 2);
-    if (pal.spots) capSpots(ctx, px + 3, py + b, 9);
+    ctx.fillRect(px + 3, py, 9, 4);
+    ctx.fillRect(px + 2, py + 4, 12, 2);
+    if (pal.spots) capSpots(ctx, px + 3, py, 9);
     ctx.fillStyle = C.skin;
-    ctx.fillRect(px + 3, py + 6 + b, 9, 7);
+    ctx.fillRect(px + 3, py + 6, 9, 7);
     ctx.fillStyle = C.skinDark;
-    ctx.fillRect(px + 3, py + 11 + b, 4, 2);
+    ctx.fillRect(px + 3, py + 11, 4, 2);
     ctx.fillStyle = C.ink;
-    if (pose.blink) ctx.fillRect(px + 8, py + 9 + b, 3, 1);
-    else ctx.fillRect(px + 8, py + 7 + b + pose.eye, 2, 3);
+    if (pose.blink) ctx.fillRect(px + 8, py + 9, 3, 1);
+    else ctx.fillRect(px + 8, py + 7 + pose.eye, 2, 3);
     ctx.fillStyle = pal.shirt;
-    ctx.fillRect(px + 2, py + 13 + b, 10, 5);
+    ctx.fillRect(px + 2, py + 13 + b, 10, 5 - b);
     ctx.fillStyle = pal.shirtDark;
-    ctx.fillRect(px + 2, py + 17 + b, 10, 1);
+    ctx.fillRect(px + 2, py + 17, 10, 1);
     ctx.fillStyle = C.skin;
-    ctx.fillRect(px - 1, py + 13 + b, 3, 5);
+    ctx.fillRect(px - 1, py + 13 + b, 3, 5 - b);
     // The front arm reaches round the back during the scratch.
-    ctx.fillRect(px + 12 - pose.scratch * 2, py + 13 + b + pose.scratch * 2, 3, 5);
+    ctx.fillRect(px + 12 - pose.scratch * 2, py + 13 + b + pose.scratch * 2, 3, 5 - b);
     ctx.fillStyle = pal.pants;
     ctx.fillRect(px + 2, py + 18, 10, 4);
     ctx.fillStyle = pal.pantsDark;
@@ -291,7 +316,10 @@ function drawPlayerBase(ctx, x, y, s, small) {
       ctx.fillStyle = C.ink;
       ctx.fillRect(px + 1, py + 24, 5, 2);
     } else if (s.state === 'walk') {
-      legs(ctx, px, py + 22, 14, pal, s.frame % 3, s.running);
+      // 26 - 5, for the same reason, and it lines the walking sole up with the
+      // standing one below — those were a pixel apart, so the feet twitched
+      // down every time he started moving.
+      legs(ctx, px, py + 21, 14, pal, s.frame % 3, s.running);
     } else {
       ctx.fillStyle = pal.pants;
       ctx.fillRect(px + 3, py + 22, 3, 2);
