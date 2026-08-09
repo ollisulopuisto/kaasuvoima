@@ -63,6 +63,18 @@ class Game {
 
   setScene(scene) {
     this.scene = scene;
+    /* A pause happened to a level; it is not a mode the machine is in. Leaving
+     * it set across a scene change is a dead end rather than a cosmetic bug:
+     * the pause key only answers inside a LevelScene, so a paused world map
+     * cannot be un-paused by anything, and `step` skips its update. The debug
+     * warp is the easiest way to get there — pause, then jump worlds — but any
+     * scene change made while paused does it.
+     *
+     * Cleared here for the same reason the ambience is: it belongs to the place
+     * you were in, and leaving each scene to remember to turn it off is how it
+     * got left on in the first place. `quickLoad` clears it by hand too; that
+     * line is now redundant, and harmless. */
+    this.paused = false;
     // Atmosphere belongs to the place you are in, so it is set from the scene
     // rather than left for each scene to remember to turn off.
     PostFX.setAmbience(scene.theme || null, scene.def || null);

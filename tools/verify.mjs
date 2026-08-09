@@ -1522,6 +1522,47 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* ----------------------- tauko ei jää jumiin --------------------------- */
+  /* A pause is something that happened to a level, not a mode the machine is
+   * in. Warping out from under the pause screen used to leave `paused` true on
+   * the world map — and nothing there can clear it, because the pause key only
+   * answers inside a LevelScene. The map never updated, Enter did nothing, and
+   * the only way out was a reload.
+   *
+   * The warp is only the shortest way to reproduce it. Any scene change made
+   * while paused does the same, which is why the fix is in `setScene` and this
+   * test checks the state of the game rather than the state of the warp. */
+  {
+    reset();
+    game.debug = true;
+    game.setScene(new LevelScene(game, '1-1'));
+    game.paused = true;
+    game.debugWarp();
+    const cleared = game.paused === false;
+    const onMap = game.scene.constructor.name === 'WorldMapScene';
+
+    /* Asserted on the flag and not by running a frame: `game.step()` drives the
+     * whole loop, including the attract-mode idle counter, and a test that
+     * borrows it hands the next three tests a title screen that has already
+     * been waiting. Found the hard way — it failed the demo tests, not this
+     * one. `paused` on a scene with no pause key *is* the stuck state, so the
+     * flag is the thing worth asserting. */
+    expect('warping out from under the pause screen leaves the game running',
+      cleared && onMap,
+      `paused ${game.paused}, ${game.scene.constructor.name}`);
+
+    /* And the same for the ordinary way out of a level, which shares the fix. */
+    reset();
+    game.setScene(new LevelScene(game, '1-1'));
+    game.paused = true;
+    game.toWorldMap();
+    expect('any scene change clears the pause, not just the warp',
+      game.paused === false, `paused ${game.paused}`);
+
+    game.debug = false;
+    game.state.debugWarped = false;
+  }
+
   /* --------------------------- salaisuuslaskuri -------------------------- */
   {
     reset();
