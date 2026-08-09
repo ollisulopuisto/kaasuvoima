@@ -70,11 +70,27 @@ const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
 export const STAR_FRAMES = 700;
 
 export const MAX_POWER_LEVEL = 5;
-export const POWER_TYPES = ['shroom', 'flower', 'leaf'];
+/*
+ * The fourth type is PAUKKUPAPU, the breaking power-up: a bean fermented so
+ * hard that the pressure inside carries through a shoulder, and a brick wall
+ * run into from the side bursts instead of stopping you.
+ *
+ * It is deliberately NOT in `LevelScene.rollPowerup`, so no question block, no
+ * secret brick and no moon can ever hand it over. The only thing in the game
+ * that gives it is the pair of papuparoonit in 2-M — see enemies.js. That is a
+ * rule and not a coincidence: a reward you can also stumble into is not a
+ * reason to take the harder branch of the map, and the branch is the whole
+ * point of the fight existing.
+ *
+ * The key is 'pop' rather than 'bean' because `normalizePower` already spends
+ * 'bean' on old saves, where it meant the plain mushroom.
+ */
+export const POWER_TYPES = ['shroom', 'flower', 'leaf', 'pop'];
 export const POWER_NAMES = {
   shroom: 'PIERUSIENI',
   flower: 'PIERUKUKKA',
   leaf: 'KAASULEHTI',
+  pop: 'PAUKKUPAPU',
 };
 
 /** Power-ups stack: the level drives both body size and ability strength. */
@@ -154,6 +170,14 @@ export class Player extends Entity {
 
   /** Extra mid-air jumps granted by the fart mushroom, one per level. */
   get airJumpsMax() { return this.type === 'shroom' && !this.corked ? this.power.level : 0; }
+
+  /**
+   * Whether running into a brick from the side breaks it. Ummetus stops it for
+   * the same reason it stops the gas jump and the tail: the charge is pressure,
+   * and a cork is a cork. It costs nothing to be blocked — see `smashThrough`,
+   * where every tile this does not touch is listed.
+   */
+  get breaker() { return this.type === 'pop' && !this.corked; }
   get shotsPerPress() { return this.power.level >= 5 ? 3 : this.power.level >= 3 ? 2 : 1; }
   get maxLiveShots() { return 2 + this.power.level; }
   get tailReach() { return 10 + this.power.level * 2; }
@@ -355,7 +379,7 @@ export class Player extends Entity {
     /* -------------------------------- move ---------------------------- */
     const chargeVx = this.vx;
     moveX(this, this.level);
-    if (this.power.level >= 4 && Math.abs(chargeVx) > 1.4 && this.vx === 0) this.smashThrough(chargeVx);
+    if (this.breaker && Math.abs(chargeVx) > 1.4 && this.vx === 0) this.smashThrough(chargeVx);
     moveY(this, this.level, {
       onHeadBump: (tx, ty) => this.level.bumpTile(tx, ty, this),
       dropThrough: down && !this.onGround,
@@ -406,7 +430,41 @@ export class Player extends Entity {
     this.level.fartBlast(this.cx, this.y + this.h, 20 + this.power.level * 3, this);
   }
 
-  /** Level 4+ is heavy enough to plough straight through bricks. */
+  /**
+   * The breaking power-up: a wall run into at speed bursts.
+   *
+   * This used to be a perk of power level 4 and above, with no power-up behind
+   * it, and that had to go rather than sit alongside the new one. Two doors to
+   * the same ability would have made the fight in 2-M optional in the only way
+   * that matters — a bowl of pea soup would have handed you the reward for
+   * beating the papuparoonit — and "the fight is the only source" is a rule the
+   * roadmap states, not a description of how things happen to be.
+   *
+   * **What it breaks, and why nothing else:**
+   *   - `B` brick — yes. It is the one tile the game has always called soft: a
+   *     bump from below breaks it and a sliding shell breaks it, so breaking it
+   *     from the side adds a third way into an existing contract.
+   *   - a brick that is hiding something — no, exactly as `ShellGuy.smashAhead`
+   *     leaves it alone. Its reward belongs to whoever bumps it, and a charge
+   *     that deleted a secret nobody ever saw would make the power-up a way of
+   *     losing things.
+   *   - `?` `!` `*` question blocks — no. They are containers, and the reward
+   *     comes out of the top when you hit the bottom. Bursting one sideways
+   *     would destroy what it holds.
+   *   - `u` a spent block — no. It is masonry once it has paid out, and it is
+   *     also frequently the ceiling somebody is standing on.
+   *   - `X` hard ground and `#` ground — no. These are the level's structure:
+   *     the validator reads exactly these two as the floor profile every route
+   *     rule is measured against, so a player who could delete them could open
+   *     a hole in the ground route that no check would ever have seen.
+   *   - `%` crumbling platform — no. Its whole contract is a timer; a plank you
+   *     can also punch out is a plank with no timer, and the tile grows back,
+   *     which fights an empty square written over it.
+   *   - `S` switch — no. It is a button, and a level has exactly one; smashing
+   *     it would delete the only way to open what the switch opens.
+   *   - `N` note block, `[ ] { }` pipe — no. A bouncer and a doorway are not
+   *     walls, and a pipe with a hole in its side is a warp with a hole in it.
+   */
   smashThrough(dirVx) {
     const dir = Math.sign(dirVx);
     const tx = Math.floor((dir > 0 ? this.x + this.w + 1 : this.x - 1) / 16);
@@ -414,12 +472,19 @@ export class Player extends Entity {
     const y1 = Math.floor((this.y + this.h - 1) / 16);
     let smashed = false;
     for (let ty = y0; ty <= y1; ty++) {
-      if (this.level.tileAt(tx, ty) === T.BRICK) {
-        this.level.smashBrick(tx, ty);
-        smashed = true;
-      }
+      if (this.level.tileAt(tx, ty) !== T.BRICK) continue;
+      if (this.level.brickSecret && this.level.brickSecret(tx, ty)) continue;
+      this.level.smashBrick(tx, ty);
+      smashed = true;
     }
-    if (smashed) this.vx = dirVx * 0.6;
+    if (smashed) {
+      this.vx = dirVx * 0.6;
+      // The wall going down is its own event, louder and lower than the single
+      // brick `smashBrick` already popped: one charge, one report, however many
+      // tiles it took out.
+      Sfx.play('burst');
+      this.level.shake(2.5);
+    }
   }
 
   headBlocked() {
@@ -489,7 +554,8 @@ export class Player extends Entity {
     switch (itemKind) {
       case 'shroom':
       case 'flower':
-      case 'leaf': {
+      case 'leaf':
+      case 'pop': {
         const maxed = this.power.level >= MAX_POWER_LEVEL && this.power.type === itemKind;
         if (maxed) {
           this.level.storeReserve(itemKind);

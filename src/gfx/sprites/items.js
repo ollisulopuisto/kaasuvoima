@@ -100,6 +100,38 @@ export function drawItem(ctx, kind, x, y, tick, opts) {
     return;
   }
 
+  if (kind === 'pop') {
+    /*
+     * Paukkupapu: a fat bean under too much pressure, split along one seam with
+     * the gas showing through it.
+     *
+     * It has to read as a *bean* at a glance and not as a mushroom cap, because
+     * it is the one power-up you cannot get from a block — a player who mistakes
+     * it for the usual thing will not know what changed. So: no cap, no stalk,
+     * a squat dark shell, and the seam pulsing brighter than anything else on
+     * it. The pulse is the only animated part; a bean that wobbled would read as
+     * something alive.
+     */
+    const beat = 0.5 + 0.5 * Math.sin(tick / 5);
+    ctx.fillStyle = '#3c1a0c';
+    ctx.fillRect(px + 1, py + 4, 14, 9);
+    ctx.fillRect(px + 3, py + 2, 10, 13);
+    ctx.fillStyle = '#8c3c1c';
+    ctx.fillRect(px + 2, py + 5, 12, 7);
+    ctx.fillRect(px + 4, py + 3, 8, 11);
+    ctx.fillStyle = '#c05a24';
+    ctx.fillRect(px + 3, py + 5, 5, 4);
+    // the split seam, running corner to corner
+    ctx.fillStyle = `rgba(168,224,74,${0.55 + 0.45 * beat})`;
+    for (let i = 0; i < 8; i++) ctx.fillRect(px + 4 + i, py + 11 - i, 2, 1);
+    ctx.fillStyle = `rgba(244,255,208,${0.4 + 0.5 * beat})`;
+    ctx.fillRect(px + 7, py + 7, 2, 2);
+    // and a wisp escaping it
+    ctx.fillStyle = `rgba(168,224,74,${0.25 + 0.3 * beat})`;
+    ctx.fillRect(px + 11, py + 1 - Math.floor(beat * 2), 3, 2);
+    return;
+  }
+
   if (kind === 'star') {
     // The one item that is literally a light source, so it gets the halo.
     glowing(ctx, px + 8, py + 8, GLOWS.star, (g) => {

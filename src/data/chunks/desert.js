@@ -128,6 +128,71 @@ export const DESERT_CHUNKS = {
     14: G,
   }),
 
+  /* --------------------------- minipomoareena -------------------------- */
+  /**
+   * The papuparoonit's arena: two stone plinths in a sand bowl, one baron on
+   * each, and nine columns of open floor between them to be shot at across.
+   *
+   * Thirty-two columns, like `boss_arena`, and for the same reason: a fight
+   * needs to fit on the screen at once. The window is 320 px — twenty tiles —
+   * so a 32-column arena is a screen and a half, which is enough that the two
+   * throwers cannot both be dealt with from one spot and little enough that
+   * neither is ever off-screen while the other is being fought.
+   *
+   * **The plinths are two tiles tall and that is measured, not chosen.** Their
+   * tops sit 32 px over the sand; a standing jump lifts the feet 71 px at power
+   * level 0, so the smallest player gets on top of one — and, more to the point,
+   * over a baron's head (its own head is 26 px above the plinth) — without a
+   * power-up. The fight is winnable at the smallest size or it is not a fight
+   * in this game.
+   *
+   * They are connected to the ground rather than floating, which is what keeps
+   * the headroom rule honest here: the tallest player needs three clear rows
+   * over anything it can walk on, and rows 8-10 above each plinth are empty.
+   *
+   * **Nothing in here is a wall.** The floor runs unbroken from edge to edge,
+   * so the arena is passable at the smallest size with the fight ignored
+   * entirely — which is the same promise every other chunk makes, and the
+   * reason the reward can be a power-up rather than a key.
+   */
+  baron_arena: ck(32, {
+    9: '            o o o o',
+    10: '        P            P',
+    11: '      XXXXX        XXXXX',
+    12: '      XXXXX        XXXXX',
+    13: G + G,
+    14: G + G,
+  }),
+
+  /**
+   * And what the paukkupapu is *for*, put where it is won.
+   *
+   * A sealed vault on a mesa shelf: brick on the left, rock on the right, a rock
+   * lid over the top, coins inside. There is no way in over it and no way in
+   * round it — the brick pillar reaches the lid — so the only way in is through,
+   * at a run, which is the one thing the new power-up does. A player who has
+   * just beaten the barons meets it four seconds later, which is where a lesson
+   * belongs.
+   *
+   * **It is a reward and never the route.** The sand below runs unbroken past
+   * the whole thing; the shelf is a place you climb to on purpose.
+   *
+   * The shelf is at row 9 rather than row 11, and that is the same measurement
+   * `dune_crumble` had to make: `X` is solid, so a shelf two rows over the sand
+   * is a ceiling three tiles above ground the player walks on and the headroom
+   * rule rejects it. At row 9 it is 64 px up, which a running jump clears at
+   * power level 0 — the same climb the boardwalk in 2-N already asks for.
+   */
+  baron_vault: ck(16, {
+    5: '       XXXXXXX',
+    6: '       B     X',
+    7: '       B ooo X',
+    8: '       B ooo X',
+    9: '   XXXXXXXXXXX',
+    13: G,
+    14: G,
+  }),
+
   /* ------------------------- salaiset alueet -------------------------- */
   /**
    * The room at the top of world 2's beanstalk.

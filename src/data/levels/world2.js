@@ -163,6 +163,46 @@ export const WORLD2_LEVELS = {
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /*
+   * 2-M — the papuparoonit, and the game's only paukkupapu.
+   *
+   * This is the reward at the end of the harder branch: 2-N is already off the
+   * direct route through the desert, and 2-M hangs off 2-N, so nobody arrives
+   * here who did not choose to twice. What they get for it is the breaking
+   * power-up, which no block in the game can roll (see POWER_TYPES in
+   * player.js). That is the whole shape of the owner's decision of 9.8.2026:
+   * branches are unequal, the harder one gives something the easier one cannot.
+   *
+   * **Short on purpose — 160 columns against the world's usual 352.** It is a
+   * fight and not a trek, and the walk in front of it exists to do exactly
+   * three things: hand out the mandatory early power-up, let a player who
+   * arrived at power 0 get back to a size where a hit is not the end, and give
+   * the arena a horizon to appear over. Padding it out with more desert would
+   * only make losing the fight more expensive to retry, and a fight you can
+   * lose has to be a fight you want to try again.
+   *
+   * **How it can be lost, and how it is won.** Two barons on two plinths lob
+   * beans across the bowl between them; the beans arc, bounce once and burst,
+   * and there is nothing to do about one but not be there. A hit at power 0 is
+   * a death and the level restarts — that is the retry. Winning is two stomps
+   * each, at any size, and the second baron to fall drops the bean.
+   *
+   * **The vault is the lesson.** `baron_vault` comes straight after the arena:
+   * a sealed shelf whose only door is a brick wall, off the route, full of
+   * coins. It is the first thing the new power-up is pointed at, and it is
+   * pointed at it while the player still has it.
+   *
+   * Not letterboxed, unlike 2-1 and 2-3. The bars are a crop rather than a
+   * mask, and this is the one level in the world where things are thrown *over*
+   * the player — a narrower window would hide the top of every arc.
+   */
+  '2-M': {
+    theme: 'desert', bg: 'peaks', music: 'level',
+    chunks: [
+      'start', 'power', 'walkers', 'pit_s',
+      'baron_arena', 'baron_vault', 'run_up', 'goal', 'goal_end',
+    ],
+  },
   '2-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 1,
     chunks: [

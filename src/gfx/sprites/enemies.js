@@ -412,3 +412,101 @@ function spikeGuyBody(ctx, x, y, frame, facing) {
 export function drawSpikeGuy(ctx, x, y, frame, facing) {
   outlined(ctx, (g) => spikeGuyBody(g, x, y, frame, facing));
 }
+
+/**
+ * Papupommi — the bean a baron throws. 10x10 and it has to read against sand,
+ * so it is the same trick the fart ball uses: a dark rim, a bright core, and a
+ * lit fuse-seam that blinks on a beat of its own. Nothing about it rotates —
+ * a spinning 10 px sprite is a smudge.
+ */
+export function drawBeanBomb(ctx, x, y, tick) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const beat = Math.floor(tick / 4) % 2;
+  ctx.fillStyle = '#2a1206';
+  ctx.fillRect(px, py + 1, 10, 8);
+  ctx.fillRect(px + 1, py, 8, 10);
+  ctx.fillStyle = '#8c3c1c';
+  ctx.fillRect(px + 1, py + 2, 8, 6);
+  ctx.fillRect(px + 2, py + 1, 6, 8);
+  ctx.fillStyle = '#c05a24';
+  ctx.fillRect(px + 2, py + 2, 3, 3);
+  ctx.fillStyle = beat ? '#f4ffd0' : '#a8e04a';
+  ctx.fillRect(px + 3, py + 4, 4, 2);
+  ctx.fillStyle = `rgba(168,224,74,${beat ? 0.55 : 0.3})`;
+  ctx.fillRect(px + 3, py - 2, 3, 3);
+}
+
+/**
+ * PAPUPAROONI — the desert mini-boss. 18x26, so it stands a head taller than
+ * anything else that walks in this game and reads as a boss from across the
+ * arena before it has done anything.
+ *
+ * The silhouette carries the fight: a wide sash-belly, a flat-brimmed sun hat,
+ * and — the part that matters — a bean held up over the hat while it winds up.
+ * `lift` runs 0..1 through the wind-up, so the arm going up *is* the telegraph
+ * rather than a separate flash to learn. `hurt` blinks it after a stomp lands,
+ * which is the only way to tell a two-hit enemy from a one-hit one.
+ */
+function baronBody(ctx, x, y, frame, facing, lift, hurt) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const bob = Math.floor(frame / 2) % 2;
+  const skin = hurt ? '#f8e0c0' : '#c8a058';
+  const coat = hurt ? '#f0c8a0' : '#6a3c58';
+  const coatDark = hurt ? '#c89870' : '#3c2032';
+  flip(ctx, px, 18, facing < 0, (bx) => {
+    // legs, short and planted wide
+    ctx.fillStyle = coatDark;
+    const swap = frame % 2 === 0;
+    ctx.fillRect(bx + (swap ? 1 : 3), py + 22, 6, 4);
+    ctx.fillRect(bx + (swap ? 11 : 9), py + 22, 6, 4);
+    // the belly, which is most of him
+    ctx.fillStyle = coat;
+    ctx.fillRect(bx + 1, py + 11 + bob, 16, 11 - bob);
+    ctx.fillRect(bx + 2, py + 9, 14, 4);
+    ctx.fillStyle = coatDark;
+    ctx.fillRect(bx + 1, py + 19, 16, 3);
+    // sash
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(bx + 2, py + 16, 14, 2);
+    // head under the brim
+    ctx.fillStyle = skin;
+    ctx.fillRect(bx + 4, py + 4, 10, 6);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 6, py + 6, 2, 2);
+    ctx.fillRect(bx + 10, py + 6, 2, 2);
+    ctx.fillRect(bx + 5, py + 5, 3, 1);
+    ctx.fillRect(bx + 10, py + 5, 3, 1);
+    // moustache, because the face has to have one thing that is his
+    ctx.fillStyle = coatDark;
+    ctx.fillRect(bx + 5, py + 9, 8, 2);
+    // the hat: flat brim, low crown
+    ctx.fillStyle = '#4a2c18';
+    ctx.fillRect(bx, py + 3, 18, 2);
+    ctx.fillRect(bx + 4, py, 10, 3);
+    ctx.fillStyle = '#6a4424';
+    ctx.fillRect(bx + 5, py + 1, 8, 1);
+    // the arm, and the bean it is winding up
+    if (lift > 0) {
+      const rise = Math.round(lift * 7);
+      ctx.fillStyle = skin;
+      ctx.fillRect(bx + 14, py + 10 - rise, 3, 6);
+      ctx.fillStyle = '#8c3c1c';
+      ctx.fillRect(bx + 13, py + 5 - rise, 6, 5);
+      ctx.fillStyle = lift > 0.6 ? '#f4ffd0' : '#a8e04a';
+      ctx.fillRect(bx + 15, py + 6 - rise, 2, 2);
+    } else {
+      ctx.fillStyle = skin;
+      ctx.fillRect(bx + 15, py + 12, 3, 6);
+    }
+    // a slow leak, so he is unmistakably of this game
+    ctx.fillStyle = 'rgba(168,224,74,0.45)';
+    const puff = (frame % 4) + 1;
+    ctx.fillRect(bx - 2 - puff, py + 17, puff + 2, 3);
+  });
+}
+
+export function drawBeanBaron(ctx, x, y, frame, facing, lift = 0, hurt = false) {
+  outlined(ctx, (g) => baronBody(g, x, y, frame, facing, lift, hurt));
+}

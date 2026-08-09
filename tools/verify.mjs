@@ -2308,6 +2308,263 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------- murtava tehostus ja papuparoonit ------------------ */
+  /*
+   * The breaking power-up (PAUKKUPAPU) and its only source (PAPUPAROONI).
+   *
+   * Two halves of one feature, so they are tested together — and the thing
+   * that ties them is the rule that has to be *proved* rather than intended:
+   * nothing else in the game hands this power-up out. A second source would
+   * not break anything visibly; it would only make the fight pointless, which
+   * is exactly the kind of decay no crash ever reports.
+   */
+  {
+    const P = await import('/src/entities/player.js');
+    const E = await import('/src/entities/enemies.js');
+    const { T } = await import('/src/gfx/tiles.js');
+
+    /**
+     * A flat corridor with a one-column wall of `ch` six tiles ahead, charged
+     * into at a run. Everything about the corridor is written into the grid
+     * rather than found in a level, so the test says what it means: the wall is
+     * the only thing between the player and open ground.
+     */
+    const chargeInto = (power, ch, { cork = false, secret = false } = {}) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 6; f++) s.update(i);
+      const p = s.player;
+      const foot = Math.floor((p.y + p.h) / 16);
+      const x0 = Math.floor(p.x / 16);
+      /*
+       * A brick that is hiding something behaves like stone, so which columns
+       * hide something is not a free choice — `brickSecret` is a pure function
+       * of the tile's position. Pick the first column that is the case being
+       * asked about, then build the corridor out to it. Which row is asked
+       * about differs: a wall that must break has to be clear all the way up
+       * (the body is more than one tile tall), a wall that must hold only has
+       * to hide something in the row every size meets.
+       */
+      let wallX = -1;
+      for (let dx = 6; dx <= 40 && wallX < 0; dx++) {
+        const hides = secret
+          ? !!s.brickSecret(x0 + dx, foot - 1)
+          : [foot - 3, foot - 2, foot - 1].some((ty) => !!s.brickSecret(x0 + dx, ty));
+        if (hides === secret) wallX = x0 + dx;
+      }
+      for (let tx = x0; tx <= wallX + 3; tx++) {
+        for (let ty = foot - 5; ty < foot; ty++) s.setTile(tx, ty, T.EMPTY);
+        s.setTile(tx, foot, T.GROUND);
+        s.setTile(tx, foot + 1, T.GROUND);
+      }
+      for (let ty = foot - 3; ty < foot; ty++) s.setTile(wallX, ty, ch);
+      if (cork) p.cork(400);
+      for (let f = 0; f < 340; f++) {
+        i.held = blank();
+        i.held.right = true;
+        i.held.run = true;
+        i.pressed = blank();
+        s.update(i);
+      }
+      return {
+        found: wallX >= 0,
+        gone: s.tileAt(wallX, foot - 1) === T.EMPTY,
+        past: p.x > wallX * 16,
+        player: p,
+      };
+    };
+
+    expect('murtava tehostus on neljäs voimatyyppi ja sillä on nimi',
+      P.POWER_TYPES.includes('pop') && P.POWER_NAMES.pop === 'PAUKKUPAPU',
+      `${P.POWER_TYPES.join(',')} / ${P.POWER_NAMES.pop}`);
+
+    {
+      const withIt = chargeInto({ type: 'pop', level: 1 }, T.BRICK);
+      expect('paukkupavulla tiili hajoaa sivusta juosten — pienimmälläkin koolla',
+        withIt.gone && withIt.past, `hajosi ${withIt.gone}, pääsi läpi ${withIt.past}`);
+    }
+    {
+      // The strongest player in the game without the power-up. Side-breaking is
+      // the power-up's own doing, not a perk of being big — otherwise pea soup
+      // is a second source and the fight stops being the only one.
+      const without = chargeInto({ type: 'leaf', level: 5 }, T.BRICK);
+      expect('ilman paukkupapua tiili pysyy vaikka voimataso olisi 5',
+        !without.gone && !without.past, `hajosi ${without.gone}, pääsi läpi ${without.past}`);
+    }
+    {
+      const corked = chargeInto({ type: 'pop', level: 3 }, T.BRICK, { cork: true });
+      expect('ummetus tukkii myös murtamisen', !corked.gone && !corked.past,
+        `hajosi ${corked.gone}`);
+    }
+    {
+      const hiding = chargeInto({ type: 'pop', level: 3 }, T.BRICK, { secret: true });
+      expect('salaisuutta kätkevä tiili kestää murtamisen, kuten kuorenkin',
+        hiding.found && !hiding.gone, `löytyi ${hiding.found}, hajosi ${hiding.gone}`);
+    }
+    {
+      // The whole table in one assertion: exactly one character gives way.
+      const kept = [];
+      for (const ch of [T.QCOIN, T.QPOWER, T.QSTAR, T.HARD, T.GROUND, T.CRUMBLE,
+        T.SWITCH, T.USED, T.NOTE]) {
+        if (chargeInto({ type: 'pop', level: 3 }, ch).gone) kept.push(ch);
+      }
+      expect('murtava tehostus rikkoo vain tiilen, ei mitään muuta ruutua',
+        kept.length === 0, kept.length ? `hajosi myös: ${kept.join(' ')}` : 'vain B');
+    }
+    {
+      // Losing it costs rewards and nothing else: the ability goes with the
+      // type, and the type is the first thing a hit takes.
+      reset({ type: 'pop', level: 1 });
+      const s = new LevelScene(game, '1-1');
+      const p = s.player;
+      const before = p.breaker;
+      p.hurt();
+      expect('tehostuksen menettäminen vie murtamisen, ei kulkua',
+        before === true && p.breaker === false && !p.dying,
+        `ennen ${before}, jälkeen ${p.breaker}`);
+    }
+
+    /* ---------------------------- papuparooni --------------------------- */
+
+    expect("ENEMY_CHARS has the mini-boss on 'P'",
+      !!E.ENEMY_CHARS.P && E.ENEMY_CHARS.P(null, 0, 0) instanceof E.BeanBaron);
+
+    {
+      const sprites = await import('/src/gfx/sprites.js');
+      expect('paroonilla, pommilla ja paukkupavulla on oma piirroksensa',
+        typeof sprites.drawBeanBaron === 'function'
+        && typeof sprites.drawBeanBomb === 'function');
+    }
+
+    {
+      // DESIGN.md 6: a spawn character that is also a tile character is a level
+      // that silently loses either the enemy or the tile.
+      const clash = Object.keys(E.ENEMY_CHARS).filter((ch) => Object.values(T).includes(ch));
+      expect('yksikään vihollismerkki ei törmää ruutumerkkiin', clash.length === 0,
+        clash.join(' ') || `${Object.keys(E.ENEMY_CHARS).length} merkkiä`);
+    }
+
+    /* The arena and everything in it. Grouped inside one try so that a missing
+     * level or a missing class reports as a failed check rather than as a
+     * thrown page error — the difference matters when the suite is being used
+     * red-first and half of this is not written yet. */
+    try {
+    {
+      reset();
+      const s = new LevelScene(game, '2-M');
+      const barons = s.entities.filter((e) => e instanceof E.BeanBaron);
+      expect('2-M on aavikon minipomokenttä: kaksi paroonia ja lippu, ei pomo-ovea',
+        barons.length === 2 && !!s.goal && !s.def.boss,
+        `${barons.length} paroonia, maali ${!!s.goal}`);
+    }
+
+    {
+      reset();
+      const s = new LevelScene(game, '2-M');
+      game.setScene(s);
+      const barons = s.entities.filter((e) => e instanceof E.BeanBaron);
+      const drops = () => s.entities.filter((e) => e.kind === 'item' && e.itemKind === 'pop').length;
+      barons[0].hp = 1;
+      barons[0].stomp();
+      const afterFirst = drops();
+      barons[1].hp = 1;
+      barons[1].stomp();
+      const afterSecond = drops();
+      expect('vasta viimeinen parooni pudottaa murtavan tehostuksen',
+        afterFirst === 0 && afterSecond === 1, `${afterFirst} -> ${afterSecond}`);
+    }
+
+    {
+      // The fight is winnable at the smallest size, like every boss in the game.
+      reset();
+      const s = new LevelScene(game, '2-M');
+      game.setScene(s);
+      const b = s.entities.find((e) => e instanceof E.BeanBaron);
+      const hp = b.hp;
+      const p = s.player;
+      p.x = b.cx - p.w / 2;
+      p.y = b.y - p.h + 4;
+      p.vy = 3; p.invuln = 0; p.frozen = 0;
+      s.collisions();
+      expect('voimatason 0 tallaus vahingoittaa paroonia', b.hp === hp - 1 && !p.dying,
+        `hp ${hp} -> ${b.hp}`);
+    }
+
+    {
+      // And losable: the thing it throws is a hazard, and a hazard hits.
+      reset({ type: 'shroom', level: 1 });
+      const s = new LevelScene(game, '2-M');
+      game.setScene(s);
+      const b = s.entities.find((e) => e instanceof E.BeanBaron);
+      const bomb = b.throwBomb();
+      const p = s.player;
+      p.x = bomb.cx - p.w / 2;
+      p.y = bomb.cy - p.h / 2;
+      p.invuln = 0; p.frozen = 0;
+      s.collisions();
+      expect('papupommi vahingoittaa: taistelun voi hävitä', p.powerLevel === 0,
+        `voima 1 -> ${p.powerLevel}`);
+    }
+
+    {
+      /* Left alone in its own arena for twenty seconds with the player in
+       * range, a baron has to do the two things the fight is made of: throw,
+       * and stay where it was put. The second one is not decoration — a baron
+       * that walks off carries the game's only paukkupapu away with it, and
+       * nothing would report that but a player who never found the reward. */
+      reset({ type: 'shroom', level: 3 });
+      const s = new LevelScene(game, '2-M');
+      game.setScene(s);
+      const barons = s.entities.filter((e) => e instanceof E.BeanBaron);
+      const p = s.player;
+      p.x = (barons[0].cx + barons[1].cx) / 2;
+      p.y = 12 * 16 - p.h;
+      s.centerCamera();
+      const thrown = new Set();
+      let strayed = 0;
+      const idle = mkInput();
+      for (let f = 0; f < 1200; f++) {
+        p.invuln = 20;                       // this is about them, not about him
+        s.update(idle);
+        for (const e of s.entities) if (e instanceof E.BeanBomb) thrown.add(e.id);
+        for (const b of barons) strayed = Math.max(strayed, Math.abs(b.x - b.homeX));
+      }
+      const onPlinth = barons.every((b) => b.onGround && b.y + b.h <= 11 * 16 + 1);
+      expect('paroonit heittelevät ja pysyvät jalustoillaan',
+        thrown.size >= 4 && strayed <= 32 && onPlinth,
+        `${thrown.size} pommia, poikkeama ${Math.round(strayed)} px, jalustalla ${onPlinth}`);
+    }
+
+    {
+      reset();
+      const s = new LevelScene(game, '2-M');
+      game.setScene(s);
+      const b = s.entities.find((e) => e instanceof E.BeanBaron);
+      b.throwBomb();
+      const snap = captureState(game);
+      const kinds = snap ? snap.level.entities.map((d) => d.t) : [];
+      expect('parooni ja sen pommi selviävät tilatallennuksesta — REGISTRY',
+        kinds.includes('BeanBaron') && kinds.includes('BeanBomb'), kinds.join(' '));
+    }
+    } catch (err) {
+      expect('papuparoonien areena rakentuu ja taistelu toimii', false, err.message);
+    }
+
+    {
+      // The rule from the roadmap, made executable: the fight is the ONLY
+      // source. Every question block, every secret brick and the moon all draw
+      // from rollPowerup, so one assertion covers all three.
+      reset({ type: 'shroom', level: 2 });
+      const s = new LevelScene(game, '1-1');
+      const seen = new Set();
+      for (let i = 0; i < 2000; i++) seen.add(s.rollPowerup(s.player));
+      expect('mikään lohko ei arvo murtavaa tehostusta', !seen.has('pop'),
+        [...seen].join(' '));
+    }
+  }
+
   /* ---------------------------- koon vaihtuminen ------------------------ */
   /* Growing and shrinking used to be a sprite swapped while nobody was looking.
    * The freeze frames were already there; this is what they are for. The
@@ -3945,7 +4202,7 @@ const report = await page.evaluate(async () => {
         g.globalCompositeOperation = 'source-over';
         g.globalAlpha = 1;
       };
-      for (const kind of ['shroom', 'flower', 'leaf', 'soup', 'star']) {
+      for (const kind of ['shroom', 'flower', 'leaf', 'soup', 'star', 'pop']) {
         sprites.drawItem(g, kind, 20, 20, 30);
         check(`item ${kind}`);
       }
@@ -3973,6 +4230,14 @@ const report = await page.evaluate(async () => {
       }
       sprites.drawSpikeGuy(g, 20, 40, 7, -1);
       check('spikeguy');
+      if (sprites.drawBeanBaron) {
+        for (const wind of [0, 0.5, 1]) {
+          sprites.drawBeanBaron(g, 20, 40, 12, -1, wind, false);
+          check(`beanbaron ${wind}`);
+        }
+        sprites.drawBeanBomb(g, 20, 40, 12);
+        check('beanbomb');
+      }
       for (const v of [0, 1, 2, 3]) {
         sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
         check(`boss ${v} spiny`);

@@ -37,6 +37,10 @@ const PALETTES = {
   shroom: { cap: '#e04c3c', shirt: C.green, shirtDark: C.greenDark, pants: C.brown, pantsDark: C.brownDark, spots: true },
   flower: { cap: C.white, shirt: C.white, shirtDark: '#c8c8d0', pants: C.green, pantsDark: C.greenDark },
   leaf: { cap: C.tan, shirt: C.tan, shirtDark: '#9c6a28', pants: C.brown, pantsDark: C.brownDark },
+  /* Paukkupapu. The darkest, heaviest palette of the four, because the thing it
+   * does is walk through a wall — and it must not be mistaken for the mushroom,
+   * whose red is the one every player learns first. Bean brown over gas green. */
+  pop: { cap: '#c05a24', shirt: '#8c3c1c', shirtDark: '#4a1c0a', pants: C.gasDark, pantsDark: '#2c4c14' },
 };
 
 function legs(ctx, x, y, w, pal, frame, running) {
