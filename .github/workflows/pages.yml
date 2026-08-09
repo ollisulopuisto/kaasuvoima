@@ -5,10 +5,15 @@
 # päivittyä. Pages on eri kiintiö ja eri palvelu, joten se on vara-ajotie eikä
 # korvaaja: Vercel pysyy ensisijaisena osoitteena (ks. `og:url` index.html:ssä).
 #
-# **Tämä työnkulku ei tee mitään ennen kuin Pages on kytketty päälle repolle**,
-# ja sen kytkeminen on omistajan päätös eikä tekninen kysymys: Pages toimii
-# ilmaisversiossa vain julkisella repolla. Tiedosto on täällä valmiina, jotta
-# päätöksen jälkeen ei tarvitse rakentaa mitään.
+# **Repo pysyy yksityisenä, sivusto on julkinen.** Se ei ole kompromissi vaan
+# juuri se mitä tästä haluttiin: lähdekoodi ei ole esillä, peli on. Pages
+# yksityisestä reposta vaatii GitHub Pron, joka on — ilmaisversiossa tämä olisi
+# vaatinut repon julkaisemisen. Sivuston rajaaminen kirjautuneille on Enterprise
+# -ominaisuus eikä siis vaihtoehto, mutta pelin kuuluukin olla auki.
+#
+# Pagesia ei tarvitse kytkeä päälle käsin: `configure-pages`in `enablement`
+# tekee sen ensimmäisellä ajolla. Jos se joskus kaatuu oikeuksiin, kytkin on
+# repon asetuksissa kohdassa Pages → Source: GitHub Actions.
 #
 # Rakennusvaihetta ei ole, eikä sitä pidä tulla. Peli on staattisia tiedostoja
 # — se on DESIGN.md:n kohta 7, ei sattuma — joten julkaisu on repon juuren
@@ -39,15 +44,6 @@ concurrency:
 
 jobs:
   deploy:
-    # Vartija, ja se on tarpeen eikä varovaisuutta: ilman tätä työnkulku ajaisi
-    # joka pushilla ja **kaatuisi joka kerta**, koska Pages ei ole päällä. Punainen
-    # rasti jokaisessa commitissa opettaa lukemaan rastit ohi, ja se on kalliimpaa
-    # kuin mikään mitä tämä tiedosto tuo.
-    #
-    # Kytkentä: repon asetuksissa Variables → `PAGES_ENABLED` = `true`. Se on
-    # yksi kenttä, ja se on tarkoituksella sama ele kuin Pagesin päälle
-    # kytkeminen — kaksi asiaa jotka pitää tehdä yhdessä, tehdään yhdessä.
-    if: vars.PAGES_ENABLED == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
