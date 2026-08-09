@@ -7467,13 +7467,22 @@ const report = await page.evaluate(async () => {
     c.height = H;
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
-    /* Every colour the player is ever painted in. */
+    /* Every colour the player is ever painted in. It is a list and not a rule
+     * because the outline has to be told from the artwork, and the day the
+     * costume changed it was also the list that said what the costume was: the
+     * greens and whites of the old shirt left it, the slate, the purples, the
+     * gas green and the brass of POWER_LOOKS came in. A colour missing from
+     * here does not fail loudly — the audit below simply stops seeing that part
+     * of the body, and a sprite with an invisible middle counts as two pieces. */
     const ART = new Set([
-      '16,16,24', '240,184,144', '192,120,80', '62,162,58', '31,111,38',
+      '16,16,24', '240,184,144', '192,120,80', '31,111,38',
       '140,76,24', '90,44,12', '200,140,64', '248,248,248', '92,156,40',
       '255,208,72', '156,106,40', '224,76,60', '200,200,208', '192,90,36',
-      '140,60,28', '74,28,10', '44,76,20', '42,74,106', '127,200,240',
+      '140,60,28', '74,28,10', '42,74,106', '127,200,240',
       '232,248,255',
+      // POWER_LOOKS, the gas hose and the leaves.
+      '168,224,74', '160,76,160', '106,44,106', '60,24,64',
+      '106,116,136', '57,65,79', '76,86,102', '232,255,192', '216,168,96',
     ]);
 
     const poses = [

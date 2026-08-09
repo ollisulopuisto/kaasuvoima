@@ -7,6 +7,74 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.44 — sankarilta lähti lakki: haalari, kaasuletku ja viisi omaa asua
+
+Pelaajahahmon ulkoasu on piirretty uusiksi. **Punainen pilkullinen lippalakki on
+poissa**, ja sen mukana koko lainattu puvustus: paita ja housut, haalarin kaksi
+kultaista nappia ja pesukarhun häntä korvineen. Tilalla on hiukset, yksiosainen
+haalari, vyö jossa on messinkinen paineventtiili ja kaasulehden mukana tuleva
+kaasuletku. [DESIGN.md](DESIGN.md):n kohta 1 kertoo saman lyhyesti.
+
+### Miksi, ja mikä nimenomaan piti vaihtaa
+
+Omistajan pyyntö oli poistaa lainatun näköiset spritet. Pelaaja on niistä isoin
+ja se ainoa jota hän ei nimennyt, mikä on syy tehdä tämä huolella eikä varovasti.
+Työ alkoi jaosta kolmeen, ja **vain ensimmäiseen ryhmään kosketaan**:
+
+| ryhmä | mitä siihen kuului | tehtiin |
+| --- | --- | --- |
+| lainattua ilmaisua | lippalakki (lippa oli tasan vartalon levyinen), sienen punainen + valkoiset pilkut, paita/housut-jako, haalarin kaksi nappia, pesukarhunhäntä ja -korvat | vaihdettiin |
+| genren kalustoa, ei kenenkään | ihminen jolla on pää, kädet ja jalat; kolmen framen kävely; kyykky; profiili | ei koskettu |
+| jo tämän pelin omaa | syväseisonta (torkahdus + ZZZ, jääpuikkohengitys, palava tukka), hengitys, räpytys, raapiminen, hikipisara, värinä, ummetuskorkki, paukkupavun paletti | ei koskettu |
+
+Hahmo tekee siis täsmälleen samat asiat kuin eilen ja näyttää samalta ihmiseltä
+tekemässä niitä. Vaihtui se mitä hänellä on päällä ja minkä värinen hän on.
+
+**Uusi asu tulee siitä mistä peli kertoo.** Hän laskeutuu suolistoon
+Pieruprinssin perään, joten hänet on puettu työhön: haalari, vyö ja venttiili
+josta paine pääsee ulos. Kaasulehti antaa häntäiskun, liidon ja lennon, ja
+kaasupelissä se esine joka tekee kaikki kolme on **letku jonka päässä on
+messinkisuutin** — sillä lyö ja siitä lentää. Eläimen häntä miehen takana on
+puku, ja tässä genressä on tasan yksi puku joksi se luetaan.
+
+Viisi voimatasoa ovat nyt viisi asua: haalari, vyö, housut ja hiukset vaihtuvat
+kaikki. Perustelu on että **kaasu näkyy hänessä** — tasot eivät ole vaatekaappi
+vaan se paljonko häntä on paineessa. Sienen valkoiset pilkut jäivät ideana
+(tehostuksen merkintä näkyy kantajassaan on tämän pelin oma tapa) mutta
+muuttuivat **kaasukupliksi haalarissa**.
+
+### Punainen ennen vihreää, kahdella mittarilla
+
+Taidemuutoksen rehellinen punainen on mitattava väite, ja tässä niitä on kaksi.
+Molemmat kaatuivat vanhalla piirroksella:
+
+1. **Pää saa olla enintään neljä pikseliä osumalaatikkoa kapeampi.** Lippa on se
+   asia lakissa joka on leveämpi kuin kallo jonka päällä se on, ja tässä
+   piirroksessa se oli tasan koko hahmon levyinen: **12 px 14:n vartalolla ja
+   10 px 12:n vartalolla**, kruunun ollessa 9 ja 8. Sääntö on leveydestä eikä
+   väristä, koska vihreäksi maalattu lippalakki on yhä lippalakki. Uudet luvut
+   ovat **9 px ja 7 px**.
+2. **Lähimmätkin kaksi voimatasoa eroavat vähintään 45 % hahmon omista
+   pikseleistä.** Vanha taulukko vaihtoi sienestä vain lakin värin, eli kaksi
+   viidestä tasosta oli sama piirros hattu maalattuna: **28 % pienimmällä koolla
+   ja 23 % suurimmalla**. Uudet luvut ovat **53 % ja 57 %**.
+
+Vanhat portit pysyivät vihreinä eivätkä ne ole tässä koristeena: sprite ei
+hajoa palasiksi yhdessäkään asennossa millään voimatasolla (0 rikki), mikään
+asento ei vuoda ulos laatikostaan (0 vuotoa), kävely kulkee edelleen
+ohitusasennon kautta ja kaikki hengittää. Osumalaatikoihin ei koskettu yhtään
+pikseliä — `PLAYER_SIZES` ja `PLAYER_DUCK_SIZES` ovat rivilleen samat.
+
+### Yksi vanha virhe joka löytyi matkalla
+
+Vanha `capSpots` piirsi kolme pilkkua joista **kaksi oli päällekkäin** ja kolmas
+kruunun reunan ohi: pienellä koolla se roikkui kokonaan lakin sivulla ja
+suurella yhden pikselin verran. Se oli ollut siellä niin kauan kuin pilkkuja on
+ollut. Uusi merkintä lasketaan sen paneelin mitoista johon se piirretään, joten
+sama kolme kuplaa osuu sekä seisovan 10x4-rinnuksen että kyykyn 12x3:n päälle.
+
+---
+
 ## v26.08.09.43 — kartta saa vieriä, ja kamera joka ei keinuta
 
 Maailmankartan maastoruudukko saa olla näkymää leveämpi, ja näkymä seuraa

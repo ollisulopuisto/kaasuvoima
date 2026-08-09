@@ -18,6 +18,25 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
 | Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
 
+**Päähahmon ulkonäkö rakennettiin uusiksi 9.8.2026.** Hahmolla oli lippalakki,
+ja pierusienen jälkeen se oli punainen valkoisine pilkkuineen paidan ja housujen
+päällä. Se ei ole kohdan 2 tarkoittamaa vapaata genrekonventiota vaan **tietty
+ilmaisu**, ja siksi se on poissa. Tilalla on hiukset, yksiosainen haalari, vyö
+jossa on messinkinen paineventtiili, ja kaasulehden mukana tuleva **kaasuletku**
+entisen pesukarhunhännän ja -korvien sijasta. Perustelu ei ole pelkkä
+välttäminen: hahmo laskeutuu suolistoon Pieruprinssin perään, ja se on
+uskottavampi lähtökohta puvustukselle kuin "ei ainakaan putkimies".
+
+Viisi voimatasoa erottuvat nyt koko asusta ja hiusten väristä eivätkä lakin
+väristä. Ajatus jonka mukaan **tehostuksen oma merkintä näkyy kantajassaan** on
+tämän pelin oma ja se jäi: pilkut ovat nyt kaasukuplia haalarissa. Väripaletti
+on yhdessä taulukossa (`POWER_LOOKS`, `src/gfx/sprites/player.js`), ja
+**kaksi mitattua väitettä pitää ratkaisun paikallaan** (`tools/verify.mjs`):
+pään on oltava vähintään neljä pikseliä osumalaatikkoa kapeampi — lakin lippa
+oli tasan laatikon levyinen, 12 px 14:stä ja 10 px 12:sta — ja lähimmätkin kaksi
+voimatasoa eroavat toisistaan vähintään 45 % hahmon omista pikseleistä. Mitattu
+uudella asulla 53 % ja 57 %, vanhalla 28 % ja 23 %.
+
 Repon ainoa binääri on `card.png`, linkkien esikatselukuva. Sekin on generoitu
 **pelistä itsestään** (`node tools/make-card.mjs` valokuvaa alkuruudun), koska
 Slack ja muut eivät renderöi SVG:tä esikatselussa. Se ei ole ulkopuolista
