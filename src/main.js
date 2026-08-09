@@ -621,6 +621,7 @@ class Game {
     }
     const a = audioDiag();
     lines.push(`MUS ${a.track.toUpperCase()} (${Music.variation().toUpperCase()})`
+      + `${a.pace > 1 ? `  KIIHTYNYT ${a.pace}X` : ''}`
       + `  MUTE ${a.muted ? 1 : 0}`);
     lines.push(`AUDIO ${a.state.toUpperCase()}  GAIN ${a.master}`
       + `  OHJAIMET ${Input.pads}${Input.padInput ? '*' : ''}`

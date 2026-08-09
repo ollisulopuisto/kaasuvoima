@@ -3128,6 +3128,267 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------- luolakaistan musiikki: paikka, ei tapahtuma ------------- */
+  /*
+   * Punainen ennen vihreää (DESIGN.md kohta 7) sille päätökselle joka piti
+   * tehdä ennen kuin yhtään säveltä kirjoitettiin: **löytyminen on tapahtuma,
+   * musiikki on paikka.**
+   *
+   * Piilokaistalle saapumisella on jo merkkinsä — `noteSecret` kirjaa löydön
+   * sillä framella jolla matka päätetään, putki soi, ja kartan salaisuuslaskuri
+   * nousee. Jos musiikinvaihto osuisi samaan hetkeen, se olisi §8:n kieltämä
+   * toinen samaa sanova merkki: kaksi "jotain tapahtui" -signaalia peräkkäin
+   * opettaa lukemaan väärää asiaa. Siksi nämä tarkistukset eivät kysy *onko*
+   * luolalla oma raita vaan **milloin** se tulee, **kuinka kauan** se pysyy ja
+   * **mikä sen tuo takaisin** — eli juuri ne asiat joissa paikka ja tapahtuma
+   * eroavat toisistaan.
+   *
+   * "Raita nimeltä cave on olemassa" ei todista mitään, joten sitä ei kysytä
+   * kertaakaan yksinään.
+   */
+  {
+    const { Music, audioTap } = await import('/src/core/audio.js');
+    const mk = (id, power = { type: null, level: 0 }, time = 9999) => {
+      reset(power);
+      const s = new LevelScene(game, id);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = time;
+      // setScene eikä sijoitus: `enter()` on se paikka jossa kohtaus valitsee
+      // raitansa, ja puolet näistä tarkistuksista koskee juuri sitä.
+      game.setScene(s);
+      return s;
+    };
+    const put = (s, tx, ty) => {
+      s.player.x = tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = ty * 16 - s.player.h;
+      s.player.vy = 0;
+      s.player.onGround = true;
+      s.player.climbing = false;
+      s.player.warpLock = 0;
+      s.centerCamera();
+    };
+    const hold = (s, i, keys, frames) => {
+      for (let f = 0; f < frames; f++) {
+        i.held = blank();
+        for (const k of keys) i.held[k] = true;
+        i.pressed = blank();
+        s.update(i);
+      }
+    };
+    const i = mkInput();
+    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (15 * 16));
+    const found = (id) => ((game.state.secrets || {})[id] || []).filter((k) => k === 'cave').length;
+
+    /* 1. Raita vaihtuu kaistan mukaan ja vaihtuu takaisin. Molemmat suunnat
+     * samassa tarkistuksessa siksi että pelkkä meno on helppo: paikka joka ei
+     * lopu kun siitä lähtee ei ole paikka vaan tila johon jäätiin. */
+    {
+      const s = mk('1-2', { type: 'shroom', level: 1 });
+      const own = Music.current;
+      put(s, 229, 26);
+      hold(s, i, ['down'], 120);
+      hold(s, i, [], 60);
+      const inCave = Music.current;
+      const caveBand = bandOf(s);
+      put(s, 250, 43);
+      hold(s, i, [], 3);
+      s.player.warpLock = 0;
+      hold(s, i, ['up'], 120);
+      hold(s, i, [], 90);
+      expect('the cave band sounds like itself, and leaving gives the level back',
+        own === 'level' && Music.has('cave') && inCave === 'cave'
+        && caveBand === 2 && bandOf(s) === 1 && Music.current === 'level',
+        `${own} -> ${inCave} (kaista ${caveBand}) -> ${Music.current} (kaista ${bandOf(s)})`);
+    }
+
+    /* 2. Taivaskaista pitää kentän oman musiikin. Päätös, ei unohdus: yksi
+     * raita kahdelle vastakkaiselle paikalle sanoisi "salaisuus" eikä "luola",
+     * ja silloin musiikki olisi taas löytymisen merkki. */
+    {
+      const s = mk('4-2', { type: 'shroom', level: 1 });
+      const own = Music.current;
+      put(s, 245, 28);
+      hold(s, i, ['up'], 120);
+      hold(s, i, [], 90);
+      expect('the sky band keeps the level\'s own music',
+        own === 'factory' && bandOf(s) === 0 && Music.current === 'factory',
+        `${own} -> ${Music.current} (kaista ${bandOf(s)})`);
+    }
+
+    /* 3. Sama mitattuna framen tarkkuudella, ja kolme lukua eikä kahta.
+     *
+     * Saapumisella on kaksi hetkeä: löytö kirjataan sillä framella jolla matka
+     * päätetään, ja matka päättyy sillä framella jolla ohjaus palaa. Musiikki
+     * ei saa osua kumpaankaan. Pelkkä "putken jälkeen" ei riittäisi — vaihto
+     * juuri sillä framella jolla pelaaja putkahtaa ulos olisi matkan viimeinen
+     * isku, ja matka on tapahtuma. Siksi tässä mitataan myös se väli. */
+    {
+      const s = mk('1-2');
+      put(s, 229, 26);
+      let foundAt = -1;
+      let controlAt = -1;
+      let musicAt = -1;
+      for (let f = 0; f < 240; f++) {
+        i.held = blank();
+        i.held.down = f < 4;
+        i.pressed = blank();
+        const traveling = !!s.player.transit;
+        s.update(i);
+        if (foundAt < 0 && found('1-2') > 0) foundAt = f;
+        if (controlAt < 0 && traveling && !s.player.transit) controlAt = f;
+        if (musicAt < 0 && Music.current === 'cave') musicAt = f;
+      }
+      expect('the music is not a second find-signal: the place arrives after the find',
+        foundAt >= 0 && controlAt > foundAt && musicAt > controlAt + 20
+        && bandOf(s) === 2,
+        `löytö framella ${foundAt}, ohjaus takaisin framella ${controlAt}, `
+        + `musiikki framella ${musicAt} (${musicAt - foundAt} framea löydöstä, `
+        + `${musicAt - controlAt} ohjauksen palaamisesta)`);
+    }
+
+    /* 4. Ja toisinpäin: paikka kuulostaa toisella käynnillä samalta kuin
+     * ensimmäisellä, vaikka löytö tapahtuu vain kerran. Löytymisen merkki
+     * soisi kerran; paikan ääni soi joka kerta. */
+    {
+      const s = mk('1-2');
+      put(s, 229, 26);
+      hold(s, i, ['down'], 120);
+      hold(s, i, [], 60);
+      const first = Music.current;
+      const firstFinds = found('1-2');
+      put(s, 250, 43);
+      hold(s, i, [], 3);
+      s.player.warpLock = 0;
+      hold(s, i, ['up'], 120);
+      hold(s, i, [], 90);
+      const between = Music.current;
+      put(s, 229, 26);
+      hold(s, i, ['down'], 120);
+      hold(s, i, [], 60);
+      expect('the music is a place: the second visit sounds like the first, the find does not',
+        first === 'cave' && between === 'level' && Music.current === 'cave'
+        && firstFinds === 1 && found('1-2') === 1,
+        `1. käynti ${first}, välissä ${between}, 2. käynti ${Music.current}, `
+        + `löytöjä ${found('1-2')}`);
+    }
+
+    /* 5. Pikatallennus luolassa. `enter()` ajetaan uudelleen latauksessa, joten
+     * se ei saa lukea raitaa kenttädatasta vaan siitä missä jalat ovat. */
+    {
+      const s = mk('1-2');
+      put(s, 229, 26);
+      hold(s, i, ['down'], 120);
+      hold(s, i, [], 60);
+      const saved = Music.current;
+      game.slot = 3;
+      game.quickSave();
+      Music.play('title');                     // jotain aivan muuta väliin
+      const between = Music.current;
+      game.quickLoad();
+      const back = game.scene;
+      expect('a quicksave taken in the cave loads back into the cave music',
+        saved === 'cave' && between === 'title' && bandOf(back) === 2
+        && Music.current === 'cave',
+        `tallennus ${saved}, väliin ${between}, lataus ${Music.current} `
+        + `(kaista ${bandOf(back)})`);
+      game.slot = 1;
+    }
+
+    /* 6. Kuoppaan putoaminen käy luolakaistan puolella ennen laavaa. Se ei ole
+     * käynti luolassa eikä siitä saa tulla ääntä. Tämän ei kaada odotusaika
+     * vaan kuolemaportti — mitattuna sauman alla ollaan vain framen verran, ja
+     * sillä framella kuolema on jo tapahtunut. Kaksi eri vartijaa, ja kumpikin
+     * omalla testillään, ettei toinen pääse esittämään toista. */
+    {
+      const s = mk('1-2');
+      s.player.x = 71 * 16;
+      s.player.y = 26 * 16;
+      let caveFrames = 0;
+      let deepest = 0;
+      let seam = 0;
+      for (let f = 0; f < 200 && s.state === 'play'; f++) {
+        i.held = blank();
+        i.pressed = blank();
+        s.update(i);
+        deepest = Math.max(deepest, bandOf(s));
+        if (bandOf(s) >= 2) seam++;
+        if (Music.current === 'cave') caveFrames++;
+      }
+      expect('falling into a pit never sounds like the cave',
+        caveFrames === 0 && deepest >= 2,
+        `syvin kaista ${deepest}, sauman alla ${seam} framea, luolamusiikkia `
+        + `${caveFrames} framea`);
+    }
+
+    /* 7. Kello ei nollaudu raidan mukana. `Music.play` aloittaa jokaisen raidan
+     * rauhallisena, joten luolaan meno vähissä ajoissa veisi kiireen pois —
+     * juuri sen signaalin joka on jo ansaittu. */
+    {
+      const s = mk('1-2', { type: null, level: 0 }, 90);
+      put(s, 229, 26);
+      hold(s, i, ['down'], 120);
+      hold(s, i, [], 60);
+      expect('entering the cave with the clock low keeps the hurry',
+        Music.current === 'cave' && Music._hurry === true,
+        `raita ${Music.current}, kiire ${Music._hurry}, aikaa ${s.time}`);
+    }
+
+    /* 8. Kiihtyvyys. Grieg valittiin rakenteensa takia — teos kiihtyy — joten
+     * se on mitattava eikä uskottava. Askelen pituus samassa osiossa, ensin
+     * heti alussa ja sitten kuuden kierroksen jälkeen, ja vertailuna raita
+     * jonka ei kuulu kiihtyä lainkaan. */
+    {
+      const tap = audioTap();
+      const stepMs = (name, pass) => {
+        Music.play(name);
+        // Raita jota ei ole ei tuota ääniä eikä siis askeleita: `play` asettaa
+        // `current`in silti, joten tämä on ainoa kohta josta puuttuva raita
+        // näkyy — ja se on syytä näkyä lukuna eikä poikkeuksena.
+        if (!Music._voices) return NaN;
+        Music._step = pass * Music._loopLen;
+        Music._cycle = pass;
+        Music._applyVariation();
+        Music._nextTime = tap.ctx.currentTime + 0.005;
+        const t0 = Music._nextTime;
+        const s0 = Music._step;
+        Music._tick();
+        if (Music._timer) { clearTimeout(Music._timer); Music._timer = null; }
+        return ((Music._nextTime - t0) / (Music._step - s0)) * 1000;
+      };
+      const caveEarly = tap ? stepMs('cave', 0) : 0;
+      const caveLate = tap ? stepMs('cave', 6) : 0;
+      Music.stop();
+      const levelEarly = tap ? stepMs('level', 0) : 0;
+      const levelLate = tap ? stepMs('level', 6) : 0;
+      Music.stop();
+      expect('the cave track accelerates the longer you stay, and only it does',
+        !tap || (caveEarly > 0 && caveLate < caveEarly * 0.6
+          && Math.abs(levelLate - levelEarly) < 0.5),
+        tap ? `luola ${caveEarly.toFixed(1)} -> ${caveLate.toFixed(1)} ms `
+          + `(${(caveEarly / caveLate).toFixed(2)}x), kenttä ${levelEarly.toFixed(1)} `
+          + `-> ${levelLate.toFixed(1)} ms`
+          : 'ei äänikontekstia — ohitettu');
+    }
+
+    /* 9. Ja kiihtyvyys nollautuu kun paikasta lähtee. Muuten toinen käynti
+     * alkaisi siitä mihin ensimmäinen jäi, ja "älä jää tänne" muuttuisi
+     * rangaistukseksi siitä että kävi kerran aiemmin. */
+    {
+      Music.play('cave');
+      Music._step = 6 * Music._loopLen;
+      const hot = Music.pace();
+      Music.play('level');
+      Music.play('cave');
+      const cold = Music.pace();
+      expect('leaving the cave winds the accelerando back to the start',
+        hot >= 1.9 && cold < 1.05,
+        `lähtiessä ${hot.toFixed(2)}x, palatessa ${cold.toFixed(2)}x `
+        + `(askel ${Music._step})`);
+      Music.stop();
+      Music.current = null;
+    }
+  }
+
   /* ------------------------------ kuplaloukku -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');

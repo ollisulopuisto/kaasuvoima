@@ -1273,6 +1273,10 @@ export function audioDiag() {
     master: master ? Number(master.gain.value.toFixed(2)) : 0,
     muted,
     track: Music.current || 'none',
+    // Measured, not remembered: the cave track's accelerando is the reason it
+    // was chosen, so the overlay shows where it has got to rather than trusting
+    // that it moved at all.
+    pace: Number(Music.pace().toFixed(2)),
   };
 }
 
@@ -1521,6 +1525,99 @@ const TRACKS = {
     },
   },
 
+  /*
+   * THE HIDDEN CAVE BAND.
+   *
+   * Edvard Grieg (1843–1907), *I Dovregubbens hall* — "In the Hall of the
+   * Mountain King" — from the incidental music to *Peer Gynt*, 1875. The
+   * composition entered the public domain on 1.1.1978 (author's life + 70
+   * years, counted from the end of the year of death). Named here and in
+   * DESIGN.md kohta 1 b and CHANGELOG.md, which is the condition on which
+   * expired music is allowed into this game at all.
+   *
+   * **Written out by hand as note numbers, the way every other track in this
+   * table is.** That is not a stylistic choice: what expired is the *work*. A
+   * particular recording and a particular printed edition are separate works
+   * with rights of their own, and they are where "but it's old music" usually
+   * goes wrong. Nothing was sampled, ripped, scanned or converted; this is a
+   * transcription of a theme from memory into the same [semitone, length]
+   * pairs the rest of this file uses, and it is synthesised at run time.
+   *
+   * WHY THIS PIECE AND NOT A NICER ONE. Because it accelerates. A bonus room
+   * with no urgency is a bonus room the player just stands in, and the tune
+   * says "don't linger" without a word of it being written on the screen. See
+   * `accel` below — the acceleration is the reason the piece is here, so it is
+   * a property of the track and not a decoration on top of it.
+   *
+   * The theme itself is also, conveniently, exactly what this sequencer is
+   * built for: Grieg's piece is one melody stated over and over, each time
+   * louder, faster and differently scored. That is what SECTIONS and VARIATIONS
+   * already do to every track in this table, so the arrangement machinery is
+   * not fighting the material for once.
+   *
+   * B minor. The lead sits an octave down, where the piece starts — low
+   * strings and bassoons, under everything — and the engine's "lead octave up"
+   * sections are what lifts it into the register the strings take over in.
+   * Phrase 0 is the statement, which leaves off on the fifth and wants to come
+   * round again; phrase 1 is the same tune an octave higher, landing home on
+   * the tonic. Two phrases and not four, because the piece has one tune.
+   */
+  cave: {
+    tempo: 88,
+    /*
+     * The accelerando, as a rate rather than a switch: `per` is how much of the
+     * starting tempo is added per pass through the loop, and `max` is where it
+     * stops. 0.18 per pass to a ceiling of double speed means the room takes
+     * about half a minute to become frantic and then stays there, breathless.
+     *
+     * It is measured from the step counter, so it is continuous — every step is
+     * a hair shorter than the one before it rather than the tempo jumping a
+     * notch each lap, which would read as a mistake being corrected (the same
+     * reasoning as SECTIONS above). And because `play` resets the step counter,
+     * the acceleration is a clock on *this* visit: leave the room and come back
+     * and it starts calm again. It measures how long you have stayed, which is
+     * the only thing it is supposed to be saying.
+     */
+    accel: { per: 0.18, max: 2 },
+    lead: {
+      wave: 'triangle', gain: 0.13, octave: -12, staccato: 0.62,
+      phrases: [
+        // The statement, low: B C# D E, D, up to F#, and back down.
+        [[-10, 2], [-8, 2], [-7, 2], [-5, 2], [-7, 2], [-3, 2], [-5, 2], [-8, 2],
+          [-10, 2], [-8, 2], [-7, 2], [-5, 2], [-7, 2], [-10, 2], [-10, 4]],
+        // The same tune an octave up, the way the strings take it over.
+        [[2, 2], [4, 2], [5, 2], [7, 2], [5, 2], [9, 2], [7, 2], [4, 2],
+          [2, 2], [4, 2], [5, 2], [7, 2], [5, 2], [2, 2], [2, 4]],
+      ],
+      notes: [[-10, 2], [-8, 2], [-7, 2], [-5, 2], [-7, 2], [-3, 2], [-5, 2], [-8, 2],
+        [-10, 2], [-8, 2], [-7, 2], [-5, 2], [-7, 2], [-10, 2], [-10, 4]],
+    },
+    harm: {
+      // Two bars of harmony under a two-bar tune: home, then the dominant,
+      // which is what makes the loop lean into its own repeat.
+      wave: 'sawtooth', gain: 0.04, octave: -12,
+      notes: [[[-10, -7, -3], 24], [[-3, 1, 4], 8]],
+    },
+    bass: {
+      /* A pedal that never lets go. Twelve eighths of the tonic and four of the
+       * dominant, accented on every downbeat: it is the marching under the
+       * floor, and it is the part that gets frightening when the tempo climbs. */
+      wave: 'triangle', gain: 0.2, staccato: 0.45, attack: 0.004, hold: 0.3,
+      accent: 'x.......x.......',
+      notes: [
+        [-22, 2], [-22, 2], [-22, 2], [-22, 2], [-22, 2], [-22, 2], [-22, 2], [-22, 2],
+        [-22, 2], [-22, 2], [-22, 2], [-22, 2], [-27, 2], [-27, 2], [-27, 2], [-27, 2],
+      ],
+    },
+    drums: {
+      // A march, not a groove: a stomp on the beat, one snare a bar, and the
+      // hats on every eighth standing in for the pizzicato strings.
+      kick: 'x.......x.......',
+      snare: '............x...',
+      hat: 'x.x.x.x.x.x.x.x.',
+    },
+  },
+
   fortress: {
     tempo: 116,
     lead: {
@@ -1682,6 +1779,27 @@ function sectionAt(cycle) {
 /** How much the tempo lifts once the level clock gets scary. */
 const HURRY_SPEED = 1.4;
 
+/**
+ * How much faster a track is playing by a given step — its accelerando.
+ *
+ * This is the second of the two ways the tempo can move, and the two are
+ * deliberately different shapes. `HURRY_SPEED` and a section's `speed` are
+ * *gears*: they change once, they are heard changing, and the lead-in bar ramps
+ * into them. An accelerando is not a gear, it is a slope — nothing announces
+ * it, and no single step is audibly faster than the one before it. That is the
+ * whole effect: the player notices they are hurrying without noticing when they
+ * started.
+ *
+ * So it is a function of the absolute step index rather than of the pass or the
+ * section, which also means it needs no state of its own. A track with no
+ * `accel` gets 1 and pays nothing.
+ */
+function paceAt(track, step, loopLen) {
+  const a = track && track.accel;
+  if (!a) return 1;
+  return Math.min(a.max, 1 + a.per * (step / Math.max(1, loopLen)));
+}
+
 export const Music = {
   current: null,
   _timer: null,
@@ -1705,6 +1823,8 @@ export const Music = {
   has: (name) => Object.prototype.hasOwnProperty.call(TRACKS, name),
   names: () => Object.keys(TRACKS),
   variation: () => Music._variation.label + (Music._changing ? ' >>' : ''),
+  /** Where the accelerando has got to, as a multiple of the written tempo. */
+  pace: () => paceAt(Music._track, Music._step, Music._loopLen),
 
   play(name) {
     if (this.current === name) return;
@@ -1816,9 +1936,13 @@ export const Music = {
       // tempo, so a change of gear is heard coming instead of just happening.
       const leadFrom = this._loopLen - LEAD_IN_STEPS;
       const inLead = this._changing && local >= leadFrom;
-      const dur = inLead
+      const geared = inLead
         ? this._stepDur + (this._nextStepDur - this._stepDur) * ((local - leadFrom) / LEAD_IN_STEPS)
         : this._stepDur;
+      // The accelerando rides on top of whatever gear the arrangement is in,
+      // rather than replacing it: a track that both accelerates and hits a
+      // double-time section should do both.
+      const dur = geared / paceAt(this._track, this._step, this._loopLen);
       const swing = this._step % 2 ? this._swing * dur : 0;
       this._emit(this._step, this._nextTime + swing, inLead, dur);
       this._step++;

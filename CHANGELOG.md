@@ -7,6 +7,112 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.32 — luolalla on oma ääni: Grieg, ja miksi se ei ole löytymisen merkki
+
+Piilokaistan luolahuoneet (`cave_room`, `fac_cellar`, `tomb_cave`) ovat olleet
+olemassa pitkään eivätkä ole kuulostaneet miltään erityiseltä. Nyt kuulostavat.
+
+**Edvard Grieg (1843–1907), *I Dovregubbens hall* — "Vuorenkuninkaan luolassa",
+näytelmämusiikista *Peer Gynt*, 1875. Sävellys vapautui tekijänoikeudesta
+1.1.1978** (tekijän elinaika + 70 vuotta kuolinvuoden lopusta laskettuna). Tämä
+on [DESIGN.md](DESIGN.md):n kohdan 1 b ensimmäinen käyttö, ja sen ehdot pitävät:
+sävelet on kirjoitettu käsin `TRACKS`-tauluun `[sävelaskel, pituus]`-pareina
+samalla tavalla kuin jokainen muukin raita tässä pelissä, ja ne
+syntetisoidaan ajossa. **Ei sampleja, ei MIDI-rippiä, ei skannattua nuottia** —
+vapautuminen koskee *sävellystä*, kun taas yksittäinen äänite ja yksittäinen
+nuottilaitos ovat eri teoksia omine oikeuksineen. Lähde on nimetty tässä,
+DESIGN.md:n taulukossa ja `audio.js`:n raidan yllä.
+
+### Miksi juuri tämä teos: se kiihtyy
+
+Valinta ei ole tunnelmavalinta vaan rakennevalinta. Bonushuone jossa ei ole
+kiirettä on bonushuone johon pelaaja jää seisomaan. Griegin teos on yksi teema
+toistettuna yhä uudelleen, joka kerta nopeammin ja kovempaa — se sanoo "älä jää
+tänne" ilman että sitä kirjoitetaan ruudulle.
+
+Ensimmäinen selvitettävä asia oli **osaako moottori kiihtyä lainkaan.** Se osasi
+vaihtaa vaihdetta muttei kiihtyä: `Music.setHurry` ja osioiden `speed` ovat
+kertavaihtoja, jotka kuullaan vaihtumassa ja joihin johdatellaan omalla
+tahdikkeellaan. Kiihdytys on eri muotoinen asia — kaltevuus, jota mikään ei
+ilmoita ja jossa yksikään askel ei ole kuultavasti edellistä nopeampi. Siksi
+tuli `paceAt(track, step, loopLen)`: raidan `accel`-kenttä kertoo paljonko
+lähtötempoa lisätään kierrosta kohti ja mihin se pysähtyy, ja se luetaan
+**absoluuttisesta askelluvusta**, joten se on jatkuva eikä nykäise kierroksen
+vaihtuessa. Luolaraita: `{ per: 0.18, max: 2 }`, eli tempo 88 → 176.
+
+Mitattu `verify.mjs`:ssä sekunneista eikä vakiosta: **askel 121,4 ms → 60,9 ms
+(1,99×)** kuuden kierroksen jälkeen, ja vertailuna sama mittaus kenttäraidalle,
+joka ei kiihdy: **96,2 ms → 96,2 ms.** Kiihtyvyys myös nollautuu paikasta
+lähtiessä (2,00× → 1,01×), koska `Music.play` nollaa askellaskurin: kiihtyvyys
+on kello *tälle* käynnille eikä rangaistus siitä että kävi kerran aiemmin.
+
+### Kysymys joka piti ratkaista ennen yhtäkään säveltä: paikka vai tapahtuma
+
+Kaistalle saapuminen **on** jo salaisuuden löytyminen, ja sillä on merkkinsä:
+`noteSecret` kirjaa löydön, putki soi, kartan salaisuuslaskuri nousee. Kaksi
+peräkkäistä "jotain tapahtui" -signaalia opettaa lukemaan väärää merkkiä
+(DESIGN.md kohta 8), joten musiikinvaihto ei saanut olla toinen samaa sanova
+merkki. Ratkaisu on että se sanoo eri lajin asian:
+
+| | löytyminen | musiikki |
+| --- | --- | --- |
+| laji | tapahtuma | paikka |
+| kesto | hetki | niin kauan kuin siellä ollaan |
+| montako kertaa | kerran ikinä | joka käynnillä samanlaisena |
+| mistä johdettu | matkan päätöshetki | jalkojen sijainti joka framella |
+
+Koodissa siitä seuraa kolme asiaa, ja ne ovat syy siihen ettei tämä ole yksi
+rivi `tryWarp`issa:
+
+1. **Sama mittaus kuin löydöllä.** `bandAt(feetY)` on nyt yksi funktio, jota
+   sekä `noteBand` että `updateBandMusic` lukevat samalla framella samoista
+   jaloista. Kaksi eri tapaa päätellä kaista olisi ennen pitkää eronnut
+   pikselin verran, ja bugi olisi ollut huone joka on löydetty muttei kuulosta
+   itseltään.
+2. **Matkan aikana ei tapahdu mitään.** Vaihto sillä framella jolla putki nielee
+   pelaajan olisi osunut suoraan löydön päälle.
+3. **`BAND_MUSIC_DWELL` = 24 framea.** Pelkkä "putken jälkeen" ei riitä: vaihto
+   sillä framella jolla ohjaus palaa olisi matkan viimeinen isku, ja matka on
+   tapahtuma.
+
+Mitattu: **löytö framella 0, ohjaus takaisin framella 31, musiikki framella
+54.** Ilman odotusaikaa musiikki tuli framella 31 — täsmälleen samalla framella
+kuin ohjaus, nolla framea erotusta. Se luku on testissä eikä muistissa.
+
+Ja toisinpäin: toisella käynnillä raita on `cave` uudelleen vaikka löytöjä on yhä
+yksi. Löytymisen merkki soisi kerran; paikan ääni soi joka kerta.
+
+### Taivaskaista pitää kentän oman musiikin — päätös, ei unohdus
+
+`sky_garden` ja `fac_loft` eivät saa omaa raitaa. Ilmeiseltä näyttävä sääntö
+olisi "piilokaista → erikoismusiikki", mutta se on sama kohdan 8 virhe
+naamioituneena: yksi raita kahdelle vastakkaiselle paikalle tarkoittaisi "olet
+salaisuudessa" eikä "olet maan alla" — eli musiikista tulisi taas löytymisen
+merkki. Luolaraita sanoo jotain paikkakohtaista (täällä on pimeää, täällä asuu
+jotain, älä jää), eikä aurinkoinen puutarha pavunvarren päässä ole mitään
+niistä. Kuva on samaa mieltä, mikä on kohdan 8 toinen puolisko: luolakaista on
+jo valmiiksi pimennetty (`drawUnderground`), taivaskaista ei, koska se on taivas.
+
+### Kaksi vartijaa, kaksi testiä
+
+Kuoppaan putoaminen käy luolakaistan puolella ennen laavakantta — mitattuna
+**yhden framen ajan**. Sitä ei estä odotusaika vaan kuolemaportti
+(`state !== 'play'`, `p.dying`), koska sillä framella kuolema on jo tapahtunut.
+Molemmat vartijat on todistettu erikseen punaisella: odotusaika pois → musiikki
+framella 31 (0 erotusta), kuolemaportti pois → yksi frame luolamusiikkia
+kuolinsyöksyn aikana. Kumpikaan ei siis esitä toista.
+
+Muuta samalla korjattua: **kello ei nollaudu raidan mukana.** `Music.play`
+aloittaa jokaisen raidan rauhallisena, joten luolaan meno vähissä ajoissa olisi
+vienyt kiireen pois — signaalin joka on jo ansaittu. `updateBandMusic` asettaa
+sen takaisin, ja se on testattu (aikaa 84, raita `cave`, kiire päällä).
+
+Pikatallennus luolassa palaa luolan musiikkiin ilman että tallennusmuotoon
+tuli yhtään uutta kenttää: `enter()` lukee raidan jaloista, ja `restoreState`
+kutsuu sitä. Testattu soittamalla väliin `title` ja lataamalla sen päälle.
+
+---
+
 ## v26.08.09.31 — maahanisku, ja sen hinta
 
 Ilmassa **alas + hyppy** syöksee Pieruprinssin maahan pierun voimalla. Ohjaus
