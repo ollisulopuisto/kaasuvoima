@@ -283,11 +283,21 @@ pelinsä, vaan sitä joka saa linkin.
 
 ### Jonossa: kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on 5 maailmaa ja 21 kenttää. Tavoite on 64, eli **kolminkertainen määrä
+Nyt on 5 maailmaa ja 22 kenttää. Tavoite on 64, eli **kolminkertainen määrä
 sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää aloittaa,
 koska kaikki muu seuraa siitä.
 
-Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirjoitetaan:
+**Tilanne muuttui 9.8.2026: neljästä esteestä kaksi on poissa ja yksi halpeni.**
+Kohta 3 (vaikeuskäyrän mittari) on tehty — muototarkistus lukee nyt tasoja eikä
+jonoa, koska haarautuva kartta vaati saman. Kohta 4:n edellyttämät palaset ovat
+olemassa: minipomo ja haarautuva kartta ovat tuotannossa, eli kahdeksan kentän
+maailmalle on nyt oikeasti jotain laitettavaksi. Ja kohta 1 halpeni, koska
+generaattori osaa nyt koko ruutusanaston (`%`, `S`, `*`, salaisuudet) eikä enää
+tuota mekaniikattomia kenttiä.
+
+**Jäljellä on siis kaksi:** paljonko tehdään käsin, ja kaksi puuttuvaa teemaa.
+
+Alkuperäiset neljä, tila merkittynä:
 
 1. **Käsin ei tehdä 43 uutta kenttää.** Nykyiset käsintehdyt ovat maailman
    parasta sisältöä, mutta ne ovat myös hidas tapa. Generaattori on olemassa
@@ -300,16 +310,16 @@ Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirj
    jää, tehdas, linnake. Luumaailma on jo jonossa. Kaksi maailmaa tarvitsee
    siis vielä oman teemansa, ja teema on paletti + taustat + palikat +
    musiikki, ei pelkkä väri.
-3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
-   väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja
-   `difficulty.mjs`:n muototarkistus mittaa nykyään jonoa. **Tämä on sama
-   uudelleenkirjoitus jonka haarautuva kartta jo vaatii** — kaksi kohtaa,
-   yksi työ, ja ne kannattaa tehdä yhdessä eikä peräkkäin.
-4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä.** Nykyinen kaava on
-   kolme kenttää ja linnake. Kahdeksan ei ole "sama kaksi kertaa" vaan tila
-   välipomolle, haaralle ja hengähdyskentälle — eli juuri ne kohdat jotka ovat
-   jo erikseen jonossa (minipomot, haarautuva kartta). Tämä kohta on siis se
-   joka **antaa niille tilan**, ei kilpaile niiden kanssa.
+3. ✔ **Vaikeuskäyrän mittari** — tehty 9.8.2026. Muototarkistus lukee tasoja
+   eikä jonoa, ja haara tiivistyy yhdeksi tasoksi. Ennuste piti paikkansa: se
+   oli sama uudelleenkirjoitus jonka haarautuva kartta vaati, ja ne tehtiin
+   yhtenä työnä. Kahdeksan porrasta on nyt mittarin kannalta pelkkää dataa.
+4. ✔ **Palaset kahdeksan kentän muodolle ovat olemassa** — minipomo (2-M) ja
+   haarautuva kartta ovat tuotannossa 9.8.2026. Kahdeksan kenttää ei ole "sama
+   kaksi kertaa" vaan tila välipomolle, haaralle ja hengähdyskentälle, ja
+   kaikki kolme ovat nyt rakennettavissa kenttädatana. **Jäljellä on muodon
+   päättäminen**: mikä on kahdeksan kentän maailman kaava, kun nykyinen on
+   kolme kenttää ja linnake.
 
 ### Päätetty: pistetaulu ei mene palvelimelle, tulos menee linkkiin
 

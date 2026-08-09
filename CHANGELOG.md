@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.15 — ohjaimen ääniloukku sanotaan ääneen
+
+Peliohjaintuki on ollut olemassa pitkään ja toimii. Siinä oli kuitenkin reikä
+jota ei voi paikata koodilla, ja se piti siksi sanoa ääneen.
+
+**Selain ei avaa ääntä ohjaimen napista.** Äänen avaaminen vaatii käyttäjän
+eleen, eikä ohjaimen painallus ole sellainen millään selaimella — eikä sitä voi
+kiertää yrittämällä uudestaan. `step()` kutsui `Sfx.resume()`:a aina kun syötettä
+tuli, ja `anyKeyPressed` sisältää nykyään myös ohjaimen napit, joten pelaaja joka
+nostaa ohjaimen käteensä eikä koske näppäimistöön sai **hiljaisen pelin ja
+silmukan joka yrittää ikuisesti**. Se on täsmälleen se vika jota koodin oma
+kommentti sanoo joskus tapahtuneen, palanneena ovesta jota kukaan ei ajatellut.
+
+Korjaus ei ole "saa se toimimaan" vaan **huomaa ja kerro**: vihje ilmoitusrivillä
+heti kun ohjaimelta tulee syötettä ja ääni on silti kiinni.
+
+**Ehto on syy eikä ajastin**, ja se on tarkoituksellista: ehtona on nimenomaan
+*ohjaimelta* tullut syöte, ei mikä tahansa syöte. `ctx.resume()` ratkeaa
+asynkronisesti, joten näppäimistöpelaaja jolla on ohjain kiinni näkisi muuten
+vihjeen välähtävän 1–3 framen ajan. Kapeampi ehto poistaa väärän hälytyksen
+kokonaan eikä melkein.
+
+Oikea ilmoitus voittaa vihjeen: `TILA 1 LADATTU` syrjäyttää sen täydeksi ajakseen,
+ja vihje palaa itse kun rivi vapautuu. Kuittaus on **vain muistissa** — se on
+yhden istunnon vastaus yhteen kysymykseen eikä asetus, joten selaimen muistiin ei
+kirjoiteta uutta avainta. Ohjaimen napilla kuittaaminen on ainoa kuittaus jolla
+on merkitystä: näppäin kuittaisi *ja* avaisi äänen, jolloin vihje olisi lähtenyt
+muutenkin.
+
+Äänen avaus kytkettiin nyt myös suoraan `keydown`- ja `pointerdown`-käsittelijöihin
+(`Input.onGesture`), koska juuri ne kantavat sen tuoreen eleen jota selain vaatii.
+
+### Ohjainta luetaan varovammin
+
+Punainen ajo paljasti kaksi oikeaa kaatumista: `pad.buttons[index]` ohjaimella
+jolla ei ole `buttons`-taulukkoa, ja `for…of` kun `getGamepads()` palauttaa
+`null`in. Nyt selaimen palauttamaa oliota kohdellaan tuntemattomana.
+
+**Ei-standardi ohjain luetaan vain napeista.** Kun `mapping !== 'standard'`,
+selain itse sanoo ettei tiedä mitä akselit ovat: akseli 0 voi olla tatti,
+hattukytkin tai liipaisin joka lepää arvossa −1 — jolloin hahmo kävelee
+vasemmalle ikuisesti ilman että kukaan koskee mihinkään. Perustelu on
+epäsymmetria: **väärä nappi on hiljaa kunnes sitä painetaan, väärä akseli painaa
+itse itseään.**
+
 ## v26.08.09.14 — murtava tehostus, ja papuparoonit jotka sen pitävät
 
 Haaran palkinto ja sen ainoa lähde, samassa erässä koska ne ovat sama asia.
