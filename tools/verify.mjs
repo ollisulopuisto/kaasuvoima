@@ -1000,6 +1000,31 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* --------------------------------- kuu -------------------------------- */
+  /* Bouncing off the moon drops a prize. It must fall *out* of the moon, not
+   * bud out of its top the way a question block does — a moon hanging in the
+   * night sky is not a brick, and the player is above it at that moment. */
+  {
+    const { Moon } = await import('/src/entities/enemies.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '2-N');
+    game.setScene(s);
+    const m = s.entities.find((e) => e instanceof Moon) || s.add(new Moon(s, 100, 60));
+    m.active = true;
+    const before = s.entities.filter((e) => e.kind === 'item').length;
+    m.stomp();
+    const item = s.entities.filter((e) => e.kind === 'item').at(-1);
+    expect('the moon drops a prize below itself, already falling',
+      s.entities.filter((e) => e.kind === 'item').length === before + 1
+      && !!item && item.emerging === 0 && item.y > m.y,
+      item ? `emerge ${item.emerging}, kuu ${Math.round(m.y)} esine ${Math.round(item.y)}` : 'ei esinettä');
+
+    // And only once — a trampoline that keeps paying is not a prize.
+    m.stomp();
+    expect('the moon pays exactly once',
+      s.entities.filter((e) => e.kind === 'item').length === before + 1 && m.used);
+  }
+
   /* ------------------------------- kuori -------------------------------- */
   /* Reported from play: stomp a shell walker, walk into the shell, lose a power
    * level. The kick landed — and then the shell, having moved 3.4 px out of a

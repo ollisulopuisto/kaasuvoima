@@ -1059,7 +1059,16 @@ export class Moon extends Enemy {
   stomp() {
     if (this.used) return true;
     this.used = true;
-    this.level.add(new Item(this.level, this.x + 2, this.y - 18, this.level.rollPowerup(this.level.player)));
+    /*
+     * It *drops* the prize, rather than budding one out of its own top.
+     * `emerge` is the question-block animation — an item pushing up out of a
+     * brick — and a moon hanging in the night sky is not a brick. Spawned just
+     * below it and left to fall, which is also where the player already is:
+     * they have just bounced off the top of it.
+     */
+    this.level.add(new Item(this.level, this.x + 2, this.y + 14,
+      this.level.rollPowerup(this.level.player), { emerge: false }));
+    this.level.spawnPuff(this.cx, this.y + 16);
     this.level.awardScore(this.score, this.cx, this.y);
     Sfx.play('powerup');
     return true;
