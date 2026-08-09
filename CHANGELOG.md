@@ -7,6 +7,260 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.36 — kaasukehä, ja se mikä pilvessä kannattaa
+
+Maailma 7, **KAASUKEHÄ**: pilvikerroksen päällä, neljä kenttää, oma teema, oma
+sävellys ja sääherra. Peli on nyt **7 maailmaa ja 30 kenttää**, ja
+[ROADMAP.md](ROADMAP.md):n teemalista on täynnä — maailma 8 on viimeinen
+linnake, jonka musiikki (*Yö Autiovuorella*) on jo varattuna DESIGN.md kohdassa
+1 b.
+
+### Kysymys 1: mikä on lattia pilvimaailmassa
+
+Pilvistä tehty maailma on kuoppa koko pituudeltaan, ellei joku päätä toisin.
+DESIGN.md kohta 5 ei jousta — maareitin on auettava voimatasolla 0 — ja
+`tools/playable.mjs` ajaa sen lupauksen, joten "ei ole lattiaa, kaikki on
+saaria" ei ole rohkea suunnittelu vaan maailma jota kukaan ei läpäise. Päätös
+tehdään siksi kerran, `chunks/cloud.js`:n ensimmäisessä kappaleessa:
+
+> **oman painonsa tiivistämä pilvi on maata.**
+
+Lattia on tavallista `#`:ää. Sama ruutu josta maailma 1 on tehty, sama lupaus,
+ja `THEMES.cloud` maalaa sen auringon puolelta valaistuna pilvenselkänä eikä
+multana. Reiät siinä ovat reikiä pilvessä ja ne tappavat kuten jokainen reikä
+tässä pelissä tappaa, koska reikä taivaassa ja reikä maassa ovat pelaajalle
+sama asia — toisen kieliopin keksiminen putoamiselle ei opettaisi mitään.
+
+Siitä seuraa kaksi sääntöä, ja ne ovat luumaailman säännöt ylösalaisin.
+`chunks/bone.js` perustelee itsensä yhdellä lauseella — *luu seisoo* — joten
+sen pystysuunta kasvaa lattiasta selkärankoina ja hautakivinä. Pilvi on
+määritelmän mukaan asia joka **ei** kannata itseään:
+
+1. **Mikään ei seiso.** Lattiarivien yläpuolella ei ole yhtään `#`:ää eikä
+   `X`:ää. Koko `steps_up` / `ledge` -puolisko jaetusta sanastosta on
+   käyttökelvoton täällä, ja korkeus on ostettava laudalla ja kelluvalla
+   lohkolla. Mitattu: **0 ruutua vastaan luumaailman 44.**
+2. **Ohut pilvi ei ole koskaan tyhjän päällä.** Jokaisen `-`:n alla on samassa
+   sarakkeessa kiinteää pilveä. Puoliläpäisevä lava on ollut pelissä alusta ja
+   siinä on yksi ansa jonka on voinut sietää siksi että lavoja on ollut vähän:
+   alas painaminen pudottaa lävitse, ja jos alla ei ole mitään, se pudottaa
+   kuoppaan. Maailma jonka koko pystysuunta on lautaa moninkertaistaisi sen,
+   joten ansa poistetaan rakenteesta eikä varoiteta siitä. Mitattu:
+   **0 roikkuvaa lautaa vastaan muun pelin 73.**
+
+Sääntö 2 maksaa, ja hinta on koko ero maailmaan 6: **yksikään lauta tässä
+maailmassa ei ylitä kuoppaa.** Muualla pelissä lauta kuopan yllä on hyvä
+vastaus (`pit_l`, `sky_run`, `bone_ribs`), ja vaikeusmittari on samaa mieltä —
+sillattu kuoppa ei tuota lainkaan kuiluriskiä. Täällä jokainen reikä hypätään,
+ja juuri siksi maailma 7 pisteytyy maailman 6 yli ilman että yksikään reikä on
+leveämpi.
+
+### Kysymys 2: miksi tämä ei ole venytetty bonushuone
+
+Pelissä on ollut taivas maailmasta 1 asti. Jokaisen korkean kentän yllä on
+piilotettu kaista, sinne mennään pavunvartta pitkin, ja `sky_garden` on jo
+paikka joka on tehty lavoista ilmassa. Kokonainen pilvimaailma joka lukisi
+samalta ei olisi vain tylsä: se halventaisi salaisuuden jonka löydettäväksi
+tekeminen oli oikeaa työtä.
+
+**Ero on lattia, ja se mitataan.** Kaksi lukua per kenttä, ja ne ovat kaksi eri
+kysymystä — *onko täällä lattia* ja *mistä täällä kuljetaan*:
+
+| | maaosuus | lautaosuus astuttavasta |
+| --- | --- | --- |
+| 7-1 | 91 % | 9 % |
+| 7-2 | 97 % | 10 % |
+| 7-3 | 89 % | 9 % |
+| `sky_garden` | **0 %** | **100 %** |
+
+Yhdellä lauseella: **taivaskaista on paikka jossa hypitään, kaasukehä on paikka
+jossa kävellään.** Testi lukee bonushuoneen samoilta riveiltä samalla koodilla,
+eli vertailukohta ei ole muistettu luku vaan pelin oma huone; ja se puree —
+kun kokeeksi vaihdettiin pilvipalikoiden lattia kahdeksan ruudun saariksi,
+luvut putosivat 68/66/70 prosenttiin ja portti kaatui.
+
+Toinen ero on se mitä **ei ole**: koko maailmassa ei ole pavunvartta eikä
+taivaskaistaa. Sen salaisuuden koko retoriikka on kiipeäminen ulos maailman
+yläpuolelle, eikä tämän maailman yläpuolella ole mitään. Taustan puolisko
+samasta väitteestä on `cloudSea`: lähimmän pilvikerroksen repeämistä pilkottaa
+maailma jonka päällä ollaan, liian kaukaa erottuakseen miksikään. Bonushuoneen
+takana on taivas; tämän takana on matka.
+
+### Maahaniskulla on täällä tilaa, muttei valtaa
+
+Maahanisku (v26.08.09.31) normalisoi voimansa kentän omaa kattoa vasten, joten
+kerroksittain ladottu maailma on ensimmäinen paikka jossa liikkeellä on koko
+pudotus käytettävissään. `cloud_anvil`in kansi on rivillä 5, ja se on maailman
+ylin lauta. Mitattuna ajavasta kohtauksesta eikä laskemalla:
+
+| mistä | voima | tappaako |
+| --- | --- | --- |
+| alasimen kannelta | **0,67** | kyllä |
+| lattiahypyn huipulta | **0,37** | ei |
+
+`POUND_KILL_AT` on 0,5, eli korkeus ostaa tappavuuden — ei tehostus eikä tämä
+maailma. Ja se ei ole pakollinen: sama botti joka todistaa maareitin
+voimatasolla 0 ei osaa maahaniskua lainkaan ja kävelee alasimen ali. Liike avaa
+paikkoja, ei kenttää (DESIGN.md kohta 5).
+
+Testi vaatii myös että ylin lauta on rivillä 5 tai ylempänä, ja se on osa
+väitettä eikä sen kuvaus: maailma jonka katto valuisi alaspäin lakkaisi olemasta
+se paikka jossa liikkeellä on tilaa, ja tekisi sen huomaamatta. Mitattu
+punaisella — alasin laskettuna tavalliselle kansikorkeudelle portti sanoo
+"ylin lauta 7-1 rivi 6".
+
+### Musiikki: oma sävellys, ja lyydinen on datassa
+
+Raita on **tätä peliä varten sävelletty**, eikä siinä ole `source`-kenttää:
+DESIGN.md kohdan 1 b sääntö koskee lainattua eikä kaikkea. Vapautuneesta
+sävelmistöstä ei löytynyt teosta joka olisi ollut *tämä paikka* samalla tavalla
+kuin *Danse macabre* oli luulaakso — pilviaiheista klassikkoa on, mutta jokainen
+niistä on sään kuvaus ulkoa käsin, ja tämä maailma on sään sisällä. Aihevalinta
+on ainoa peruste jolla lainaaminen on tässä pelissä tehty, ja kun sitä ei ole,
+ei lainata. Lainattuja raitoja on siis yhä kaksi (`cave`, `bone`), ja portti
+sanoo sen ääneen.
+
+Sävellyksen yksi ajatus on kirjoitettavissa numeroina, joten se tarkistetaan:
+**D-lyydinen**. Lyydinen on duuriasteikko jonka neljäs sävel on korotettu, ja
+juuri se yksi sävel on syy valita se tänne — tavallisessa duurissa neljäs sävel
+vetää alaspäin subdominanttiin, ja korotettuna koko vetosuunta katoaa. Se on
+kirjaimellisesti sen soundi ettei mikään putoa. Sointukierto on D — E — D — Bm,
+ja **E-duuri on koko juttu**: toinen aste duurina on mahdollinen vain
+lyydisessä.
+
+Mitattu: **G# soi 12 kertaa, G nolla kertaa, asteikon ulkopuolella ei mitään,
+säveliä yhteensä 95.** Yksi ainoa G ja moodi on jälleen tavallinen D-duuri — se
+kuulostaisi vain hieman tavallisemmalta, mikä on täsmälleen se vika jota kukaan
+ei osaa etsiä. Todistettu punaisella: yksi sävel vaihdettuna portti sanoo
+"G# 11 kertaa, G 1 kertaa, asteikon ulkopuolella pc5×1".
+
+Rumpuihin ei tullut takapotkua. Virveli kakkosella ja nelosella on se kuvio joka
+sitoo musiikin lattiaan, ja se olisi ollut vastoin kaikkea muuta tässä.
+
+### Sääherra, ja mitä pomo vastaa osumaan
+
+`bossVariant: 5`. Kysymys on sama kuin luurangolla ja vastaus tulee tämän
+maailman aiheesta: **sää väistää ylöspäin.** Muut pomot vastaavat osumaan
+kiihtymällä, mikä on luku jonka pelaaja tuntee kolmen sekunnin päästä; sääherra
+lähtee ilmaan samalla framella ja tulee alas iskuaaltojen kanssa, koska
+variantti ≥ 1 heittää ne kovasta laskeutumisesta.
+
+Se on yksi rivi (`jumpTimer = 1`), ja se on tarkoitus: koneisto on jo olemassa,
+`REGISTRY` (savestate.js) ei muutu, eikä uutta entiteettiä synny. Nopeus nousee
+0,2:lla eikä 0,35:llä samasta syystä kuin luurangolla — nousu **on** se
+kiihdytys, ja kaksi kiihdytystä yhdestä osumasta on yksi liikaa. Mitattu
+vertailuna eikä yksin, molempien oma hyppykello kaukana: **sääherra ilmassa
+framella 0, luuranko ei 40 framen ikkunassa.**
+
+Arvomerkki on **ilmapuntari, jonka neula osoittaa myrskyyn**. Se noudattaa
+saman säännön kuin jokainen muu arvomerkki — pyöreä, silmien alapuolella, eikä
+mitään pään yläpuolella — ja hahmon koko vitsi on että ilmakehä kuuluu
+jollekulle, jolloin omistamisen merkki on se että sen tilan saa lukea.
+
+Väri on **myrskynsininen eikä valkoinen**, vaikka maailma on valkoinen, ja se on
+luettavuuspäätös: kruunu on kullanvärinen, ja vaalea pomo kultaisella kruunulla
+on pomo jonka kruunua ei näe. Kruunu on se yksi asia jonka pelaajan on luettava,
+koska se kertoo milloin häneen ei saa koskea.
+
+### Kontrasti: se teema jonka kuuluisi kaatua omaan porttiinsa
+
+Valkoista valkoisella on koko maailman lähtökohta, ja jos tiili sulautuu maahan,
+se ei näytä bugilta vaan siltä ettei palikoita ole. Yön pari (`#7a5a30` ja
+`#6a5030`, mitattuna **0,4 %**) on todiste siitä että näin käy vahingossa.
+
+Vastaus on ettei kumpikaan ole valkoinen samasta syystä: **maa on auringon
+puolelta valaistua pohjapilveä ja tiili on ukkospilveä.** Kaksi eri pilveä, ei
+saman pilven kaksi sävyä.
+
+| teema | tiilen ja maan ero |
+| --- | --- |
+| yö | 0,4 % |
+| linnake | 7,9 % |
+| aavikko | 8,6 % |
+| ruoho | 9,3 % |
+| tehdas | 17,9 % |
+| jää | 22,3 % |
+| **pilvi** | **40,9 %** |
+| luu | 48,7 % |
+
+Kynnys on 25 %, eli korkeampi kuin yhdelläkään ennen luumaailmaa toimitetulla
+teemalla — se ei mene läpi vahingossa. Yläraja tulee ilmaiseksi luumaailman
+omasta väitteestä, joka vaatii olevansa koko pelin selvin pari. **Yön 0,4 % on
+yhä löydös eikä tämän työn korjattava**, samoin kuin viime kerralla: yön paletin
+muuttaminen muuttaisi valmiin kentän ulkonäön, ja se on omistajan päätös.
+
+### Vaikeus, mitattuna
+
+| kenttä | pisteet | mikä siinä on |
+| --- | --- | --- |
+| 7-1 | 252,5 | kerrokset: kaksi korkeutta, sitten reikiä |
+| 7-2 | 180,2 | notko — säätä reikien sijaan |
+| 7-3 | 278,7 | alasin, ja jokainen reikä minkä maailma omistaa |
+| 7-F | 405,3 | linnoitus, ja pelin vaikein kenttä |
+| **w7** | **279,2** | ↑ +14,9 maailmasta 6 |
+
+Käyrä nousee ja notkahtaa tasan kerran (`253 → 180 → 279`), kuten jokaisessa
+muussakin maailmassa. Ja **käyrän on nyt noustava myös maailmasta maailmaan**,
+mikä on eri väite kuin muototesti: muototesti katsoo yhtä maailmaa kerrallaan,
+joten uusi maailma voisi olla sisäisesti moitteeton ja silti edellistä
+helpompi — pelaajan kannalta juuri se on se vika joka tuntuu. `difficulty.mjs`
+on tulostanut rivin "Käyrä nousee joka maailmassa" pitkään, ja tuloste ei ole
+portti. Väite meni punaiseksi kertaalleen matkan varrella (**w7 261,5, −2,7**)
+ennen kuin vihollistiheys ja reikien määrä oli mitoitettu.
+
+`node tools/difficulty.mjs --write` on ajettu, ja `src/data/difficulty.js`
+sisältää neljä uutta riviä.
+
+### Botti saneli geometrian kerran, ja se oli sama oppi kuin luulaaksossa
+
+`tools/playable.mjs` kaatui maailmaan 7 kerran: **7-F, "maasto sarakkeessa
+166"**. Syy oli `fort_pillars` suoraan ennen `fort_gap`ia — pilarit ovat seinä,
+seinä nostaa hypyn liian aikaisin, ja hyppy päättyy laavaan. Se on täsmälleen
+sama vika kuin luulaakson hautakivi kuopan huulella, eri palikalla: **mitattu
+hyppybudjetti on se mihin kentät leikataan, ei se mitä vasten ne leikataan.**
+Korjaus oli järjestys — `fort_hall` väliin, pilarit takaisin areenan eteen
+kuten 6-F:ssä — eikä kuopan kaventaminen.
+
+Numeroidut kentät menivät läpi ensimmäisellä ajolla, ja se on rakenteen ansiota
+eikä onnea: kun ohut pilvi ei saa ylittää kuoppaa, botille ei voi rakentaa
+sellaista reittiä jota se ei osaa lukea.
+
+**Toinen botti — se meluisa, joka pelaa viholliset päällä ja jonka kuolemat
+ovat raportti eikä portti — löysi silti jotain.** Maailman 7 kentät pääsivät
+4–9 prosenttiin, kun muu peli on 12–57. Se on liian selvä ero ollakseen
+kohinaa, ja syy oli yksi palikka: `cloud_bank` avaa kaikki kolme kenttää, ja
+siinä oli kolme asukasta. Palikan oma kommentti sanoi sen itse — *"kielioppi
+ilman panosta"* — eli data oli ristiriidassa oman perustelunsa kanssa.
+Tyhjennettynä luvut ovat 39/25/28 %. Raportti ei kaada mitään, mutta se
+kannattaa lukea.
+
+### Muuta samassa erässä
+
+- **Kartalle kolme uutta maastomerkkiä**: `c` pilvipinta, `i` repeämä jonka
+  läpi näkyy alas, ja `U` ukkospää, joka on `TALL_TERRAIN`issa (piirtoala
+  y+1…y+13 osuu polun pisteen musteeseen y+5…y+10 kuten puu ja kallo).
+  Ruudukko rakennettiin säännöstä käsin: tien raivausalue laskettiin ensin ja
+  kalusto istutettiin siihen mikä jäi jäljelle — 20 pyydettyä, 20 istutettua,
+  0 hylättyä.
+- **Maapinnan kuvio on pystysuunnassa epäsymmetrinen** (`surface: 'cloud'`),
+  ainoana pelissä: yläpinta on kiinteä ja alareuna hilseilee, koska pilvi on
+  maata vain siltä osin kuin oma paino on sen pakannut. Harja on pyöreä kuhma
+  eikä piikki — terävä yksityiskohta pilven yläreunassa lukisi rakeena eli
+  vaarana. Sää on viimaa: sama hiukkasmoottori kuin aavikon hiekalla, mutta
+  valkoisena, pidempänä ja kahdessa kerroksessa eri nopeuksilla.
+- **`THEME_AMBIENCE`: pilvi saa aavikon tuulen.** Se on uudelleenkäyttöä siinä
+  mielessä että tuuli on tuulta; kaksi synteesiä samalle ilmiölle olisi kaksi
+  tapaa sanoa sama asia (DESIGN.md kohta 8).
+- **Putki on messinkiä.** Ruohon vihreä olisi tässä paletissa haalea ja
+  valkoinen putki valkoista pilveä vasten ei ole putki vaan aukko; messinki on
+  teeman ainoa lämmin väri ja siksi ainoa jonka silmä löytää heti.
+- **Maareitin lupaus on nyt portti maailmoissa 6 ja 7.** Sama botti ajetaan
+  `verify.mjs`:stä ja tulos kaataa. Maailmoissa 1–5 on kolme tunnettua nimeä
+  (4-3, sekä 2-1 / 3-F / 5-F tuplahypyllä) ja niiden avaaminen on eri työ;
+  käsintehdyt maailmat luulaaksosta eteenpäin eivät saa kasvattaa sitä listaa.
+
+---
+
 ## v26.08.09.35 — juoksuhiekka, ja kolme sekuntia aikaa tehdä jotain
 
 Aavikkoon uusi ruutu `~`, **JUOKSUHIEKKA**. Omistajan pyyntö oli kaksiosainen ja

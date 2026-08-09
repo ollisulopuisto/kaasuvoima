@@ -8,9 +8,9 @@ import { DIFFICULTY } from './difficulty.js';
  * Terrain characters:
  *   . grass  , dark grass  T tree  M mountain  ~ water  S sand
  *   C cactus  R rock  I ice  P pine  " bush  F factory floor  E machinery
- *   b bone ground  K skull
+ *   b bone ground  K skull  c cloud bank  i tear in the cloud  U thunderhead
  *
- * Eight of those stand up out of the ground (`TALL_TERRAIN`), and where they
+ * Nine of those stand up out of the ground (`TALL_TERRAIN`), and where they
  * may stand is not up to whoever edits the grid: `worldProblems` refuses a map
  * that plants one on the road or next to it. See `clearZone`.
  *
@@ -258,6 +258,51 @@ const WORLD_DEFS = [
       { a: 'w6-3', b: 'w6-f', path: [[16, 3]] },
     ],
   },
+  /*
+   * KAASUKEHÄ, maailma 7 — pilvikerros auringon puolella.
+   *
+   * The road runs along the top of a cloud bank, and the scenery is what a
+   * cloud bank has: thunderheads standing up out of it (`U`) and the odd tear
+   * in it through which the world below shows (`i`). The tear is the map's half
+   * of the argument the levels make — this is somewhere *above* somewhere, not
+   * a room with a blue wall behind it — and it is a flat glyph, so it goes
+   * under the road like every other piece of ground texture.
+   *
+   * The grid was built from rule 8 outwards rather than by eye, as world 6's
+   * was: the road's clear zone was taken out first and the thunderheads planted
+   * into what was left. Twenty asked for, twenty placed, none refused.
+   */
+  {
+    id: 'w7',
+    name: 'KAASUKEHÄ',
+    theme: 'cloud',
+    terrain: [
+      'ccUccccUcccccUccccUc',
+      'ccccUcccicUcccccccUc',
+      'UccccccccccccccccccU',
+      'cccccccccciccccccccc',
+      'UcccccccccccccicccUc',
+      'ccUccccccccccccccccU',
+      'ccccccUccccccccUcicc',
+      'cUccccccccccUccccccc',
+      'cccUcciccUccccccUccc',
+    ],
+    nodes: [
+      { id: 'w7-s', tx: 1, ty: 3, type: 'start', name: 'ALKU' },
+      { id: 'w7-1', tx: 4, ty: 3, type: 'level', level: '7-1', name: 'NOUSUVIRTAUS' },
+      { id: 'w7-h', tx: 4, ty: 6, type: 'house', name: 'HERNETALO' },
+      { id: 'w7-2', tx: 8, ty: 5, type: 'level', level: '7-2', name: 'MATALAPAINE' },
+      { id: 'w7-3', tx: 12, ty: 2, type: 'level', level: '7-3', name: 'ALASIN' },
+      { id: 'w7-f', tx: 16, ty: 4, type: 'fortress', level: '7-F', name: 'SÄÄHERRA' },
+    ],
+    links: [
+      { a: 'w7-s', b: 'w7-1' },
+      { a: 'w7-1', b: 'w7-h' },
+      { a: 'w7-1', b: 'w7-2', path: [[8, 3]] },
+      { a: 'w7-2', b: 'w7-3', path: [[12, 5]] },
+      { a: 'w7-3', b: 'w7-f', path: [[16, 2]] },
+    ],
+  },
 ];
 
 export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.terrain) }));
@@ -371,12 +416,13 @@ export function linkCurve(world, link) {
  *
  *   T tree 1..14 · P pine 1..14 · M mountain 3..15 · C cactus 3..14
  *   R rock 8..13 · " bush 6..13 · E machinery 1..14 · K skull 4..14
+ *   U thunderhead 1..13
  *
  * The path dot's own ink is y+5..y+10 inside the tile, so every one of them
  * collides head-on. The flat glyphs — grass, dark grass, sand, ice, factory
  * plating, bone ground, water — are ground texture and belong under the road.
  */
-export const TALL_TERRAIN = 'TPMCR"EK';
+export const TALL_TERRAIN = 'TPMCR"EKU';
 
 /** Every tile a link crosses, node centres included. */
 export function pathTiles(world) {

@@ -183,6 +183,7 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 4 PIERUTEHDAS | tehdas | **PIERUPRINSSI**, joka pullistuu jokaisesta osumasta 3-kertaiseksi |
 | 5 JÄLKIPYYKKI | sekateema | uusintaottelu prinssin kanssa |
 | 6 LUULAAKSO | hautausmaa keskiyöllä | **LUURANKO**, joka hajoaa jokaisesta osumasta ja kokoaa itsensä |
+| 7 KAASUKEHÄ | pilvikerroksen päällä | **SÄÄHERRA**, joka nousee ilmaan jokaisesta osumasta |
 
 Jokaisessa maailmassa on kolme kenttää, hernetalo ja linnake. Kentän läpäisy avaa
 siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.

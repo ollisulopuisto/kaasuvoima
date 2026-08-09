@@ -169,6 +169,10 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
   // Luulaakson kuu on pelin suurin ja kylmin: Danse macabre on keskiyö, ja
   // keskiyö on tässä maailmassa kellonaika eikä tunnelma.
   else if (themeName === 'bone') disc(ctx, cx, cy, 16, '#f4f0e0', '#b0b4c8', tick, false);
+  // Kaasukehän aurinko on pelin ainoa jolla on sädekehä ilman lämmintä
+  // taivasta: pilvikerroksen päällä valo tulee suoraan eikä ilmakehän läpi,
+  // joten se on valkoinen ja terävä eikä keltainen ja utuinen.
+  else if (themeName === 'cloud') disc(ctx, cx, cy, 13, '#ffffff', '#ffe8a0', tick, true);
   else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
 }
 
@@ -258,6 +262,34 @@ function weather(ctx, themeName, camX, viewW, viewH, tick) {
       ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
       if (seed > 0.7) ctx.fillStyle = `rgba(140,200,230,${a * 0.5})`;
       ctx.fillRect(Math.round(x) - 1, Math.round(y) + 1, 3, 1);
+    }
+    return;
+  }
+
+  if (themeName === 'cloud') {
+    /*
+     * Viima: pitkiä ohuita repaleita jotka kiitävät ohi vaakasuoraan.
+     *
+     * Sama hiukkasmoottori kuin aavikon hiekalla ja tarkoituksella, koska se on
+     * sama ilmiö: tuulessa kulkeva aine. Ero on että nämä ovat **valkoisia ja
+     * pidempiä** ja että ne kulkevat molempiin suuntiin — ylempi kerros
+     * nopeammin kuin alempi. Se on ainoa asia ruudulla joka kertoo että
+     * kerrosten välillä on liikettä, ja se on myös syy miksi tämä maailma
+     * kuulostaa aavikolta: `THEME_AMBIENCE` antaa sille saman tuulen, koska
+     * tuuli on tuulta.
+     */
+    for (let layerIndex = 0; layerIndex < 2; layerIndex++) {
+      for (let i = 0; i < 18; i++) {
+        const seed = hashNoise(i, 51 + layerIndex * 13);
+        const sy = hashNoise(i * 23 + 5, 67 + layerIndex);
+        const span = viewW + 80;
+        const speed = layerIndex ? 2.6 + seed * 2.4 : 0.9 + seed * 1.1;
+        const x = ((seed * span - tick * speed - camX * (0.2 + layerIndex * 0.25)) % span + span)
+          % span - 40;
+        const y = 24 + sy * (viewH - 60) + Math.sin((tick + i * 30) / 60) * 2;
+        ctx.fillStyle = `rgba(255,255,255,${(layerIndex ? 0.22 : 0.10) + seed * 0.16})`;
+        ctx.fillRect(Math.round(x), Math.round(y), 6 + Math.round(seed * (layerIndex ? 14 : 7)), 1);
+      }
     }
     return;
   }
@@ -473,6 +505,129 @@ function cloud(ctx, x, y, size, color, shade) {
   ctx.fillRect(x + 2 * s, y + 2 * s, 5 * s, 3 * s);
 }
 
+/* ------------------------------- kaasukehä ------------------------------ */
+
+/**
+ * PILVIMEREN TAUSTA, ja se yksi asia jonka sen on sanottava.
+ *
+ * Maailma 7:n koko ongelma on ettei se saa lukea bonushuoneena. Kentät
+ * vastaavat siihen lattialla (`levels/world7.js`), ja tausta vastaa siihen
+ * yhdellä asialla jota taivaskaistan tausta ei koskaan tee: **täällä näkyy
+ * alas.** Lähimmän pilvikerroksen repeämistä pilkottaa maailma, jonka päällä
+ * tämä on — vihreää ja ruskeaa, liian kaukana erottuakseen miksikään. Se on
+ * ero paikan ja huoneen välillä siinä muodossa jonka silmä lukee ilman että
+ * kukaan selittää: bonushuoneen takana on taivas, tämän takana on matka.
+ *
+ * Kolme kerrosta kuten muillakin taustoilla, mutta ne ovat pilviä eivätkä
+ * kukkuloita, ja siksi ne ovat **vaakaan venytettyjä**. Vuoren siluetti on
+ * pystysuuntainen tapahtuma; pilvikerros on vaakasuuntainen, ja jos sen
+ * piirtää `ridge()`:llä siitä tulee lumeton vuori.
+ *
+ * Ukkospäät seisovat kaukaisimmalla kerroksella eivätkä lähimmällä. Ne ovat
+ * tämän maailman ainoa pystysuora asia, ja lähellä ne peittäisivät juuri sen
+ * repeämän jonka takia tausta on olemassa.
+ */
+function cloudSea(ctx, th, camX, viewW, viewH, tick, groundY) {
+  const bank = (key, w, h, paint) => strip(key, w, h, paint);
+
+  /* Far: a flat shelf of cloud with thunderheads standing on it. Washed most of
+   * the way to the sky colour, because distance in air is haze and nothing
+   * else. */
+  const FAR_H = 132;
+  const farColor = mix(th.cloud, th.sky[1], 0.55);
+  const farTop = mix(th.cloud, th.sky[1], 0.3);
+  const farStrip = bank(`cloudfar:${th.sky[1]}`, 288, FAR_H, (g, w, h) => {
+    for (let i = 0; i < 5; i++) {
+      const n = hashNoise(i, 71);
+      const cx = i * 62 + Math.floor(n * 20);
+      const ch = Math.round(46 + n * 54);
+      // A thunderhead: a column that widens as it rises and then flattens off
+      // into an anvil, which is the one silhouette a cloud has that a hill
+      // cannot borrow.
+      g.fillStyle = farColor;
+      for (let k = 0; k < ch; k++) {
+        const t = k / ch;
+        const wide = Math.round(16 + t * 26 + (t > 0.78 ? (t - 0.78) * 120 : 0));
+        g.fillRect(cx - Math.floor(wide / 2), h - 26 - k, wide, 1);
+      }
+      g.fillStyle = farTop;
+      g.fillRect(cx - 20, h - 26 - ch, 40, 2);
+    }
+    g.fillStyle = farColor;
+    g.fillRect(0, h - 26, w, 26);
+    g.fillStyle = farTop;
+    for (let x = 0; x < w; x += 8) {
+      const n = hashNoise(x, 13);
+      g.fillRect(x, h - 26 - Math.round(n * 3), 8, 2 + Math.round(n * 3));
+    }
+  });
+  tileStrip(ctx, farStrip, -camX * 0.12, groundY - FAR_H, viewW);
+
+  /* Mid: fat cumulus, drifting on their own on top of the parallax. Clouds are
+   * the one piece of scenery in this game that has a reason to move while the
+   * camera stands still. */
+  const midColor = mix(th.cloud, th.sky[1], 0.22);
+  const midShade = mix(th.cloud, th.sky[1], 0.5);
+  for (let i = 0; i < 9; i++) {
+    const seed = hashNoise(i * 17, 29);
+    const span = viewW + 180;
+    const x = Math.round(((-camX * 0.3 - tick * 0.14 + i * 92 + seed * 70) % span + span)
+      % span - 90);
+    const y = groundY - 96 + Math.floor(seed * 46);
+    cloud(ctx, x, y, 1 + Math.floor(seed * 2), midColor, midShade);
+  }
+
+  /* Near: the cloud floor the road is standing on, with tears in it. */
+  const NEAR_H = 74;
+  const nearStrip = bank(`cloudnear:${th.cloud}`, 224, NEAR_H, (g, w, h) => {
+    g.fillStyle = mix(th.cloud, th.sky[1], 0.08);
+    g.fillRect(0, 22, w, h - 22);
+    // lobes along the top edge, so the seam with the sky is not a ruler line
+    for (let x = 0; x < w; x += 6) {
+      const n = hashNoise(x * 3, 91);
+      const lobe = Math.round(n * 20);
+      g.fillRect(x, 22 - lobe, 7, lobe + 2);
+    }
+    g.fillStyle = mix(th.cloud, th.sky[1], 0.34);
+    for (let x = 0; x < w; x += 4) {
+      const n = hashNoise(x, 37);
+      if (n > 0.6) g.fillRect(x, 30 + Math.round(n * 20), 10, 2);
+    }
+
+    /*
+     * Repeämät, ja tässä on koko taustan syy olla olemassa. Aukon läpi näkyy
+     * maailma jonka päällä ollaan: vihreää ja ruskeaa laikkua, liian kaukana
+     * erottuakseen miksikään yksittäiseksi asiaksi. Sen ei pidäkään erottua —
+     * jos siitä tunnistaisi pellon, se olisi maisema; kun siitä ei tunnista
+     * mitään, se on korkeus.
+     */
+    for (let i = 0; i < 3; i++) {
+      const n = hashNoise(i, 101);
+      const gx = Math.round(20 + i * 74 + n * 20);
+      const gw = 22 + Math.round(n * 18);
+      g.fillStyle = '#5c7a4c';
+      g.fillRect(gx, 44, gw, 10);
+      g.fillStyle = '#7a6a44';
+      g.fillRect(gx + 3, 46, Math.round(gw * 0.4), 4);
+      g.fillRect(gx + Math.round(gw * 0.6), 49, Math.round(gw * 0.3), 3);
+      g.fillStyle = '#46603c';
+      g.fillRect(gx + 2, 51, gw - 5, 2);
+      // the torn lip, lighter than the sheet so the hole reads as a hole
+      g.fillStyle = th.cloud;
+      g.fillRect(gx - 3, 40, gw + 6, 4);
+      g.fillRect(gx - 3, 54, gw + 6, 4);
+    }
+  });
+  tileStrip(ctx, nearStrip, -camX * 0.52, groundY - NEAR_H, viewW);
+
+  // Haze into the tilemap, brighter than anywhere else: air lit from above.
+  const haze = ctx.createLinearGradient(0, groundY - 26, 0, groundY);
+  haze.addColorStop(0, 'rgba(255,255,255,0)');
+  haze.addColorStop(1, 'rgba(255,255,255,0.38)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, groundY - 26, viewW, 26);
+}
+
 /* --------------------------------- main -------------------------------- */
 
 /**
@@ -493,6 +648,12 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0)
 
   if (bg === 'factory') {
     factoryYard(ctx, th, camX, viewW, viewH, tick);
+    return;
+  }
+
+  if (bg === 'clouds') {
+    cloudSea(ctx, th, camX, viewW, viewH, tick, viewH + drop);
+    weather(ctx, theme, camX, viewW, viewH, tick);
     return;
   }
 

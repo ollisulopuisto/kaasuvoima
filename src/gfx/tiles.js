@@ -193,6 +193,37 @@ export const THEMES = {
     hill: '#2a2a40', hillDark: '#1a1a2c',
     cloud: '#3c3a52',
   },
+  /**
+   * KAASUKEHÄ — maailma 7, pilvikerroksen päällä.
+   *
+   * Tämä teema on se jonka pitäisi kaatua omaan kontrastiporttiinsa: valkoista
+   * valkoisella on koko maailman lähtökohta, ja jos tiili sulautuu maahan, se
+   * ei näytä bugilta vaan siltä että palikoita ei ole. Yön pari (`#7a5a30` ja
+   * `#6a5030`, mitattuna 0,4 %) on todiste siitä että näin käy vahingossa.
+   *
+   * Vastaus on ettei kumpikaan ole valkoinen samasta syystä: **maa on
+   * auringon puolelta valaistua pohjapilveä ja tiili on ukkospilveä.** Kaksi
+   * eri pilveä, ei saman pilven kaksi sävyä, ja `verify.mjs` mittaa eron.
+   *
+   * Messinkinen putki on saman päätöksen kolmas kohta. Ruohon vihreä tai jään
+   * turkoosi olisi tässä paletissa haalea, ja valkoinen putki valkoista pilveä
+   * vasten ei ole putki vaan aukko — messinki on ainoa lämmin väri koko
+   * teemassa ja siksi ainoa asia jonka silmä löytää heti.
+   *
+   * Taivas on tummempi ylhäällä kuin alhaalla, päinvastoin kuin ruoholla ja
+   * aavikolla. Se on korkeuden ainoa ilmainen merkki: ilmakehä ohenee ylöspäin,
+   * ja pilvikerroksen päällä horisontti on kirkkaampi kuin zeniitti.
+   */
+  cloud: {
+    surface: 'cloud',
+    sky: ['#2a5cc0', '#bcdcf8'],
+    ground: '#dfe8f8', groundDark: '#9aa8c8', groundTop: '#ffffff', groundTopDark: '#c2d0ea',
+    brick: '#7c86ac', brickDark: '#4e5678', brickLight: '#a8b2d4',
+    hard: '#eef4ff', hardDark: '#98a4c0', hardLight: '#ffffff',
+    pipe: '#d0a850', pipeDark: '#8a6c20', pipeLight: '#f0d488',
+    hill: '#b8c6e4', hillDark: '#8e9cc0',
+    cloud: '#ffffff',
+  },
   fortress: {
     surface: 'stone',
     sky: ['#101018', '#282840'],
@@ -302,6 +333,30 @@ function surfaceCap(ctx, x, y, th, tx, ty) {
       }
       break;
 
+    /*
+     * Pilven harja. Sama idea kuin ruohon korrella, jään puikolla ja luun
+     * sirpaleella — yksi asia ruudun ulkopuolella, jottei reuna ole
+     * viivotinsuora — mutta se on **pyöreä ja leveä** eikä terävä ja kapea.
+     * Kuhmu ylöspäin, ei piikkiä: pilven yläreuna on ainoa reuna tässä pelissä
+     * jonka pitää lukea pehmeänä, ja terävä yksityiskohta samassa paikassa
+     * lukisi rakeena eli vaarana. Muotoa tämä ei muuta, koska muoto on yhä
+     * 16x16 laatta.
+     */
+    case 'cloud':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 5);
+      ctx.fillStyle = th.hardLight;
+      ctx.fillRect(x, y, TILE, 2);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 5, TILE, 1);
+      if (n > 0.55) {
+        const bx = x + 1 + Math.floor(n * 8);
+        ctx.fillStyle = th.hardLight;
+        ctx.fillRect(bx, y - 2, 5, 2);
+        ctx.fillRect(bx + 1, y - 3, 3, 1);
+      }
+      break;
+
     default:                                 // stone
       ctx.fillStyle = th.groundTop;
       ctx.fillRect(x, y, TILE, 4);
@@ -365,6 +420,35 @@ function drawGround(ctx, x, y, th, openAbove, tx, ty) {
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(x + 2, y + 9, 1, 4);
     ctx.fillRect(x + 13, y + 7, 1, 5);
+  } else if (th.surface === 'cloud') {
+    /*
+     * Tiivistynyttä pilveä, ja koko kuvion tehtävä on sanoa **mihin suuntaan
+     * tämä on painunut kasaan**: kaaret ovat vaakaan ja alareuna hajoaa.
+     *
+     * Se on maailman koko fiktio yhdessä laatassa. Pilvi on maata siksi että
+     * oma paino on pakannut sen, joten yläpinta on kiinteä ja alapinta on
+     * hilseilevä — pisteet harvenevat ylhäältä alas, eli laatta on sitä
+     * vähemmän ainetta mitä kauempana sen kannesta ollaan. Ainoa maapinta
+     * pelissä jonka kuvio on epäsymmetrinen pystysuunnassa: hiekan kerrokset
+     * ja kiven saumat näyttävät samalta kummin päin tahansa, tämä ei.
+     */
+    const n = hashNoise(tx, ty);
+    ctx.fillStyle = th.groundDark;
+    for (let i = 0; i < 3; i++) {
+      const an = hashNoise(tx * 3 + i, ty * 7);
+      ctx.fillRect(x + 1 + Math.floor(an * 5), y + 7 + i * 3, 5 + Math.floor(an * 5), 1);
+    }
+    // The underside frays: a scatter that thins upward, so the bottom row of
+    // the tile is the loosest and the top of the tile is the packed part.
+    for (let i = 0; i < 7; i++) {
+      const fn = hashNoise(tx * 11 + i, ty * 5 + i * 3);
+      const py = y + 8 + Math.floor(fn * 8);
+      if (fn * 8 < (py - y - 8) * 0.6) continue;
+      ctx.fillRect(x + Math.floor(hashNoise(i, tx + ty) * 15), py, 1, 1);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x + 2, y + 6, 6, 1);
+    if (n > 0.6) ctx.fillRect(x + 9, y + 9, 4, 1);
   } else if (th.surface === 'stone') {
     ctx.fillStyle = th.groundDark;
     const off = (tx + ty) % 2 ? 0 : 8;

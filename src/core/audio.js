@@ -1014,6 +1014,14 @@ export const THEME_AMBIENCE = {
   fortress: 'hall',      // a big stone room — which is a reverb, not a sound
   desert: 'wind',        // a long way off, and never quite the same twice
   ice: 'crackle',        // something giving, somewhere you cannot see
+  /* Kaasukehä saa saman tuulen kuin aavikko, ja se on uudelleenkäyttöä siinä
+   * mielessä että tuuli on tuulta. Ilmavirta pilvikerroksen päällä ja ilmavirta
+   * dyynin yllä ovat sama ilmiö samalla äänellä; oma synteesi niille olisi
+   * kaksi tapaa sanoa sama asia, ja se on juuri se mitä DESIGN.md kohta 8
+   * kieltää — huone värittää sen mikä on huoneessa, ja tässä huoneessa on
+   * liikkuvaa ilmaa. Sama päätös kuin viimalla `backdrop.js`:ssä: hiukkaset
+   * ovat aavikon hiukkasmoottori valkoisena, koska ne ovat sama asia. */
+  cloud: 'wind',
 };
 
 /*
@@ -1881,6 +1889,105 @@ const TRACKS = {
       kick: 'x.....',
       snare: '..x..x',
       hat: 'x.x.x.',
+    },
+  },
+
+  /*
+   * KAASUKEHÄ — maailma 7, ja tämä on **omaa sävellystä**.
+   *
+   * Ei `source`-kenttää eikä sitä kysytä miltään: DESIGN.md kohdan 1 b sääntö
+   * koskee lainattua eikä kaikkea, ja oma sävelmä on tässä pelissä oletus.
+   * Vapautuneesta sävelmistöstä ei etsimälläkään löytynyt teosta joka olisi
+   * ollut *tämä paikka* samalla tavalla kuin Danse macabre oli luulaakso —
+   * pilviaiheista klassikkoa on, mutta jokainen niistä on sään kuvaus ulkoa
+   * käsin, ja tämä maailma on sään sisällä. Aihevalinta on ainoa peruste jolla
+   * lainaaminen on tässä pelissä tehty, ja kun sitä ei ole, ei lainata.
+   *
+   * ## D-lyydinen, ja se on väite eikä tunnelma
+   *
+   * Lyydinen on duuriasteikko jonka **neljäs sävel on korotettu** (D E F# G#
+   * A B C#), ja juuri se yksi sävel on syy valita se tähän. Tavallisessa
+   * duurissa neljäs sävel vetää alaspäin subdominanttiin — se on se voima joka
+   * saa musiikin laskeutumaan kotiin. Korota se puolisävelaskeleella ja koko
+   * vetosuunta katoaa: harmonia ei enää kallistu mihinkään, se leijuu. Se on
+   * kirjaimellisesti sen soundi ettei mikään putoa, ja tämä maailma on tehty
+   * siitä ettei mikään putoa.
+   *
+   * Se on myös tarkistettavissa datasta, ja siksi `verify.mjs` laskee kaksi
+   * lukua: korotettu kvartti (G#) soi, alennettua (G) ei ole kertaakaan. Yksi
+   * ainoa G ja moodi on jälleen tavallinen D-duuri — se kuulostaisi vain
+   * hieman tavallisemmalta, mikä on täsmälleen se vika jota kukaan ei osaa
+   * etsiä.
+   *
+   * Sointukierto on D — E — D — Bm. **E-duuri on koko juttu**: se on toinen
+   * aste duurina, mikä on mahdollista vain lyydisessä, ja se on ainoa sointu
+   * jonka soidessa korotettu kvartti on soinnun oma sävel eikä ohisävel.
+   *
+   * Neljä fraasia, ja jokainen on yksi asia jonka ilma tekee:
+   *   0  **nousuvirtaus** — nouseva kuvio joka ratkeaa ylöspäin eikä alas
+   *   1  **leijunta** — pitkiä nuotteja, vastapaino kaikelle muulle
+   *   2  **viima** — kuudestoistaosajuoksuja alas ja takaisin ylös
+   *   3  **teema** — se laulettava, ja fraasi jonka `notes` toistaa
+   */
+  cloud: {
+    tempo: 104,
+    lead: {
+      // Kolmioaalto ja pitkä pito: puhallinmainen ääni, ei kanttiaallon terä.
+      // Vibrato on hidas ja kapea, koska se on kannattelua eikä väristystä.
+      wave: 'triangle', gain: 0.13, vibrato: 3, vibratoRate: 4.5, staccato: 0.92,
+      phrases: [
+        // 0 — nousuvirtaus
+        [[-7, 2], [-5, 2], [-3, 2], [-1, 2], [0, 4], [2, 2], [4, 2],
+          [5, 2], [4, 2], [2, 2], [-1, 2], [0, 8]],
+        // 1 — leijunta
+        [[0, 6], [-1, 2], [0, 8],
+          [2, 4], [4, 4], [5, 8]],
+        // 2 — viima
+        [[9, 1], [7, 1], [5, 1], [4, 1], [2, 1], [0, 1], [-1, 1], [-3, 1],
+          [-5, 1], [-3, 1], [-1, 1], [0, 1], [2, 1], [4, 1], [5, 1], [7, 1],
+          [9, 1], [11, 1], [12, 1], [11, 1], [9, 1], [7, 1], [5, 1], [4, 1],
+          [2, 2], [-1, 2], [0, 4]],
+        // 3 — teema
+        [[5, 4], [4, 2], [2, 2], [0, 4], [-1, 4],
+          [0, 2], [2, 2], [4, 4], [5, 2], [9, 2], [7, 4]],
+      ],
+      notes: [[5, 4], [4, 2], [2, 2], [0, 4], [-1, 4],
+        [0, 2], [2, 2], [4, 4], [5, 2], [9, 2], [7, 4]],
+    },
+    harm: {
+      /* D — E — D — Bm, kahdeksan askelta kukin. E on toinen aste duurina, eli
+       * lyydisen oma sointu: se on ainoa hetki jolloin G# on soinnun sävel. */
+      wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.95, attack: 0.03, hold: 0.8,
+      notes: [
+        [[-7, -3, 0], 8],
+        [[-5, -1, 2], 8],
+        [[-7, -3, 0], 8],
+        [[-10, -7, -3], 8],
+      ],
+    },
+    bass: {
+      /* Ei kävelevää bassoa vaan urkupiste joka nousee kerran tahdissa
+       * oktaavin. Lyydisen koko idea kaatuu jos basso kulkee: liikkuva basso
+       * tekee soinnuista käännöksiä ja käännökset kuulostavat siltä että
+       * jonnekin ollaan menossa. */
+      wave: 'triangle', gain: 0.16, staccato: 0.7, attack: 0.006, hold: 0.4,
+      accent: 'x.......x.......',
+      notes: [
+        [-19, 2], [-19, 2], [-12, 2], [-19, 2],
+        [-17, 2], [-17, 2], [-10, 2], [-17, 2],
+        [-19, 2], [-19, 2], [-12, 2], [-19, 2],
+        [-22, 2], [-22, 2], [-15, 2], [-13, 2],
+      ],
+    },
+    drums: {
+      /* Ei takapotkua. Virveli kakkosella ja nelosella on se kuvio joka sitoo
+       * musiikin lattiaan, ja tässä maailmassa ei ole lattiaa siinä mielessä.
+       * Yksi virveli tahtia kohti kolmannella iskulla, harvat bassorummut, ja
+       * hi-hat kahdeksasosina — se on se kuvio joka kuulostaa tuulelta eikä
+       * marssilta. */
+      kick: 'x.....x...x.....',
+      snare: '........x.......',
+      hat: 'x.x.x.x.x.x.x.x.',
     },
   },
 

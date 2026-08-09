@@ -2362,10 +2362,35 @@ const report = await page.evaluate(async () => {
       bad.length === 0,
       shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa`)
         .join(', '));
+
+    /*
+     * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
+     * yllä oleva. Muototesti katsoo yhtä maailmaa kerrallaan, joten uusi
+     * maailma voisi olla sisäisesti moitteeton ja silti helpompi kuin
+     * edellinen — pelaajan kannalta juuri se on se vika joka tuntuu.
+     * `difficulty.mjs` on tulostanut tämän rivin pitkään ("Käyrä nousee joka
+     * maailmassa"), ja tulostus ei ole portti.
+     *
+     * Luku on maailman tasojen keskiarvo linnake mukaan lukien, sama kuin
+     * työkalussa. Askelten koot vaihtelevat rajusti (+8,0 maailmaan 6, +66,8
+     * maailmaan 5) eikä sitä yritetä tasoittaa: askelen koko on toimituksellinen
+     * päätös, sen etumerkki ei ole.
+     */
+    const means = WORLDS.map((w) => {
+      const tiers = tiersOf(w);
+      const sum = tiers.reduce((s, t) => s + tierScore(w, t, DIFFICULTY), 0);
+      return { id: w.id, mean: sum / (tiers.length || 1) };
+    });
+    const falls = means.filter((m, i) => i > 0 && m.mean <= means[i - 1].mean);
+    expect('vaikeus nousee maailmasta maailmaan',
+      falls.length === 0,
+      means.map((m, i) => `${m.id} ${m.mean.toFixed(1)}`
+        + (i ? ` (${m.mean > means[i - 1].mean ? '+' : ''}${(m.mean - means[i - 1].mean).toFixed(1)})` : ''))
+        .join(', '));
   }
 
   /*
-   * 3. LUUMAAILMAN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
+   * 3. UUSIEN KÄSINTEHTYJEN MAAILMOJEN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
    *
    * DESIGN.md kohta 5 sanoo sen näin: tehostus avaa paikkoja, ei kenttää.
    * `tools/playable.mjs` mittaa juuri tätä koko pelistä, mutta se on raportti
@@ -2373,15 +2398,24 @@ const report = await page.evaluate(async () => {
    * liittyä siihen listaan huomaamatta, joten sen kolme numeroitua kenttää ja
    * linnake ajetaan täällä ja tulos on kaatava.
    *
+   * **Maailmat 6 ja 7 samassa silmukassa, ja se on väite eikä säästö.** Lupaus
+   * koskee koko peliä, mutta portiksi se voidaan nostaa vain siellä missä
+   * lähtötaso on puhdas: maailmoissa 1–5 on kolme tunnettua nimeä (4-3, ja
+   * 2-1 / 3-F / 5-F tuplahypyllä), ja niiden korjaaminen on eri työ kuin uuden
+   * maailman tekeminen. Käsintehdyt maailmat luulaaksosta eteenpäin eivät saa
+   * kasvattaa tuota listaa, ja tässä se on ajettavassa muodossa.
+   *
    * Botti on sama tyhmä botti: juoksee oikealle ja hyppää. Viholliset ja
    * vaarat poistetaan, koska kysymys on maastosta — vihollisen alle jääminen on
    * eri testi ja se on jo olemassa. Tehostuksia ei anneta yhtään: voimataso 0
-   * on se koko jolle lupaus on annettu.
+   * on se koko jolle lupaus on annettu. Se on samalla toinen puoli maahaniskun
+   * lupauksesta: botti ei osaa maahaniskua eikä sitä pyydetä siltä, joten
+   * kenttä joka vaatisi sitä jäisi tähän kiinni.
    */
   {
-    const bone = levelIds().filter((id) => id.startsWith('6-'));
+    const handmade = levelIds().filter((id) => /^[67]-/.test(id));
     const rows = [];
-    for (const id of bone) {
+    for (const id of handmade) {
       reset({ type: null, level: 0 });
       let finished = null;
       game.finishLevel = (r) => { finished = r; };
@@ -2439,11 +2473,261 @@ const report = await page.evaluate(async () => {
       });
     }
     const stuck = rows.filter((r) => !r.cleared);
-    expect('luumaailman jokainen kenttä on läpäistävissä voimatasolla 0',
-      rows.length === 4 && stuck.length === 0,
+    expect('luulaakson ja pilvimaailman jokainen kenttä on läpäistävissä voimatasolla 0',
+      rows.length === 8 && stuck.length === 0,
       rows.length
-        ? `${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
-        : 'ei 6-kenttiä lainkaan');
+        ? `${rows.length} kenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+        : 'ei 6- eikä 7-kenttiä lainkaan');
+  }
+
+  /* ----------------------------- pilvimaailma ---------------------------- */
+  /*
+   * Maailma 7, KAASUKEHÄ, ja kaksi ongelmaa jotka se on olemassa ratkaistakseen.
+   * Molemmat ovat sellaisia joihin maailma voi vastata väärin *ja silti näyttää
+   * valmiilta*, joten molemmat mitataan tässä eikä perustella kommentissa.
+   *
+   * ONGELMA 1: PELISSÄ ON JO TAIVAS. Jokaisen korkean kentän yllä on
+   * taivaskaista, ja `sky_garden` on jo paikka joka on tehty lavoista ilmassa.
+   * Jos kokonainen pilvimaailma lukee samalta, se ei ole uusi maailma vaan
+   * venytetty bonushuone — ja pahempaa, se halventaa salaisuuden jonka
+   * löydettäväksi tekeminen oli oikeaa työtä. Ero on tehty **lattiasta** ja se
+   * on siksi mitattavissa: bonushuoneessa ei ole lattiaa lainkaan, ja kaikki
+   * mille siellä voi astua on lautaa. Testi 3 laskee molemmat luvut molemmista.
+   *
+   * ONGELMA 2: PILVISTÄ TEHTY MAAILMA ON KUOPPA KOKO PITUUDELTAAN. Vastaus on
+   * kirjoitettu palikoihin ja tarkistetaan testeissä 1 ja 2: **tiivistynyt
+   * pilvi on maata**, eli lattia on tavallista `#`:ää, ja **ohut pilvi (`-`) ei
+   * ole koskaan tyhjän päällä**. Jälkimmäinen on se puolisko joka ostaa
+   * puoliläpäisevän lavan tähän maailmaan ilman sen omaa ansaa — alas
+   * painaminen vahingossa ei voi pudottaa tyhjään, koska tässä maailmassa
+   * lavan alla on aina pilveä.
+   */
+  {
+    const { CLOUD_CHUNKS } = await import('/src/data/chunks/cloud.js');
+    const { BONE_CHUNKS } = await import('/src/data/chunks/bone.js');
+    const { CHUNKS } = await import('/src/data/chunks.js');
+
+    /*
+     * 1. EI JALKOJA, ja se on luumaailman ehdon peilikuva.
+     *
+     * `chunks/bone.js` perustelee itsensä yhdellä lauseella: luu seisoo, eli
+     * jokainen `X` ja `#` lattian yläpuolella nojaa johonkin suoraan allaan,
+     * koska luuranko on määritelmän mukaan asia joka kannattaa itsensä. Pilvi
+     * on määritelmän mukaan asia joka **ei** kannata itseään, joten sääntö
+     * kulkee tässä täsmälleen toisin päin:
+     *
+     *   **mikään ei seiso maassa — kaikki pystysuunta leijuu.**
+     *
+     * Ei kukkuloita, ei portaita, ei hautakiviä: lattian yläpuolella ei ole
+     * yhtään `#`:ää eikä `X`:ää. Se maksaa saman kuin luumaailman sääntö maksoi
+     * — koko `steps_up`/`ledge`-sanasto on poissa käytöstä, ja korkeus on
+     * ostettava laudalla ja lohkolla — ja se on juuri se hinta jonka takia
+     * sääntö kannattaa kirjoittaa: se pakottaa maailman siluetin erilaiseksi
+     * kuin yhdenkään edellisen.
+     *
+     * Luumaailma mitataan tässä vastapariksi eikä kohteliaisuudesta: jos
+     * molemmat luvut olisivat nollia, sääntö ei erottaisi mitään.
+     */
+    const STANDS = '#X';
+    const legsIn = (chunks) => {
+      const out = [];
+      for (const [name, chunk] of Object.entries(chunks)) {
+        for (let y = 0; y < 13; y++) {
+          for (let x = 0; x < chunk.w; x++) {
+            if (STANDS.includes(chunk.rows[y][x])) out.push(`${name} ${x},${y}`);
+          }
+        }
+      }
+      return out;
+    };
+    const cloudLegs = legsIn(CLOUD_CHUNKS);
+    const boneLegs = legsIn(BONE_CHUNKS);
+    expect('pilvimaailmassa mikään ei seiso maassa, luumaailmassa kaikki seisoo',
+      cloudLegs.length === 0 && boneLegs.length > 0,
+      `${Object.keys(CLOUD_CHUNKS).length} pilvipalikkaa, maasta nousevia ruutuja `
+      + `${cloudLegs.length} — luussa ${boneLegs.length}`
+      + (cloudLegs.length ? `: ${cloudLegs.slice(0, 5).join(' ')}` : ''));
+
+    /*
+     * 2. OHUT PILVI EI OLE KOSKAAN TYHJÄN PÄÄLLÄ.
+     *
+     * Puoliläpäisevä lava on ollut pelissä alusta asti ja siinä on yksi ansa,
+     * joka on aina ollut siedettävä siksi että lavoja on ollut vähän: alas
+     * painaminen pudottaa lävitse, ja jos lavan alla ei ole mitään, se pudottaa
+     * kuoppaan. Maailma jonka koko pystysuunta on lautaa moninkertaistaa sen
+     * ansan — joten tässä maailmassa jokaisen `-`:n alla on samassa sarakkeessa
+     * kiinteää pilveä.
+     *
+     * Sääntö on ehdoton eikä ohje, ja sillä on hintansa: **tässä maailmassa
+     * yksikään lauta ei ylitä kuoppaa.** Jokainen reikä pilvessä hypätään.
+     * Muualla pelissä lauta kuopan yllä on tavallinen ja hyvä ratkaisu
+     * (`pit_l`, `sky_run`, `bone_ribs`, `sky_garden`), ja alla oleva luku
+     * mittaa juuri ne — jos se olisi nolla, sääntö ei kieltäisi mitään.
+     */
+    const hanging = (chunks) => {
+      let count = 0;
+      const where = [];
+      for (const [name, chunk] of Object.entries(chunks)) {
+        for (let y = 0; y < 15; y++) {
+          for (let x = 0; x < chunk.w; x++) {
+            if (chunk.rows[y][x] !== '-') continue;
+            let held = false;
+            for (let below = y + 1; below < 15; below++) {
+              if (STANDS.includes(chunk.rows[below][x])) { held = true; break; }
+            }
+            if (!held) { count++; if (where.length < 5) where.push(`${name} ${x},${y}`); }
+          }
+        }
+      }
+      return { count, where };
+    };
+    const cloudHang = hanging(CLOUD_CHUNKS);
+    const elsewhere = hanging(Object.fromEntries(
+      Object.entries(CHUNKS).filter(([name]) => !name.startsWith('cloud_'))));
+    expect('pilvimaailmassa yksikään ohut pilvi ei leiju tyhjän päällä',
+      cloudHang.count === 0 && elsewhere.count > 0,
+      `pilvimaailma ${cloudHang.count}, muu peli ${elsewhere.count}`
+      + (cloudHang.count ? `: ${cloudHang.where.join(' ')}` : ` (esim. ${elsewhere.where.join(' ')})`));
+  }
+
+  /*
+   * 3. TÄMÄ EI OLE VENYTETTY BONUSHUONE, JA SE ON MITATTU.
+   *
+   * Kaksi lukua per kenttä, ja ne ovat kaksi eri kysymystä:
+   *
+   *   **maaosuus** — kuinka monessa sarakkeessa on kiinteää lattiaa. Se on
+   *   vastaus kysymykseen "onko täällä lattia": paikassa on lattia, huoneessa
+   *   ei ole.
+   *   **lautaosuus astuttavasta** — kuinka suuri osa kaikesta mille voi astua
+   *   on ohutta pilveä. Se on vastaus kysymykseen "mistä täällä kuljetaan":
+   *   bonushuoneessa vastaus on sata prosenttia, koska siellä ei ole muuta.
+   *
+   * `sky_garden` mitataan samoilla riveillä ja se antaa 0 % ja 100 %. Jos
+   * pilvimaailman luvut lähestyvät noita, maailma on muuttunut siksi
+   * bonushuoneeksi jota se ei saa olla, ja se näkyy tässä ennen kuin se näkyy
+   * kenessäkään pelaajassa.
+   *
+   * Linnake 7-F jätetään pois tarkoituksella: se on jaettu `fort_*`-käytävä
+   * niin kuin joka maailman linnake, ja sen lattiassa on laavaa. Väite koskee
+   * niitä kolmea kenttää jotka ovat tämän maailman omia.
+   */
+  {
+    const { getLevel } = await import('/src/data/levels.js');
+    const { CHUNKS } = await import('/src/data/chunks.js');
+    const SOLIDF = '#X';
+    const shares = (rows, floorRow) => {
+      const w = rows[0].length;
+      let ground = 0;
+      let planks = 0;
+      let groundTiles = 0;
+      for (let x = 0; x < w; x++) {
+        const solid = SOLIDF.includes(rows[floorRow][x]) || SOLIDF.includes(rows[floorRow + 1][x]);
+        if (solid) ground++;
+        for (let y = 0; y < rows.length; y++) {
+          if (rows[y][x] === '-') planks++;
+          else if (SOLIDF.includes(rows[y][x])) groundTiles++;
+        }
+      }
+      const footing = planks + groundTiles;
+      return {
+        ground: (ground / w) * 100,
+        plank: footing ? (planks / footing) * 100 : 100,
+        w,
+      };
+    };
+    const levels = ['7-1', '7-2', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 13) }));
+    const garden = shares(CHUNKS.sky_garden.rows, 13);
+    const worstGround = levels.reduce((m, l) => Math.min(m, l.ground), 100);
+    const worstPlank = levels.reduce((m, l) => Math.max(m, l.plank), 0);
+    expect('pilvimaailmassa on lattia, bonushuoneessa ei — mitattuna molemmat',
+      levels.length === 3 && worstGround >= 80 && worstPlank <= 25
+      && garden.ground === 0 && garden.plank === 100,
+      `${levels.map((l) => `${l.id} maata ${l.ground.toFixed(0)} % / lautaa `
+        + `${l.plank.toFixed(0)} % (${l.w} saraketta)`).join(', ')}`
+      + ` — sky_garden maata ${garden.ground.toFixed(0)} % / lautaa ${garden.plank.toFixed(0)} %`);
+  }
+
+  /*
+   * 4. MAAHANISKULLA ON TÄSSÄ MAAILMASSA TILAA, MUTTEI VALTAA.
+   *
+   * Maahanisku (v26.08.09.31) normalisoi voimansa kentän omaa kattoa vasten,
+   * joten se on sitä kovempi mitä korkeammalta se aloitetaan — ja kerroksittain
+   * ladottu pilvimaailma on ainoa paikka pelissä jossa korkeutta on tarjolla
+   * ilman että sitä pitää erikseen rakentaa. Väite on kaksiosainen ja
+   * molemmat puolet mitataan:
+   *
+   *   - **alasimelta pudotettuna isku tappaa.** Maailman ylin lauta on
+   *     `cloud_anvil`in kansi, ja siltä alkava sukellus ylittää
+   *     POUND_KILL_AT-rajan (0,5) mitattuna eikä laskettuna.
+   *   - **lattialta hypättynä se ei tapa.** Sama liike tavallisen seisonnasta
+   *     tehdyn hypyn huipulta jää rajan alle, eli korkeus on se mikä ostaa
+   *     tappavuuden — ei tehostus eikä tämä maailma.
+   *
+   * Ja kolmas puoli on jo tarkistettu muualla: kohdan 3 botti ei osaa
+   * maahaniskua lainkaan ja läpäisee silti jokaisen 7-kentän voimatasolla 0,
+   * eli liike avaa paikkoja eikä kenttää (DESIGN.md kohta 5).
+   */
+  {
+    const { getLevel } = await import('/src/data/levels.js');
+    /* Ylin lauta koko maailmassa, ja siitä se sarake jonka vierestä pääsee
+     * putoamaan lattiaan asti — sukellus jonka jalat ovat jo kannen päällä ei
+     * mittaa mitään, koska se laskeutuu sille kannelle. */
+    let top = null;
+    for (const id of ['7-1', '7-2', '7-3']) {
+      const rows = getLevel(id).rows;
+      for (let y = 0; y < 13 && (!top || y < top.y); y++) {
+        for (let x = 0; x < rows[y].length - 1; x++) {
+          if (rows[y][x] !== '-' || rows[y][x + 1] === '-') continue;
+          let clear = true;
+          for (let d = y; d <= 12; d++) if (rows[d][x + 1] !== ' ') clear = false;
+          if (!clear || rows[13][x + 1] !== '#') continue;
+          top = { id, x: x + 1, y };
+          break;
+        }
+      }
+    }
+    const dive = (id, place) => {
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const i = mkInput();
+      const step = (held = {}, pressed = {}) => {
+        i.held = { ...blank(), ...held };
+        i.pressed = { ...blank(), ...pressed };
+        s.update(i);
+      };
+      place(s.player, step);
+      step({ down: true, jump: true }, { down: true, jump: true });
+      for (let f = 0; f < 240 && !s.lastPound; f++) step({ down: true });
+      return s.lastPound;
+    };
+    const fromDeck = top && dive(top.id, (p) => {
+      p.x = top.x * 16 + 1;
+      p.y = top.y * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = false;
+    });
+    const fromFloor = top && dive(top.id, (p, step) => {
+      p.x = top.x * 16 + 1;
+      p.y = 12 * 16 - p.h;
+      for (let f = 0; f < 20; f++) step();
+      step({ jump: true }, { jump: true });
+      for (let f = 0; f < 60 && p.vy < 0; f++) step({ jump: true });
+    });
+    /* Rivi 5 on `cloud_anvil`in kansi, ja se on osa väitettä eikä sen kuvaus:
+     * maailma jonka ylin lauta valuisi alaspäin lakkaisi olemasta se paikka
+     * jossa liikkeellä on tilaa, ja tekisi sen huomaamatta. */
+    expect('pilvimaailman ylimmältä laudalta maahanisku tappaa, lattiahypystä ei',
+      !!fromDeck && !!fromFloor && top.y <= 5 && fromDeck.kills && !fromFloor.kills,
+      top
+        ? `ylin lauta ${top.id} rivi ${top.y}: voima ${fromDeck ? fromDeck.strength.toFixed(2) : '—'}`
+        + ` (${fromDeck && fromDeck.kills ? 'tappaa' : 'ei tapa'}), lattiahypystä `
+        + `${fromFloor ? fromFloor.strength.toFixed(2) : '—'}`
+        + ` (${fromFloor && fromFloor.kills ? 'tappaa' : 'ei tapa'})`
+        : 'yhtään lautaa ei löytynyt maailmasta 7');
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -4364,7 +4648,7 @@ const report = await page.evaluate(async () => {
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
-    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F'];
+    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F', '7-F'];
 
     const arena = (power) => {
       reset(power);
@@ -4629,6 +4913,50 @@ const report = await page.evaluate(async () => {
         `naurua ${laughs.length}, kruunu pois ${doffs} kertaa, päähän ${donned}, vaiheet `
         + `${[...new Set(laughs.map((e) => e.phase))].join('/') || '-'}, `
         + `sävelkorkeus ${VOICES.luuranko ? VOICES.luuranko.pitchScale : 'ei ääntä'}`);
+    }
+
+    /* ------------------------------ sääherra ----------------------------- */
+    /*
+     * SÄÄHERRA, 7-F, `bossVariant: 5`, ja hän vastaa osumaan **nousemalla**.
+     *
+     * Kysymys on sama kuin luurangolla — mitä pomo tekee kun häneen osuu — ja
+     * vastaus tulee tämän maailman aiheesta: sää väistää ylöspäin. Muut pomot
+     * kiihtyvät, mikä on luku jonka pelaaja tuntee kolmen sekunnin päästä;
+     * tämä lähtee ilmaan samalla framella ja tulee alas iskuaaltojen kanssa,
+     * koska variantti >= 1 heittää ne kovasta laskeutumisesta. Yksi rivi
+     * (`jumpTimer = 1`) tuottaa siis koko ketjun eikä `REGISTRY` muutu.
+     *
+     * Mitataan vertailuna eikä yksin: molempien pomojen oma hyppykello
+     * asetetaan kauas, jotta ilmaan nouseminen ei voi olla sattumaa, ja
+     * luuranko ajetaan samalla mitalla. Ilman vertailua testi menisi läpi
+     * pelkästä siitä että pomot hyppivät muutenkin.
+     */
+    {
+      const liftOff = (id) => {
+        reset();
+        const s = new LevelScene(game, id);
+        game.setScene(s);
+        const b = s.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 60; f++) s.update(idle);   // anna hänen laskeutua
+        b.spikePhase = 'open';
+        b.spikeTimer = 1e6;
+        b.invuln = 0;
+        b.jumpTimer = 9999;                            // oma kello pois pelistä
+        b.chargeTimer = 9999;
+        b.stomp();
+        for (let f = 0; f < 40; f++) {
+          s.update(idle);
+          if (!b.onGround) return { at: f, variant: b.variant };
+        }
+        return { at: -1, variant: b.variant };
+      };
+      const storm = liftOff('7-F');
+      const skeleton = liftOff('6-F');
+      expect('sääherra nousee ilmaan osumasta, luuranko ei',
+        storm.variant === 5 && storm.at >= 0 && storm.at <= 3 && skeleton.at < 0,
+        `sääherra (variantti ${storm.variant}) ilmassa framella ${storm.at}, `
+        + `luuranko (variantti ${skeleton.variant}) framella ${skeleton.at} — 40 framen ikkuna`);
     }
 
     /* ------------------------ jättiläisen kannet ------------------------ */
@@ -8481,6 +8809,60 @@ const report = await page.evaluate(async () => {
     Music.stop();
   }
 
+  /*
+   * KAASUKEHÄ, ELI SE ETTÄ LYYDINEN ON DATASSA EIKÄ TUNNELMASSA.
+   *
+   * Maailman 7 raita on **tätä peliä varten sävelletty** — ei `source`-kenttää,
+   * eikä sitä kysytä miltään, koska DESIGN.md kohdan 1 b sääntö koskee
+   * lainattua eikä kaikkea. Vapautuneesta sävelmistöstä ei löytynyt teosta joka
+   * olisi ollut *tämä paikka* samalla tavalla kuin Danse macabre oli
+   * luulaakso, ja aihevalinta on ainoa peruste jolla lainaaminen on tässä
+   * pelissä tehty.
+   *
+   * Sävellyksen yksi ajatus on kirjoitettavissa numeroina, joten se
+   * tarkistetaan: raita on **D-lyydisessä**. Lyydinen on duuriasteikko jonka
+   * neljäs sävel on korotettu, ja juuri se yksi sävel on syy valita se tänne:
+   * korotettu kvartti poistaa vetovoiman subdominanttiin, eli harmonia ei
+   * koskaan kallistu alaspäin. Se on kirjaimellisesti sen soundi ettei mikään
+   * laskeudu — mikä on tämän maailman koko aihe.
+   *
+   * Kaksi lukua, ja molemmat rikkoutuvat yhdestä nuotista:
+   *   - **alennettua kvarttia (G) ei ole kertaakaan.** Yksi G ja moodi on
+   *     jälleen tavallinen duuri, eikä kukaan osaisi etsiä sitä yhtä säveltä.
+   *   - **korotettu kvartti (G#) soi useasti.** Lyydinen jossa ei koskaan soi
+   *     sen oma sävel on lyydinen vain paperilla.
+   */
+  {
+    Sfx.resume();
+    Music.play('cloud');
+    const track = Music._track;
+    /* D on -7 puolisävelaskelta A:sta, joten sävelluokka lasketaan siitä. */
+    const pcOf = (semi) => (((semi + 7) % 12) + 12) % 12;
+    const LYDIAN = [0, 2, 4, 6, 7, 9, 11];
+    const counts = new Array(12).fill(0);
+    const collect = (notes) => {
+      for (const [semi] of notes || []) {
+        if (semi === null || semi === undefined) continue;
+        for (const s of Array.isArray(semi) ? semi : [semi]) counts[pcOf(s)]++;
+      }
+    };
+    for (const name of ['lead', 'harm', 'bass']) {
+      const voice = (track || {})[name];
+      if (!voice) continue;
+      collect(voice.notes);
+      for (const phrase of voice.phrases || []) collect(phrase);
+    }
+    const outside = counts
+      .map((n, pc) => ({ pc, n }))
+      .filter((x) => x.n && !LYDIAN.includes(x.pc));
+    expect('pilviraita on D-lyydinen: korotettu kvartti soi, alennettua ei ole',
+      outside.length === 0 && counts[6] >= 8 && counts[5] === 0,
+      `G# ${counts[6]} kertaa, G ${counts[5]} kertaa, asteikon ulkopuolella `
+      + `${outside.map((x) => `pc${x.pc}×${x.n}`).join(' ') || 'ei mitään'}`
+      + ` — säveliä yhteensä ${counts.reduce((a, b) => a + b, 0)}`);
+    Music.stop();
+  }
+
   /* ------------------------------ rendering ---------------------------- */
   {
     const { drawBackdrop } = await import('/src/gfx/backdrop.js');
@@ -8498,7 +8880,7 @@ const report = await page.evaluate(async () => {
     };
     const badBg = [];
     for (const theme of Object.keys(THEMES)) {
-      for (const bg of ['hills', 'dunes', 'peaks', 'bones', 'factory', 'none']) {
+      for (const bg of ['hills', 'dunes', 'peaks', 'bones', 'clouds', 'factory', 'none']) {
         try {
           const near = shot(bg, theme, 0, 24);
           const far = shot(bg, theme, 640, 24);
@@ -8611,6 +8993,27 @@ const report = await page.evaluate(async () => {
         !!quick && vsGround > sandGap && vsLava > sandGap,
         `hiekka vs maa ${vsGround.toFixed(1)} %, hiekka vs laava ${vsLava.toFixed(1)} %, `
         + `aavikon maa vs tiili ${sandGap.toFixed(1)} %`);
+
+      /*
+       * Ja pilviteema on juuri se teema joka tämän testin kuuluisi kaataa.
+       *
+       * Valkoista valkoisella on koko maailman lähtökohta, ja se on samalla se
+       * tapa jolla teema epäonnistuisi hiljaa: rikottava lohko sulaisi maahan
+       * kuten yössä (0,4 %), eikä kukaan huomaisi ennen kuin joku juoksisi
+       * kentän läpi ja ihmettelisi minne palikat katosivat. Siksi tässä
+       * maailmassa maa ja tiili ovat **kaksi eri pilveä**: pohjapilvi on
+       * auringon puolelta valaistua, tiili on ukkospilveä. Kynnys 25 % on
+       * korkeampi kuin yhdelläkään ennen luumaailmaa toimitetulla teemalla,
+       * eli se ei mene läpi vahingossa — ja luumaailman oma väite yllä pitää
+       * huolen ylärajasta, koska se vaatii olevansa koko pelin selvin pari.
+       */
+      const cloud = gaps.find((x) => x.theme === 'cloud');
+      expect('pilvimaailman tiili erottuu maasta vaikka molemmat ovat pilveä',
+        !!cloud && cloud.gap >= 25,
+        cloud ? `pilvi ${cloud.gap.toFixed(1)} %, kynnys 25 % — jää ${
+          (gaps.find((x) => x.theme === 'ice') || {}).gap.toFixed(1)} %, yö ${
+          (gaps.find((x) => x.theme === 'night') || {}).gap.toFixed(1)} %`
+          : 'ei pilviteemaa lainkaan');
     }
 
     /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
