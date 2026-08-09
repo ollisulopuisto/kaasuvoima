@@ -7,6 +7,95 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.18 — spritejen animaatiokierrokset läpikäytynä, ja aurinko joka näkyy
+
+Kaksi työtä, jotka molemmat alkoivat "tarkistetaan tämä" ja päättyivät
+"tässä on neljä bugia".
+
+### Animaatiokierrokset kaikilla viidellä voimatasolla
+
+Roadmapin kohta on ollut listalla pitkään: käydään läpi. **2220 yhdistelmää**
+(6 kokoa × 5 tehostustyyppiä × 37 asentoa/framea × molemmat suunnat) piirrettiin
+ja mitattiin: piirroksen rajat osumalaatikkoa vasten, yhtenäisyys, ja
+framehash kierrosten vertailuun. Lähtötilanne: **458 asentoa vuoti laatikostaan
+ja 160 hajosi kahdeksi kappaleeksi.**
+
+- **Hengitys repi hahmon kahtia.** Paita nousi `b`:n mukana mutta housut oli
+  naulattu paikalleen, joten vyötärölle avautui pikselin rako ja koko alavartalo
+  irtosi omaksi palakseen — **joka koossa, joka tehostuksella, noin
+  kolmanneksessa jokaista hengitystä.** Nyt hengitys nostaa hartioita ja venyttää
+  paidan vyölle asti, mikä on se mitä koodin oma kommentti aina väitti sen tekevän.
+- **Kävelyn frame 2 jätti takajalan leijumaan** kaikilla koilla ja tyypeillä.
+- **Juoksun harppaus romahti voimatasolla 0**: `spread` sulki jalkojen välin
+  kokonaan, eli juoksussa oli *vähemmän* jalkojen liikettä kuin kävelyssä.
+- **Piirros laatikon alapuolella** — 3 px pienimmällä koolla, ja **ei vain
+  kävelyssä vaan myös seisonnassa ja kyykyssä**, koska seisonta lainaa
+  kävelysyklin framea. Korjattu **piirrosta kutistamalla, ei laatikkoa
+  kasvattamalla**: sama valinta kuin kävelijän kanssa, eli törmäyksiin ei
+  koskettu.
+
+Puhtaana todettu ja siksi kirjattu: **paukkupapu piirtyy omanaan** kaikissa
+kuudessa koossa ja 37 asennossa (se ei perinyt mitään), skaalattu piirto ei
+pyöristä spriteä ulos laatikosta, peilaus on tarkka, eikä yksikään yhdistelmä
+piirrä tyhjää.
+
+Kaksi asiaa jäi odottamaan tiedostoa jota työ ei omistanut: **kävelysyklissä ei
+ole ohitusasentoa** (`%3` menee auki→auki ilman välivaihetta) ja **kiipeilyllä ei
+ole asentoa lainkaan** — `animFrame` lasketaan köydelle ja heitetään pois, koska
+`state()` palauttaa `'jump'`.
+
+### Aurinko näkyy, varoittaa ja tietää milloin lopettaa
+
+`Math.min(skyY, cam.y + 18)` oli **räikkä**: aurinko saattoi vain nousta, joten
+kameran laskiessa se jäi maailman koordinaatteihin ja katosi ruudun yläpuolelle.
+
+Mitattuna 2-1:ssä (laajakuva, `viewH` 160): kokonaan näkyvissä **21,5 % →
+98,3 %**, ja leijuessa **0,6 % → 99,7 %**. Pahin ylitys −52 px → −3 px.
+2-2:ssa (ei laajakuvaa) sama vika maksoi vähemmän — ja **juuri siksi se selvisi
+huomaamatta**: laajakuva ei aiheuttanut vikaa, se paljasti sen.
+
+Lepokorkeus on nyt osuus ikkunasta (`viewH`, ei `VIEW_H`), joten molemmat
+kuvasuhteet lukevat samalla tavalla.
+
+**Palava jälki** on 14 kipinää, kaksi kokonaislukuneliötä kumpikin,
+`'lighter'`-tilassa kiekon alla — ja se **tallentuu vain kun aurinko liikkuu**,
+joten leijuva aurinko ei jätä mitään ja pysähtynyt ei tuhri. Jälki ilmestyy
+itsestään sukelluksessa.
+
+**Sukelluksella on nyt näkyvä ennakkovaroitus** (halo joka paisuu kiihtyvällä
+sykkeellä), ja se on tarkoituksella erinäköinen kuin iskuaalto: oranssinvalkoinen
+taivaalla vastaan ruskehtava välähdys lattialla.
+
+**Aurinko luovuttaa lipulla.** Kynnys on se mitä pelaaja näkee: sillä framella
+kun maali tulee ruutuun, aurinko lakkaa jahtaamasta ja nousee pois — hitaammin
+kuin se seuraa, koska poistuminen on tarkoitettu katsottavaksi. Perustelu sille
+että juuri tämä vihollinen luovuttaa: loppusuora on joka kentässä rauhallinen
+tarkoituksella, aurinko on ainoa joka voi osua tangolla ylhäältä, ja kuolema
+voitetun kentän jälkeen on huono viimeinen muisto.
+
+**Eikä se seuraa maan alle.** Vanhalla koodilla se laskeutui **222 pikseliä
+sisään 2-2:n suljettuun hautakammioon**. Nyt se odottaa oman kaistansa yllä.
+Aavikossa ei ole yhtään warp-putkea, joten tämä on tänään saavuttamaton —
+rakennettu silti, koska salaisuuksia lisätään kenttiin jatkuvasti ja vihollinen
+jonka rajaus lepää sen varassa ettei kukaan lisää putkea on ansa seuraavalle.
+
+**Vaikeutuiko se?** Ei, ja se on mitattu eikä väitetty: sama siemennetty ajo
+antaa identtiset luvut ennen ja jälkeen (12 yritystä, 11 osumaa, 11 kuolemaa).
+Rehellinen sivuvaikutus: auringon voi nyt *koskettaa* korkealla hypyllä, koska se
+on ruudulla. Ennen se oli 2-1:ssä ulottumattomissa — mutta se oli piilossa oloa
+eikä tasapainoa.
+
+**Kamerasidonnaisuuden auditointi:** aurinko oli ainoa. Taustat saavat `viewH`:n
+parametrina, kuu ei lue kameraa lainkaan, ja kaikki muut cullit ovat
+vaakasuuntaisia — crop on pystysuuntainen.
+
+### Sivuvaikutus jonka ensimmäinen korjaus aiheutti
+
+Kartan pelinappulan nostovakio oli sovitettu käsin siihen aikaan kun pienin
+sprite piirtyi kolme pikseliä laatikkonsa alapuolelle, eli **vakio maksoi
+hiljaa sitä bugia**. Kun piirros kutistettiin laatikkoon, nappula nousi mukana;
+12 → 10 palauttaa sen jalat samalle tasolle muiden voimatasojen kanssa.
+
 ## v26.08.09.17 — salaisuudet kartalle: kertoo että, ei missä
 
 Peli kätkee nyt paljon: salainen alue maailmoissa 1–4, tähtilohkot, kytkinseinät
