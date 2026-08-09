@@ -614,6 +614,70 @@ const report = await page.evaluate(async () => {
     }
     expect('at least one level is tall enough to have a hidden band', !!tall,
       tall ? `${tall.rows.length} riviä` : 'ei korkeita kenttiä');
+
+    /* Red before green (DESIGN.md 7), for the two ways a hidden room turns into
+     * a trap. Both are built here rather than borrowed from a real level,
+     * because a rule proved only against content that happens to be correct is
+     * a rule proved against nothing: the fixture is broken on purpose, one
+     * fault at a time, and the same fixture with the fault taken out has to
+     * come back silent.
+     *
+     * The shape is the shape every hidden area in the game has: a flat route
+     * band with two warp pipes, a sealed room in the sky over one of them and a
+     * sealed room in the cave under the other. Each room holds a power-up,
+     * which is the whole reason the way out is measured at the tallest size —
+     * you arrive small and you grow in there. */
+    const tallFixture = ({ skyCeiling = 5, ledgeOverCaveExit = false } = {}) => {
+      const W = 64;
+      const g = Array.from({ length: 45 }, () => ' '.repeat(W));
+      const put = (y, x, s) => { g[y] = g[y].slice(0, x) + s + g[y].slice(x + s.length); };
+      const room = (top, ceiling, left, width, floorChar) => {
+        put(top + ceiling, left, 'X'.repeat(width));
+        for (let y = top + ceiling + 1; y <= top + 12; y++) {
+          put(y, left, 'X'); put(y, left + width - 1, 'X');
+        }
+        put(top + 13, left, floorChar.repeat(width));
+        put(top + 14, left, floorChar.repeat(width));
+      };
+
+      // Route band: flat ground, a start, a power-up inside the first quarter,
+      // a flag, and the two warp pipes.
+      put(28, 0, '#'.repeat(W)); put(29, 0, '#'.repeat(W));
+      put(27, 2, '1');
+      put(24, 8, '!');
+      put(27, 60, 'F');
+      put(27, 20, '()');   // down into the cave room
+      put(27, 40, '()');   // up into the sky loft
+      // The fault: two tiles of ground on the surface right over the cave
+      // room's exit, so the warp back up has nowhere to put a 21x43 body.
+      if (ledgeOverCaveExit) { put(26, 23, '####'); put(27, 23, '####'); }
+
+      // Sky loft over the pipe at column 40. `skyCeiling` is its ceiling row:
+      // 5 leaves the tallest size three clear rows over the floor, 10 leaves
+      // two, which is the one-row-too-low fault.
+      room(0, skyCeiling, 36, 14, '#');
+      put(9, 42, '!');
+      put(12, 46, '()');   // the way back down
+
+      // Cave room under the pipe at column 20.
+      room(30, 5, 14, 14, 'X');
+      put(39, 18, '!');
+      put(42, 24, '()');   // the way back up
+      return g;
+    };
+
+    const sound = validateLevel(tallFixture(), budget);
+    const lowCeiling = validateLevel(tallFixture({ skyCeiling: 10 }), budget);
+    const sealedIn = validateLevel(tallFixture({ ledgeOverCaveExit: true }), budget);
+
+    expect('a bonus room with a ceiling one row too low is reported',
+      lowCeiling.length > 0 && lowCeiling.every((p) => p.startsWith('no headroom') && p.includes('sky band')),
+      lowCeiling.slice(0, 3).join(' / ') || 'ei yhtään');
+    expect('a bonus room whose exit pipe has nowhere to land is reported',
+      sealedIn.length > 0 && sealedIn.every((p) => p === 'no way out of the cave band at the tallest size'),
+      sealedIn.slice(0, 3).join(' / ') || 'ei yhtään');
+    expect('the same tall fixture without the faults passes',
+      sound.length === 0, sound.slice(0, 3).join(' / '));
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
