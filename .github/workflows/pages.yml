@@ -39,6 +39,15 @@ concurrency:
 
 jobs:
   deploy:
+    # Vartija, ja se on tarpeen eikä varovaisuutta: ilman tätä työnkulku ajaisi
+    # joka pushilla ja **kaatuisi joka kerta**, koska Pages ei ole päällä. Punainen
+    # rasti jokaisessa commitissa opettaa lukemaan rastit ohi, ja se on kalliimpaa
+    # kuin mikään mitä tämä tiedosto tuo.
+    #
+    # Kytkentä: repon asetuksissa Variables → `PAGES_ENABLED` = `true`. Se on
+    # yksi kenttä, ja se on tarkoituksella sama ele kuin Pagesin päälle
+    # kytkeminen — kaksi asiaa jotka pitää tehdä yhdessä, tehdään yhdessä.
+    if: vars.PAGES_ENABLED == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
