@@ -16,7 +16,7 @@ Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 44 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
 
-**Kahdeksan kentän maailman muoto on päätetty** (v26.08.09.43): seitsemän
+**Kahdeksan kentän maailman muoto on päätetty** (v26.08.09.46): seitsemän
 numeroitua kenttää ja linnake, ja kävelyssä kaksi hengähdystä. Muoto on portissa
 eikä tässä dokumentissa, ja maailmat **1 ja 3** on tehty sen mukaan — generaattori
 osaa nyt kaikki kahdeksan teemaa ehtoineen. Jäljellä maailmat 2 ja 4–8, eli **20
@@ -358,7 +358,7 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 Nyt on **8 maailmaa ja 44 kenttää**, eli maailmat ovat kasassa, muoto on
 päätetty ja kenttiä puuttuu **20**: maailmat 2 ja 4–8. Tavoite on 64.
 
-**Muoto ei ole enää auki (v26.08.09.43), ja se on portissa eikä tässä.**
+**Muoto ei ole enää auki (v26.08.09.46), ja se on portissa eikä tässä.**
 Kahdeksan kenttää on `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on
 **kaksi hengähdystä**. Kolme perustelua ovat muutoslokissa; tähän jää se osa joka
 koskee tekemättä olevia maailmoja:
@@ -484,7 +484,7 @@ Alkuperäiset neljä, tila merkittynä:
    kartta vaati saman uudelleenkirjoituksen. Ennuste piti paikkansa — kaksi
    kohtaa, yksi työ.
 4. ✔ **Kahdeksan kenttää maailmassa on eri muoto kuin neljä** — päätetty ja
-   tehty (v26.08.09.43), ks. tämän kohdan alku. Muoto on murrettu nyt kahdesti: maailma 8 on **kuusi** kenttää (v26.08.09.42), ja
+   tehty (v26.08.09.46), ks. tämän kohdan alku. Muoto on murrettu nyt kahdesti: maailma 8 on **kuusi** kenttää (v26.08.09.42), ja
    `tiersOf`, kartta, vaikeusmittari ja tallennus veivät sen ilman yhtä riviä
    muutosta. Se poistaa tästä kohdasta epävarmimman osan — kysymys ei ole enää
    "kestääkö moottori", vaan mitä niihin kenttiin laitetaan.
