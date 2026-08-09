@@ -55,8 +55,10 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
    (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
 5. **Luumaailma** ja luurankopomo tehtaan jälkeen.
-6. **Salaisuuksien löydettävyys**: karttaan "salaisuudet 0/1" (kertoo *että*,
-   ei *missä*), demo näyttää tempun, kolikkojonot osoittavat.
+6. **Salaisuuksien löydettävyys** — kolmesta osasta yksi tehty:
+   ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
+   löytynyt, **ei koskaan missä** (v26.08.09.17). Jäljellä: demo näyttää
+   tempun, ja kolikkojonot osoittavat.
 
 ## Jonossa
 
