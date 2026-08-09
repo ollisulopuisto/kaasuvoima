@@ -255,6 +255,80 @@ const TRANSIT_OUT = 13;       // and back out at the far end
 const WARP_UP_REACH = 3 * TILE;
 
 /*
+ * MUSIIKKI ON PAIKKA, LÖYTYMINEN ON TAPAHTUMA.
+ *
+ * The hidden cave band gets its own track (`cave` in audio.js — Grieg, and see
+ * DESIGN.md kohta 1 b for why an 1875 piece is allowed in here at all). The
+ * question that had to be answered before a single note was written is the one
+ * DESIGN.md kohta 8 asks: arriving in a hidden band **is** finding the secret,
+ * and the find already has its signals — `noteSecret` writes it, the pipe
+ * sweeps, the map's secret counter goes up. Two signals saying "something
+ * happened" one after the other teach the player to read the wrong one.
+ *
+ * So the music is not allowed to be a second announcement. It has to say a
+ * different kind of thing, and the difference it says is this:
+ *
+ *   - a find is an EVENT: instantaneous, once ever, and it fires at the moment
+ *     the journey is decided — before the player has arrived anywhere.
+ *   - the music is a PLACE: it does not sting on arrival, it is simply what
+ *     this room sounds like for as long as you are standing in it, it sounds
+ *     exactly the same on your fifth visit as on your first, and it stops when
+ *     you leave.
+ *
+ * Three things in the code follow from that, and they are the reason this is
+ * not one line in `tryWarp`:
+ *
+ *   1. It is driven from where the feet are, every frame, by the same
+ *      measurement `noteBand` uses (`bandAt`) — not by the warp, not by a flag
+ *      set on arrival. A place is a position, so a position is what is asked.
+ *   2. Nothing happens while the player is travelling. A track change on the
+ *      frame the pipe swallows him would land on top of the find and be exactly
+ *      the second signal this is avoiding. The room starts sounding like itself
+ *      once he is standing in it, roughly half a second later.
+ *   3. `BAND_MUSIC_DWELL` keeps the music off the arrival itself. Waiting for
+ *      the transit to finish is not enough on its own: a switch on the frame
+ *      the body pops back out of the pipe would simply be the last beat of the
+ *      journey, and the journey is the event. The dwell decouples them, so the
+ *      room starts sounding like itself while the player is already standing in
+ *      it doing something else. It is also what separates a place from a
+ *      passage — a place is somewhere you are still in a moment later. Measured
+ *      in `verify.mjs`: the find lands on frame 0, control comes back on frame
+ *      31, and the music arrives on frame 54.
+ *
+ * The dwell is symmetric, which also gives leaving a short tail instead of a
+ * cut. Twenty-four frames is long enough to be nobody's idea of a sting and
+ * short enough that a player walking into the room hears it as the room rather
+ * than as a delayed reward.
+ *
+ * One case the dwell does *not* carry, so that nobody trusts it for the wrong
+ * reason: falling into a bottomless pit crosses under the seam into the cave
+ * band — measured, for exactly one frame — before the lava lid kills you. What
+ * keeps that silent is the death gate below (`state !== 'play'`, `p.dying`),
+ * because by the time the check runs the fall has already been fatal. Both
+ * guards are tested; neither is standing in for the other.
+ */
+const BAND_MUSIC_DWELL = 24;
+
+/*
+ * The sky band (`sky_garden`, `fac_loft`) keeps the level's own music, and that
+ * is a decision rather than an omission.
+ *
+ * The obvious-looking move is "hidden band → special music", but that is the
+ * §8 mistake wearing a disguise: one track for two opposite places would mean
+ * "you are in a secret" and not "you are underground", and a sound that means
+ * "you found something" is precisely the second find-signal. The cave track
+ * says something specific and diegetically-shaped — it is dark down here,
+ * something lives in it, do not linger — and a sunlit garden on a beanstalk is
+ * none of those things.
+ *
+ * The picture agrees, which is the other half §8 asks for: the cave band is
+ * already washed dark by `drawUnderground`, so the music joins a signal that is
+ * continuously there. The sky band has no such wash, because it is sky.
+ */
+const CAVE_BAND = 2;
+const CAVE_TRACK = 'cave';
+
+/*
  * The fortress door, from the boss falling over to the level ending.
  *
  * The door takes half a second to swing. `onBossDefeated` already had a sound
@@ -352,6 +426,12 @@ export class LevelScene {
      * half-state, and what makes the save state need one field instead of a
      * second copy of the map. */
     this.switchTimer = 0;
+    /* Which band the music is currently the sound of, and how long the feet
+     * have disagreed with it. Derived, never saved: `enter` re-reads both from
+     * the player's feet, so a restored snapshot cannot come back believing it
+     * is somewhere it is not. See BAND_MUSIC_DWELL. */
+    this.placeBand = 1;
+    this.bandHold = 0;
     this.bar = this.def.letterbox ? LETTERBOX_BAR : 0;
     /** How much level the view actually shows. Everything vertical reads this. */
     this.viewH = VIEW_H - 2 * this.bar;
@@ -470,9 +550,15 @@ export class LevelScene {
   }
 
   enter() {
-    // A boss level gets its own theme until the thing is beaten.
-    const track = this.def.boss && !this.bossDefeated ? 'boss' : (this.def.music || 'level');
-    Music.play(track);
+    /* Where the player already is, with no dwell: entering a scene is not
+     * arriving anywhere, it is being somewhere. This is also the whole of what
+     * a quicksave taken in the cave needs — `restoreState` rebuilds the scene
+     * and `setScene` calls this, so the snapshot comes back sounding like the
+     * place it was taken in without the save format carrying a track name.
+     * A boss level gets its own theme until the thing is beaten. */
+    this.placeBand = this.player ? this.bandAt(this.player.y + this.player.h) : 1;
+    this.bandHold = 0;
+    Music.play(this.trackFor(this.placeBand));
     Music.setHurry(this.time <= HURRY_TIME);
     // The room and the weather, from the theme — the audio half of what
     // PostFX.setAmbience does to the picture.
@@ -1039,11 +1125,60 @@ export class LevelScene {
    * one band.
    */
   noteBand(feetY) {
-    const bands = this.def.bands;
-    if (!bands || !this.game.state) return;
-    const band = Math.floor((feetY - 1) / (bands.rows * TILE));
+    if (!this.def.bands || !this.game.state) return;
+    const band = this.bandAt(feetY);
     if (band <= 0) noteSecret(this.game.state, this.id, SKY);
-    else if (band >= 2) noteSecret(this.game.state, this.id, CAVE);
+    else if (band >= CAVE_BAND) noteSecret(this.game.state, this.id, CAVE);
+  }
+
+  /**
+   * Which band a pair of feet is in: 0 sky, 1 the route, 2 the cave.
+   *
+   * One measurement, used by everything that cares. The find (`noteBand`) and
+   * the music (`updateBandMusic`) have to agree about where the player is even
+   * though they do completely different things with the answer — two different
+   * ways of deciding it would eventually disagree by a pixel, and the bug would
+   * be a room that is found but does not sound like itself.
+   *
+   * A level with one band answers 1: it is all route.
+   */
+  bandAt(feetY) {
+    const bands = this.def.bands;
+    if (!bands) return 1;
+    return Math.floor((feetY - 1) / (bands.rows * TILE));
+  }
+
+  /** What the place the player is standing in sounds like. See BAND_MUSIC_DWELL. */
+  trackFor(band) {
+    if (this.def.boss && !this.bossDefeated) return 'boss';
+    const own = this.def.music || 'level';
+    return band >= CAVE_BAND ? CAVE_TRACK : own;
+  }
+
+  /**
+   * The music follows the feet — slowly enough that only a place can move it.
+   *
+   * Called from `update` on the same frame and from the same pair of feet as
+   * `noteBand`, so the event and the place are measured together and can be
+   * read side by side. Everything about the timing is in BAND_MUSIC_DWELL.
+   *
+   * `Music.play` is a no-op when the name has not changed, so crossing between
+   * the sky and the route — which share a track — does not restart the tune;
+   * only a real change of place is heard. The hurry is re-applied because a
+   * fresh track always starts calm, and losing the clock's push on the way into
+   * a room would throw away a signal the player has already earned.
+   */
+  updateBandMusic() {
+    if (!this.def.bands || this.state !== 'play') return;
+    const p = this.player;
+    if (!p || p.dying || p.transit) { this.bandHold = 0; return; }
+    const band = this.bandAt(p.y + p.h);
+    if (band === this.placeBand) { this.bandHold = 0; return; }
+    if (++this.bandHold < BAND_MUSIC_DWELL) return;
+    this.bandHold = 0;
+    this.placeBand = band;
+    Music.play(this.trackFor(band));
+    Music.setHurry(this.time <= HURRY_TIME);
   }
 
   /**
@@ -1208,8 +1343,16 @@ export class LevelScene {
     /* Feet, not head: bumping your head into the sky band is not arriving. The
      * pipe records its own arrival the moment the journey is committed, but a
      * beanstalk has no such moment — climbing into the sky is a position and
-     * not an event, so the position is what is asked, every frame. */
-    if (this.player) this.noteBand(this.player.y + this.player.h);
+     * not an event, so the position is what is asked, every frame.
+     *
+     * The music is asked on the same frame from the same feet, and answers a
+     * different question: not "has this been found" but "what does it sound
+     * like here". They are next to each other on purpose — see
+     * BAND_MUSIC_DWELL for why the two answers must not arrive together. */
+    if (this.player) {
+      this.noteBand(this.player.y + this.player.h);
+      this.updateBandMusic();
+    }
   }
 
   /**

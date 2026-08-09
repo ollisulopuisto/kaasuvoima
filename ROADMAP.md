@@ -75,17 +75,25 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    kuin säveltäjän omassa "Fossiles"-osassa. Ehdot ovat
    [DESIGN.md](DESIGN.md):n kohdassa 1 b: sävelet kirjoitetaan käsin
    `TRACKS`-tauluun, ei äänitettä eikä nuottilaitosta, ja lähde nimetään.
-6. **Luolakaistan oma musiikki:** Griegin *Vuorenkuninkaan luolassa* (1875,
-   vapautui 1.1.1978). Näistä kolmesta ainoa jolle on käyttö **jo tänään** —
-   piilokaistat ovat olemassa (`cave_room`, `fac_cellar`, `tomb_cave`) eivätkä
-   ne kuulosta miltään erityiseltä. Teos kiihtyy, eli se sanoo "älä jää tänne"
-   ilman että sitä kirjoitetaan ruudulle. Tekotapa: uusi `cave`-raita
-   `TRACKS`-tauluun ja vaihto kaistan mukaan siellä missä `noteSecret` jo
-   päättelee kaistan jaloista (`level.js` ~rivi 913). **Kysymys joka pitää
-   ratkaista ensin:** kaistalle saapuminen *on* jo salaisuuden löytyminen ja
-   sillä on merkkinsä — musiikinvaihto ei saa olla toinen samaa sanova merkki
-   (§8), vaan sen pitää sanoa eri asia: löytyminen on tapahtuma, musiikki on
-   paikka. *Yö Autiovuorella* odottaa viimeistä linnaketta.
+6. ✔ **Luolakaistan oma musiikki** — tehty (v26.08.09.32). Griegin
+   *Vuorenkuninkaan luolassa* (1875, vapautui 1.1.1978) on nyt `cave`-raita
+   `TRACKS`-taulussa, käsin kirjoitettuina sävelinä, ja luolakaista soittaa sen.
+   Neljä asiaa jäi kirjatuksi muitakin muutoksia varten:
+   **Kysymys ratkaistiin ennen säveliä** — löytyminen on tapahtuma ja musiikki
+   on paikka, mistä seurasi että vaihto johdetaan jaloista joka framella
+   (`bandAt`, sama mittaus kuin `noteSecret`illä), ei matkasta, eikä se osu
+   kumpaankaan saapumisen omaan hetkeen: mitattuna löytö framella 0, ohjaus
+   takaisin framella 31, musiikki framella 54.
+   **Moottori ei osannut kiihtyä** vaan vaihtaa vaihdetta; `paceAt` lisäsi
+   jatkuvan kiihdytyksen raidan omana ominaisuutena, mitattuna 121,4 → 60,9 ms
+   askelta kohti (1,99×) kun kenttäraita pysyy 96,2 ms:ssä.
+   **Taivaskaista jätettiin kentän omaan musiikkiin** tarkoituksella: yksi raita
+   kahdelle vastakkaiselle paikalle sanoisi "salaisuus" eikä "luola", ja
+   silloin musiikki olisi taas löytymisen merkki (§8).
+   **Kaksi vartijaa, kaksi testiä** — odotusaika pitää musiikin poissa
+   saapumisesta ja kuolemaportti pitää sen poissa kuoppaan putoamisesta, ja
+   kumpikin on todistettu erikseen punaisella ettei toinen esitä toista.
+   *Yö Autiovuorella* odottaa yhä viimeistä linnaketta.
 7. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
    löytynyt, **ei koskaan missä** (v26.08.09.17);
