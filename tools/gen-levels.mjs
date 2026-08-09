@@ -423,7 +423,19 @@ function weightedPiece(weights) {
   return entries[0][0];
 }
 
-function buildLevel({ palette, targetWidth, tuning = null }) {
+/**
+ * `intensity` is the one knob that says "harder", and it moves exactly two
+ * things: how much calm sits between challenges, and how many enemies the
+ * level ends up carrying. Both are *rates*, so the mined rhythm — the shape of
+ * the ramp, the distribution of rest lengths, how gaps relate to the jump
+ * budget — is untouched; the level breathes at the same tempo, just faster.
+ *
+ * Deliberately not wired to gap width or wall height. Those are checked against
+ * the measured jump budget, and a knob that could push them past it would be a
+ * knob that can break the ground-route promise. Difficulty that a validator can
+ * reject is not difficulty, it is a broken level.
+ */
+function buildLevel({ palette, targetWidth, tuning = null, intensity = 1 }) {
   const pal = PALETTES[palette];
   const c = new Canvas();
   const ctx = { enemies: pal.enemies, restScale: 1, ease: 0, gaveePower: false };
@@ -445,7 +457,8 @@ function buildLevel({ palette, targetWidth, tuning = null }) {
     // quarter of the corpus gets the shortest rests.
     const quarter = Math.min(3, Math.floor((x / targetWidth) * 4));
     const tuned = tuning ? tuning.get(trace.length) : null;
-    ctx.restScale = (1.35 - 0.6 * (ramp[quarter] / peak)) * (tuned ? tuned.restScale : 1);
+    ctx.restScale = ((1.35 - 0.6 * (ramp[quarter] / peak)) / intensity)
+      * (tuned ? tuned.restScale : 1);
     ctx.ease = tuned ? tuned.ease : 0;
     const from = x;
     x += PIECES.rest(c, x, ctx);
@@ -480,7 +493,7 @@ function buildLevel({ palette, targetWidth, tuning = null }) {
 
   // The piece weights alone undershoot the corpus enemy density, so top it up
   // on plain ground until the level breathes at the mined rate.
-  const target = Math.round((stats.enemiesPer100 / 100) * x * 0.8);
+  const target = Math.round((stats.enemiesPer100 / 100) * x * 0.8 * intensity);
   let placed = 0;
   for (let y = 0; y < ROWS; y++) {
     for (let px = 0; px < c.width; px++) if (pal.enemies.includes(c.get(px, y))) placed++;
@@ -617,10 +630,25 @@ async function originality(rows) {
 
 /* --------------------------------- main --------------------------------- */
 
+/*
+ * `intensity` per level, measured against world 4 with tools/difficulty.mjs:
+ * the generated levels came out below the world before them, which made world 5
+ * a step down at the end of the game. 5-2 was already the world's peak and is
+ * left alone; the other two are pushed up around it, so the world keeps the
+ * rise-with-a-breather shape instead of turning into a straight climb.
+ *
+ * NOTE: src/data/generated.js has NOT been rebuilt with these values. The
+ * originality check needs the corpus behind VGLC_DIR (DESIGN.md §3), and
+ * regenerating without it would quietly drop that safeguard. Run
+ *
+ *   VGLC_DIR="…" node tools/gen-levels.mjs
+ *
+ * and re-run tools/difficulty.mjs to see what it did.
+ */
 const PLAN = [
-  { id: '5-1', palette: 'meadow', theme: 'grass', bg: 'hills', music: 'level', width: 210 },
-  { id: '5-2', palette: 'dunes', theme: 'desert', bg: 'dunes', music: 'level', width: 230 },
-  { id: '5-3', palette: 'glacier', theme: 'ice', bg: 'peaks', music: 'level', width: 240 },
+  { id: '5-1', palette: 'meadow', theme: 'grass', bg: 'hills', music: 'level', width: 210, intensity: 1.3 },
+  { id: '5-2', palette: 'dunes', theme: 'desert', bg: 'dunes', music: 'level', width: 230, intensity: 1.0 },
+  { id: '5-3', palette: 'glacier', theme: 'ice', bg: 'peaks', music: 'level', width: 240, intensity: 1.35 },
 ];
 
 const built = [];
@@ -633,7 +661,7 @@ for (const spec of PLAN) {
   for (let attempt = 0; attempt < 40 && problems.length; attempt++) {
     const seed = SEED + attempt * 7919 + spec.id.charCodeAt(2) * 104729;
     rnd = mulberry32(seed);
-    const build = { palette: spec.palette, targetWidth: spec.width };
+    const build = { palette: spec.palette, targetWidth: spec.width, intensity: spec.intensity };
     const plain = buildLevel(build);
     rows = plain.rows;
     notes = [];

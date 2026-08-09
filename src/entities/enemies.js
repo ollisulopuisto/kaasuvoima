@@ -2,7 +2,7 @@ import { Entity } from './entity.js';
 import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
 import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
-  drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun,
+  drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBubble, bubbleRadius, recolored, TINTS,
 } from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
@@ -48,6 +48,13 @@ export class Enemy extends Entity {
   get bubbleable() { return false; }
 
   get bubbled() { return this.bubbleTimer > 0; }
+
+  /**
+   * Points on top: a stomp lands on them and hurts, rather than counting. Every
+   * other way of killing the thing is untouched, which is the whole design —
+   * spiky closes one door, it does not make an enemy invincible.
+   */
+  get spiky() { return false; }
 
   /** True once the bubble has started warning that it is about to go. */
   get bursting() { return this.bubbleTimer > 0 && this.bubbleTimer < BUBBLE_WARN; }

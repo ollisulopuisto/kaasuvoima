@@ -116,6 +116,23 @@ export const CHUNKS = {
     13: '##          ####',
     14: '##          ####',
   }),
+  /**
+   * Two gaps and two tiles of ground between them. Each jump on its own is
+   * shorter than the one in `pit_s`; what is hard is that the first one has to
+   * *stop*, because the landing is two tiles wide and the next gap starts
+   * immediately after it.
+   *
+   * This is deliberately not one wide gap. The measured budget says eight tiles
+   * fit, but `tools/playable.mjs` — which is the design promise made
+   * executable — does not clear seven at power level 0, and a level the
+   * smallest size cannot pass is broken rather than hard. Difficulty here has
+   * to come from asking for two accurate jumps, not one enormous one.
+   */
+  pit_twin: ck(16, {
+    9: '  o o     o o',
+    13: '##     ##     #',
+    14: '##     ##     #',
+  }),
 
   /* ------------------------------- stairs ------------------------------ */
   steps_up: ck(16, {
@@ -278,6 +295,19 @@ export const CHUNKS = {
 
   /* ------------------------------- hazards ----------------------------- */
   spikes: ck(16, { 12: '     ^^^^', 13: G, 14: G }),
+  /**
+   * A spike bed too long to hop, and a bridge over it. The bridge is the route
+   * and the spikes are what a badly judged landing costs — the ground under
+   * them is still ground, so the level does not become a pit, it becomes a
+   * question about height.
+   */
+  spike_bridge: ck(16, {
+    8: '      ooo',
+    9: '   ---------',
+    12: '     ^^^^',
+    13: G,
+    14: G,
+  }),
   lava_gap: ck(16, {
     10: '   ------',
     13: '####WWWWWW######',
@@ -492,6 +522,33 @@ export const CHUNKS = {
     12: 'XX    f     XX',
     13: G,
     14: G,
+  }),
+  /**
+   * The trench. Nine tiles of lava, one plank in the middle, and the spikes on
+   * the near lip so the run-up has to be measured instead of taken — two
+   * three-tile hops rather than one long one, which is a different skill and
+   * the one a last fortress should be asking about.
+   */
+  fort_trench: ck(16, {
+    0: G,
+    1: G,
+    10: '      ---',
+    12: ' ^^',
+    13: '###         ####',
+    14: '###WWWWWWWWW####',
+  }),
+  /**
+   * The factory catwalk, rebuilt over lava. There it cost you the fall; here it
+   * costs you immediately, which is the only thing the last fortress adds — the
+   * move is still "keep walking".
+   */
+  fort_burn: ck(16, {
+    0: G,
+    1: G,
+    9: '    o o o',
+    12: '            k',
+    13: '###%%%%%%%%%####',
+    14: '###WWWWWWWWW####',
   }),
   boss_arena: ck(32, {
     0: G + G,

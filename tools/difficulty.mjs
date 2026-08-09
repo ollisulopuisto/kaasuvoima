@@ -55,7 +55,11 @@ const ENEMY_COST = {
   p: 1.1,   // pipe plant: telegraphed and stationary, but not stompable
   r: 1.5,   // stink cloud: bobs at head height and drifts toward you
   c: 1.2,   // cork guy: hops unpredictably, but corking is a nuisance not damage
-  H: 2.0,   // heartburn jet: cannot be killed at all, pure timing
+  H: 1.5,   /* heartburn jet: cannot be killed, but it is bolted to one column
+             * and fires on a fixed period. Timing a metronome is the cheapest
+             * skill on this list — the plant next door is the same deal and
+             * costs 1.1; the jet costs more only because it erupts out of open
+             * floor instead of a pipe you can see from a screen away. */
   A: 3.0,   // angry sun: unkillable by stomp and follows you for the rest of the level
   O: 0.0,   // moon: harmless, it is a trampoline with a power-up in it
   b: 5.0,   /* boss: one entity, but it is the level. The real spread between
@@ -86,11 +90,15 @@ function routeBand(rows) {
   return rows.slice(top, top + ROWS);
 }
 
-/** Horizontal runs of `chars` above the floor, as {y, from, w}. */
+/**
+ * Horizontal runs of `chars`, as {y, from, w}. The floor row is included: the
+ * crumbling catwalk is written at floor level, and it is footing you have to
+ * aim at like any other.
+ */
 function runs(route, chars) {
   const out = [];
   const w = route[0].length;
-  for (let y = 0; y < FLOOR; y++) {
+  for (let y = 0; y <= FLOOR; y++) {
     let run = 0;
     for (let x = 0; x <= w; x++) {
       if (x < w && chars.has(route[y][x])) { run++; continue; }
@@ -125,12 +133,16 @@ function measure(rows) {
   /*
    * A column is lethal if standing in it kills: no floor at all, or lava where
    * the floor should be. Lava counts because a lava trench is a pit that the
-   * engine happens to have put a lid on — it is not somewhere you land.
+   * engine happens to have put a lid on — it is not somewhere you land. Lava on
+   * the lower floor row counts only when the upper one is open, so a solid
+   * catwalk with lava beneath it reads as the catwalk it is; a crumbling one
+   * does not, because it will not be there.
    */
   const lethalCol = [];
   for (let x = 0; x < w; x++) {
-    const grounded = SOLID.has(at(x, FLOOR)) || SOLID.has(at(x, FLOOR + 1));
-    const lava = at(x, FLOOR) === 'W' || at(x, FLOOR + 1) === 'W';
+    const stands = (y) => SOLID.has(at(x, y)) && at(x, y) !== '%';
+    const grounded = stands(FLOOR) || stands(FLOOR + 1);
+    const lava = at(x, FLOOR) === 'W' || (!SOLID.has(at(x, FLOOR)) && at(x, FLOOR + 1) === 'W');
     lethalCol.push(!grounded || lava);
   }
 
@@ -148,7 +160,7 @@ function measure(rows) {
    */
   const landable = [];
   for (let x = 0; x < w; x++) {
-    const plank = Array.from({ length: FLOOR }, (_, y) => at(x, y)).some((ch) => ch === '-' || ch === '%');
+    const plank = Array.from({ length: FLOOR + 1 }, (_, y) => at(x, y)).some((ch) => ch === '-' || ch === '%');
     landable.push(!lethalCol[x] || plank);
   }
   let gapRisk = 0;
@@ -191,12 +203,10 @@ function measure(rows) {
    * is leaving whether or not you aimed well.
    */
   let precision = 0;
-  let planks = 0;
   for (const r of runs(route, new Set(['-', '%']))) {
     const overDeath = Array.from({ length: r.w }, (_, i) => lethalCol[r.from + i]).some(Boolean);
     const crumbles = Array.from({ length: r.w }, (_, i) => at(r.from + i, r.y) === '%').some(Boolean);
     precision += Math.min(1, 3 / r.w) * (overDeath ? 2.5 : 1) * (crumbles ? 1.5 : 1);
-    planks++;
   }
 
   const per100 = (n) => (n / w) * 100;
@@ -204,7 +214,6 @@ function measure(rows) {
     cols: w,
     enemies,
     spans,
-    planks,
     metrics: {
       enemies: per100(enemyCost),
       gaps: per100(gapRisk),

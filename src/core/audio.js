@@ -224,7 +224,7 @@ const VOWELS = {
  * @param {number} o.pitch starting pitch in Hz
  * @param {number} o.bend pitch multiplier at the end
  */
-function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.28, delay = 0 }) {
+function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.44, delay = 0 }) {
   if (muted || !ensure()) return;
   const t0 = ctx.currentTime + delay;
   const vowels = [...word].map((v) => VOWELS[v] || VOWELS.a);
@@ -354,7 +354,7 @@ const SFX = {
     tone({ from: 240, to: 660, dur: 0.22, gain: 0.22, hold: 0.3, detune: 12 });
     farty({ dur: 0.16, base: 120, gain: 0.14, wobble: 30, wet: 0.3 });
     // Only now and then: a grunt on every single jump would be unbearable.
-    maybeVox(0.18, { word: 'u', dur: 0.16, pitch: 300, bend: 0.8, gain: 0.14 });
+    maybeVox(0.18, { word: 'u', dur: 0.16, pitch: 300, bend: 0.8, gain: 0.26 });
   },
   fart: () => farty({ dur: 0.3, base: 150, gain: 0.32, wobble: 24 }),
   bigfart: () => farty({ dur: 0.46, base: 92, gain: 0.38, wobble: 17, wet: 0.8 }),
@@ -395,33 +395,35 @@ const SFX = {
   powerup: () => {
     [523, 659, 784, 1047, 1319].forEach((f, i) =>
       tone({ from: f, dur: 0.11, gain: 0.18, delay: i * 0.055, hold: 0.5, detune: 8 }));
-    vox({ word: 'iea', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.22, delay: 0.18 });
+    vox({ word: 'iea', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.38, delay: 0.18 });
   },
-  yeah: () => vox({ word: 'iea', dur: 0.4, pitch: 255, bend: 1.35, gain: 0.26 }),
-  oof: () => vox({ word: 'ou', dur: 0.3, pitch: 240, bend: 0.6, gain: 0.24 }),
+  /* These three were defined and never called from anywhere. A sound nobody
+   * triggers is not a sound. See scenes/cards.js and entities/player.js. */
+  yeah: () => vox({ word: 'iea', dur: 0.4, pitch: 255, bend: 1.35, gain: 0.42 }),
+  oof: () => vox({ word: 'ou', dur: 0.3, pitch: 240, bend: 0.6, gain: 0.40 }),
   letsgo: () => {
-    vox({ word: 'eo', dur: 0.22, pitch: 250, bend: 1.1, gain: 0.24 });
-    vox({ word: 'ou', dur: 0.26, pitch: 300, bend: 1.3, gain: 0.24, delay: 0.24 });
+    vox({ word: 'eo', dur: 0.22, pitch: 250, bend: 1.1, gain: 0.40 });
+    vox({ word: 'ou', dur: 0.26, pitch: 300, bend: 1.3, gain: 0.40, delay: 0.24 });
   },
   powerdown: () => {
     [784, 587, 440, 330].forEach((f, i) =>
       tone({ type: 'square', from: f, dur: 0.13, gain: 0.18, delay: i * 0.06 }));
     farty({ dur: 0.3, base: 110, gain: 0.16, wobble: 14, delay: 0.1, wet: 0.4 });
-    maybeVox(0.5, { word: 'ou', dur: 0.28, pitch: 245, bend: 0.65, gain: 0.2, delay: 0.05 });
+    maybeVox(0.5, { word: 'ou', dur: 0.28, pitch: 245, bend: 0.65, gain: 0.34, delay: 0.05 });
   },
   oneup: () => {
     [659, 784, 1047, 1319].forEach((f, i) =>
       tone({ type: 'triangle', from: f, dur: 0.13, gain: 0.2, delay: i * 0.08, detune: 6 }));
-    vox({ word: 'uo', dur: 0.42, pitch: 280, bend: 1.5, gain: 0.24, delay: 0.24 });
+    vox({ word: 'uo', dur: 0.42, pitch: 280, bend: 1.5, gain: 0.40, delay: 0.24 });
   },
   die: () => {
-    vox({ word: 'ou', dur: 0.5, pitch: 260, bend: 0.45, gain: 0.26 });
+    vox({ word: 'ou', dur: 0.5, pitch: 260, bend: 0.45, gain: 0.42 });
     tone({ from: 440, to: 700, dur: 0.14, gain: 0.22, hold: 0.4 });
     tone({ from: 700, to: 90, dur: 0.75, gain: 0.24, delay: 0.16, hold: 0.2, vibrato: 12 });
     farty({ dur: 0.6, base: 130, gain: 0.24, wobble: 11, delay: 0.16, wet: 0.9, vary: 0.4 });
   },
   clear: () => {
-    vox({ word: 'iea', dur: 0.45, pitch: 260, bend: 1.4, gain: 0.26 });
+    vox({ word: 'iea', dur: 0.45, pitch: 260, bend: 1.4, gain: 0.42 });
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) =>
       tone({ from: f, dur: 0.17, gain: 0.2, delay: i * 0.12, detune: 8 }));
     [1, 3, 5].forEach((i) => hatAt2(i * 0.12));

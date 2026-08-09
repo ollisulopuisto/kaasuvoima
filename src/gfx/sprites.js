@@ -895,6 +895,83 @@ export function drawBubble(ctx, cx, cy, radius, tick, warning, paint) {
   ctx.fillRect(px - Math.round(rx * 0.62), py - Math.round(ry * 0.28), 1, 2);
 }
 
+/* -------------------------------- spines ------------------------------- */
+
+/**
+ * Bone spines along the top edge of a sprite — the one part of a body a stomp
+ * ever lands on, so that is where they go.
+ *
+ * Drawn as actual triangles rather than signalled with a tint, because this is
+ * read in the same frame the player decides to jump: a colour has to be learned
+ * first, a row of points does not. `out` is 0..1, how far they have pushed
+ * through the skin, so a boss winding up to bristle is the same drawing at a
+ * fraction of its height rather than a second sprite that has to agree with the
+ * first.
+ */
+export function drawSpines(ctx, x, y, w, out, tick, warning = false, unit = 8) {
+  if (out <= 0) return;
+  const px = Math.round(x);
+  const py = Math.round(y);
+  // `unit` is the nominal spacing, so a boss that has swollen to three times
+  // its size grows its spines instead of sprouting three times as many.
+  const count = Math.max(3, Math.round(w / unit));
+  const step = w / count;
+  const full = Math.max(4, Math.round(step * 1.1));
+  const half = Math.max(2, Math.round(step * 0.32));
+  const h = Math.max(1, Math.round(full * out));
+  // While they are still coming out the tips flash, so the warning reads even
+  // on the frames where the points are still short enough to miss.
+  const tip = warning && Math.floor(tick / 3) % 2 ? '#fff8e8' : '#e8e0c8';
+
+  ctx.fillStyle = '#5a5040';
+  ctx.fillRect(px, py - 1, Math.round(w), 2);
+  for (let i = 0; i < count; i++) {
+    const sx = Math.round(px + step * (i + 0.5));
+    for (let r = 0; r < h; r++) {
+      // Widest at the base, one pixel at the point.
+      const hw = Math.max(1, Math.round((half * (r + 1)) / h));
+      ctx.fillStyle = r < h / 2 ? tip : '#a89878';
+      ctx.fillRect(sx - hw, py - h + r, hw * 2, 1);
+    }
+  }
+}
+
+/**
+ * Piikkiukko — the walking one that cannot be stomped. Squat and dark on
+ * purpose: the spines are the whole silhouette, and a tall body would put them
+ * where a jumping player is not looking.
+ */
+function spikeGuyBody(ctx, x, y, frame, facing) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const bob = Math.floor(frame / 6) % 2;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    ctx.fillStyle = '#3c3450';
+    ctx.fillRect(bx + 1, py + 5 + bob, 14, 9 - bob);
+    ctx.fillStyle = '#584c74';
+    ctx.fillRect(bx + 2, py + 6 + bob, 12, 5);
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 3, py + 8, 4, 4);
+    ctx.fillRect(bx + 9, py + 8, 4, 4);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 5, py + 9, 2, 3);
+    ctx.fillRect(bx + 10, py + 9, 2, 3);
+    // Angry brows: the plant taught us a face reads as a character, and this
+    // one is a character you are meant to walk around.
+    ctx.fillRect(bx + 3, py + 7, 4, 1);
+    ctx.fillRect(bx + 9, py + 7, 4, 1);
+    ctx.fillStyle = '#2a2438';
+    const swap = frame % 2 === 0;
+    ctx.fillRect(bx + (swap ? 1 : 3), py + 13, 5, 3);
+    ctx.fillRect(bx + (swap ? 10 : 8), py + 13, 5, 3);
+    drawSpines(ctx, bx + 1, py + 5, 14, 1, frame);
+  });
+}
+
+export function drawSpikeGuy(ctx, x, y, frame, facing) {
+  outlined(ctx, (g) => spikeGuyBody(g, x, y, frame, facing));
+}
+
 /**
  * World 1's boss, to the lead designer's specification: a boxer.
  *
@@ -944,7 +1021,12 @@ function drawBoxerBoss(r, bx, py, body, dark, frame) {
   r(bx + 2, py + 16, 3, 2, '#f07868');
 }
 
-export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1) {
+/**
+ * `spines` is 0..1: how far the boss's back spines are out. Drawn here rather
+ * than by the entity so a boss is one picture — the spines have to scale and
+ * flash with the body they belong to, and the giant scales by three.
+ */
+export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1, spines = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20'];
@@ -970,6 +1052,7 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1)
       }, bx, py, body, dark, frame);
     });
     ctx.restore();
+    bossSpines(ctx, px, py, S, spines, frame);
     return;
   }
 
@@ -1004,6 +1087,15 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1)
     r(bx + (swap ? 21 : 19), py + 28, 10, 4);
   });
   ctx.restore();
+  bossSpines(ctx, px, py, S, spines, frame);
+}
+
+/**
+ * Along the top of the boss's *hitbox*, not the top of its artwork: what the
+ * player can see is then exactly what a stomp would land on.
+ */
+function bossSpines(ctx, px, py, scale, out, frame) {
+  drawSpines(ctx, px + 1, py, Math.round(30 * scale), out, frame, out < 1, 8 * scale);
 }
 
 /* -------------------------------- items -------------------------------- */

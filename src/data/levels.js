@@ -28,7 +28,7 @@ const LEVEL_DEFS = {
     theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'plat_float', 'pit_s', 'note_pair',
-      'walkers', 'brick_wall', 'coins', 'beanstalk', 'pipe_plant', 'pit_bridge',
+      'walkers', 'brick_wall', 'pit_plat', 'beanstalk', 'pipe_plant', 'pit_bridge',
       'flyer', 'plat_steps', 'warp_pipe', 'power_hi', 'clouds', 'pit_l',
       'ledge', 'shell', 'sky_run', 'steps_down', 'run_up', 'goal', 'goal_end',
     ],
@@ -55,7 +55,7 @@ const LEVEL_DEFS = {
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
-      'start', 'flat', 'power', 'walkers', 'sun', 'qrow',
+      'start', 'flat', 'power', 'walkers', 'sun', 'corks',
       'pipe_plant', 'pit_s', 'heartburn', 'coins', 'shell', 'plat_steps',
       'pit_l', 'flyer', 'bricks', 'ledge', 'pit_plat', 'corks',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
@@ -64,7 +64,7 @@ const LEVEL_DEFS = {
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
-      'start', 'plat_float', 'power', 'walkers', 'spikes', 'pipe_pair',
+      'start', 'plat_float', 'power', 'walkers', 'spikes', 'pit_twin',
       'walkers', 'sky_run', 'coin_stack', 'pit_bridge', 'clouds', 'brick_wall',
       'heartburn_pair', 'plat_hi', 'shell', 'pit_l', 'power_hi', 'walkers',
       'note_pair', 'steps_down', 'run_up', 'goal', 'goal_end',
@@ -76,7 +76,7 @@ const LEVEL_DEFS = {
     chunks: [
       'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
       'moon_night', 'coins', 'shell', 'plat_steps', 'pit_l', 'corks',
-      'dune_night', 'bricks', 'flyer', 'pit_plat', 'shell', 'steps_up',
+      'dune_night', 'spike_bridge', 'flyer', 'pit_plat', 'shell', 'steps_up',
       'run_up', 'goal', 'goal_end',
     ],
   },
@@ -84,8 +84,8 @@ const LEVEL_DEFS = {
     theme: 'desert', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'sun', 'lava_gap', 'walker',
-      'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'coins', 'soup_stop',
-      'sky_run', 'bricks', 'heartburn', 'plat_float', 'walkers', 'power',
+      'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'soup_stop',
+      'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'walkers', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
@@ -93,7 +93,7 @@ const LEVEL_DEFS = {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 1,
     chunks: [
       'start', 'fort_hall', 'fort_power', 'fort_spikes', 'fort_gap', 'fort_blocks',
-      'fort_pillars', 'fort_spikes', 'fort_gap', 'fort_hall', 'boss_arena',
+      'fort_pillars', 'fort_spikes', 'fort_gap', 'fort_pillars', 'boss_arena',
     ],
   },
 
@@ -101,7 +101,7 @@ const LEVEL_DEFS = {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'walkers', 'pit_s', 'qrow',
-      'flyer', 'plat_hi', 'shell', 'pit_l', 'coin_stack', 'pipe_tall',
+      'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'pit_twin',
       'spikes', 'cork_gap', 'sky_run', 'pit_plat', 'power_hi', 'plat_steps',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
@@ -110,8 +110,8 @@ const LEVEL_DEFS = {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
-      'coins', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell', 'plat_float',
-      'spikes', 'flyer', 'pit_plat', 'bricks', 'pipe_pair', 'walkers',
+      'clouds', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell', 'plat_float',
+      'spikes', 'flyer', 'pit_plat', 'heartburn_pair', 'corks', 'walkers',
       'ledge', 'power', 'run_up', 'goal', 'goal_end',
     ],
   },
@@ -119,7 +119,7 @@ const LEVEL_DEFS = {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'lava_gap', 'walkers', 'plat_steps',
-      'shell', 'lava_wide', 'clouds', 'coin_stack', 'heartburn_pair', 'pipe_plant',
+      'shell', 'lava_wide', 'clouds', 'cork_gap', 'heartburn_pair', 'pipe_plant',
       'lava_gap', 'sky_run', 'corks', 'brick_wall', 'pit_l', 'plat_float',
       'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
@@ -128,7 +128,7 @@ const LEVEL_DEFS = {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 2,
     chunks: [
       'start', 'fort_hall', 'fort_power', 'fort_pillars', 'fort_gap', 'fort_spikes',
-      'fort_blocks', 'fort_gap', 'fort_spikes', 'fort_pillars', 'fort_hall', 'boss_arena',
+      'fort_blocks', 'fort_gap', 'fort_spikes', 'fort_pillars', 'fort_spikes', 'boss_arena',
     ],
   },
 
@@ -136,7 +136,7 @@ const LEVEL_DEFS = {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_press', 'fac_vents', 'corks',
-      'fac_belt', 'clouds', 'fac_shaft', 'fac_gap', 'heartburn', 'fac_crumble',
+      'fac_belt', 'cork_gap', 'fac_shaft', 'fac_gap', 'heartburn', 'fac_crumble',
       'fac_press', 'cloud_run', 'fac_vents', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
@@ -144,7 +144,7 @@ const LEVEL_DEFS = {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_belt', 'heartburn_pair', 'fac_shaft',
-      'cork_gap', 'fac_press', 'cloud_run', 'fac_gap', 'soup_stop', 'fac_vents',
+      'corks', 'fac_press', 'fac_floor', 'fac_gap', 'soup_stop', 'fac_vents',
       'fac_belt', 'clouds', 'fac_shaft', 'heartburn', 'steps_down', 'run_up',
       'goal', 'goal_end',
     ],
@@ -154,7 +154,7 @@ const LEVEL_DEFS = {
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_vents', 'fac_belt', 'fac_shaft',
       'heartburn_pair', 'cloud_run', 'fac_gap', 'fac_press', 'corks', 'fac_belt',
-      'heartburn', 'fac_shaft', 'cloud_run', 'fac_vents', 'fac_press', 'steps_up',
+      'heartburn', 'fac_shaft', 'cloud_run', 'fac_vents', 'cork_gap', 'steps_up',
       'run_up', 'goal', 'goal_end',
     ],
   },
@@ -162,18 +162,25 @@ const LEVEL_DEFS = {
     theme: 'factory', bg: 'factory', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_vents', 'fac_gap', 'fac_shaft',
-      'fac_belt', 'fac_floor', 'boss_arena_big',
+      'fac_belt', 'fac_vents', 'boss_arena_big',
     ],
   },
 
   // World 5 is the statistics-driven bonus world; 5-1..5-3 come out of
   // tools/gen-levels.mjs, the rematch arena is hand-built like the others.
   ...GENERATED_LEVELS,
+  /*
+   * The rematch, and the last thing in the game. World 5's numbered levels are
+   * generated and their difficulty is the generator's to set, so this is the
+   * one place the world can be given a peak by hand — and it is spent on
+   * trenches rather than on more enemies, because at this point the player has
+   * seen every enemy and none of them is news.
+   */
   '5-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
-      'start', 'fort_hall', 'fort_power', 'fort_spikes', 'fort_pillars', 'fort_gap',
-      'fort_blocks', 'fort_spikes', 'fort_gap', 'fort_hall', 'boss_arena_big',
+      'start', 'fort_hall', 'fort_power', 'fort_trench', 'fort_spikes', 'fort_burn',
+      'fort_gap', 'fort_trench', 'fort_burn', 'fort_spikes', 'boss_arena_big',
     ],
   },
 };

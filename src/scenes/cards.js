@@ -15,6 +15,9 @@ export class InterludeScene {
 
   enter() {
     Music.stop();
+    // The one moment in the game with no other sound competing, which is the
+    // only place a synthesised voice has a chance of being heard as one.
+    Sfx.play('letsgo');
   }
 
   update(input) {
