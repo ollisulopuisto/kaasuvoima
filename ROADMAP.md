@@ -292,7 +292,24 @@ jälkeen ja paremmin tiedoin.
   bugi, mutta se on nyt kirjattu.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
-- **Hyppybudjetti on vanhentunut, ja se on ollut sitä alusta asti.**
+- ✔ **Hyppybudjetti korjattu 9.8.2026** (oli: vanhentunut alusta asti). Tiedosto
+  on mitattu uusiksi (6/9/4), `PHYSICS.md`:n taulukko korjattu, ja maailma 3
+  muotoiltu uuden mittarin mukaan: 3-1:n kuilut olivat kolmessa kohdassa
+  budjetin rajalla, mikä teki avauskentästä maailman vaikeimman. Kaksi
+  jääkohtaista kapeampaa kuilupalikkaa, ja w3 nousee taas (162 → 133 → 174).
+
+  **Tärkein osa on testi, ei korjaus:** `verify.mjs` tarkistaa nyt että
+  budjettitiedosto on toistettavissa nykyisistä vakioista. Tätä bugia ei voinut
+  saada kiinni millään portilla, koska sekä `rules.js` että `difficulty.mjs`
+  lukevat *saman* tiedoston — liian antelias budjetti saa jokaisen kentän
+  näyttämään hyväksytyltä. Alla oleva kuvaus on jätetty tähän siksi että se
+  kertoo miten se pääsi syntymään.
+
+  **Maailmaa 5 ei generoitu uusiksi.** Sen kentät läpäisevät validaattorin myös
+  uusilla luvuilla, mutta seuraava generointiajo tuottaisi erilaiset kentät.
+  Se on yhä oma päätöksensä.
+
+- **(Historia) Hyppybudjetti oli vanhentunut, ja se oli sitä alusta asti.**
   `tools/jump-budget.json` ja `PHYSICS.md`:n taulukko lupaavat 121 px nousun ja
   200 px kantaman; mitattuna nyt 71 ja 155. Vakiot eivät ole muuttuneet sitten
   sen commitin joka kirjoitti tiedoston viimeksi (`src/level/physics.js`), ja
@@ -307,26 +324,14 @@ jälkeen ja paremmin tiedoin.
   Seurauksena **kohta 3 (d) peruttiin** 9.8.2026: sen peruste oli tämä väärä
   luku. Se osa on siis hoidettu.
 
-  **Jäljellä oleva päätös: korjataanko itse tiedosto?** Se ei ole ilmainen, ja
-  hinta on nyt mitattu eikä arvattu. `difficulty.mjs` pisteyttää kuiluriskin
-  suhteessa budjettiin (`(span / gapTiles) ** 2`), joten oikea budjetti tekee
-  kuiluista suhteessa vaikeampia ja nostaa kaikkia lukuja. Ajettuna arvoilla
-  6/9/4:
-
-  - koko pelin käyrä nousee yhä joka maailmassa, mutta epätasaisesti:
-    w3→w4 kutistuu +4,0:aan ja w4→w5 kasvaa +39,5:een
-  - **maailma 3 ei enää nouse kokonaisuutena**: 3-1 204 → 3-2 133 → 3-3 174,
-    eli avauskenttä on maailman vaikein
-
-  Tuo viimeinen on oikeaa tietoa jota vanhentunut tiedosto piilotti, ei uusi
-  vika: 3-1:n kuilut ovat suhteessa oikeaan hyppyyn leveämmät kuin luultiin.
-  Mutta se on **maailman 3 muotoa koskeva kysymys**, ei kirjanpitoa, joten
-  tiedostoa ei korjattu ohimennen. Kolme vaihtoehtoa: korjaa tiedosto ja hyväksy
-  että mittari valittaa maailmasta 3 kunnes sen muoto korjataan; korjaa tiedosto
-  ja korjaa maailma 3 samalla; tai jätä molemmat ja pidä tämä kirjaus.
-  **Muista myös että maailma 5 on generoitu vanhoilla luvuilla** — sen kentät
-  läpäisevät validaattorin myös uusilla, mutta seuraava generointiajo tuottaisi
-  erilaisia kenttiä.
+  Tiedoston korjaaminen ei ollut ilmaista, ja hinta mitattiin ennen kuin siihen
+  koskettiin: `difficulty.mjs` pisteyttää kuiluriskin suhteessa budjettiin
+  (`(span / gapTiles) ** 2`), joten oikea budjetti nostaa kaikkia lukuja ja
+  paljasti sen että **maailma 3 ei noussut kokonaisuutena** (3-1 204 →
+  3-2 133 → 3-3 174). Se ei ollut uusi vika vaan vanha, jonka vanhentunut
+  tiedosto piilotti: 3-1:n kuilut olivat kolmessa kohdassa budjetin rajalla.
+  Omistaja valitsi 9.8.2026 että sekä tiedosto että maailma 3 korjataan, ja
+  molemmat on nyt tehty — ks. yllä.
 
   Ansa jonka tämä paljasti: **`measure-jump.mjs` kirjoittaa
   `jump-budget.json`in sivuvaikutuksena**, eli pelkkä mittaaminen muuttaa sitä
