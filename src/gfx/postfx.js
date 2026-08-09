@@ -466,10 +466,12 @@ export const PostFX = {
    * and it cannot be voted out by their own gas.
    *
    * Writes into two preallocated arrays and never builds an object, because
-   * this is called once per lit entity per frame.
+   * this is called once per lit entity per frame. Aim the lamp with `setFocus`
+   * first: that is what clears the previous frame and says where "near" is.
    */
   addLight(x, y, radius, intensity) {
     if (!(intensity > 0) || !(radius > 0)) return;
+    this._ensureLights();
     // Off-screen lights would still occupy a slot. The reach is the outer edge
     // of the falloff, so a light just past the border still spills into view.
     const reach = radius * (1 + LIGHT_EDGE);
@@ -796,7 +798,10 @@ export const PostFX = {
       this._punch(g, this._lights[i4], this._lights[i4 + 1],
         this._lights[i4 + 2], this._lights[i4 + 3]);
     }
+    // The layer is ours alone, but it is still a context: left on
+    // `destination-out` it would be one refactor away from erasing something.
     g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
 
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
