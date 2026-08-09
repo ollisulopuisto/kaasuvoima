@@ -10,8 +10,8 @@
 let ctx = null;
 let master = null;
 let musicBus = null;
-let musicOut = null;
 let sfxBus = null;
+let sfxOut = null;
 let bedBus = null;
 let noiseBuffer = null;
 let muted = false;
@@ -46,16 +46,26 @@ function ensure() {
   tame.frequency.value = 4800;
   tame.Q.value = 0.4;
   musicBus.connect(tame).connect(master);
-  musicOut = tame;
 
+  /*
+   * The sfx path is two nodes, not one, and the gap between them is where a
+   * room goes. Everything that makes a sound effect connects to `sfxBus`; the
+   * dry signal and anything the room sends back both arrive at `sfxOut`, which
+   * is the one thing that reaches the master. A send that returned to the
+   * master would be a room built on the outside of the mixer, and a send that
+   * returned to `sfxBus` would feed itself.
+   */
   sfxBus = ctx.createGain();
   sfxBus.gain.value = 0.95;
-  sfxBus.connect(master);
+  sfxOut = ctx.createGain();
+  sfxOut.connect(master);
+  sfxBus.connect(sfxOut);
 
-  // The per-level beds ride the sfx bus. They are things in the world, the
-  // same as a coin or a stomp, so they are muted, limited and — the part that
-  // matters when somebody asks whether they are too loud — *measured* on the
-  // same meter as everything else the world makes.
+  // The per-level beds ride the sfx bus. Wind and cracking ice are things in
+  // the world — the place making a noise — so they are on the diegetic side of
+  // the line with the coins and the farts, and whatever the room does to those
+  // it does to these. It also means they are muted, limited and *measured* on
+  // the same meter as everything else the world makes.
   bedBus = ctx.createGain();
   bedBus.gain.value = 1;
   bedBus.connect(sfxBus);
@@ -515,32 +525,42 @@ export const THEME_AMBIENCE = {
  *
  * The slapback in `ensure()` stays exactly where it is. That is a 190 ms echo on
  * the music for a bit of air, which is a different job in every level.
- */
-const HALL_SECONDS = 1.8;
-const HALL_PREDELAY = 0.022;
-/*
- * Both buses feed it, at different depths.
  *
- * A room applies to everything heard inside it; sending only the music would be
- * an effect on the soundtrack rather than a place. But the sound effects are the
- * game telling you what just happened, and a stomp still ringing a second and a
- * half later is telling you about a stomp you have already stopped caring about.
- * So the effects get under half the music's send, through the same filters —
- * enough to put them in the room, not enough to leave a trail behind every jump.
+ * ---------------------------------------------------------------------------
+ * IT HANGS OFF THE SFX PATH AND NOTHING ELSE. THIS IS THE RULE.
+ *
+ * The music is **non-diegetic**: nothing in the castle is playing it. It is the
+ * narrator, and the narrator is not standing in the room — a film score does not
+ * echo when the scene moves into a cave. So the room may not touch it, in this
+ * level or any other, and the answer to "should X get the reverb too" is always
+ * decided the same way: is X something in the world making a noise?
+ *
+ * Sound effects are **diegetic**: a coin, a stomp, a fart ball, a boss coming
+ * down. Those are made by things standing on the stone, and the stone is exactly
+ * what should colour them. The per-level beds are on the same side of the line —
+ * the wind and the ice *are* the place — so they are in the room too.
+ * ---------------------------------------------------------------------------
  */
-const HALL_MUSIC_SEND = 1;
-const HALL_SFX_SEND = 0.42;
+const HALL_SECONDS = 0.95;
+const HALL_PREDELAY = 0.018;
 /**
- * How much room there is, and the only number here that is taste rather than
- * physics — the convolver normalises the impulse response, which is what makes
- * this a single knob instead of a level that moves when the decay time does.
+ * How much room there is — one knob, because the convolver normalises the
+ * impulse response, so this does not move when the decay time does.
  *
- * Measured on the master sum: a stomp peaks at 0.19 and its tail through the
- * hall starts at 0.024 and is under the noise floor by 1.5 s. That is about
- * 18 dB down, which is a room you are standing in rather than a room somebody
- * has put over the top of the game.
+ * Deliberately modest. The first version was a cathedral — twice this wet over
+ * twice the decay — and a cathedral is the wrong room for a game where a coin,
+ * a stomp, a kick and a brick all fire inside one second: every one of them was
+ * still ringing over the next three. Measured on the sfx path, as the time a
+ * sound stays above a hundredth of its own peak:
+ *
+ *   stomp    ~95 ms dry ->  ~360 ms   (~910 ms as a cathedral)
+ *   brick   ~135 ms dry ->  ~330 ms
+ *   coin    ~190 ms dry ->  ~590 ms
+ *
+ * Roughly three times the ring, not ten. Long enough to hear the walls, short
+ * enough that the next sound still arrives on its own.
  */
-const HALL_WET = 2.4;
+const HALL_WET = 0.55;
 const HALL_FADE = 0.5;
 
 let hall = null;
@@ -583,51 +603,46 @@ function buildHall() {
   damp.frequency.value = 2600;
   const wet = ctx.createGain();
   wet.gain.value = 0.0001;
-  cut.connect(damp).connect(conv).connect(wet).connect(master);
-
-  const music = ctx.createGain();
-  music.gain.value = HALL_MUSIC_SEND;
-  music.connect(cut);
-  const sfx = ctx.createGain();
-  sfx.gain.value = HALL_SFX_SEND;
-  sfx.connect(cut);
-  return { wet, music, sfx, sending: false };
+  cut.connect(damp).connect(conv).connect(wet).connect(sfxOut);
+  return { in: cut, wet, sending: false };
 }
 
 /**
- * Opens and closes the sends. Closing them rather than only turning the wet
- * down matters: a convolver with nothing connected to it stops costing anything
- * once its tail has run out, and a level with no stone in it should not be
- * paying for a 1.8-second convolution it cannot hear.
+ * Opens and closes the send. Closing it rather than only turning the wet down
+ * matters: a convolver with nothing connected to it stops costing anything once
+ * its tail has run out, and a level with no stone in it should not be paying
+ * for a convolution it cannot hear.
  */
-function hallSends(on) {
+function hallSend(on) {
   if (!hall || hall.sending === on) return;
   hall.sending = on;
-  if (on) {
-    musicOut.connect(hall.music);
-    sfxBus.connect(hall.sfx);
-  } else {
-    musicOut.disconnect(hall.music);
-    sfxBus.disconnect(hall.sfx);
-  }
+  if (on) sfxBus.connect(hall.in);
+  else sfxBus.disconnect(hall.in);
 }
+
+/**
+ * Measured on the master sum, against a coin at 0.256: the wind peaks between
+ * 0.018 and 0.045 depending on where the swell is, so 15 to 23 dB under the
+ * smallest sound effect in the game and 17 dB under the music. The swell used
+ * to reach further down than this and the bed simply vanished for half a minute
+ * at a time — a different failure from being too loud, but just as much one.
+ */
+const WIND_GAIN = 0.062;
 
 /**
  * Distant desert wind: two noise loops through a lowpass, with slow LFOs on the
  * colour and on the level.
  *
- * Ten nodes, started once and stopped once. The rates do not divide into each
- * other and the two loops run at unrelated speeds, because one two-second noise
- * loop on its own starts to sound like a two-second noise loop.
+ * Ten nodes, started once and stopped once. The LFO rates do not divide into
+ * each other and the two loops run at unrelated speeds, because one two-second
+ * noise loop on its own starts to sound like a two-second noise loop.
  */
-const WIND_GAIN = 0.05;
-
 function buildWind() {
   const out = ctx.createGain();
   out.gain.value = WIND_GAIN;
   out.connect(bedBus);
   const swell = ctx.createGain();
-  swell.gain.value = 0.75;
+  swell.gain.value = 0.8;
   swell.connect(out);
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
@@ -656,7 +671,7 @@ function buildWind() {
     nodes.push(osc);
   };
   lfo(0.071, 230, lp.frequency);
-  lfo(0.043, 0.32, swell.gain);
+  lfo(0.043, 0.24, swell.gain);
 
   const t0 = ctx.currentTime;
   for (const n of nodes) n.start(t0);
@@ -762,7 +777,7 @@ export const Ambience = {
     this.live = true;
     if (this.current === 'hall') {
       if (!hall) hall = buildHall();
-      hallSends(true);
+      hallSend(true);
       const t = ctx.currentTime;
       hall.wet.gain.cancelScheduledValues(t);
       hall.wet.gain.setValueAtTime(Math.max(0.0001, hall.wet.gain.value), t);
@@ -786,7 +801,7 @@ export const Ambience = {
       hall.wet.gain.cancelScheduledValues(t);
       hall.wet.gain.setValueAtTime(Math.max(0.0001, hall.wet.gain.value), t);
       hall.wet.gain.exponentialRampToValueAtTime(0.0001, t + HALL_FADE);
-      hallSends(false);
+      hallSend(false);
     }
     const w = this._wind;
     if (w) {
@@ -832,13 +847,15 @@ export const Ambience = {
 
 /** What the audio engine is actually doing, for the debug overlay. */
 /**
- * Taps for measuring loudness from a test harness: the sfx bus, and the master
- * sum. Both are needed. A coin is on the sfx bus and the music is on the music
- * bus, so `master` is the only point where the two can honestly be compared —
- * and it is the only place the hall's wet return is heard at all.
+ * Taps for measuring loudness from a test harness.
+ *
+ * `bus` is the end of the sfx path — dry plus whatever the room sent back, so a
+ * reverb tail is visible there. `music` is the music path on its own, which is
+ * how you prove the room never touched it. `master` is the sum, and it is the
+ * only place a coin and the music can honestly be compared against each other.
  */
 export function audioTap() {
-  return ensure() ? { ctx, bus: sfxBus, master } : null;
+  return ensure() ? { ctx, bus: sfxOut, music: musicBus, master } : null;
 }
 
 export function audioDiag() {

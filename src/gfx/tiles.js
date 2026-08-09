@@ -293,36 +293,110 @@ function drawGround(ctx, x, y, th, openAbove, tx, ty) {
 
 /* -------------------------------- blocks -------------------------------- */
 
+/**
+ * A breakable tile is boarded-up timber, not masonry: three upright planks
+ * nailed to a cross-batten.
+ *
+ * Two things make it readable rather than merely different. The planks run
+ * *vertically* while every solid surface in the game runs horizontally, so the
+ * grain alone separates breakable from ground at speed. And it carries a hard
+ * outline on all four sides — ground and hard tile seamlessly into each other,
+ * so a framed box is by definition a thing rather than a wall. The material
+ * also has to pay off when it goes: wood splinters, and `BrickPiece` does.
+ */
 function drawBrick(ctx, x, y, th, tx, ty) {
   ctx.fillStyle = th.brick;
   ctx.fillRect(x, y, TILE, TILE);
+
+  // plank seams, with the lit edge of the next board beside each one
   ctx.fillStyle = th.brickDark;
-  ctx.fillRect(x, y + 7, TILE, 1);
-  ctx.fillRect(x, y + 15, TILE, 1);
-  ctx.fillRect(x + 3, y, 1, 7);
-  ctx.fillRect(x + 11, y + 8, 1, 7);
+  ctx.fillRect(x + 5, y, 1, TILE);
+  ctx.fillRect(x + 10, y, 1, TILE);
   ctx.fillStyle = th.brickLight;
-  ctx.fillRect(x, y, TILE, 1);
-  ctx.fillRect(x, y + 8, TILE, 1);
-  ctx.fillRect(x + 4, y + 1, 1, 6);
-  ctx.fillRect(x + 12, y + 9, 1, 6);
-  // a hairline crack on some of them, so a wall is not four copies of one tile
+  ctx.fillRect(x + 6, y, 1, TILE);
+  ctx.fillRect(x + 11, y, 1, TILE);
+
+  // grain: a couple of ticks per tile so a wall is not one stamp repeated
   const n = hashNoise(tx * 3, ty * 5);
-  if (n > 0.66) {
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    const cx = x + 5 + Math.floor(n * 6);
-    ctx.fillRect(cx, y + 2, 1, 2);
-    ctx.fillRect(cx + 1, y + 4, 1, 2);
-    if (n > 0.88) ctx.fillRect(cx + 1, y + 10, 1, 4);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(x + 1 + Math.floor(n * 3), y + 2, 1, 3);
+  ctx.fillRect(x + 12 + Math.floor(n * 2), y + 11, 1, 3);
+  if (n > 0.55) ctx.fillRect(x + 7, y + 12, 1, 3);
+  if (n > 0.78) {                                   // a knot in one board
+    const kx = x + (n > 0.9 ? 12 : 1);
+    ctx.fillRect(kx, y + 11, 3, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(kx + 1, y + 11, 1, 2);
   }
+
+  // the batten: a strap laid across the boards, which is what holds them up
+  ctx.fillStyle = th.brick;
+  ctx.fillRect(x, y + 6, TILE, 4);
+  ctx.fillStyle = th.brickLight;
+  ctx.fillRect(x, y + 6, TILE, 1);
+  ctx.fillStyle = th.brickDark;
+  ctx.fillRect(x, y + 9, TILE, 1);
+
+  // nail heads, one per board, where the batten crosses it
+  for (const nx of [2, 7, 13]) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x + nx, y + 7, 2, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x + nx, y + 7, 1, 1);
+  }
+
+  // the frame: what says "this is a box on the wall", not more wall
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillRect(x, y + TILE - 1, TILE, 1);
+  ctx.fillRect(x, y, 1, TILE);
+  ctx.fillRect(x + TILE - 1, y, 1, TILE);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(x + 1, y + 1, TILE - 2, 1);
 }
 
+/**
+ * The prize block is a pressurised canister: a bolted brass plate with a drum
+ * bulging out of it and a pea-green light burning behind the gauge glass.
+ *
+ * A symbol on the face would only ever be somebody else's symbol. A container
+ * that is visibly under pressure says "there is something in here" without one,
+ * and the blinking gauge is the part that says "hit me" — nothing else in the
+ * game blinks. Its colours are fixed rather than themed on purpose: this is the
+ * one tile that must shout on all six backgrounds, and the dark frame keeps it
+ * off the sand in the desert as much as off the night sky.
+ */
 function drawQuestion(ctx, x, y, tick) {
   const phase = Math.floor(tick / 8) % 4;
-  const glow = phase === 0 ? '#ffe070' : phase === 2 ? '#e8a020' : '#f8c030';
-  ctx.fillStyle = glow;
+  const plate = phase === 0 ? '#d89020' : phase === 2 ? '#b06c10' : '#c88018';
+  ctx.fillStyle = '#2a1a06';
   ctx.fillRect(x, y, TILE, TILE);
-  bevel(ctx, x, y, TILE, TILE, '#ffe8a0', '#a05c10');
+  ctx.fillStyle = plate;
+  ctx.fillRect(x + 1, y + 1, 14, 14);
+  ctx.fillStyle = '#f0b848';
+  ctx.fillRect(x + 1, y + 1, 14, 1);
+  ctx.fillRect(x + 1, y + 1, 1, 14);
+  ctx.fillStyle = '#8a5008';
+  ctx.fillRect(x + 1, y + 14, 14, 1);
+  ctx.fillRect(x + 14, y + 1, 1, 14);
+
+  // corner bolts: the plate is fastened on, so it can be blown off
+  for (const [bx, by] of [[2, 2], [12, 2], [2, 12], [12, 12]]) {
+    ctx.fillStyle = '#8a5008';
+    ctx.fillRect(x + bx, y + by, 2, 2);
+    ctx.fillStyle = '#ffe0a0';
+    ctx.fillRect(x + bx, y + by, 1, 1);
+  }
+
+  // the drum, straining outwards
+  ctx.fillStyle = '#e09828';
+  ctx.fillRect(x + 3, y + 4, 10, 8);
+  ctx.fillStyle = '#ffd070';
+  ctx.fillRect(x + 3, y + 4, 10, 1);
+  ctx.fillRect(x + 3, y + 4, 1, 8);
+  ctx.fillStyle = '#7a4408';
+  ctx.fillRect(x + 3, y + 11, 10, 1);
+  ctx.fillRect(x + 12, y + 4, 1, 8);
 
   // a highlight sweeping across the face every couple of seconds
   const sweep = (tick % 150) / 150;
@@ -335,26 +409,47 @@ function drawQuestion(ctx, x, y, tick) {
     }
   }
 
-  ctx.fillStyle = '#7a3c08';
-  ctx.fillRect(x + 5, y + 4, 6, 2);
-  ctx.fillRect(x + 9, y + 6, 2, 2);
-  ctx.fillRect(x + 7, y + 8, 3, 2);
-  ctx.fillRect(x + 7, y + 12, 2, 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillRect(x + 5, y + 3, 6, 1);
-  ctx.fillStyle = '#a05c10';
-  ctx.fillRect(x + 1, y + 1, 1, 1);
-  ctx.fillRect(x + 14, y + 1, 1, 1);
-  ctx.fillRect(x + 1, y + 14, 1, 1);
-  ctx.fillRect(x + 14, y + 14, 1, 1);
+  // the gauge: the only blinking thing on screen
+  ctx.fillStyle = '#241c08';
+  ctx.fillRect(x + 5, y + 6, 6, 4);
+  const lit = phase === 0 || phase === 1;
+  ctx.fillStyle = lit ? '#a8f04a' : '#4c8c1c';
+  ctx.fillRect(x + 6, y + 7, 4, 2);
+  if (lit) {
+    ctx.fillStyle = '#e8ffc0';
+    ctx.fillRect(x + 6, y + 7, 1, 1);
+  }
 }
 
+/** The same canister after it has been emptied: the drum punched inside out. */
 function drawUsed(ctx, x, y, th) {
-  ctx.fillStyle = th.brickDark;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
   ctx.fillRect(x, y, TILE, TILE);
-  bevel(ctx, x, y, TILE, TILE, th.brick, '#3a1c06');
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillStyle = th.brickDark;
+  ctx.fillRect(x + 1, y + 1, 14, 14);
+
+  // Inverted bevel on the crater: light on the bottom, dark on the top, which
+  // is the whole reason it reads as pressed in rather than merely darker.
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(x + 3, y + 3, 10, 10);
+  ctx.fillRect(x + 3, y + 3, 10, 1);
+  ctx.fillRect(x + 3, y + 3, 1, 10);
+  ctx.fillStyle = th.brick;
+  ctx.fillRect(x + 3, y + 12, 10, 1);
+  ctx.fillRect(x + 12, y + 3, 1, 10);
+
+  // the dead gauge, and two creases where the metal folded
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x + 6, y + 7, 4, 2);
+  ctx.fillRect(x + 4, y + 5, 3, 1);
+  ctx.fillRect(x + 9, y + 10, 3, 1);
+
+  ctx.fillStyle = th.brick;
+  for (const [bx, by] of [[2, 2], [12, 2], [2, 12], [12, 12]]) {
+    ctx.fillRect(x + bx, y + by, 2, 2);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(x + 1, y + 1, 14, 1);
 }
 
 function drawHard(ctx, x, y, th, tx, ty) {

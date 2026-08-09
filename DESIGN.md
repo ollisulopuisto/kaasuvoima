@@ -191,6 +191,43 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
 - **`window.sfb3` on elävä Game-olio.** Konsolista pääsee käsiksi kaikkeen, ja
   `tools/verify.mjs` ajaa koko testistön juuri sen kautta.
 
+## 8. Diegeettinen ja ei-diegeettinen
+
+Tämä jako ratkaisee useimmat "pitäisikö tämän efektin koskea tuohon" -kysymykset
+ilman että niistä tarvitsee väitellä erikseen.
+
+- **Diegeettinen** on maailman sisällä: kolikon kilahdus, pomon askel, aavikon
+  tuuli, jään rätinä, kuumuuden väreily, huurre ruudun reunoilla. Nämä syntyvät
+  jostakin mikä on siinä huoneessa.
+- **Ei-diegeettinen** on kertojan puolella: musiikki, HUD, pistelaskuri,
+  välikortit, esittelytilan teksti. Mikään kentässä ei soita musiikkia.
+
+**Sääntö: huone värittää sen mikä on huoneessa, ei sitä mikä ei ole.**
+
+Siitä seuraa suoraan mitä on jo tehty:
+- Linnakkeen kaiku roikkuu `sfxBus`issa eikä masterissa. Elokuvamusiikki ei kaiu
+  kun kohtaus siirtyy luolaan, mutta askeleet kaikuvat. Mitattu: sama
+  musiikkipätkä vaimenee identtisesti linnakkeessa ja niityllä (634 vs 642 ms),
+  sama tömäytys 91 ms → 367 ms.
+- Kuumuus ja huurre eivät kosketa HUD-palkkia. HUD ei ole ikkuna maailmaan.
+- Bloom ei kosketa HUD-palkkia samasta syystä.
+- Tuuli ja jään rätinä ovat diegeettisiä: ne **ovat** se paikka, joten ne
+  menevät ääniefektien puolelle ja huoneen läpi.
+
+### Työkalu, ei vain sääntö
+
+Rajan voi myös **rikkoa tarkoituksella**, ja silloin se on tehokas. Ei-diegeettinen
+kerros voi reagoida maailmaan, kun se on dramaattinen valinta eikä vahinko:
+
+- musiikki vaimenee tai ohenee ennen pomotaistelua — kertoja hiljenee
+- musiikki kääntyy nurin tai vinoon määräaikaisen tehostuksen ajaksi
+- koko ruutu sykkii kun P-mittari täyttyy
+
+**Kumpikin puoli aina yhdessä.** Ääni ilman kuvaa jää huomaamatta melussa, kuva
+ilman ääntä tuntuu tekniseltä häiriöltä. Ja jokaisen tällaisen efektin pitää
+erottua pomon omista efekteistä eri värillä ja eri rytmillä, tai pelaaja oppii
+lukemaan väärää signaalia.
+
 ## 7. Työskentelyperiaatteet
 
 - **Muutosloki on osa työtä.** Jokainen merkittävä muutos kirjataan
