@@ -202,21 +202,110 @@ export function drawCorkGuy(ctx, x, y, frame, facing) {
   outlined(ctx, (g) => corkGuyBody(g, x, y, frame, facing));
 }
 
-/** Vihainen aurinko — hovers over the desert and dive-bombs the player. */
-export function drawAngrySun(ctx, x, y, tick, diving, hurt) {
+/**
+ * How long one ember of the sun's wake burns, in frames. It lives here rather
+ * than with the entity because how long a spark stays lit is a question about
+ * the picture; the entity only counts it down.
+ */
+export const SUN_TRAIL_LIFE = 26;
+
+/**
+ * The sun's burning wake.
+ *
+ * ROADMAP lists this under the queued screen effects with the rule attached:
+ * an effect on **one object** belongs in the drawing code, an effect on the
+ * **whole screen** belongs in postfx.js, and nothing falls in between. Post
+ * sees only the finished picture and cannot tell which pixel was the sun.
+ *
+ * Two techniques, both already sanctioned by the changelog: `'lighter'` for the
+ * glow and `globalAlpha` for the fade. Not `ctx.filter = 'drop-shadow()'` —
+ * per sprite that costs more than the entire post-processing pass and is banned
+ * by name. Both are put back before this returns; verify.mjs asserts that for
+ * every sprite in the game.
+ *
+ * It costs at most 28 integer rectangles, which is what makes an effect like
+ * this cheap here at all: the sprites are procedural, so a spark is two
+ * fillRects and not a second copy of the artwork.
+ */
+export function drawSunTrail(ctx, trail) {
+  if (!trail || trail.length === 0) return;
+  const op = ctx.globalCompositeOperation;
+  const alpha = ctx.globalAlpha;
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of trail) {
+    const t = Math.max(0, Math.min(1, s.life / SUN_TRAIL_LIFE));
+    const ex = Math.round(s.x) + 10;
+    const ey = Math.round(s.y) + 10;
+    // Cubed rather than linear: an ember should be gone well before its slot
+    // is reused, or the wake reads as a solid bar rather than as sparks.
+    const r = Math.max(1, Math.round(1 + 5 * t));
+    ctx.globalAlpha = 0.34 * t * t;
+    ctx.fillStyle = '#ff6810';
+    ctx.fillRect(ex - r, ey - r, r * 2, r * 2);
+    const c = Math.max(1, r - 2);
+    ctx.globalAlpha = 0.5 * t * t * t;
+    ctx.fillStyle = '#ffd048';
+    ctx.fillRect(ex - c, ey - c, c * 2, c * 2);
+  }
+  ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = op;
+}
+
+/** A filled circle in the row-at-a-time idiom the disc below already uses. */
+function hotDisc(ctx, cx, cy, radius) {
+  for (let dy = -radius; dy <= radius; dy++) {
+    const half = Math.round(Math.sqrt(Math.max(0, radius * radius - dy * dy)));
+    if (half > 0) ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+  }
+}
+
+/**
+ * Vihainen aurinko — hovers over the desert and dive-bombs the player.
+ *
+ * `fx.windUp` is 0..1 through the dive's telegraph and `fx.trail` is the
+ * burning wake; both are optional, so a caller that only wants the sun (the
+ * death tumble, a test) can leave them out.
+ *
+ * The telegraph must not be mistaken for the boss's own effects — DESIGN.md §8:
+ * two similar "something is happening" signals teach the player to read the
+ * wrong one. The shockwave is a tan-brown blob on the floor flickering every
+ * three frames; this is orange-white, in the sky, and a smooth swell whose
+ * throb *accelerates* as the dive gets closer. Different colour, different
+ * place, different rhythm.
+ */
+export function drawAngrySun(ctx, x, y, tick, diving, hurt, fx) {
+  if (fx && fx.trail) drawSunTrail(ctx, fx.trail);
+  const wind = fx && fx.windUp ? Math.max(0, Math.min(1, fx.windUp)) : 0;
   const cx = Math.round(x) + 10;
   const cy = Math.round(y) + 10;
-  const hot = diving || hurt;
+  // Halfway through the wind-up it goes hot: one step the eye cannot miss,
+  // under a continuous swell that says how much longer you have.
+  const hot = diving || hurt || wind > 0.5;
   const disc = hurt && Math.floor(tick / 2) % 2 ? '#ffffff' : hot ? '#ff9820' : '#ffd048';
   const rayColor = hot ? '#ff6810' : '#f8a820';
 
-  // eight rays, slowly turning
+  if (wind > 0) {
+    const op = ctx.globalCompositeOperation;
+    const alpha = ctx.globalAlpha;
+    // A heartbeat that speeds up. `wind * wind` keeps it continuous in wind —
+    // scaling the *frequency* by a changing number would jump the phase.
+    const beat = 0.55 + 0.45 * Math.sin(wind * wind * 18);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.10 + 0.30 * wind * beat;
+    ctx.fillStyle = '#ff6810';
+    hotDisc(ctx, cx, cy, 11 + Math.round(9 * wind));
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = op;
+  }
+
+  // eight rays, slowly turning, reaching further as it charges
+  const reach = 12 + Math.round(4 * wind);
   const rot = tick * 0.035;
   ctx.fillStyle = rayColor;
   for (let i = 0; i < 8; i++) {
     const a = rot + (i * Math.PI) / 4;
-    for (let r = 8; r <= 12; r++) {
-      const w = 13 - r;
+    for (let r = 8; r <= reach; r++) {
+      const w = reach + 1 - r;
       ctx.fillRect(
         Math.round(cx + Math.cos(a) * r - w / 2),
         Math.round(cy + Math.sin(a) * r - w / 2), w, w);

@@ -11,7 +11,8 @@
 export { PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer, drawCork } from './sprites/player.js';
 export {
   drawWalker, drawShell, drawFlyer, drawPlant, drawStinkCloud, drawCorkGuy,
-  drawAngrySun, drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
+  drawAngrySun, drawSunTrail, SUN_TRAIL_LIFE,
+  drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb,
 } from './sprites/enemies.js';
 export { drawBoss } from './sprites/boss.js';

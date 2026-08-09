@@ -50,8 +50,15 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 1. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
    Tekotapa on kirjattu jo silloin kun kaistat tehtiin: lohko pudottaa pavun, ja
    pavusta kasvaa varsi ruutu kerrallaan ylöspäin (`setTile` animoituna).
-2. **Kiipeilyanimaatio** — hahmo selin, ote varresta.
-3. **Spritejen animaatiokierrosten tarkistus** kaikilla viidellä voimatasolla.
+2. **Kiipeilyanimaatio** — hahmo selin, ote varresta. **Puolet on jo koodissa
+   turhaan**: `animFrame` lasketaan köydelle kahden framen sykliksi ja
+   heitetään pois, koska `Player.state()` palauttaa `'jump'` kiipeillessä.
+   Työ on siis `state()`:n paluuarvo ja asento, ei ajastin.
+3. ✔ **Spritejen animaatiokierrokset** käyty läpi kaikilla viidellä
+   voimatasolla (v26.08.09.18): 2220 yhdistelmää mitattuna, neljä bugia
+   korjattu, ja tarkistus on nyt portissa. **Jäljellä yksi**: kävelysyklistä
+   puuttuu ohitusasento — `%3` menee auki→auki ilman välivaihetta. Korjaus on
+   `player.js`:ssä `% 4` ja taulu `[0,1,2,1]`, ja piirtopuoli sietää sen jo.
 4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
    (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
 5. **Luumaailma** ja luurankopomo tehtaan jälkeen.
@@ -72,10 +79,11 @@ askel ja iskuaalto ansaitsevat oman voimakkuutensa, ja tärinän pitäisi olla
 *suunnattua* (pystyisku tärisyttää pystyyn) eikä aina samaa ympyrää. Kuvaputken
 jälkikäsittely voi vahvistaa sen — se näkee jo valmiin kuvan.
 
-**2. Auringon palava jälki (halpa, ei ruutuefekti).** Tämä on entiteettikohtainen
-eikä koko ruudun asia, ja siksi se kuuluu `sprites/enemies.js`:ään eikä
-`postfx.js`:ään. Sääntö on jo kirjattu: yhtä oliota koskeva efekti kuuluu
-piirtokoodiin, koko ruutua koskeva jälkikäsittelyyn, eikä väliin jää mitään.
+**2. ✔ Auringon palava jälki — tehty** (v26.08.09.18), ja sääntö piti: se meni
+`sprites/enemies.js`:ään eikä `postfx.js`:ään, koska jälkikäsittely ei tiedä
+mikä pikseli oli aurinko. Samalla korjautui räikkä joka piti auringon
+näkymättömissä 2-1:ssä (kokonaan näkyvissä 21,5 % → 98,3 %), sukellus sai
+näkyvän ennakkovaroituksen, ja aurinko luovuttaa lipulla eikä seuraa maan alle.
 
 **3. Pomo hyökkää pelikentän kimppuun (keskihintainen).** Iskuaalto irrottaa
 laattoja, halkeamat leviävät lattiassa. **Tämä on halpa vain siksi että ruudukko

@@ -647,7 +647,11 @@ export class WorldMapScene {
   drawToken(ctx) {
     const bob = this.mode === 'idle' ? Math.round(Math.sin(this.tick / 12) * 1) : 0;
     const power = normalizePower(this.game.state.power);
-    const lift = power.level === 0 ? 12 : 16 + power.level * 4;
+    /* 10 and not 12: this was hand-fitted back when the smallest sprite drew
+     * three pixels below its own hitbox, so the constant was quietly paying for
+     * that bug. The art was shrunk to the box (v26.08.09.18) and the token rose
+     * with it — 10 puts its feet back level with every other power level's. */
+    const lift = power.level === 0 ? 10 : 16 + power.level * 4;
 
     /*
      * The map used to pass no `idle` count at all, so `idlePose` never got past
