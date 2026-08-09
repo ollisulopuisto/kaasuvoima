@@ -378,7 +378,44 @@ export const PostFX = {
     this._uniforms = null;
     this.displayCanvas = null;
     this.mode = this._initGL() ? 'webgl' : '2d';
+    this._syncFrame();
     return this.displayCanvas || source;
+  },
+
+  /**
+   * Onko ruudulla juuri nyt **kaareva** kuva.
+   *
+   * Kaksi ehtoa, ja molemmat ovat pakollisia: tynnyrivääristymä elää vain
+   * varjostimessa (`uCurve` on `present`issä nolla kaikilla muilla asetuksilla),
+   * ja varjostin on olemassa vain kun WebGL-konteksti saatiin. Ilman jompaa
+   * kumpaa kuva on suorakulmio joka täyttää kankaansa reunasta reunaan.
+   */
+  curved() {
+    return this.mode === 'webgl' && this.preset === 'crt';
+  },
+
+  /**
+   * Kertoo sivulle kumpaa kuvaa se kehystää.
+   *
+   * Tämä on koko "ruudun ympärillä on laatikko" -korjaus. `styles.css` piirtää
+   * esityskankaalle suorakulmaisen renkaan, mutta kaareva kuva vetäytyy
+   * elementin suorasta reunasta sisäänpäin — nurkassa mitattuna 15 pikseliä 640
+   * pikselin levyisellä ruudulla, reunojen keskellä ei lainkaan — ja rengas jää
+   * seisomaan raon ulkopuolelle. Sitä rakoa ei voi kuroa umpeen CSS:llä, koska
+   * mikään CSS-muoto ei ole tynnyri.
+   *
+   * Luokka on siis se tieto joka sivulta puuttui: kaartaako kuva vai ei. Sitä
+   * ei voi päätellä elementistä (sama `#screen` on molemmissa tapauksissa) eikä
+   * kysyä varjostimelta, joten se kirjoitetaan tähän — samasta paikasta josta
+   * `uCurve`kin päätetään, jotta ne eivät voi eriytyä.
+   */
+  _syncFrame() {
+    const canvas = this.displayCanvas;
+    // Testit tekevät instansseja `Object.create(PostFX)`:llä ja ajavat ne
+    // irrallisilla kankailla; luokka menee silloin kankaalle jota kukaan ei näe,
+    // eikä se haittaa. Vain puuttuva kangas pitää väistää.
+    if (!canvas || !canvas.classList) return;
+    canvas.classList.toggle('curved', this.curved());
   },
 
   loadPreset() {
@@ -397,6 +434,9 @@ export const PostFX = {
     } catch {
       /* private mode — the preset just won't stick between sessions */
     }
+    // Kehys seuraa asetusta samalla painalluksella kuin kuvakin: `7` kiertää
+    // kolme moodia, ja niistä yksi on kaareva.
+    this._syncFrame();
     return this.preset;
   },
 

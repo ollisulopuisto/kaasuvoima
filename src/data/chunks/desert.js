@@ -184,12 +184,21 @@ export const DESERT_CHUNKS = {
    * tile of depth honestly. The step up is one tile, against a measured wall
    * budget of four.
    *
-   * The banks are also the fence. Nothing in this game turns round at a ledge,
-   * so the two walkers stand on the flat either side of the dune and are
-   * stopped by its own sides — a walker that could wander into the pool would
-   * sink to the bottom and keep walking, invisible, which is a bug that looks
-   * like a joke. They are the same two walkers as the `walkers` chunk this
-   * replaces, in the same places, so the level's enemy count did not move.
+   * The banks were also the fence, and **they are not load-bearing any more.**
+   * The paragraph that stood here said the two walkers had to be kept out of
+   * the pool because a walker that wandered in would sink to the bottom and
+   * keep walking, invisible — a bug that looks like a joke. That was true, and
+   * relying on placement to prevent it was a constraint held in place by
+   * nobody moving anything. The engine now knows: `Enemy.sink()` gives a
+   * walker the same sand the player gets, so one that wandered in would wade,
+   * go under and be gone in 185 frames instead of patrolling the bottom.
+   *
+   * The walkers stay where they are all the same, and that is a level-design
+   * choice rather than a safety measure. They are the same two walkers as the
+   * `walkers` chunk this replaces, in the same places, so this level's enemy
+   * count, its difficulty reading and its rhythm are all the ones that were
+   * measured. Moving one into the sand would be redesigning a shipped level to
+   * show off a fix, which is the wrong order to do those two things in.
    *
    * Three columns wide, with the coins two rows over the bank so the jump that
    * takes them is the jump that clears the sand. Same trick as the shallow one

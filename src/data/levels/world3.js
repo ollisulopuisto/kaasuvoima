@@ -78,13 +78,32 @@ export const WORLD3_LEVELS = {
    * Why this level and not 3-1 or 3-3: 3-2 is the world's deliberate dip, and a
    * hidden area needs a player with attention to spare. Somewhere the level is
    * already pressing is where a secret goes unfound.
+   *
+   * **`spikes` -> `pipe_short` at chunk 13, one chunk before the warp**, and it
+   * is the same argument 2-2 made when it added its decoy: a pipe that goes
+   * somewhere only reads as a discovery in a level that also has pipes that do
+   * not. This level had a warp and no ordinary pipe at all, which made its one
+   * pipe a signpost — and across the whole game four of six two-tile floor
+   * pipes were warps, so the habit "press down on any short pipe with coins
+   * over it" paid two times in three. `verify.mjs` now caps that at one in
+   * three; measured 4/13 = 30,8 %.
+   *
+   * The spike bed is what paid for it, and it could: the spike row's first
+   * appearance is 1-3, so nothing is introduced or lost, and this is the
+   * world's dip by design (133.4 -> 130.3, world shape 162 -> 130 -> 187,
+   * still one dip). Two other slots were tried first and the reason this one
+   * won is `tools/playable.mjs`: putting the pipe at chunk 6 in place of
+   * `clouds` left the power-0 bot stuck at column 170 on the plank bridge —
+   * a two-tile obstacle 60 columns earlier is enough to change what it arrives
+   * with. The ground route stays passable at the smallest size (DESIGN.md §5)
+   * and that is checked, not assumed.
    */
   '3-2': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
       'clouds', 'beanstalk', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell',
-      'plat_float', 'spikes', 'warp_pipe', 'flyer', 'pit_plat', 'heartburn_pair',
+      'plat_float', 'pipe_short', 'warp_pipe', 'flyer', 'pit_plat', 'heartburn_pair',
       'corks', 'walkers', 'ledge', 'power', 'run_up', 'goal', 'goal_end',
     ],
     sky: [[112, 'sky_garden']],
@@ -133,10 +152,20 @@ export const WORLD3_LEVELS = {
    * stone rather than the creature — `tools/difficulty.mjs` prices a plank over
    * a pit and cannot tell "a different pit" from "a harder one".
    */
+  /*
+   * Chunk 1 is `pipe_short` where it was `flat`: sixteen columns of empty
+   * ground became sixteen columns of empty ground with an ordinary two-tile
+   * pipe and its three coins on it. It is the cheapest chunk in the level to
+   * pay with and it buys one more pipe that goes nowhere, which is what stops
+   * the coined short pipe from being a reliable warp oracle — see 3-2 above and
+   * levels/world1.js for the whole argument. The score does not move (186.5
+   * before and after): the meter prices enemies, gaps and hazards, and a pipe
+   * on flat ground is none of the three.
+   */
   '3-3': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
-      'start', 'flat', 'power', 'lava_gap', 'walkers', 'plat_steps',
+      'start', 'pipe_short', 'power', 'lava_gap', 'walkers', 'plat_steps',
       'shell', 'lava_wide', 'clouds', 'cork_gap', 'heartburn_pair', 'pipe_plant',
       'lava_gap', 'sky_run', 'corks', 'ice_crumble', 'brick_wall', 'plat_float',
       'pit_croak', 'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',

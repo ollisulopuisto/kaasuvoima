@@ -1071,6 +1071,245 @@ const report = await page.evaluate(async () => {
         `ennen uppoama ${before.sunk} framea y=${before.y}, `
         + `jälkeen ${p2.sunk} framea y=${Math.round(p2.y)}`);
     }
+
+    /* ------------------- 10. hiekka ja se mikä siihen kävelee ------------ */
+    /*
+     * Punainen ennen vihreää (DESIGN.md kohta 7) toiselle puoliskolle:
+     * **hiekka ei tiennyt vihollisista mitään.**
+     *
+     * Hiekka on ruutu eikä osuma, joten se koskee kaikkea mikä seisoo lattialla
+     * — ja siihen asti se koski vain pelaajaa. Kävelijä joka päätyi lammikkoon
+     * putosi sen pohjalle ja jatkoi kävelyä siellä, koko keho pinnan alla,
+     * näkymättömänä. Se ei näyttänyt bugilta vaan vitsiltä, ja tänään sen esti
+     * pelkkä sijoittelu: 2-1:n ja 2-3:n penkat aitaavat kävelijät lammikoiden
+     * ulkopuolelle. Sijoittelurajoite on rajoite vain niin kauan kuin kukaan ei
+     * siirrä mitään, ja juuri se on se laji jota testi on olemassa varten.
+     *
+     * Mitattavat väitteet, ja jokainen niistä on päätös eikä sivutuote:
+     *
+     *   a. syvässä lammikossa vihollinen uppoaa ja katoaa — samalla kellolla
+     *      kuin pelaaja, koska se on sama hiekka
+     *   b. matalassa se ei voi hukkua, koska geometria on sama molemmille
+     *   c. hukkuminen ei maksa pisteitä (ks. kuilu: sekään ei maksa)
+     *   d. pikatallennus kesken vihollisen uppoamista palaa kesken uppoamista
+     *   e. merkkinä on hiekan oma pöly, ei pelaajan hukkumisääni
+     *   f. jokainen painovoiman varassa liikkuva vihollinen on **päättänyt**
+     *      uppoamisestaan — sama portti kuin `ENEMY_COST`
+     *   g. ja koko kauppa on tavoitettavissa julkaistussa kentässä eikä vain
+     *      koeasetelmassa: 2-1:n kuori potkaistuna vasemmalle
+     */
+    {
+      const enemies = await import('/src/entities/enemies.js');
+      const { Sfx } = await import('/src/core/audio.js');
+
+      /** Kaikki neljä lattiakävelijää ja lentäjä, merkkeineen. */
+      const species = [['g', enemies.Walker], ['k', enemies.ShellGuy],
+        ['x', enemies.SpikeGuy], ['c', enemies.CorkGuy], ['f', enemies.Flyer]];
+
+      /**
+       * Yksi vihollinen lammikon keskelle, jalat täsmälleen pinnalla — sama
+       * lähtöasento kuin `dropInto` antaa pelaajalle, jotta luvut ovat
+       * vertailukelpoisia sen kanssa.
+       */
+      const dropEnemy = (s, pool, Ctor) => {
+        const mid = Math.round(((pool.tx0 + pool.tx1 + 1) / 2) * 16);
+        const e = new Ctor(s, mid, pool.top * 16);
+        e.x = mid - e.w / 2;
+        e.y = pool.top * 16 - e.h;
+        e.vx = 0;
+        e.vy = 0;
+        e.active = true;
+        e.alwaysActive = true;
+        s.add(e);
+        return e;
+      };
+
+      /** Ajaa lammikkoa kunnes vihollinen katoaa, ja kertoo mitä matkalla tapahtui. */
+      const sinkRun = (id, pool, Ctor, cap = 900) => {
+        const s = sandScene(id);
+        s.player.x = 16;
+        s.player.y = 8 * 16;
+        const e = dropEnemy(s, pool, Ctor);
+        const i = mkInput();
+        const startX = e.x;
+        let buried = 0;
+        let gone = null;
+        for (let f = 0; f < cap; f++) {
+          s.update(i);
+          if (e.y >= pool.top * 16 + 1) buried++;
+          if (e.remove || !s.entities.includes(e)) { gone = f; break; }
+        }
+        return { gone, buried, dx: Math.round(e.x - startX), e, s };
+      };
+
+      /* a. Syvä lammikko: uppoaa ja katoaa, eikä kävele pohjalla. Yläraja on
+       *    pelaajan oma lukema — sama hiekka, sama kello — ja alaraja on se
+       *    että uppoaminen on uppoamista eikä katoamista kosketuksesta. */
+      {
+        const rows = [];
+        for (const [ch, Ctor] of species) {
+          const r = sinkRun(deepest.id, deepest.pool, Ctor);
+          rows.push({ ch, gone: r.gone, buried: r.buried });
+        }
+        expect('syvä hiekka ottaa myös vihollisen, eikä se jää kävelemään pohjalle',
+          rows.every((r) => r.gone !== null && r.gone > 60 && r.gone < 400),
+          rows.map((r) => `${r.ch}: ${r.gone === null ? 'ei koskaan' : `${r.gone} framea`}`
+            + `, ${r.buried} framea pinnan alla`).join(', '));
+      }
+
+      /* b. Matala lammikko ei hukuta ketään, ja se on sama geometria jolla se
+       *    ei hukuta pelaajaakaan: keho on kuoppaa pidempi. Tämä on vihreä jo
+       *    ennen korjausta ja on se puoli jota korjaus ei saa rikkoa. */
+      {
+        const rows = [];
+        for (const [ch, Ctor] of species) {
+          const r = sinkRun(shallowest.id, shallowest.pool, Ctor, 600);
+          rows.push({ ch, gone: r.gone, top: Math.round(r.e.y - shallowest.pool.top * 16) });
+        }
+        const depth = (shallowest.pool.bottom - shallowest.pool.top + 1) * 16;
+        expect('matala hiekka ei hukuta vihollista sen enempää kuin pelaajaa',
+          rows.every((r) => r.gone === null),
+          `kuoppa ${depth} px — ` + rows.map((r) => `${r.ch} ${r.gone === null ? 'jäi' : 'katosi'}`
+            + ` (pää ${r.top > 0 ? '+' : ''}${r.top} px pinnasta)`).join(', '));
+      }
+
+      /* c. Hiekkaan hukkunut vihollinen ei maksa mitään. Ennakkotapaus on
+       *    kuilu: kentän pohjan läpi pudonnut vihollinen katoaa ilmaiseksi jo
+       *    nyt, ja hukkuminen on sama tapahtuma kansi päällä. Piste maksetaan
+       *    tässä pelissä siitä mitä pelaaja teki, ei siitä mitä huone teki. */
+      {
+        reset();
+        const r = sinkRun(deepest.id, deepest.pool, enemies.Walker);
+        expect('hiekkaan hukkunut vihollinen ei maksa pisteitä',
+          r.gone !== null && game.state.score === 0,
+          `kävelijä katosi ${r.gone === null ? 'ei koskaan' : `${r.gone} framessa`}, `
+          + `pisteet ${game.state.score}`);
+      }
+
+      /* d. Pikatallennus kesken vihollisen uppoamista. Sama väite kuin
+       *    kohdassa 9 pelaajalle, ja samasta syystä: uppoaminen on tavallisia
+       *    lukuja oliossa, joten `REGISTRY` kantaa sen ilman tallennuskoodia. */
+      {
+        const s = sandScene(deepest.id);
+        game.setScene(s);
+        s.player.x = 16;
+        s.player.y = 8 * 16;
+        const e = dropEnemy(s, deepest.pool, enemies.Walker);
+        const i = mkInput();
+        for (let f = 0; f < 140; f++) { s.update(i); i.pressed = blank(); }
+        const before = { sunk: e.sunk, y: Math.round(e.y) };
+        const snap = captureState(game);
+        restoreState(game, snap);
+        const e2 = game.scene.entities.find((z) => z.constructor.name === 'Walker');
+        expect('pikatallennus kesken vihollisen uppoamista palaa kesken uppoamista',
+          before.sunk > 0 && !!e2 && e2.sunk === before.sunk && Math.round(e2.y) === before.y,
+          `ennen uppoama ${before.sunk} framea y=${before.y}, jälkeen `
+          + `${e2 ? `${e2.sunk} framea y=${Math.round(e2.y)}` : 'ei kävelijää'}`);
+      }
+
+      /* e. Kuva ja ääni (DESIGN.md kohta 8). Uppoava vihollinen tarvitsee
+       *    merkin, mutta se ei saa olla **pelaajan oma** merkki: `upota` ja
+       *    `kahlaa` ovat lauseita "sinut sai kiinni", ja aavikossa lammikko voi
+       *    olla ruudun ulkopuolella. Ääni ilman näkyvää syytä opettaisi
+       *    katsomaan alas silloin kun mitään ei ole. Jäljelle jää hiekan oma
+       *    pöly, joka on sama pöly kummalle tahansa keholle. */
+      {
+        const heard = [];
+        const realPlay = Sfx.play;
+        Sfx.play = function (name, ...rest) { heard.push(name); return realPlay.call(this, name, ...rest); };
+        let puffs = 0;
+        try {
+          const s = sandScene(deepest.id);
+          s.player.x = 16;
+          s.player.y = 8 * 16;
+          const e = dropEnemy(s, deepest.pool, enemies.Walker);
+          const i = mkInput();
+          const seen = new Set();
+          for (let f = 0; f < 400; f++) {
+            s.update(i);
+            for (const z of s.entities) {
+              if (z.constructor.name === 'Puff' && !seen.has(z.id)) { seen.add(z.id); puffs++; }
+            }
+            if (e.remove) break;
+          }
+        } finally {
+          Sfx.play = realPlay;
+        }
+        const borrowed = heard.filter((n) => n === 'upota' || n === 'kahlaa');
+        expect('uppoavan vihollisen merkki on hiekan pöly, ei pelaajan hukkumisääni',
+          puffs >= 8 && borrowed.length === 0,
+          `${puffs} pölyhiukkasta, pelaajan ääniä ${borrowed.length}`
+          + `${heard.length ? ` (kuultiin: ${[...new Set(heard)].join(',') || 'ei mitään'})` : ''}`);
+      }
+
+      /* f. Portti, ja se on sama portti kuin `ENEMY_COST`.
+       *
+       * Vihollinen joka putoaa painovoiman varassa on vihollinen joka voi
+       * päätyä hiekkaan, joten sen on **sanottava** kumpaa se on. Oletusarvoa
+       * ei ole kummallakaan puolella: `true` oletuksena upottaisi hiljaa
+       * seuraavan lentävän, `false` oletuksena jättäisi seuraavan kävelijän
+       * kävelemään pohjalla — ja juuri jälkimmäinen on se bugi jota tämä lohko
+       * korjaa. Kysymys esitetään vain niiltä joita se koskee: luokan oma
+       * `update` kertoo lähdetekstissään käyttääkö se `applyGravity`ä, ja koodi
+       * on ajossa sellaisenaan (ei käännösvaihetta, DESIGN.md kohta 7).
+       */
+      {
+        const classes = Object.entries(enemies)
+          .filter(([, v]) => typeof v === 'function' && v.prototype instanceof enemies.Enemy);
+        const undecided = [];
+        const silent = [];
+        for (const [name, Ctor] of classes) {
+          const src = String(Ctor.prototype.update || '');
+          const owns = Object.prototype.hasOwnProperty.call(Ctor.prototype, 'sinks');
+          if (/applyGravity\(/.test(src) && !owns) undecided.push(name);
+          if (owns && Ctor.prototype.sinks && !/this\.sink\(\)/.test(src)) silent.push(name);
+        }
+        const sinkers = classes.filter(([, C]) => C.prototype.sinks).map(([n]) => n);
+        expect('jokainen painovoiman varassa oleva vihollinen on päättänyt hiekasta',
+          undecided.length === 0 && silent.length === 0 && sinkers.length >= 4,
+          undecided.length || silent.length
+            ? `päättämättä: ${undecided.join(',') || '-'}; ilmoittaa uppoavansa muttei kysy `
+              + `hiekalta: ${silent.join(',') || '-'}`
+            : `${classes.length} luokkaa, uppoavat: ${sinkers.join(' ')}`);
+      }
+
+      /* g. Ja se että tämä on tavoitettavissa oikeassa kentässä eikä vain
+       *    koeasetelmassa. 2-1:n ainoa kuori seisoo lammikon oikealla puolella,
+       *    joten vasemmalle potkaistu kuori päätyy hiekkaan — ja se on koko
+       *    kauppa jonka mekaniikka tarjoaa: väline vaihtuu roskikseen. Jos
+       *    joku joskus siirtää kumpaa tahansa palikkaa, tämä kertoo sen. */
+      {
+        reset({ type: 'leaf', level: 3 });
+        const s = new LevelScene(game, '2-1');
+        game.setScene(s);
+        s.time = 9999;
+        const shell = s.entities.find((e) => e.constructor.name === 'ShellGuy');
+        const sand = [];
+        for (let tx = 0; tx < s.w; tx++) {
+          if (s.rawTileAt(tx, 13) === T.QUICKSAND) sand.push(tx);
+        }
+        let gone = null;
+        let col = null;
+        if (shell && sand.length) {
+          shell.alwaysActive = true;
+          shell.active = true;
+          shell.toShell();
+          shell.kick(-1);
+          s.player.x = shell.x + 60;
+          s.player.y = shell.y - 40;
+          const i = mkInput();
+          for (let f = 0; f < 600; f++) {
+            s.update(i);
+            if (shell.remove) { gone = f; break; }
+          }
+          col = Math.floor(shell.cx / 16);
+        }
+        expect('2-1:ssä vasemmalle potkaistu kuori päätyy hiekkaan eikä ohi',
+          gone !== null && sand.includes(col),
+          `kuori sarakkeessa ${col}, hiekka ${sand[0]}–${sand[sand.length - 1]}, `
+          + `katosi ${gone === null ? 'ei koskaan' : `${gone} framessa`}`);
+      }
+    }
   } catch (e) {
     expect('juoksuhiekan testit pääsevät ajoon asti', false, String(e && e.message));
   }
@@ -6307,6 +6546,40 @@ const report = await page.evaluate(async () => {
     expect('kahden ruudun lattiaputket kantavat saman kolikkorivin, warppasi tai ei',
       pipes.length >= 6 && shapes.size === 1 && warps < pipes.length,
       `${pipes.length} putkea, ${warps} warppia, kolikkorivit [${[...shapes].join('] [')}]`);
+
+    /*
+     * 5. JA SAMA VÄITE MUODOSTA: lyhyt putki ei saa olla warpin synonyymi.
+     *
+     * Kohta 4 takaa että kaikki kahden ruudun lattiaputket *näyttävät*
+     * samalta. Se ei takaa mitään siitä miten usein sellaisen alle menee
+     * jotain — ja jos niitä on kuusi ja neljä on warppeja, "paina alas jokaisen
+     * kolikoidun lyhyen putken päällä" osuu kahdesti kolmesta. Salaisuus jonka
+     * arvaa kahdesti kolmesta ei ole salaisuus vaan rutiini, ja koko
+     * kolikkovihjeen idea (kohta 3c) kaatuu sen mukana: vihje näyttäisi
+     * vihjeeltä ja toimisi kylttinä.
+     *
+     * **Miksi kolmasosa.** Luku ei ole makuasia eikä sitä ole poimittu ilmasta,
+     * vaan se on *sama kaista jonka peli jo asettaa toiselle tavalliselta
+     * näyttävälle esineelle joka joskus onkin salaisuus*: piilotiili. Tuon
+     * testin raja tässä samassa tiedostossa on `share < 0.35` — alle 35 % kaikista
+     * tiilistä saa kätkeä jotain. Lyhyt lattiaputki on täsmälleen sama väite eri
+     * esineestä, joten se saa saman katon, ja kolmasosa on lähin luku jonka
+     * alle nykyiset neljä warppia mahtuvat: 4/12 = 33,3 %.
+     *
+     * Kolmasosa on myös se kohta jossa väite muuttuu laadullisesti. Puolikkaalla
+     * "useimmat lyhyet putket ovat tavallisia" on totta yhden putken erolla ja
+     * kääntyy takaisin heti kun joku lisää yhden warpin. Kolmasosalla pelaaja
+     * joka painaa alas jokaisen lyhyen putken päällä on väärässä kaksi kertaa
+     * useammin kuin oikeassa, ja uusi warp maksaa kolme uutta tavallista
+     * putkea — mikä on juuri se hinta jonka sen kuuluu maksaa.
+     *
+     * Ei alarajaa. Tavallisia putkia ei voi olla liikaa: jokainen niistä on
+     * ilmaisia kolikoita ja yksi vertailukohta lisää.
+     */
+    expect('lyhyt lattiaputki ei ole warpin synonyymi',
+      warps * 3 <= pipes.length,
+      `${warps}/${pipes.length} lattiaputkesta warppaa = ${(warps * 100 / pipes.length).toFixed(1)} %`
+      + ` (katto 33,3 %, sama kuin piilotiilen 35 %)`);
   }
 
   /* ---------------- salaisuudet kartalla: kertoo että, ei missä ----------- */
@@ -8181,6 +8454,7 @@ const report = await page.evaluate(async () => {
         let seen = 0;
         let rise = 0;
         let takeoff = null;
+        let counted = false;
         for (let f = 0; f < 1200; f++) {
           input.held = blank();
           input.pressed = blank();
@@ -8191,15 +8465,19 @@ const report = await page.evaluate(async () => {
           else if (phase > 40 && phase < 74) input.held.jump = true;
           const wasGround = s.player.onGround;
           const camBefore = s.cam.y;
+          /* Whether the view had finished its last move before this take-off.
+           * See the assertion below for why an unfinished one has to be left
+           * out of the *rise* number and stays in the *ground* number. */
+          const settled = Math.abs(s.cam.y - s.cameraY()) < 0.5;
           s.update(input);
           const p = s.player;
           if (p.dying) break;
-          if (wasGround && !p.onGround) takeoff = p.y + p.h;
+          if (wasGround && !p.onGround) { takeoff = p.y + p.h; counted = settled; }
           if (!p.onGround && takeoff !== null) {
             air++;
             if (takeoff < s.cam.y + s.viewH) seen++;
             // How far the view climbed on a single airborne frame.
-            rise = Math.max(rise, camBefore - s.cam.y);
+            if (counted) rise = Math.max(rise, camBefore - s.cam.y);
           }
           if (p.onGround) takeoff = null;
         }
@@ -8217,7 +8495,22 @@ const report = await page.evaluate(async () => {
        * tops out 16.4 px from the top of the letterbox band, 0.4 px short of
        * forcing the old hard clamp, so it was always going to move the view —
        * it now moves it 0.93 px over the whole 85 px arc instead of stepping.
-       * The power-0 row has 20.4 px of headroom and stays at 0.00. */
+       * The power-0 row has 20.4 px of headroom and stays at 0.00.
+       *
+       * **Only jumps that start from a settled view count**, which is the same
+       * filter its sibling below has had since `CAM_TOP_LEAD` and for the same
+       * reason: landing moves the anchor and the view then glides up to it at
+       * `CAM_V_EASE`, so a jump taken while that glide is still running carries
+       * the glide into the air with it and the number stops being about the
+       * arc. It only started mattering here when the letterboxed levels stopped
+       * cutting their big landings — a cut was over inside one frame and could
+       * never overlap the next take-off, so this filter was free before and is
+       * load-bearing now. Unfiltered the bot reads 2.65 px in 2-1, and every
+       * pixel of it is the previous landing finishing.
+       *
+       * The *ground* number deliberately keeps every frame: the take-off tile
+       * must stay on screen through jumps taken mid-glide as well, and that is
+       * a promise about the picture rather than about which mechanism moved it. */
       expect('the view does not ride a jump upward',
         rows.every((r) => r.rise < 2),
         rows.map((r) => `${r.id} ${r.rise.toFixed(2)} px/frame`).join(', '));
@@ -8540,6 +8833,155 @@ const report = await page.evaluate(async () => {
       expect('a ground pound is not followed down by the view it landed under',
         pounds.length >= 5 && pounds.every((r) => r.pounded && r.tail < 9.5),
         pounds.map(say).join(', '));
+    }
+
+    /*
+     * Red before green (DESIGN.md §7) for the fourth camera report, which is
+     * the one the previous fix measured and deliberately did not fix blind:
+     * **jumping onto a raised platform cuts.**
+     *
+     * The two fixes above are the falling axis and the top-of-frame axis. This
+     * is the third and it is the one nobody complained about, because it does
+     * not look like a camera bug — it looks like the level jumping. Landing is
+     * `onGround` on the frame the feet touch, so the anchor moves the whole
+     * height of the platform in one frame and `CAM_V_EASE` glides the view up
+     * to it. That is by design and it is what every ordinary level does: the
+     * biggest landing in a 208-row level moves the view 32 px and its first
+     * frame is 8 px. In the two letterboxed levels the same landing is bigger
+     * than the old `CAM_SNAP` threshold and was cut instead of glided.
+     *
+     * **A cut is the whole distance on one frame; a glide is a decaying series
+     * over many.** So the measurement is the same one the rising fix used: the
+     * largest single-frame upward move of the view over a real jump onto a real
+     * platform, driven with the pad rather than teleported, because a teleport
+     * would prove a step the player cannot actually take.
+     *
+     * The fixture picks, per level, the platform whose landing moves the view
+     * furthest — in 2-1 and 2-3 alike that is a four-tile top at row 9 over the
+     * desert floor at row 13, which frames at 30 against the floor's 80, so the
+     * step is 50 px of the level's 80 px of travel.
+     */
+    {
+      /**
+       * The landing in this level that moves the view furthest, jumped for real.
+       *
+       * Candidates are ranked by how far the framing would move — `cameraY()`
+       * asked twice, once with the feet on the lower floor and once with them
+       * on the platform — rather than by how tall the platform is, because the
+       * level's own clamp is what decides whether a tall step is a big move or
+       * no move at all. Then the best few are jumped at with the pad, and the
+       * first one the player genuinely lands on is the answer.
+       */
+      const climb = (id, power) => {
+        reset(power);
+        const probe = new LevelScene(game, id);
+        const frameAt = (feet) => {
+          probe.player.y = feet - probe.player.h;
+          probe.player.onGround = true;
+          probe.camAnchor = feet;
+          return probe.cameraY();
+        };
+        const tops = [];
+        for (let tx = 3; tx < probe.w - 3; tx++) {
+          for (let ty = 3; ty < probe.h - 2; ty++) {
+            if (!probe.solidAt(tx, ty) || probe.solidAt(tx, ty - 1)) continue;
+            if (!probe.solidAt(tx + 1, ty)) continue;
+            let fy = ty + 1;
+            while (fy < probe.h && !probe.solidAt(tx - 2, fy)) fy++;
+            /* Two to four tiles of step. Below two there is nothing to measure;
+             * above four the jump does not reach the top and the run would be
+             * measuring a landing that never happened — the measured budget is
+             * 100 px of rise, and clearing a rim needs more than just reaching
+             * its height. */
+            if (fy >= probe.h || fy - ty < 2 || fy - ty > 4) continue;
+            tops.push({ tx, ty, fy, move: frameAt(fy * TILE) - frameAt(ty * TILE) });
+          }
+        }
+        tops.sort((a, b) => b.move - a.move);
+        /* Several run-ups, because how much room a jump needs depends on the
+         * platform and not on this fixture's opinion: four tiles clears the
+         * four-tile step in 2-1 and lands short of the same step in 2-3. */
+        for (const spot of tops.slice(0, 10)) for (const runUp of [4, 6, 8, 3]) {
+          reset(power);
+          const s = new LevelScene(game, id);
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const p = s.player;
+          p.x = (spot.tx - runUp) * TILE;
+          p.y = spot.fy * TILE - p.h;
+          p.vx = 0;
+          p.vy = 0;
+          p.onGround = true;
+          s.centerCamera();
+          const input = mkInput();
+          for (let f = 0; f < 40; f++) s.update(input);   // let the view settle
+          let jumped = false;
+          let step = 0;
+          let settle = 0;
+          let landed = -1;
+          let onTop = false;
+          for (let f = 0; f < 140; f++) {
+            input.held = blank();
+            input.pressed = blank();
+            /* The pad is dropped the moment the feet touch. The complaint is
+             * about the settling and not about what happens next, and a player
+             * who keeps running off the far side would fold a second landing
+             * into the number. */
+            if (landed < 0) {
+              input.held.right = true;
+              input.held.run = true;
+              if (p.onGround && !jumped) {
+                input.pressed.jump = true;
+                input.held.jump = true;
+                jumped = true;
+              } else if (jumped && p.vy < 0) input.held.jump = true;
+            }
+            const wasAir = !p.onGround;
+            const camBefore = s.cam.y;
+            s.update(input);
+            const d = camBefore - s.cam.y;
+            if (landed < 0 && jumped && wasAir && p.onGround) {
+              landed = f;
+              onTop = p.y + p.h <= spot.ty * TILE + 1;
+              if (!onTop) break;                              // landed short
+              /* Stopped dead on touchdown. The complaint is vertical, and a
+               * body that slides on and off the far rim would fold a second
+               * landing and a fall into a number that is meant to be about
+               * one rise. */
+              p.vx = 0;
+            }
+            if (landed >= 0) {
+              step = Math.max(step, d);
+              // How long the view took to arrive: a cut arrives on the frame it
+              // happens, an animation does not.
+              if (!settle && Math.abs(s.cam.y - s.cameraY()) <= 1) settle = f - landed + 1;
+            }
+            if (p.dying) break;
+            if (landed >= 0 && (settle || f > landed + 40)) break;
+          }
+          if (onTop) return { id, level: power.level, top: spot.ty, step, settle };
+        }
+        return null;
+      };
+
+      const rows = [];
+      for (const [id, power] of [['2-1', { type: null, level: 0 }],
+        ['2-1', { type: 'leaf', level: 3 }], ['2-3', { type: null, level: 0 }],
+        ['2-3', { type: 'leaf', level: 3 }], ['1-1', { type: null, level: 0 }],
+        ['4-1', { type: null, level: 0 }]]) {
+        const r = climb(id, power);
+        if (r) rows.push(r);
+      }
+      /* 13 px is the ceiling for the same reason 2.5 and 3.5 are the ceilings
+       * on the other two axes: it is far under the 50 px the cut produced and
+       * just over the 12.5 px the ease produces on its first frame, so it is
+       * the cut that cannot come back rather than the mechanism being frozen.
+       * 12.5 is `CAM_V_EASE` × 50 and nothing else, which is exactly what an
+       * ordinary level's 32 px landing already does at 8 px. */
+      expect('a view that has to rise on landing animates instead of cutting',
+        rows.length >= 5 && rows.every((r) => r.step < 13 && r.settle > 4),
+        rows.map((r) => `${r.id} taso ${r.level}: ${r.step.toFixed(2)} px/frame, `
+          + `asettui ${r.settle || '>40'} framessa`).join(', '));
     }
 
     /* ---------------------------- vihainen aurinko ---------------------- */
@@ -9313,10 +9755,11 @@ const report = await page.evaluate(async () => {
      *
      * **Mitattu ennen kuin luuteemaa oli olemassa**, ja luku kannattaa lukea:
      * ruoho 9,3 %, aavikko 8,6 %, yö **0,4 %**, jää 22,3 %, tehdas 17,9 %,
-     * linnake 7,9 %. Yön tiili ja yön maa ovat siis käytännössä sama väri —
-     * `#7a5a30` vastaan `#6a5030` — eli 2-N:ssä rikottava lohko sulautuu
-     * maahan. Se on löydös eikä tämän työn korjattava: yön paletin muuttaminen
-     * muuttaisi valmiin kentän ulkonäön, ja se on oma päätöksensä.
+     * linnake 7,9 %. Yön tiili ja yön maa olivat siis käytännössä sama väri —
+     * `#7a5a30` vastaan `#6a5030` — eli 2-N:ssä rikottava lohko sulautui
+     * maahan. Se oli pitkään löydös eikä korjattava, koska yön paletin
+     * muuttaminen muuttaa valmiin kentän ulkonäön; omistaja päätti sen
+     * erikseen, ja korjaus on **tiilessä eikä maassa** (ks. oma kohtansa alla).
      *
      * Siksi väite on se jonka tämä työ omistaa ja joka on rikottavissa:
      * **luumaailman pari on koko pelin selvin.** Ei "riittävän hyvä" vaan
@@ -9397,6 +9840,73 @@ const report = await page.evaluate(async () => {
           (gaps.find((x) => x.theme === 'ice') || {}).gap.toFixed(1)} %, yö ${
           (gaps.find((x) => x.theme === 'night') || {}).gap.toFixed(1)} %`
           : 'ei pilviteemaa lainkaan');
+
+      /*
+       * JA YÖ. Pelin heikoin pari, 0,4 %, ja koko päivän tiedossa ollut ongelma:
+       * `#7a5a30` tiiltä `#6a5030` maata vasten on kaksi nimeä samalle ruskealle,
+       * eli 2-N:n rikottava lohko on käytännössä näkymätön. Se on ehtinyt ohjata
+       * kahta suunnittelupäätöstä — juoksuhiekka jätettiin pois 2-N:stä ja
+       * pilviteema rakennettiin 25 %:n kynnykseen juuri ettei tämä toistuisi.
+       *
+       * **Omistaja päätti että tiili vaalenee ja maa jää.** Se on tärkeä puoli:
+       * 2-N:n lattia näyttää tämän jälkeen täsmälleen siltä miltä ennenkin.
+       *
+       * Kynnys on 17 %, ja se on **kaksi kertaa pelin heikoin selviytynyt pari**
+       * (aavikko 8,6 %). Se ei ole jään 22,3 % eikä sitä yritetäkään: jään koko
+       * paletti asuu luminanssivälillä 145–224, eli sillä on 80 tasoa
+       * liikkumavaraa, kun taas yön paletti on tarkoituksella puristettu pimeään
+       * päähän — ja juuri se puristus **on** se mikä tekee yöstä yön. Kynnys ei
+       * myöskään ole "hiukan yli nykyisen": se on lähellä sitä maksimia jonka
+       * paletti antaa alla olevan pimeysehdon vallitessa, ja mitattu paras
+       * puumainen sävy sen alla oli 19,2 %.
+       */
+      const night = gaps.find((x) => x.theme === 'night');
+      expect('yön tiili erottuu yön omasta maasta',
+        !!night && night.gap >= 17,
+        night ? `yö ${night.gap.toFixed(1)} %, kynnys 17 % = 2 × aavikko `
+          + `(${(gaps.find((x) => x.theme === 'desert') || {}).gap.toFixed(1)} %) `
+          + `— ennen korjausta 0,4 %` : 'ei yöteemaa lainkaan');
+
+      /*
+       * Ja tässä on se puolisko joka estää helpon vastauksen.
+       *
+       * Vaalentamisella on raja, ja ilman rajaa tämän testin voisi läpäistä
+       * maalaamalla yön tiilen niin kirkkaaksi että se hehkuu sisältäpäin — yksi
+       * bugi vaihdettuna toiseen. Raja on mitattu eikä keksitty: **kova palikka
+       * on jokaisen kahdeksan teeman kirkkain kiinteä ruutu**, maata ja tiiltä
+       * myöten (mitattuna luminanssina ruoho 192,3 / 99,5 / 105,6; aavikko
+       * 186,7 / 166,2 / 141,0; yö 133,1 / 86,6; jää 224,3; tehdas 162,5;
+       * luu 211,0; pilvi 232,6; linnake 171,0).
+       *
+       * Se on kaksi asiaa yhdessä. Fysiikan puolella kova palikka on se pinta
+       * jonka taivas valaisee kirkkaimmin, joten mikä tahansa sitä kirkkaampi
+       * ruutu tekee valonsa itse — juuri se on "hehkuu sisältäpäin" mitattuna.
+       * Luettavuuden puolella se on opittu merkki: **kirkkain on se jota ei voi
+       * rikkoa.** Yksi teema joka kääntää sen nurin opettaa väärän lukutavan
+       * kaikkien muiden jäljiltä.
+       *
+       * Väite koskee kaikkia teemoja eikä vain yötä, koska sääntö on koko pelin
+       * eikä yhden korjauksen — ja koska juuri niin se pysyy voimassa myös
+       * seuraavan paletin kohdalla.
+       */
+      const lumOf = (ch, theme) => {
+        const m = meanOf(ch, theme);
+        return m ? 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2] : 0;
+      };
+      const lit = Object.keys(THEMES).map((theme) => ({
+        theme,
+        hard: lumOf(T.HARD, theme),
+        ground: lumOf(T.GROUND, theme),
+        brick: lumOf(T.BRICK, theme),
+      }));
+      const glowing = lit.filter((x) => x.hard <= x.brick || x.hard <= x.ground);
+      const nightLit = lit.find((x) => x.theme === 'night');
+      expect('kova palikka on jokaisen teeman kirkkain kiinteä ruutu',
+        glowing.length === 0,
+        `${lit.map((x) => `${x.theme} ${x.hard.toFixed(0)}/${x.ground.toFixed(0)}/`
+          + `${x.brick.toFixed(0)}`).join(', ')} (kova/maa/tiili)`
+        + (nightLit ? ` — yön tiilelle jää ${(nightLit.hard - nightLit.brick).toFixed(1)} `
+          + 'luminanssia pelivaraa' : ''));
     }
 
     /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
@@ -9621,6 +10131,176 @@ const report = await page.evaluate(async () => {
   report.checks.push(...mobile.checks);
   report.failures.push(...mobile.failures);
   await phone.close();
+}
+
+/* ------------------------ kehys kaarevan kuvan ympärillä ------------------ */
+/*
+ * Omistajan havainto Chromella: "kuvaputkiruudun ympärillä on laatikko".
+ *
+ * Syy on kahden asian törmäys, ja molemmat mitataan tässä ennen kuin kumpaakaan
+ * uskotaan. `styles.css` piirtää esityskankaalle suorakulmaisen renkaan
+ * (`box-shadow: 0 0 0 2px`), kun taas `postfx.js`:n tynnyrivääristymä vetää
+ * kuvan **sisäänpäin** (`uv += uv * offset`, ja rajan yli menevä näyte on
+ * kehystä). Suora rengas jää siis seisomaan kaarevan kuvan ympärille, ja rako
+ * niiden välissä on suurimmillaan nurkissa — juuri siellä missä se ruutukaappauksessa näkyy.
+ *
+ * Mittaus on kaksiosainen, koska rengas ei ole kankaalla vaan sivulla: kaarevuus
+ * luetaan esityskankaan pikseleistä (lähde valkoiseksi, yksi `present`, ja
+ * katsotaan mistä kuva alkaa), ja rengas oikeasta ruutukaappauksesta, jonka
+ * selain on jo yhdistänyt varjoineen päivineen. Kaappaus puretaan takaisin
+ * sivulla `createImageBitmap`illa — se on sama kaksikko joka repossa jo on
+ * (`tools/make-card.mjs` kuvaa elementin, testistö lukee pikseleitä).
+ *
+ * Vaatimus on nimenomaan ehdollinen eikä "poista kehys". Kuvamoodeja on kolme
+ * (`7`: pois → hehku → kuvaputki) ja vain kuvaputki kaartaa, eikä WebGL:tä
+ * vailla olevalla koneella kaareva kuva ole edes mahdollinen. Suora kuva saa
+ * siis pitää kehyksensä, ja se on toinen tämän kohdan väitteistä: pelkkä rivin
+ * poistaminen tiedostosta kaataa sen.
+ */
+{
+  const expect = (name, ok, detail = '') => {
+    report.checks.push({ name, ok, detail });
+    if (!ok) report.failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const glThere = await page.evaluate(async () => {
+    const { PostFX } = await import('/src/gfx/postfx.js');
+    return PostFX.mode === 'webgl';
+  });
+
+  if (!glThere) {
+    // Kelvollista WebGL:ää vailla ei ole kaarevaa kuvaa eikä siis tätä bugia.
+    // Ohitus sanotaan ääneen: hiljaa ohitettu testi on vihreä joka ei mittaa.
+    report.checks.push({
+      name: 'kaareva kuva ei kanna suoraa kehystä',
+      ok: true,
+      detail: 'ei WebGL-kontekstia, ei kaarevuutta — ohitettu',
+    });
+  } else {
+    /* 1. Kaarevuus: kuinka kauas kuva vetäytyy elementin reunasta.
+     *
+     * Lähde maalataan valkoiseksi, jotta ero kuvan ja kehysvärin
+     * (`vec4(0.02, 0.02, 0.03, 1.0)`) välillä on suurin mahdollinen eikä mittaus
+     * riipu siitä mikä kohtaus sattuu olemaan ruudulla. Nurkasta lähdetään
+     * lävistäjää pitkin sisään ja reunan keskeltä suoraan sisään: ero näiden
+     * kahden välillä **on** koko bugi, koska suora kehys sopii vain siihen
+     * jälkimmäiseen. */
+    const curve = await page.evaluate(async () => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      const game = window.sfb3;
+      const src = game.canvas;
+      const g = src.getContext('2d');
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, src.width, src.height);
+      PostFX.setPreset('crt');
+      PostFX.present();
+      const disp = PostFX.displayCanvas;
+      // Piirtopuskuria luetaan saman tehtävän sisällä kuin se piirrettiin:
+      // ilman `preserveDrawingBuffer`ia se on tyhjä heti kun selain on ehtinyt
+      // yhdistää ruudun.
+      const probe = document.createElement('canvas');
+      probe.width = disp.width;
+      probe.height = disp.height;
+      const p = probe.getContext('2d');
+      p.drawImage(disp, 0, 0);
+      const d = p.getImageData(0, 0, probe.width, probe.height).data;
+      const sum = (x, y) => {
+        const i = (y * probe.width + x) * 4;
+        return d[i] + d[i + 1] + d[i + 2];
+      };
+      // Kehysväri on summana 18; 40 on sen yläpuolella ja kaukana valkoisesta.
+      let diag = 0;
+      while (diag < probe.height / 2 && sum(diag, diag) < 40) diag++;
+      let mid = 0;
+      const my = probe.height >> 1;
+      while (mid < probe.width / 2 && sum(mid, my) < 40) mid++;
+      game.render();                     // takaisin siihen mitä ruudulla oli
+      return { w: probe.width, h: probe.height, diag, mid };
+    });
+    expect('kuvaputken kuva vetäytyy nurkista mutta ei reunojen keskeltä',
+      curve.diag >= 8 && curve.mid === 0,
+      `nurkassa ${curve.diag} px sisään, reunan keskellä ${curve.mid} px `
+      + `(${curve.w}x${curve.h})`);
+
+    /* 2. Rengas: kirkkain pikseli siinä kahden pikselin nauhassa joka jää heti
+     * elementin ulkopuolelle. Siellä asuu `box-shadow`in levitys, ja siellä
+     * asuu myös pudotusvarjo — joka vain tummentaa, joten sivun oma tausta on
+     * oikea vertailukohta molempiin suuntiin. */
+    const band = async (preset) => {
+      await page.evaluate(async (name) => {
+        const { PostFX } = await import('/src/gfx/postfx.js');
+        PostFX.setPreset(name);
+        window.sfb3.render();
+      }, preset);
+      await page.waitForTimeout(80);
+      const box = await page.evaluate(() => {
+        const el = document.getElementById('screen') || document.getElementById('game');
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      });
+      const pad = 6;
+      const png = await page.screenshot({
+        clip: {
+          x: Math.round(box.x - pad),
+          y: Math.round(box.y - pad),
+          width: Math.round(box.w + pad * 2),
+          height: Math.round(box.h + pad * 2),
+        },
+      });
+      return page.evaluate(async ({ b64, edge }) => {
+        const blob = await (await fetch(`data:image/png;base64,${b64}`)).blob();
+        const bmp = await createImageBitmap(blob);
+        const c = document.createElement('canvas');
+        c.width = bmp.width;
+        c.height = bmp.height;
+        const g = c.getContext('2d');
+        g.drawImage(bmp, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const lum = (x, y) => {
+          const i = (y * c.width + x) * 4;
+          return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        };
+        let max = 0;
+        for (let x = edge; x < c.width - edge; x++) {
+          max = Math.max(max, lum(x, edge - 1), lum(x, edge - 2),
+            lum(x, c.height - edge), lum(x, c.height - edge + 1));
+        }
+        for (let y = edge; y < c.height - edge; y++) {
+          max = Math.max(max, lum(edge - 1, y), lum(edge - 2, y),
+            lum(c.width - edge, y), lum(c.width - edge + 1, y));
+        }
+        const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number);
+        return { max, bg: 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2] };
+      }, { b64: png.toString('base64'), edge: pad });
+    };
+
+    const wasPreset = await page.evaluate(async () => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      return PostFX.preset;
+    });
+    const crt = await band('crt');
+    const flat = await band('pois');
+    const glow = await band('hehku');
+    await page.evaluate(async (name) => {
+      const { PostFX } = await import('/src/gfx/postfx.js');
+      PostFX.setPreset(name);
+      window.sfb3.render();
+    }, wasPreset);
+
+    expect('kaareva kuva ei kanna suoraa kehystä',
+      crt.max <= crt.bg,
+      `kirkkain kehyspikseli ${crt.max.toFixed(1)}, sivun tausta ${crt.bg.toFixed(1)} `
+      + `— kuva vetäytyy nurkassa ${curve.diag} px`);
+
+    /* Ja toinen puolisko: suora kuva on suora, ja suoran kuvan ympärille kehys
+     * kuuluu. Ilman tätä väitettä bugin voisi "korjata" poistamalla rivin, ja
+     * silloin ilman WebGL:ää pelaava — sama kone jolle koko varajärjestelmä on
+     * olemassa — saisi reunattoman kankaan mustalla sivulla. */
+    expect('suora kuva pitää kehyksensä molemmissa muissa moodeissa',
+      flat.max > flat.bg && glow.max > glow.bg,
+      `pois ${flat.max.toFixed(1)}, hehku ${glow.max.toFixed(1)}, `
+      + `tausta ${flat.bg.toFixed(1)}`);
+  }
 }
 
 /* --------------------- haastelinkki oikeana sivunlatauksena --------------- */
@@ -10283,6 +10963,80 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     && compareTable(dropped, measured).length === 1
     && compareTable(extra, measured).length === 1)) {
     report.failures.push('vaikeustaulun vertailu ei huomaa vanhentumista');
+  }
+}
+
+/*
+ * YKSI RUUTU, YKSI UUSI ASIA — opetusjärjestyksen ainoa portti.
+ *
+ * `tools/curriculum.mjs` mittaa kolmea ehtoa (POHJA, SEURA, YKSIN) ja on
+ * raportti eikä portti. Omistaja päätti 9.8.2026 nostaa niistä *yhden*
+ * portiksi, koska vain se osoitti toistuvan ja korjattavan vian: YKSIN hylkäsi
+ * kuusi ensiesittelyä 26:sta, ja hylätyt tulivat kolmena parina — kolme kenttää
+ * joissa kaksi uutta asiaa esitellään samalla ruudulla. POHJA hylkäsi nolla ja
+ * SEURA kaksi, eikä kumpikaan kelpaa portiksi ilman että ne ensin korjataan.
+ *
+ * **Mitä "ensiesittely" tarkoittaa, kun kartta haarautuu.** Maailma 2 haarautuu
+ * 2-2:ssa, joten yhdellä ominaisuudella on kolme eri vastausta siihen missä se
+ * kohdataan ensin: *earliest* (aikaisin kenttä jollain reitillä), *guaranteed*
+ * (kenttä johon mennessä jokainen reitti on sen kohdannut) ja *branch-only*
+ * (vain toisella haaralla esiintyvä). **Tämä portti väittää `earliest`istä**,
+ * ja syy on että se on pahin tapaus: se on ensimmäinen paikka jossa kukaan voi
+ * kohdata asian, ja jos kaksi asiaa on siellä samalla ruudulla, ne ovat samalla
+ * ruudulla jollekulle. `guaranteed` sallisi tungoksen niin kauan kuin *toinen*
+ * reitti on jo opettanut toisen niistä, mikä on lupaus väärälle pelaajalle.
+ *
+ * Kulkua ei kävellä täällä uudestaan: `curriculum.mjs` kävelee graafin samoilla
+ * säännöillä kuin `worldProblems` (linkit suunnattuja, reitti päättyy
+ * linnakkeeseen, talot kävellään läpi), ja tämä tiedosto lukee sen tuloksen.
+ * Toinen kävely olisi toinen totuus.
+ *
+ * Ruutu on 20 laattaa = 320 px, eli canvasin leveys jaettuna laatalla. Se on
+ * oikea yksikkö siksi että kysymys ei ole siitä kuinka kaukana kaksi esittelyä
+ * on toisistaan tiedostossa vaan siitä näkyvätkö ne yhtä aikaa.
+ */
+{
+  const { CURRICULUM_ROWS, CURRICULUM_INTRO, SCREEN_COLS } = await import('./curriculum.mjs');
+  const measured = CURRICULUM_ROWS.filter((r) => r.enc && !r.feature.core);
+  const crowded = measured.filter((r) => !r.safety.yksin);
+  const where = (r) => `${r.feature.key}@${r.enc.earliest}:${r.inst.x0}`;
+  report.checks.push({
+    name: `kahta ensiesittelyä ei ole saman ${SCREEN_COLS} laatan ruudun sisällä`,
+    ok: crowded.length === 0,
+    detail: crowded.length
+      ? `${crowded.length}/${measured.length}: ${crowded.map(where).join(' ')}`
+      : `${measured.length} ensiesittelyä, väljin pakka ${SCREEN_COLS} laattaa`,
+  });
+  if (crowded.length) {
+    report.failures.push(...crowded.map((r) => `ensiesittely ruudun sisällä toisesta: ${where(r)}`));
+  }
+
+  /*
+   * JA SAMAN ASIAN TOINEN PUOLI: montako uutta asiaa yksi kenttä esittelee.
+   *
+   * YKSIN mittaa etäisyyttä, tämä lukumäärää, ja ne eivät ole sama väite. Kenttä
+   * voi levittää seitsemän ensiesittelyä 400 sarakkeelle ja läpäistä YKSINin
+   * moitteetta — juuri niin 1-2 teki kaikkien muiden paitsi yhden parin osalta —
+   * ja silti pyytää pelaajaa oppimaan seitsemän asiaa yhdessä kentässä. 1-2 oli
+   * pelin toinen kenttä, mikä on huonoin mahdollinen paikka sille.
+   *
+   * Raja on **kolme**, eikä se ole pyöristys: kolme oli pelin *seuraavaksi*
+   * pahin kenttä ennen tätä korjausta (1-1 ja 1-3, kumpikin kolme), joten raja
+   * on mitattu pelistä eikä valittu. Se sanoo "1-2 ei saa olla poikkeus", ei
+   * "kolme on oikea luku". Perussanasto ei ole mukana samasta syystä kuin
+   * työkalussa: ensimmäisen ruudun aakkosia ei voi aikatauluttaa.
+   */
+  const over = CURRICULUM_INTRO.filter((l) => l.features.length > 3);
+  const busiest = CURRICULUM_INTRO.reduce((a, b) => (b.features.length > a.features.length ? b : a));
+  report.checks.push({
+    name: 'yksikään kenttä ei esittele yli kolmea uutta asiaa',
+    ok: over.length === 0,
+    detail: over.length
+      ? over.map((l) => `${l.id} ${l.features.length}: ${l.features.map((f) => f.feature.key).join(' ')}`).join(' — ')
+      : `eniten ${busiest.id} ${busiest.features.length} kpl`,
+  });
+  if (over.length) {
+    report.failures.push(...over.map((l) => `${l.id} esittelee ${l.features.length} uutta asiaa kerralla`));
   }
 }
 

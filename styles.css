@@ -43,7 +43,13 @@ html, body {
 
 /* #screen is the WebGL presentation canvas, created at runtime by postfx.js
    when the machine has a usable context. Without one, #game stays on screen
-   and this rule simply never matches anything. */
+   and this rule simply never matches anything.
+
+   The ring and the rounded corners are for a *straight* picture, which is what
+   both canvases carry most of the time: the effects key cycles pois → hehku →
+   kuvaputki and only the last of the three bends anything, and without WebGL
+   nothing bends at all. See `#screen.curved` below for the one case where a
+   straight frame is the wrong frame. */
 #game, #screen {
   display: block;
   image-rendering: pixelated;
@@ -52,6 +58,30 @@ html, body {
   border-radius: 4px;
   box-shadow: 0 0 0 2px #23233a, 0 18px 60px rgba(0, 0, 0, 0.65);
   touch-action: none;
+}
+
+/*
+ * Kaareva kuva ei ota suoraa kehystä. Luokan asettaa `PostFX._syncFrame`, ja se
+ * on päällä täsmälleen silloin kun varjostin taivuttaa kuvaa.
+ *
+ * Syy on mitattu eikä maku: tynnyrivääristymä vetää kuvan elementin suorasta
+ * reunasta sisäänpäin, nurkassa 15 pikseliä 640 pikselin levyisellä ruudulla ja
+ * reunojen keskellä ei lainkaan. Rengas jäi seisomaan sen raon ulkopuolelle ja
+ * näytti — omistajan sanoin — laatikolta kuvaputkiruudun ympärillä. Rakoa ei voi
+ * kuroa umpeen CSS:llä, koska mikään CSS-muoto ei ole tynnyri, ja varjostimen
+ * puolella se maksaisi kuvaa: nurkkien peittäminen ylipyyhkäisyllä söisi 8 px
+ * kuvan molemmilta laidoilta ja 6 px ylhäältä ja alhaalta, eli myös HUD-palkin
+ * alareunan — ja lisäksi kuva vaihtaisi kokoa kesken efektikierron.
+ *
+ * Jäljelle jää pudotusvarjo, ja se on tässä oikea kehys: se on pehmeä, se on
+ * elementin ulkopuolella eikä sen reunassa, ja se tummenee taustaa vasten sen
+ * sijaan että piirtäisi siihen viivan. Kuvan oma reunaväri (`vec4(0.02, 0.02,
+ * 0.03, 1.0)`, luminanssi 6,4) on sivun taustaa (10,9) tummempi, joten kaareva
+ * nurkka lukee putken vetäytymisenä eikä raona.
+ */
+#screen.curved {
+  border-radius: 0;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.65);
 }
 
 #hint {

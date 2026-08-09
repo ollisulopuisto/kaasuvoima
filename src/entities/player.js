@@ -14,7 +14,7 @@ import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
-import { T, TILE, info } from '../gfx/tiles.js';
+import { T } from '../gfx/tiles.js';
 
 /*
  * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
@@ -326,37 +326,8 @@ export class Player extends Entity {
   /** Reported for the tests and the HUD-less picture; the physics use the y. */
   get inQuicksand() { return this.quicksandSurface() !== null; }
 
-  /**
-   * The y of the surface of the quicksand this body is in, or null.
-   *
-   * The *surface* and not merely "yes": every question quicksand asks is about
-   * a height. Whether the head is under is the surface against `this.y`, how
-   * far there is to climb is the surface against the feet, and where the grains
-   * are thrown from is the surface again. Returning a boolean and looking the
-   * height up again at each of those would have been three chances to look up a
-   * different tile.
-   *
-   * The highest quicksand row the body overlaps wins, because a two-tile pool
-   * has two rows of it and only the top one has air over it. Reading the tile
-   * above rather than tracking pool extents keeps this a question about the
-   * body's own box, which is the only thing that stays true when a pool is
-   * dug into a slope or a chunk boundary.
-   */
-  quicksandSurface() {
-    const x0 = Math.floor(this.x / TILE);
-    const x1 = Math.floor((this.x + this.w - 1) / TILE);
-    const y0 = Math.floor(this.y / TILE);
-    const y1 = Math.floor((this.y + this.h - 1) / TILE);
-    for (let ty = y0; ty <= y1; ty++) {
-      for (let tx = x0; tx <= x1; tx++) {
-        if (!info(this.level.tileAt(tx, ty)).quicksand) continue;
-        let top = ty;
-        while (top > 0 && info(this.level.tileAt(tx, top - 1)).quicksand) top--;
-        return top * TILE;
-      }
-    }
-    return null;
-  }
+  /* `quicksandSurface()` is on `Entity` — it used to be here, and it moved the
+   * day the enemies had to sink too. The comment on it says why. */
 
   /**
    * Whether running into a brick from the side breaks it. Ummetus stops it for

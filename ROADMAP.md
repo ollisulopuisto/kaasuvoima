@@ -786,10 +786,13 @@ kenttiä joita luetaan joka framessa.
   bugi: **hylly ei ole maareitillä**, alla oleva lattia on kuljettava, eikä
   kenttä ole missään koossa mahdoton. Isoin pelaaja vain törmää näkymättömään
   kattoon jos kiipeää sinne.
-- **Yön paletissa tiili ja maa ovat lähes sama ruskea** (27,8 / 34 %, heikoin
-  pari kaikista kuudesta teemasta). Uusi kuvakieli paransi eron joka teemassa,
-  mutta tämä jäljelle jäänyt on **paletti eikä muoto**, joten se ei korjaannu
-  teemakohtaisilla muodoilla vaan `night.brick`in ja `night.ground`in väreillä.
+- ✔ **Yön tiili ja maa erotettu 9.8.2026** (v26.08.09.40). Pari oli mitattuna
+  0,4 % — heikoin koko pelissä — ja korjaus tuli sieltä mistä oli ennustettukin,
+  paletista eikä muodosta. Omistajan päätöksellä liikkui **vain** `night.brick`
+  (`#7a5a30` → `#c88a62`), joten 2-N:n lattia näyttää entiseltä; ero maahan on
+  nyt 17,8 %. Ylärajan antaa uusi mitattu väite `verify.mjs`:ssä: kova palikka
+  on jokaisen kahdeksan teeman kirkkain kiinteä ruutu, koska kirkkain on se jota
+  ei voi rikkoa. Yön tiilelle jää sen alle 2,9 luminanssia pelivaraa.
 
 ## Myöhemmin
 

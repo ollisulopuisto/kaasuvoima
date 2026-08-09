@@ -23,9 +23,21 @@
  *      one branch only is a different case from one that lives on both
  *   3. whether that first encounter is safe, by a stated proxy — see TURVAPROXY
  *
- * What it deliberately does NOT do: change anything, gate anything, or grade a
- * level. A level that introduces two features at once is reported as such; the
- * tool has no opinion about whether that level is good.
+ * What it deliberately does NOT do: change anything or grade a level. A level
+ * that introduces two features at once is reported as such; the tool has no
+ * opinion about whether that level is good.
+ *
+ * IT USED TO SAY "gate anything" IN THAT SENTENCE, AND SINCE 9.8.2026 IT DOES
+ * NOT. The tool still writes nothing and still fails nothing — but one of its
+ * three conditions, YKSIN, was promoted to an assertion in `tools/verify.mjs`,
+ * which imports the exports at the bottom of this file rather than walking the
+ * map a second time. The verdict this tool was built to deliver was that a full
+ * curriculum system was not worth building (the last feature arrives in 5-3,
+ * most levels introduce nothing new, and the generator already obeys the rule
+ * 56 times out of 58); YKSIN was the one fault it found that was real,
+ * repeated and cheap to fix, and it was the only thing acted on. The direction
+ * matters and is worth keeping straight: the gate borrows this measurement, the
+ * measurement does not borrow the gate.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -138,7 +150,32 @@ const FOLLOW_TILES = 2;
  *     geometry spelled out at its detector.
  */
 
-/** Enemy markers, straight off `ENEMY_CHARS` in src/entities/enemies.js. */
+/**
+ * Enemy markers, straight off `ENEMY_CHARS` in src/entities/enemies.js.
+ *
+ * "Straight off" is a copy and copies go stale, so here is the one that has:
+ * **`U`, the kurnuttaja, is in `ENEMY_CHARS` and is not in this table.** It
+ * shipped the same day this tool did and neither knew about the other, so the
+ * measurement below has never seen it. That is a known hole in a gate, not a
+ * decision, and it is written here rather than fixed for one reason worth
+ * stating: adding the row makes 2-1 fail YKSIN twice over. The creature stands
+ * at column 117, sixteen columns from the pipe plant at 101 and seventeen from
+ * the heartburn jet at 134 — and `levels/world2.js` argues *at length* that the
+ * plant belongs on that exact screen, because the two are the game's only
+ * unstompable telegraphed enemies and the difference between them is only
+ * visible side by side. So this is a real disagreement between a rule and a
+ * design decision rather than an oversight to sweep up, and the owner's scope
+ * on 9.8.2026 was the six failures the tool already reported and nothing else.
+ * Whoever takes it up has to settle that argument first; the fix is a chunk
+ * order in 2-1 (swapping `pit_croak` with `pit_l` puts the creature at 197 and
+ * clears the rule) and the cost is a paragraph of somebody's reasoning.
+ *
+ * `tools/verify.mjs` has a check for exactly this shape of staleness on the
+ * difficulty meter — "jokaisella vihollismerkillä on hinta vaikeusmittarissa" —
+ * and the equivalent one here is the natural next step once the above is
+ * settled. It is deliberately not added today, because a check that fails on
+ * the day it lands is a check somebody disables.
+ */
 const ENEMY_NAMES = {
   g: 'kävelijä',
   k: 'kuoriukko',
@@ -456,6 +493,13 @@ function firstInstance(feature, level) {
  *            (SCREEN_COLS = 20 tiles) in the same level and the same band. FAIL
  *            means the level introduces two new things where the player can see
  *            both at once, which is the definition of teaching neither.
+ *            **This is the one of the three that `tools/verify.mjs` asserts**,
+ *            and it is asserted on `earliest` — the worst case, the first level
+ *            in which anybody can meet the thing — because `guaranteed` would
+ *            excuse a crowded screen on one branch on the strength of what the
+ *            other branch taught. It failed 6 first encounters out of 26 on the
+ *            day it was promoted, in three pairs: vine/pipe plant in 1-2, star/
+ *            cork guy in 1-3, crumbling floor/moon in 2-N.
  *
  * What this proxy CANNOT see, and it matters: it does not know whether a
  * feature can be walked past, it does not know the player's speed on arrival,
@@ -826,7 +870,25 @@ if (!IS_MAIN) {
   report();
 }
 
-export { FEATURES, PATHS, ROWS_OUT as CURRICULUM_ROWS };
+/*
+ * WHAT IS EXPORTED, AND WHY THIS FILE IS NO LONGER ONLY A REPORT.
+ *
+ * The header above still says this tool gates nothing, and that is still true
+ * of the tool: it writes nothing and it grades nothing. But one of the three
+ * conditions it measures — YKSIN — was promoted to an assertion in
+ * `tools/verify.mjs` on 9.8.2026, and the assertion imports these exports
+ * rather than walking the map a second time. That direction matters: the gate
+ * borrows the measurement, the measurement does not borrow the gate.
+ *
+ * `CURRICULUM_ROWS` carries `feature`, `enc` (the first-encounter answer set),
+ * `inst` (where, in columns) and `safety` for every feature. `CURRICULUM_INTRO`
+ * is the same data pivoted per level: what each level is the first place to
+ * meet. `SCREEN_COLS` is exported so the gate can quote the unit in its own
+ * message instead of writing 20 down again.
+ */
+export {
+  FEATURES, PATHS, ROWS_OUT as CURRICULUM_ROWS, INTRO as CURRICULUM_INTRO, SCREEN_COLS,
+};
 
 function report() {
 const pad = (s, n) => String(s).padEnd(n);

@@ -135,11 +135,47 @@ export const THEMES = {
     hill: '#c89040', hillDark: '#9c6a24',
     cloud: '#fff0dc',
   },
+  /**
+   * YÖ — aavikon oma pimeä puoli, ja pelin pitkäaikaisin näkyvyysvirhe.
+   *
+   * Tiili oli `#7a5a30` ja maa on `#6a5030`: kaksi nimeä samalle ruskealle.
+   * `verify.mjs` mittasi parin eroksi **0,4 %**, koko pelin heikoimman, eli
+   * 2-N:n rikottava lohko oli lattiaa vasten käytännössä näkymätön. Se ehti
+   * ohjata kahta muuta päätöstä ennen kuin se korjattiin — juoksuhiekka jätettiin
+   * pois 2-N:stä ja pilviteema rakennettiin 25 %:n kynnykseen — mikä on hyvä
+   * muistutus siitä että näkymätön mekaniikka maksaa muualla kuin siinä
+   * kentässä jossa se asuu.
+   *
+   * **Tiili liikkui, maa ei.** Se on omistajan päätös ja sillä on hintansa
+   * molempiin suuntiin: 2-N:n lattia näyttää täsmälleen entiseltä, mutta koko
+   * ero on ostettava tiilen puolelta yhdessä paletissa joka on tarkoituksella
+   * puristettu pimeään päähän.
+   *
+   * Uusi tiili on **kuunvalon haalistamaa lautaa**: vaaleampi, kuivempi ja
+   * hitusen harmaampi kuin maan lämmin multa, eli kaksi eri ainetta eikä saman
+   * aineen kaksi sävyä. Sama vastaus kuin luulaaksossa ja pilvikerroksessa,
+   * ainoastaan hillitympi, koska tässä maailmassa ei ole päivänvaloa myytävänä.
+   * Mitattu ero maahan **17,8 %** (0,4 %:sta), eli yli kaksinkertainen pelin
+   * heikoimpaan selviytyneeseen pariin (aavikko 8,6 %) nähden.
+   *
+   * **Miksi tähän ja ei kirkkaammalle.** Ylärajan antaa mitattu sääntö jota
+   * kaikki kahdeksan teemaa noudattavat: kova palikka on teemansa kirkkain
+   * kiinteä ruutu. Yön kova palikka on luminanssiltaan 133,1 ja tämä tiili
+   * 130,3 — pelivaraa jää 2,8. Sitä kirkkaampi lauta tekisi valonsa itse
+   * (yössä ei ole mitään mikä sen valaisisi) ja kääntäisi nurin merkin jonka
+   * pelaaja on oppinut viidessä maailmassa: kirkkain on se jota ei voi rikkoa.
+   * Jään 22,3 %:iin yltävä lauta mitattiin, ja se vaati luminanssin 142 eli
+   * kirkkaamman kuin oma kivi ja yhtä kirkkaan kuin keskipäivän aavikon tiili.
+   * Se olisi ollut numero ilman yötä.
+   *
+   * `brickDark` tummeni samalla maan alle (`#684230` vastaan maan `#6a5030`),
+   * joten lankkujen saumat lukevat varjoina eivätkä maan sävynä — ks. `drawBrick`.
+   */
   night: {
     surface: 'sand',
     sky: ['#0d1030', '#2a2350'],
     ground: '#6a5030', groundDark: '#3e2c18', groundTop: '#8a6a3c', groundTopDark: '#5c4424',
-    brick: '#7a5a30', brickDark: '#4a3418', brickLight: '#a8804a',
+    brick: '#c88a62', brickDark: '#684230', brickLight: '#f4c4a0',
     hard: '#8a86a0', hardDark: '#4a4660', hardLight: '#b4b0c8',
     pipe: '#7a5220', pipeDark: '#4a3010', pipeLight: '#a87a3a',
     hill: '#3a2f52', hillDark: '#241d38',
@@ -199,7 +235,9 @@ export const THEMES = {
    * Tämä teema on se jonka pitäisi kaatua omaan kontrastiporttiinsa: valkoista
    * valkoisella on koko maailman lähtökohta, ja jos tiili sulautuu maahan, se
    * ei näytä bugilta vaan siltä että palikoita ei ole. Yön pari (`#7a5a30` ja
-   * `#6a5030`, mitattuna 0,4 %) on todiste siitä että näin käy vahingossa.
+   * `#6a5030`, mitattuna 0,4 %) oli todiste siitä että näin käy vahingossa —
+   * tämän teeman kynnys rakennettiin sitä lukua vasten, ja yö on sittemmin
+   * korjattu erikseen. Kynnys jää: se on olemassa tämän teeman takia.
    *
    * Vastaus on ettei kumpikaan ole valkoinen samasta syystä: **maa on
    * auringon puolelta valaistua pohjapilveä ja tiili on ukkospilveä.** Kaksi
@@ -492,9 +530,11 @@ function drawBrick(ctx, x, y, th, tx, ty) {
   ctx.fillRect(x, y, TILE, TILE);
 
   // Plank seams, with the lit edge of the next board beside each one. The seam
-  // takes a shadow on top of the palette colour: in the night set `brickDark`
-  // and the ground brown are nearly the same, and a breakable tile that differs
-  // only in silhouette is one you find out about by not finding out about it.
+  // takes a shadow on top of the palette colour rather than trusting
+  // `brickDark` alone, because a palette is free to put its shadow tone within
+  // a few levels of its own ground — the night set did exactly that until its
+  // brick was lightened — and a seam that lands on the ground colour is a seam
+  // you find out about by not finding out about it.
   for (const sx of [5, 10]) {
     ctx.fillStyle = th.brickDark;
     ctx.fillRect(x + sx, y, 1, TILE);
