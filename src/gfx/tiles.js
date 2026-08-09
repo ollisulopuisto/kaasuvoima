@@ -493,6 +493,15 @@ function drawPlatform(ctx, x, y, th) {
   ctx.fillRect(x, y + 6, TILE, 1);
 }
 
+/**
+ * The spikes only occupy the bottom of their tile; the rest is air.
+ *
+ * Exported because the damage box in scenes/level.js is built from it. Drawing
+ * and hurting must come from one number, or a jump that visibly clears the
+ * points still costs a power level — which is exactly what it did.
+ */
+export const SPIKE_TOP = 6;
+
 function drawSpike(ctx, x, y, tick) {
   for (let i = 0; i < 4; i++) {
     const bx = x + i * 4;

@@ -1,5 +1,7 @@
 import { getLevel } from '../data/levels.js';
-import { TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP } from '../gfx/tiles.js';
+import {
+  TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP,
+} from '../gfx/tiles.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
@@ -779,7 +781,13 @@ export class LevelScene {
           p.die('lava');
           return;
         } else if (ch === T.SPIKE) {
-          if (p.hurt('spike')) p.vy = -3;
+          // Only the part with points on it hurts. Testing the whole tile made
+          // the top six pixels — plain air, above the tips — just as lethal as
+          // the spikes, so a jump that cleared them by sight still cost you.
+          const box = {
+            x: tx * TILE, y: ty * TILE + SPIKE_TOP, w: TILE, h: TILE - SPIKE_TOP,
+          };
+          if (overlaps(p.box, box) && p.hurt('spike')) p.vy = -3;
         } else if (ch === T.DOOR && this.bossDefeated) {
           this.completeLevel(null);
           return;

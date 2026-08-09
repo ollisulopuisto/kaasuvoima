@@ -817,6 +817,44 @@ const report = await page.evaluate(async () => {
       `cam.y ${Math.round(worst)}`);
   }
 
+  /* ------------------------------- piikit ------------------------------- */
+  /* Reported from play: "the player passed on top of the spikes but still took
+   * damage". The spikes are drawn in the bottom ten pixels of their tile, but
+   * the damage test used the whole sixteen — so six pixels of plain air above
+   * the points were just as lethal as the points. */
+  {
+    const { T, TILE, SPIKE_TOP } = await import('/src/gfx/tiles.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '2-1');
+    game.setScene(s);
+
+    // Build a spike bed of our own so the test does not depend on level data.
+    const ty = 12;
+    const tx = Math.floor(s.player.x / TILE) + 4;
+    for (let i = 0; i < 4; i++) s.setTile(tx + i, ty, T.SPIKE);
+
+    const tryAt = (feetY) => {
+      const p = s.player;
+      p.dying = false;
+      p.invuln = 0;
+      p.frozen = 0;
+      p.power = { type: 'shroom', level: 3 };
+      p.applySize();
+      p.x = (tx + 1) * TILE;
+      p.y = feetY - p.h;
+      const before = p.powerLevel;
+      s.playerTiles();
+      return p.powerLevel < before || p.dying;
+    };
+
+    const spikeTop = ty * TILE + SPIKE_TOP;
+    const clear = tryAt(spikeTop - 1);      // feet one pixel above the points
+    const grazed = tryAt(spikeTop + 3);     // feet in among the points
+    expect('spikes hurt where the points are and not in the air above them',
+      !clear && grazed, `yläpuolella ${clear ? 'sattui' : 'ei sattunut'}, `
+      + `piikeissä ${grazed ? 'sattui' : 'ei sattunut'}`);
+  }
+
   /* ------------------------------ supertähti ---------------------------- */
   /* It kills what it touches, and it protects you from enemies and from nothing
    * else. The three "still kills" cases are the whole point of the feature —
