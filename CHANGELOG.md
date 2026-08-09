@@ -194,6 +194,21 @@ Seuraus: maailman 2 luku laski 149,0:sta 147,3:een. **Se ei ole viritys vaan
 seuraus** — `2-N` on nyt vaihtoehto `2-3`:lle eikä enää jokaisen pelaajan
 keskiarvossa.
 
+### Muototarkistus lukee tasoja, ei jonoa
+
+Käyrän muototarkistus vertasi peräkkäisiä kenttiä ketjussa, ja se oli oikein
+täsmälleen niin kauan kuin kartta oli jono. Haarautuvalla kartalla se alkaa
+valehdella molempiin suuntiin: helppo haara vaikean perässä raportoituu notkona
+jota kukaan ei pelaa, ja vaikea haara piikkinä jota kenenkään ei ole pakko
+selvitä. Nyt yksi taso on yksi askel etenemistä — yksi kenttä tai yksi kokonainen
+haara — ja haaran luku on **helpoimman reitin** luku, koska se on se jonka
+jokainen kävelee. Haaran oma eriarvoisuus on eri kysymys, ja se tarkistetaan
+erikseen.
+
+Tämä oli sama uudelleenkirjoitus jota kahdeksan maailman tavoite roadmapissa jo
+vaati. Kaksi kohtaa, yksi työ — ja sen jälkeen kahdeksan porrasta on mittarin
+kannalta pelkkää dataa.
+
 ### Rakenne on tarkistettu, ei muistettu
 
 `worldProblems` vaatii että jokainen kenttä on jollain reitillä alusta
@@ -297,6 +312,19 @@ yhä ilmaa), tiili on täytölle seinä vaikka iso pelaaja rikkoo sen, ja vain n
 tiet tunnetaan jotka ruudukko nimeää. Tarkistus voi siis **jäädä huomaamatta
 ansa mutta ei keksiä sellaista.**
 
+### Neljäs tapaus tunnetusta pääntilamuodosta, ja miksi sääntöä ei laajennettu
+
+Tarkistus löysi neljännen tapauksen samasta muodosta jonka linnakkeet jo
+tuntevat: `tomb_cave`n `?B!B?`-rivi on kaksi riviä katon alla. **Se ei ole ansa**
+— hyllylle ei pääse isoimmalla koolla, joten sinne ei myöskään jää jumiin, ja
+huoneen lattia ja reitti ovat vapaat kaikilla kuudella koolla.
+
+Pääntilasääntö rajattiin tarkoituksella kaistan **maahan** eikä jokaiseen
+seisottavaan hyllyyn juuri tästä syystä. "Jokainen hylly" -versio hälyttäisi
+näistä neljästä eikä mistään muusta, ja sääntö joka valittaa kolmesta
+linnakkeesta ja yhdestä oikein toimivasta bonushuoneesta vaimennetaan viikossa —
+minkä jälkeen se ei suojaa mitään.
+
 Samalla korjattu: `*` (tähtilohko) puuttui `SOLID`-joukosta vaikka `TILE_INFO`
 antaa sille `solid: true`. Merkityksetöntä niin kauan kuin säännöt mittasivat
 lattioita, kantava heti kun ne kysyvät mahtuuko keho.
@@ -361,6 +389,18 @@ tiedoston.** Liian antelias budjetti ei siis näy rikkeinä vaan päinvastoin �
 saa jokaisen kentän näyttämään hyväksytyltä. Mittari joka mittaa itseään omalla
 väärällä mitallaan on aina vihreä.
 
+**Mikään ei ollut rikki, ja se mitattiin ennen kuin tiedostoon koskettiin:**
+validaattori ajettiin kaikille 21 kentälle sekä tallennetulla (8/13/6) että
+mitatulla (6/9/4) budjetilla, ja rikkeitä on molemmilla nolla. Yksikään kuilu ei
+siis ollut liian leveä; väärä luku oli tehnyt kentistä helpompia, ei
+rikkinäisiä.
+
+**Ansa joka tämän alla paljastui, ja joka on tästä lähtien tiedossa:**
+`measure-jump.mjs` kirjoittaa `jump-budget.json`in **sivuvaikutuksena**, eli
+pelkkä mittaaminen muuttaa juuri sitä tiedostoa jota generaattori ja
+validaattori lukevat. Raportoiva työkalu joka kirjoittaa omat syötteensä on ansa,
+ja se on sama ansa joka kerta kun siihen astutaan.
+
 ### Maailma 3
 
 Oikea budjetti nostaa kaikkia vaikeuslukuja, koska kuiluriski pisteytetään
@@ -393,6 +433,31 @@ uusilla luvuilla; uusi generointiajo on oma päätöksensä.
 
 Iso erä, ja pääosin rinnakkaisten alaagenttien tekemä: kuusi työtä omissa
 työkopioissaan, yhdistettynä ja portti ajettuna kerran kaikelle yhdessä.
+
+### Tauko ei jää päälle kohtauksen vaihtuessa
+
+*(Kirjattu jälkikäteen: korjaus tuli tässä erässä mutta jäi vaille omaa
+merkintäänsä, ja sen huomasi vasta roadmapin siivous.)*
+
+Bugi: laita peli tauolle, avaa debug-ruutu ja warppaa seuraavaan maailmaan, niin
+taukoa ei saa enää pois. Peli on jumissa eikä siitä pääse kuin lataamalla sivun.
+
+**Syy ei ollut se mitä oire lupasi.** Tauko- ja debug-ruutu eivät kilpailleet
+mistään. Tauko jäi päälle kohtaukseen jossa sitä ei voi ottaa pois:
+taukonäppäin vastaa vain `LevelScene`ssä, joten maailmankartalla mikään näppäin
+ei kosketa lippuun — ja `step` ohittaa kartan päivityksen niin kauan kuin lippu
+on päällä. Warppaus on vain lyhin tie sinne; **mikä tahansa kohtauksen vaihto
+tauon aikana tekee saman.**
+
+Korjaus on siksi `setScene`ssä eikä warpissa, ja samasta syystä kuin tunnelma
+nollataan siellä: tauko kuuluu siihen paikkaan jossa oltiin, ja se että jokainen
+kohtaus muistaisi sammuttaa sen itse on juuri se tapa jolla se jäi päälle.
+
+Testi ensin, ja se kaatui oikeasta syystä (`paused true, WorldMapScene`).
+Ensimmäinen versio testistä ajoi `game.step()`:n varmistaakseen että kartta
+todella päivittyy — ja kaatoi kolme esittelytilan testiä, koska step pyörittää
+myös alkuruudun jouten-laskuria. Lippu kohtauksessa jossa ei ole taukonäppäintä
+*on* se jumitila, joten lippu on se mitä kannattaa väittää.
 
 ### Mekaniikat maailmoihin 2, 3 ja 4
 
@@ -995,6 +1060,14 @@ pois — täysin ajantasaisessakin selaimessa. Ilman WebGL:ää bloom, juovat ja
 vinjetti piirretään Canvas 2D:llä; vain kaarevuus jää pois. `verify.mjs` tynkää
 kontekstin pois ja tarkistaa tämän joka ajolla, samoin sen että heittävä ajuri ei
 kaada peliä.
+
+Selaintuki ei siis ole se joka tämän kaataa. WebGL 1 on ollut mukana vuodesta
+2011 ja WebGL 2 on kaikissa nykyselaimissa — viimeinen puuttuja oli Safari, joka
+sai sen iOS/macOS 15:ssä (2021) — ja tälle pelille kumpi tahansa riittää, koska
+tarvittava on yksi tekstuuri ja yksi fragment-shader. Se mikä *oikeasti* kaataa
+WebGL:n on ajuri, ja siksi fallback testataan eikä oleteta. WebGPU olisi taas
+liian aikaista: Safarilla se tuli vasta 2025 ja Firefoxin tuki on osittainen,
+eikä se toisi tähän mitään mitä WebGL ei tekisi.
 
 ### Kaksi virhettä, jotka löytyivät vasta kuvakaappauksesta
 Molemmat menivät testeistä läpi ja näkyivät heti silmällä — tästä syystä efektit
