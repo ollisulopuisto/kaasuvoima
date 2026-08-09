@@ -4,6 +4,13 @@ import { Music, Sfx } from '../core/audio.js';
 import { loadScores, addScore, NAME_LENGTH, GAME_VERSION } from '../core/scores.js';
 import { padNum } from '../core/utils.js';
 
+/** `YYYY-MM-DD` in local time, which is the day the player would call it. */
+function isoDay(stamp) {
+  const d = new Date(stamp);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Letters a name can be built from. The last two slots are edit commands. */
 const ALPHABET = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖ0123456789 '];
 
@@ -175,13 +182,17 @@ export class HighScoreScene {
       drawText(ctx, `${i + 1}`.padStart(2), 30, y, { color: '#8890b0' });
       drawText(ctx, entry.name, 52, y, { color });
       if (entry.assisted) drawText(ctx, '*', 52 + NAME_LENGTH * 6 + 2, y, { color: '#c88040' });
-      drawText(ctx, `M${entry.world}`, 132, y, { color: '#8fe04a' });
-      if (entry.version) {
-        drawText(ctx, entry.version, 160, y, {
+      drawText(ctx, `M${entry.world}`, 130, y, { color: '#8fe04a' });
+      /* The day the score was set, ISO order: year, month, day. It sorts the
+       * same way it reads, and there is no continent on which it means
+       * something else. The build version is still stored on the entry — it is
+       * just not what anyone wants to read off a scoreboard. */
+      if (entry.at) {
+        drawText(ctx, isoDay(entry.at), 158, y, {
           color: entry.version === GAME_VERSION ? '#6a7a9a' : '#8a6a4a',
         });
       }
-      drawText(ctx, padNum(entry.score, 7), 290, y, { color, align: 'right' });
+      drawText(ctx, padNum(entry.score, 6), 290, y, { color, align: 'right' });
     });
 
     if (this.scores.some((e) => e.assisted)) {

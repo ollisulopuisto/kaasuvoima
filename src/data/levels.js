@@ -64,7 +64,7 @@ const LEVEL_DEFS = {
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level',
     chunks: [
-      'start', 'plat_float', 'power', 'sun', 'spikes', 'pipe_pair',
+      'start', 'plat_float', 'power', 'walkers', 'spikes', 'pipe_pair',
       'walkers', 'sky_run', 'coin_stack', 'pit_bridge', 'clouds', 'brick_wall',
       'heartburn_pair', 'plat_hi', 'shell', 'pit_l', 'power_hi', 'walkers',
       'note_pair', 'steps_down', 'run_up', 'goal', 'goal_end',
@@ -76,7 +76,7 @@ const LEVEL_DEFS = {
     chunks: [
       'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
       'moon_night', 'coins', 'shell', 'plat_steps', 'pit_l', 'corks',
-      'dune_night', 'bricks', 'flyer', 'pit_plat', 'sun', 'steps_up',
+      'dune_night', 'bricks', 'flyer', 'pit_plat', 'shell', 'steps_up',
       'run_up', 'goal', 'goal_end',
     ],
   },
