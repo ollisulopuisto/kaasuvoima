@@ -2136,6 +2136,40 @@ const report = await page.evaluate(async () => {
         Math.abs(e.speed - was * E.ANGRY_SPEED) < 1e-9, `${was} -> ${e.speed}`);
     }
 
+    /* Nopeutuminen on sääntö jota pelaaja ei voi lukea mistään ellei naama
+     * kerro sitä. `drawStinkCloud` osaa kaksi ilmettä ja piirsi vuosia vain
+     * toista: molemmat kutsupaikat antoivat kirjaimellisen `true`:n, joten
+     * rauhallinen pilvi näytti aivan yhtä vihaiselta kuin puolitoista kertaa
+     * nopeampi karkulainen. Testi vertaa kahta muuten identtistä pilveä
+     * pikseli pikseliltä, koska juuri se ero oli nolla.
+     *
+     * `tick = 0` ei ole makuasia: karkulainen myös vilkkuu (`get tint`), ja
+     * vilkku on päällä joka toinen neljän framen jakso. Nollassa se on pois,
+     * joten ainoa jäljelle jäävä ero on ilme. */
+    {
+      const faces = (angry) => {
+        const cv = document.createElement('canvas');
+        cv.width = 40; cv.height = 32;
+        const g2 = cv.getContext('2d');
+        const e2 = new E.StinkCloud(setup(96).s, 8, 8);
+        e2.tick = 0;
+        e2.facing = 1;
+        e2.angry = angry;
+        e2.x = 8; e2.y = 8;
+        e2.draw(g2);
+        return g2.getImageData(0, 0, 40, 32).data;
+      };
+      const calm = faces(false);
+      const cross = faces(true);
+      let diff = 0;
+      for (let i = 0; i < calm.length; i += 4) {
+        if (calm[i] !== cross[i] || calm[i + 1] !== cross[i + 1]
+          || calm[i + 2] !== cross[i + 2] || calm[i + 3] !== cross[i + 3]) diff++;
+      }
+      expect('a stink cloud that escaped a bubble looks angrier than one that never was',
+        diff > 0, `${diff} px eroa`);
+    }
+
     {
       const want = {
         Walker: true, ShellGuy: true, Flyer: true, StinkCloud: true, CorkGuy: true,

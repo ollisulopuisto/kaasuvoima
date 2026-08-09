@@ -556,13 +556,13 @@ väite "ei tee mitään" oli väärä.
 
 ### Taso A — kyky joka koodissa on ja jota peli ei koskaan pyydä
 
-1. **Ruskea pilvi on pysyvästi vihainen.** `drawStinkCloud(…, angry)` saa
-   molemmilta kutsupaikoilta kirjaimellisen `true`:n, joten **rauhallista
-   naamaa ei piirretä koskaan** — eikä olion *oikea* `angry`-tila (kuplasta
-   karannut, `ANGRY_SPEED` 1,6×) ohjaa sitä. Eli vihastunut pilvi näyttää
-   samalta kuin rauhallinen, vaikka se liikkuu puolitoista kertaa nopeammin.
-   **Tämä on ainoa löydös jonka pelaaja huomaa**, ja se on juuri väärinpäin:
-   nopeutunut vihollinen on se joka pitäisi näkyä.
+1. ✔ **Korjattu (v26.08.09.24): ruskea pilvi oli pysyvästi vihainen.**
+   `drawStinkCloud(…, angry)` sai molemmilta kutsupaikoilta kirjaimellisen
+   `true`:n, joten rauhallista naamaa ei piirretty koskaan eikä olion *oikea*
+   `angry`-tila (kuplasta karannut, `ANGRY_SPEED` 1,6×) ohjannut sitä. Naama
+   seuraa nyt oliota, ja kuolevakin pilvi piirtyy omalla tilallaan — §8, ei
+   siisteys: kaksi samannäköistä merkkiä opettaa lukemaan väärin. Mitattu ero
+   kahden muuten identtisen pilven välillä **0 px → 8 px**.
 2. `drawNote(…, bumped)` saa kovakoodatun `false`:n. Kuollut haara elävän
    mekanismin takana — `drawTiles` siirtää palikkaa yleisellä bump-siirtymällä,
    joten liike näkyy silti.
