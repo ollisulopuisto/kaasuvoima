@@ -551,30 +551,74 @@ function drawLava(ctx, x, y, tick, tx) {
   ctx.fillRect(x, y, TILE, 2);
 }
 
-function drawDoor(ctx, x, y, th, tick, open) {
+/**
+ * One tile of a door. Doors are built several tiles wide and tall, and each
+ * tile draws only its own slice — `edges` says which sides are the outside of
+ * the door, so the stone surround, the hinges and the centre seam land on the
+ * real boundaries instead of being repeated on every tile.
+ *
+ * The reason it is drawn this way at all: a one-tile door is 16 px tall and the
+ * largest player is 43. Walking into a doorway you tower over does not read as
+ * going through a door, it reads as a bug.
+ */
+function drawDoor(ctx, x, y, th, tick, open, edges) {
+  const e = edges || { l: true, r: true, t: true, b: true };
   ctx.fillStyle = th.hardDark;
   ctx.fillRect(x, y, TILE, TILE);
-  ctx.fillStyle = th.hard;
-  ctx.fillRect(x, y, TILE, 1);
+  if (e.t) {
+    ctx.fillStyle = th.hard;
+    ctx.fillRect(x, y, TILE, 1);
+  }
+
+  const ix = x + (e.l ? 2 : 0);
+  const iw = TILE - (e.l ? 2 : 0) - (e.r ? 2 : 0);
+  const iy = y + (e.t ? 1 : 0);
+  const ih = TILE - (e.t ? 1 : 0) - (e.b ? 1 : 0);
   ctx.fillStyle = '#3a2008';
-  ctx.fillRect(x + 2, y + 1, 12, 15);
+  ctx.fillRect(ix, iy, iw, ih);
   ctx.fillStyle = '#7a4c20';
-  ctx.fillRect(x + 3, y + 2, 10, 14);
+  ctx.fillRect(ix + 1, iy + 1, iw - 2, ih - (e.b ? 1 : 0));
+
+  // planks, so a three-tile leaf does not read as one flat slab
   ctx.fillStyle = '#5c3410';
-  ctx.fillRect(x + 7, y + 2, 1, 14);
-  ctx.fillStyle = '#9c6a30';
-  ctx.fillRect(x + 3, y + 2, 10, 1);
-  ctx.fillStyle = '#c8c8d8';                      // hinges
-  ctx.fillRect(x + 3, y + 4, 2, 1);
-  ctx.fillRect(x + 3, y + 12, 2, 1);
+  for (let px = ix + 4; px < ix + iw - 2; px += 5) ctx.fillRect(px, iy + 1, 1, ih - 1);
+  if (e.t) {
+    ctx.fillStyle = '#9c6a30';
+    ctx.fillRect(ix + 1, iy + 1, iw - 2, 1);
+  }
+
+  // The seam between the two leaves runs down the inside edge of each half.
+  if (!e.r) {
+    ctx.fillStyle = '#2a1806';
+    ctx.fillRect(x + TILE - 1, iy, 1, ih);
+  }
+
+  ctx.fillStyle = '#c8c8d8';
+  if (e.l) {
+    ctx.fillRect(x + 3, y + 4, 2, 1);
+    ctx.fillRect(x + 3, y + 11, 2, 1);
+  }
+  if (e.r) {
+    ctx.fillRect(x + TILE - 5, y + 4, 2, 1);
+    ctx.fillRect(x + TILE - 5, y + 11, 2, 1);
+  }
+
+  // Handles sit at the seam, and only on the middle row of a tall door.
   const glow = open && Math.floor(tick / 8) % 2 === 0;
-  ctx.fillStyle = glow ? '#fff0a0' : '#ffd048';   // handle
-  ctx.fillRect(x + 10, y + 9, 2, 2);
+  const middle = !e.t && !e.b;
+  if (middle || (e.t && e.b)) {
+    ctx.fillStyle = glow ? '#fff0a0' : '#ffd048';
+    if (!e.r) ctx.fillRect(x + TILE - 4, y + 7, 2, 3);
+    if (!e.l) ctx.fillRect(x + 2, y + 7, 2, 3);
+    if (e.l && e.r) ctx.fillRect(x + 10, y + 9, 2, 2);
+  }
+
   if (open) {
     ctx.fillStyle = 'rgba(255,224,120,0.12)';
     ctx.fillRect(x - 2, y - 2, TILE + 4, TILE + 4);
   }
 }
+
 
 export function drawCoinSprite(ctx, x, y, tick) {
   const frames = [10, 6, 2, 6];
@@ -680,7 +724,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA: drawLava(ctx, x, y, tick, tx); break;
-    case T.DOOR: drawDoor(ctx, x, y, th, tick, !!opts.doorOpen); break;
+    case T.DOOR: drawDoor(ctx, x, y, th, tick, !!opts.doorOpen, opts.doorEdges); break;
     default: break;
   }
 }

@@ -844,7 +844,20 @@ export class LevelScene {
       // An empty box is not a hitbox, whatever `overlaps` thinks of it.
       if (e.box.h <= 0 || e.box.w <= 0) continue;
 
-      if (e.kind !== 'enemy' || e.dying || e.harmless) continue;
+      if (e.kind !== 'enemy' || e.dying) continue;
+
+      /* A bubble is a target, not a threat: touching it is the whole kill.
+       * Popping one from above still bounces the player, or a jump onto a
+       * bubble would read as a stomp that did not take. */
+      if (e.bubbled) {
+        if (overlaps(p.box, e.box)) {
+          e.popBubble(e.cx >= p.cx ? 1 : -1);
+          if (fallVy > 0) p.bounce();
+        }
+        continue;
+      }
+
+      if (e.harmless) continue;
 
       if (spin && overlaps(spin, e.box)) {
         e.hitByTail(p.facing);
@@ -1013,6 +1026,14 @@ export class LevelScene {
             doorOpen: this.bossDefeated,
             crumble: this.crumbleProgress(tx, ty),
             switchOn: this.switchTimer > 0,
+            // A door is several tiles; each slice needs to know which of its
+            // sides are the outside of the whole door.
+            doorEdges: ch === T.DOOR ? {
+              l: this.tileAt(tx - 1, ty) !== T.DOOR,
+              r: this.tileAt(tx + 1, ty) !== T.DOOR,
+              t: this.tileAt(tx, ty - 1) !== T.DOOR,
+              b: this.tileAt(tx, ty + 1) !== T.DOOR,
+            } : null,
           });
       }
     }

@@ -420,9 +420,19 @@ export class WorldMapScene {
         for (let s = 1; s < steps; s++) {
           const x = Math.round(ax + ((bx - ax) * s) / steps);
           const y = Math.round(ay + ((by - ay) * s) / steps);
-          ctx.fillStyle = open ? '#f8e0a0' : '#5a5a72';
+          /* Outline first, then the dot.
+           *
+           * Without it the ice world was unreadable: the open path is #f8e0a0
+           * and the ice terrain is #cfe6ff, whose luminances are 225 and 227.
+           * Two levels out of 255 is not a colour difference, it is the same
+           * colour. Picking a different gold would only move the problem to
+           * whichever theme it collided with next, so the dot carries its own
+           * dark edge and stops depending on what is behind it. */
+          ctx.fillStyle = 'rgba(24,20,16,0.72)';
+          ctx.fillRect(x - 3, y - 3, 6, 6);
+          ctx.fillStyle = open ? '#ffd048' : '#6a6a86';
           ctx.fillRect(x - 2, y - 2, 4, 4);
-          ctx.fillStyle = open ? '#c8a860' : '#3a3a50';
+          ctx.fillStyle = open ? '#c07c20' : '#3a3a50';
           ctx.fillRect(x - 2, y + 1, 4, 1);
         }
       }

@@ -478,9 +478,15 @@ const report = await page.evaluate(async () => {
       s2.player.y = door[0].ty * 16;
       for (let f = 0; f < 200 && !finished; f++) { s2.update(i); i.pressed = blank(); }
     }
+    /* The door is several tiles now — big enough that the largest power level
+     * walks through it rather than steps over it — so what matters is that it
+     * exists, that it is tall enough for that player, and that touching it
+     * ends the level. */
+    const doorH = door.length ? Math.max(...door.map((d) => d.ty))
+      - Math.min(...door.map((d) => d.ty)) + 1 : 0;
     expect('the fortress door opens once the boss is beaten',
-      door.length === 1 && !!finished && finished.cleared,
-      `${door.length} ovea, finished ${JSON.stringify(finished)}`);
+      door.length > 0 && doorH * 16 >= 43 && !!finished && finished.cleared,
+      `${door.length} ruutua, ${doorH} korkea, finished ${JSON.stringify(finished)}`);
   }
 
   /* The design rules, applied to EVERY level in the game rather than only the

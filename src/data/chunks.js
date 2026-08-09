@@ -440,7 +440,9 @@ export const CHUNKS = {
     6: '        -----                    -----',
     7: '         o o                      o o',
     9: '                     b',
-    12: '                                            D',
+    10: '                                            DD',
+    11: '                                            DD',
+    12: '                                            DD',
     13: G + G + G,
     14: G + G + G,
   }),
@@ -497,7 +499,12 @@ export const CHUNKS = {
     2: 'XX                            XX',
     3: 'XX                            XX',
     9: '            b',
-    12: '                            D',
+    /* Two tiles wide and three tall. The largest power level is 21x43 px, so a
+     * single-tile doorway is a third of his height — he does not walk through
+     * it, he steps over it. */
+    10: '                            DD',
+    11: '                            DD',
+    12: '                            DD',
     13: G + G,
     14: G + G,
   }),
