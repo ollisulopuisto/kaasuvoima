@@ -239,6 +239,7 @@ export class ShellGuy extends Enemy {
     this.mode = 'walk';
     this.speed = 0.5;
     this.reviveTimer = 0;
+    this.kickGrace = 0;
     this.score = 100;
   }
 
@@ -278,11 +279,28 @@ export class ShellGuy extends Enemy {
     this.vx = 3.4 * dir;
     this.facing = dir;
     this.reviveTimer = 0;
+    /*
+     * Reported from play: stomp a shell walker, walk into the shell, lose a
+     * power level. The kick was landing correctly — and then the shell, which
+     * had only moved 3.4 px out of a box it was overlapping by more than that,
+     * was still inside the player on the very next frame. A sliding shell hurts
+     * you, so it hurt the one who had just kicked it.
+     *
+     * Ten frames is enough for a shell at 3.4 px/frame to clear the widest
+     * player (21 px) from a standing overlap. It only shields the player; the
+     * shell mows down everything else from the first frame, which is the whole
+     * point of kicking one.
+     */
+    this.kickGrace = 10;
     Sfx.play('kick');
   }
 
+  /** A shell you have just kicked cannot hurt you on its way out of your box. */
+  get harmless() { return this.bubbled || this.kickGrace > 0; }
+
   update() {
     this.tick++;
+    if (this.kickGrace > 0) this.kickGrace--;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
 

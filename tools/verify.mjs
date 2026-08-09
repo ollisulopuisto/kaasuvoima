@@ -940,6 +940,52 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------------------- kuori -------------------------------- */
+  /* Reported from play: stomp a shell walker, walk into the shell, lose a power
+   * level. The kick landed — and then the shell, having moved 3.4 px out of a
+   * box it overlapped by more, was still inside the player next frame, where a
+   * sliding shell hurts. It hurt the one who had just kicked it. */
+  {
+    const { ShellGuy } = await import('/src/entities/enemies.js');
+    reset({ type: 'shroom', level: 2 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    const p = s.player;
+
+    const e = new ShellGuy(s, p.x + p.w - 6, p.y + p.h - 24);
+    e.active = true;
+    e.alwaysActive = true;
+    s.add(e);
+    e.toShell();
+    e.stompable = true;
+
+    const before = p.powerLevel;
+    let kicked = false;
+    for (let f = 0; f < 30 && !p.dying; f++) {
+      i.held = blank();
+      i.held.right = true;
+      i.pressed = blank();
+      s.update(i);
+      if (e.mode === 'sliding') kicked = true;
+    }
+    expect('kicking a shell you are standing in does not hurt you',
+      kicked && p.powerLevel === before && !p.dying,
+      `potkaistu ${kicked}, voima ${before}->${p.powerLevel}`);
+
+    // But a shell that has been on its way for a while is still dangerous.
+    e.kickGrace = 0;
+    e.x = p.x + 2;
+    p.invuln = 0;
+    p.frozen = 0;
+    const mid = p.powerLevel;
+    s.collisions();
+    expect('a shell already on its way still hurts', p.powerLevel < mid || p.dying,
+      `voima ${mid}->${p.powerLevel}`);
+  }
+
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
