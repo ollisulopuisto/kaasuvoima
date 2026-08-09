@@ -2,7 +2,18 @@
 <html lang="fi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<!--
+  No `user-scalable=no`, and no `maximum-scale`, on purpose.
+
+  iOS Safari has ignored `user-scalable=no` since iOS 10, so it never stopped
+  the double tap it was put here for; what it does do is take away the pinch
+  that gets you *back*, on every browser that still honours it. A player who
+  zooms in by accident and cannot zoom out is worse off than one who zooms in.
+
+  Double-tap zoom is stopped where it can actually be stopped: `touch-action`
+  in styles.css. Pinch stays available, always.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Super Fart Bros 3</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23101018'/%3E%3Crect x='3' y='3' width='10' height='10' fill='%238fe04a'/%3E%3Crect x='5' y='6' width='2' height='2' fill='%23101018'/%3E%3Crect x='9' y='6' width='2' height='2' fill='%23101018'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">

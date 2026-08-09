@@ -5,6 +5,24 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * `manipulation` is the whole double-tap-zoom fix, and it belongs on the root
+ * element because a touch is judged against the element under the finger *and
+ * all of its ancestors*. Putting it here covers the page margin beside the
+ * canvas, which is exactly where the double tap that started this was aimed.
+ *
+ * `manipulation` and not `none`: it drops double-tap zoom and keeps panning and
+ * pinch. `none` here would take the pinch away too, and pinch is the only way
+ * back from a page that is already zoomed.
+ *
+ * `.zoomed` is set from touch.js when the visual viewport reports a scale above
+ * 1. In that state every browser gesture is handed back — double tap included,
+ * because at 2x a double tap zooms *out*. Being stuck is worse than being
+ * interrupted, and you are not playing at 2x anyway.
+ */
+html { touch-action: manipulation; }
+html.zoomed { touch-action: auto; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -88,6 +106,39 @@ body.touching #shell {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * The overlay covers the whole viewport, so `touch-action: none` on it is a
+ * blanket ban on every browser gesture — including the pinch that undoes an
+ * accidental zoom. That is the second half of the bug this fixes: zoom in
+ * beside the canvas, and the controls that appear are what keep you there.
+ *
+ * So the ban is conditional. At scale 1 — i.e. while anybody is playing — it
+ * stays exactly as it was, and no stray second finger can pinch the picture
+ * mid-jump. The moment the page is actually zoomed, the overlay stops
+ * interfering and the way out is available again.
+ */
+html.zoomed #touch.on { touch-action: auto; }
+
+/* Says how to get out, since nothing on a phone advertises it. Only visible
+   in the trapped state, and only where the controls already are. */
+#touch .zoomnote { display: none; }
+
+html.zoomed #touch .zoomnote {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 44px;
+  transform: translateX(-50%);
+  font: 600 12px/1.3 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: #ffe08a;
+  background: rgba(16, 20, 36, 0.88);
+  border: 1px solid rgba(255, 208, 72, 0.4);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
 #touch .key {
   position: absolute;
   display: flex;
@@ -115,16 +166,57 @@ body.touching #shell {
 }
 
 /* The d-pad: 72px keys with a 4px gap. Anything under about 44px is missed
-   often enough to feel like the game ignoring you rather than a miss. */
-#touch[data-layout="napit"] .pad .key { width: 72px; height: 72px; }
-#touch[data-layout="napit"] .pad [data-act="left"]  { left: 16px;  bottom: 96px; }
-#touch[data-layout="napit"] .pad [data-act="right"] { left: 168px; bottom: 96px; }
-#touch[data-layout="napit"] .pad [data-act="up"]    { left: 92px;  bottom: 172px; }
-#touch[data-layout="napit"] .pad [data-act="down"]  { left: 92px;  bottom: 20px; }
+   often enough to feel like the game ignoring you rather than a miss. It is
+   shared by both button layouts — steering was never the problem, and a d-pad
+   that moves when you change layouts is a d-pad you have to learn twice. */
+#touch:not([data-layout="peukalot"]) .pad .key { width: 72px; height: 72px; }
+#touch:not([data-layout="peukalot"]) .pad [data-act="left"]  { left: 16px;  bottom: 96px; }
+#touch:not([data-layout="peukalot"]) .pad [data-act="right"] { left: 168px; bottom: 96px; }
+#touch:not([data-layout="peukalot"]) .pad [data-act="up"]    { left: 92px;  bottom: 172px; }
+#touch:not([data-layout="peukalot"]) .pad [data-act="down"]  { left: 92px;  bottom: 20px; }
 
 #touch[data-layout="napit"] .acts .key { width: 86px; height: 86px; }
 #touch[data-layout="napit"] .acts [data-act="jump"] { right: 16px;  bottom: 32px; }
 #touch[data-layout="napit"] .acts [data-act="run"]  { right: 112px; bottom: 108px; }
+
+/* ------------------------------- rulla -------------------------------
+ * Two separate buttons cannot be held by one thumb, because a touchscreen
+ * reports one point per finger and that point is somewhere in the middle of
+ * the contact patch. Roll the thumb from run to jump and the point crosses the
+ * gap: run lets go, exactly the way sliding across the d-pad is *supposed* to
+ * work.
+ *
+ * So they are not two separate buttons. The fart pad is a field in the corner
+ * where the flat of the thumb rests, and the jump button sits inside it, up
+ * and to the left where the tip reaches. Anywhere in the field is run;
+ * the circle is run *and* jump. Nothing new to learn, nothing to get stuck in,
+ * and the hit-testing that makes it work is the one that was already there —
+ * every rectangle under the finger counts, and here two of them are.
+ *
+ * The jump circle is wholly inside the field on every side. If it stuck out,
+ * the tip could land on jump alone and the running jump would quietly become a
+ * standing one, which is the bug this layout exists to fix.
+ */
+#touch[data-layout="rulla"] .acts [data-act="run"] {
+  right: 8px;
+  bottom: 12px;
+  width: 150px;
+  height: 150px;
+  border-radius: 30px;
+  border-style: dashed;
+  border-color: rgba(180, 216, 120, 0.45);
+  background: rgba(20, 26, 46, 0.30);
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 14px 12px 0;
+}
+
+#touch[data-layout="rulla"] .acts [data-act="jump"] {
+  right: 52px;
+  bottom: 60px;
+  width: 92px;
+  height: 92px;
+}
 
 /* The thumb layout draws no buttons at all — the halves of the screen are the
    controls, and the stick is drawn where the thumb lands. */
@@ -181,25 +273,40 @@ body.touching #shell {
 /* A phone in portrait is only ~390px wide, and at the full size the d-pad and
    the fart button collide in the middle. Everything shrinks and tucks in. */
 @media (max-width: 460px) {
-  #touch[data-layout="napit"] .pad .key { width: 64px; height: 64px; }
-  #touch[data-layout="napit"] .pad [data-act="left"]  { left: 8px;   bottom: 84px; }
-  #touch[data-layout="napit"] .pad [data-act="right"] { left: 136px; bottom: 84px; }
-  #touch[data-layout="napit"] .pad [data-act="up"]    { left: 72px;  bottom: 152px; }
-  #touch[data-layout="napit"] .pad [data-act="down"]  { left: 72px;  bottom: 16px; }
+  #touch:not([data-layout="peukalot"]) .pad .key { width: 64px; height: 64px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="left"]  { left: 8px;   bottom: 84px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="right"] { left: 136px; bottom: 84px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="up"]    { left: 72px;  bottom: 152px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="down"]  { left: 72px;  bottom: 16px; }
   #touch[data-layout="napit"] .acts .key { width: 76px; height: 76px; }
   #touch[data-layout="napit"] .acts [data-act="jump"] { right: 8px;  bottom: 28px; }
   #touch[data-layout="napit"] .acts [data-act="run"]  { right: 92px; bottom: 108px; }
+
+  /* 390 px of width: the d-pad ends at 200, and the field starts at 250. */
+  #touch[data-layout="rulla"] .acts [data-act="run"] {
+    right: 6px; bottom: 10px; width: 134px; height: 134px; border-radius: 26px;
+  }
+  #touch[data-layout="rulla"] .acts [data-act="jump"] {
+    right: 46px; bottom: 54px; width: 82px; height: 82px;
+  }
 }
 
 /* Landscape on a phone is short: drop the keys down and in so they clear the
    canvas, which is the thing being played. */
 @media (max-height: 460px) {
-  #touch[data-layout="napit"] .pad .key { width: 60px; height: 60px; }
-  #touch[data-layout="napit"] .pad [data-act="left"]  { left: 10px;  bottom: 76px; }
-  #touch[data-layout="napit"] .pad [data-act="right"] { left: 138px; bottom: 76px; }
-  #touch[data-layout="napit"] .pad [data-act="up"]    { left: 74px;  bottom: 138px; }
-  #touch[data-layout="napit"] .pad [data-act="down"]  { left: 74px;  bottom: 14px; }
+  #touch:not([data-layout="peukalot"]) .pad .key { width: 60px; height: 60px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="left"]  { left: 10px;  bottom: 76px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="right"] { left: 138px; bottom: 76px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="up"]    { left: 74px;  bottom: 138px; }
+  #touch:not([data-layout="peukalot"]) .pad [data-act="down"]  { left: 74px;  bottom: 14px; }
   #touch[data-layout="napit"] .acts .key { width: 72px; height: 72px; }
   #touch[data-layout="napit"] .acts [data-act="jump"] { right: 10px; bottom: 20px; }
   #touch[data-layout="napit"] .acts [data-act="run"]  { right: 92px; bottom: 88px; }
+
+  #touch[data-layout="rulla"] .acts [data-act="run"] {
+    right: 8px; bottom: 8px; width: 126px; height: 126px; border-radius: 24px;
+  }
+  #touch[data-layout="rulla"] .acts [data-act="jump"] {
+    right: 42px; bottom: 42px; width: 78px; height: 78px;
+  }
 }

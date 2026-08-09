@@ -48,9 +48,10 @@ function serve() {
 }
 
 let chromium;
+let devices;
 try {
   // PW_MODULE lets a global install be used instead of a local devDependency.
-  ({ chromium } = await import(process.env.PW_MODULE || 'playwright'));
+  ({ chromium, devices } = await import(process.env.PW_MODULE || 'playwright'));
 } catch {
   console.error('playwright is missing. Run:  npm i -D playwright && npx playwright install chromium');
   process.exit(2);
@@ -2055,6 +2056,7 @@ const report = await page.evaluate(async () => {
   /* --------------------------- kosketusohjaus -------------------------- */
   {
     const { Input } = await import('/src/core/input.js');
+    const { LAYOUTS } = await import('/src/core/touch.js');
     const touch = game.touch;
     touch.reveal();
 
@@ -2148,6 +2150,56 @@ const report = await page.evaluate(async () => {
     expect('the right half jumps low down and farts up top',
       jump === 'jump' && run === 'run', `alhaalla "${jump}", ylhäällä "${run}"`);
 
+    /* The rolling layout: the fart pad is a field low and right where the flat
+     * of the thumb rests, and the jump button sits *inside* it, up and left
+     * where the tip reaches. One finger is one point to every touchscreen ever
+     * built, so the only way one thumb can hold two buttons is for the two
+     * rectangles to overlap. That containment is the whole mechanism, so it is
+     * asserted directly rather than through the pixels it happens to have. */
+    touch.setLayout('rulla');
+    letGo();
+    expect('the old layouts are still on offer',
+      LAYOUTS.includes('napit') && LAYOUTS.includes('peukalot'), LAYOUTS.join(','));
+    expect('the rolling layout keeps the d-pad', rect('left').width > 0, `${rect('left').width}`);
+
+    const runPad = rect('run');
+    const jumpPad = rect('jump');
+    expect('the jump button lies wholly inside the fart pad, above and left of the thumb rest',
+      jumpPad.left >= runPad.left && jumpPad.right <= runPad.right
+      && jumpPad.top >= runPad.top && jumpPad.bottom <= runPad.bottom
+      && jumpPad.left > runPad.left && jumpPad.bottom < runPad.bottom,
+      `pieru ${Math.round(runPad.left)},${Math.round(runPad.top)} ${Math.round(runPad.width)}x${Math.round(runPad.height)}`
+      + ` hyppy ${Math.round(jumpPad.left)},${Math.round(jumpPad.top)} ${Math.round(jumpPad.width)}x${Math.round(jumpPad.height)}`);
+
+    /* This is the bug the owner reported, written as a gesture: rest the thumb
+     * on the fart pad, roll the tip up onto jump, roll back. Run must never let
+     * go — a jump that drops the run bit is a short jump, and short jumps miss
+     * gaps that were measured for long ones. */
+    letGo();
+    const rest = [runPad.right - 18, runPad.bottom - 18];
+    send('pointerdown', 20, ...rest);
+    const resting = held();
+    send('pointermove', 20, ...at('jump'));
+    const rolledUp = held();
+    send('pointermove', 20, ...rest);
+    const rolledBack = held();
+    send('pointerup', 20, ...rest);
+    const lifted = held();
+    expect('one thumb holds the fart button down and still reaches jump',
+      resting === 'run' && rolledUp === 'jump,run' && rolledBack === 'run' && lifted === '',
+      `lepo "${resting}" ylös "${rolledUp}" alas "${rolledBack}" irti "${lifted}"`);
+
+    // Steering with the other hand has to keep working through all of it.
+    letGo();
+    send('pointerdown', 21, ...at('right'));
+    send('pointerdown', 22, ...at('jump'));
+    const runJumpRight = held();
+    for (const id of [21, 22]) send('pointerup', id, 0, 0);
+    expect('the rolling layout still runs, jumps and steers at once',
+      runJumpRight === 'jump,right,run', `"${runJumpRight}"`);
+
+    expect('the rolling layout is remembered too', touch.loadLayout() === 'rulla', touch.loadLayout());
+
     // Switching layout mid-press must not leave an action stuck down.
     letGo();
     touch.setLayout('napit');
@@ -2160,6 +2212,56 @@ const report = await page.evaluate(async () => {
     touch.setLayout('napit');
     letGo();
     expect('the touch layout is remembered', touch.loadLayout() === 'napit', touch.loadLayout());
+  }
+
+  /* --------------------- selaimen zoom mobiiliselaimessa --------------------- */
+  /*
+   * Two halves of one bug. Double-tapping beside the canvas zooms the page in,
+   * and the full-screen control overlay then swallows the pinch that would
+   * take it back out. `user-scalable=no` does not help: iOS Safari has ignored
+   * it since iOS 10, and on Android it makes the trap worse by disabling the
+   * way back out.
+   */
+  {
+    const touch = game.touch;
+    const root = document.getElementById('touch');
+    const meta = document.querySelector('meta[name="viewport"]').content;
+
+    touch.setZoomed?.(false);
+    expect('nothing in the viewport meta can lock a player out of zooming back out',
+      !/user-scalable\s*=\s*(no|0)/i.test(meta) && !/maximum-scale/i.test(meta), meta);
+
+    expect('the double tap is killed by touch-action on the root element',
+      getComputedStyle(document.documentElement).touchAction === 'manipulation',
+      getComputedStyle(document.documentElement).touchAction);
+
+    const playing = getComputedStyle(root).touchAction;
+    touch.setZoomed?.(true);
+    const zoomedRoot = getComputedStyle(document.documentElement).touchAction;
+    const zoomedOverlay = getComputedStyle(root).touchAction;
+    touch.setZoomed?.(false);
+    expect('the overlay eats browser gestures while playing and gives them back while zoomed',
+      playing === 'none' && zoomedOverlay === 'auto' && zoomedRoot === 'auto',
+      `pelatessa "${playing}", zoomattuna juuri "${zoomedRoot}" / peite "${zoomedOverlay}"`);
+
+    /* The belt to that pair of braces: swallow the second tap ourselves. It has
+     * to stay off the controls — the toolbar is ordinary DOM and needs the
+     * synthetic click that preventDefault would eat. */
+    const tap = (target, x, y) => {
+      const t = new window.Touch({ identifier: 1, target, clientX: x, clientY: y });
+      const ev = new TouchEvent('touchend', {
+        bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [t],
+      });
+      target.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    };
+    const first = tap(document.body, 40, 40);
+    const second = tap(document.body, 42, 41);
+    const tool = root.querySelector('.tool');
+    const onTool = tap(tool, 4, 4) || tap(tool, 4, 4);
+    expect('a double tap beside the game is swallowed, and the controls are not',
+      first === false && second === true && onTool === false,
+      `1. "${first}" 2. "${second}" työkalu "${onTool}"`);
   }
 
   /* ------------------------------ kuvaefektit -------------------------- */
@@ -2867,6 +2969,106 @@ const report = await page.evaluate(async () => {
     audio: { sfx: Sfx.names(), music: Music.names() },
   };
 });
+
+/* ---------------------- kosketusohjaus puhelimen mitoissa ----------------- */
+/*
+ * A second context with an iPhone's viewport, pixel ratio and touch support.
+ *
+ * What this proves: that the layout survives 390 CSS pixels of width, that the
+ * phone-only media queries — which never run in the desktop page above — put
+ * the buttons where they are meant to be, and that the hit-testing still reads
+ * a thumb roll at that size.
+ *
+ * What it does NOT prove: anything about Safari. This is Chromium wearing an
+ * iPhone's measurements. Double-tap zoom, pinch and `touch-action` handling are
+ * WebKit's own, and only a real phone can confirm them.
+ */
+{
+  const phone = await browser.newContext({ ...devices['iPhone 13'] });
+  const page2 = await phone.newPage();
+  page2.on('pageerror', (e) => errors.push(`[iphone pageerror] ${e.message}`));
+  page2.on('console', (m) => {
+    const text = m.text();
+    if (m.type() === 'error' && !text.includes('favicon')) errors.push(`[iphone console] ${text}`);
+  });
+  await page2.goto(`http://127.0.0.1:${PORT}`, { waitUntil: 'networkidle' });
+  await page2.waitForTimeout(400);
+
+  const mobile = await page2.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name: `${name} (iPhone-mitat)`, ok, detail });
+      if (!ok) failures.push(`${name} [iPhone-mitat]${detail ? ` (${detail})` : ''}`);
+    };
+    const { Input } = await import('/src/core/input.js');
+    const touch = window.sfb3.touch;
+    touch.reveal();
+
+    // A phone that has never been given a preference gets the layout that was
+    // built for one thumb. Anyone who has chosen keeps their choice — that is
+    // what localStorage is for, and this context has nothing stored.
+    expect('a phone with no stored preference starts in the rolling layout',
+      touch.layout === 'rulla', touch.layout);
+
+    touch.setLayout('rulla');
+    const rect = (act) => document.querySelector(`#touch [data-act="${act}"]`).getBoundingClientRect();
+    const send = (type, id, x, y) => {
+      document.getElementById('touch').dispatchEvent(new PointerEvent(type, {
+        pointerId: id, clientX: x, clientY: y, pointerType: 'touch', bubbles: true, cancelable: true,
+      }));
+    };
+    const held = () => {
+      Input.poll();
+      return Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    };
+
+    expect('the root element still forbids double-tap zoom on a phone',
+      getComputedStyle(document.documentElement).touchAction === 'manipulation',
+      getComputedStyle(document.documentElement).touchAction);
+
+    const runPad = rect('run');
+    const jumpPad = rect('jump');
+    const dpad = ['left', 'right', 'up', 'down'].map(rect);
+    const small = [runPad, jumpPad, ...dpad].filter((r) => r.width < 44 || r.height < 44);
+    expect('no control is under the 44 px a fingertip needs', small.length === 0,
+      small.map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
+
+    expect('the jump button stays inside the fart pad at phone width',
+      jumpPad.left >= runPad.left && jumpPad.right <= runPad.right
+      && jumpPad.top >= runPad.top && jumpPad.bottom <= runPad.bottom,
+      `pieru ${Math.round(runPad.left)}..${Math.round(runPad.right)} / hyppy ${Math.round(jumpPad.left)}..${Math.round(jumpPad.right)}`);
+
+    const clash = dpad.filter((r) => r.right > runPad.left && r.bottom > runPad.top && r.top < runPad.bottom);
+    expect('the fart pad does not land on the d-pad at 390 px of width',
+      clash.length === 0, `d-pad ends at ${Math.round(Math.max(...dpad.map((r) => r.right)))}, pieru alkaa ${Math.round(runPad.left)}`);
+
+    const offscreen = [runPad, jumpPad, ...dpad]
+      .filter((r) => r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight);
+    expect('every control is on the screen', offscreen.length === 0,
+      `${Math.round(innerWidth)}x${Math.round(innerHeight)}, ulkona ${offscreen.length}`);
+
+    touch._releaseAll();
+    Input.poll();
+    Input.poll();
+    const rest = [runPad.right - 16, runPad.bottom - 16];
+    send('pointerdown', 30, ...rest);
+    const resting = held();
+    send('pointermove', 30, jumpPad.left + jumpPad.width / 2, jumpPad.top + jumpPad.height / 2);
+    const rolled = held();
+    send('pointermove', 30, ...rest);
+    const back = held();
+    send('pointerup', 30, ...rest);
+    expect('the thumb roll works at phone size too',
+      resting === 'run' && rolled === 'jump,run' && back === 'run',
+      `lepo "${resting}" ylös "${rolled}" alas "${back}"`);
+
+    return { checks, failures };
+  });
+  report.checks.push(...mobile.checks);
+  report.failures.push(...mobile.failures);
+  await phone.close();
+}
 
 await browser.close();
 server.close();
