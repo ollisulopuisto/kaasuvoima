@@ -9,8 +9,9 @@ import { DIFFICULTY } from './difficulty.js';
  *   . grass  , dark grass  T tree  M mountain  ~ water  S sand
  *   C cactus  R rock  I ice  P pine  " bush  F factory floor  E machinery
  *   b bone ground  K skull  c cloud bank  i tear in the cloud  U thunderhead
+ *   w flagstone  A battlement
  *
- * Nine of those stand up out of the ground (`TALL_TERRAIN`), and where they
+ * Ten of those stand up out of the ground (`TALL_TERRAIN`), and where they
  * may stand is not up to whoever edits the grid: `worldProblems` refuses a map
  * that plants one on the road or next to it. See `clearZone`.
  *
@@ -303,6 +304,63 @@ const WORLD_DEFS = [
       { a: 'w7-3', b: 'w7-f', path: [[16, 2]] },
     ],
   },
+  /*
+   * VIIMEINEN LINNAKE, maailma 8 — ja tämä kartta on kuusi solmua eikä kolme.
+   *
+   * The road is the one place the finale's shape is visible before a level
+   * loads. Every other map in this file is start, three levels and a fortress,
+   * laid out in four hops; this one is six, and a player looking at it can
+   * count them. That is the cheapest and the most honest way to say "this is
+   * longer than what you have been doing", and it costs one row of data.
+   *
+   * **The pea house is outside the gate.** It hangs off the start node rather
+   * than off the first level, which is where every other world puts it, and the
+   * reason is that in this world there is no outdoors after 8-1: the levels are
+   * roofed from the first tile to the last, so a friendly cottage between two
+   * of them would be the one thing on the map contradicting what the rooms say.
+   * Take it before you go in, or not at all.
+   *
+   * The scenery is battlements (`A`) standing on flagstone (`w`), and every one
+   * of them was placed the way world 6's and 7's were: rule 8 in
+   * `worldProblems` refuses anything tall on the road or beside it, so the
+   * road's clear zone was taken out first and the towers planted into what was
+   * left. Sixteen asked for, sixteen placed, none refused.
+   */
+  {
+    id: 'w8',
+    name: 'VIIMEINEN LINNAKE',
+    theme: 'fortress',
+    terrain: [
+      'wwAwwwAwwwAwwwAwwwAw',
+      'wwwwAwwwwwwwAwwwwwww',
+      'wwwwwwwwwwwwwwwwwwww',
+      'wwwwwwwwwwwwwwwwwwww',
+      'wwwwwwwwwwwwwwwwwwww',
+      'wwwwwwwwwwwwwwwwwwww',
+      'AwwwAwwwAwwwwwwAwwww',
+      'wwAwwwAwwwwAwwwwwAww',
+      'wwwwwwwwwAwwwwwwwwww',
+    ],
+    nodes: [
+      { id: 'w8-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
+      { id: 'w8-h', tx: 1, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w8-1', tx: 4, ty: 4, type: 'level', level: '8-1', name: 'PORTTIHOLVI' },
+      { id: 'w8-2', tx: 7, ty: 2, type: 'level', level: '8-2', name: 'VARTIOKÄYTÄVÄ' },
+      { id: 'w8-3', tx: 10, ty: 5, type: 'level', level: '8-3', name: 'TYRMÄ' },
+      { id: 'w8-4', tx: 13, ty: 2, type: 'level', level: '8-4', name: 'AHJO' },
+      { id: 'w8-5', tx: 16, ty: 5, type: 'level', level: '8-5', name: 'MYRSKYKAMMIO' },
+      { id: 'w8-f', tx: 18, ty: 2, type: 'fortress', level: '8-F', name: 'VALTAISTUINSALI' },
+    ],
+    links: [
+      { a: 'w8-s', b: 'w8-h' },
+      { a: 'w8-s', b: 'w8-1' },
+      { a: 'w8-1', b: 'w8-2', path: [[7, 4]] },
+      { a: 'w8-2', b: 'w8-3', path: [[10, 2]] },
+      { a: 'w8-3', b: 'w8-4', path: [[13, 5]] },
+      { a: 'w8-4', b: 'w8-5', path: [[16, 2]] },
+      { a: 'w8-5', b: 'w8-f', path: [[18, 5]] },
+    ],
+  },
 ];
 
 export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.terrain) }));
@@ -416,13 +474,14 @@ export function linkCurve(world, link) {
  *
  *   T tree 1..14 · P pine 1..14 · M mountain 3..15 · C cactus 3..14
  *   R rock 8..13 · " bush 6..13 · E machinery 1..14 · K skull 4..14
- *   U thunderhead 1..13
+ *   U thunderhead 1..13 · A battlement 2..14
  *
  * The path dot's own ink is y+5..y+10 inside the tile, so every one of them
  * collides head-on. The flat glyphs — grass, dark grass, sand, ice, factory
- * plating, bone ground, water — are ground texture and belong under the road.
+ * plating, bone ground, water, flagstone — are ground texture and belong under
+ * the road.
  */
-export const TALL_TERRAIN = 'TPMCR"EKU';
+export const TALL_TERRAIN = 'TPMCR"EKUA';
 
 /** Every tile a link crosses, node centres included. */
 export function pathTiles(world) {

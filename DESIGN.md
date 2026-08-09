@@ -55,13 +55,21 @@ Käytetty sävelmistö, tässä on koko lista:
 | --- | --- | --- | --- |
 | *Vuorenkuninkaan luolassa* (Peer Gynt, 1875) | Edvard Grieg, k. 1907 | 1.1.1978 | luolakaista (`cave`) |
 | *Danse macabre* op. 40 (1874) | Camille Saint-Saëns, k. 1921 | 1.1.1992 | luumaailma (`bone`, maailma 6) |
-| *Yö Autiovuorella* (1867), Rimski-Korsakovin sovitus 1886 | Modest Mussorgski, k. 1881; N. Rimski-Korsakov, k. 1908 | 1.1.1952 / 1.1.1979 | viimeinen linnake (tulossa) |
+| *Yö Autiovuorella* (1867), Rimski-Korsakovin sovitus 1886 | Modest Mussorgski, k. 1881; Nikolai Rimski-Korsakov, k. 1908 | 1.1.1952 / 1.1.1979 | viimeinen linnake (`autiovuori`, maailma 8) |
 
 **Kaksi säveltäjää yhdellä rivillä ei ole huolimattomuutta.** *Yö
 Autiovuorella* tunnetaan lähes yksinomaan Rimski-Korsakovin sovituksena, ja
 **sovitus on oma teoksensa omine suoja-aikoineen** — juuri se on se kohta jossa
 "tämähän on vanhaa musiikkia" menee useimmiten pieleen. Molemmat ovat vapaita,
 mutta se on kaksi tarkistusta eikä yksi, ja siksi molemmat lukevat tässä.
+
+Ja koska kaksi tarkistusta ei ole sama asia kuin kaksi *muistettua* tarkistusta,
+portti lukee nyt raidan `source`-kentät kaikki eikä kahta nimettyä
+(v26.08.09.38). Sovittajan nimi oli aiemmin kenttä jonka olisi voinut kirjoittaa
+koodiin ilman että se olisi joutunut kumpaankaan dokumenttiin — eli täsmälleen
+se puoliksi kattava portti jota tämä kohta pelkää. Sukunimi ei myöskään riitä:
+taulukossa lukee **Nikolai** Rimski-Korsakov, ja portti vaatii sen merkkijonon
+sellaisenaan.
 
 **Varoitus joka kannattaa lukea ennen kuin innostuu:** Jean Sibelius kuoli
 20.9.1957, joten hänen teoksensa vapautuvat vasta **1.1.2028**. *Finlandia* ja

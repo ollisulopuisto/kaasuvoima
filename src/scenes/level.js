@@ -1269,9 +1269,23 @@ export class LevelScene {
     return Math.floor((feetY - 1) / (bands.rows * TILE));
   }
 
-  /** What the place the player is standing in sounds like. See BAND_MUSIC_DWELL. */
+  /**
+   * What the place the player is standing in sounds like. See BAND_MUSIC_DWELL.
+   *
+   * `bossMusic` overrides the shared boss theme for one fight, and it exists
+   * for one level in the game (8-F). The general rule stays what it was — a
+   * fight sounds like a fight, everywhere — but the last fight of the last
+   * world is scored by the world's own piece, which is a night that ends when
+   * a bell rings and the morning comes back in the major. Cutting that off to
+   * play something else at the moment it resolves would throw away the ending
+   * twice, and the piece is only in this game because it has that shape.
+   *
+   * Written as `||` rather than as a branch on purpose: a level without the
+   * field behaves exactly as it did, so this line changes one level and not
+   * seven.
+   */
   trackFor(band) {
-    if (this.def.boss && !this.bossDefeated) return 'boss';
+    if (this.def.boss && !this.bossDefeated) return this.def.bossMusic || 'boss';
     const own = this.def.music || 'level';
     return band >= CAVE_BAND ? CAVE_TRACK : own;
   }

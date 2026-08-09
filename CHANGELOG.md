@@ -7,6 +7,216 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.42 — viimeinen linnake, ja finaali joka ei ole neljäs kenttä
+
+Maailma 8, **VIIMEINEN LINNAKE**: kuusi kenttää, kuusi tappelua, ei yhtään
+lippua. Peli on nyt **8 maailmaa ja 36 kenttää**, teemalista on täysi eikä
+siihen tullut riviä, ja [ROADMAP.md](ROADMAP.md):n "kahdeksan maailmaa" -kohdan
+viimeinen avoin asia — paljonko tehdään käsin — on tältä osin ratkaistu
+tekemällä.
+
+### Ongelma, ja se ei ole "tehdään linnakemaailma"
+
+Omistaja pyysi finaalin joka **lukee finaalina eikä maailmana 7 eri paletilla**.
+Se on ankarampi vaatimus kuin miltä kuulostaa, koska maailma 8 on ainoa maailma
+tässä pelissä jolla ei ole omaa teemaa: linnake on ollut `THEMES.fortress`
+alusta asti ja sitä on käytetty seitsemän maailman viimeisessä kentässä. Uusi
+paletti ei ole vaihtoehto — se muuttaisi valmiiden kenttien ulkonäön — joten ero
+on tehtävä jossain muualla tai sitä ei ole.
+
+Se muu paikka on **muoto**, ja muoto on mitattavissa. Kaava on ollut seitsemän
+kertaa kolme kenttää ja linnake. Tässä se rikotaan:
+
+> **linnake lakkaa olemasta viimeinen kenttä ja alkaa olla koko maailma.**
+
+Kuusi kenttää, jokainen sisätilaa, ja **jokainen niistä päättyy tappeluun**.
+Ainoa ulospääsy joka huoneesta on se mikä siinä seisoo. Neljä väitettä, ja
+jokainen niistä on `verify.mjs`:ssä numeroineen, koska väite muodosta on
+täsmälleen sitä lajia joka voi olla väärässä kaiken näyttäessä valmiilta:
+
+| väite | maailma 8 | muu peli |
+| --- | --- | --- |
+| askelia (`tiersOf`) | **6** | 4, myös haarautuvassa maailmassa 2 |
+| kattoa sarakkeista | **100 %** | 10–57 %, lähimpänä tehdas |
+| lippuja / ovia | **0 / 6** | 3 / 1 |
+| eri pomoja | **6** | 1 |
+
+Nollatestinä on joka kohdassa muu peli. Jos luku olisi sama kaikkialla, väite ei
+erottaisi mitään ja testi olisi koriste — sama peruste jolla pilvimaailma
+mittasi lattiansa bonushuonetta vasten.
+
+### Miksi pomokierros, eikä esimerkiksi kaikkien mekaniikkojen kavalkadi
+
+Kolme muotoa oli oikeasti tarjolla: gauntlet-kenttä joka lainaa jokaista
+mekaniikkaa, neljä linnaketta vanhoissa mittasuhteissa, tai pomokierros.
+Pomokierros valittiin siksi että se on niistä ainoa joka tekee finaalista
+kertomuksen **edeltävästä pelistä** eikä itsestään. Jokainen tappelu on tappelu
+jonka pelaaja on jo voittanut kerran, ja maailman lause on että linnakkeella ei
+ole enää mitään uutta lähetettävää — se lähettää kaiken minkä on jo lähettänyt.
+
+Järjestys on se jossa ne tavattiin (variantit 0, 1, 2, 4, 5) **paitsi jättiläinen,
+joka siirrettiin viimeiseksi.** Hänet tavattiin neljäntenä (4-F) ja uudestaan
+viidentenä (5-F), joten tiukka järjestys olisi jättänyt hänet keskelle ja
+lopettanut sääherraan. Hän on lopussa koska hän on pelin ainoa pomo joka tarvitsee
+eri huoneen: hän kasvaa puoli kokoa per tallaus, viimeiset kaksi osumaa ovat
+voimatason 0 hypyn ulkopuolella, ja `boss_arena_big`in kannet ovat vastaus.
+Finaali joka päättyisi tappeluun jonka vanha areena vetää, päättyisi pienempään
+huoneeseen kuin se mistä tultiin.
+
+### Kolme sääntöä, ja kaikki kolme ovat mittoja
+
+**1. Ei ulkopuolta.** Luulaakson ehto oli "taivas on auki", pilvimaailman
+"mikään ei seiso maassa"; tämä on niiden kolmas ja molempien vastakohta:
+jokaisen sarakkeen yllä on kiveä, ensimmäisestä ruudusta viimeiseen. Siitä
+seurasi yksi asia jota ei osannut odottaa: **pelin jokainen linnake on tähän
+asti alkanut kuudellatoista sarakkeella taivasta**, koska jaettu `start`-palikka
+jättää kaksi ylintä riviä tyhjäksi. Yhden kentän huoneessa sitä ei huomaa;
+maailmassa joka väittää olevansa sisätila se on reikä väitteen läpi. Siksi
+`keep_start`.
+
+Vertailuluku sanoi toisenkin asian: **tehdas on 57 %.** Maailma 4 on sisätila
+kolmessa kentässä neljästä, eli pelkkä katto ei erota mitään. Väite on siis sata
+vastaan viisikymmentäseitsemän eikä sata vastaan nolla.
+
+**2. Tiili ei kosketa kiveä.** Tämä on se velka jonka ROADMAP kirjasi maailmaa 8
+varten: linnaketeeman tiilen ja maan ero on **7,9 %**, koko pelin toiseksi
+huonoin heti yön 0,4 %:n jälkeen. Mitattuna uudestaan tässä työssä, samalla
+koodilla kuin luuteeman oma testi: 7,9 %, ja sija on yhä toinen. Uusi paletti
+ei ollut vaihtoehto, joten vastaus on rakenteellinen — kaksi lähes samanväristä
+ruutua jotka eivät ole koskaan vierekkäin, ei tarvitse erottaa toisistaan. Tässä
+maailmassa tiili leijuu ja kivi ei, ja ero luetaan paikasta eikä väristä.
+Hinta on todellinen ja se on se mikä tekee tästä säännön: `brick_wall`in
+kaltainen lattialta nouseva tiilipino on kielletty rakenne. Mitattuna
+kosketuksia maailmassa 8 **0**, muualla pelissä **14**.
+
+**3. Jokaisen kuilun edessä on yhdeksän saraketta lattiaa.** Luulaakso mittasi
+syyn ja kirjoitti sen kommenttiin: seisova hyppy kantaa **0 px** sivusuunnassa,
+joten laskeutuminen on täsmälleen niin hyvä kuin se vauhdinotto jonka se jättää.
+Maailma jonka jokainen kenttä on käytävä ja jonka jokainen kuilu on laavaa on
+juuri se paikka jossa tuo lakkaa olemasta ohje: jaettu `fort_gap` tuo mukanaan
+vain neljä saraketta lattiaa ja `keep_forge` viisi, joten kumpikaan ei saa
+seurata reikää eikä toista kuilua. Sääntö saneli kaikkien kuuden kentän
+palikkajärjestyksen, ja se on portissa: ahtain kuilu maailmassa 8 on **9**,
+muun pelin ahtain **0**.
+
+### Mitä botti opetti, ja se on eri asia kuin mitä sääntö tiesi
+
+`8-3` kaatui läpäisytestiin **sarakkeessa 105**, vaikka sääntö 3 luki sen
+kohdalta yhtenäistä lattiaa kolmenkymmenen sarakkeen verran. Syy on se mitä
+ruudukko ei kerro: edellinen palikka oli `keep_stair`, ja pelaaja tulee sen yli
+**portaita pitkin** eikä lattiaa pitkin. Lattia oli ehjä, mutta kukaan ei
+kävellyt sillä. Portailta pudotaan neljä saraketta ennen laavan huulta, ja se on
+vauhdinotto jota ei ole.
+
+Korjaus on kentän palikkajärjestys eikä palikka: porras siirrettiin kuilun
+*jälkeen*. Kirjattu tänne siksi että sääntö 3 on nyt tiedettävästi vajaa —
+**se lukee lattiaa eikä reittiä** — ja seuraava kenttä joka nostaa pelaajan
+maasta juuri ennen kuilua kaatuu samalla tavalla ilman että mikään sanoo miksi.
+
+### Musiikki: Mussorgski, Rimski-Korsakov, ja portti joka luki puolet
+
+Raita `autiovuori` on **Modest Mussorgski** (1839–1881), *Yö Autiovuorella*
+(1867), **Nikolai Rimski-Korsakov**in (1844–1908) sovituksena (1886). Sävellys
+vapautui 1.1.1952 ja sovitus 1.1.1979 (tekijänoikeus = tekijän elinaika + 70
+vuotta). [DESIGN.md](DESIGN.md):n kohta 1 b sanoo millä ehdoilla vapautunut
+sävelmistö saa tulla sisään: **sävelet kirjoitetaan käsin** `TRACKS`-tauluun ja
+syntetisoidaan ajossa — ei sampleja, ei MIDI-rippiä, ei skannattua nuottia,
+koska vapautuminen koskee sävellystä ja yksittäinen äänite tai nuottilaitos on
+eri teos omine oikeuksineen — ja **lähde nimetään** sekä siihen dokumenttiin
+että tähän. Sama varaus kuin luulaaksossa: tämä on sovitus eikä transkriptio,
+kolme ääntä ja rummut eivät ole orkesteri, ja aiheet on kirjoitettu
+korvakuulolta eikä mistään laitoksesta.
+
+Aihevalinta on ainoa peruste jolla tässä pelissä on lainattu, ja se pätee tässä
+paremmin kuin kertaakaan aiemmin: teos *on* yksi yö pahojen vuorella, ja se
+loppuu siihen että kello soi ja aamu tulee.
+
+**Portti luki tähän asti puolet tapauksista.** `verify.mjs` vaati `composer`in
+ja `work`in molempiin dokumentteihin — eli raita olisi voinut kantaa
+`arranger`-kenttää jota mikään ei tarkista. Se on täsmälleen se vika joka
+löytyi `cave`sta kerran jo (portti ei nähnyt raitaa lainkaan), eli kahdesti
+tehtynä se ei ole huolimattomuutta vaan puuttuva tarkistus: portti lukee nyt
+**jokaisen** `source`-kentän. Sukunimi ei riitä, koska DESIGN.md:n taulukossa
+lukee nyt Nikolai Rimski-Korsakov ja portti vaatii sen merkkijonon.
+
+**Ja yksi asia teoksesta on datassa eikä selityksessä: yö on mollissa, aamu on
+duurissa.** Fraasit 0–2 ovat yö eikä yhdessäkään niistä ole duuriterssiä (F#);
+fraasi 3 on aamu eikä siinä ole molliterssiä (F) kertaakaan. Yksi F# yössä ja
+käänne on koriste, koska duuri oli jo käynyt; yksi F aamussa ja aamu on vain
+hiljaisempi yö. Kumpikaan ei kuulostaisi rikkinäiseltä vaan latteammalta, mikä
+on juuri se vika jota kukaan ei osaa etsiä. Mitattuna: yössä molliterssi 8
+kertaa ja duuriterssi 0, aamussa duuriterssi 2 ja molliterssi 0.
+
+Siitä seurasi säestys: **harmoniassa ei ole terssiä lainkaan.** Sekvensseri
+vaihtaa fraasia joka kierroksella mutta soittaa saman `harm`in läpi koko raidan,
+joten mollisointu aamun alla rikkoisi käänteen samalla nuotilla jolla se
+tehdään. Paljas kvintti kantaa molemmat, ja se on lisäksi vanhempi ja karumpi
+ääni kuin kolmisointu. Sekin on portissa.
+
+**`bossMusic`, ja se on yksi rivi moottoria yhtä kenttää varten.** Peli soittaa
+`boss`-raitaa niin kauan kuin tappelu on kesken, joten kuuden tappelun
+maailmassa `music:`-rivi päättäisi lähes tyhjää — teos kuuluisi käytävillä ja ei
+missään muualla. Siksi `8-F` kantaa `bossMusic: 'autiovuori'`: se on pelin ainoa
+tappelu jota ei säestä pomoteema, ja samalla ainoa jonka musiikki ei vaihdu kun
+se päättyy. Peruste on teoksessa itsessään — se on yö joka kovenee kunnes kello
+soi ja aamu ottaa saman sävellajin suurena — ja sen katkaiseminen juuri
+ratkaisuhetkellä olisi lopun heittämistä pois kahdesti.
+
+### Kartta
+
+Kuusi solmua eikä kolme, ja sen näkee ennen kuin yksikään kenttä latautuu.
+**Hernetalo on portin ulkopuolella**, kiinni aloitussolmussa eikä ensimmäisessä
+kentässä niin kuin joka toisessa maailmassa: tässä maailmassa ei ole ulkoilmaa
+8-1:n jälkeen, joten mökki kahden huoneen välissä olisi ainoa asia kartalla joka
+on eri mieltä kuin huoneet. Ota se ennen kuin menet sisään, tai älä ollenkaan.
+
+Kaksi uutta karttamerkkiä: `w` kivilaatta (litteä, tien alle) ja `A`
+rintavarustus, joka menee `TALL_TERRAIN`iin ja siis säännön 8 piiriin. Ruudukko
+rakennettiin säännöstä ulospäin kuten maailmoissa 6 ja 7 — tien raivattu vyöhyke
+otettiin ensin pois ja tornit istutettiin siihen mitä jäi: kuusitoista pyydettiin,
+kuusitoista istutettiin, yhtään ei hylätty. Maan väri on koko pelin tummin, ja se
+on tarkoitus: viimeinen kartta on ainoa jolla ei ole taivasta eikä maisemaa vaan
+kivilattia soihtujen valossa, ja soihtu on kartan ainoa lämmin väri.
+
+### Vaikeuskäyrä
+
+`node tools/difficulty.mjs --write` ajettu. Maailmojen keskiarvo **w8 301,0**,
+eli **+21,8** maailmaan 7 (279,2) — käyrä nousee yhä joka maailmassa. Kenttien
+muoto linnake pois lukien: **245 → 117 → 302 → 378 → 386**, tasan yksi notko.
+
+**Ja yksi jännite on kirjattava eikä siloteltava.** Notko on suhteessa syvempi
+kuin missään aiemmassa maailmassa: 8-2 on 39 % maailmansa keskiarvosta, kun
+luulaakson notko oli 56 % ja pilvimaailman 65 %. Syy on rakenteellinen eikä
+huolimattomuutta — kuilut ovat 30 % mittarin painosta ja kuiluosuus vielä 9 %
+lisää, joten maailmassa jonka vaikeus on lähes kokonaan kuiluissa hengähdys joka
+poistaa kuilut putoaa väistämättä pidemmälle kuin maailmassa jonka vaikeus on
+vihollisissa. Käsi ei ole samaa mieltä kuin mittari: 8-2 päättyy pomoon niin
+kuin muutkin, ja se on ainoa kenttä maailmassa jossa voimatason voi menettää
+menettämättä henkeä. Mittari ei osaa lukea sitä, ja tämä kappale on se mitä
+sille tehdään.
+
+### Uutta vihollisvarastosta, ja se mitä ei otettu
+
+**Kurnuttaja** (v26.08.09.37) asuu maailman kolossa: `keep_croak` on ruutu
+ruudulta `keep_hole`, ja identtisyys on päätös eikä laiskuus — pelaaja on
+ylittänyt juuri sen kolon kaksi palikkaa aiemmin, joten ainoa uusi luettava on
+se mikä siinä asuu. Ei kolikoita sen yli, samasta syystä kuin `pit_croak`issa:
+kolikkokaari on tämän pelin tapa piirtää hyppy, ja sen piirtäminen tähän
+osoittaisi pelaajaa siihen yhteen ilmasarakkeeseen joka on toisinaan varattu.
+
+**Juoksuhiekkaa (v26.08.09.35) ei otettu**, ja se on päätös eikä unohdus:
+`levels/world2.js` ratkaisi asian jo yhdellä lauseella — *linnakkeessa on
+kivilattia eikä hiekkaa* — ja sääntö joka hylätään heti kun se on epämukava ei
+ollut sääntö. Ruutu jää aavikkoon.
+
+**Maahanisku** (v26.08.09.31) yltää pomoon tämän avoimessa vaiheessa, ja se on
+omistajan päättämää vakiintunutta käytöstä. Ainoa paikka jossa sillä on tässä
+maailmassa pudotusta on `boss_arena_big`in kansi eli viimeinen tappelu — liike
+avaa paikan eikä kenttää, ja botti joka todistaa jokaisen kentän voimatasolla 0
+ei osaa sitä lainkaan.
+
+---
+
 ## v26.08.09.41 — hiekka ei tiedä kuka siihen astuu, ja kamera lakkaa leikkaamasta noustessaan
 
 Kaksi bugia, molemmat eilen mitattuja ja tarkoituksella jätettyjä. Ne eivät

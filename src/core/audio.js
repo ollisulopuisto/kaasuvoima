@@ -2048,6 +2048,141 @@ const TRACKS = {
     },
   },
 
+  /*
+   * VIIMEINEN LINNAKE — Modest Mussorgski, *Yö Autiovuorella* (1867),
+   * Nikolai Rimski-Korsakovin sovituksena (1886).
+   *
+   * **Kaksi tekijää yhdellä rivillä ei ole huolimattomuutta, ja se on tämän
+   * raidan tärkein yksityiskohta.** Mussorgski kuoli 1881, joten sävellys
+   * vapautui 1.1.1952; Rimski-Korsakov kuoli 1908, joten sovitus vapautui
+   * 1.1.1979. Teos tunnetaan lähes yksinomaan jälkimmäisenä, ja **sovitus on
+   * oma teoksensa omine suoja-aikoineen** — juuri se on se kohta jossa
+   * "tämähän on vanhaa musiikkia" menee useimmiten pieleen. Molemmat ovat
+   * vapaita, mutta se on kaksi tarkistusta eikä yksi, ja siksi `source`issa on
+   * kolme kenttää ja `verify.mjs` lukee niistä jokaisen: kumpikin nimi on
+   * oltava sekä DESIGN.md:ssä (kohta 1 b) että muutoslokissa.
+   *
+   * DESIGN.md kohdan 1 b muu ehto täyttyy samalla tavalla kuin `bone`illa ja
+   * `cave`lla: **sävelet on kirjoitettu käsin tähän tauluun** ja
+   * syntetisoidaan ajossa. Repoon ei tule sampleja, MIDI-rippiä eikä
+   * skannattua nuottia — vapautuminen koskee sävellystä, ja yksittäinen äänite
+   * tai nuottilaitos on eri teos omine oikeuksineen. Ja rehellisyyden nimissä
+   * sama varaus kuin luulaaksossa: tämä on **sovitus eikä transkriptio**.
+   * Kolme ääntä ja rummut eivät ole orkesteri, ja aiheet on kirjoitettu
+   * korvakuulolta eikä mistään laitoksesta.
+   *
+   * Miksi juuri tämä teos: aihevalinta, kuten aina tässä pelissä. Teos *on*
+   * yö pahojen vuorella, se kestää yhden yön, ja se loppuu siihen että kello
+   * soi ja aamu tulee. Viimeinen linnake on kuusi tappelua peräkkäin ja sen
+   * jälkeen peli loppuu; sama muoto, eri väline.
+   *
+   * ## Se yksi asia joka on datassa: yö on mollissa, aamu on duurissa
+   *
+   * Teoksen koko dramaturgia on yksi käänne, ja se on kirjoitettavissa
+   * numeroina, joten `verify.mjs` laskee sen:
+   *
+   *   - fraasit 0–2 ovat yö, eikä yhdessäkään niistä ole duuriterssiä (F#)
+   *   - fraasi 3 on aamu, eikä siinä ole molliterssiä (F) kertaakaan
+   *
+   * Yksi F# yössä ja käänne on koriste, koska duuri oli jo käynyt. Yksi F
+   * aamussa ja aamu on vain hiljaisempi yö. Kumpikaan ei kuulostaisi
+   * rikkinäiseltä — ne kuulostaisivat *vähemmän hyvältä*, mikä on täsmälleen
+   * se vika jota kukaan ei osaa etsiä.
+   *
+   * **Harmonia on paljaita kvinttejä, ja se on tämän ratkaisun hinta.**
+   * Sekvensseri vaihtaa fraasia joka kierroksella mutta soittaa saman
+   * säestyksen läpi koko raidan, joten mollisointu aamun alla rikkoisi
+   * käänteen samalla nuotilla jolla se tehdään. Ilman terssiä sama säestys
+   * kantaa molemmat, ja moodi asuu sävelmässä — mikä on lisäksi juuri se
+   * sointi jota tällä musiikilla on: avoin kvintti on vanhempi ja karumpi ääni
+   * kuin kolmisointu. Sekin on portissa: `harm`issa ei ole yhtään F:ää eikä
+   * F#:ää.
+   *
+   * Neljä fraasia, ja jokainen on yksi asia jonka yö tekee:
+   *   0  **kohina** — se juokseva kuudestoistaosakuvio jolla teos alkaa
+   *   1  **kutsu** — matala, raskas pääaihe: vuoren oma teema
+   *   2  **tanssi** — sapatti, ajava ja tasainen
+   *   3  **aamu** — kellonlyönnit ja sama sävellaji suurena
+   *
+   * Kellonlyöntejä on kuusi, ja se luku on **meidän** eikä teoksen: partituuri
+   * vain toistaa lyönnin, joten kuusi on se mikä mahtuu tahtiin. Luulaakson
+   * kaksitoista on eri asia — siellä luku on kellonaika ja siksi se lasketaan
+   * portissa nimellä. Suunta on myös vastakkainen ja se on koko vitsi: siellä
+   * lyönnit *aloittavat* tanssin, täällä ne *lopettavat* yön.
+   */
+  autiovuori: {
+    source: {
+      composer: 'Modest Mussorgski',
+      arranger: 'Nikolai Rimski-Korsakov',
+      work: 'Yö Autiovuorella',
+    },
+    tempo: 132,
+    lead: {
+      /* Kanttiaalto ja kapea detune: tämä on ainoa raita jonka pitää kuulostaa
+       * siltä että se huutaa. Staccato on pitkä, koska jouset eivät irrota. */
+      wave: 'sawtooth', gain: 0.12, detune: 10, staccato: 0.86, vibrato: 3, vibratoRate: 5,
+      phrases: [
+        // 0 — kohina: d-molli ylös ja alas, kuudestoistaosina
+        [[-7, 1], [-5, 1], [-4, 1], [-2, 1], [0, 1], [-2, 1], [-4, 1], [-5, 1],
+          [-7, 1], [-5, 1], [-4, 1], [-2, 1], [0, 1], [1, 1], [0, 1], [-2, 1],
+          [-4, 1], [-5, 1], [-4, 1], [-2, 1], [0, 1], [1, 1], [4, 1], [5, 1],
+          [4, 2], [1, 2], [0, 2], [-2, 2], [-4, 4], [-7, 4]],
+        // 1 — kutsu: vuoren teema, oktaavia alempaa ja pisteellisenä
+        [[-19, 4], [-16, 2], [-19, 2], [-14, 4], [-16, 2], [-19, 2],
+          [-12, 4], [-16, 4], [-19, 8],
+          [-19, 4], [-16, 2], [-19, 2], [-14, 4], [-11, 2], [-12, 2],
+          [-8, 4], [-12, 4], [-19, 8]],
+        // 2 — tanssi: sapatti, tasaisina kahdeksasosina
+        [[-7, 2], [-7, 1], [-4, 1], [-2, 2], [-4, 2],
+          [-7, 2], [-4, 2], [-2, 2], [0, 2],
+          [1, 2], [0, 2], [-2, 2], [-4, 2],
+          [-2, 2], [0, 2], [4, 2], [5, 4]],
+        // 3 — aamu: kuusi lyöntiä, ja sitten D-duuri
+        [[5, 4], [5, 4], [5, 4], [5, 4], [5, 4], [5, 4],
+          [0, 4], [2, 2], [4, 2], [5, 8],
+          [9, 4], [7, 2], [5, 2], [4, 4], [2, 4],
+          [0, 2], [2, 2], [4, 2], [5, 2], [9, 8]],
+      ],
+      notes: [[-19, 4], [-16, 2], [-19, 2], [-14, 4], [-16, 2], [-19, 2],
+        [-12, 4], [-16, 4], [-19, 8],
+        [-19, 4], [-16, 2], [-19, 2], [-14, 4], [-11, 2], [-12, 2],
+        [-8, 4], [-12, 4], [-19, 8]],
+    },
+    harm: {
+      /* D5 — C5 — G5 — D5. Ei yhtään terssiä, ks. yllä: sama säestys kantaa
+       * sekä yön että aamun, koska se ei ota kantaa kumpaankaan. */
+      wave: 'sawtooth', gain: 0.045, octave: -12, staccato: 0.95, attack: 0.02, hold: 0.7,
+      notes: [
+        [[-7, 0], 8],
+        [[-9, -2], 8],
+        [[-14, -7], 8],
+        [[-7, 0], 8],
+      ],
+    },
+    bass: {
+      /* Juokseva pohja eikä urkupiste: teos on liikettä alusta loppuun, ja
+       * tämä on se ääni joka ei pysähdy. Sävelet ovat pohjia ja kvinttejä,
+       * samasta syystä kuin harmoniassa. */
+      wave: 'triangle', gain: 0.19, staccato: 0.5, attack: 0.004, hold: 0.25,
+      accent: 'x...x...x...x...',
+      notes: [
+        [-31, 2], [-24, 2], [-31, 2], [-24, 2], [-31, 2], [-24, 2], [-31, 2], [-19, 2],
+        [-33, 2], [-26, 2], [-33, 2], [-26, 2], [-33, 2], [-26, 2], [-33, 2], [-21, 2],
+        [-38, 2], [-31, 2], [-38, 2], [-31, 2], [-38, 2], [-31, 2], [-38, 2], [-26, 2],
+        [-31, 2], [-24, 2], [-31, 2], [-24, 2], [-31, 4], [-31, 4],
+      ],
+    },
+    drums: {
+      /* Sapatti eikä marssi: bassorumpu joka iskulle ja vielä yksi väliin,
+       * virveli kakkoselle ja neloselle, hi-hat kuudestoistaosina. Se on
+       * tarkoituksella tiheämpi kuin linnakkeen oma raita, jossa ei ole
+       * hi-hattia lainkaan — se huone on tyhjä, tämä on täynnä. */
+      kick: 'x..x..x.x..x..x.',
+      snare: '....x.......x...',
+      hat: 'xxxxxxxxxxxxxxxx',
+    },
+  },
+
   boss: {
     tempo: 176,
     lead: {

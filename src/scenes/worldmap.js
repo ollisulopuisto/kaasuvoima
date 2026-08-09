@@ -346,12 +346,17 @@ export class WorldMapScene {
     // One shared sway, offset per tile so neighbours do not move in lockstep.
     const sway = (tx, ty, amount) =>
       Math.round(Math.sin(this.tick / 24 + tx * 0.8 + ty * 0.5) * amount);
+    /* Linnakkeen maa on koko pelin tummin, ja se on tarkoitus eikä sattuma:
+     * viimeinen kartta on ainoa jolla ei ole taivasta eikä maisemaa, vaan
+     * kivilattia soihtujen valossa. Tehtaan pari (#4a4460 / #332f44) on
+     * lähinnä, ja siksi tämä on siitä viilennetty ja tummennettu — sisätila
+     * kahdesti peräkkäin näyttäisi muuten samalta paikalta. */
     const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff'
       : th === 'factory' ? '#4a4460' : th === 'bone' ? '#5a5c50'
-        : th === 'cloud' ? '#e6eefc' : '#4cb04c';
+        : th === 'cloud' ? '#e6eefc' : th === 'fortress' ? '#3a3a4c' : '#4cb04c';
     const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
       : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038'
-        : th === 'cloud' ? '#b6c6e4' : '#348a34';
+        : th === 'cloud' ? '#b6c6e4' : th === 'fortress' ? '#26263a' : '#348a34';
     ctx.fillStyle = base;
     ctx.fillRect(0, MAP_Y, 320, MAP_H);
 
@@ -576,6 +581,49 @@ export class WorldMapScene {
             ctx.fillStyle = '#2a8a30';
             ctx.fillRect(x + 3, y + 9, 10, 5);
             ctx.fillRect(x + 5 + s1, y + 6, 6, 4);
+            break;
+          }
+          case 'w': {
+            /* Kivilattia: sauma alas ja oikealle, sama tapa kuin tehtaan
+             * pellillä. Litteä glyfi eikä `TALL_TERRAIN`issa, joten se menee
+             * tien alle kuten kaikki muukin maan pinta. Laatta on limitetty
+             * joka toisella rivillä — suora ruudukko lukisi taustapaperina, ja
+             * kivi ladotaan limiin siksi ettei sauma jatku. */
+            ctx.fillStyle = '#2e2e40';
+            ctx.fillRect(x, y + 15, TILE, 1);
+            ctx.fillRect(x + (ty % 2 ? 7 : 15), y, 1, TILE);
+            if (hashNoise(tx * 7, ty * 11) > 0.78) {
+              ctx.fillStyle = '#4a4a5e';
+              ctx.fillRect(x + 4, y + 6, 3, 1);
+              ctx.fillRect(x + 9, y + 11, 2, 1);
+            }
+            break;
+          }
+          case 'A': {
+            /* Rintavarustus, y+2..y+14 — eli se osuu tien pisteen musteeseen
+             * (y+5..y+10) kuten puu, kallo ja ukkospää, ja on siksi
+             * `TALL_TERRAIN`issa.
+             *
+             * Soihtu palaa aukossa, ja se on kaksi framea eikä sykkivä hehku:
+             * kartan muut liikkeet ovat huojuntaa (puut, pilvet, vesi), joten
+             * välkkyvä piste erottuu niistä liikelajina eikä vain värinä. Se on
+             * myös ainoa lämmin väri koko kartalla — kylmä kivi ja yksi tuli
+             * lukee linnakkeena ilman että mitään tarvitsee kirjoittaa. */
+            ctx.fillStyle = '#20202e';
+            ctx.fillRect(x + 2, y + 5, 12, 9);
+            ctx.fillStyle = '#585870';
+            ctx.fillRect(x + 3, y + 6, 10, 7);
+            ctx.fillStyle = '#20202e';
+            ctx.fillRect(x + 2, y + 2, 2, 3);
+            ctx.fillRect(x + 7, y + 2, 2, 3);
+            ctx.fillRect(x + 12, y + 2, 2, 3);
+            ctx.fillStyle = '#6e6e88';
+            ctx.fillRect(x + 2, y + 2, 2, 1);
+            ctx.fillRect(x + 7, y + 2, 2, 1);
+            ctx.fillRect(x + 12, y + 2, 2, 1);
+            const lit = Math.floor(this.tick / 7 + tx * 2 + ty) % 2;
+            ctx.fillStyle = lit ? '#ffcc50' : '#e08020';
+            ctx.fillRect(x + 7, y + 8, 2, 2 + lit);
             break;
           }
           default:
