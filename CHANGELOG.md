@@ -7,6 +7,70 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.16 — puhesyntetisaattori sai konsonantit
+
+`vox()` osasi viisi vokaalia, joten jokainen repliikki oli vokaaliliuku: `'iea'`
+oli "jee" ja `'ou'` oli "oof". Ääni jolla on vain vokaaleja ei voi sanoa eri
+asioita — se voi vain huutaa eri korkeuksilla.
+
+Kolme perhettä, kolme mekanismia, yksi taulu:
+
+- **Nasaalit** (m, n) ovat samat kaksi kaistanpäästösuodinta uusilla kohteilla:
+  F1 250 Hz ja yläkaista kymmenesosaan. Ei uutta koneistoa, vain uudet luvut.
+- **Frikatiivit** (s, š, f, h) ovat jaettua kohinapuskuria suotimen läpi, ilman
+  sävelkorkeutta lainkaan.
+- **Klusiilit** (p, t, k) ovat **hiljaisuus ja sitten purske**. Hiljaisuus on se
+  osa joka tekee niistä klusiileja; ilman sitä ne ovat napsahduksia.
+
+Peräkkäiset soinnilliset kirjaimet ovat yhä **yksi** oskillaattori joka liukuu
+kohteesta toiseen — eli tarkalleen se mitä koko sana ennen oli.
+
+### Kolme mittausta, joista jokainen kumosi oletuksen
+
+1. **Kohinapolku on hiljaisempi kuin vokaalipolku**, ei kovempi kuten oletin —
+   noin 6 dB, mikä kohinan huippukertoimen jälkeen on suunnilleen se suhde joka
+   oikealla ässällä on. `VOX_HISS` 1,0 on siis mittaustulos eikä oletusarvo.
+2. **Nasaali oli liian kova**: 250 Hz:n kaistanpäästö istuu perustaajuuden
+   päällä, joten se mittasi 0,81 vokaalin 0,58:aa vastaan. Taso 0,5.
+3. **Sanat eivät ole yhtä kovia samalla vahvistuksella.** Viisikohteinen sana
+   käy läpi useamman suodinasennon ja voittaa maksimin: samalla gainilla rivit
+   mittasivat 0,31–0,81, eli 8 dB. Jokainen repliikki on nyt mitattu erikseen
+   noin 0,55:een.
+
+Vanhat vokaalisanat mitattiin rinnakkain vanhaa versiota vastaan: erot ovat
+pienempiä kuin mittauksen oma hajonta.
+
+### Tuntematon kirjain pudotetaan, ei korvata
+
+Ennen `VOWELS[v] || VOWELS.a` teki tuntemattomasta kirjaimesta ylimääräisen
+"ah":n — eli tavun jota kukaan ei kirjoittanut, mikä lukee pelin bugina eikä
+kirjoitusvirheenä. Nyt se pudotetaan, ja tyhjäksi jäänyt sana putoaa yhteen
+'a':han, koska **ääniefekti joka hiljaa jättää soimatta on se vika jota kukaan
+ei ilmoita**. Puuttuvat kirjaimet ovat approksimantteja (j, v, l, r), jotka
+ympäröivät vokaalit kantavat muutenkin: "JES" kirjoitetaan `'ies'`.
+
+### Peli sai suunsa auki suomeksi
+
+Kaikki olemassa oleviin kutsupaikkoihin, ei yhtään uutta ääntä: JES · AUTS ·
+NO NIIN · NAM · JIPPII · OHHOH · HIENOA · HUPS · HUP.
+
+### Kaksi asiaa jotka löytyivät matkalla
+
+- **Mutaatiotesti paljasti että klusiilin aaltomuototarkistus meni läpi myös
+  hitaalla vokaalin nousulla** eikä vain oikealla umpiolla. Korjattu molemmista
+  päistä.
+- **Mittaukset heittelivät kaksinkertaisesti**, kunnes syy löytyi:
+  esittelytila. Kahdenkymmenen sekunnin jouten olon jälkeen alkuruutu alkaa
+  pelata peliä itselleen ja ampuu hyppyjä ja tallauksia **juuri siihen väylään
+  jota mitattiin.**
+
+### Valmis pomojen äänille
+
+`voxPlan(word, dur)` on *mitä sanotaan*, `VOICES` on *kuka sanoo*. Pomo saa
+`vox({ word, voice: VOICES.joku })` eikä mikään muu argumentti muutu. Taulussa
+on toistaiseksi yksi rivi, koska puhujia on yksi — ääni jolla ei puhu kukaan on
+sama virhe kuin ääni jota ei laukaise mikään.
+
 ## v26.08.09.15 — ohjaimen ääniloukku sanotaan ääneen
 
 Peliohjaintuki on ollut olemassa pitkään ja toimii. Siinä oli kuitenkin reikä
