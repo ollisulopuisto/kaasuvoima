@@ -7,6 +7,85 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.20 — jättiläisen areenalle portaat, ja päätös joka osoittautui vääräksi
+
+Tehtävä oli opastaa pelaaja jättiläispomon yläkansille, koska päätös oli että
+kannet *ovat* vastaus ja ongelma on vain se ettei niitä huomata. **Mittaus
+kumosi päätöksen perusteen.**
+
+### Kansille ei päässyt
+
+Simuloitu kiipeäminen voimatasolla 0 — jokaisesta lattiasarakkeesta, seisova ja
+juoksuhyppy vauhdilla ja ilman, leveyssuuntainen haku jokaisesta löydetystä
+laskeutumispaikasta — löysi **täsmälleen yhden seisottavan korkeuden: lattian.**
+Rivi 6 on 112 px ylhäällä, paras hyppy kantaa 85, eikä välissä ollut mitään.
+
+Kannet eivät siis olleet vastaus jota ei huomata. Ne olivat lavastetta — ja
+*siksi* ne luettiin lavasteeksi.
+
+### Ja taistelu oli läpäisemätön
+
+| osumaa | koko | nousu jonka seuraava tallaus vaatii |
+| --- | --- | --- |
+| 0 | 1,0 | 32 px |
+| 1 | 1,5 | 48 px |
+| 2 | 2,0 | 64 px |
+| 3 | 2,5 | **80 px** |
+| 4 | 3,0 | **96 px** |
+
+Voimatason 0 hypyt areenassa: seisova 71, kävely 78, juoksu 85, P-vauhti 100.
+**Hyppykorkeus ei riipu koosta**, joten nämä luvut pätevät joka voimatasolla.
+
+Osumat 1–3 lähtevät siis lattialta, mutta neljäs vaatii 80 px ja viides — se
+joka päättää taistelun — 96. Roadmapin oma "kahden osuman jälkeen" oli yhden
+osuman liian aikaisin, mutta johtopäätös oli **liian lievä**: hp on 5, joten
+lattialta taistelua ei voinut voittaa lainkaan.
+
+### Korjaus pysyi rajauksen sisällä
+
+Kokoa ei rajattu eikä kansia laskettu — kumpikin oli kielletty. Kansille tehtiin
+**portaat**: askellava rivillä 9, 64 px lattiasta (tasan mitattu `wallTiles`) ja
+48 px kannelle, eli kaksi tavallista seisovaa hyppyä.
+
+**Rivi 9 eikä 10, ja se on mitattu:** pomon oma hyppy nostaa jalat y=161:een, ja
+rivin 10 lava olisi y=160 — hän laskeutuisi pelaajan portaille. Marginaali on
+17 px ja sillä on oma testinsä.
+
+Lavat ovat **puulavoja eivätkä lohkoja**, joten mikään ei jää loukkuun niiden
+päälle eikä iskuaalto pysähdy. Kolikkokaari piirtää sen hypyn joka portaalle vie,
+ja kansilla on nyt viisi kolikkoa kahden sijaan: DESIGN.md kohta 5 kieltää
+portaat tyhjään, ja tämä oli sama sääntö väärinpäin. **Kansi kannattaa nyt
+kiivetä ensimmäisellä minuutilla**, kun pomoon vielä yltää lattialtakin — eli
+reitti opitaan ennen kuin sitä tarvitaan.
+
+Kasvu pudottaa **pölyä kansilavoista**: eri paikka (katto, ei lattia), eri suunta
+(putoaa, ei kulje) ja eri väri kuin iskuaallolla tai auringon
+ennakkovaroituksella. Ääntä ei lisätty — kasvun `fart` on jo se puolikas, ja se
+soi vain kun koko oikeasti muuttui.
+
+### Helpottuiko vai vaikeutuiko
+
+**Helpottui, ja niin piti käydä:** läpäisemättömästä läpäistäväksi. Voimatason 0
+botti vie jättiläisen 5 hp:stä nollaan sekä 4-F:ssä että 5-F:ssä.
+
+Yksi asia **vaikeutui tarkoituksella**: skaalasta 2,5 ylöspäin pomon osumalaatikko
+yltää askellavan yli, joten askel muuttuu vaaralliseksi juuri silloin kun hän
+kasvaa lattian ulottumattomiin. Turvallinen maa nousee sitä mukaa kuin hän
+kasvaa, ja se on koko opetus.
+
+**`difficulty.mjs` sanoo että kentät vaikeutuivat** — 4-F 192,6 → 202,1 ja
+5-F 337,4 → 345,5. Se laskee uudet kolikot ja lavat eikä näe taistelusta mitään
+(jokainen pomo on 5,0). **Luku nousi samalla kun taistelu helpottui.** Älä lue
+sitä tuomiona tästä muutoksesta.
+
+### Velka joka jäi
+
+`boss_arena_big` on nyt määritelty **kahdesti**: elävä `fortress.js`:ssä ja
+kuollut kopio `factory.js`:ssä, jota `chunks.js`:n levitysjärjestys varjostaa.
+Se on portin vahtima ansa — `verify.mjs` kaatuu äänekkäästi jos varjostus joskus
+lakkaa — mutta **kopio pitää poistaa** kun `factory.js`:ää muokkaava rinnakkainen
+työ on valmis.
+
 ## v26.08.09.19 — putken suunta, putkessa kulkeminen, kameran pito ja linnan ovi
 
 Neljä omistajan raportoimaa vikaa, jotka osuivat samoihin kahteen tiedostoon.

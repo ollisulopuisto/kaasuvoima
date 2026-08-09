@@ -1133,6 +1133,42 @@ const SPIKE_OPEN_MIN = 120;
  */
 const SPIKE_DOFF = 20;
 
+/*
+ * THE GIANT'S GROWTH, SEEN FROM THE ROOM.
+ *
+ * Every stomp puffs the giant up half a size, and by the fourth one his head is
+ * further above the floor than any power-0 jump reaches — the last hits have to
+ * come down off the arena's decks (see `boss_arena_big`). The decks are the
+ * answer, so the answer has to be *pointed at*, and the growth is the moment to
+ * do it: it is the one moment in the fight when the player is certainly looking
+ * at the boss and has just been told something changed.
+ *
+ * So the room answers. He swells, the arena takes it, and dust comes off the
+ * planks overhead — up there, where the next hit is going to have to come from.
+ *
+ * Three deliberate differences from the two telegraphs this game already owns
+ * (DESIGN.md §8: a new signal that looks like an old one teaches the player to
+ * read the wrong thing):
+ *
+ *   - **place.** The shockwave runs out along the floor from his feet. This
+ *     happens at the ceiling, on the decks, nowhere near him.
+ *   - **direction.** The shockwave travels sideways and the sun's dive
+ *     telegraph gathers on the sun. Dust falls.
+ *   - **colour.** His own gas is brown (`spawnPuff(..., true)`, the same brown
+ *     as the stink clouds). Deck dust is the pale puff, so "brown means him"
+ *     survives.
+ *
+ * The sound half is already there and is not new either: `stomp` for the hit
+ * and `fart` for the growth, the second of which only the giant plays. Picture
+ * and sound together, which is the rule; a third boss sound would have been a
+ * fourth thing to learn.
+ */
+const DUST_FRAMES = 28;
+/** One burst every few frames, so it patters rather than flashes. */
+const DUST_EVERY = 4;
+/** How far along the deck the thump is felt, in tiles either side of him. */
+const DUST_REACH = 14;
+
 /**
  * Fortress boss. `variant` picks the move set:
  *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates.
@@ -1165,6 +1201,8 @@ export class Boss extends Enemy {
     // that started mid-doff would open the fight wearing the one thing that is
     // supposed to mean "not now".
     this.doffTimer = 0;
+    // Counts the deck dust down after a growth. See DUST_FRAMES.
+    this.deckDust = 0;
   }
 
   get giant() { return this.variant === 3; }
@@ -1206,6 +1244,27 @@ export class Boss extends Enemy {
     }
   }
 
+  /**
+   * Shakes dust off every plank above him. Runs for DUST_FRAMES after a growth
+   * and does nothing at all in an arena with no planks in it, which is every
+   * arena but the giant's — the signal is made of the thing it points at, so it
+   * cannot end up pointing at nothing.
+   */
+  updateDeckDust() {
+    if (--this.deckDust % DUST_EVERY) return;
+    const head = Math.floor(this.y / TILE);
+    const mid = Math.floor(this.cx / TILE);
+    for (let tx = mid - DUST_REACH; tx <= mid + DUST_REACH; tx++) {
+      // Every third column, marching sideways burst by burst: a whole plank
+      // letting go at once is a collapse, and nothing is collapsing.
+      if ((tx + this.deckDust) % 3) continue;
+      for (let ty = 0; ty < head; ty++) {
+        if (this.level.tileAt(tx, ty) !== T.PLATFORM) continue;
+        this.level.spawnPuff(tx * TILE + TILE / 2, (ty + 1) * TILE + 2);
+      }
+    }
+  }
+
   applyScale() {
     const bottom = this.y + this.h;
     const cx = this.x + this.w / 2;
@@ -1227,6 +1286,8 @@ export class Boss extends Enemy {
       if (Math.abs(this.targetScale - this.scale) < 0.05) this.scale = this.targetScale;
       this.applyScale();
     }
+
+    if (this.deckDust > 0) this.updateDeckDust();
 
     this.updateSpikes();
 
@@ -1305,8 +1366,13 @@ export class Boss extends Enemy {
     Sfx.play('stomp');
     if (this.giant) {
       // Puffs up half a size with every hit, all the way to three times over.
+      const before = this.targetScale;
       this.targetScale = Math.min(3, this.targetScale + 0.5);
       Sfx.play('fart');
+      // Only when he actually got bigger. At full size the fight has stopped
+      // changing address, and a signal that fires when nothing changed is the
+      // fastest way to teach a player to ignore it.
+      if (this.targetScale > before) this.deckDust = DUST_FRAMES;
     } else {
       this.speed += 0.35;
     }

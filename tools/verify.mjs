@@ -2618,6 +2618,255 @@ const report = await page.evaluate(async () => {
       expect('the level clock holds far more windows than the boss has health',
         worst >= 4, `${rows.join(' ')} — huonoin ${worst.toFixed(1)} per osuma`);
     }
+
+    /* ------------------------ jättiläisen kannet ------------------------ */
+    /*
+     * THE GIANT AND HIS DECKS (4-F, 5-F, `bossVariant: 3`).
+     *
+     * The giant grows half a size with every stomp, so his head climbs away
+     * from the floor as the fight goes on, and by the end of it no power-0 jump
+     * reaches. That was ruled design and not a bug on 9.8.2026: the arena's
+     * upper decks are the answer, and the decks are where the last hits come
+     * from. Which turns the whole promise — every boss is beatable at the
+     * smallest size — into one sentence that had never been checked:
+     *
+     *     a power-0 player must be able to GET ONTO a deck, and from a deck the
+     *     stomp must land at every size he reaches.
+     *
+     * It was not true. A simulated climb over the arena found exactly one
+     * standable height, the floor: the decks were 112 px up against an 85 px
+     * best jump, with nothing in between. The fight's answer was scenery, which
+     * is precisely why players read it as scenery.
+     *
+     * These four checks are that sentence, in the order a player meets it —
+     * the head leaves reach, the climb exists, the drop connects, and the
+     * steps stay the player's rather than his.
+     */
+    {
+      const GIANT_LEVELS = ['4-F', '5-F'];
+      const FLOOR_Y = 208;
+
+      /* The measurement itself, kept as a check so that a later change to the
+       * physics or to his growth says so instead of silently making the decks
+       * pointless — or, worse, silently necessary at a size they were never
+       * checked for. `budget` is the measured jump, not a remembered one. */
+      {
+        const budget = await (await fetch('/tools/jump-budget.json')).json();
+        const stand = budget.cases.find((c) => c.label === 'standing, held').height;
+        const run = budget.cases.find((c) => c.label === 'running, held').height;
+        reset();
+        const s = new LevelScene(game, '4-F');
+        const boss = s.entities.find((e) => e instanceof E.Boss);
+        // The rise the n-th stomp asks for is the boss's height when it lands.
+        const rises = [];
+        let scale = 1;
+        for (let hit = 0; hit < boss.maxHp; hit++) {
+          rises.push(Math.round(boss.baseH * scale));
+          scale = Math.min(3, scale + 0.5);
+        }
+        const fromFloor = rises.filter((r) => r <= run).length;
+        expect('the giant grows out of power-0 floor reach before he is down',
+          boss.giant && fromFloor < boss.maxHp,
+          `nousut ${rises.join('/')} px, seisova hyppy ${stand}, juoksuhyppy ${run}`
+          + ` — lattialta ${fromFloor}/${boss.maxHp} osumaa`);
+      }
+
+      /*
+       * Every height a power-0 player can stand at, found by simulation rather
+       * than by reading the grid: from each place they have reached, jump
+       * standing and jump in both directions with and without a run-up, and see
+       * where they land. It over-reports nothing — every spot in the set was
+       * arrived at by actually flying there — and it is the only honest way to
+       * ask "is that platform reachable", because the grid cannot tell a ledge
+       * you can just make from one you just cannot.
+       */
+      const standableHeights = (id) => {
+        reset();
+        const s = new LevelScene(game, id);
+        game.setScene(s);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+        s.time = 9999;
+        const p = s.player;
+        const x0 = (s.grid[0].length - 48) * 16;
+        const i = mkInput();
+
+        const hop = (x, feet, dir, runup) => {
+          p.x = x; p.y = feet - p.h; p.vx = 0; p.vy = 0;
+          p.onGround = true; p.invuln = 999; p.frozen = 0;
+          s.centerCamera();
+          for (let f = 0; f < runup; f++) {
+            i.held = blank(); i.pressed = blank();
+            i.held[dir > 0 ? 'right' : 'left'] = true; i.held.run = true;
+            s.update(i);
+            if (!p.onGround) break;
+          }
+          i.held = blank(); i.pressed = blank();
+          if (dir) { i.held[dir > 0 ? 'right' : 'left'] = true; i.held.run = true; }
+          i.pressed.jump = true; i.held.jump = true;
+          s.update(i);
+          for (let f = 0; f < 180 && !p.onGround; f++) {
+            i.pressed = blank();
+            i.held.jump = true;
+            s.update(i);
+          }
+          return { x: p.x, feet: p.y + p.h, ok: p.onGround && !p.dying };
+        };
+
+        const seen = new Set();
+        const spots = [];
+        const push = (x, feet) => {
+          if (x < x0 + 8 || x > x0 + 47 * 16) return;
+          const k = `${Math.round(x / 8)},${Math.round(feet)}`;
+          if (seen.has(k)) return;
+          seen.add(k);
+          spots.push({ x, feet });
+        };
+        for (let c = 2; c < 46; c += 2) push(x0 + c * 16, FLOOR_Y);
+
+        const heights = new Set();
+        for (let n = 0; n < spots.length && n < 400; n++) {
+          heights.add(Math.round(spots[n].feet));
+          for (const [dir, runup] of [[0, 0], [-1, 0], [1, 0], [-1, 45], [1, 45]]) {
+            const r = hop(spots[n].x, spots[n].feet, dir, runup);
+            if (r.ok) push(r.x, r.feet);
+          }
+        }
+        return { heights: [...heights].sort((a, b) => a - b), x0 };
+      };
+
+      /* Where the decks are is read out of the level rather than written down,
+       * so moving them moves the test with them. */
+      const deckRows = (s) => {
+        const out = new Set();
+        const from = s.grid[0].length - 48;
+        for (let y = 0; y < s.grid.length; y++) {
+          for (let x = from; x < s.grid[y].length; x++) {
+            if (s.grid[y][x] === '-') out.add(y);
+          }
+        }
+        return [...out].sort((a, b) => a - b);
+      };
+
+      /* THE CENTRE OF ALL THIS. Red before green (DESIGN.md §7): against the
+       * arena as it stood this reports one reachable height, 208, the floor. */
+      for (const id of GIANT_LEVELS) {
+        reset();
+        const probe = new LevelScene(game, id);
+        const decks = deckRows(probe);
+        const { heights } = standableHeights(id);
+        const reached = decks.filter((row) => heights.includes(row * 16));
+        expect(`${id}: a power-0 player can climb onto the giant's decks`,
+          decks.length > 0 && reached.length === decks.length,
+          `kannet riveillä ${decks.join('/')}, seisottavat korkeudet ${heights.join('/')}`);
+      }
+
+      /* And from up there the stomp has to connect at every size he reaches,
+       * including the one he is at when the fight ends. Dropping off a deck is
+       * the whole move, so that is what is simulated: stand on the plank, press
+       * down, fall. */
+      for (const id of GIANT_LEVELS) {
+        const misses = [];
+        for (const scale of [1, 1.5, 2, 2.5, 3]) {
+          reset();
+          const s = new LevelScene(game, id);
+          game.setScene(s);
+          const boss = s.entities.find((e) => e instanceof E.Boss);
+          const p = s.player;
+          const x0 = (s.grid[0].length - 48) * 16;
+          const deck = deckRows(s)[0];
+          // The left deck, and the boss parked under the middle of it.
+          let col = 0;
+          for (let x = 0; x < 48; x++) if (s.grid[deck][x + (s.grid[0].length - 48)] === '-') { col = x + 2; break; }
+          boss.scale = scale; boss.targetScale = scale; boss.applyScale();
+          boss.x = x0 + col * 16 - boss.w / 2; boss.y = FLOOR_Y - boss.h;
+          boss.vx = 0; boss.vy = 0; boss.invuln = 0;
+          p.x = x0 + col * 16 - p.w / 2; p.y = deck * 16 - p.h;
+          p.vx = 0; p.vy = 0; p.invuln = 0; p.frozen = 0;
+          s.centerCamera();
+          const hp0 = boss.hp;
+          const i = mkInput();
+          let hurt = false;
+          for (let f = 0; f < 240 && boss.hp === hp0; f++) {
+            i.held = blank(); i.pressed = blank();
+            // Hold him still and open: this asks about geometry, not timing —
+            // the window is already tested above, for every boss in the game.
+            boss.jumpTimer = 999; boss.chargeTimer = 999; boss.charging = 0;
+            boss.spikePhase = 'open'; boss.spikeTimer = 999;
+            boss.vx = 0; boss.speed = 0;
+            i.held.down = true;
+            s.update(i);
+            if (p.dying) hurt = true;
+          }
+          if (boss.hp === hp0 || hurt) misses.push(`${scale}x`);
+        }
+        expect(`${id}: a power-0 stomp off the deck lands on the giant at every size`,
+          misses.length === 0, misses.length ? `ei osunut: ${misses.join(',')}` : 'kaikki koot');
+      }
+
+      /* The steps are at row 9 and not row 10 for one measured reason: his own
+       * jump reaches y≈161 and a plank at row 10 tops out at 160, so he would
+       * land on the player's staircase and stand there. Sixteen pixels is the
+       * whole margin, so it gets a check rather than a comment. */
+      for (const id of GIANT_LEVELS) {
+        reset();
+        const s = new LevelScene(game, id);
+        game.setScene(s);
+        const boss = s.entities.find((e) => e instanceof E.Boss);
+        const p = s.player;
+        boss.scale = 3; boss.targetScale = 3; boss.applyScale();
+        boss.y = FLOOR_Y - boss.h;
+        const i = mkInput();
+        let top = Infinity;
+        for (let f = 0; f < 900; f++) {
+          p.invuln = 999;
+          s.update(i);
+          top = Math.min(top, boss.y + boss.h);
+        }
+        // The lowest plank in the arena is the step, and it is the only one he
+        // could ever reach — so it is the only one worth measuring against.
+        const step = Math.max(...deckRows(s)) * 16;
+        expect(`${id}: the giant's own jump cannot put him on the player's steps`,
+          top > step, `jalat ylimmillään y=${Math.round(top)}, alin lava y=${step}`);
+      }
+
+      /* The signal. A growth that changed nothing on screen would be a sound in
+       * a noisy fight; this is the picture half (DESIGN.md §8), and it has to
+       * come off the decks rather than off him or it points at the wrong thing. */
+      {
+        reset();
+        const s = new LevelScene(game, '4-F');
+        game.setScene(s);
+        const boss = s.entities.find((e) => e instanceof E.Boss);
+        const p = s.player;
+        const deck = deckRows(s)[0];
+        s.entities = s.entities.filter((e) => e.kind !== 'effect');
+        boss.spikePhase = 'open'; boss.spikeTimer = 999; boss.invuln = 0;
+        // He stays where he spawns — between the two decks, which is the point.
+        const before = boss.targetScale;
+        boss.stomp();
+        const armed = boss.deckDust > 0;
+        const i = mkInput();
+        for (let f = 0; f < 12; f++) { p.invuln = 999; s.update(i); }
+        const dust = s.entities.filter((e) => e.constructor.name === 'Puff'
+          && e.y < (deck + 3) * 16);
+        expect('growing shakes dust off the decks, not off the giant',
+          boss.targetScale > before && armed && dust.length > 0,
+          `pöly ${dust.length} hiukkasta kansien tasolla, koko ${before}->${boss.targetScale}`);
+      }
+
+      /* `boss_arena_big` is defined twice — the live one here, and a dead copy
+       * left behind in `factory.js` where it used to live. `chunks.js` spreads
+       * the fortress last, so the fortress copy wins. Shadowing is a trap when
+       * it is silent, so this is the thing that stops being silent: edit the
+       * factory copy and nothing happens, but the gate says why. */
+      {
+        const { CHUNKS } = await import('/src/data/chunks.js');
+        const { FORTRESS_CHUNKS } = await import('/src/data/chunks/fortress.js');
+        expect("the giant's arena is the fortress copy, not the dead one in factory.js",
+          !!FORTRESS_CHUNKS.boss_arena_big
+          && CHUNKS.boss_arena_big === FORTRESS_CHUNKS.boss_arena_big);
+      }
+    }
   }
 
   /* ------------------- murtava tehostus ja papuparoonit ------------------ */

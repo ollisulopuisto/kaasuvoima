@@ -617,12 +617,36 @@ kenttiä joita luetaan joka framessa.
   tarkoitus eikä vika. Luku jää kirjatuksi mittaustulokseksi. Muistettavaa jos
   tähän palataan: mittari ei näe pomon liikesarjaa lainkaan (jokainen pomo on
   5,0), joten osa luvusta mittaa kaivantoja eikä taistelua.
-- ✔ **Jättiläispomo: päätetty 9.8.2026 että se on suunnittelua.** Areenan
-  yläkannet *ovat* vastaus, joten ongelma on opastus eikä ulottuvuus: pelaaja
-  joka ei huomaa kansia päättelee että taistelu on rikki. Työ on siis saada
-  kannet lukemaan vastauksena eikä lavasteena — ei pomon koon rajaaminen.
-  (Voimatason 0 hyppy kantaa ~71 px; kahden osuman jälkeen pää on lattiatasolta
-  saavuttamattomissa.)
+- ✔ **Jättiläispomo — korjattu 9.8.2026, ja päätöksen peruste oli väärä.**
+  Päätös oli "kannet ovat vastaus, ongelma on opastus". Mittaus kumosi sen:
+  **kansille ei päässyt voimatasolla 0 lainkaan.** Rivi 6 on 112 px lattiasta,
+  paras hyppy kantaa 85, eikä välissä ollut mitään. Kannet eivät siis olleet
+  vastaus jota ei huomata, ne olivat lavastetta — ja *siksi* ne luettiin
+  lavasteeksi.
+
+  **Ja taistelu oli oikeasti läpäisemätön.** Osumat 1–3 lähtevät lattialta
+  seisovalla hypyllä, mutta osuma 4 vaatii 80 px ja osuma 5 — se joka päättää
+  taistelun — 96 px. Roadmapin oma "kahden osuman jälkeen" oli siis yhden osuman
+  liian aikaisin, mutta johtopäätös oli liian lievä eikä liian ankara.
+
+  Korjaus pysyi omistajan rajauksen sisällä: kokoa ei rajattu eikä kansia
+  laskettu. Kansille tehtiin **portaat** (askellava rivillä 9, 64 px lattiasta
+  ja 48 px kannelle — kaksi tavallista seisovaa hyppyä), ja kolikkokaari
+  osoittaa reitin. Askel on rivillä 9 eikä 10 mitatusta syystä: pomon oma hyppy
+  nostaa jalat y=161:een, ja rivin 10 lava olisi y=160 — hän laskeutuisi
+  pelaajan portaille. Marginaali on 17 px ja sillä on oma testinsä.
+
+  Kasvu osoittaa kansia: se pudottaa **pölyä kansilavoista**, eri paikassa, eri
+  suuntaan ja eri värillä kuin iskuaalto tai auringon ennakkovaroitus.
+
+  Sivuvaikutus joka on tarkoitettu: skaalasta 2,5 ylöspäin pomon osumalaatikko
+  yltää askellavan yli, eli **turvallinen maa nousee sitä mukaa kun hän kasvaa.**
+  Se on koko opetus.
+
+  **`difficulty.mjs` sanoo että kentät vaikeutuivat** (4-F 192,6→202,1,
+  5-F 337,4→345,5). Se laskee uudet kolikot ja lavat eikä näe taistelusta
+  mitään — luku nousi samalla kun taistelu helpottui. Älä lue sitä tuomiona.
+
 - ✔ **Kävelijän osumalaatikko: päätetty 9.8.2026 kasvattaa piirros laatikkoon.**
   `Walker` on 16×16 mutta piirtyy `+1..+15` leveänä ja `+3..+16` korkeana, eli
   pään yllä on 3 px vyöhyke joka satuttaa näkymättä — vastoin DESIGN.md kohdan 7
