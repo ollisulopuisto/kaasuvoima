@@ -1069,21 +1069,28 @@ export class LevelScene {
       drawGoal(ctx, this.goal.x, this.goal.y, GOAL_HEIGHT, this.cardIndex, this.state !== 'play');
     }
 
-    for (const e of this.entities) {
-      if (!e.active) continue;
-      if (e.x + e.w < camX - 32 || e.x > camX + VIEW_W + 32) continue;
-      e.draw(ctx);
-    }
-    this.player.draw(ctx);
-
     /* The lamp follows the player, and this is the only place its screen
      * position is already known: the camera rounding, the shake jitter and the
      * letterbox offset have all been applied by now. Working it out anywhere
      * else would mean deriving the same three numbers a second time, and the
-     * light would sit a shake behind the thing it is lighting. */
-    if (this.def.spotlight) {
-      PostFX.setFocus(this.player.cx - camX, this.player.cy - camY + this.bar);
+     * light would sit a shake behind the thing it is lighting.
+     *
+     * Aiming it also clears last frame's world lights, so it has to come before
+     * the entities offer theirs. */
+    const lit = !!this.def.spotlight;
+    if (lit) PostFX.setFocus(this.player.cx - camX, this.player.cy - camY + this.bar);
+
+    for (const e of this.entities) {
+      if (!e.active) continue;
+      if (e.x + e.w < camX - 32 || e.x > camX + VIEW_W + 32) continue;
+      e.draw(ctx);
+      // Gathered in the draw loop rather than in a pass of its own: whatever is
+      // close enough to be worth lighting is exactly what is close enough to be
+      // worth drawing, and the cull is already written here.
+      const glow = lit ? e.light : null;
+      if (glow) PostFX.addLight(glow.x - camX, glow.y - camY + this.bar, glow.r, glow.i);
     }
+    this.player.draw(ctx);
 
     ctx.restore();
     if (this.bar) this.drawLetterbox(ctx);

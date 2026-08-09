@@ -95,6 +95,34 @@ const AMBIENCE_STRENGTH = { desert: 1, factory: 0.5, ice: 1 };
  */
 const SPOT_LIT = 120;
 const SPOT_EDGE = 48;
+/** Every other light falls off over the same fraction of its radius as the lamp. */
+const LIGHT_EDGE = SPOT_EDGE / SPOT_LIT;
+
+/**
+ * How many lights the picture can hold at once, the player's lamp included.
+ *
+ * Eight, because the shader loop is unrolled and every fragment pays for every
+ * slot whether it is filled or not — the cost is the budget, not the number of
+ * lamps actually burning. Eight measured at the same tenth of a millisecond as
+ * one; sixteen did not.
+ *
+ * The lamp is not one of the slots below, it is `uFocus` and it is separate on
+ * purpose: a player who fires seven shots must not put their own light out.
+ * So seven world lights, and the lamp on top of them.
+ */
+export const MAX_LIGHTS = 8;
+const MAX_WORLD_LIGHTS = MAX_LIGHTS - 1;
+/**
+ * Radius of the cached falloff sprite the Canvas 2D path stamps for each light.
+ * Larger than the lamp's own reach (120 * 1.4 = 168) so every light in the game
+ * is a *down*scale of it, which is the direction that cannot invent detail.
+ */
+const LIGHT_SPRITE_R = 192;
+
+/** All slots empty. Uploaded once at init so the array is never left at the
+ * GLSL default, where a radius of 0 would make the falloff undefined. */
+const EMPTY_LIGHTS = new Float32Array(MAX_WORLD_LIGHTS * 4);
+for (let i = 0; i < MAX_WORLD_LIGHTS; i++) EMPTY_LIGHTS[i * 4 + 2] = 1;
 /**
  * And the floor: outside the beam the picture drops to this and stops there,
  * so a spike bed is dim rather than absent. Measured rather than chosen — at
@@ -145,7 +173,8 @@ uniform float uAberration;
 uniform float uHeat;
 uniform float uFrost;
 uniform float uDark;       // spotlight strength
-uniform vec2 uFocus;       // where the lamp is, in texture coords
+uniform vec2 uFocus;       // where the player's lamp is, in texture coords
+uniform vec4 uLights[${MAX_WORLD_LIGHTS}];   // xy texture coords, z radius in source px, w strength
 uniform float uTime;
 uniform float uFloor;      // top edge of the HUD, in texture coords from below
 uniform float uMask;       // aperture grille strength
@@ -204,9 +233,22 @@ void main() {
    * because the fallback paints the same falloff as a black gradient, and a
    * gradient multiplies in exactly this space. */
   if (uDark > 0.0 && uv.y > uFloor) {
-    float lit = 1.0 - smoothstep(${SPOT_LIT.toFixed(1)}, ${(SPOT_LIT + SPOT_EDGE).toFixed(1)},
-                                 length((uv - uFocus) * uSource));
-    color *= mix(1.0, mix(${SPOT_DIM.toFixed(3)}, 1.0, lit), uDark);
+    /* Lights combine by *multiplying what each one leaves dark*, not by taking
+     * the brightest. Two overlapping pools then add up to something brighter
+     * than either, which is what light does — and it is the one combination the
+     * Canvas 2D fallback can reproduce exactly, because punching holes in a
+     * black layer with destination-out multiplies alpha in the same way. */
+    float dark = smoothstep(${SPOT_LIT.toFixed(1)}, ${(SPOT_LIT + SPOT_EDGE).toFixed(1)},
+                            length((uv - uFocus) * uSource));
+    for (int i = 0; i < ${MAX_WORLD_LIGHTS}; i++) {
+      vec4 lamp = uLights[i];
+      // An empty slot carries strength 0 and a radius of 1: zero would make the
+      // two smoothstep edges equal, which is undefined rather than merely dark.
+      float lit = lamp.w * (1.0 - smoothstep(lamp.z, lamp.z * ${(1 + LIGHT_EDGE).toFixed(3)},
+                                             length((uv - lamp.xy) * uSource)));
+      dark *= 1.0 - lit;
+    }
+    color *= mix(1.0, 1.0 - ${(1 - SPOT_DIM).toFixed(3)} * dark, uDark);
   }
 
   // One dark line per *source* row, not per screen pixel. Tying this to the
@@ -296,9 +338,17 @@ export const PostFX = {
   /** Set from the level's theme or its flags; see THEME_AMBIENCE. */
   ambience: null,
   ambienceAmount: 0,
-  /** Where the spotlight points, in source pixels. */
+  /** Where the player's lamp points, in source pixels. */
   focus: { x: 160, y: 120 },
+  /** How many of the world-light slots are filled this frame. */
+  lightCount: 0,
   tick: 0,
+  _lights: null,
+  _lightD2: null,
+  _lightUniform: null,
+  _mask: null,
+  _maskCtx: null,
+  _lightSprite: null,
   _gl: null,
   _copy: null,
   _copyCtx: null,
@@ -380,6 +430,73 @@ export const PostFX = {
     // make an instance, and mutating an inherited object would write through
     // to every one of them.
     this.focus = { x, y };
+    // Aiming the lamp starts the frame's light list. Anything the world is
+    // carrying is added after this, and nothing survives into the next frame —
+    // a light left behind by a dead fart ball would burn where nothing is.
+    this.lightCount = 0;
+    this._ensureLights();
+  },
+
+  /**
+   * The light buffers, as *own* properties. `Object.create(PostFX)` is how the
+   * tests make an instance, and a buffer inherited from the prototype would be
+   * one buffer shared by every instance — the same trap `setFocus` avoids by
+   * assigning rather than mutating.
+   */
+  _ensureLights() {
+    if (Object.prototype.hasOwnProperty.call(this, '_lights') && this._lights) return;
+    this._lights = new Float32Array(MAX_WORLD_LIGHTS * 4);
+    this._lightD2 = new Float32Array(MAX_WORLD_LIGHTS);
+    this._lightUniform = new Float32Array(MAX_WORLD_LIGHTS * 4);
+  },
+
+  /**
+   * Offers a light to the frame, in the same source pixels as `setFocus`.
+   *
+   * @param {number} radius the lit core, in source pixels; it fades out over a
+   *   further `LIGHT_EDGE` of that, exactly as the lamp does
+   * @param {number} intensity 1 lifts the picture all the way back to full
+   *   brightness, less than 1 leaves the ground it stands on still dim
+   *
+   * **Nearest to the player wins.** With more candidates than slots something
+   * has to go, and the useful rule is the selfish one: the lights that decide
+   * what you can see from where you are standing are the ones near you. A shot
+   * three screens away lighting a wall you cannot see costs a slot and buys
+   * nothing. The player's own lamp is never a candidate here — it is `focus`,
+   * and it cannot be voted out by their own gas.
+   *
+   * Writes into two preallocated arrays and never builds an object, because
+   * this is called once per lit entity per frame.
+   */
+  addLight(x, y, radius, intensity) {
+    if (!(intensity > 0) || !(radius > 0)) return;
+    // Off-screen lights would still occupy a slot. The reach is the outer edge
+    // of the falloff, so a light just past the border still spills into view.
+    const reach = radius * (1 + LIGHT_EDGE);
+    const w = this.source ? this.source.width : 320;
+    const h = this.source ? this.source.height : 240;
+    if (x + reach < 0 || x - reach > w || y + reach < 0 || y - reach > h - HUD_H) return;
+
+    const dx = x - this.focus.x;
+    const dy = y - this.focus.y;
+    const d2 = dx * dx + dy * dy;
+    let slot = this.lightCount;
+    if (slot >= MAX_WORLD_LIGHTS) {
+      let worst = 0;
+      for (let i = 1; i < MAX_WORLD_LIGHTS; i++) {
+        if (this._lightD2[i] > this._lightD2[worst]) worst = i;
+      }
+      if (this._lightD2[worst] <= d2) return;
+      slot = worst;
+    } else {
+      this.lightCount++;
+    }
+    this._lightD2[slot] = d2;
+    const i4 = slot * 4;
+    this._lights[i4] = x;
+    this._lights[i4 + 1] = y;
+    this._lights[i4 + 2] = radius;
+    this._lights[i4 + 3] = intensity;
   },
 
   cyclePreset() {
@@ -448,8 +565,12 @@ export const PostFX = {
         frost: gl.getUniformLocation(program, 'uFrost'),
         dark: gl.getUniformLocation(program, 'uDark'),
         focus: gl.getUniformLocation(program, 'uFocus'),
+        // The array's base element: uploading to it with uniform4fv fills the
+        // whole array, which is the only portable way to reach it on WebGL 1.
+        lights: gl.getUniformLocation(program, 'uLights[0]'),
         time: gl.getUniformLocation(program, 'uTime'),
       };
+      gl.uniform4fv(this._uniforms.lights, EMPTY_LIGHTS);
       this.displayCanvas = canvas;
       // The source canvas keeps drawing, it just stops being the thing on
       // screen. `drawImage` and `toDataURL` still work on a hidden canvas,
@@ -642,24 +763,70 @@ export const PostFX = {
   },
 
   /**
-   * The lamp without a shader: one radial gradient of black over the
-   * playfield. `rgba(0,0,0,a)` over the picture is a multiply by `1-a`, which
-   * is the same operation the shader does, so both paths dim by the same
-   * amount — and a canvas gradient carries its last stop out to infinity, so
-   * the corners are covered without a second fill.
+   * The lights without a shader: one black layer over the playfield with a hole
+   * punched in it per light. `rgba(0,0,0,a)` over the picture is a multiply by
+   * `1-a`, which is the same operation the shader does, so both paths dim by
+   * the same amount — and `destination-out` scales the layer's alpha by
+   * `1 - hole`, which is the same *combination* the shader does. A frame lit by
+   * one lamp comes out identical to the single-gradient version this replaced.
    *
-   * The HUD is left out, exactly as the heat and the frost leave it out.
+   * The layer is exactly the playfield, so the HUD is left out by construction,
+   * exactly as the heat and the frost leave it out.
    */
   _spotlightPass(ctx, source) {
-    const { x, y } = this.focus;
-    const grad = ctx.createRadialGradient(x, y, SPOT_LIT, x, y, SPOT_LIT + SPOT_EDGE);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${(1 - SPOT_DIM) * this.ambienceAmount})`);
+    const w = source.width;
+    const h = source.height - HUD_H;
+    if (!this._mask || this._mask.width !== w || this._mask.height !== h) {
+      this._mask = makeCanvas(w, h);
+      this._maskCtx = this._mask.getContext('2d');
+    }
+    const g = this._maskCtx;
+    // `copy` rather than clear-then-fill: one pass over the layer, and it
+    // cannot inherit last frame's holes.
+    g.globalCompositeOperation = 'copy';
+    g.globalAlpha = 1;
+    g.imageSmoothingEnabled = true;
+    g.fillStyle = `rgba(0,0,0,${(1 - SPOT_DIM) * this.ambienceAmount})`;
+    g.fillRect(0, 0, w, h);
+
+    g.globalCompositeOperation = 'destination-out';
+    this._punch(g, this.focus.x, this.focus.y, SPOT_LIT, 1);
+    for (let i = 0; i < this.lightCount; i++) {
+      const i4 = i * 4;
+      this._punch(g, this._lights[i4], this._lights[i4 + 1],
+        this._lights[i4 + 2], this._lights[i4 + 3]);
+    }
+    g.globalAlpha = 1;
+
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, source.width, source.height - HUD_H);
+    ctx.drawImage(this._mask, 0, 0);
+  },
+
+  /**
+   * One light's hole in the dark layer.
+   *
+   * The falloff is a cached sprite scaled to size rather than a gradient built
+   * on the spot: `createRadialGradient` allocates, and this runs up to eight
+   * times a frame. A radial ramp is the one shape a uniform scale reproduces
+   * exactly, so the cheap version is also the correct one.
+   */
+  _punch(g, x, y, radius, intensity) {
+    if (!this._lightSprite) {
+      const r = LIGHT_SPRITE_R;
+      const sprite = makeCanvas(r * 2, r * 2);
+      const s = sprite.getContext('2d');
+      const grad = s.createRadialGradient(r, r, r / (1 + LIGHT_EDGE), r, r, r);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      s.fillStyle = grad;
+      s.fillRect(0, 0, r * 2, r * 2);
+      this._lightSprite = sprite;
+    }
+    const reach = radius * (1 + LIGHT_EDGE);
+    g.globalAlpha = Math.min(1, intensity);
+    g.drawImage(this._lightSprite, x - reach, y - reach, reach * 2, reach * 2);
   },
 
   _scanlinePass(ctx, source) {
@@ -726,9 +893,24 @@ export const PostFX = {
     gl.uniform1f(this._uniforms.heat, this.ambience === 'heat' ? this.ambienceAmount : 0);
     gl.uniform1f(this._uniforms.frost, this.ambience === 'frost' ? this.ambienceAmount : 0);
     gl.uniform1f(this._uniforms.dark, this.ambience === 'spotlight' ? this.ambienceAmount : 0);
-    // The texture is uploaded flipped, so the lamp's y has to be flipped too.
+    // The texture is uploaded flipped, so every light's y has to be flipped too.
     gl.uniform2f(this._uniforms.focus, this.focus.x / this.source.width,
       1 - this.focus.y / this.source.height);
+    if (this.ambience === 'spotlight') {
+      this._ensureLights();
+      const u = this._lightUniform;
+      for (let i = 0; i < MAX_WORLD_LIGHTS; i++) {
+        const i4 = i * 4;
+        const on = i < this.lightCount;
+        u[i4] = on ? this._lights[i4] / this.source.width : 0;
+        u[i4 + 1] = on ? 1 - this._lights[i4 + 1] / this.source.height : 0;
+        // An empty slot: no strength, and a radius of 1 rather than 0 — see the
+        // shader, where two equal smoothstep edges are undefined, not dark.
+        u[i4 + 2] = on ? this._lights[i4 + 2] : 1;
+        u[i4 + 3] = on ? this._lights[i4 + 3] : 0;
+      }
+      gl.uniform4fv(this._uniforms.lights, u);
+    }
     gl.uniform1f(this._uniforms.time, this.tick / 60);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return true;

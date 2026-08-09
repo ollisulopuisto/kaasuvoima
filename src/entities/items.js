@@ -10,6 +10,25 @@ const EMERGE_FRAMES = 26;
 const FART_STYLE = { glow: GLOWS.fart };
 const FART_STYLE_SPENT = { glow: GLOWS.fart, tint: TINTS.spent };
 
+/**
+ * The light a shot carries, in the same shared-object idiom as the styles
+ * above: the scene reads it, copies four numbers out of it and forgets it, so
+ * one object serves every ball in flight.
+ */
+const FART_LIGHT = { x: 0, y: 0, r: 0, i: 0 };
+/**
+ * Small on purpose. The point of a burning shot is that you have to *follow* it
+ * to see by it — a shot that lit as much ground as the player's own lamp would
+ * just be a second lamp you can throw, and the dark level would stop being
+ * dark. 44 px lights the tile it is bouncing along and the two either side.
+ */
+const FART_LIGHT_R = 44;
+/**
+ * It never lifts the ground all the way back to daylight the way the lamp does.
+ * A shot shows you that there is a ledge there; it does not read the sign.
+ */
+const FART_LIGHT_I = 0.78;
+
 export class Item extends Entity {
   /** @param {'shroom'|'flower'|'leaf'|'soup'|'star'|'oneup'} itemKind */
   constructor(level, x, y, itemKind, { emerge = true } = {}) {
@@ -134,6 +153,22 @@ export class FartBall extends Entity {
     if (hit.ground) this.vy = -2.9;   // bounces along the floor
     if (hit.ceiling) this.vy = 1;
     if (this.y > this.level.heightPx + 16) this.remove = true;
+  }
+
+  /**
+   * Burning gas gives off light, and the shot is the only light in the level
+   * that goes where the player is not. Chasing your own shot into the dark to
+   * see what is ahead is the whole idea.
+   *
+   * It dims as it runs out of gas on the same 40-frame tail the sprite already
+   * fades on, so the light and the picture agree about when the shot is spent.
+   */
+  get light() {
+    FART_LIGHT.x = this.cx;
+    FART_LIGHT.y = this.cy;
+    FART_LIGHT.r = FART_LIGHT_R;
+    FART_LIGHT.i = FART_LIGHT_I * Math.min(1, this.life / 40);
+    return FART_LIGHT;
   }
 
   pop() {

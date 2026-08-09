@@ -1,6 +1,6 @@
 import { Entity } from './entity.js';
-import { drawGasPuff, drawBrickShard } from '../gfx/sprites.js';
-import { drawCoinSprite, THEMES } from '../gfx/tiles.js';
+import { drawGasPuff } from '../gfx/sprites.js';
+import { drawCoinSprite, drawSplinter, THEMES } from '../gfx/tiles.js';
 import { drawText } from '../gfx/font.js';
 
 export class Puff extends Entity {
@@ -93,27 +93,89 @@ export class ScorePop extends Entity {
   }
 }
 
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+
+/**
+ * A piece of a broken plank.
+ *
+ * The scene spawns four of these on a tidy symmetric cross and it will keep
+ * doing that, because the scene is not ours to change — so the variety has to
+ * live in the piece. Four identical squares leaving in matched pairs is a
+ * diagram of an explosion; wood comes apart in slivers of different lengths
+ * that tumble at different rates and fall at different speeds, and one piece in
+ * five is a nail, which is the detail that names the material.
+ *
+ * Each piece is a small cluster rather than a single shard, and that is a
+ * measurement rather than a flourish: single shards put 53 lit pixels a frame
+ * on screen against the old four squares' 144, and a smash you have to look
+ * for is not a smash. The cluster restores the mass and spends it on shapes.
+ */
 export class BrickPiece extends Entity {
   constructor(level, x, y, dx, dy, theme) {
-    super(level, x, y, 6, 6);
+    super(level, x, y, 8, 8);
     this.kind = 'effect';
     this.alwaysActive = true;
     this.active = true;
-    this.vx = dx;
-    this.vy = dy;
-    this.color = (THEMES[theme] || THEMES.grass).brick;
+
+    const nail = Math.random() < 0.2;
+    this.bits = nail
+      ? [
+        // A nail does not come out clean; it brings the board it was in.
+        { dx: 0, dy: 0, len: 5, thick: 1, phase: 0, nail: true },
+        { dx: rnd(2, 4), dy: rnd(1, 3), len: rnd(4, 6), thick: 3, phase: 2 },
+      ]
+      : [
+        { dx: 0, dy: 0, len: rnd(6, 8), thick: 3, phase: 0 },
+        { dx: rnd(-5, -2), dy: rnd(1, 3), len: rnd(4, 6), thick: 2, phase: 1 },
+        { dx: rnd(2, 4), dy: rnd(-4, -1), len: rnd(4, 6), thick: 2, phase: 3 },
+      ];
+
+    // Skew and jitter break the mirror: a splinter that came off cleanly keeps
+    // most of the launch it was given, one that tore off keeps rather less.
+    this.vx = dx * (0.55 + Math.random() * 1.1) + (Math.random() - 0.5) * 1.6;
+    this.vy = dy * (0.7 + Math.random() * 0.6) - Math.random() * 0.9;
+    // Slivers hang in the air, chunks and nails drop. Same launch, different arc.
+    this.gravity = nail ? 0.42 : 0.22 + Math.random() * 0.2;
+    this.spin = (Math.random() < 0.5 ? -1 : 1) * (0.06 + Math.random() * 0.26);
+    this.frame = Math.random() * 4;
+    this.theme = theme;
   }
 
   update() {
     this.tick++;
     this.x += this.vx;
     this.y += this.vy;
-    this.vy += 0.35;
+    this.vy += this.gravity;
+    this.vx *= 0.985;                 // drag, so the two halves drift apart
+    this.frame += this.spin;
     if (this.y > this.level.heightPx + 24) this.remove = true;
   }
 
   draw(ctx) {
-    drawBrickShard(ctx, this.x, this.y, this.color);
+    const th = THEMES[this.theme] || THEMES.grass;
+    const x = Math.round(this.x);
+    const y = Math.round(this.y);
+
+    // Sawdust, only for the first moments: the burst is what sells the smash,
+    // and a shard trailing dust for its whole flight would read as smoke.
+    if (this.tick < 9) {
+      ctx.fillStyle = th.brickLight;
+      ctx.fillRect(x - Math.round(this.vx * 2), y - Math.round(this.vy * 2), 1, 1);
+      ctx.fillStyle = th.brick;
+      ctx.fillRect(x - Math.round(this.vx * 3.5) + 1, y - Math.round(this.vy * 3), 1, 1);
+    }
+
+    // The cluster opens out as it flies, so a smash keeps growing for a moment
+    // instead of being one shape that merely travels.
+    const spread = 1 + Math.min(this.tick, 22) * 0.09;
+    const bits = this.bits || [{ dx: 0, dy: 0, len: 6, thick: 3, phase: 0 }];
+    for (const b of bits) {
+      const f = (((Math.floor(this.frame) + b.phase) % 4) + 4) % 4;
+      const bx = x + Math.round(b.dx * spread);
+      const by = y + Math.round(b.dy * spread);
+      if (b.nail) drawSplinter(ctx, bx, by, b.len, 1, f, th.hardDark, th.hardLight, th.hardDark);
+      else drawSplinter(ctx, bx, by, b.len, b.thick, f, th.brick, th.brickLight, th.brickDark);
+    }
   }
 }
 

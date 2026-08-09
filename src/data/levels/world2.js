@@ -38,13 +38,21 @@ export const WORLD2_LEVELS = {
    * player who does not get on with it can go round. It stays out of world 1
    * on principle — the first world is where the game teaches, and a lesson in
    * the dark is not a lesson.
+   *
+   * The `heartburn` before the spike bridge is there for its *light*: a flame
+   * is the brightest thing in the level and the only one that shows you ground
+   * you are not standing on, so waiting one out buys you a look at what comes
+   * next. It is the same chunk 2-1 and 2-2 already taught in daylight, and both
+   * of them come before this one on the map — the flame is a tool here, never
+   * the first lesson. Same sixteen columns and the same flat floor as the
+   * `dune_night` it replaced, so the route through the level is unchanged.
    */
   '2-N': {
     theme: 'night', bg: 'dunes', music: 'level', wind: true, spotlight: true,
     chunks: [
       'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
       'moon_night', 'coins', 'shell', 'plat_steps', 'pit_l', 'corks',
-      'dune_night', 'spike_bridge', 'flyer', 'pit_plat', 'shell', 'steps_up',
+      'heartburn', 'spike_bridge', 'flyer', 'pit_plat', 'shell', 'steps_up',
       'run_up', 'goal', 'goal_end',
     ],
   },

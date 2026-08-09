@@ -308,13 +308,18 @@ function drawBrick(ctx, x, y, th, tx, ty) {
   ctx.fillStyle = th.brick;
   ctx.fillRect(x, y, TILE, TILE);
 
-  // plank seams, with the lit edge of the next board beside each one
-  ctx.fillStyle = th.brickDark;
-  ctx.fillRect(x + 5, y, 1, TILE);
-  ctx.fillRect(x + 10, y, 1, TILE);
-  ctx.fillStyle = th.brickLight;
-  ctx.fillRect(x + 6, y, 1, TILE);
-  ctx.fillRect(x + 11, y, 1, TILE);
+  // Plank seams, with the lit edge of the next board beside each one. The seam
+  // takes a shadow on top of the palette colour: in the night set `brickDark`
+  // and the ground brown are nearly the same, and a breakable tile that differs
+  // only in silhouette is one you find out about by not finding out about it.
+  for (const sx of [5, 10]) {
+    ctx.fillStyle = th.brickDark;
+    ctx.fillRect(x + sx, y, 1, TILE);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x + sx, y, 1, TILE);
+    ctx.fillStyle = th.brickLight;
+    ctx.fillRect(x + sx + 1, y, 1, TILE);
+  }
 
   // grain: a couple of ticks per tile so a wall is not one stamp repeated
   const n = hashNoise(tx * 3, ty * 5);
@@ -332,6 +337,8 @@ function drawBrick(ctx, x, y, th, tx, ty) {
   // the batten: a strap laid across the boards, which is what holds them up
   ctx.fillStyle = th.brick;
   ctx.fillRect(x, y + 6, TILE, 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(x, y + 7, TILE, 2);
   ctx.fillStyle = th.brickLight;
   ctx.fillRect(x, y + 6, TILE, 1);
   ctx.fillStyle = th.brickDark;
@@ -368,12 +375,12 @@ function drawBrick(ctx, x, y, th, tx, ty) {
  */
 function drawQuestion(ctx, x, y, tick) {
   const phase = Math.floor(tick / 8) % 4;
-  const plate = phase === 0 ? '#d89020' : phase === 2 ? '#b06c10' : '#c88018';
+  const plate = phase === 0 ? '#f0a828' : phase === 2 ? '#c88014' : '#dc941c';
   ctx.fillStyle = '#2a1a06';
   ctx.fillRect(x, y, TILE, TILE);
   ctx.fillStyle = plate;
   ctx.fillRect(x + 1, y + 1, 14, 14);
-  ctx.fillStyle = '#f0b848';
+  ctx.fillStyle = '#ffd478';
   ctx.fillRect(x + 1, y + 1, 14, 1);
   ctx.fillRect(x + 1, y + 1, 1, 14);
   ctx.fillStyle = '#8a5008';
@@ -382,19 +389,23 @@ function drawQuestion(ctx, x, y, tick) {
 
   // corner bolts: the plate is fastened on, so it can be blown off
   for (const [bx, by] of [[2, 2], [12, 2], [2, 12], [12, 12]]) {
-    ctx.fillStyle = '#8a5008';
+    ctx.fillStyle = '#6a3c04';
     ctx.fillRect(x + bx, y + by, 2, 2);
-    ctx.fillStyle = '#ffe0a0';
+    ctx.fillStyle = '#ffe8b0';
     ctx.fillRect(x + bx, y + by, 1, 1);
   }
 
   // the drum, straining outwards
-  ctx.fillStyle = '#e09828';
+  ctx.fillStyle = '#6a3c04';                      // the shadow it casts on the plate
+  ctx.fillRect(x + 3, y + 3, 11, 1);
+  ctx.fillRect(x + 13, y + 4, 1, 9);
+  ctx.fillRect(x + 3, y + 12, 11, 1);
+  ctx.fillStyle = '#ffb838';
   ctx.fillRect(x + 3, y + 4, 10, 8);
-  ctx.fillStyle = '#ffd070';
+  ctx.fillStyle = '#ffe8a8';
   ctx.fillRect(x + 3, y + 4, 10, 1);
   ctx.fillRect(x + 3, y + 4, 1, 8);
-  ctx.fillStyle = '#7a4408';
+  ctx.fillStyle = '#9a5c0c';
   ctx.fillRect(x + 3, y + 11, 10, 1);
   ctx.fillRect(x + 12, y + 4, 1, 8);
 
@@ -411,13 +422,13 @@ function drawQuestion(ctx, x, y, tick) {
 
   // the gauge: the only blinking thing on screen
   ctx.fillStyle = '#241c08';
-  ctx.fillRect(x + 5, y + 6, 6, 4);
+  ctx.fillRect(x + 5, y + 6, 6, 5);
   const lit = phase === 0 || phase === 1;
   ctx.fillStyle = lit ? '#a8f04a' : '#4c8c1c';
-  ctx.fillRect(x + 6, y + 7, 4, 2);
+  ctx.fillRect(x + 6, y + 7, 4, 3);
   if (lit) {
     ctx.fillStyle = '#e8ffc0';
-    ctx.fillRect(x + 6, y + 7, 1, 1);
+    ctx.fillRect(x + 6, y + 7, 2, 1);
   }
 }
 
@@ -494,38 +505,110 @@ function drawNote(ctx, x, y, tick, bumped) {
   ctx.fillRect(x + 9, y + 4 + off + bob, 4, 2);
 }
 
+/** Where the throat of a pipe starts inside the mouth tile. */
+const PIPE_THROAT = 6;
+
+/**
+ * The shaft of a pipe: sheet-metal stovepipe, built out of sections.
+ *
+ * Two attempts got thrown away here and both are worth recording. A smooth
+ * light-to-dark tube is the thing we are trying not to be. Fine corrugation all
+ * the way down is not that, but at 16 px it reads as a window shutter, and a
+ * shutter is not something you would ever try to climb into. What works is
+ * segments: a flat sheet with a riveted lap seam down the front and a joint
+ * band where each section meets the next. `bandAt` is the row inside the tile
+ * where a joint belongs, so the rhythm is one per tile and cannot drift when
+ * the camera scrolls by an odd pixel.
+ */
+function ductShaft(ctx, x, y, off, h, th, left, bandAt) {
+  ctx.fillStyle = th.pipe;
+  ctx.fillRect(x, y + off, TILE, h);
+
+  // The folded edge of the sheet: hard steps, no gradient. A square duct, not
+  // a cylinder — the tube shading is the most familiar single thing about the
+  // pipe this replaces, so it is the first thing to go.
+  ctx.fillStyle = th.pipeDark;
+  if (left) ctx.fillRect(x, y + off, 2, h);
+  else ctx.fillRect(x + TILE - 3, y + off, 3, h);
+  if (left) {
+    ctx.fillStyle = th.pipeLight;
+    ctx.fillRect(x + 2, y + off, 1, h);
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(x + TILE - 1, y + off, 1, h);
+  }
+
+  // the riveted lap seam, on the left half only, so a pipe has a front
+  if (left) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(x + 6, y + off, 1, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(x + 7, y + off, 1, h);
+    for (let i = 2; i < h; i += 5) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x + 6, y + off + i, 2, 1);
+    }
+  }
+
+  if (bandAt === null || bandAt < off || bandAt + 3 > off + h) return;
+  const bx = x + (left ? 2 : 0);
+  const bw = TILE - (left ? 2 : 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(bx, y + bandAt, bw, 1);
+  ctx.fillStyle = th.pipeLight;
+  ctx.fillRect(bx, y + bandAt + 1, bw, 1);
+  ctx.fillStyle = th.pipeDark;
+  ctx.fillRect(bx, y + bandAt + 2, bw, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';           // rivets holding the joint
+  for (const rx of left ? [4, 11] : [4, 12]) ctx.fillRect(x + rx, y + bandAt + 1, 1, 1);
+}
+
 function drawPipe(ctx, x, y, ch, th) {
   const top = ch === T.PIPE_TL || ch === T.PIPE_TR;
   const left = ch === T.PIPE_TL || ch === T.PIPE_BL;
   ctx.fillStyle = th.pipe;
   ctx.fillRect(x, y, TILE, TILE);
-  if (left) {
-    ctx.fillStyle = th.pipeLight;
-    ctx.fillRect(x + (top ? 2 : 3), y, 3, TILE);
-    ctx.fillStyle = th.pipeDark;
-    ctx.fillRect(x, y, 2, TILE);
-  } else {
-    ctx.fillStyle = th.pipeDark;
-    ctx.fillRect(x + TILE - 4, y, 4, TILE);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.fillRect(x + TILE - 1, y, 1, TILE);
+
+  if (!top) {
+    ductShaft(ctx, x, y, 0, TILE, th, left, 1);
+    return;
   }
-  if (top) {
-    ctx.fillStyle = th.pipe;
-    ctx.fillRect(x, y, TILE, 6);
-    ctx.fillStyle = left ? th.pipeLight : th.pipeDark;
-    ctx.fillRect(left ? x + 2 : x + TILE - 5, y, 4, 6);
+
+  // The mouth: a bolted vent collar sitting flush on the duct. Flush matters —
+  // a rim that overhangs the shaft is the other game's pipe in one stroke, and
+  // this one has to be enterable without borrowing that silhouette.
+  ctx.fillStyle = th.pipe;
+  ctx.fillRect(x, y, TILE, PIPE_THROAT);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillStyle = th.pipeLight;
+  ctx.fillRect(x, y + 1, TILE, 1);
+  ctx.fillStyle = th.pipeDark;
+  ctx.fillRect(x, y + 5, TILE, 1);
+  // Bolts sit symmetrically about the two-tile mouth: 2 and 11 on the left
+  // tile, 4 and 13 on the right.
+  for (const bx of left ? [2, 11] : [4, 13]) {
     ctx.fillStyle = th.pipeDark;
-    ctx.fillRect(x, y, TILE, 1);
-    ctx.fillRect(x, y + 5, TILE, 1);
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(x, y + 1, TILE, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';           // the dark throat of the pipe
-    ctx.fillRect(x, y + 6, TILE, 2);
-  } else {
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fillRect(x, y + 7, TILE, 1);
+    ctx.fillRect(x + bx, y + 2, 2, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x + bx, y + 2, 1, 1);
   }
+
+  // The throat: a hole with walls beside it, not a dark stripe across the tile.
+  // Inset from the outer edge is what does the work — you can see the thickness
+  // of the sheet the opening is cut in, and thickness is what makes it a hole.
+  const tx0 = left ? x + 2 : x;
+  const tw = TILE - 2;
+  ctx.fillStyle = th.pipeDark;
+  ctx.fillRect(x, y + PIPE_THROAT, TILE, 5);
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(tx0, y + PIPE_THROAT, tw, 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(tx0, y + PIPE_THROAT + 3, tw, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';       // far wall catching the light
+  ctx.fillRect(tx0, y + PIPE_THROAT + 4, tw, 1);
+
+  ductShaft(ctx, x, y, PIPE_THROAT + 5, TILE - PIPE_THROAT - 5, th, left, null);
 }
 
 /**
@@ -570,7 +653,7 @@ function drawWarpPipe(ctx, x, y, ch, th, tick) {
   drawPipe(ctx, x, y, ch === T.WARP_L ? T.PIPE_TL : T.PIPE_TR, th);
   const pulse = 0.1 + 0.12 * Math.sin(tick / 20);
   ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-  ctx.fillRect(x, y + 6, TILE, 2);
+  ctx.fillRect(x, y + PIPE_THROAT, TILE, 3);
 }
 
 function drawPlatform(ctx, x, y, th) {
@@ -749,6 +832,41 @@ function drawDoor(ctx, x, y, th, tick, open, edges) {
   }
 }
 
+
+/**
+ * One splinter off a broken plank, in whichever of four orientations it is
+ * currently tumbling through.
+ *
+ * The tumble is four stamped shapes rather than a real rotation because
+ * `ctx.rotate` would hand us anti-aliased mush at this size, and everything
+ * else in the game is whole pixels. `len` and `thick` are the caller's, so no
+ * two shards off the same plank are the same piece of wood.
+ */
+export function drawSplinter(ctx, x, y, len, thick, frame, body, light, dark) {
+  if (frame === 0 || frame === 2) {
+    const w = frame === 0 ? len : thick;
+    const h = frame === 0 ? thick : len;
+    ctx.fillStyle = body;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = light;
+    ctx.fillRect(x, y, frame === 0 ? w : 1, frame === 0 ? 1 : h);
+    ctx.fillStyle = dark;
+    ctx.fillRect(frame === 0 ? x : x + w - 1, frame === 0 ? y + h - 1 : y,
+      frame === 0 ? w : 1, frame === 0 ? 1 : h);
+    return;
+  }
+  // Edge-on: a staircase, shortened so a diagonal shard is not visibly bigger
+  // than the same shard lying flat.
+  const d = Math.max(2, Math.round(len * 0.7));
+  ctx.fillStyle = body;
+  for (let i = 0; i < d; i++) {
+    ctx.fillRect(x + i, y + (frame === 1 ? i : d - 1 - i), 2, 2);
+  }
+  ctx.fillStyle = light;
+  ctx.fillRect(x, y + (frame === 1 ? 0 : d - 1), 1, 1);
+  ctx.fillStyle = dark;
+  ctx.fillRect(x + d, y + (frame === 1 ? d - 1 : 0) + 1, 1, 1);
+}
 
 export function drawCoinSprite(ctx, x, y, tick) {
   const frames = [10, 6, 2, 6];

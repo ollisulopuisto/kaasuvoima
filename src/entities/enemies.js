@@ -28,6 +28,21 @@ export const ANGRY_SPEED = 1.6;
 /** And what popping one is worth to the player, or the trap is a nerf. */
 const POP_BONUS = 2;
 
+/**
+ * The light an enemy is giving off this frame, in the shared-object idiom the
+ * sprite styles already use: the draw loop copies the four numbers out of it
+ * and forgets it, so one object serves every lit enemy in the level and no
+ * light costs an allocation. Nothing may hold on to what `light()` returns.
+ */
+const LIGHT = { x: 0, y: 0, r: 0, i: 0 };
+function light(x, y, r, i) {
+  LIGHT.x = x;
+  LIGHT.y = y;
+  LIGHT.r = r;
+  LIGHT.i = i;
+  return LIGHT;
+}
+
 export class Enemy extends Entity {
   constructor(level, x, y, w, h) {
     super(level, x, y, w, h);
@@ -724,6 +739,11 @@ export class AngrySun extends Enemy {
   hitByTail(dir) { this.takeHit(dir); }
   hitByShell(dir) { this.takeHit(dir); }
 
+  /** It is a burning sun. Put it out and the light goes with it. */
+  get light() {
+    return this.dying ? null : light(this.cx, this.cy, 72, 0.85);
+  }
+
   draw(ctx) {
     if (this.dying) {
       this.drawFlipped(ctx, () => drawAngrySun(ctx, this.x, this.y, this.tick, false, false));
@@ -783,6 +803,27 @@ export class Heartburn extends Entity {
 
   get box() {
     return { x: this.x + 3, y: this.floorY - this.height, w: 10, h: this.height };
+  }
+
+  /**
+   * A column of burning gas is a light, and in the dark level it is *the*
+   * light: the brightest thing there, visible from further away than anything
+   * else, and the only one that tells you what the floor looks like somewhere
+   * you are not standing. It is also the thing that kills you if you are
+   * standing in it when it goes off. That trade is the point — you wait out a
+   * hazard to be shown the route, and the waiting is what costs you the clock.
+   *
+   * The light follows the flame's own timing, so it is not a second signal to
+   * learn: the warning ember is a dim glow, the flare is the flare. It reaches
+   * half again as far as the flame is tall, which keeps the *bright* part well
+   * inside the killing column — a hazard whose light is wider than the hazard
+   * would be teaching the wrong edge.
+   */
+  get light() {
+    if (this.height <= 0) return null;
+    const warn = this.phase === 'warn';
+    return light(this.x + 8, this.floorY - this.height / 2,
+      20 + this.height * 0.85, warn ? 0.3 : 0.95);
   }
 
   update() {
@@ -1150,6 +1191,20 @@ export class Moon extends Enemy {
   hitByProjectile() { /* it is the moon */ }
   hitByShell() { }
   hitByTail() { }
+
+  /**
+   * It already draws a halo; a moon that hung in a dark sky without lighting
+   * anything would be a picture of a moon. Weak and wide: it is a landmark you
+   * steer by from across the level, not a lamp — the ground under it stays dim
+   * enough that you still want to be standing in your own light.
+   *
+   * It breathes on the same beat as the halo, and goes down to almost nothing
+   * once it has paid out, so a spent moon stops being a place worth going.
+   */
+  get light() {
+    return light(this.cx, this.cy, 64,
+      this.used ? 0.16 : 0.42 + 0.04 * Math.sin(this.tick / 14));
+  }
 
   draw(ctx) {
     const cx = Math.round(this.x) + 10;
