@@ -43,7 +43,7 @@ osumasta. Maailman kaksi sääntöä ovat portissa eivätkä kommentissa: **mik�
 seiso maassa** (0 ruutua vastaan luun 44) ja **ohut pilvi ei ole koskaan tyhjän
 päällä** (0 vastaan muun pelin 73), ja lattia on mitattu bonushuonetta vasten
 (maata 89–97 % vastaan `sky_garden`in 0 %) · **maailma 8 VIIMEINEN LINNAKE**
-(v26.08.09.38): ei uutta teemaa vaan uusi *muoto* — kuusi kenttää, kuusi
+(v26.08.09.42): ei uutta teemaa vaan uusi *muoto* — kuusi kenttää, kuusi
 tappelua, ei yhtään lippua, `chunks/keep.js`, kentät 8-1…8-F ja kartta jolla on
 kuusi solmua. Neljä väitettä portissa: **kuusi askelta** (`tiersOf`, muut
 neljä), **kattoa 100 %** sarakkeista (lähin kilpailija tehdas 57 %), **0
@@ -147,7 +147,7 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    **Vaikeus on ostettava kahdesti.** Ensimmäinen mitoitus antoi w7 261,5 eli
    maailmaa 6 helpomman, ja korjaus oli vihollistiheys ja reikien määrä — ei
    leveämmät kuopat, koska ne rikkoisivat läpäisylupauksen.
-8. ✔ **Viimeinen linnake** — tehty (v26.08.09.38). Maailma 8: `THEMES.fortress`
+8. ✔ **Viimeinen linnake** — tehty (v26.08.09.42). Maailma 8: `THEMES.fortress`
    (ei uutta teemaa, koska lista on täysi), `bg: 'none'`, `chunks/keep.js`,
    kentät 8-1…8-F ja kuuden solmun kartta. Musiikki on Mussorgskin *Yö
    Autiovuorella* Rimski-Korsakovin sovituksena, eli DESIGN.md kohdan 1 b
@@ -370,7 +370,7 @@ vaikeuskäyrää +8,0 ja +14,9**, eli käsityö ei automaattisesti tuota isoa
 askelta. Kolme jäljellä olevaa maailmaa samalla tavalla on siis noin kolme
 kertaa tämä työ, ja kohdan 1 suositus on yhä lukematta ratkaisematta.
 
-**Viimeinen linnake (v26.08.09.38) on kolmas mittapiste, ja se maksoi
+**Viimeinen linnake (v26.08.09.42) on kolmas mittapiste, ja se maksoi
 vähemmän — koska se ei ostanut teemaa.** Yhdeksän palikkaa, kuusi kenttää,
 kartta, ei uutta pomoa ja lainattu sävelmä. Kaksi mittausta säilytettäväksi:
 **teema on se kallis puoli**, ei kenttien määrä — kuusi kenttää valmiilla
@@ -390,7 +390,7 @@ generaattori osaa nyt koko ruutusanaston (`%`, `S`, `*`, salaisuudet) eikä enä
 tuota mekaniikattomia kenttiä.
 
 **Jäljellä on siis yksi:** paljonko tehdään käsin. Teemat ovat kasassa
-(v26.08.09.36) ja kahdeksas maailma on tehty (v26.08.09.38), joten tämä kohta
+(v26.08.09.36) ja kahdeksas maailma on tehty (v26.08.09.42), joten tämä kohta
 ei enää koske maailmoja lainkaan — se koskee sitä, miten kahdeksasta neljän
 kentän maailmasta tulee kahdeksan kahdeksan kentän maailmaa. Maailma 8 on
 samalla ensimmäinen todiste siitä että maailman ei tarvitse olla neljä kenttää:
@@ -414,7 +414,7 @@ Alkuperäiset neljä, tila merkittynä:
    — eli `THEMES.cloud`, `bg: 'clouds'`, `chunks/cloud.js` ja `TRACKS.cloud`.
 
    ✔ **Maailma 8 on viimeinen linnake, eikä se tarvinnut uutta teemaa** — tehty
-   (v26.08.09.38). Linnake on ollut teemana `THEMES.fortress` alusta asti, ja
+   (v26.08.09.42). Linnake on ollut teemana `THEMES.fortress` alusta asti, ja
    viimeinen maailma on se paikka jossa siitä tuli koko maailma eikä yhden
    kentän huone. Musiikki on *Yö Autiovuorella* (Mussorgski 1867,
    Rimski-Korsakovin sovitus 1886), eli [DESIGN.md](DESIGN.md):n kohdan 1 b
@@ -435,7 +435,7 @@ Alkuperäiset neljä, tila merkittynä:
    kartta vaati saman uudelleenkirjoituksen. Ennuste piti paikkansa — kaksi
    kohtaa, yksi työ.
 4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä**, ja muoto on nyt
-   kerran murrettu: maailma 8 on **kuusi** kenttää (v26.08.09.38), ja
+   kerran murrettu: maailma 8 on **kuusi** kenttää (v26.08.09.42), ja
    `tiersOf`, kartta, vaikeusmittari ja tallennus veivät sen ilman yhtä riviä
    muutosta. Se poistaa tästä kohdasta epävarmimman osan — kysymys ei ole enää
    "kestääkö moottori", vaan mitä niihin kenttiin laitetaan.
