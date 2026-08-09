@@ -525,11 +525,22 @@ const HALL_PREDELAY = 0.022;
  * an effect on the soundtrack rather than a place. But the sound effects are the
  * game telling you what just happened, and a stomp still ringing a second and a
  * half later is telling you about a stomp you have already stopped caring about.
- * So the effects get half the music's send, through the same filters — enough to
- * put them in the room, not enough to leave a trail behind every jump.
+ * So the effects get under half the music's send, through the same filters —
+ * enough to put them in the room, not enough to leave a trail behind every jump.
  */
-const HALL_MUSIC_SEND = 0.34;
-const HALL_SFX_SEND = 0.16;
+const HALL_MUSIC_SEND = 1;
+const HALL_SFX_SEND = 0.42;
+/**
+ * How much room there is, and the only number here that is taste rather than
+ * physics — the convolver normalises the impulse response, which is what makes
+ * this a single knob instead of a level that moves when the decay time does.
+ *
+ * Measured on the master sum: a stomp peaks at 0.19 and its tail through the
+ * hall starts at 0.024 and is under the noise floor by 1.5 s. That is about
+ * 18 dB down, which is a room you are standing in rather than a room somebody
+ * has put over the top of the game.
+ */
+const HALL_WET = 2.4;
 const HALL_FADE = 0.5;
 
 let hall = null;
@@ -755,7 +766,7 @@ export const Ambience = {
       const t = ctx.currentTime;
       hall.wet.gain.cancelScheduledValues(t);
       hall.wet.gain.setValueAtTime(Math.max(0.0001, hall.wet.gain.value), t);
-      hall.wet.gain.exponentialRampToValueAtTime(1, t + HALL_FADE);
+      hall.wet.gain.exponentialRampToValueAtTime(HALL_WET, t + HALL_FADE);
     } else if (this.current === 'wind') {
       this._wind = buildWind();
     } else if (this.current === 'crackle') {

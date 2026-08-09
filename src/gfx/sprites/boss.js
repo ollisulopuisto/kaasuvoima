@@ -183,11 +183,18 @@ function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose) {
   r(bx + (swap ? 21 : 19), py + 28, 10, 4, dark);
   bossRank(r, bx, py, variant);
 
-  // Hands last, so they close over the sceptre they are supposed to be holding.
+  /*
+   * Hands last, so they close over the sceptre they are supposed to be holding.
+   *
+   * White, not body-coloured. Their whole job is to be seen carrying the crown
+   * on the frames before it can hurt anybody, and a hand the same colour as the
+   * arm it is on disappears at exactly the distance this is read from.
+   */
   const hy = handY(py, pose);
   for (const hx of [bx + 2, bx + 24]) {
-    r(hx, hy, 6, 6, dark);
-    r(hx + 1, hy + 1, 4, 2, body);
+    r(hx, hy, 6, 6, '#e8e0c0');
+    r(hx, hy + 4, 6, 2, '#a89878');
+    r(hx + 1, hy + 1, 4, 2, C.white);
   }
 }
 

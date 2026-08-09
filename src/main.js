@@ -11,7 +11,7 @@ import { InterludeScene, GameOverScene, EndingScene, VictoryScene } from './scen
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
-import { qualifies } from './core/scores.js';
+import { qualifies, GAME_VERSION } from './core/scores.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
 import { Touch, LAYOUT_NAMES } from './core/touch.js';
@@ -427,6 +427,9 @@ class Game {
     const n = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d);
 
     const lines = [
+      // Which build is on screen. Asked more than once, and guessing from
+      // which features are visible is a poor way to answer it.
+      `SFB v${GAME_VERSION}`,
       `FPS ${this.fps}  FRAME ${n(this.frameMs)}MS  WORK ${n(this.workMs)}MS  STEPS ${this.stepsThisFrame}`,
       `SCENE ${(scene ? scene.constructor.name : 'NONE').replace('SCENE', '')}`
         + `${scene && scene.id ? ` ${scene.id}` : ''}  TICK ${scene ? scene.tick || 0 : 0}`,
