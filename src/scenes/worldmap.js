@@ -498,15 +498,34 @@ export class WorldMapScene {
     const bob = this.mode === 'idle' ? Math.round(Math.sin(this.tick / 12) * 1) : 0;
     const power = normalizePower(this.game.state.power);
     const lift = power.level === 0 ? 12 : 16 + power.level * 4;
+
+    /*
+     * The map used to pass no `idle` count at all, so `idlePose` never got past
+     * its "standing about for a few seconds" gate and the token did the same two
+     * frames forever. Feeding it the counter reuses every idle beat the levels
+     * already have — looking around, scratching, tapping a foot — for free, and
+     * passing the theme brings the weather with it: he shivers on the ice map.
+     */
+    if (this.mode === 'walk') this.standing = 0;
+    else this.standing = (this.standing || 0) + 1;
+
+    /* Turning to look behind him. The sprite has no back view, so the turn is
+     * the flip itself — brief, and only while standing, which is exactly how it
+     * reads: a glance over the shoulder rather than a change of mind. */
+    const glance = this.standing > 260 && (this.standing % 420) > 300
+      && (this.standing % 420) < 360;
+
     drawPlayer(ctx, this.pos.x - 6, MAP_Y + this.pos.y - lift + bob, {
       type: power.type,
       level: power.level,
-      facing: 1,
+      facing: glance ? -1 : 1,
       frame: Math.floor(this.tick / 8) % 3,
       state: this.mode === 'walk' ? 'walk' : 'idle',
       ducking: false,
       running: false,
       tick: this.tick,
+      idle: this.mode === 'walk' ? 0 : this.standing,
+      theme: this.world.theme,
       wag: this.tick / 20,
     });
   }
