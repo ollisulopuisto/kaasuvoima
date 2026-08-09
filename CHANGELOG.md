@@ -7,6 +7,70 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.29 — kolikkojono vie putken päälle
+
+Salaisuuksien löydettävyys, kolmesta osasta toinen. Kartta kertoi jo *että*
+kentässä on salaisuuksia ja montako on löytynyt; nyt kentässä itsessään on
+vihje siitä mistä yksi niistä aukeaa. Demo-osuus on erikseen ja tekemättä.
+
+### Mihin vihje kuuluu, ja mihin se ei kuulu
+
+Pelissä on 59 salaisuutta (`secretKeys`, mitattu). Vihjeen sai kolme niistä, ja
+loput 56 jätettiin tahallaan rauhaan. Rajan veti yksi kysymys: **onko
+salaisuuden avaaminen tavallista pelaamista vai ei.**
+
+- **Lastattu tiili, tähtilohko, pavunvarren `?`-lohko.** Kaikki avautuvat
+  lyömällä lohkoa alhaalta, mikä on se mitä pelaaja tekee muutenkin joka
+  ruudussa. `star_block`in oma perustelu sanoo sen suoraan: palkinto on siitä
+  että löi lohkoa joka näyttää ihan tavalliselta lohkolta. Kolikkojono niiden
+  päällä sanoisi "tämä lohko on eri" ja tappaisi koko mekaniikan.
+- **Kytkin.** Oma ruutunsa, oma piirroksensa, ja tiililaatta näkyvissä pään
+  päällä. Se lukee jo.
+- **Warp-putki.** Vaatii että seisot sen päällä ja painat **alas**. Mikään muu
+  pelissä ei tee sitä. Tämä on pelin ainoa salaisuus johon ei voi kompastua.
+
+Ja juuri se oli ilman vihjettä: `fac_duct_down` sai kolme kolikkoa jo
+kirjoitushetkellä, mutta `warp_pipe` — 1-2, 2-2 ja 3-2 — ei ollut saanut
+mitään. Mitattuna ennen: kahdeksasta tiestä salaiselle kaistalle **viidellä oli
+kolme kolikkoa ja kolmella nolla.**
+
+### Miksi juuri nämä kolikot
+
+Kolme kolikkoa kuoppariville, sarakkeisiin −3, −1 ja +1 putken vasemmasta
+reunasta. Jokainen luku on perusteltu, eikä yksikään ole makuasia:
+
+- **Ne maksavat itsestään.** Rivi 9 on neljä ruutua lattian yllä ja paikaltaan
+  hyppy nostaa mitattuna 71 px eli 4,4 ruutua jo voimatasolla 0. Ohikulkija saa
+  ne ilmaiseksi. Tämä on ero vihjeen ja kyltin välillä: vihjeen seuraaminen ei
+  maksa mitään silloinkaan kun se ei vie mihinkään.
+- **Ne vievät jalat, eivät katsetta, ja vievät ne paikkaan eivätkä esineeseen.**
+  Jono tulee vasemmalta ja sen viimeinen kolikko on putken oman vasemman
+  sarakkeen yllä, joten se hyppy joka poimii sen laskee putken kannelle — sinne
+  missä pitää seistä. Mikään ei osoita suuaukkoa eikä mikään ole keskitetty sen
+  päälle (poikkeama keskeltä 1,5 ruutua).
+- **Sama rivi on tavallisen putken päällä.** `pipe_short` sai täsmälleen samat
+  kolme kolikkoa. 2-2 asetti tavallisen putken warp-putken eteen nimenomaan
+  siksi ettei warp olisi kyltti; vihje pelkälle warpille olisi purkanut sen.
+  1-1 on se kenttä jossa tapa opetetaan, eikä 1-1 kätke yhtään mitään — eli
+  ensimmäinen putki josta pelaajalle maksetaan ei vie minnekään.
+
+Mitattuna koko pelin yli: **kuoppakaistalla on 219 kolikkoriviä ja niistä 14
+(6,4 %) on salaisuuden kohdalla.** Kolikkorivi on siis tavallinen näky ja huono
+ennustaja, mikä on juuri se mitä vihjeeltä vaaditaan.
+
+### Portti
+
+Kuusi uutta riviä `verify.mjs`:ään, ja punainen ensin: kaksi niistä kaatui
+ennen muutosta (`8 sisäänkäyntiä, kolikoita 0/3/0/3/0/3/3/3` ja `6 putkea,
+4 warppia, kolikkorivit [] [-3,-1,1]`). Testit eivät kysy onko jono olemassa
+vaan mittaavat ne ominaisuudet joista vihje muuttuu kyltiksi: saako kolikot
+pienimmällä koolla ilman salaisuutta, koskettaako jokin kolikko sisäänkäyntiä,
+onko jono keskitetty sen päälle, ja kuinka usein kolikkorivi ylipäätään
+tarkoittaa jotain. Vaikeustaulukko ei liikkunut lainkaan — kolikko ei ole
+uhka eikä kuilu.
+
+---
+
 ## v26.08.09.28 — kaksi teosta lisää vapautuneiden listalle
 
 Omistajan valinta, jatkoa kohdan 1 b avaukselle. Sävellyksiä ei ole vielä

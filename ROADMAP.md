@@ -20,8 +20,10 @@ ja `node tools/difficulty.mjs` vaikeuskäyrän.
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
 kuopalle/laavalle/kellolle) · kytkinruudut · murenevat lavat · murtava tehostus
 PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · pavunvarsi ja
-warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuudet tavallisissa tiilissä
-(39 kpl) · piikkiukko · pomon deterministinen piikkisykli.
+warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuuksia **59 kpl 21
+kentässä**, mitattuna `secretKeys`illä eikä muistista: 30 ladattua tiiltä, 7
+tähtilohkoa, 4 kytkintä ja 8 sisäänkäyntiä piilokaistalle (tässä luki pitkään
+39, mikä oli vanhentunut) · piikkiukko · pomon deterministinen piikkisykli.
 
 **Sisältö:** haarautuva kartta maailmassa 2 — `2-2` on risteys, `HIEKKATIE` ja
 `LAAVATIE` päätyvät molemmat linnakkeeseen, ja haaran vaikeus ja palkinto lukevat
@@ -81,10 +83,15 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    sillä on merkkinsä — musiikinvaihto ei saa olla toinen samaa sanova merkki
    (§8), vaan sen pitää sanoa eri asia: löytyminen on tapahtuma, musiikki on
    paikka. *Yö Autiovuorella* odottaa viimeistä linnaketta.
-7. **Salaisuuksien löydettävyys** — kolmesta osasta yksi tehty:
+7. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
-   löytynyt, **ei koskaan missä** (v26.08.09.17). Jäljellä: demo näyttää
-   tempun, ja kolikkojonot osoittavat.
+   löytynyt, **ei koskaan missä** (v26.08.09.17);
+   ✔ kolikkojonot osoittavat (v26.08.09.29) — ja osoittavat vain sitä yhtä
+   salaisuutta johon ei voi kompastua, warp-putkea, koska lohkosta aukeavat
+   salaisuudet avautuu jo tavallisella pelaamisella eikä vihje niiden päällä
+   olisi vihje vaan kyltti. Sama kolikkorivi on tavallisella putkella, ja
+   koko pelin kuoppakaistan kolikkoriveistä 6,4 % on salaisuuden kohdalla.
+   Jäljellä: **demo näyttää tempun**.
 
 ## Jonossa
 

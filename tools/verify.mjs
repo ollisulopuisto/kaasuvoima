@@ -3676,6 +3676,211 @@ const report = await page.evaluate(async () => {
       `${secrets}/${bricks} tiiltä = ${Math.round(share * 100)} %`);
   }
 
+  /* ------------- kolikkojonot: vihje eikä kyltti (DESIGN.md §5) ----------- */
+  /*
+   * A hidden band is the one secret in this game that a player cannot stumble
+   * into. A loaded brick is bumped by accident, a star block is an ordinary `?`
+   * and gets hit out of habit, a switch is a tile of its own with a slab of
+   * brick hanging over it — but a warp pipe asks you to *stand on it and press
+   * down*, and nothing in ordinary play ever does that. So the ways into a
+   * hidden band are the places a coin hint has to earn its keep, and these are
+   * the properties that separate a hint from a sign. Each one can actually go
+   * wrong, which is why each one is a line here rather than a sentence in a
+   * comment somewhere:
+   *
+   *   1. **every entrance carries one.** A census, not a spot check: eight ways
+   *      into a hidden band in the whole game, and a ninth added later has to
+   *      come past this line rather than ship silently unhinted.
+   *   2. **it pays on its own.** Every hint coin is collectible from the route
+   *      band's own floor at power level 0, without finding anything. That is
+   *      `fac_duct_down`'s test, quoted: "they are worth having on their own, so
+   *      following them costs nothing if there turns out to be nothing".
+   *   3. **it is not an arrow.** Three ways of failing that, all measured: a
+   *      coin touching the entrance tile marks it; a run centred on the entrance
+   *      is an X on the spot; and a shape that only ever appears at a secret is
+   *      a signpost however innocent it looks. The third is the one that needs
+   *      the whole game to answer, so it is counted over the whole game.
+   *   4. **the shape says "a pipe", never "this pipe".** Two-tile floor pipes
+   *      are pixel-identical apart from the shine in a warp's throat, so the
+   *      coins over them have to be identical too. This is the line that fails
+   *      when somebody gives the secret one a hint and forgets its twin.
+   *
+   * What is deliberately *not* asserted here: that a loaded brick, a star block
+   * or a switch has a hint. None of them gets one, and that is the design —
+   * a trail on a secret that already reads is noise, and noise is what makes
+   * the real hints stop working.
+   */
+  {
+    reset();
+    const { getLevel } = await import('/src/data/levels.js');
+    const jump = await (await fetch('/tools/jump-budget.json')).json();
+
+    /* Eight columns either side, and rows 7-10 of the band. That is the bump
+     * row and the two rows around it — the band a coin has to be in to be
+     * grabbed from the floor at all — widened by enough that a three-coin run
+     * beside an entrance counts and the next chunk's coins do not. */
+    const WIN = 8;
+    const BUMP_FROM = 7;
+    const BUMP_TO = 10;
+    /* Anything the feet can rest on, so a coin over a pipe is measured against
+     * the pipe's own lid rather than the floor four rows under it. */
+    const STANDABLE = new Set([...'#XB?!*uN[]{}%()S-']);
+    const isCoin = (sc, tx, ty) => sc.rawTileAt(tx, ty) === 'o';
+
+    /**
+     * Every way into a hidden band, read from the loaded scene rather than from
+     * the level data, so that the bean block is the one the engine actually
+     * planted (`plantVines`) instead of a fourth copy of where it hangs.
+     */
+    const entrancesOf = (sc) => {
+      const def = getLevel(sc.id);
+      if (!def.bands) return [];
+      const top = def.bands.main;
+      const list = [];
+      for (let ty = top; ty < top + def.bands.rows; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          if (!'()'.includes(sc.rawTileAt(tx, ty))) continue;
+          if (tx > 0 && '()'.includes(sc.rawTileAt(tx - 1, ty))) continue;
+          let x1 = tx;
+          while (x1 + 1 < sc.w && '()'.includes(sc.rawTileAt(x1 + 1, ty))) x1++;
+          list.push({ kind: 'putki', x0: tx, x1, y: ty, top });
+        }
+      }
+      for (const key of sc.beanstalks.keys()) {
+        const [bx, by] = key.split(',').map(Number);
+        list.push({ kind: 'papulohko', x0: bx, x1: bx, y: by, top });
+      }
+      return list.map((e) => ({ ...e, where: `${sc.id} ${e.kind}@${e.x0}` }));
+    };
+
+    const hints = [];
+    let runs = 0;
+    let runsAtSecret = 0;
+    const pipes = [];
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      const def = getLevel(id);
+      const doors = entrancesOf(sc);
+      for (const e of doors) {
+        const coins = [];
+        for (let ty = e.top + BUMP_FROM; ty <= e.top + BUMP_TO; ty++) {
+          for (let tx = Math.max(0, e.x0 - WIN); tx <= Math.min(sc.w - 1, e.x1 + WIN); tx++) {
+            if (isCoin(sc, tx, ty)) coins.push({ tx, ty });
+          }
+        }
+        hints.push({ id, e, coins, sc });
+      }
+
+      /* Every coin run in the bump band of every band, so that "how often does
+       * a coin row mean something" is a number and not an impression. A run is
+       * allowed one empty column, because `o o o` is one row of coins and not
+       * three rows of one. */
+      const bandTops = def.bands ? [0, def.bands.main, def.bands.cave] : [0];
+      for (const b of bandTops) {
+        for (let ty = b + BUMP_FROM; ty <= b + BUMP_TO; ty++) {
+          let tx = 0;
+          while (tx < sc.w) {
+            if (!isCoin(sc, tx, ty)) { tx++; continue; }
+            let end = tx;
+            for (;;) {
+              if (isCoin(sc, end + 1, ty)) { end++; continue; }
+              if (sc.rawTileAt(end + 1, ty) === ' ' && isCoin(sc, end + 2, ty)) { end += 2; continue; }
+              break;
+            }
+            runs++;
+            if (doors.some((e) => e.top === b && end >= e.x0 - WIN && tx <= e.x1 + WIN)) runsAtSecret++;
+            tx = end + 1;
+          }
+        }
+      }
+
+      /* Two-tile floor pipes: a mouth, one tile of throat, and ground. That is
+       * `pipe_short`, `warp_pipe` and `fac_duct_down` — the same silhouette
+       * whether or not it goes anywhere. */
+      for (let ty = 0; ty < sc.h; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          const ch = sc.rawTileAt(tx, ty);
+          if (ch !== '[' && ch !== '(') continue;
+          if (sc.rawTileAt(tx, ty + 1) !== '{' || sc.rawTileAt(tx, ty + 2) !== '#') continue;
+          const offsets = [];
+          for (let cy = ty - 4; cy < ty; cy++) {
+            for (let cx = tx - WIN; cx <= tx + WIN; cx++) if (isCoin(sc, cx, cy)) offsets.push(cx - tx);
+          }
+          pipes.push({ id, tx, warp: ch === '(', offsets: offsets.join(',') });
+        }
+      }
+    }
+
+    /* 1. The census. */
+    const bare = hints.filter((h) => h.coins.length < 3);
+    expect('jokainen tie salaiselle kaistalle kantaa kolikkovihjeen',
+      hints.length === 8 && bare.length === 0,
+      `${hints.length} sisäänkäyntiä, kolikoita ${hints.map((h) => h.coins.length).join('/')}`
+      + (bare.length ? ` — vihjeettä: ${bare.map((h) => h.e.where).join(' ')}` : ''));
+
+    /* 2. It pays on its own: the drop from every hint coin to the first thing
+     * under it that holds, against the measured standing jump at power 0. A
+     * coin with nothing under it at all is worse than a high one — it hangs
+     * over a pit, and a coin you have to dare a pit for is not a free hint. */
+    const standing = (jump.cases.find((c) => c.label === 'standing, held') || {}).height || 0;
+    let worst = 0;
+    const dangling = [];
+    for (const h of hints) {
+      for (const c of h.coins) {
+        let sy = -1;
+        for (let ty = c.ty + 1; ty < h.e.top + 15; ty++) {
+          if (STANDABLE.has(h.sc.rawTileAt(c.tx, ty))) { sy = ty; break; }
+        }
+        if (sy < 0) { dangling.push(`${h.e.where} ${c.tx},${c.ty}`); continue; }
+        worst = Math.max(worst, sy - c.ty);
+      }
+    }
+    expect('vihjekolikot saa pienimmällä koolla ilman itse salaisuutta',
+      dangling.length === 0 && worst * 16 <= standing,
+      `korkeintaan ${worst} ruutua = ${worst * 16} px, paikaltaan hyppy nostaa ${standing} px`
+      + (dangling.length ? ` — tyhjän päällä: ${dangling.join(' ')}` : ''));
+
+    /* 3a. No coin touches the entrance tile. A coin on the thing is a marker on
+     * the thing, whatever the rest of the run is doing. */
+    let nearest = 99;
+    for (const h of hints) {
+      for (const c of h.coins) {
+        const dx = Math.max(h.e.x0 - c.tx, c.tx - h.e.x1, 0);
+        nearest = Math.min(nearest, Math.max(dx, Math.abs(c.ty - h.e.y)));
+      }
+    }
+    expect('yksikään vihjekolikko ei kosketa sisäänkäyntiä',
+      nearest >= 2, `lähin kolikko ${nearest} ruudun päässä`);
+
+    /* 3b. And the run is not centred on it. Coins either side of a thing, evenly
+     * spaced, is the oldest map marking there is. */
+    const offCentre = hints.map((h) => {
+      const xs = h.coins.map((c) => c.tx);
+      const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+      return { where: h.e.where, off: Math.abs(mid - (h.e.x0 + h.e.x1) / 2) };
+    });
+    const centred = offCentre.filter((o) => o.off < 1);
+    expect('vihjejono ei ole keskitetty sisäänkäynnin päälle',
+      centred.length === 0,
+      `poikkeama keskeltä ${offCentre.map((o) => o.off).join('/')} ruutua`
+      + (centred.length ? ` — keskitetty: ${centred.map((o) => o.where).join(' ')}` : ''));
+
+    /* 3c. The camouflage, counted over the whole game: a coin row that means
+     * something has to be the exception, or following coin rows becomes an
+     * oracle and the hint has turned into a sign. */
+    const share = runsAtSecret / Math.max(1, runs);
+    expect('kolikkorivi on tavallinen näky eikä salaisuuden merkki',
+      runs >= 200 && share <= 0.1,
+      `${runsAtSecret}/${runs} kolikkoriviä salaisuuden kohdalla = ${(share * 100).toFixed(1)} %`);
+
+    /* 4. The twin. */
+    const shapes = new Set(pipes.map((p) => p.offsets));
+    const warps = pipes.filter((p) => p.warp).length;
+    expect('kahden ruudun lattiaputket kantavat saman kolikkorivin, warppasi tai ei',
+      pipes.length >= 6 && shapes.size === 1 && warps < pipes.length,
+      `${pipes.length} putkea, ${warps} warppia, kolikkorivit [${[...shapes].join('] [')}]`);
+  }
+
   /* ---------------- salaisuudet kartalla: kertoo että, ei missä ----------- */
   /*
    * Four things have to hold at once, and the last two are the design:
