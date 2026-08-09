@@ -182,7 +182,10 @@ export class HighScoreScene {
       drawText(ctx, `${i + 1}`.padStart(2), 30, y, { color: '#8890b0' });
       drawText(ctx, entry.name, 52, y, { color });
       if (entry.assisted) drawText(ctx, '*', 52 + NAME_LENGTH * 6 + 2, y, { color: '#c88040' });
-      drawText(ctx, `M${entry.world}`, 130, y, { color: '#8fe04a' });
+      /* World and level, because "world 3" says nothing about whether they died
+       * walking in or on the castle door. Older rows have no level and fall
+       * back to the world alone rather than showing a blank. */
+      drawText(ctx, entry.level || `M${entry.world}`, 126, y, { color: '#8fe04a' });
       /* The day the score was set, ISO order: year, month, day. It sorts the
        * same way it reads, and there is no continent on which it means
        * something else. The build version is still stored on the entry — it is

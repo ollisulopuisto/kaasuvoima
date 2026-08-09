@@ -32,6 +32,8 @@ export function loadScores() {
         name: String(e.name || '').slice(0, NAME_LENGTH) || '???',
         score: Math.max(0, Math.floor(e.score)),
         world: Number(e.world) || 1,
+        // The level id the run reached, e.g. "2-3". Older rows have none.
+        level: typeof e.level === 'string' ? e.level.slice(0, 4) : '',
         assisted: !!e.assisted,
         version: typeof e.version === 'string' ? e.version : '',
         at: Number(e.at) || 0,
@@ -63,11 +65,12 @@ export function qualifies(score) {
  * did not make the cut. Ties keep the older entry ahead — you have to beat
  * a score, not match it.
  */
-export function addScore({ name, score, world = 1, assisted = false }) {
+export function addScore({ name, score, world = 1, level = '', assisted = false }) {
   const entry = {
     name: (name || '???').slice(0, NAME_LENGTH),
     score: Math.max(0, Math.floor(score)),
     world,
+    level: String(level || '').slice(0, 4),
     assisted: !!assisted,
     version: GAME_VERSION,
     at: Date.now(),

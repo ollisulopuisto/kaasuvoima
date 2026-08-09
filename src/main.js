@@ -66,7 +66,7 @@ class Game {
     this.scene = scene;
     // Atmosphere belongs to the place you are in, so it is set from the scene
     // rather than left for each scene to remember to turn off.
-    PostFX.setAmbience(scene.theme || null);
+    PostFX.setAmbience(scene.theme || null, scene.def || null);
     if (scene.enter) scene.enter();
   }
 
@@ -109,6 +109,10 @@ class Game {
     const result = {
       score: this.state.score,
       world: this.state.world + 1,
+      // The level the run actually reached, so the board says 2-3 and not
+      // merely "world 2" — the difference between walking in and dying at the
+      // castle door is the whole story of a run.
+      level: (this.pendingNode && this.pendingNode.level) || '',
       assisted: !!this.state.usedSaveState,
     };
     // A run that skipped worlds is not a run. No mark would be honest enough.

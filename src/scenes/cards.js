@@ -56,10 +56,20 @@ export class InterludeScene {
   }
 }
 
+/**
+ * Game over, with an actual choice.
+ *
+ * It used to say "Z jatkaaksesi" and then end the run regardless — the word
+ * said continue and the button did not. Now there are two options and the
+ * selected one is unmistakable: an arrow, a colour, and a line saying what it
+ * will do. A menu whose selection you have to squint at is a menu that gets
+ * pressed by accident, and this one decides whether a run survives.
+ */
 export class GameOverScene {
   constructor(game) {
     this.game = game;
     this.tick = 0;
+    this.choice = 0;
   }
 
   enter() {
@@ -69,19 +79,60 @@ export class GameOverScene {
 
   update(input) {
     this.tick++;
-    if (this.tick > 200 || input.pressed.jump || input.pressed.start) {
+    if (this.tick < 30) return;      // no accidental press on the way in
+
+    if (input.pressed.left || input.pressed.up) {
+      this.choice = 0;
+      Sfx.play('cursor');
+    }
+    if (input.pressed.right || input.pressed.down) {
+      this.choice = 1;
+      Sfx.play('cursor');
+    }
+    if (input.pressed.jump || input.pressed.start) {
       input.consume('jump');
       input.consume('start');
-      this.game.finishRun();
+      Sfx.play('select');
+      if (this.choice === 0) {
+        // The run goes on, so nothing is banked: the board is for finished runs.
+        this.game.toWorldMap();
+      } else {
+        this.game.finishRun();
+      }
     }
+  }
+
+  drawOption(ctx, index, label, hint, y) {
+    const on = this.choice === index;
+    const blink = on && Math.floor(this.tick / 8) % 2 === 0;
+    if (on) {
+      ctx.fillStyle = '#24243c';
+      ctx.fillRect(40, y - 5, 240, 26);
+      ctx.fillStyle = blink ? '#ffd048' : '#8fe04a';
+      ctx.fillRect(40, y - 5, 240, 1);
+      ctx.fillRect(40, y + 20, 240, 1);
+    }
+    drawText(ctx, on ? '>' : ' ', 52, y, { color: '#ffd048' });
+    drawText(ctx, label, 68, y, {
+      color: on ? '#ffffff' : '#70708c', shadow: on ? '#101018' : null,
+    });
+    drawText(ctx, hint, 68, y + 11, { color: on ? '#8fe04a' : '#50506a' });
   }
 
   draw(ctx) {
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, 0, 320, 240);
-    drawText(ctx, 'PELI POIKKI', 160, 100, { color: '#ffffff', align: 'center', shadow: '#303048' });
-    drawText(ctx, 'KAASU LOPPUI', 160, 120, { color: '#8fe04a', align: 'center' });
-    drawText(ctx, 'Z JATKAAKSESI', 160, 150, { color: '#8890b0', align: 'center' });
+    drawText(ctx, 'PELI POIKKI', 160, 40, {
+      color: '#ffffff', align: 'center', shadow: '#303048', scale: 2,
+    });
+    drawText(ctx, 'KAASU LOPPUI', 160, 66, { color: '#8fe04a', align: 'center' });
+
+    this.drawOption(ctx, 0, 'JATKA', 'SAMA MAAILMA, PISTEET SAILYVAT', 110);
+    this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'PISTEET PISTETAULUUN', 150);
+
+    drawText(ctx, 'NUOLET VALITSE   Z HYVAKSY', 160, 200, {
+      color: '#8890b0', align: 'center',
+    });
   }
 }
 

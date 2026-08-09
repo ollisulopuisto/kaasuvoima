@@ -622,6 +622,16 @@ const report = await page.evaluate(async () => {
     scores.addScore({ name: 'TIE', score: 5000, world: 1 });
     expect('a tie stays behind the entry that got there first',
       scores.loadScores()[0].name === 'STAR');
+
+    // The board should say which level the run reached, not just which world.
+    scores.clearScores();
+    scores.addScore({ name: 'LVL', score: 4242, world: 2, level: '2-3' });
+    const withLevel = scores.loadScores()[0];
+    scores.addScore({ name: 'OLD', score: 4000, world: 2 });
+    const withoutLevel = scores.loadScores()[1];
+    expect('a score remembers the level it reached, and old rows still load',
+      withLevel.level === '2-3' && withoutLevel.level === '',
+      `${withLevel.level} / "${withoutLevel.level}"`);
     scores.clearScores();
   }
 
@@ -938,6 +948,56 @@ const report = await page.evaluate(async () => {
       expect('a restored bubble still runs out and turns angry',
         !!back && !back.bubbled && back.angry, back ? `angry ${back.angry}` : 'poissa');
     }
+  }
+
+  /* ---------------------------- peli poikki ----------------------------- */
+  /* It used to say "continue" and end the run regardless. Both options must
+   * exist, the selection must be visible, and continuing must NOT bank the
+   * score — the board is for finished runs. */
+  {
+    const { GameOverScene } = await import('/src/scenes/cards.js');
+    const scores = await import('/src/core/scores.js');
+    const i = mkInput();
+
+    reset();
+    scores.clearScores();
+    game.state.score = 50000;
+    game.setScene(new GameOverScene(game));
+    for (let f = 0; f < 32; f++) game.scene.update(mkInput());
+    const start = game.scene.choice;
+    i.pressed.right = true;
+    game.scene.update(i);
+    const moved = game.scene.choice;
+    i.pressed = blank();
+    i.pressed.left = true;
+    game.scene.update(i);
+    const back = game.scene.choice;
+    expect('the game over screen offers two choices and moves between them',
+      start === 0 && moved === 1 && back === 0, `${start}/${moved}/${back}`);
+
+    // Continue: back to the map, nothing banked.
+    i.pressed = blank();
+    i.pressed.jump = true;
+    game.scene.update(i);
+    expect('continuing resumes the run and banks nothing',
+      game.scene.constructor.name === 'WorldMapScene' && scores.loadScores().length === 0,
+      `${game.scene.constructor.name}, ${scores.loadScores().length} riviä`);
+
+    // Start over: the run is finished, so the score goes to the board.
+    reset();
+    game.state.score = 50000;
+    game.setScene(new GameOverScene(game));
+    for (let f = 0; f < 32; f++) game.scene.update(mkInput());
+    const j = mkInput();
+    j.pressed.right = true;
+    game.scene.update(j);
+    j.pressed = blank();
+    j.pressed.jump = true;
+    game.scene.update(j);
+    expect('starting over ends the run and offers the score to the board',
+      ['NameEntryScene', 'HighScoreScene'].includes(game.scene.constructor.name),
+      game.scene.constructor.name);
+    scores.clearScores();
   }
 
   /* ------------------------------- kuori -------------------------------- */
