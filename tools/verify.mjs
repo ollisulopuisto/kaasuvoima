@@ -2411,6 +2411,320 @@ const report = await page.evaluate(async () => {
       offCurve <= 0.5, `suurin poikkeama piirretystä käyrästä ${offCurve.toFixed(3)} px`);
   }
 
+  /* ------------- kartta joka on näkymää leveämpi, ja sen kamera ------------ */
+  /*
+   * KAHDEKSAN KENTTÄÄ EI MAHDU KAHTEENKYMMENEEN SARAKKEESEEN.
+   *
+   * Kartan ruudukko on ollut tasan näkymän kokoinen (20x9 laattaa = 320x144 px),
+   * joten se ei ole koskaan joutunut vierimään. Kahdeksan solmua, niiden polut
+   * ja säännön 8 raivaama väljyys eivät mahdu kahteenkymmeneen sarakkeeseen, eli
+   * ruudukon on saatava olla näkymää leveämpi ja näkymän on seurattava nappulaa.
+   *
+   * Testimaailma eikä levennetty oikea maailma, kahdesta syystä. Toinen on
+   * työnjako — maailmadata on toisen käsissä juuri nyt — ja toinen on että
+   * *kuvitteellinen* leveä maailma on parempi testi kuin oikea: se saa olla
+   * 30 saraketta leveä ja siinä saa olla solmu kohdassa 25, eli kaukana sen
+   * takana mihin näkymä yltää, ilman että kukaan joutuu pelaamaan sitä.
+   *
+   * Punainen ennen vihreää (DESIGN.md 7). Ennen korjausta nämä sanoivat:
+   *   - kaukainen solmu ei piirtynyt lainkaan: 0 pikseliä mustetta, kun leima
+   *     on kohdassa x=400..419 ja näkymä on 0..319
+   *   - nappula käveli ulos ruudusta: suurin x näkymässä 456 px (raja 320)
+   *   - näkymän ulkopuolinen solmu ja linkki piirrettiin silti: 14 ja 20
+   *     fillRect-kutsua, jokainen kokonaan ruudun ulkopuolelle
+   *   - kaksinkertaisen levyinen maasto maksoi kaksinkertaisesti: 918 vs 1794
+   *     fillRect-kutsua samasta näkymästä
+   *   - leima ei liikkunut vieritettäessä: vasen reuna pysyi x=207:ssä kun sen
+   *     olisi pitänyt olla 47
+   */
+  {
+    const worlds = await import('/src/data/worlds.js');
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+    const cv = document.createElement('canvas');
+    cv.width = 320;
+    cv.height = 240;
+    const g = cv.getContext('2d');
+
+    /*
+     * Laskuri piirtokutsuille. Kello on huono mittari portissa — se heittelee
+     * koneen mukaan ja punainen joka johtuu naapuriprosessista ei ole punainen —
+     * mutta `fillRect`-kutsujen määrä on täsmälleen sama joka ajolla ja mittaa
+     * sitä samaa asiaa: montako laattaa, solmua ja pistettä koodi vaivautui
+     * piirtämään. Kellotettu luku on raportissa, tämä on portissa.
+     */
+    const counting = (target) => {
+      let n = 0;
+      const ctx = new Proxy(target, {
+        get(o, k) {
+          const v = o[k];
+          if (typeof v !== 'function') return v;
+          if (k === 'fillRect') return (...a) => { n++; return v.apply(o, a); };
+          return v.bind(o);
+        },
+        set(o, k, v) { o[k] = v; return true; },
+      });
+      return { ctx, calls: () => n };
+    };
+
+    /*
+     * PITKÄ LAAKSO: 30 saraketta, kahdeksan kenttää, linnake sarakkeessa 28.
+     * Kalusto on riveillä 0, 7 ja 8, eli säännön 8 raivaaman käytävän (rivit
+     * 1..6) ulkopuolella — testimaailmakin on maailma, ja rikkinäinen maailma
+     * mittaisi rikkinäisyyttään eikä vierimistä.
+     */
+    const WIDE = {
+      id: 'wL',
+      name: 'PITKA LAAKSO',
+      theme: 'grass',
+      terrain: [
+        'T..T...T..T...T..T...T..T...T.',
+        '..............................',
+        '..............................',
+        '..............................',
+        '..............................',
+        '..............................',
+        '..............................',
+        '.T...T...T...T...T...T...T...T',
+        'T..T...T..T...T..T...T..T...T.',
+      ],
+      nodes: [
+        { id: 'wL-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
+        { id: 'wL-1', tx: 4, ty: 4, type: 'level', level: '1-1', name: 'YKSI' },
+        { id: 'wL-2', tx: 7, ty: 2, type: 'level', level: '1-2', name: 'KAKSI' },
+        { id: 'wL-3', tx: 10, ty: 5, type: 'level', level: '1-3', name: 'KOLME' },
+        { id: 'wL-4', tx: 13, ty: 2, type: 'level', level: '2-1', name: 'NELJA' },
+        { id: 'wL-5', tx: 16, ty: 5, type: 'level', level: '2-2', name: 'VIISI' },
+        { id: 'wL-6', tx: 19, ty: 2, type: 'level', level: '2-3', name: 'KUUSI' },
+        { id: 'wL-7', tx: 22, ty: 5, type: 'level', level: '3-1', name: 'SEITSEMAN' },
+        { id: 'wL-8', tx: 25, ty: 2, type: 'level', level: '3-2', name: 'KAHDEKSAN' },
+        { id: 'wL-f', tx: 28, ty: 4, type: 'fortress', level: '1-F', name: 'LINNAKE' },
+      ],
+      links: [
+        { a: 'wL-s', b: 'wL-1' },
+        { a: 'wL-1', b: 'wL-2', path: [[7, 4]] },
+        { a: 'wL-2', b: 'wL-3', path: [[10, 2]] },
+        { a: 'wL-3', b: 'wL-4', path: [[13, 5]] },
+        { a: 'wL-4', b: 'wL-5', path: [[16, 2]] },
+        { a: 'wL-5', b: 'wL-6', path: [[19, 5]] },
+        { a: 'wL-6', b: 'wL-7', path: [[22, 2]] },
+        { a: 'wL-7', b: 'wL-8', path: [[25, 5]] },
+        { a: 'wL-8', b: 'wL-f', path: [[28, 2]] },
+      ],
+    };
+
+    expect('leveä testimaailma on itsekin kelvollinen kartta',
+      worlds.worldProblems(WIDE).length === 0, worlds.worldProblems(WIDE).join(' / '));
+
+    /* Kohtaus osoitetaan testimaailmaan käsin sen sijaan että se työnnettäisiin
+     * `WORLDS`iin: taulukkoa kiertävät kaikki tämän tiedoston muut karttatestit,
+     * ja globaalia listaa mutatoiva testi rikkoisi ne. */
+    const keepPersist = game.persist.bind(game);
+    game.persist = () => {};
+    const wideAt = (nodeId) => {
+      reset();
+      game.state.cleared = Object.fromEntries(WIDE.nodes.map((n) => [n.id, true]));
+      const m = new WorldMapScene(game);
+      m.world = WIDE;
+      m.routeLinks = new Map();
+      m.node = worlds.findNode(WIDE, nodeId);
+      m.pos = { x: m.node.tx * 16 + 8, y: m.node.ty * 16 + 8 };
+      m.mode = 'idle';
+      m.tick = 30;
+      if (m.snapCamera) m.snapCamera();
+      return m;
+    };
+    const camOf = (m) => (m.camX ? m.camX() : 0);
+    const inkOf2 = (paint) => {
+      g.clearRect(0, 0, 320, 240);
+      paint(g);
+      const d = g.getImageData(0, 0, 320, 240).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++;
+      return n;
+    };
+    /** Piirretyn musteen vasen reuna, tai -1 jos mustetta ei ole. */
+    const leftEdge = (paint) => {
+      g.clearRect(0, 0, 320, 240);
+      paint(g);
+      const d = g.getImageData(0, 0, 320, 240).data;
+      for (let x = 0; x < 320; x++) {
+        for (let y = 0; y < 240; y++) if (d[(y * 320 + x) * 4 + 3] > 8) return x;
+      }
+      return -1;
+    };
+
+    /* --- 1. kartan toinen pää on olemassa ruudulla --- */
+
+    const far = worlds.findNode(WIDE, 'wL-8');
+    const mFar = wideAt('wL-8');
+    const keepNodes = mFar.world;
+    mFar.world = { ...WIDE, nodes: [far] };
+    const farInk = inkOf2((c) => mFar.drawNodes(c));
+    mFar.world = keepNodes;
+    expect('kartan kaukaisin solmu näkyy kun sen päällä seisotaan',
+      farInk > 0,
+      `solmu wL-8 laattasarakkeessa ${far.tx} (x=${far.tx * 16}), näkymä `
+      + `${camOf(mFar)}..${camOf(mFar) + 320}, mustetta ${farInk} px`);
+
+    /* --- 2. nappula ei kävele ulos ruudusta --- */
+
+    /* Koko matka alusta linnakkeeseen, joka linkki kerrallaan, ja nappulan
+     * paikka näkymässä joka framella. Tämä on se testi joka kaatuu heti jos
+     * kamera unohtuu jostain tilasta: kävelystä, saapumisesta tai lopusta. */
+    const chain = ['wL-s', 'wL-1', 'wL-2', 'wL-3', 'wL-4', 'wL-5', 'wL-6', 'wL-7', 'wL-8', 'wL-f'];
+    const mWalk = wideAt('wL-s');
+    let minView = 1e9;
+    let maxView = -1e9;
+    let worstStep = 0;
+    let reversals = 0;
+    let arrived = 'wL-s';
+    const idle = () => ({ pressed: blank(), held: blank(), released: blank(), consume() {} });
+    for (let i = 0; i < chain.length - 1; i++) {
+      const a = worlds.findNode(WIDE, chain[i]);
+      const b = worlds.findNode(WIDE, chain[i + 1]);
+      const dx = Math.sign((WIDE.links[i].path ? WIDE.links[i].path[0][0] : b.tx) - a.tx);
+      const dy = Math.sign((WIDE.links[i].path ? WIDE.links[i].path[0][1] : b.ty) - a.ty);
+      mWalk.mode = 'idle';
+      mWalk.tryMove(dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
+      let prev = camOf(mWalk);
+      let dir = 0;
+      for (let f = 0; f < 4000 && mWalk.mode === 'walk'; f++) {
+        mWalk.update(idle());
+        const cam = camOf(mWalk);
+        const view = mWalk.pos.x - cam;
+        minView = Math.min(minView, view);
+        maxView = Math.max(maxView, view);
+        const step = cam - prev;
+        worstStep = Math.max(worstStep, Math.abs(step));
+        if (step && dir && Math.sign(step) !== dir) reversals++;
+        if (step) dir = Math.sign(step);
+        prev = cam;
+      }
+      arrived = mWalk.node.id;
+    }
+    expect('nappula pysyy ruudulla koko matkan kartan päästä päähän',
+      arrived === 'wL-f' && minView >= 4 && maxView <= 316,
+      `pääty ${arrived}, nappula näkymässä ${minView.toFixed(1)}..${maxView.toFixed(1)} px (0..320)`);
+
+    /* --- 3. kamera ei tärise eikä ryntää --- */
+
+    /* Nappula kulkee 1.4 px/frame, joten kameran on kuljettava korkeintaan
+     * saman verran: sitä nopeampi liike olisi kameran omaa vauhtia eikä
+     * seuraamista. Ja suunnanvaihto kesken yhden linkin on juuri se tärinä joka
+     * syntyy kun mutka heiluttaa nappulan x:ää ja kamera seuraa heilahdusta. */
+    expect('kamera seuraa nappulaa eikä liiku omin päin',
+      worstStep <= 2 && reversals === 0,
+      `pahin askel ${worstStep} px/frame (nappula 1.4), suunnanvaihtoja ${reversals}`);
+
+    /* --- 4. näkymän ulkopuolista ei piirretä --- */
+
+    const mCull = wideAt('wL-s');
+    const nodeCull = counting(g);
+    const keepW = mCull.world;
+    mCull.world = { ...WIDE, nodes: [far] };
+    g.clearRect(0, 0, 320, 240);
+    mCull.drawNodes(nodeCull.ctx);
+    const linkCull = counting(g);
+    mCull.world = { ...WIDE, nodes: WIDE.nodes, links: [WIDE.links[8]] };
+    mCull.drawLinks(linkCull.ctx);
+    mCull.world = keepW;
+    expect('näkymän ulkopuolelle jäävää solmua tai linkkiä ei piirretä lainkaan',
+      nodeCull.calls() === 0 && linkCull.calls() === 0,
+      `solmu wL-8 ${nodeCull.calls()} kutsua, linkki wL-8→wL-f ${linkCull.calls()} kutsua `
+      + `(näkymä ${camOf(mCull)}..${camOf(mCull) + 320})`);
+
+    /* Ja sama maastolle: kartan leventäminen ei saa maksaa mitään, koska
+     * näkymä on yhtä leveä kuin ennenkin. Sama kartta kahtena levyisenä, sama
+     * näkymä, ja piirtokutsujen pitää olla luku luvulta sama. */
+    const mTer = wideAt('wL-s');
+    const narrow = counting(g);
+    g.clearRect(0, 0, 320, 240);
+    mTer.drawTerrain(narrow.ctx);
+    const doubled = counting(g);
+    mTer.world = { ...WIDE, terrain: WIDE.terrain.map((r) => r + r) };
+    g.clearRect(0, 0, 320, 240);
+    mTer.drawTerrain(doubled.ctx);
+    mTer.world = WIDE;
+    expect('kaksi kertaa leveämpi maasto ei maksa piirtoaikaa yhtään enempää',
+      narrow.calls() === doubled.calls() && narrow.calls() > 0,
+      `30 saraketta ${narrow.calls()} fillRect, 60 saraketta ${doubled.calls()}`);
+
+    /* --- 5. leima mitataan vieritettynäkin oikein --- */
+
+    /*
+     * Laatan sisäiset raot mitattiin tänään pikseleistä (2 px joka saumaan) ja
+     * ne ovat portti. Vieritys ei saa muuttaa niitä — ja se muuttaisi, jos
+     * kameran siirtymä olisi murtoluku: puolen pikselin translaatio pehmentäisi
+     * jokaisen reunan ja mitatut raot kutistuisivat sitä myöten. Siksi tässä
+     * mitataan sama leima neljästä eri vierityksestä ja vaaditaan sekä että
+     * se on *liikkunut* oikeaan kohtaan että että se on mitattavissa samana.
+     */
+    const stamp = worlds.findNode(WIDE, 'wL-4');
+    const stampInk = (m) => {
+      const keep = m.world;
+      m.world = { ...WIDE, nodes: [stamp] };
+      const out = { left: leftEdge((c) => m.drawNodes(c)), ink: inkOf2((c) => m.drawNodes(c)) };
+      m.world = keep;
+      return out;
+    };
+    /* Mitta on suhteellinen eikä ennustettu: leiman vasen reuna on vaikeuspalkin
+     * tumma reunus kaksi pikseliä ruudun vasemmalta puolen, ja sen absoluuttinen
+     * arvo on `drawPips`in asia. Väite on että se *siirtyy* vierityksen verran ja
+     * että mustetta on yhtä paljon — eli leima liikkui eikä sumentunut. */
+    const base = stampInk(wideAt('wL-s'));
+    const edges = [];
+    const inks = [];
+    for (const scroll of [0, 37, 96, 160]) {
+      const m = wideAt('wL-s');
+      m.scroll = scroll;
+      const got = stampInk(m);
+      edges.push(`${got.left}/${base.left - camOf(m)}`);
+      inks.push(got.ink);
+    }
+    expect('solmun leima liikkuu vierityksen mukana ja mittautuu samana',
+      edges.every((e) => e.split('/')[0] === e.split('/')[1])
+      && new Set(inks).size === 1 && base.ink > 0,
+      `vasen reuna (mitattu/odotettu) ${edges.join(' ')}, mustetta ${inks.join('/')} px`);
+
+    /* --- 6. ja kaikki tämä on nolla-muutos kapealle kartalle --- */
+
+    /*
+     * Jokainen laivattu maailma on yhä 20 laattaa leveä eli tasan näkymän
+     * kokoinen, joten kameran pitää olla nollassa joka framella: alussa, joka
+     * solmulla ja keskellä kävelyä. Se on se väite jonka nojalla kapean kartan
+     * kuva on pikselilleen sama kuin ennen — siirtymä on 0, eikä 0 px:n
+     * translaatio muuta yhtään pikseliä.
+     */
+    let drift = 0;
+    let widest = 0;
+    for (let wi = 0; wi < WORLDS.length; wi++) {
+      const w = WORLDS[wi];
+      widest = Math.max(widest, WorldMapScene.mapWidthPx ? WorldMapScene.mapWidthPx(w) : 320);
+      for (const link of w.links) {
+        reset();
+        game.state.world = wi;
+        game.state.node = link.a;
+        game.state.cleared = Object.fromEntries(w.nodes.map((n) => [n.id, true]));
+        const m = new WorldMapScene(game);
+        drift = Math.max(drift, Math.abs(camOf(m)));
+        const pts = worlds.linkPoints(w, link);
+        m.mode = 'idle';
+        m.tryMove(Math.sign(pts[1].tx - pts[0].tx) > 0 ? 'right'
+          : Math.sign(pts[1].tx - pts[0].tx) < 0 ? 'left'
+            : Math.sign(pts[1].ty - pts[0].ty) > 0 ? 'down' : 'up');
+        for (let f = 0; f < 4000 && m.mode === 'walk'; f++) {
+          m.update(idle());
+          drift = Math.max(drift, Math.abs(camOf(m)));
+        }
+      }
+    }
+    expect('kapea kartta ei vieri pikseliäkään, eli sen kuva on ennallaan',
+      drift === 0 && widest === 320,
+      `suurin siirtymä ${drift} px, levein laivattu kartta ${widest} px (näkymä 320)`);
+
+    game.persist = keepPersist;
+  }
+
   /* Standing still on solid ground must read as grounded on EVERY frame. If it
    * flickers, jumps silently vanish: the press lands on a frame where the game
    * thinks the player is in mid-air. */

@@ -7,6 +7,82 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.43 — kartta saa vieriä, ja kamera joka ei keinuta
+
+Maailmankartan maastoruudukko saa olla näkymää leveämpi, ja näkymä seuraa
+pelinappulaa vaakasuunnassa. Tämä on **kyvykkyys eikä sisältömuutos**: yhtään
+maailmaa ei levennetty tässä, ja jokaisen laivatun kartan kuva on pikselilleen
+sama kuin ennen.
+
+### Ongelma
+
+Ruudukko on ollut tasan näkymän kokoinen — 20x9 laattaa eli 320x144 px — joten
+kartta ei ole koskaan joutunut vierimään. Kun jokaiseen maailmaan halutaan
+kahdeksan kenttää, kahdeksan solmua, niiden polut ja **säännön 8 raivaama
+käytävä** (`worldProblems`: mitään korkeaa ei saa seisoa polulla eikä sen
+neljällä naapuriruudulla) eivät mahdu kahteenkymmeneen sarakkeeseen. Este on
+siis kartta eikä kenttädata, ja este poistetaan täältä.
+
+### Kamera: mikä perittiin `level.js`:ltä ja mitä ei
+
+Kenttäkameran perustelu on tämän repon harkituinta proosaa, ja siitä otettiin
+kaksi kohtaa kolmesta:
+
+| kenttäkameran sääntö | karttakamera | miksi |
+| --- | --- | --- |
+| **kuollut alue** | peritty, 96 px | pieni liike ei liikuta ruutua — ja se on myös se mikä estää mutkan heiluttaman nappulan keinuttamasta näkymää |
+| **ei hitausmassaa** | peritty | siirtymä tehdään kokonaan sillä framella jolla se mitataan, joten näkymä pysähtyy samalla framella kuin nappula |
+| **leikkaus saapumisessa** | peritty (`snapCamera`) | `centerCamera`in vastine: saapumisessa ei ole "mistä pehmentää" |
+| **ennakointi (look-ahead)** | **hylätty** | kartalla ei tähdätä: siirto valitaan yhdellä painalluksella, kohde on jo piirretty, ja kahden laatan loikka kestää 23 framea. ~30 framessa rakentuva kallistus olisi yhä asettumassa kun nappula on jo perillä — se on hitausmassa toisella nimellä |
+| **pystyakselin säännöt** | **hylätty** | pystyvieritys on eri ominaisuus omine kysymyksineen; `worldmap.js`:n yläkommentti luettelee ne kolme ehtoa jotka pitäisi ratkaista ensin |
+
+96 px on mitattu eikä valittu: nappula pysyy 96 px:n sisällä 320 px:n ikkunan
+keskeltä, eli menosuunnassa on aina vähintään 64 px karttaa näkyvissä. Pisin
+loikka kahden solmun välillä on kolme laattaa (48 px) ja solmun leima ulottuu
+11 px keskipisteestään — 59 px on siis se mitä seuraavan solmun näkeminen vaatii
+ennen kuin siltä jolla seisoo lähtee pois.
+
+### Vieritys ei ole tallennustiedostossa, ja se on päätös
+
+Kameran paikka **johdetaan** nykyisestä solmusta (`snapCamera` `sync`istä), eikä
+sitä kirjoiteta `sfb3.save.v2`:een eikä pikatallennukseen. Syy on että
+tallennettu johdettu arvo on toinen totuus samasta asiasta: se voi olla eri
+mieltä kuin `state.node`, ja silloin kartta saapuisi väärään kohtaan ja
+liukuisi oikeaan. Nyt jokainen saapuminen — maailmaan tulo, kentästä paluu,
+tallennuksen lataus, uuden pelin ensimmäinen frame — rakentaa kohtauksen
+uudestaan ja saapuu suoraan oikeaan kohtaan.
+
+### Mitattu
+
+Punainen ennen vihreää (DESIGN.md 7). Testimaailma `wL` (30 saraketta, kahdeksan
+kenttää, linnake sarakkeessa 28) lisättiin `verify.mjs`:ään, ja se sanoi:
+
+| väite | ennen | jälkeen |
+| --- | --- | --- |
+| kaukaisin solmu näkyy | 0 px mustetta (leima x=400, näkymä 0..320) | 308 px, näkymä 160..480 |
+| nappula pysyy ruudulla | 25.4..**459.0** px | 25.4..299.0 px |
+| ulkopuolista ei piirretä | solmu 13 + linkki 27 fillRect-kutsua | 0 ja 0 |
+| leveämpi maasto ei maksa | 30 saraketta 105, 60 saraketta 209 kutsua | 69 ja 69 |
+| leima liikkuu vieritettäessä | vasen reuna 206 kaikilla vierityksillä | 206 / 169 / 110 / 46, muste 308 px joka kerta |
+
+Kellotettuna, mediaani yhdeksästä 400 framen erästä, `drawTerrain`:
+
+| sarakkeita | ennen | jälkeen |
+| --- | --- | --- |
+| 30 | 0.168 ms | 0.163 ms |
+| 60 | 0.206 ms | 0.179 ms |
+| 120 | 0.282 ms | 0.171 ms |
+
+Eli piirtotyö oli kartan levyinen ja on nyt näkymän levyinen. Kapea kartta
+maksaa 0.04 ms enemmän kuin ennen (16.7 ms:n framesta), koska muunnos tehdään
+myös silloin kun se on nolla — se on tarkoituksellista, ks. `camX()`.
+
+Ja se mikä ei muuttunut: **kaikkien kahdeksan maailman kaikkien solmujen kuva
+kolmella eri tickillä on tavulleen sama** kuin ennen muutosta (52 hajautusta,
+kaikki identtisiä). Kapea kartta ei vieri pikseliäkään, ja se on portissa.
+
+---
+
 ## v26.08.09.42 — viimeinen linnake, ja finaali joka ei ole neljäs kenttä
 
 Maailma 8, **VIIMEINEN LINNAKE**: kuusi kenttää, kuusi tappelua, ei yhtään
