@@ -183,6 +183,70 @@ syöksyn ääni, osuman ääni, tärinä jonka voimakkuus seuraa korkeutta, ja
 iskuaalto joka on **eri väriä ja eri rytmiä kuin pomon iskuaalto** — kaksi
 samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
+### Omistajan palaute 9.8.2026
+
+Kuusi asiaa kerralla, omistajan omin sanoin puhelimella pelatessa. Kirjattu
+tähän kokonaisuutena, koska ne kertovat yhdessä jotain mitä yksikään niistä ei
+kerro yksin: **peli on menossa muiden käsiin.** Jakoruutu, kosketusohjaus ja
+törmäystuntuma ovat kaikki sitä samaa — ne eivät haittaa tekijää, joka osaa
+pelinsä, vaan sitä joka saa linkin.
+
+1. ✔ **Tauko jäi jumiin** debug-warpin jälkeen. Korjattu (`setScene` nollaa
+   tauon). Diagnoosi ei ollut se mitä oire lupasi: tauko- ja debug-ruutu eivät
+   kilpailleet mistään, vaan tauko jäi päälle kohtaukseen jossa sitä ei voi
+   ottaa pois.
+2. **Mobiili-Safari, kaksi vikaa.** Kaksoisnapautus zoomaa sivun eikä siitä
+   pääse takaisin — `user-scalable=no` ei ole tehonnut iOS 10:n jälkeen, eli
+   korjaus on `touch-action` ja synteettisen kaksoisnapautuksen nieleminen.
+   Toinen on ohjaimen asettelu: **juoksu/pierunappia ei voi pitää pohjassa ja
+   hypätä samalla.** Omistajan kaksi ehdotusta: pierunappi alas oikealle niin
+   että peukalon keskiosa lepää sillä ja kärki nousee hyppynapille, tai kolmas
+   virtuaalinappi joka tarkoittaa "pidä juoksu pohjassa". Jälkimmäinen lisää
+   tilan, ja tila on asia joka pitää oppia ja johon voi jäädä jumiin.
+3. **Jakoruutu, kevyt toteutus.** Syy on aikataulullinen eikä tekninen: peliä
+   ollaan antamassa kavereille testattavaksi. Kevyt tarkoittaa tässä
+   **selainpuolta ja vain sitä** — `navigator.share` ja leikepöytä, ei
+   palvelinta. Sama peruste kuin telemetrian kohdassa 4, ja täällä vielä
+   painavampi: pelaajat ovat lapsia. Linkin esikatselukortti on jo olemassa,
+   joten vaikein osa on tehty.
+4. **Törmäystuntuma.** "Laskeutuessa liikkuu vielä sivuttain, eikä ehdi
+   väistää vihollista jota kohti on menossa." Tämä on **diagnoosi ennen
+   korjausta**: oire nimeää kaksi eri epäiltyä (osumalaatikot ja liikemäärä),
+   eikä kumpikaan ole vielä mitattu. `PHYSICS.md`:n vakiot eivät ole vapaasti
+   säädettävissä — ne mitoittavat koko pelin vaikeuskäyrän — joten "toimii
+   kuten suunniteltu, tässä luku" on kelvollinen lopputulos.
+5. **Kahdeksan maailmaa ja kahdeksan kenttää kussakin.** Oma kohtansa alla.
+
+### Jonossa: kahdeksan maailmaa, kahdeksan kenttää kussakin
+
+Nyt on 5 maailmaa ja 21 kenttää. Tavoite on 64, eli **kolminkertainen määrä
+sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää aloittaa,
+koska kaikki muu seuraa siitä.
+
+Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirjoitetaan:
+
+1. **Käsin ei tehdä 43 uutta kenttää.** Nykyiset käsintehdyt ovat maailman
+   parasta sisältöä, mutta ne ovat myös hidas tapa. Generaattori on olemassa
+   ja tekee jo maailman 5:n, telemetria syöttää sitä, ja tässä mittakaavassa
+   se lakkaa olemasta bonusmaailman kikka ja alkaa olla se tapa jolla peli
+   tehdään. Päätös jota tämä vaatii: **mikä osuus tehdään käsin.** Suositus:
+   maailman ensimmäinen ja viimeinen kenttä käsin, väli generoiden ja käsin
+   viimeistellen — käsi opettaa ja päättää, generaattori täyttää.
+2. **Kuusi teemaa ei riitä kahdeksalle maailmalle.** Nyt: ruoho, aavikko, yö,
+   jää, tehdas, linnake. Luumaailma on jo jonossa. Kaksi maailmaa tarvitsee
+   siis vielä oman teemansa, ja teema on paletti + taustat + palikat +
+   musiikki, ei pelkkä väri.
+3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
+   väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja
+   `difficulty.mjs`:n muototarkistus mittaa nykyään jonoa. **Tämä on sama
+   uudelleenkirjoitus jonka haarautuva kartta jo vaatii** — kaksi kohtaa,
+   yksi työ, ja ne kannattaa tehdä yhdessä eikä peräkkäin.
+4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä.** Nykyinen kaava on
+   kolme kenttää ja linnake. Kahdeksan ei ole "sama kaksi kertaa" vaan tila
+   välipomolle, haaralle ja hengähdyskentälle — eli juuri ne kohdat jotka ovat
+   jo erikseen jonossa (minipomot, haarautuva kartta). Tämä kohta on siis se
+   joka **antaa niille tilan**, ei kilpaile niiden kanssa.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
@@ -333,7 +397,7 @@ mahdu. **Korjaa se ensin.**
 Järjestys: (a) tehtaan pääntila ✔, (b) tehostuspalikka jokaisen kentän alkuun ✔,
 (c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille — **kesken**.
 
-Kohdat a–c on tehty ja **validaattori on puhdas kaikille 20 kentälle** — tästä
+Kohdat a–c on tehty ja **validaattori on puhdas kaikille 21 kentälle** — tästä
 eteenpäin sääntörikkeen ilmestyminen on regressio, joten `verify.mjs`:n voi
 kytkeä kaatamaan ajon myös käsintehdyistä kentistä. Jäljellä on
 vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
