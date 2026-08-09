@@ -939,6 +939,35 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ---------------------------- voittoruutu ----------------------------- */
+  /* Clearing a castle used to leave the player standing on the edge of the
+   * arena while the map loaded. The card must appear, must be skippable, and
+   * must never be able to swallow the world it was celebrating. */
+  {
+    const { VictoryScene } = await import('/src/scenes/cards.js');
+    reset({ type: 'leaf', level: 3 });
+    let completed = 0;
+    const realComplete = game.completeWorld;
+    game.completeWorld = () => { completed++; };
+    game.pendingNode = { id: 'w1-f', level: '1-F', type: 'fortress' };
+    game.finishLevel = Object.getPrototypeOf(game).finishLevel || game.finishLevel;
+    game.setScene(new VictoryScene(game, 1, () => game.completeWorld()));
+    const shown = game.scene instanceof VictoryScene;
+    const i = mkInput();
+    for (let f = 0; f < 20; f++) game.scene.update(i);
+    const early = completed;
+    i.pressed.jump = true;
+    game.scene.update(i);
+    const afterKey = completed;
+    // …and it must also end on its own, for whoever puts the pad down.
+    game.setScene(new VictoryScene(game, 1, () => game.completeWorld()));
+    for (let f = 0; f < 600; f++) game.scene.update(mkInput());
+    expect('the victory card shows, skips on a key and ends by itself',
+      shown && early === 0 && afterKey === 1 && completed === 2,
+      `alussa ${early}, näppäimellä ${afterKey}, lopuksi ${completed}`);
+    game.completeWorld = realComplete;
+  }
+
   /* ------------------------------- attract ----------------------------- */
   {
     const { DemoScene } = await import('/src/scenes/demo.js');

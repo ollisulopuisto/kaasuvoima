@@ -1,6 +1,7 @@
 import { drawText } from '../gfx/font.js';
 import { drawPlayer, drawItem, drawBoss } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
+import { hashNoise } from '../core/utils.js';
 import { normalizePower, POWER_NAMES } from '../entities/player.js';
 
 /** The "MAAILMA 1-1 / SFB x 4" card shown before every level. */
@@ -122,5 +123,133 @@ export class EndingScene {
     });
     drawText(ctx, `PISTEET ${this.game.state.score}`, 160, 180, { color: '#8fe04a', align: 'center' });
     drawText(ctx, 'Z PALAA ALKUUN', 160, 210, { color: '#8890b0', align: 'center' });
+  }
+}
+
+/**
+ * The reward for beating a fortress.
+ *
+ * Before this, clearing a castle put the player on the right-hand edge of the
+ * arena and left them standing there while the world map loaded. The fight was
+ * the hardest thing in the world and the game said nothing about it. So: he
+ * walks off, and we cut to him sitting down to a bowl of pea soup, which is the
+ * one food this game has an opinion about.
+ *
+ * It is a card, not a cutscene: a few seconds, skippable, and it never blocks
+ * progress. A celebration you have to sit through twice stops being one.
+ */
+export class VictoryScene {
+  constructor(game, world, next) {
+    this.game = game;
+    this.world = world;
+    this.next = next;
+    this.tick = 0;
+    this.power = game.state.power;
+  }
+
+  enter() {
+    Sfx.play('clear');
+    Music.play('title');
+  }
+
+  update(input) {
+    this.tick++;
+    // Held from the previous scene's last frame would skip it instantly.
+    if (this.tick > 20 && (input.pressed.jump || input.pressed.start)) {
+      input.consume('jump');
+      input.consume('start');
+      this.finish();
+      return;
+    }
+    if (this.tick > 460) this.finish();
+  }
+
+  finish() {
+    if (this.done) return;
+    this.done = true;
+    this.next();
+  }
+
+  /** Steam that rises, spreads and fades — the only thing on screen that moves slowly. */
+  drawSteam(ctx, x, y) {
+    for (let i = 0; i < 5; i++) {
+      const age = (this.tick * 1.6 + i * 26) % 130;
+      const t = age / 130;
+      const px = x + Math.round(Math.sin(age / 11 + i) * (2 + t * 6));
+      const py = y - Math.round(age * 0.34);
+      const size = 3 - Math.floor(t * 2);
+      if (size <= 0) continue;
+      ctx.fillStyle = `rgba(232,240,255,${0.5 * (1 - t)})`;
+      ctx.fillRect(px, py, size, size);
+    }
+  }
+
+  draw(ctx) {
+    const t = this.tick;
+    const grad = ctx.createLinearGradient(0, 0, 0, 240);
+    grad.addColorStop(0, '#1a1030');
+    grad.addColorStop(1, '#40243c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 320, 240);
+
+    /* Confetti. Two independent seeds per piece — one seed driving both axes
+     * lays them out along a tidy diagonal, which is the documented mistake in
+     * DESIGN.md §6 and which this scene reproduced first time out. */
+    for (let i = 0; i < 34; i++) {
+      const sx = hashNoise(i * 3 + 1, 7);
+      const sy = hashNoise(i * 5 + 2, 19);
+      const x = Math.round(sx * 320);
+      const y = Math.round(((t * (0.6 + sy) + sy * 260) % 260) - 10);
+      const sway = Math.round(Math.sin(t / 14 + i) * 3);
+      ctx.fillStyle = ['#ffd048', '#8fe04a', '#ff8080', '#8fd0ff'][i % 4];
+      ctx.fillRect(x + sway, y, 2, 3);
+    }
+
+    // Hero first, table second: the table hides his legs, and a man whose legs
+    // you cannot see behind a table is sitting at it rather than standing on it.
+    const tableY = 168;
+    drawPlayer(ctx, 128, tableY - 30, {
+      type: this.power.type,
+      level: Math.min(2, this.power.level),
+      facing: 1,
+      frame: 0,
+      state: 'idle',
+      tick: t,
+      wag: t / 20,
+      idle: 0,
+    });
+
+    ctx.fillStyle = '#5a3a1c';
+    ctx.fillRect(96, tableY, 128, 6);
+    ctx.fillStyle = '#3c2410';
+    ctx.fillRect(104, tableY + 6, 8, 26);
+    ctx.fillRect(208, tableY + 6, 8, 26);
+
+    // the bowl, and the spoon going in and out of it
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(168, tableY - 8, 22, 8);
+    ctx.fillStyle = '#c8bca8';
+    ctx.fillRect(168, tableY - 2, 22, 2);
+    ctx.fillStyle = '#6f8c34';                      // pea soup, obviously
+    ctx.fillRect(170, tableY - 7, 18, 3);
+    const dip = Math.round(Math.sin(t / 16) * 5);
+    ctx.fillStyle = '#c8c8d8';
+    ctx.fillRect(176, tableY - 16 - dip, 2, 9);
+    ctx.fillRect(174, tableY - 18 - dip, 6, 3);
+    this.drawSteam(ctx, 178, tableY - 12);
+
+    const punch = t < 10 ? 3 : 2;
+    drawText(ctx, `MAAILMA ${this.world} SELVÄ!`, 160, 40, {
+      color: ['#ffd048', '#ffffff', '#8fe04a'][Math.floor(t / 7) % 3],
+      align: 'center', shadow: '#101018', scale: punch,
+    });
+    drawText(ctx, 'HERNEKEITTOA SANKARILLE', 160, 74, {
+      color: '#e8e0c0', align: 'center',
+    });
+    drawItem(ctx, 'soup', 148, 96, t);
+
+    if (t > 90 && Math.floor(t / 20) % 2) {
+      drawText(ctx, 'Z JATKA', 160, 214, { color: '#8890b0', align: 'center' });
+    }
   }
 }

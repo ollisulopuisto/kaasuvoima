@@ -7,7 +7,7 @@ import { TitleScene } from './scenes/title.js';
 import { WorldMapScene } from './scenes/worldmap.js';
 import { LevelScene } from './scenes/level.js';
 import { DemoScene } from './scenes/demo.js';
-import { InterludeScene, GameOverScene, EndingScene } from './scenes/cards.js';
+import { InterludeScene, GameOverScene, EndingScene, VictoryScene } from './scenes/cards.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
@@ -183,7 +183,9 @@ class Game {
     this.persist();
 
     if (node.type === 'fortress') {
-      this.completeWorld();
+      // The castle is the hardest thing in the world; the game should say so
+      // before it hands out the next map.
+      this.setScene(new VictoryScene(this, this.state.world + 1, () => this.completeWorld()));
       return;
     }
     this.toWorldMap();
