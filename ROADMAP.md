@@ -112,32 +112,20 @@ ja validoitu**: pelaaja näkee sen tulevan, areena palautuu jos pomo kaatuu, ja
 mikään järjestely ei saa tehdä ovea saavuttamattomaksi. Ilman noita kolmea se on
 epäreiluuden generaattori.
 
-### Ruututyypit teemakohtaisiksi muodoltaan, ei vain väriltään
+### ✘ Peruttu 9.8.2026: ruututyypit teemakohtaisiksi muodoltaan
 
-Toiminta pysyy samana, ulkonäkö vaihtuu maailman mukaan: aavikossa toisenlaiset
-lohkot kuin linnakkeessa, jäässä toisenlaiset kuin tehtaassa.
+Omistaja: *"we don't need a theme specific tile shape, the current skinning is
+enough."* Kohta oli jonossa siitä asti kun uusi kuvakieli (v26.08.09.7) poisti
+sen esteen, eikä sitä koskaan aloitettu.
 
-**Mikä on jo olemassa:** `THEMES` antaa jokaiselle teemalle oman palettinsa, ja
-`drawTile` saa teeman nimen, joten ruudut ovat jo teemakohtaisia **väriltään**.
-`drawGround`illa on lisäksi `surface`-vaihtelu (korret, aallot, niitit).
-
-**Mikä puuttuu:** muoto. Tiili on sama tiili joka maailmassa, vain eri värisenä,
-ja sama koskee `?`-lohkoa ja putkea. Tämä kohta on siis "eri piirtofunktio per
-teema" eikä "eri paletti per teema".
-
-**Este on poissa:** uusi kuvakieli tiilelle, `?`-lohkolle, putkelle ja
-rikkoutumiselle on paikallaan (v26.08.09.7), eli tämä on aloitettavissa. Jäljellä
-on vain kaksi ehtoa, ja ne koskevat tekotapaa eivätkä ole esteitä:
-
-1. **Kaikkien pitää lukea samaksi asiaksi.** Pelaaja oppii maailmassa 1 että
-   tuo on rikottava lohko, ja maailmassa 4 sen pitää olla tunnistettavissa
-   ilman uutta opettelua. Vaihtelu saa olla materiaalissa, ei siluetissa.
-   Mitattava sama tapa kuin nyt: uusi ruutu maan ja kovan maan vieressä, ja
-   pikseliero raportoituna jokaisessa teemassa.
-2. **Kustannus on kuusi kertaa suurempi kuin miltä näyttää.** Kuusi teemaa
-   kertaa neljä ruutua on 24 piirtofunktiota ylläpidettäväksi. Halvempi malli
-   on yksi funktio joka ottaa muotoparametrit teemataulusta — sama tapa jolla
-   `THEMES` hoitaa jo värit.
+Perustelu kannattaa säilyttää, koska se on vastaus kysymykseen joka tulee
+takaisin: **väri riittää erottamaan maailmat, muoto ei ollut se puuttuva asia.**
+`THEMES` antaa jokaiselle teemalle oman palettinsa ja `drawGround`illa on
+`surface`-vaihtelu (korret, aallot, niitit), eli maailmat erottuvat jo. Hinta
+olisi ollut kuusi teemaa kertaa neljä ruutua eli 24 piirtofunktiota, ja
+vastineeksi olisi saanut riskin: pelaaja oppii maailmassa 1 miltä rikottava
+lohko näyttää, ja jokainen uusi siluetti on uusi opettelu. Vaihtelu materiaalissa
+oli aina oikea puolisko — ja se on jo tehty.
 
 ### Maahanisku (ground pound)
 
