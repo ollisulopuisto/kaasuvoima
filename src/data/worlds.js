@@ -9,6 +9,10 @@ import { DIFFICULTY } from './difficulty.js';
  *   . grass  , dark grass  T tree  M mountain  ~ water  S sand
  *   C cactus  R rock  I ice  P pine  " bush  F factory floor  E machinery
  *
+ * Seven of those stand up out of the ground (`TALL_TERRAIN`), and where they
+ * may stand is not up to whoever edits the grid: `worldProblems` refuses a map
+ * that plants one on the road or next to it. See `clearZone`.
+ *
  * BRANCHES. A world may declare `branches`: places where two routes leave the
  * same node and rejoin at the same node. The declaration is not decoration —
  * `worldProblems()` refuses a map whose links fork without one, so a fork that
@@ -27,14 +31,14 @@ const WORLD_DEFS = [
     name: 'PAPULAAKSO',
     theme: 'grass',
     terrain: [
-      'MMM....TT.......MMMM',
+      'MMM.T..TT.......MMMM',
       'MM......T....TT...MM',
-      '..,..TT.......T...,.',
-      '..T....."......T....',
-      '...."...T....."..T..',
+      '..,..T...T."..T...,.',
+      '..T....."......T..T.',
+      '...."...T........T..',
       '.,.........,........',
-      '....T.......".....T.',
-      '~~~..T......TT....~~',
+      '............".....T.',
+      '~~~.........TT....~~',
       '~~~~~~~~..~~~~~~~~~~',
     ],
     nodes: [
@@ -59,14 +63,14 @@ const WORLD_DEFS = [
     theme: 'desert',
     terrain: [
       'SSSSSSSSSSSSSSSSSSSS',
-      'SSMMSSSSCSSSSSSMMSSS',
-      'SSSSSSSSSSSCSSSSSSSS',
-      'SSCSSSSRSSSSSSSSCSSS',
-      'SSSSSSSSSSSSRSSSSSSS',
-      'SSSSSRSSSSSSSSSSSSSS',
-      'SSSSSSSSCSSSSSSSSRSS',
-      'SSCSSSSSSSSSSSCSSSSS',
-      'SSSSSSSSSSSSSSSSSSSS',
+      'SSMSSSSSCSSRSMSMMSSS',
+      'SSSSSSCSSCSSSSSSSSSS',
+      'SSSSSSSRSSSSSSSSSSSS',
+      'SSSSSSSSSSSSSSSSSCSS',
+      'SSSSSSSSSSSSSCSSSSSS',
+      'SSSSSSSSSSSSSSSSSRSS',
+      'SSCSSSSSSSSSSSSSSSCS',
+      'SSSRSSSSSSSSSSSSSSSS',
     ],
     nodes: [
       { id: 'w2-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
@@ -122,13 +126,13 @@ const WORLD_DEFS = [
     terrain: [
       'IIMIIIIIIIIIIIIIIMII',
       'IIMMIIIPIIIIRIMMIIII',
-      'IIIIIIIIIIPIIIIIIRII',
+      'IIIIRIIIPIPIIPIIIRII',
       'IIPIIIRIIIIIIIIPIIII',
+      'IIIIIIIIIIIIIIRIIPII',
       'IIIIIIIIIIIIIIIIIIII',
-      'IIIIPIIIIIRIIIIIIPII',
-      'IIRIIIIIPIIIIIIIIIII',
-      'IIPIIIIIIIIIIPIIIRII',
-      'IIIIIIRIIIIIIIIIIIII',
+      'IIIIIIIIIIIIIIIIIIII',
+      'IIIIIIIIIIPIIIIIIIRI',
+      'IIPIIIRIIIIIIIIIIIII',
     ],
     nodes: [
       { id: 'w3-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
@@ -152,14 +156,14 @@ const WORLD_DEFS = [
     theme: 'factory',
     terrain: [
       'FFFFFFFFFFFFFFFFFFFF',
-      'FFEEFFFFFFFEEFFFFFFF',
-      'FFFFFFFFEFFFFFFFFEFF',
-      'FFEFFFFFFFFFFEFFFFFF',
-      'FFFFFFFEFFFFFFFFFFFF',
-      'FFFEFFFFFFFFFFFEFFFF',
-      'FFFFFFFFFFEFFFFFFFFF',
-      'FFEFFFFFEFFFFFFEFFFF',
+      'FFEFFFFFFFFEEFFFFFFF',
+      'FFFFFFEFEFFFFFFFFEFF',
       'FFFFFFFFFFFFFFFFFFFF',
+      'FFFFFFFFFFFFFFFFFFEF',
+      'FFFFFFFFFFFFFFFFFFFF',
+      'FEFFFEFFFFFFFFEFFFFF',
+      'FFEFFFFEFFFFFFFEFFFF',
+      'FFFEFFFFFFFFFFEFFFFF',
     ],
     nodes: [
       { id: 'w4-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
@@ -182,13 +186,13 @@ const WORLD_DEFS = [
     name: 'JÄLKIPYYKKI',
     theme: 'grass',
     terrain: [
-      'MMM...TT......T..MMM',
-      'MM..T......TT.....MM',
+      'MMM.".TT..T...T..MMM',
+      'MM...T..T..TT..T..MM',
       '..,....T......T...,.',
-      '.T...."....T....."..',
-      '...."....T......T...',
-      '.,........,......T..',
-      '...T......"......T..',
+      '.T...."........T."..',
+      '..............T...T.',
+      '.,........,.........',
+      '..........".........',
       '~~..T.....TT.....~~~',
       '~~~~~~~..~~~~~~~~~~~',
     ],
@@ -214,6 +218,7 @@ export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.te
 
 export const MAP_W = 20;
 export const MAP_H = 9;
+export const TILE = 16;
 
 export function findNode(world, id) {
   return world.nodes.find((n) => n.id === id) || null;
@@ -229,6 +234,154 @@ export function linkPoints(world, link) {
   const b = findNode(world, link.b);
   const mid = (link.path || []).map(([tx, ty]) => ({ tx, ty }));
   return [{ tx: a.tx, ty: a.ty }, ...mid, { tx: b.tx, ty: b.ty }];
+}
+
+/* ------------------------- the road, and its verges ----------------------- */
+
+/**
+ * THE BEND.
+ *
+ * A road drawn between two node centres is a ruler line, and a map made of
+ * ruler lines reads as a diagram rather than a place. So every straight run
+ * gets two control points, at a third and two thirds of its length, pushed
+ * sideways by a couple of pixels. Two points rather than one because a single
+ * pushed midpoint is a chevron — a road that changes its mind once — while two
+ * independent ones give an arc when they agree and a lazy S when they do not.
+ *
+ * The offsets come out of a hash of the two node ids, never `Math.random()`.
+ * The map is redrawn from scratch sixty times a second and rebuilt from a save
+ * on every load; a random bend would crawl while you looked at it and would be
+ * a different road after a quicksave. A hash of the ids is the same road on
+ * every frame, on every machine, forever, and it costs nothing to store.
+ *
+ * BEND_MAX is 4 px and that number is load-bearing, not taste. A path dot is
+ * six pixels across, so it reaches 3 px either side of the line; a tile is 16
+ * and the line runs down its middle, 8 px from the edge. 4 + 3 = 7 < 8, so a
+ * bent road still cannot leave the tiles the link says it passes through — and
+ * those tiles, plus their neighbours, are exactly what `clearZone` keeps free
+ * of scenery. Raise BEND_MAX to 5 and the road starts poking into ground that
+ * nothing has cleared for it.
+ */
+export const BEND_MAX = 4;
+const BEND_AT = [1 / 3, 2 / 3];
+
+/** FNV-1a over a string → [0,1). Deterministic, and cheap enough to redo per frame. */
+function bendHash(key) {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
+/**
+ * The link as a polyline in map pixels — the ONE geometry the map has.
+ *
+ * Both the drawing and the walking pawn read this. They used to each build
+ * their own points out of `linkPoints`, which was harmless while the road was
+ * straight and became a lie the moment it was not: the picture would bend and
+ * the pawn would cut the corner. That split is what DESIGN.md 8 is about, so
+ * the fix is not "bend both the same way" but "there is only one way".
+ *
+ * y is measured from the top of the map band, the same frame `this.pos` uses;
+ * the scene adds MAP_Y when it draws.
+ */
+export function linkCurve(world, link) {
+  const pts = linkPoints(world, link).map((p) => ({ x: p.tx * TILE + 8, y: p.ty * TILE + 8 }));
+  const out = [pts[0]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    /* A zero-length hop has no normal to push along, so it keeps its endpoint
+     * and skips the bend rather than dividing by zero and vanishing. */
+    if (!len) { out.push(b); continue; }
+    const nx = -(b.y - a.y) / len;          // unit normal, so the push is sideways
+    const ny = (b.x - a.x) / len;
+    /* A short run gets a smaller bend than a long one, or a two-tile hop reads
+     * as a kink rather than a curve. The shortest run on any map is 32 px. */
+    const cap = Math.min(BEND_MAX, Math.max(2, Math.round(len / 12)));
+    for (const t of BEND_AT) {
+      const key = `${link.a}>${link.b}#${i}#${t}`;
+      const amp = 2 + Math.floor(bendHash(key) * (cap - 1) * 0.999999);
+      const dir = bendHash(`${key}!`) < 0.5 ? -1 : 1;
+      out.push({
+        x: Math.round(a.x + (b.x - a.x) * t + nx * amp * dir),
+        y: Math.round(a.y + (b.y - a.y) * t + ny * amp * dir),
+      });
+    }
+    out.push(b);
+  }
+  return out;
+}
+
+/**
+ * SCENERY THAT STANDS UP.
+ *
+ * These seven glyphs draw above the ground rather than on it, so a path drawn
+ * across one is a path with a tree in it. Measured out of `drawTerrain`, in
+ * pixels from the top of the tile:
+ *
+ *   T tree 1..14 · P pine 1..14 · M mountain 3..15 · C cactus 3..14
+ *   R rock 8..13 · " bush 6..13 · E machinery 1..14
+ *
+ * The path dot's own ink is y+5..y+10 inside the tile, so every one of them
+ * collides head-on. The flat glyphs — grass, dark grass, sand, ice, factory
+ * plating, water — are ground texture and belong under the road.
+ */
+export const TALL_TERRAIN = 'TPMCR"E';
+
+/** Every tile a link crosses, node centres included. */
+export function pathTiles(world) {
+  const out = new Set(world.nodes.map((n) => `${n.tx},${n.ty}`));
+  for (const link of world.links) {
+    const pts = linkPoints(world, link);
+    for (let i = 0; i < pts.length - 1; i++) {
+      let { tx, ty } = pts[i];
+      const dx = Math.sign(pts[i + 1].tx - tx);
+      const dy = Math.sign(pts[i + 1].ty - ty);
+      out.add(`${tx},${ty}`);
+      while (tx !== pts[i + 1].tx || ty !== pts[i + 1].ty) {
+        if (tx !== pts[i + 1].tx) tx += dx;
+        if (ty !== pts[i + 1].ty) ty += dy;
+        out.add(`${tx},${ty}`);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The corridor that has to stay empty: every path tile AND its four orthogonal
+ * neighbours.
+ *
+ * Why the neighbours and not just the tile the road is in — this was measured
+ * rather than argued, by drawing both maps and counting the empty pixels
+ * between the road and the nearest scenery. Clear only the road's own tiles,
+ * put a mountain range in the rows above and below it, and **2 px** of map is
+ * all that is left: a mountain fills down to the last row of its tile, a road
+ * bent 4 px upward reaches y+5 of its own, and the dark outline every dot
+ * carries is then all but resting on the mountain's foot. Clearing the four
+ * neighbours as well pushes the nearest possible scenery two tiles off the
+ * centreline, and the tightest place on the five shipped maps measures **7 px**
+ * — the width of the dot itself. Both numbers are asserted in `verify.mjs`, so
+ * this paragraph cannot quietly stop being true.
+ *
+ * The diagonals are deliberately NOT listed, and they do not need to be: the
+ * tile diagonally off a straight run is the orthogonal neighbour of the next
+ * path tile along, so a straight road already clears its own diagonals. Only
+ * the outside of a corner is left, and a corner is the one place where the road
+ * turns away from the tile rather than past it.
+ */
+export function clearZone(world) {
+  const zone = new Set();
+  for (const key of pathTiles(world)) {
+    const [tx, ty] = key.split(',').map(Number);
+    zone.add(key);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) zone.add(`${tx + dx},${ty + dy}`);
+  }
+  return zone;
 }
 
 /* ======================= measured difficulty on the map =================== */
@@ -426,6 +579,11 @@ export function tierScore(world, tier, scores = DIFFICULTY) {
  * editing data, it is rule 6 below: block every rewarded route and the fortress
  * must still be reachable. Data that breaks the promise cannot be written here
  * without the gate saying so.
+ *
+ * Rule 8 is the same idea applied to the picture rather than the graph: scenery
+ * may not stand where the road goes. It reads the terrain grid, which is the
+ * only rule here that does — but "the map has to mean what it draws" covers a
+ * tree in the road exactly as much as it covers a level nobody can reach.
  */
 export function worldProblems(world, scores = DIFFICULTY) {
   const out = [];
@@ -506,6 +664,31 @@ export function worldProblems(world, scores = DIFFICULTY) {
           say(`haara ${branch.from}→${branch.to}: palkittu reitti ${r.name} (${r.score.toFixed(1)}) `
             + `ei ole vaikeampi kuin ${p.name} (${p.score.toFixed(1)})`);
         }
+      }
+    }
+  }
+
+  // 8. nothing tall stands on the road or beside it
+  /*
+   * The owner played the map and said the trees were on top of the paths. They
+   * were not, in z-order — `drawTerrain` runs before `drawLinks`, so the line
+   * was always painted over the tree — and that is exactly why this is a data
+   * rule and not a draw-order fix. A road that has been painted over a tree is
+   * still a road you cannot follow: the eye reads the canopy, the trunk and the
+   * dots as one busy patch. The line has to have somewhere to be.
+   *
+   * So it is a rule with the same standing as the branch rules above: a tree
+   * planted on the road is not "a thing we have not done", it is a thing the
+   * file refuses to hold. Turning it on displaced 36 pieces of scenery across
+   * the five shipped maps; every one of them was decoration, and every one was
+   * replanted somewhere the road does not go.
+   */
+  const zone = clearZone(world);
+  for (let ty = 0; ty < (world.terrain || []).length; ty++) {
+    const row = world.terrain[ty] || '';
+    for (let tx = 0; tx < row.length; tx++) {
+      if (TALL_TERRAIN.includes(row[tx]) && zone.has(`${tx},${ty}`)) {
+        say(`${row[tx]} ruudussa ${tx},${ty} seisoo polun päällä tai sen vieressä`);
       }
     }
   }

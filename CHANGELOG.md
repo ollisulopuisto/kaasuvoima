@@ -7,6 +7,106 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.30 — kartta saa hengittää: polku raivattuna, laatta väljänä, tiet mutkalla
+
+Kolme valitusta omistajalta, joka pelasi kartan läpi. Ne ovat yksi työ, koska
+ne ovat sama kuva: **puut seisovat polulla, numerolaatta on ahdettu täyteen ja
+tiet on vedetty viivaimella.** Kaikki kolme on nyt mitattu eikä katsottu.
+
+### 1. Kalusto ei saa seisoa siinä mihin tie menee
+
+Puu polulla ei ollut piirtojärjestysvirhe — `drawTerrain` on aina ajettu ennen
+`drawLinks`iä, eli viiva on maalattu puun **päälle**. Se ei silti auta: latvus,
+runko ja pisteet luetaan yhtenä sotkuisena läiskänä. Viivalla pitää olla paikka
+missä olla.
+
+Siksi tämä on **datasääntö eikä piirtokorjaus**. `worldProblems` sai säännön 8:
+`TALL_TERRAIN` (`T P M C R " E`, ne seitsemän jotka nousevat maasta) ei saa
+seisoa `clearZone`n sisällä, ja se vyöhyke on jokainen polun ruutu **sekä sen
+neljä sivunaapuria**. Puuta polulla ei voi enää committoida.
+
+Miksi naapuritkin — mitattu, ei arvattu. Piirretään maasto kahdesti, kerran
+oikeana ja kerran ilman korkeaa kalustoa; erotus **on** kaluston muste, ja siitä
+lasketaan tyhjät pikselit polkuun. Pelkillä polkuruuduilla vastaus on **2 px**:
+vuori täyttää ruutunsa viimeiseen riviin, 4 px ylös mutkalla oleva tie yltää
+omansa riville y+5, ja pisteen tumma reunus lepää vuoren juurella. Naapurit
+mukaan luettuna tiukin paikka viidellä kartalla on **7 px** — pisteen oma
+leveys. Molemmat luvut ovat portissa, joten tämä kappale ei voi hiljaa lakata
+olemasta totta.
+
+Hinta oli **36 siirrettyä koristetta** viidessä maailmassa. Yhtään ei poistettu:
+jokainen istutettiin uudelleen paikkaan johon tie ei mene, ja kaluston määrä on
+maailma maailmalta sama kuin ennen (32 / 15 / 22 / 15 / 32).
+
+### 2. Laatta kasvoi ulos ruudustaan, ja se maksoi 12 px naapurin väliä
+
+Numero, vaikeuspalkki ja salaisuusmerkki jakoivat yhden 16x16-ruudun, ja
+mitattuna **jokainen väli oli 0 px**: merkin oikea reuna numeron vasemmassa
+sarakkeessa, laatan alareunus kiinni palkin varjossa, palkin viisi pykälää
+pikselin päässä toisistaan. Sitä ei korjaa järjestelemällä uudelleen 16x16:n
+sisällä — 3 + 5 pikseliä sisältöä ja 2 px ilmaa joka saumaan ei mahdu
+kuuteentoista reunusten kanssa.
+
+Nyt laatta on 16x13 ja alkaa 2 px ruudun **yläpuolelta**, palkki 20x5 ja päättyy
+2 px sen **alapuolelle**; pykälän jako on 4 px entisen 3:n sijaan. Jokainen
+sauma on 2 px. Mitä se maksaa 320x240-puskurissa:
+
+- leima 20x21 = 420 px² entisen 256:n sijaan, 0,55 % puskurista per solmu;
+- kartan lähin solmupari on kaksi ruutua eli 32 px erillään (`w2-3` ja `w2-m`),
+  joten leimojen väliin jää **12 px** karttaa entisen 16:n sijaan; lähin
+  pystypari on kolme ruutua ja jättää 27;
+- lähin polku joka ei liity solmuun kulkee 28 px sen keskeltä, ja leiman ja
+  polun väliin jää **17 px**;
+- alin kenttäsolmu on rivillä 7, jonka palkki loppuu y=143. Paneeli alkaa 158.
+
+Vanha kommentti kielsi palkkia vuotamasta ruudustaan, koska se muuten osuisi
+naapurin maastoon tai naapurin palkkiin. Huoli oli oikea ja johtopäätös väärä:
+sitä ei ollut mitattu. Nyt se on, ja portti mittaa kaikki neljä lukua joka ajo —
+sinä päivänä kun joku siirtää solmun kaksi ruutua lähemmäs, portti sanoo sen.
+
+Linnakkeen portin vasen pieli kaventui pikselin, jotta salaisuusmerkki saa saman
+2 px:n ilman kuin kenttälaatassa. Reittitaulun sarakkeet siirtyivät neljä
+pikseliä oikealle leveämmän palkin perässä.
+
+### 3. Tiet mutkittelevat, ja nappula kulkee sitä samaa mutkaa
+
+Jokainen suora saa kaksi ohjauspistettä, kolmannekseen ja kahteen kolmannekseen,
+sivuun työnnettynä. Kaksi eikä yksi: yksi työnnetty keskipiste on kulma, kaksi
+riippumatonta antaa kaaren kun ne ovat samaa mieltä ja laiskan S:n kun eivät.
+
+Poikkeama tulee **solmujen tunnusten tiivisteestä**, ei `Math.random()`ista.
+Kartta piirretään uusiksi kuusikymmentä kertaa sekunnissa ja rakennetaan
+tallennuksesta joka latauksella; satunnainen mutka madeltaisi silmissä ja olisi
+eri tie pikatallennuksen jälkeen. Mitattu mutka on 2,0–4,0 px.
+
+`BEND_MAX = 4` on kantava luku eikä makuasia: piste on kuusi pikseliä leveä eli
+yltää 3 px viivan kummallekin puolelle, ruudun keskeltä reunaan on 8, ja
+4 + 3 = 7 < 8. Mutkitteleva tie ei siis pääse ulos niistä ruuduista jotka linkki
+ilmoittaa kulkevansa — ja juuri ne ruudut naapureineen on raivattu kohdassa 1.
+Viitosella tie alkaisi tökkiä maahan jota mikään ei ole sille raivannut.
+
+**Kuva ja liike lukevat saman geometrian.** `linkCurve` on `worlds.js`:ssä, ja
+sekä `drawLinks` että kävelevä nappula lukevat sen. Aiemmin molemmat rakensivat
+omat pisteensä `linkPoints`ista, mikä oli harmitonta niin kauan kuin tie oli
+suora ja muuttui valheeksi heti kun se ei ollut: kuva mutkittelisi ja nappula
+oikaisisi. Se on juuri se jako josta DESIGN.md 8 puhuu, joten korjaus ei ole
+"mutkitellaan molemmissa samalla kaavalla" vaan "kaavoja on yksi". Mitattu
+poikkeama nappulan reitin ja piirretyn käyrän välillä: **0,000 px**.
+
+Sivutuote: pisteet lasketaan nyt koko tien matkalta eikä pätkä kerrallaan.
+Vanha silmukka laski askeleet segmentissä, ja kahden ruudun hypyn kolmannes on
+yksitoista pikseliä — `round(11/8)` on 1, ja silmukka joka juoksee ykkösestä
+alle ykkösen ei piirrä mitään.
+
+### Punainen ennen vihreää
+
+Kaikki seitsemän väitettä nähtiin punaisena ennen kuin mitään korjattiin:
+kalustoa vyöhykkeessä **36 kpl**, polun ja kaluston väli **−1 px** (eli
+päällekkäin), `worldProblems` ei tunnistanut polulle istutettua puuta, laatan
+välit **0 / 0 / 0 / 0 px**, mutkan syvyys **0,0 px**.
+
+---
+
 ## v26.08.09.29 — kolikkojono vie putken päälle
 
 Salaisuuksien löydettävyys, kolmesta osasta toinen. Kartta kertoi jo *että*
