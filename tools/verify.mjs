@@ -939,6 +939,70 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* --------------------------- debug-warp -------------------------------- */
+  /* A testing tool, and the two things that make it safe to have one: it does
+   * nothing without the developer overlay up (an invisible warp is a cheat code
+   * somebody finds by accident), and a run that used it cannot reach the board
+   * at all. There is an honest star for "rewound"; there is none for "skipped
+   * four worlds". */
+  {
+    const scores = await import('/src/core/scores.js');
+    reset();
+    game.debug = false;
+    const world0 = game.state.world;
+    game.debugWarp();
+    const blocked = game.state.world === world0 && !game.state.debugWarped;
+
+    game.debug = true;
+    game.debugWarp();
+    const moved = game.state.world !== world0 && game.state.debugWarped === true;
+    expect('the debug warp needs the overlay and marks the run',
+      blocked && moved, `ilman debugia ${blocked}, debugilla ${moved}`);
+
+    scores.clearScores();
+    game.state.score = 999999;
+    game.finishRun();
+    expect('a warped run never reaches the high score table',
+      scores.loadScores().length === 0
+      && game.scene.constructor.name === 'HighScoreScene',
+      `${scores.loadScores().length} riviä, ${game.scene.constructor.name}`);
+    game.debug = false;
+    game.state.debugWarped = false;
+    scores.clearScores();
+  }
+
+  /* --------------------------- salaisuuslaskuri -------------------------- */
+  {
+    reset();
+    const tall = new LevelScene(game, '1-2');
+    const c = game.levelSecrets(tall);
+    const plain = game.levelSecrets(new LevelScene(game, '1-1'));
+    expect('the debug overlay counts the secrets in the level',
+      c.vine === 1 && c.warp > 0 && c.bands === 1
+      && plain.vine === 0 && plain.warp === 0 && plain.bands === 0,
+      `1-2: varsi ${c.vine} putki ${c.warp} kaistat ${c.bands}`
+      + ` / 1-1: varsi ${plain.vine} putki ${plain.warp}`);
+    /* Counted across the whole game rather than one level: there are only 186
+     * bricks in all of it, and the first version of this feature hid about five
+     * surprises in the lot — a mechanic nobody would ever meet. */
+    let bricks = 0;
+    let secrets = 0;
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      for (let ty = 0; ty < sc.h; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          if (sc.rawTileAt(tx, ty) !== 'B') continue;
+          bricks++;
+          if (sc.brickSecret(tx, ty)) secrets++;
+        }
+      }
+    }
+    const share = secrets / Math.max(1, bricks);
+    expect('secret bricks are common enough to meet and rare enough to matter',
+      secrets >= 12 && share > 0.08 && share < 0.35,
+      `${secrets}/${bricks} tiiltä = ${Math.round(share * 100)} %`);
+  }
+
   /* ------------------------- teemakohtainen seisonta -------------------- */
   /* Standing about is where the character says what kind of place this is: he
    * shivers on the ice and mops his brow in the desert. Asserted by pixel count
@@ -1163,6 +1227,42 @@ const report = await page.evaluate(async () => {
       kill(sc);
       if (!sc.player.dying) survived.push(what);
     }
+    /* Spikes are one of the things in the level that hit you, so the star does
+     * cover them — the lead designer asked for exactly that. The level itself
+     * still is not covered, which is the line the previous check draws. */
+    {
+      const { T } = await import('/src/gfx/tiles.js');
+      reset({ type: 'shroom', level: 3 });
+      const sc = new LevelScene(game, '1-1');
+      game.setScene(sc);
+      for (let f = 0; f < 6; f++) sc.update(mkInput());
+      const p2 = sc.player;
+      const tx = Math.floor(p2.cx / 16);
+      const ty = Math.floor((p2.y + p2.h) / 16) - 1;
+      sc.setTile(tx, ty, T.SPIKE);
+      p2.y = ty * 16 + 10 - p2.h;
+      const withoutStar = p2.powerLevel;
+      sc.playerTiles();
+      const hurt = p2.powerLevel < withoutStar;
+
+      reset({ type: 'shroom', level: 3 });
+      const sc2 = new LevelScene(game, '1-1');
+      game.setScene(sc2);
+      for (let f = 0; f < 6; f++) sc2.update(mkInput());
+      const p3 = sc2.player;
+      p3.collect('star');
+      const tx2 = Math.floor(p3.cx / 16);
+      const ty2 = Math.floor((p3.y + p3.h) / 16) - 1;
+      sc2.setTile(tx2, ty2, T.SPIKE);
+      p3.y = ty2 * 16 + 10 - p3.h;
+      const before2 = p3.powerLevel;
+      sc2.playerTiles();
+      expect('the star carries you over ground spikes',
+        hurt && p3.powerLevel === before2 && !p3.dying,
+        `ilman tähteä ${hurt ? 'sattui' : 'ei sattunut'}, tähdellä `
+        + `${p3.powerLevel === before2 ? 'ei sattunut' : 'sattui'}`);
+    }
+
     expect('the star does not save you from the level itself',
       survived.length === 0,
       survived.length ? `selvisi: ${survived.join(', ')}` : 'kuoppa/laava/aika tappavat yhä');

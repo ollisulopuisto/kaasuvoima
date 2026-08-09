@@ -111,6 +111,11 @@ class Game {
       world: this.state.world + 1,
       assisted: !!this.state.usedSaveState,
     };
+    // A run that skipped worlds is not a run. No mark would be honest enough.
+    if (this.state.debugWarped) {
+      this.toHighScores();
+      return;
+    }
     if (!qualifies(result.score)) {
       this.toHighScores();
       return;
@@ -247,6 +252,59 @@ class Game {
     }
   }
 
+  /* -------------------------------- debug ------------------------------ */
+
+  /**
+   * Jumps to the next world, for testing. Only with the developer overlay up,
+   * because it is a testing tool and an invisible one would be a cheat code
+   * somebody found by accident.
+   *
+   * The run is marked, and a marked run **cannot reach the high score table at
+   * all**. The save-state star says "this was rewound"; there is no honest star
+   * for "this player skipped four worlds", so the answer is not a mark on the
+   * board but no board.
+   */
+  debugWarp() {
+    if (!this.debug) {
+      this.toast('WARP VAATII DEBUG-RUUDUN (9)');
+      return;
+    }
+    const next = (this.state.world + 1) % WORLDS.length;
+    this.state.world = next;
+    this.state.worldsOpen = Math.max(this.state.worldsOpen, next + 1);
+    this.state.node = startNode(WORLDS[next]).id;
+    this.state.debugWarped = true;
+    this.persist();
+    this.toast(`WARP: MAAILMA ${next + 1} (PISTETAULU POIS)`);
+    Sfx.play('powerup');
+    this.toWorldMap();
+  }
+
+  /**
+   * What is hidden in the level being played, counted rather than located.
+   * The point is to make the new mechanics findable while testing without
+   * turning the debug overlay into a map of every answer.
+   */
+  levelSecrets(scene) {
+    if (!scene || !scene.grid) return null;
+    const count = { vine: 0, warp: 0, star: 0, aswitch: 0, crumble: 0, brick: 0 };
+    for (let ty = 0; ty < scene.h; ty++) {
+      for (let tx = 0; tx < scene.w; tx++) {
+        const ch = scene.rawTileAt ? scene.rawTileAt(tx, ty) : scene.grid[ty][tx];
+        if (ch === 'v') count.vine++;
+        else if (ch === '(') count.warp++;
+        else if (ch === '*') count.star++;
+        else if (ch === 'S') count.aswitch++;
+        else if (ch === '%') count.crumble++;
+        else if (ch === 'B' && scene.brickSecret && scene.brickSecret(tx, ty)) count.brick++;
+      }
+    }
+    // A vine is many tiles and one secret; the same for a crumbling catwalk.
+    count.vine = count.vine ? 1 : 0;
+    count.bands = scene.def && scene.def.bands ? 1 : 0;
+    return count;
+  }
+
   /* ------------------------------ telemetry ---------------------------- */
 
   /** Hands the local playtest log over as a file. Nothing is sent anywhere. */
@@ -300,6 +358,7 @@ class Game {
     if (Input.pressed.quicksave) this.quickSave();
     if (Input.pressed.quickload) this.quickLoad();
     if (Input.pressed.export) this.exportTelemetry();
+    if (Input.pressed.warp) this.debugWarp();
     if (Input.pressed.touch) {
       Touch.reveal();
       this.toast(`KOSKETUSOHJAUS: ${LAYOUT_NAMES[Touch.toggleLayout()]}`);
@@ -381,6 +440,12 @@ class Game {
     lines.push(`KOSKETUS ${t.visible ? t.layout.toUpperCase() : 'PIILOSSA'}`
       + `  SORMET ${t.pointers}  (6 VAIHDA)`);
     lines.push(`LIVES ${this.state.lives}  COINS ${this.state.coins}  SCORE ${this.state.score}`);
+    if (scene && scene.grid) {
+      const c = this.levelSecrets(scene);
+      lines.push(`SALAT VARSI ${c.vine}  PUTKI ${c.warp}  TAHTI ${c.star}`
+        + `  KYTKIN ${c.aswitch}  LAVA ${c.crumble}  TIILI ${c.brick}  KAISTAT ${c.bands}`);
+    }
+    if (this.state.debugWarped) lines.push('WARPATTU - EI PISTETAULUA');
     if (scene && scene.id && scene.cam) {
       // Cached: this scans the whole telemetry log, and the overlay is the one
       // thing on screen that must never be the reason the frame is slow.

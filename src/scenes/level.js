@@ -58,13 +58,23 @@ const STAR_HUD_COLORS = ['#fff070', '#ffffff', '#8fe04a', '#78c0ff'];
  * friend, rather than a lottery. It also needs no level data and no save-state
  * field, and it applies to every world at once, including generated ones.
  *
- * The rates are deliberately mean. At roughly one coin brick in forty and one
- * power brick in three hundred, a level has a handful of surprises in it and
- * hitting every brick you pass is still a waste of time — which is what keeps
- * them surprises instead of a chore.
+ * The rates were first set at 1-in-40 and 1-in-300, "deliberately mean". That
+ * was calibrated for a game with thousands of bricks. This one has **186 in
+ * total**, so those rates hid about five surprises in the entire game and one
+ * power-up in every other playthrough — a feature nobody would ever meet.
+ *
+ * These numbers are **calibrated by counting, not by intent**. Brick positions
+ * are structured — rows and blocks, not scattered points — and the hash is not
+ * uniform over them: a nominal 16 % came out at 30 % when measured across all
+ * 186. So the rates were tuned against the real level data until the count was
+ * right, and `verify.mjs` asserts the measured share rather than the constants.
+ *
+ * As set, the whole game holds 23 coin bricks and 6 power bricks — one or two
+ * per level. Often enough that hitting a brick is worth a try, rare enough that
+ * hitting every brick is still a waste of a clock that is counting down.
  */
-const SECRET_COIN_RATE = 0.025;
-const SECRET_POWER_RATE = 0.0035;
+const SECRET_COIN_RATE = 0.07;
+const SECRET_POWER_RATE = 0.015;
 
 export class LevelScene {
   constructor(game, levelId) {
@@ -780,10 +790,14 @@ export class LevelScene {
         } else if (ch === T.LAVA) {
           p.die('lava');
           return;
-        } else if (ch === T.SPIKE) {
-          // Only the part with points on it hurts. Testing the whole tile made
-          // the top six pixels — plain air, above the tips — just as lethal as
-          // the spikes, so a jump that cleared them by sight still cost you.
+        } else if (ch === T.SPIKE && !(p.star > 0)) {
+          /* Only the part with points on it hurts. Testing the whole tile made
+           * the top six pixels — plain air, above the tips — just as lethal as
+           * the spikes, so a jump that cleared them by sight still cost you.
+           *
+           * The star covers spikes too: it is protection from the things in the
+           * level that hit you, and a spike bed is one of those. What it still
+           * does not cover is the level itself — a pit, lava, the clock. */
           const box = {
             x: tx * TILE, y: ty * TILE + SPIKE_TOP, w: TILE, h: TILE - SPIKE_TOP,
           };
