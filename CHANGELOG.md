@@ -7,6 +7,143 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.22 — kävelyn ohitusasento, kiipeilyasento ja kolme toisen tason seisontaa
+
+### Kävely kulkee ohitusasennon kautta
+
+Kolme jalka-framea olivat aina oikein — 0 ja 2 ovat kosketukset, 1 on ohitus —
+mutta ajuri pyöritti niitä `% 3`:lla, joten kerran jokaisessa askelparissa 2
+kiertyi suoraan 0:aan ja hahmo laski **molemmat jalat maahan kahdesti peräkkäin.**
+Nyt `% 4` ja taulu `[0,1,2,1]`.
+
+Auditointi ennusti korjauksen oikein, mutta kaksi asiaa piti mitata:
+
+- **Piirtopuolen `s.frame % 3` piti silti muuttaa.** Kutsujien osalta ennuste
+  piti — 0, 1 ja 2 kuvautuvat itselleen — mutta framea 3 ei ollut, joten se
+  olisi piirtynyt framena 0 ja tuottanut auki→auki uudelleen.
+- **`% 4` yksin on kolmannes vähemmän askelia samalle matkalle.** Kävelykatolla
+  vanha ajastin antaa 6,8 px kosketusta kohti, ja saappaanjälkien väli on 7 px —
+  lähes täydellinen istutus. Korjaamaton `% 4` antaisi 9,1. `animTimer` on siis
+  skaalattu, jolloin tahti säilyy ja vain epätasaisuus poistuu.
+
+Samalla kutsupaikat pelin ulkopuolella (alkuruudun kävelijä, voittokortti,
+karttanappula) ajavat sykliä nyt samasta vakiosta kuin moottori. Ne käyttivät
+kirjaimellista kolmosta, ja **juuri siksi ne olisivat jääneet vanhaan
+kiertoon sen jälkeen kun kenttä korjattiin.**
+
+### Kiipeilyasento, ja puolet siitä oli jo koodissa
+
+`animFrame` laskettiin köydelle kahden framen sykliksi ja **heitettiin pois**,
+koska `Player.state()` palautti `'jump'`. Nyt se palauttaa `'climb'`, ja asento
+on olemassa: hahmo selin, ei silmää, niska varjossa, kädet ylös nostettuina
+niille samoille sarakkeille joissa riippuvat kädet jo ovat — joten laatikkoon ei
+kosketa. Jalat nousevat vastakkain ylhäällä olevan käden kanssa.
+
+Piirtäminen pakotti yhden korjauksen: 14 pikselin kehossa pää on yhdeksän, joten
+nostettu käsi asettui kiinni päähän ja ne sulautuivat ihonväriseksi möhkäleeksi
+jolla on hattu. Yhden pikselin varjoreuna erottaa ne.
+
+### Kolme toisen tason seisontaa
+
+Tavallisessa kentässä hahmo **nukahtaa**, jäässä **hengittää ulos jääpuikkoja**,
+aavikossa **tukka syttyy** ja hän sammuttaa sen paniikissa.
+
+**Laukeaa 1200 framen jälkeen, ja luku on lainattu eikä valittu:** se on
+alkuruudun oma `DEMO_AFTER`, joten pelissä on **yksi kuollut aika eikä kahta**,
+ja pelaaja oppii sen kerran. Ensimmäisen tason hengitys on koskematta ja alkaa
+yhä heti. Katkeaa yhdessä framessa: `threatNear()` nollaa laskurin kun mikä
+tahansa aktiivinen vihollinen tai vaara on kuuden ruudun sisällä.
+
+**ZZZ on symboli, ja se ratkaistiin eikä sivuutettu.** Roadmap oli oikeassa
+siinä että jääpuikot ja liekki ovat huoneen tekoja hahmolle mutta ZZZ ei ole.
+Konventio ei kuitenkaan ole tälle pelille uusi: `addScorePop` leijuttaa jo
+sanoja maailman koordinaateissa niiden yläpuolella jotka ne ansaitsivat, ja
+`UMMETUS` ponnahtaa pelaajan omasta päästä. ZZZ liittyy siihen kerrokseen eikä
+avaa uutta.
+
+Raja kirjattiin siihen **missä koodi asuu**: symboli piirretään kehon templaatin
+ulkopuolella, kiinteässä koossa joka **ei skaalaudu voimatason mukana**, eikä se
+ota kehon sävytystä. *Ajatus ei kasva siitä että ajattelija syö sienen.*
+
+### Kaksi bugia jotka portti nappasi ja silmä ei
+
+4×4 Z:n yhden pikselin diagonaali kosketti vain kulmista, joten kirjain hajosi
+kahdeksi kappaleeksi. Ja kolme Z:tä lyhyellä matkalla sulautui yhdeksi nauhaksi.
+Molemmat löytyivät yhtenäisyystarkistuksesta — samasta vuotäytöstä joka löysi
+hengityksen repimän pelaajan v26.08.09.18:ssa.
+
+**Ja yksi jonka silmä nappasi ja portti ei:** pesukarhun korvat jäivät
+paikoilleen kun pää nyökkäsi.
+
+## v26.08.09.21 — kävelijä täyttää laatikkonsa, ja kaikki elävä hengittää
+
+### Kävelijän piirros laatikkoon
+
+`Walker` on 16×16 mutta piirtyi `+1..+15` leveänä ja `+3..+16` korkeana, eli
+**pään yllä oli 3–4 pikselin vyöhyke joka satutti näkymättä.** Omistajan päätös
+oli **kasvattaa piirros laatikkoon eikä kutistaa laatikkoa piirrokseen**, koska
+laatikko on nyt anteliaampi kuin miltä näyttää ja kutistaminen tekisi
+tallauksesta tiukempaa kaikkialla — ja kävelijä on se olio jonka muunnelmia
+kaikki muut ovat. Nyt kate on **0 kaikilla neljällä sivulla**, jokaisessa
+framessa, molempiin suuntiin, molemmissa hengitysvaiheissa. Törmäyksiin ei
+koskettu: `entities/enemies.js` on ennallaan.
+
+Muut oliot mitattiin mutta jätettiin: kilpikonna 1 px, kuori 2 px, piikkiukko
+1 px sivuilla (ja piikit 2 px yli — *vaaratonta* taidetta vaarallisen näköisessä
+paikassa), kasvi 1 px, ummetuskorkki 2 px, ruskea pilvi 1 px joka sivulla.
+Papuparooni oli ainoa joka täytti laatikkonsa valmiiksi. **Jokainen luku on nyt
+nimetty sallittuna arvona portissa**, joten minkä tahansa korjaaminen on yhden
+merkin muutos ja testi kertoo jos joku frame jäi.
+
+**Sivulöydös, korjattu:** `drawFlyer` syötti olion raa'an tickin
+`walkerBody`lle, jonka jalkojen vaihto on `frame % 2` — **lentäjän jalat
+vaihtuivat joka framessa**, eli 30 Hz:n välkyntä eikä askellus.
+
+Toinen: ummetuskorkki piirtyi joka toisessa framessa **1 px laatikkonsa alle**,
+koska sen vanha `hop` siirsi koko kehoa pohjia myöten. Hyppy muuttui hengitykseksi.
+
+### Hengitys: 163 framea, eikä luku ole keksitty
+
+Ehdokkaat aseteltiin samalle aika-akselille pelin jo lähettämän hengityksen
+(pelaajan seisonta) viereen, yksi merkki per frame. 32 ja 64 framea on vapinaa,
+96 on hermostunut, 260 antaa kävelijän ylittää puoli ruutua hengitysten välissä.
+**163 epäsymmetrisellä kynnyksellä** — ylhäällä 0,93 s, alhaalla 1,8 s — on se
+rytmi joka pelissä jo on, ja symmetrinen jaksosuhde lukisi metronomina eikä
+hengityksenä. Luku on siis `Math.round(Math.PI * 2 * 26)`, ei arvaus.
+
+### Vaihesiirto, ja sen rehellinen hinta
+
+Pääosa hajonnasta on ilmaista: jokaisen olion `tick` alkaa siitä kun kamera
+herättää sen, joten eri hetkellä kohdatut ovat jo eri vaiheessa. Paikkatermi
+kattaa sen tapauksen joka jää — ryhmä joka herää samalla framella.
+
+**Hinta sanottuna ääneen:** kävelevä olio kantaa siirtymänsä mukanaan, joten
+paikkatermi on myös tahdin muutos — 164 framea paikallaan, 127 oikealle
+kävellessä, 229 vasemmalle. Ruutuhilaan napsautettu vaihe erottaisi naapurit
+paremmin, ja se hylättiin koska se hyppäyttäisi vaihetta joka kerta kun olio
+ylittää ruudun rajan. Roadmap kieltää sen, ja **testi valvoo sitä**: 4 pikselin
+siirtymä saa liikuttaa hengitystä korkeintaan yhden animaatiotikin verran, kun
+hilaan napsautettu versio liikuttaisi sitä ~54.
+
+### Hengitys ei ole siirto, ja se on todistettu
+
+Ylä- ja alareuna on naulattu ja liike tapahtuu niiden välissä: kävelijällä
+kruunu rivillä 0, jalat rivillä 15, hartiat nousevat ja jalat venyvät perässä.
+Kokonaan liikkuva keho jättäisi lattiarivin tyhjäksi tai avaisi uudelleen sen
+vyöhykkeen jonka työn ensimmäinen puoli sulki.
+
+Valvonta on kolminkertainen, 176 framea × molemmat suunnat × 9 spriteä: taide
+laatikon ulkopuolella, laatikko ilman taidetta, ja **yksi yhtenäinen kappale** —
+sama vuotäyttö kuin pelaajan auditoinnissa, koska hengitys joka naulaa toisen
+pään ja liikuttaa keskeltä on täsmälleen se virhe joka repi pelaajan kahtia
+v26.08.09.18:ssa.
+
+### Kaksinkertainen hengitys vältetty nimeltä
+
+Ruskea pilvi (sinibobi), lentäjä (pomppu), papuparooni (fyysinen hyppy,
+tarkistettu koodista), aurinko, kuu ja kuplassa olevat jätettiin rauhaan.
+**Kuori liukuessaan ei hengitä** — pyörivä esine ei ole keho.
+
 ## v26.08.09.20 — jättiläisen areenalle portaat, ja päätös joka osoittautui vääräksi
 
 Tehtävä oli opastaa pelaaja jättiläispomon yläkansille, koska päätös oli että

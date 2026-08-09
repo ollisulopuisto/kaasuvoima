@@ -1,5 +1,5 @@
 import { drawText } from '../gfx/font.js';
-import { drawPlayer, drawItem, drawBoss } from '../gfx/sprites.js';
+import { drawPlayer, drawItem, drawBoss, WALK_FRAMES } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise } from '../core/utils.js';
 import { normalizePower, POWER_NAMES } from '../entities/player.js';
@@ -178,7 +178,7 @@ export class EndingScene {
       type: 'leaf',
       level: 1,
       facing: 1,
-      frame: Math.floor(this.tick / 8) % 3,
+      frame: Math.floor(this.tick / 8) % WALK_FRAMES,
       state: 'walk',
       ducking: false,
       running: false,

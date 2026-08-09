@@ -11,7 +11,82 @@
 
 import { C, outlined, flip } from './palette.js';
 
-function walkerBody(ctx, x, y, frame, facing, squashed) {
+/* ------------------------------- breathing ------------------------------ */
+
+/**
+ * Frames from one breath to the next. Not a new number: the player already
+ * breathes on `Math.sin(tick / 26) > 0.55` and nobody has ever said he
+ * twitches, so the enemies breathe on the same clock and the same threshold.
+ * One game, one breath.
+ */
+export const BREATH_PERIOD = Math.round(Math.PI * 2 * 26);
+
+/**
+ * How much of a breath a pixel of ground is worth. See `breath` for why this
+ * is a compromise and not a tuned constant. The vertical one may be larger
+ * because a walking enemy's `y` does not change at all.
+ */
+const BREATH_X = 0.02;
+const BREATH_Y = 0.055;
+
+/**
+ * One shared breathing cycle for everything in this file that is alive.
+ * Returns 0 or 1: the pixel the body is lifted by, this frame.
+ *
+ * **Why one pixel and never less.** The artwork is integer rectangles on a
+ * 320x240 canvas. Anything under a pixel either rounds to a pixel anyway or
+ * breaks the grid the whole picture rests on, so the amplitude is fixed and
+ * the craft is entirely in the period. A pixel that pops twice a second is a
+ * tremor; a pixel that pops every three seconds, held up for the shorter third
+ * of the cycle, is a chest. That is the player's rhythm, and it is why the
+ * exhale outlasts the inhale here — a breath that is symmetric is a blink.
+ *
+ * **Why the caller passes its own clock.** Every enemy is drawn from its own
+ * `tick`, which starts when the camera wakes it, so two enemies the player
+ * walked up to at different moments are already out of phase without anything
+ * being done about it. What that does *not* cover is a group that wakes on the
+ * same frame — a room the player steps into with three walkers already in it —
+ * and in that case a row of them would pulse as one body and read as a
+ * rendering fault rather than as life. The offset below is what separates
+ * those.
+ *
+ * **Why the offset is small.** `worldmap.js` offsets its sway by tile, which it
+ * can afford because a tile does not walk. An enemy carries its offset along
+ * with it, so a spatial phase is also a rate change. Measured at 0.02 rad/px
+ * and the walker's own 0.55 px/frame: one breath every 164 frames standing
+ * still, 127 walking right and 229 walking left, and two walkers a tile apart
+ * pop 8 frames apart. Bigger separates neighbours better and swings the rate
+ * further; the ceiling is the value at which a walker heading left stops
+ * breathing altogether, and this is comfortably under a third of it. The
+ * alternative — snapping the offset to the tile grid, as the map does — was
+ * rejected because the phase would then jump every time an enemy crossed a
+ * tile boundary.
+ */
+export function breath(tick, x, y) {
+  return Math.sin(tick / 26 + x * BREATH_X + y * BREATH_Y) > 0.55 ? 1 : 0;
+}
+
+/* -------------------------------- walkers ------------------------------- */
+
+/**
+ * `lift` is 0 or 1: how far the body is up this frame.
+ *
+ * The crown is nailed to the top of the box and the feet to the bottom of it,
+ * and the breath moves everything in between — so the drawing covers all
+ * sixteen rows and all sixteen columns in every frame of every cycle. That is
+ * deliberate and it is the whole reason this sprite was redrawn: it used to
+ * paint x+1..+15 and y+3..+16 inside a 16x16 box, which left a three pixel
+ * band above its head that could hurt you without being visible (DESIGN.md
+ * §7). The fix grew the art into the box rather than shrinking the box onto
+ * the art, because the walker is the enemy every other one is a variation of
+ * and its box is the size of a stomp everywhere in the game.
+ *
+ * It also means the breath cannot be a translation. A body that moves up as a
+ * whole leaves the floor line empty and floats; one that moves down as a whole
+ * empties the band this sprite was redrawn to fill. So the walker breathes the
+ * way the player does: the shoulders rise and the legs stretch after them.
+ */
+function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   if (squashed) {
@@ -21,39 +96,48 @@ function walkerBody(ctx, x, y, frame, facing, squashed) {
     ctx.fillRect(px + 1, py + 14, 14, 2);
     return;
   }
-  // A slow squash keeps the walker alive even when it is just plodding along.
-  const bob = Math.floor(frame / 2) % 2;
+  const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
     ctx.fillStyle = '#a06828';
-    ctx.fillRect(bx + 2, py + 3 + bob, 12, 9 - bob);
-    ctx.fillRect(bx + 1, py + 5, 14, 6);
+    ctx.fillRect(bx + 3, py, 10, 3);
+    ctx.fillRect(bx + 1, py + 2 - b, 14, 10);
+    ctx.fillRect(bx, py + 5 - b, 16, 6);
     ctx.fillStyle = '#7a4c18';
-    ctx.fillRect(bx + 2, py + 10, 12, 2);
+    ctx.fillRect(bx + 1, py + 10 - b, 14, 2);
     ctx.fillStyle = C.white;
-    ctx.fillRect(bx + 3, py + 6, 4, 4);
-    ctx.fillRect(bx + 9, py + 6, 4, 4);
+    ctx.fillRect(bx + 3, py + 6 - b, 4, 4);
+    ctx.fillRect(bx + 9, py + 6 - b, 4, 4);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(bx + 5, py + 7, 2, 3);
-    ctx.fillRect(bx + 10, py + 7, 2, 3);
-    ctx.fillRect(bx + 3, py + 4, 4, 2);
-    ctx.fillRect(bx + 9, py + 4, 4, 2);
+    ctx.fillRect(bx + 5, py + 7 - b, 2, 3);
+    ctx.fillRect(bx + 10, py + 7 - b, 2, 3);
+    ctx.fillRect(bx + 3, py + 4 - b, 4, 2);
+    ctx.fillRect(bx + 9, py + 4 - b, 4, 2);
     const swap = frame % 2 === 0;
     ctx.fillStyle = '#4c2c08';
-    ctx.fillRect(bx + (swap ? 0 : 2), py + 12, 6, 4);
-    ctx.fillRect(bx + (swap ? 10 : 8), py + 12, 6, 4);
+    ctx.fillRect(bx + (swap ? 0 : 2), py + 12 - b, 6, 4 + b);
+    ctx.fillRect(bx + (swap ? 10 : 8), py + 12 - b, 6, 4 + b);
     ctx.fillStyle = 'rgba(168,224,74,0.5)';
     const puff = (frame % 4) + 1;
-    ctx.fillRect(bx - 3 - puff, py + 9, puff + 2, 3);
+    ctx.fillRect(bx - 3 - puff, py + 9 - b, puff + 2, 3);
   });
 }
 
 export function drawWalker(ctx, x, y, frame, facing, squashed) {
-  outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed));
+  // `frame` is the walker's tick divided by eight; the breath wants frames.
+  const lift = breath(frame * 8, x, y);
+  outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed, lift));
 }
 
-function shellBody(ctx, x, y, frame, facing, mode) {
+/**
+ * The head is the top of this one's box, so the head is what stays put and the
+ * shell rides up and down behind it — a turtle's breath rather than a walker's.
+ * A shell with nobody in it does not breathe: it is a rolling object, and the
+ * spin is its animation.
+ */
+function shellBody(ctx, x, y, frame, facing, mode, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
+  const b = lift;
   if (mode === 'shell' || mode === 'sliding') {
     const spin = mode === 'sliding' ? Math.floor(frame / 2) % 4 : 0;
     ctx.fillStyle = C.shell;
@@ -71,11 +155,11 @@ function shellBody(ctx, x, y, frame, facing, mode) {
   }
   flip(ctx, px, 16, facing < 0, (bx) => {
     ctx.fillStyle = C.shell;
-    ctx.fillRect(bx + 1, py + 8, 12, 12);
+    ctx.fillRect(bx + 1, py + 8 - b, 12, 12);
     ctx.fillStyle = C.shellDark;
-    ctx.fillRect(bx + 2, py + 12, 10, 3);
+    ctx.fillRect(bx + 2, py + 12 - b, 10, 3);
     ctx.fillStyle = C.rim;
-    ctx.fillRect(bx + 1, py + 18, 12, 3);
+    ctx.fillRect(bx + 1, py + 18 - b, 12, 3);
     ctx.fillStyle = '#f0d060';
     ctx.fillRect(bx + 8, py + 1, 7, 7);
     ctx.fillStyle = C.ink;
@@ -84,15 +168,26 @@ function shellBody(ctx, x, y, frame, facing, mode) {
     ctx.fillRect(bx + 8, py + 6, 6, 2);
     ctx.fillStyle = '#f0d060';
     const swap = Math.floor(frame / 4) % 2 === 0;
-    ctx.fillRect(bx + (swap ? 1 : 3), py + 20, 5, 4);
-    ctx.fillRect(bx + (swap ? 8 : 6), py + 20, 5, 4);
+    ctx.fillRect(bx + (swap ? 1 : 3), py + 20 - b, 5, 4 + b);
+    ctx.fillRect(bx + (swap ? 8 : 6), py + 20 - b, 5, 4 + b);
   });
 }
 
 export function drawShell(ctx, x, y, frame, facing, mode) {
-  outlined(ctx, (g) => shellBody(g, x, y, frame, facing, mode));
+  const lift = mode === 'walk' ? breath(frame, x, y) : 0;
+  outlined(ctx, (g) => shellBody(g, x, y, frame, facing, mode, lift));
 }
 
+/**
+ * No breath on this one: it bounces off the floor every time it lands, which is
+ * as much vertical motion as any body needs, and a second cycle underneath a
+ * hop only fights it.
+ *
+ * It is drawn from the enemy's raw tick rather than from every eighth frame the
+ * way the walker is, so the walk cycle had to be divided down here — passing
+ * the tick straight through swapped its legs on every single frame, which is
+ * not a gait but a 30 Hz flicker.
+ */
 export function drawFlyer(ctx, x, y, frame, facing) {
   const px = Math.round(x);
   const py = Math.round(y);
@@ -104,20 +199,27 @@ export function drawFlyer(ctx, x, y, frame, facing) {
     g.fillStyle = '#c8c8d8';
     g.fillRect(px - 4, py + (flap ? 5 : 9), 6, 1);
     g.fillRect(px + 14, py + (flap ? 5 : 9), 6, 1);
-    walkerBody(g, px, py, frame, facing, false);
+    walkerBody(g, px, py, Math.floor(frame / 8), facing, false, 0);
   });
 }
 
-function plantBody(ctx, x, y, frame) {
+/**
+ * The plant is bolted to a pipe, so its breath is the one part of it that can
+ * move without moving the pipe: the head draws itself up off the stem and
+ * settles back down onto it. Its crown is the top of its box — that is what
+ * a stomp lands on — so the crown is exactly what may not move.
+ */
+function plantBody(ctx, x, y, frame, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
+  const b = lift;
   ctx.fillStyle = C.greenDark;
-  ctx.fillRect(px + 5, py + 10, 6, 22);
+  ctx.fillRect(px + 5, py + 10 - b, 6, 22 + b);
   ctx.fillStyle = C.green;
-  ctx.fillRect(px + 6, py + 10, 3, 22);
+  ctx.fillRect(px + 6, py + 10 - b, 3, 22 + b);
   const open = Math.floor(frame / 12) % 2 === 0;
   ctx.fillStyle = '#e04040';
-  ctx.fillRect(px + 1, py, 14, 11);
+  ctx.fillRect(px + 1, py, 14, 11 - b);
   // Polka dots, not eyes. The plant is a plant; giving it a face made it read
   // as a character rather than a hazard. (Lead designer's call.)
   ctx.fillStyle = '#f8f8f8';
@@ -128,17 +230,17 @@ function plantBody(ctx, x, y, frame) {
   ctx.fillRect(px + 1, py, 14, 1);
   if (open) {
     ctx.fillStyle = '#701010';
-    ctx.fillRect(px + 3, py + 5, 10, 4);
+    ctx.fillRect(px + 3, py + 5 - b, 10, 4);
     ctx.fillStyle = C.white;
-    for (let i = 0; i < 4; i++) ctx.fillRect(px + 3 + i * 3, py + 5, 2, 2);
+    for (let i = 0; i < 4; i++) ctx.fillRect(px + 3 + i * 3, py + 5 - b, 2, 2);
   } else {
     ctx.fillStyle = '#a02020';
-    ctx.fillRect(px + 2, py + 6, 12, 3);
+    ctx.fillRect(px + 2, py + 6 - b, 12, 3);
   }
 }
 
 export function drawPlant(ctx, x, y, frame) {
-  outlined(ctx, (g) => plantBody(g, x, y, frame));
+  outlined(ctx, (g) => plantBody(g, x, y, frame, breath(frame, x, y)));
 }
 
 /** Ruskea pilvi — a drifting brown stink cloud. */
@@ -173,33 +275,41 @@ export function drawStinkCloud(ctx, x, y, frame, facing, angry) {
   outlined(ctx, (g) => stinkBody(g, x, y, frame, facing, angry));
 }
 
-/** Ummetuskorkki — corks you up instead of hurting you. */
-function corkGuyBody(ctx, x, y, frame, facing) {
+/**
+ * Ummetuskorkki — corks you up instead of hurting you.
+ *
+ * This one used to jog its whole body a pixel down every six frames, feet and
+ * all, which put its soles a pixel below the box it is hit with and read as a
+ * vibration rather than as a body. Now it breathes on the shared cycle: the
+ * body lifts and the stubby feet stretch after it, so the soles stay on the
+ * floor line where the collision is.
+ */
+function corkGuyBody(ctx, x, y, frame, facing, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
-  const hop = Math.floor(frame / 6) % 2;
+  const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
     ctx.fillStyle = C.corkDark;
-    ctx.fillRect(bx + 2, py + 2 + hop, 12, 12);
+    ctx.fillRect(bx + 2, py + 2 - b, 12, 12);
     ctx.fillStyle = C.cork;
-    ctx.fillRect(bx + 3, py + 3 + hop, 10, 10);
+    ctx.fillRect(bx + 3, py + 3 - b, 10, 10);
     ctx.fillStyle = C.corkDark;
-    ctx.fillRect(bx + 3, py + 6 + hop, 10, 1);
-    ctx.fillRect(bx + 3, py + 10 + hop, 10, 1);
+    ctx.fillRect(bx + 3, py + 6 - b, 10, 1);
+    ctx.fillRect(bx + 3, py + 10 - b, 10, 1);
     ctx.fillStyle = C.white;
-    ctx.fillRect(bx + 4, py + 7 + hop, 3, 3);
-    ctx.fillRect(bx + 9, py + 7 + hop, 3, 3);
+    ctx.fillRect(bx + 4, py + 7 - b, 3, 3);
+    ctx.fillRect(bx + 9, py + 7 - b, 3, 3);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(bx + 5, py + 8 + hop, 2, 2);
-    ctx.fillRect(bx + 10, py + 8 + hop, 2, 2);
+    ctx.fillRect(bx + 5, py + 8 - b, 2, 2);
+    ctx.fillRect(bx + 10, py + 8 - b, 2, 2);
     ctx.fillStyle = '#7a4c18';
-    ctx.fillRect(bx + 4, py + 14 + hop, 3, 2);
-    ctx.fillRect(bx + 9, py + 14 + hop, 3, 2);
+    ctx.fillRect(bx + 4, py + 14 - b, 3, 2 + b);
+    ctx.fillRect(bx + 9, py + 14 - b, 3, 2 + b);
   });
 }
 
 export function drawCorkGuy(ctx, x, y, frame, facing) {
-  outlined(ctx, (g) => corkGuyBody(g, x, y, frame, facing));
+  outlined(ctx, (g) => corkGuyBody(g, x, y, frame, facing, breath(frame, x, y)));
 }
 
 /**
@@ -471,35 +581,41 @@ export function drawSpines(ctx, x, y, w, out, tick, warning = false, unit = 8) {
  * purpose: the spines are the whole silhouette, and a tall body would put them
  * where a jumping player is not looking.
  */
-function spikeGuyBody(ctx, x, y, frame, facing) {
+function spikeGuyBody(ctx, x, y, frame, facing, lift = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
-  const bob = Math.floor(frame / 6) % 2;
+  // The spines ride on the back, so they go up and down with it. The rest pose
+  // is the low one on purpose: the points already reach above the box (they
+  // are art that cannot hurt you, which is the harmless half of the rule), and
+  // breathing upwards from the old rest height would have reached further.
+  const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
     ctx.fillStyle = '#3c3450';
-    ctx.fillRect(bx + 1, py + 5 + bob, 14, 9 - bob);
+    ctx.fillRect(bx + 1, py + 6 - b, 14, 8 + b);
     ctx.fillStyle = '#584c74';
-    ctx.fillRect(bx + 2, py + 6 + bob, 12, 5);
+    ctx.fillRect(bx + 2, py + 7 - b, 12, 5);
     ctx.fillStyle = C.white;
-    ctx.fillRect(bx + 3, py + 8, 4, 4);
-    ctx.fillRect(bx + 9, py + 8, 4, 4);
+    ctx.fillRect(bx + 3, py + 9 - b, 4, 4);
+    ctx.fillRect(bx + 9, py + 9 - b, 4, 4);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(bx + 5, py + 9, 2, 3);
-    ctx.fillRect(bx + 10, py + 9, 2, 3);
+    ctx.fillRect(bx + 5, py + 10 - b, 2, 3);
+    ctx.fillRect(bx + 10, py + 10 - b, 2, 3);
     // Angry brows: the plant taught us a face reads as a character, and this
     // one is a character you are meant to walk around.
-    ctx.fillRect(bx + 3, py + 7, 4, 1);
-    ctx.fillRect(bx + 9, py + 7, 4, 1);
+    ctx.fillRect(bx + 3, py + 8 - b, 4, 1);
+    ctx.fillRect(bx + 9, py + 8 - b, 4, 1);
     ctx.fillStyle = '#2a2438';
     const swap = frame % 2 === 0;
     ctx.fillRect(bx + (swap ? 1 : 3), py + 13, 5, 3);
     ctx.fillRect(bx + (swap ? 10 : 8), py + 13, 5, 3);
-    drawSpines(ctx, bx + 1, py + 5, 14, 1, frame);
+    drawSpines(ctx, bx + 1, py + 6 - b, 14, 1, frame);
   });
 }
 
 export function drawSpikeGuy(ctx, x, y, frame, facing) {
-  outlined(ctx, (g) => spikeGuyBody(g, x, y, frame, facing));
+  // `frame` is the enemy's tick halved; the breath wants frames.
+  const lift = breath(frame * 2, x, y);
+  outlined(ctx, (g) => spikeGuyBody(g, x, y, frame, facing, lift));
 }
 
 /**

@@ -3648,7 +3648,11 @@ const report = await page.evaluate(async () => {
   {
     const sprites = await import('/src/gfx/sprites.js');
     const { PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer } = sprites;
-    const W = 96; const H = 76; const OX = 36; const OY = 15;
+    /* Twelve rows taller and the sprite twelve lower than this used to be: the
+     * sleeper's ZZZ climbs 21 px above his head, and a picture that runs off
+     * the top of the sheet counts as one piece fewer rather than as a leak,
+     * which is a check quietly measuring the canvas instead of the drawing. */
+    const W = 96; const H = 88; const OX = 36; const OY = 27;
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
@@ -3677,10 +3681,41 @@ const report = await page.evaluate(async () => {
       { n: 'walk 0', s: { state: 'walk', frame: 0 } },
       { n: 'walk 1', s: { state: 'walk', frame: 1 } },
       { n: 'walk 2', s: { state: 'walk', frame: 2 } },
+      { n: 'walk 3', s: { state: 'walk', frame: 3 } },
       { n: 'run 0', s: { state: 'walk', frame: 0, running: true } },
       { n: 'run 2', s: { state: 'walk', frame: 2, running: true } },
       { n: 'jump', s: { state: 'jump', frame: 0 } },
       { n: 'duck', s: { state: 'duck', ducking: true } },
+      /* Hand over hand up a vine, seen from behind. Nothing leaves the box
+       * that the standing pose does not already send out: the raised arms sit
+       * on the same columns the hanging ones do. */
+      { n: 'climb 0', s: { state: 'climb', frame: 0 } },
+      { n: 'climb 1', s: { state: 'climb', frame: 1 } },
+      /*
+       * The second-tier idle, one per theme. Each is sampled at the frame of
+       * its own cycle that reaches furthest, so the numbers below are the
+       * animation's maxima and not one convenient still: `px` is template
+       * pixels and grows with the sprite, `screen` is finished pixels and does
+       * not, and `comps` is the exact number of pieces the picture is allowed
+       * to be in. Every one of them was measured off the drawing rather than
+       * chosen, and none of them is round.
+       *
+       * The icicles and the flame are the room acting on the character, so
+       * they are drawn by the body and grow with it. The ZZZ is a symbol and
+       * is not part of the body, so it is drawn beside it at a fixed size —
+       * see the note in sprites/player.js.
+       */
+      { n: 'sleep', s: { state: 'idle', tick: 5, idle: 1319 }, a: { screen: { above: 21, front: 12 }, comps: 4 } },
+      /* Two samples of the icicle breath: the first one still on his lip, and
+       * the frame where all three are clear of him and as far out as they go. */
+      { n: 'frost 1', s: { state: 'idle', tick: 5, idle: 1244, theme: 'ice' }, a: { px: { front: 2 } } },
+      { n: 'frost 3', s: { state: 'idle', tick: 5, idle: 1263, theme: 'ice' }, a: { px: { front: 11 }, comps: 4 } },
+      { n: 'alight', s: { state: 'idle', tick: 5, idle: 1218, theme: 'desert' }, a: { px: { above: 2 } } },
+      /* The panic beats the body a pixel sideways as well as the arms, so the
+       * back arm reaches one further out than a hanging one — the same pixel
+       * the shiver is already allowed on the ice, for the same reason. */
+      { n: 'panic', s: { state: 'idle', tick: 5, idle: 1260, theme: 'desert' }, a: { px: { above: 4, back: 1 } } },
+      { n: 'smoke', s: { state: 'idle', tick: 5, idle: 1355, theme: 'desert' }, a: { px: { above: 4 } } },
     ];
 
     const leaks = [];
@@ -3724,11 +3759,13 @@ const report = await page.evaluate(async () => {
             const ice = s.theme === 'ice';
             const sweaty = s.theme === 'desert' || s.theme === 'factory';
             const up = (n, k) => (n <= 0 ? 0 : Math.ceil(n * k));
+            const px = (p.a && p.a.px) || {};
+            const scr = (p.a && p.a.screen) || {};
             const allow = {
-              above: up(type === 'leaf' ? 2 : 0, sy),           // raccoon ears
+              above: up((type === 'leaf' ? 2 : 0) + (px.above || 0), sy) + (scr.above || 0),
               below: 0,                                        // the floor line is the floor line
-              front: up((sweaty ? 2 : 1) + (ice ? 1 : 0), sx), // hand, bead, shiver
-              back: up((type === 'leaf' ? 9 : 1) + (ice ? 1 : 0), sx), // tail, hand, shiver
+              front: up((sweaty ? 2 : 1) + (ice ? 1 : 0) + (px.front || 0), sx) + (scr.front || 0),
+              back: up((type === 'leaf' ? 9 : 1) + (ice ? 1 : 0) + (px.back || 0), sx) + (scr.back || 0),
             };
             const over = {
               above: OY - y0,
@@ -3758,7 +3795,8 @@ const report = await page.evaluate(async () => {
                 if (q < W * (H - 1) && art[q + W] && !seen[q + W]) { seen[q + W] = 1; stack.push(q + W); }
               }
             }
-            if (comps !== 1) pieces.push(`${where}: ${comps} pieces`);
+            const wantComps = (p.a && p.a.comps) || 1;
+            if (comps !== wantComps) pieces.push(`${where}: ${comps} pieces, ${wantComps} named`);
           }
         }
       }
@@ -3783,6 +3821,419 @@ const report = await page.evaluate(async () => {
     }
     expect('the paukkupapu has a body of its own at every level and pose',
       same.length === 0, same.slice(0, 4).join('; '));
+  }
+
+  /* ------------------ vihollisten laatikot ja hengitys ------------------- */
+  /*
+   * The audit above, pointed at the things that walk at him. Same method —
+   * measure the picture, not the numbers that made it — and it found the same
+   * two kinds of fault.
+   *
+   *  1. `Walker` is declared 16x16 and drew x+1..+15, y+3..+16, so a three
+   *     pixel band above its head hurt without ever being visible (DESIGN.md
+   *     §7). Fixed by growing the art into the box, never by shrinking the box
+   *     onto the art: the walker is the enemy every other one is a variation
+   *     of, so its box is the size of a stomp everywhere in the game, and
+   *     trimming it would quietly make every walker harder to land on.
+   *  2. Nothing that walks had any vertical motion at all. Everything alive
+   *     breathes now — one pixel — and two neighbours must not breathe in step.
+   *
+   * `over` is art outside the box: visible, harmless, a wing or a spine.
+   * `under` is box with no art on it: invisible, harmful, and the worse of the
+   * two. Both are named per enemy rather than tolerated as slack, because
+   * slack is where the next one hides — every non-zero number below is a
+   * finding somebody may still decide to fix.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const W = 88; const H = 72; const OX = 28; const OY = 24;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    /* Every colour an enemy body is painted in. Trailing gas and the stink
+     * cloud's shadow are deliberately not on the list: they are translucent, so
+     * they only reach full alpha where they land on the stacked outline, and a
+     * puff of gas behind an enemy is not part of its body. */
+    const ART = new Set([
+      '160,104,40', '122,76,24', '76,44,8', '248,248,248', '16,16,24',
+      '62,162,58', '28,107,31', '248,232,160', '240,208,96', '200,160,48',
+      '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
+      '232,224,200', '168,152,120', '224,64,64', '31,111,38', '160,32,32',
+      '112,16,16', '216,168,96', '156,106,40', '138,90,42', '92,58,22',
+      '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
+      '106,68,36',
+    ]);
+    const shot = (paint) => {
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const art = new Uint8Array(W * H);
+      let x0 = 1e9; let y0 = 1e9; let x1 = -1; let y1 = -1;
+      let rows = 0; let n = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] !== 255) continue;
+          if (!ART.has(`${d[i]},${d[i + 1]},${d[i + 2]}`)) continue;
+          art[y * W + x] = 1;
+          if (x < x0) x0 = x;
+          if (y < y0) y0 = y;
+          if (x > x1) x1 = x;
+          if (y > y1) y1 = y;
+          rows += y;
+          n++;
+        }
+      }
+      /* One body, not a pile of parts — the same flood fill as the player's
+       * audit, and here for the same reason: his breath used to lift the shirt
+       * off the trousers, and a breath that pins the top of a sprite while it
+       * moves the middle is exactly the shape of mistake that does it again. */
+      let pieces = 0;
+      const seen2 = new Uint8Array(W * H);
+      const stack = [];
+      for (let q0 = 0; q0 < W * H; q0++) {
+        if (!art[q0] || seen2[q0]) continue;
+        pieces++;
+        stack.push(q0);
+        seen2[q0] = 1;
+        while (stack.length) {
+          const q = stack.pop();
+          const qx = q % W;
+          if (qx > 0 && art[q - 1] && !seen2[q - 1]) { seen2[q - 1] = 1; stack.push(q - 1); }
+          if (qx < W - 1 && art[q + 1] && !seen2[q + 1]) { seen2[q + 1] = 1; stack.push(q + 1); }
+          if (q >= W && art[q - W] && !seen2[q - W]) { seen2[q - W] = 1; stack.push(q - W); }
+          if (q < W * (H - 1) && art[q + W] && !seen2[q + W]) { seen2[q + W] = 1; stack.push(q + W); }
+        }
+      }
+      // `lift` is the art's vertical centre of mass in hundredths of a pixel:
+      // it moves whenever any part of the body moves up or down, and it does
+      // not care where along the ground the sprite was drawn.
+      return { x0, y0, x1, y1, pieces, lift: n ? Math.round((rows / n) * 100) : -1 };
+    };
+
+    const none = { over: {}, under: {} };
+    const subjects = [
+      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+        paint: (ox, t, f) => sprites.drawWalker(g, ox, OY, Math.floor(t / 8), f, false) },
+      // A flattened walker is scenery for twenty-two frames and cannot hurt
+      // anybody, so it is not held to the box it no longer fills.
+      { n: 'flyer', box: [0, 0, 16, 16], over: { left: 4, right: 4 }, under: {},
+        paint: (ox, t, f) => sprites.drawFlyer(g, ox, OY, t, f) },
+      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1,
+        over: {}, under: { top: 1 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'walk') },
+      { n: 'shell', box: [1, 0, 14, 14], over: { left: 1, right: 1 }, under: { top: 2 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'shell') },
+      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2,
+        over: { top: 2 }, under: { left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawSpikeGuy(g, ox, OY, Math.floor(t / 2), f) },
+      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1,
+        over: {}, under: { left: 1, right: 1 }, facings: [1],
+        paint: (ox, t) => sprites.drawPlant(g, ox, OY, t) },
+      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1,
+        over: {}, under: { top: 2, left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawCorkGuy(g, ox, OY, t, f) },
+      { n: 'stink cloud', box: [0, 0, 20, 14],
+        over: {}, under: { top: 1, bottom: 1, left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawStinkCloud(g, ox, OY, t, f, true) },
+      { n: 'bean baron', box: [0, 0, 18, 26], ...none,
+        paint: (ox, t, f) => sprites.drawBeanBaron(g, ox, OY, Math.floor(t / 7), f, 0, false) },
+    ];
+
+    // One line per distinct fault, not one per frame: 176 frames of the same
+    // three pixel band is one bug, and a list of 700 of them hides the next.
+    const seen = new Map();
+    const disagree = [];
+    const note = (what, t) => {
+      if (!seen.has(what)) { seen.set(what, t); disagree.push(what); }
+    };
+    const worst = [];
+    for (const s of subjects) {
+      const [dx, dy, bw, bh] = s.box;
+      const bx0 = OX + dx; const by0 = OY + dy;
+      const bx1 = bx0 + bw - 1; const by1 = by0 + bh - 1;
+      let gap = 0;
+      for (const facing of (s.facings || [1, -1])) {
+        for (let t = 0; t < 176; t += 2) {
+          const m = shot(() => s.paint(OX, t, facing));
+          if (m.x1 < 0) { note(`${s.n} f${facing}: nothing drawn`, t); continue; }
+          if (m.pieces !== 1) note(`${s.n} f${facing}: came apart into ${m.pieces} pieces`, t);
+          const over = { top: by0 - m.y0, bottom: m.y1 - by1, left: bx0 - m.x0, right: m.x1 - bx1 };
+          const under = { top: m.y0 - by0, bottom: by1 - m.y1, left: m.x0 - bx0, right: bx1 - m.x1 };
+          for (const k of ['top', 'bottom', 'left', 'right']) {
+            if (under[k] > gap) gap = under[k];
+            if (over[k] > (s.over[k] || 0)) {
+              note(`${s.n} f${facing}: ${over[k]}px of art ${k} of the box, ${s.over[k] || 0} allowed`, t);
+            }
+            if (under[k] > (s.under[k] || 0)) {
+              note(`${s.n} f${facing}: ${under[k]}px of box with no art at the ${k}, ${s.under[k] || 0} allowed`, t);
+            }
+          }
+        }
+      }
+      worst.push(`${s.n} ${gap}`);
+    }
+    // The measurement, not just the verdict: the widest band of box that no
+    // pixel of the enemy ever covers. Zero is what the walker was grown for.
+    expect('every enemy\'s drawing agrees with the box it hurts you with',
+      disagree.length === 0,
+      disagree.length ? disagree.join('; ') : `laatikossa kattamatta: ${worst.join(', ')}`);
+
+    /*
+     * One shared breath, offset per enemy — the trick the world map already
+     * uses on its tiles. Without the offset a row of walkers pulses as one
+     * body and reads as a rendering fault rather than as life. Measured three
+     * ways: it moves at all, a neighbour a tile away is out of step with it,
+     * and one pixel of walking does not jump its phase.
+     *
+     * Not on the list, because they already have vertical motion of their own
+     * and a second one would fight it: the stink cloud (bobs on a sine), the
+     * flyer (bounces off the floor), the bean baron (hops), the angry sun and
+     * the moon (both hover), and anything sealed in a bubble.
+     */
+    const flat = [];
+    const lockstep = [];
+    const measured = [];
+    const PERIOD = sprites.BREATH_PERIOD;
+    const flipOf = (ser) => {
+      for (let i = 1; i < ser.length; i++) if (ser[i] !== ser[0]) return i;
+      return -1;
+    };
+    for (const s of subjects.filter((q) => q.breathes)) {
+      const series = (ox) => {
+        const out = [];
+        for (let t = 0; t < PERIOD + 16; t++) out.push(shot(() => s.paint(ox, t, 1)).lift);
+        return out;
+      };
+      // A whole tile's worth of standing positions, so whatever the phase is
+      // derived from, this walks across at least one of its boundaries.
+      const steps = [0, 4, 8, 12, 16].map((d) => series(OX + d));
+      const here = steps[0];
+      let apart = 0;
+      for (let i = 0; i < here.length; i++) if (here[i] !== steps[4][i]) apart++;
+      // How far the breath's phase moved for four pixels of ground. It has to
+      // move — that is what keeps neighbours apart — but it may only ever
+      // drift, never snap, or an enemy would change its breathing the moment
+      // it stepped over a tile boundary. The slack is one step of the sprite's
+      // own animation clock, which for the walker is eight frames because that
+      // is the only clock it is given.
+      let jumped = 0;
+      for (let i = 1; i < steps.length; i++) {
+        const a = flipOf(steps[i - 1]); const b = flipOf(steps[i]);
+        if (a < 0 || b < 0) continue;
+        const d = Math.abs(a - b);
+        jumped = Math.max(jumped, Math.min(d, PERIOD - d));
+      }
+      const slack = 4 + s.clock;
+      if (new Set(here).size < 2) flat.push(`${s.n} never moves`);
+      if (apart < 3) lockstep.push(`${s.n}: the next tile along differs on ${apart} frames`);
+      if (jumped > slack) lockstep.push(`${s.n}: four pixels of travel snapped the breath ${jumped} frames, ${slack} allowed`);
+      measured.push(`${s.n} ${apart}/${jumped}`);
+    }
+    expect('everything alive breathes, and neighbours are not in step',
+      flat.length === 0 && lockstep.length === 0,
+      [...flat, ...lockstep, `naapurin ero / 4px:n siirtymä: ${measured.join(', ')}`].join('; '));
+  }
+  /* ------------------------ kävelyn ohitusasento ------------------------ */
+  /*
+   * A walk is contact, pass, contact, pass. The three leg frames were always
+   * right — 0 and 2 are the two contacts, 1 is the pass — but the driver ran
+   * them with `% 3`, so once every stride the cycle wrapped 2 straight back to
+   * 0 and the character put both feet down twice in a row.
+   *
+   * Measured on the pictures a player who is actually walking asks for, not on
+   * the counter: the counter can be renumbered, the limp cannot be argued with.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 40;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (frame) => {
+      g.clearRect(0, 0, 40, 40);
+      sprites.drawPlayer(g, 8, 4, {
+        type: 'shroom', level: 1, facing: 1, frame, state: 'walk',
+        running: false, tick: 5, idle: 0, wag: 0,
+      });
+      const d = g.getImageData(0, 0, 40, 40).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] * 5 + d[i + 3]) | 0;
+      return h;
+    };
+
+    reset({ type: 'shroom', level: 1 });
+    const scene = new LevelScene(game, '1-1');
+    const input = mkInput();
+    input.held.right = true;
+    const asked = [];
+    for (let f = 0; f < 400; f++) {
+      scene.update(input);
+      const p = scene.player;
+      if (p.state() === 'walk') asked.push(p.animFrame);
+    }
+    // The pictures, with repeats of the same picture collapsed.
+    const pics = [];
+    for (const f of asked) {
+      const h = shot(f);
+      if (pics.length === 0 || pics[pics.length - 1] !== h) pics.push(h);
+    }
+    const pass = shot(1);
+    const contacts = new Set(pics.filter((h) => h !== pass));
+    let doubled = 0;
+    for (let i = 1; i < pics.length; i++) {
+      if (pics[i] !== pass && pics[i - 1] !== pass) doubled++;
+    }
+    expect('the walk passes through the closed-legs frame between every contact',
+      pics.length > 8 && contacts.size === 2 && doubled === 0,
+      `${pics.length} kuvaa, ${contacts.size} kosketusasentoa, ${doubled} peräkkäin`);
+  }
+
+  /* ------------------------- kiipeilyn oma asento ----------------------- */
+  /*
+   * Half of this was already in the engine and thrown away: `animFrame` was
+   * being driven as a two-frame hand-over-hand cycle while `state()` reported
+   * `jump`, so the vine showed a frozen jump pose that never changed. Both
+   * halves are checked here — the state the engine reports, and that the two
+   * frames are actually two different pictures and neither of them is the jump.
+   */
+  {
+    const { T } = await import('/src/gfx/tiles.js');
+    const sprites = await import('/src/gfx/sprites.js');
+    reset({ type: 'shroom', level: 1 });
+    let scene = null;
+    let vine = null;
+    for (const id of levelIds()) {
+      const sc = new LevelScene(game, id);
+      for (let ty = 1; ty < sc.h && !vine; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          if (sc.rawTileAt(tx, ty) === T.VINE && sc.rawTileAt(tx, ty + 1) === T.VINE) {
+            vine = { tx, ty }; scene = sc; break;
+          }
+        }
+      }
+      if (vine) break;
+    }
+    let climbState = 'ei köyttä';
+    let moved = false;
+    if (vine) {
+      const p = scene.player;
+      p.x = vine.tx * 16 + (16 - p.w) / 2;
+      p.y = vine.ty * 16;
+      p.onGround = false;
+      const input = mkInput();
+      input.held.up = true;
+      const seen = new Set();
+      for (let f = 0; f < 40; f++) {
+        scene.update(input);
+        if (p.climbing) { climbState = p.state(); seen.add(p.animFrame); }
+      }
+      moved = seen.size === 2;
+    }
+
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 40;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (o) => {
+      g.clearRect(0, 0, 40, 40);
+      sprites.drawPlayer(g, 8, 4, {
+        type: 'shroom', level: 1, facing: 1, frame: 0, state: 'idle',
+        running: false, tick: 5, idle: 0, wag: 0, ...o,
+      });
+      const d = g.getImageData(0, 0, 40, 40).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] * 5 + d[i + 3]) | 0;
+      return h;
+    };
+    const a = shot({ state: 'climb', frame: 0 });
+    const b = shot({ state: 'climb', frame: 1 });
+    const jump = shot({ state: 'jump', frame: 0 });
+    expect('a player on a vine climbs instead of hanging in a jump pose',
+      climbState === 'climb' && moved && a !== b && a !== jump && b !== jump,
+      `tila "${climbState}", kaksi framea ${moved}, framet eroavat ${a !== b}, `
+      + `ei hyppyasento ${a !== jump && b !== jump}`);
+  }
+
+  /* --------------------- toisen tason seisonta-animaatiot --------------- */
+  /*
+   * Twenty seconds of standing still — the same wait the title screen makes
+   * before the cabinet starts playing by itself — and the character starts a
+   * bigger performance: he falls asleep in an ordinary level, breathes icicles
+   * on the ice and sets his hair on fire in the desert.
+   *
+   * Three things are checked, and the first two are the whole joke:
+   *  1. Nothing at all changes before the twenty seconds are up. The first-tier
+   *     idle keeps its own 360-frame cycle, so a shot at 1199 must be identical
+   *     to the same phase 360 frames earlier.
+   *  2. It ends in one frame when anything comes near, exactly as the attract
+   *     demo hands the machine back.
+   *  3. All three are different performances, not one with a repaint.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (o) => {
+      g.clearRect(0, 0, 64, 64);
+      sprites.drawPlayer(g, 22, 26, {
+        type: null, level: 1, facing: 1, state: 'idle', frame: 0, wag: 0,
+        running: false, ducking: false, theme: 'grass', tick: 100, ...o,
+      });
+      return g.getImageData(0, 0, 64, 64).data;
+    };
+    const diff = (a, b) => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]
+          || a[i + 3] !== b[i + 3]) n++;
+      }
+      return n;
+    };
+    const quiet = diff(shot({ idle: 1199 }), shot({ idle: 839 }));
+    const wakes = diff(shot({ idle: 1199 }), shot({ idle: 1300 }));
+    const sleep = shot({ idle: 1300 });
+    const frost = shot({ idle: 1263, theme: 'ice' });
+    const fire = shot({ idle: 1260, theme: 'desert' });
+    const own = Math.min(diff(sleep, frost), diff(sleep, fire), diff(frost, fire));
+    // …and it must be an animation, not a still.
+    const alive = diff(shot({ idle: 1300 }), shot({ idle: 1340 }));
+    expect('the second-tier idle waits twenty seconds and then puts on a show',
+      quiet === 0 && wakes > 30 && own > 20 && alive > 10,
+      `ennen ${quiet}px, laukeaa ${wakes}px, teemojen ero ${own}px, elää ${alive}px`);
+
+    /* Breaking in a single frame is the same promise the attract demo makes. */
+    reset({ type: 'shroom', level: 1 });
+    const scene = new LevelScene(game, '1-1');
+    const p = scene.player;
+    const idleInput = mkInput();
+    for (let f = 0; f < 30; f++) scene.update(idleInput);
+    // Nothing in the room to begin with, so the twenty seconds can run out.
+    const foes = scene.entities.filter((e) => e.kind === 'enemy');
+    for (const e of foes) e.x += 4000;
+    p.idle = 1400;
+    scene.update(idleInput);
+    const undisturbed = p.idle;
+    let broke = -1;
+    if (foes.length) {
+      const foe = foes[0];
+      foe.x = p.x + 40;
+      foe.y = p.y;
+      foe.active = true;
+      p.idle = 1400;
+      scene.update(idleInput);
+      broke = p.idle;
+    }
+    expect('the second-tier idle stops dead the frame something comes near',
+      undisturbed > 1400 && broke === 0,
+      `häiriöttä ${undisturbed}, vihollinen lähellä ${broke}`);
   }
 
   /* ---------------------------- voittoruutu ----------------------------- */
