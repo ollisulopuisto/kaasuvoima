@@ -143,6 +143,43 @@ Kolme asiaa jotka kannattaa päättää ennen kuin tätä aloitetaan:
    rikkoutuminen ovat juuri nyt uudistettavina. Teemakohtaiset muodot
    kannattaa rakentaa sen päälle eikä sen rinnalle, tai työ tehdään kahdesti.
 
+
+### Jonossa: maahanisku (ground pound)
+
+Ilmassa alas + hyppy syöksee hahmon maahan pierun voimalla. Osuma tainnuttaa tai
+tappaa lähellä olevat viholliset, ja **mitä korkeammalta pudotaan, sitä kovempaa
+se osuu** — sekä vahingoltaan että ruudulla. Ylimmästä mahdollisesta hypystä
+tehtynä se on äänivallin rikkominen: pieru työntää alas, ympärille syntyy
+iskuaalto.
+
+Ohjaus on jo vapaana: `down` + `jump` yhdessä ei tarkoita ilmassa mitään.
+`jumpBuffer` ja `airJumps` ovat pelaajassa, iskuaalto on olemassa (`Shockwave`,
+pomon hyökkäys), ja `scene.shake` on olemassa. Suurin osa palasista on siis
+paikallaan.
+
+Neljä asiaa jotka pitää ratkaista, ja kaksi niistä on tasapainoa:
+
+1. **Se ei saa korvata tallausta.** Tallaus on pelin perusliike. Maahanisku saa
+   olla laajempi ja kovempi mutta sen pitää maksaa jotain — putoamisaika jonka
+   aikana ei voi ohjata, ja hetki maassa jonka aikana on haavoittuvainen. Ilman
+   hintaa siitä tulee ainoa liike jota kukaan käyttää.
+2. **Voimataso saa vahvistaa sitä, ei avata sitä.** Sama lupaus kuin muualla:
+   tehostus avaa paikkoja, ei kenttää. Perusliikkeen pitää toimia voimatasolla 0,
+   ja korkeampi taso saa laajentaa sädettä tai lisätä iskuaallon.
+3. **Piikikkäät viholliset.** Maahanisku ei ole tallaus, joten piikkiukkoon ja
+   piikikkääseen pomoon osuminen pitää päättää erikseen. Suositus: **piikit
+   voittavat senkin** — muuten piikikkyys lakkaa tarkoittamasta mitään ja juuri
+   rakennettu pomosykli menettää merkityksensä.
+4. **Korkeuden mittaaminen.** "Mitä korkeammalta, sitä kovempaa" tarvitsee
+   lähtökorkeuden muistiin syöksyn alkaessa, ja katon (`ty < 0` on kiinteä)
+   takia ylin mahdollinen korkeus on tiedossa — eli asteikko voidaan normalisoida
+   eikä arvata.
+
+Audiovisuaalinen puoli kuuluu tähän kokonaan eikä erikseen (DESIGN.md kohta 8):
+syöksyn ääni, osuman ääni, tärinä jonka voimakkuus seuraa korkeutta, ja
+iskuaalto joka on **eri väriä ja eri rytmiä kuin pomon iskuaalto** — kaksi
+samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
