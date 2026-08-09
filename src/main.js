@@ -455,12 +455,6 @@ class Game {
       drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
         { color: '#8890b0', align: 'center' });
     }
-    /* Ominaisuus jota kukaan ei löydä ei ole olemassa, ja tämän koko tarkoitus
-     * on että linkki lähtee eteenpäin. Vihje on siksi niillä kahdella ruudulla
-     * joista jako aukeaa, yläkulmassa jossa ei ole muuta. */
-    if (this.canShareHere()) {
-      drawText(ctx, 'X KERRO KAVERILLE', W - 4, 2, { color: '#6a7a9a', align: 'right' });
-    }
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });
     }

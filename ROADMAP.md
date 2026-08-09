@@ -28,9 +28,10 @@ nyrkkeilijäpomo · jäätikkö laavan tilalle jäämaailmassa · kaksoisovet ·
 voittoruutu hernekeitolla · sirppikuu.
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
-kosketusohjaus kahdella mallilla · esittelytila · teemakohtaiset
+esittelytila · teemakohtaiset
 seisonta-animaatiot kentissä ja kartalla · oma kuvakieli tiilelle, `?`-lohkolle
-ja putkelle · valojärjestelmä, jossa maailma kantaa omat valonsa.
+ja putkelle · valojärjestelmä, jossa maailma kantaa omat valonsa · kosketusohjaus
+kolmella mallilla · jakoruutu (`navigator.share`, ei palvelinta).
 
 **Työkalut:** playable.mjs · difficulty.mjs · debug-warp (näppäin 4, kaataa
 pistetaulun) · salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva
@@ -38,9 +39,14 @@ generaattori.
 
 ### Seuraava työ, tässä järjestyksessä
 
-1. **Uudet ominaisuudet kaikkiin maailmoihin.** Ne ovat nyt yhdessä kentässä
-   kutakin — se on oikein valmiissa pelissä ja väärin nyt, koska niitä ei
-   pääse näkemään. **Tämä estää pelitestauksen, joten se on ensimmäisenä.**
+1. ✔ **Uudet ominaisuudet kaikkiin maailmoihin** — tehty maailmoihin 2, 3 ja 4
+   (v26.08.09.8). Kukin sai sen mitä siltä puuttui ja **tasan yhden** salaisen
+   alueen. Käyrä nousee yhä joka maailmassa, notkoja tasan yksi kussakin.
+
+   **Jäljellä maailma 5**, ja se on eri työ: sen numeroidut kentät tulevat
+   generaattorista, joten mekaniikat leviävät sinne vain opettamalla
+   `gen-levels.mjs`:lle uudet merkit — ja se arpoo maailman uusiksi, eli kolmen
+   kentän mitattu vaikeus muuttuu kerralla. Oma päätöksensä, ei tämän erän jatko.
 2. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
 3. **Kiipeilyanimaatio** — hahmo selin, ote varresta.
 4. **Spritejen animaatiokierrosten tarkistus** kaikilla viidellä voimatasolla.
@@ -247,6 +253,32 @@ Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirj
    jo erikseen jonossa (minipomot, haarautuva kartta). Tämä kohta on siis se
    joka **antaa niille tilan**, ei kilpaile niiden kanssa.
 
+### Päätetty: pistetaulu ei mene palvelimelle, tulos menee linkkiin
+
+Kysymys 9.8.2026: voisiko pistetaulu olla globaali? **Ei — tulos kulkee
+jakolinkissä.** Tekninen puoli on helppo (Vercel on jo alla), eli päätös
+tehdään muilla perusteilla, ja niitä on kolme:
+
+1. **Pistetaulussa on nimi.** `NameEntryScene` kysyy sen, ja lapsi kirjoittaa
+   siihen etunimensä. Globaali taulu lähettäisi sen ulos ja **näyttäisi sen
+   vieraille** — eli sama päätös kuin telemetrian kohdassa 4, mutta raskaampi,
+   koska julkisuus on tässä koko idea. Korjaus on sanalistasta valittava nimi,
+   ja se on isompi työ kuin palvelin.
+2. **Pisteet laskee selain**, joten globaali taulu on kunniajärjestelmä jossa
+   on POST-osoite. Peli välittää taulun rehellisyydestä jo nyt: tilatallennus
+   antaa tähden ja warpattu kierros ei pääse taululle lainkaan. Globaali taulu
+   tekisi noista tarkistuksista koristeita.
+3. **Se olisi ensimmäinen ajonaikainen riippuvuus** (DESIGN.md kohta 7) — eli
+   ensimmäinen tapa jolla peli voi olla rikki ilman että kukaan koski koodiin.
+
+**Tehdään sen sijaan:** tulos jakolinkin osoiteparametreihin
+(`?s=45200&n=OLLI&l=2-3`), ja vastaanottajan alkuruutu kertoo mihin pitää yltää.
+Ei palvelinta, ei tallennettuja nimiä, eikä huijaaminen ole ongelma jota
+kannattaisi ratkaista — oman kehulinkin väärentäminen on itseään vastaan.
+Jakoruutu on jo olemassa ja lukee osoitteen `og:url`-tagista, joten tämä on
+laajennus eikä uusi ruutu. Jos globaali taulu joskus tehdään, se tehdään tämän
+jälkeen ja paremmin tiedoin.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
@@ -260,6 +292,40 @@ Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirj
   bugi, mutta se on nyt kirjattu.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
+- **Hyppybudjetti on vanhentunut, ja se on ollut sitä alusta asti.**
+  `tools/jump-budget.json` ja `PHYSICS.md`:n taulukko lupaavat 121 px nousun ja
+  200 px kantaman; mitattuna nyt 71 ja 155. Vakiot eivät ole muuttuneet sitten
+  sen commitin joka kirjoitti tiedoston viimeksi (`src/level/physics.js`), ja
+  vakioista laskettuna tulee ~72 px — eli **tiedosto oli väärässä jo
+  syntyessään**: fysiikkamuutos ja budjettitiedosto tulivat samassa commitissa,
+  eikä budjettia mitattu uudelleen muutoksen jälkeen.
+
+  **Mikään ei ole rikki:** validaattori ajettiin kaikille 21 kentälle sekä
+  tallennetulla (8/13/6) että mitatulla (6/9/4) budjetilla, ja rikkeitä on
+  molemmilla nolla. Yksikään kuilu ei siis ole liian leveä.
+
+  Seuraus on silti konkreettinen: **kohdan 3 (d) peruste on väärä.** Se sanoo
+  että kuilut on mitoitettu kuudelle ruudulle vaikka juoksuhyppy kantaa 12,5 —
+  kantama on 9,7. Kohta on jäljellä olevan listan ainoa, joten se voi hyvinkin
+  olla tarpeeton. **Päätä tämä ennen kuin budjettitiedosto generoidaan uusiksi**,
+  koska maailma 5 on generoitu vanhoilla luvuilla.
+
+  Ansa jonka tämä paljasti: **`measure-jump.mjs` kirjoittaa
+  `jump-budget.json`in sivuvaikutuksena**, eli pelkkä mittaaminen muuttaa sitä
+  tiedostoa jota generaattori lukee.
+- **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan**, kaikki samaa muotoa:
+  `fort_blocks`in tiilihylly (rivi 9) ja sen yllä oleva holvi (rivi 6) jättävät
+  väliin kaksi riviä kun tarvitaan kolme. Osuu kenttiin 1-F, 2-F ja 3-F.
+  Validaattori ei huomauta siitä syystä joka on myös vastaus siihen onko se
+  bugi: **hylly ei ole maareitillä**, alla oleva lattia on kuljettava, eikä
+  kenttä ole missään koossa mahdoton. Isoin pelaaja vain törmää näkymättömään
+  kattoon jos kiipeää sinne.
+- **Bonushuoneita ei validoi mikään.** `rules.js` lukee vain sen kaistan jossa
+  aloitusmerkki on, joten taivas- ja luolakaistan huoneet menevät läpi
+  tarkistamatta — ja juuri siellä liian matala katto olisi pahin, koska
+  `secrets.js`:n oma sääntö on että bonus josta ei pääse pois on ansa.
+  Maailmojen 2–4 uudet huoneet on tarkistettu ajamalla moottoria kaikilla
+  kuudella koolla, mutta se oli käsityötä eikä portti.
 - **Yön paletissa tiili ja maa ovat lähes sama ruskea** (27,8 / 34 %, heikoin
   pari kaikista kuudesta teemasta). Uusi kuvakieli paransi eron joka teemassa,
   mutta tämä jäljelle jäänyt on **paletti eikä muoto**, joten se ei korjaannu

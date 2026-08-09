@@ -47,6 +47,7 @@ näppäimistöasettelu ei siirrä niitä.
 | juoksunäppäin | pierupallo (kukka) · häntäisku (lehti) |
 | alas | kyykky · pudotus puulavan läpi |
 | Enter | tauko kentässä · kartalla käytä varastoesine |
+| juoksunäppäin (X/K) | alkuruudussa ja pistetaulussa: **kerro kaverille** (jakoruutu) |
 | M tai 0 | äänet päälle/pois |
 | 1 / 2 | tallenna tila / lataa tila |
 | 3 | vaihda tallennuspaikkaa (1–3) |
@@ -221,23 +222,49 @@ kannettava ilmoittaa kosketustuen jota kukaan ei käytä, eikä sellaiselle
 koneelle kannata piirtää ristiohjainta pelin päälle. Työpöydällä ne saa esiin
 näppäimellä **6** tai osoitteella `?touch=1`.
 
-Kaksi mallia, ja **6** (tai OHJAUS-painike) vaihtaa niiden välillä:
+Kolme mallia, ja **6** (tai OHJAUS-painike) vaihtaa niiden välillä:
 
 | Malli | Miten |
 | --- | --- |
-| `näppäimet` | Näkyvä ristiohjain vasemmalla, Z ja X oikealla. Tarkka, mutta vie ruudun alaosan. |
+| `rulla` | **Oletus.** Sama ristiohjain kuin näppäimissä, mutta oikealla on kaksi nappia yhden kentän sijaan: pieru täyttää nurkan johon peukalon lapa asettuu, ja hyppy on ympyrä *sen sisällä* ylhäällä vasemmalla, jonne kärki yltää. Yksi peukalo pitää siis pierun pohjassa ja hyppää. Hinta: tässä mallissa ei voi hypätä ilman juoksua. |
+| `näppäimet` | Näkyvä ristiohjain vasemmalla, Z ja X oikealla. Tarkka, mutta vie ruudun alaosan — ja ainoa malli jossa saa kävelyvauhtisen hypyn. |
 | `peukalot` | Ei näkyviä nappeja. Vasen puoli on sauva joka ilmestyy siihen mihin peukalo osuu, oikean puolen alaosa hyppää ja yläosa pieruttaa. |
 
-Kumpi on parempi, ei ratkea pöydän ääressä, joten molemmat ovat mukana ja
-valinta muistetaan.
+Kumpi on parempi, ei ratkea pöydän ääressä, joten kaikki ovat mukana ja valinta
+muistetaan. Vain oletus vaihtui; kenenkään tallennettua valintaa ei hylätty.
 
-Toteutuksen kolme sääntöä, jotka säästävät eniten harmia:
+**Miksi `rulla` on olemassa:** juoksunappia pitää pitää pohjassa *ennen* hyppyä
+ja sen aikana, koska juoksu nostaa nopeuskattoa ja vauhti kertyy juostessa.
+Kahdella erillisellä napilla se vaatii kaksi sormea. Peukalon rullaaminen napilta
+toiselle ei auta, koska kosketusnäyttö raportoi sormen **yhtenä pisteenä**:
+piste siirtyy, ja juoksu vapautuu. Sama koodipolku tekee ristiohjaimesta
+ristiohjaimen. Siksi ratkaisu ei ole nappien siirtely vaan sisäkkäisyys — piste
+osuu molempiin suorakulmioihin yhtä aikaa.
+
+Toteutuksen neljä sääntöä, jotka säästävät eniten harmia:
 - **Osumatarkistus on omaa koodia**, ei DOM-nappeja. Selain ei lähetä
   `pointerleave`ia kun peukalo liukuu napilta pois, eikä ristiohjain jolla ei
   voi rullata peukaloa ole ristiohjain.
 - **Jokainen sormi seurataan `pointerId`:llä.** Ohjaus + juoksu + hyppy on kolme
   sormea, ja yhdenkin pudottaminen tuntuu pelin jumittumiselta.
-- **`touch-action: none`**, tai Android tekee hypystä sivun vierityksen.
+- **`touch-action: none` peitteellä**, tai Android tekee hypystä sivun
+  vierityksen — **mutta vain kun kuva ei ole zoomattuna.** Koko ruudun peittävä
+  peite joka kieltää kaikki eleet kieltää myös nipistyksen, eli se lukitsee
+  pelaajan siihen zoomiin johon hän vahingossa päätyi. Ks. alla.
+- **Juoresta ei tehdä automaattista.** Se olisi halvin tapa korjata koko ongelma
+  ja väärä: kuilut on mitoitettu mitattuun hyppybudjettiin, joten aina päällä
+  oleva juoksu muuttaa hyppykaarta ja jokaisen kentän vaikeutta. Se on
+  kenttäsuunnittelua ohjausvalikon kautta.
+
+### Mobiili-Safari ja zoom
+
+`user-scalable=no` ei ole tehonnut iOS-Safarissa sitten iOS 10:n, eikä
+`maximum-scale` ole ratkaisu vaan pahennus: selaimissa jotka sitä tottelevat se
+vie nipistyksen, eli poistaa tien takaisin. Zoomaus estetään siis
+`touch-action: manipulation`illa juurielementissä, joka tappaa
+kaksoisnapautuksen mutta jättää nipistyksen. Kun kuva *on* zoomattuna
+(`visualViewport.scale`), juurielementti ja ohjainpeite antavat kaikki eleet
+takaisin, jotta pelaaja pääsee aina ulos.
 
 ## Kuvaefektit
 
