@@ -7860,36 +7860,52 @@ const report = await page.evaluate(async () => {
     };
 
     const none = { over: {}, under: {} };
+    /*
+     * `stomp` is the rule the entity actually enforces (`Enemy.stompable`), and
+     * it is on this table rather than read out of the classes on purpose: the
+     * point of the crown audit below is to compare the *picture* against the
+     * rule, so the rule has to arrive from somewhere the picture cannot reach.
+     * `pit` marks the one enemy the player never arrives above.
+     */
     const subjects = [
-      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
         paint: (ox, t, f) => sprites.drawWalker(g, ox, OY, Math.floor(t / 8), f, false) },
       // A flattened walker is scenery for twenty-two frames and cannot hurt
       // anybody, so it is not held to the box it no longer fills.
-      { n: 'flyer', box: [0, 0, 16, 16], over: { left: 4, right: 4 }, under: {},
+      { n: 'flyer', box: [0, 0, 16, 16], stomp: true,
+        over: { left: 4, right: 4 }, under: {},
         paint: (ox, t, f) => sprites.drawFlyer(g, ox, OY, t, f) },
-      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1,
+      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1, stomp: true,
         over: {}, under: { top: 1 },
         paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'walk') },
-      { n: 'shell', box: [1, 0, 14, 14], over: { left: 1, right: 1 }, under: { top: 2 },
+      { n: 'shell', box: [1, 0, 14, 14], stomp: true,
+        over: { left: 1, right: 1 }, under: { top: 2 },
         paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'shell') },
-      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2,
+      /* The kicked one. It was never in this audit, which is a gap and not a
+       * decision: a shell that slides through a room is the one drawing in the
+       * game the player is asked to read while it is moving fastest. */
+      { n: 'shell sliding', box: [1, 0, 14, 14], stomp: true,
+        over: { left: 1, right: 1 }, under: { top: 2 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'sliding') },
+      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2, stomp: false,
         over: { top: 2 }, under: { left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawSpikeGuy(g, ox, OY, Math.floor(t / 2), f) },
-      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1,
+      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1, stomp: false,
         over: {}, under: { left: 1, right: 1 }, facings: [1],
         paint: (ox, t) => sprites.drawPlant(g, ox, OY, t) },
-      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1,
+      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1, stomp: true,
         over: {}, under: { top: 2, left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawCorkGuy(g, ox, OY, t, f) },
-      { n: 'stink cloud', box: [0, 0, 20, 14],
+      { n: 'stink cloud', box: [0, 0, 20, 14], stomp: true,
         over: {}, under: { top: 1, bottom: 1, left: 1, right: 1 },
         paint: (ox, t, f) => sprites.drawStinkCloud(g, ox, OY, t, f, true) },
-      { n: 'bean baron', box: [0, 0, 18, 26], ...none,
+      { n: 'bean baron', box: [0, 0, 18, 26], stomp: true, ...none,
         paint: (ox, t, f) => sprites.drawBeanBaron(g, ox, OY, Math.floor(t / 7), f, 0, false) },
       /* Kurnuttaja. Silmät ovat laatikon katto ja jalat sen lattia, ja hengitys
        * liikkuu niiden välissä — sama rakenne kuin kävelijällä, ja samasta
        * syystä: se on ainoa tapa täyttää laatikko jokaisella framella. */
-      { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+      { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8,
+        stomp: false, pit: true, ...none,
         paint: (ox, t, f) => sprites.drawKurnuttaja(g, ox, OY, t, f) },
     ];
 
@@ -7986,6 +8002,190 @@ const report = await page.evaluate(async () => {
     expect('everything alive breathes, and neighbours are not in step',
       flat.length === 0 && lockstep.length === 0,
       [...flat, ...lockstep, `naapurin ero / 4px:n siirtymä: ${measured.join(', ')}`].join('; '));
+
+    /* ------------- ylälaita kertoo saako päälle hypätä ------------------- */
+    /*
+     * Stomping is the one verb this game teaches in its first screen, and the
+     * whole verb rests on a yes/no the player has to read *before* the jump, at
+     * a distance, in a fraction of a second. There is exactly one place in a
+     * sprite where that answer can live: the top edge, because that is the part
+     * a falling player is aimed at.
+     *
+     * So the claim is not "the art looks different". It is that **the top edges
+     * of the two populations do not overlap** — that no enemy you must walk
+     * around offers a wider flat landing than the narrowest one you are meant to
+     * jump on, with a band of at least four pixels between them where nothing
+     * lives. That is a number, it is measured off the finished pixels, and it
+     * cannot be satisfied by choosing a nicer colour: colour has to be learned
+     * first, and a row of points does not (the same argument `drawSpines`
+     * already makes for the piikkiukko, now enforced instead of asserted).
+     *
+     * **What the red said, and it is worth reading twice.** Measured on the old
+     * art, the widest flat landing surface in the entire enemy roster belonged
+     * to the *plant* — 14 px of unbroken flat crown out of a 16 px box, wider
+     * than the walker's 10, tied with the shell that you are supposed to jump
+     * on — and the plant is the one enemy in the game that has never been
+     * stompable. The picture said "land here" in the largest type available and
+     * the rule said "this costs you a power level". The other unstompable, the
+     * piikkiukko, measured 1. So the populations were not merely close, they
+     * were inverted, and the game taught a lie in 1-2 to every player who had
+     * just been taught the truth in 1-1.
+     *
+     * `landing` is the widest run of columns whose topmost painted pixel is
+     * within one pixel of the sprite's own highest, over the box's columns only
+     * — a wing hanging off the side is not somewhere you can land. `points` is
+     * how many separate such runs there are, which is what tells a row of teeth
+     * apart from a plateau with a notch in it.
+     */
+    const crown = (paint, box) => {
+      const [dx, , bw] = box;
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const top = new Int32Array(bw).fill(1e9);
+      for (let y = 0; y < H; y++) {
+        for (let i = 0; i < bw; i++) {
+          const q = ((y * W) + OX + dx + i) * 4;
+          if (d[q + 3] !== 255) continue;
+          if (!ART.has(`${d[q]},${d[q + 1]},${d[q + 2]}`)) continue;
+          if (y < top[i]) top[i] = y;
+        }
+      }
+      let min = 1e9;
+      for (const v of top) if (v < min) min = v;
+      let landing = 0; let run = 0; let points = 0; let was = false;
+      for (let i = 0; i < bw; i++) {
+        const hi = top[i] <= min + 1;
+        if (hi) { run++; if (!was) points++; if (run > landing) landing = run; } else { run = 0; }
+        was = hi;
+      }
+      return { landing, points };
+    };
+    {
+      const read = [];
+      for (const s of subjects) {
+        if (s.stomp === undefined) continue;
+        let landing = 1e9; let points = 1e9;
+        for (const facing of (s.facings || [1, -1])) {
+          for (let t = 0; t < 176; t += 2) {
+            const m = crown(() => s.paint(OX, t, facing), s.box);
+            landing = Math.min(landing, m.landing);
+            points = Math.min(points, m.points);
+          }
+        }
+        read.push({ ...s, landing, points });
+      }
+      /* The kurnuttaja is the one exemption and it is named rather than
+       * tolerated. It is not stompable either, but it spends its life at the
+       * bottom of a pit: the player never arrives above it by choice, and the
+       * warning it owes is the column of bubbles `drawCroak` puts in the air
+       * over the hole — a signal in a place, not a shape on a crown. Its own
+       * number is printed anyway, because an exemption nobody can see the size
+       * of is just a hole in a test. Measured 6, which is inside the band this
+       * assertion keeps empty, and somebody may yet decide to narrow its eye
+       * turrets. */
+      const land = read.filter((s) => !s.pit);
+      const yes = land.filter((s) => s.stomp);
+      const no = land.filter((s) => !s.stomp);
+      const softest = yes.reduce((m, s) => (s.landing < m.landing ? s : m), yes[0]);
+      const flattest = no.reduce((m, s) => (s.landing > m.landing ? s : m), no[0]);
+      const blunt = no.filter((s) => s.points < 3);
+      const pit = read.find((s) => s.pit);
+      expect('vihollisen ylälaita kertoo saako sen päälle hypätä',
+        softest.landing >= flattest.landing + 4 && blunt.length === 0,
+        `tallattavista kapein ${softest.n} ${softest.landing} px, `
+        + `tallaamattomista levein ${flattest.n} ${flattest.landing} px`
+        + (blunt.length ? ` — piikittömät: ${blunt.map((s) => `${s.n} ${s.points}`).join(', ')}` : '')
+        + `; kaikki: ${read.map((s) => `${s.n} ${s.landing}/${s.points}`).join(', ')}`
+        + (pit ? ` (${pit.n} kuopan pohjalla, ei portissa)` : ''));
+    }
+
+    /* ------------ vihollinen erottuu siitä maasta jolla se seisoo -------- */
+    /*
+     * The tiles have had a per-theme contrast gate for a while and the enemies
+     * have not, which is the wrong way round: a brick that melts into the
+     * ground costs you a secret, an enemy that melts into the ground costs you
+     * a power level. Eight themes and one sprite each means eight chances for
+     * a species to disappear, and the one that disappears will be the one on
+     * the world nobody replayed.
+     *
+     * Same measure as the tile gate, deliberately — mean channel difference out
+     * of a full 255, crude but unbreakable, and worth more as *the same number*
+     * than as a better one nobody can compare against anything. Two differences,
+     * both forced by what is being measured:
+     *
+     *   - The outline is left out (`16,16,24`). Every sprite in the game wears
+     *     the same one, so it can only ever hide the thing being asked about,
+     *     which is whether the *body* has a colour of its own.
+     *   - The threshold is not typed in. It is the desert's own ground/brick
+     *     gap, computed here from the same tiles — the weakest pair the game
+     *     already ships and knowingly tolerates. "At least as separate as the
+     *     worst pair we already live with" is a claim that stays true when the
+     *     palette moves, which a hard-coded 8.6 would not.
+     *
+     * **What the red said.** The walker — the first enemy in the game, in 1-1,
+     * standing on grass — measured 6.0 % against grass and 5.7 % against the
+     * night ground of world 2, both under the 8.6 % floor. The plant measured
+     * 6.9 % against grass. Brown on brown, and it had been that way since the
+     * first sprite was written.
+     *
+     * Gated on the three species this pass redrew, and **measured on all of
+     * them**: the rest of the roster is printed with its worst theme so the
+     * ones still under the line are a decision somebody makes with a number in
+     * front of them rather than a thing this test quietly blesses.
+     */
+    {
+      const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
+      const bodyMean = (paint) => {
+        g.clearRect(0, 0, W, H);
+        paint();
+        const d = g.getImageData(0, 0, W, H).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let i = 0; i < W * H; i++) {
+          const q = i * 4;
+          if (d[q + 3] !== 255) continue;
+          const key = `${d[q]},${d[q + 1]},${d[q + 2]}`;
+          if (!ART.has(key) || key === '16,16,24') continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const tileMean = (ch, theme) => {
+        g.clearRect(0, 0, W, H);
+        drawTile(g, ch, 0, 0, theme, 3, 5, 0, ' ', {});
+        const d = g.getImageData(0, 0, 16, 16).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let q = 0; q < d.length; q += 4) {
+          if (d[q + 3] < 8) continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const sep = (a, b) => (!a || !b ? 0
+        : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
+      const floor = sep(tileMean(T.GROUND, 'desert'), tileMean(T.BRICK, 'desert'));
+      const grounds = Object.keys(THEMES).map((th) => [th, tileMean(T.GROUND, th)]);
+      // The three this pass owns. Everything else is measured and printed.
+      const owned = new Set(['walker', 'shell walking', 'shell', 'shell sliding', 'plant']);
+      const rows = [];
+      for (const s of subjects) {
+        const m = bodyMean(() => s.paint(OX, 0, 1));
+        let worst = { th: '?', v: 1e9 };
+        for (const [th, ground] of grounds) {
+          const v = sep(m, ground);
+          if (v < worst.v) worst = { th, v };
+        }
+        rows.push({ n: s.n, owned: owned.has(s.n), ...worst });
+      }
+      const mine = rows.filter((r) => r.owned);
+      const rest = rows.filter((r) => !r.owned);
+      const sunk = mine.filter((r) => r.v < floor);
+      expect('uudelleenpiirretty vihollinen erottuu jokaisen teeman maasta',
+        sunk.length === 0,
+        `kynnys ${floor.toFixed(1)} % = aavikon maa vs tiili; `
+        + `${mine.map((r) => `${r.n} ${r.v.toFixed(1)} (${r.th})`).join(', ')}`
+        + ` — mittaamatta portissa: ${rest.map((r) => `${r.n} ${r.v.toFixed(1)} (${r.th})`).join(', ')}`);
+    }
   }
   /* ------------------------ kävelyn ohitusasento ------------------------ */
   /*
