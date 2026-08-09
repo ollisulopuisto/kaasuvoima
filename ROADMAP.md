@@ -12,9 +12,17 @@ ennen pushia on `node tools/verify.mjs`.
 
 ## Tila 9.8.2026
 
-Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 36 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 44 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
+
+**Kahdeksan kentän maailman muoto on päätetty** (v26.08.09.43): seitsemän
+numeroitua kenttää ja linnake, ja kävelyssä kaksi hengähdystä. Muoto on portissa
+eikä tässä dokumentissa, ja maailmat **1 ja 3** on tehty sen mukaan — generaattori
+osaa nyt kaikki kahdeksan teemaa ehtoineen. Jäljellä maailmat 2 ja 4–8, eli **20
+kenttää**. Yksi varaus, ja se on iso: **alkuperäisyystarkistusta ei voitu ajaa**
+(`VGLC_DIR` asettamatta), joten jokainen generoitu kenttä kantaa merkinnän
+`origin: 'not checked'` ja `node tools/originality.mjs` odottaa korpusta.
 
 **Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
@@ -347,8 +355,37 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on **8 maailmaa ja 36 kenttää**, eli maailmat ovat kasassa ja kenttiä
-puuttuu 28. Tavoite on 64. Se on eri tilanne kuin se jossa tämä kohta
+Nyt on **8 maailmaa ja 44 kenttää**, eli maailmat ovat kasassa, muoto on
+päätetty ja kenttiä puuttuu **20**: maailmat 2 ja 4–8. Tavoite on 64.
+
+**Muoto ei ole enää auki (v26.08.09.43), ja se on portissa eikä tässä.**
+Kahdeksan kenttää on `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on
+**kaksi hengähdystä**. Kolme perustelua ovat muutoslokissa; tähän jää se osa joka
+koskee tekemättä olevia maailmoja:
+
+- **Haara ja välipomo eivät ole muodon osia** vaan maailman ominaisuuksia. Haaran
+  pitää tämän dokumentin oman päätöksen mukaan olla eriarvoinen ja maksaa jotain
+  jota ei saa muualta, ja sellaisia palkintoja on pelissä **yksi**, jonka ainoa
+  lähde on maailman 2 välipomo. Seitsemän uutta keksittäisiin vain muodon
+  täytteeksi. Maailma 2 saa siis olla haarautuva kahdeksankin kentän mitassa —
+  muoto puhuu askelista, ja kahdeksan kenttää on seitsemän askelta vain jos
+  mikään niistä ei ole haara.
+- **Uudet kentät tulevat perään eivätkä väliin.** Tunniste on avain
+  tallennukseen ja salaisuuslaskuriin, ja piilotetut tiilet ovat *sijainnin*
+  hajautus — kentän siirtäminen arpoisi sen jokaisen salaisuuden uudelleen.
+- **Järjestys on: generoi ensin, kytke kartalle vasta sitten.** `gen-levels.mjs`
+  lataa vaikeusmittarin, joka kävelee koko pelin, eli se kaatuu jos kartalla on
+  solmu kenttään jota ei vielä ole. Aja `--world wN`, niin muut maailmat eivät
+  liiku.
+- **Maailma 8 on eri työ kuin muut.** Neljä kenttää lisää, ja jokaisen niistä on
+  oltava pomohuone (ei lippua, katto joka sarakkeen yllä). Generaattorissa **ei
+  ole areenapalikkaa**; se on nimetty puute eikä yllätys.
+- **Maailma 4 on ahtain paikka kahdesta suunnasta.** Käyrässä sen ylä- ja
+  alapuolella on +17,5 ja +66,8, ja sen katto-osuus (57 %) on maailman 8
+  väitteen lähin kilpailija — generoitu tehdaskenttä ei saa kattaa riviä 0.
+
+Alla oleva teksti on kirjoitettu ennen tätä päätöstä; kohdat 1–3 pitävät yhä,
+kohta 4 on tehty. Se on eri tilanne kuin se jossa tämä kohta
 kirjoitettiin (6 maailmaa, 26 kenttää), ja ero kannattaa lukea tarkkaan:
 **maailmojen tekeminen ei ollut se kallis puoli, ja se on nyt tehty.**
 Jäljellä oleva työ on kenttiä olemassa oleviin maailmoihin, mikä on täsmälleen
@@ -398,7 +435,14 @@ se on kuusi, eikä mikään moottorissa vastustanut sitä.
 
 Alkuperäiset neljä, tila merkittynä:
 
-1. **Käsin ei tehdä 38 uutta kenttää.** (Luku oli 42 ennen luumaailmaa.)
+1. ✔ **Ratkaistu 9.8.2026: uudet kentät generoidaan, käsin ei tehdä enää
+   yhtään.** Omistajan päätös, ja suositus "ensimmäinen ja viimeinen käsin"
+   jäi käyttämättä siitä syystä että käsintehdyt kentät ovat jo olemassa —
+   maailmoissa 1 ja 3 ne kolme opettavaa kenttää ja linnake ovat se käden osuus,
+   ja generaattori täyttää välin. Alkuperäinen teksti alla, koska sen
+   kustannusarvio pitää yhä.
+
+   **Käsin ei tehdä 38 uutta kenttää.** (Luku oli 42 ennen luumaailmaa.)
    Nykyiset käsintehdyt ovat maailman
    parasta sisältöä, mutta ne ovat myös hidas tapa. Generaattori on olemassa
    ja tekee jo maailman 5:n, telemetria syöttää sitä, ja tässä mittakaavassa
@@ -430,12 +474,17 @@ Alkuperäiset neljä, tila merkittynä:
    samanväristä ruutua ei tarvitse erottaa toisistaan jos ne eivät kosketa.
 3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
    väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja se on yhä
-   päättämättä. Mittarin puoli on sen sijaan tehty: `difficulty.mjs`:n
+   päättämättä — mutta yksi mittaus on nyt tehty ja se osoittaa toiseen suuntaan
+   kuin kysymys olettaa. **Kahdeksan kentän maailma 1 mittautuu helpommaksi kuin
+   neljän kentän maailma 1** (125,6 → 111,3), koska sen sanasto on neljä
+   mekaniikkaa leveä eikä kenttä yllä yli 112:n. Portaan korkeus ei siis ole
+   pelkkä valinta: **maailman katto on sen sanaston ominaisuus**, ja
+   opetusmaailmassa se on matala tarkoituksella. Mittarin puoli on sen sijaan tehty: `difficulty.mjs`:n
    muototarkistus lukee nyt tasoja eikä jonoa (v26.08.09.13), koska haarautuva
    kartta vaati saman uudelleenkirjoituksen. Ennuste piti paikkansa — kaksi
    kohtaa, yksi työ.
-4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä**, ja muoto on nyt
-   kerran murrettu: maailma 8 on **kuusi** kenttää (v26.08.09.42), ja
+4. ✔ **Kahdeksan kenttää maailmassa on eri muoto kuin neljä** — päätetty ja
+   tehty (v26.08.09.43), ks. tämän kohdan alku. Muoto on murrettu nyt kahdesti: maailma 8 on **kuusi** kenttää (v26.08.09.42), ja
    `tiersOf`, kartta, vaikeusmittari ja tallennus veivät sen ilman yhtä riviä
    muutosta. Se poistaa tästä kohdasta epävarmimman osan — kysymys ei ole enää
    "kestääkö moottori", vaan mitä niihin kenttiin laitetaan.

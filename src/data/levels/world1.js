@@ -26,7 +26,31 @@
  * chunk of the same width, which is also why not one hidden brick moved: those
  * are a hash of position (`src/core/secrets.js`), so an *inserted* chunk would
  * have re-rolled every secret after it in the level.
+ *
+ * ## Kahdeksan kenttää, ja miksi kolme ensimmäistä eivät liikkuneet (9.8.2026)
+ *
+ * Maailma on nyt kahdeksan kenttää: nämä kolme, neljä generoitua (`1-4`…`1-7`,
+ * `tools/gen-levels.mjs`) ja linnake. Muoto ja sen perustelu ovat portissa
+ * (`tools/verify.mjs`, "kahdeksan kentän maailmassa on kaksi hengähdystä"), ja
+ * yksi asia kannattaa lukea täältä: **uudet kentät tulivat perään eivätkä
+ * väliin, ja se on tämän tiedoston takia.**
+ *
+ * Numeroiden uudelleenjärjestäminen olisi ollut siistimpää ja se olisi maksanut
+ * kolme asiaa joista mikään ei ole kosmeettinen. Yllä oleva opetusjärjestys on
+ * mitattu tunnisteittain (`tools/curriculum.mjs`), tallennus ja salaisuuslaskuri
+ * on avainnettu tunnisteella, ja **piilotetut tiilet ovat sijainnin hajautus** —
+ * eli kentän siirtäminen olisi arponut sen jokaisen salaisuuden uudelleen. Sama
+ * peruste kuin ylempänä: siksi tässäkin vaihdetaan, ei lisätä väliin.
+ *
+ * Neljä uutta kenttää eivät esittele mitään: ne ovat maailman toinen kaari, ja
+ * kolme ensimmäistä ovat yhä se osa joka opettaa.
  */
+
+import { GENERATED_LEVELS } from '../generated.js';
+
+/** Which of the generated levels belong to this world — the file holds them all. */
+const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
+  .filter(([id]) => id.startsWith('1-')));
 
 export const WORLD1_LEVELS = {
   /*
@@ -151,6 +175,10 @@ export const WORLD1_LEVELS = {
       'power', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /* `1-4`…`1-7`, generated. They sit here rather than at the top of the object
+   * because `levelIds()` hands its key order straight to the world map, so this
+   * spread is also the play order. */
+  ...generated,
   /*
    * Unchanged, and now the first place in the game a flyer appears — not
    * because anything was added here but because 1-2 and 1-3 stopped being

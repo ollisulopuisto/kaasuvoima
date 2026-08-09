@@ -3263,17 +3263,43 @@ const report = await page.evaluate(async () => {
   }
 
   /*
-   * 2. JOKAISEN MAAILMAN KÄYRÄ NOUSEE JA SIINÄ ON TASAN YKSI NOTKO.
+   * 2. JOKAISEN MAAILMAN KÄYRÄ NOUSEE, HENGÄHTÄÄ, EIKÄ KIIPEÄ KOLMEA PIDEMPÄÄN.
    *
    * `tools/difficulty.mjs` on tulostanut tämän rivin pitkään, mutta tulostus ei
    * ole portti: uuden maailman voisi committoida suoraviivaisena tai laskevana
    * eikä mikään sanoisi mitään ennen kuin joku katsoo. Nyt sanoo.
    *
-   * Luvut luetaan `src/data/difficulty.js`:stä, ei mitata täällä uudestaan —
-   * sen tuoreuden tarkistaa jo oma testinsä ajon lopussa, joten kahta mittaria
-   * ei tarvita. Linnake jätetään pois kävelystä samasta syystä kuin työkalussa:
-   * se on aina viimeinen ja aina huippu, joten sen kanssa jokainen maailma
-   * "nousee" ilmaiseksi.
+   * **TÄMÄ SÄÄNTÖ MUUTTUI 9.8.2026, ja se on tarkoituksellinen muutos eikä
+   * löysennys.** Vanha muoto oli `dips !== 1` — "tasan yksi notko" — ja se on
+   * nyt jaettu neljään väitteeseen. Syy on mittaus, ei maku:
+   *
+   *   **"Tasan yksi" ei sanonut mitään kolmen askelen maailmasta.** Kolmen
+   *   askelen kävelyssä on kaksi siirtymää, joten notkoja voi olla 0, 1 tai 2.
+   *   Kaksi notkoa tarkoittaa että molemmat siirtymät laskevat, eli viimeinen
+   *   luku on ensimmäistä pienempi — jonka `rises` hylkää jo. Eli maailmoissa
+   *   1–7 ehto `dips === 1` oli **täsmälleen sama ehto** kuin `dips >= 1`, ja
+   *   se ero näkyy vasta kun maailmassa on enemmän askelia. Sanan "tasan"
+   *   ainoa oikea kohde oli maailma 8 (viisi askelta), jossa se sattui
+   *   pitämään.
+   *
+   *   **Ja kahdeksan kentän maailmassa "tasan yksi" olisi väärä sääntö.**
+   *   Seitsemän askelta yhdellä hengähdyksellä on kuuden nousun putki jossa on
+   *   yksi tauko; ROADMAP pyytää kahdeksalta kentältä nimenomaan tilaa
+   *   hengähdyskentälle, eikä yhtä.
+   *
+   * Tilalle neljä väitettä, ja jokainen on mitattu tästä pelistä:
+   *
+   *   1  käyrä nousee kokonaisuutena           (ennallaan)
+   *   2  vähintään yksi notko                  (vanhan sisältö kolmella askelella)
+   *   3  ei kahta notkoa peräkkäin             — pelissä 0 tapausta tänään
+   *   4  ei yli kolmen nousun putkea           — pelin pisin on tasan 3 (maailma
+   *                                              8: 117→302→378→386)
+   *
+   * Kolme ja nolla ovat siis pelin omia lukuja eivätkä valittuja kattoja: sääntö
+   * kieltää sen mitä peli ei jo tee, ja päästää läpi kaiken minkä se tekee.
+   * Maailmoissa 1–7 uusi sääntö on merkki merkiltä sama kuin vanha (ks. todistus
+   * yllä), maailmassa 8 se sallii toisen hengähdyksen jos joku sellaisen joskus
+   * haluaa. Se on ainoa kohta jossa sääntö on väljempi, ja se on sanottu ääneen.
    */
   {
     const { tiersOf, tierScore } = await import('/src/data/worlds.js');
@@ -3281,16 +3307,78 @@ const report = await page.evaluate(async () => {
     const shapes = WORLDS.map((w) => {
       const walk = tiersOf(w).filter((t) => !t.fortress);
       const seq = walk.map((t) => tierScore(w, t, DIFFICULTY));
-      const dips = seq.slice(1).filter((v, i) => v < seq[i]).length;
+      const steps = seq.slice(1).map((v, i) => (v < seq[i] ? -1 : 1));
+      const dips = steps.filter((s) => s < 0).length;
+      const twice = steps.some((s, i) => i > 0 && s < 0 && steps[i - 1] < 0);
+      let climb = 0;
+      let longest = 0;
+      for (const s of steps) {
+        climb = s > 0 ? climb + 1 : 0;
+        longest = Math.max(longest, climb);
+      }
       return {
-        id: w.id, seq, dips, rises: seq[seq.length - 1] > seq[0],
+        id: w.id,
+        seq,
+        dips,
+        twice,
+        longest,
+        levels: w.nodes.filter((n) => n.level).length,
+        rises: seq[seq.length - 1] > seq[0],
       };
     });
-    const bad = shapes.filter((s) => s.dips !== 1 || !s.rises);
-    expect('jokaisen maailman vaikeuskäyrä nousee ja notkahtaa tasan kerran',
+    const bad = shapes.filter((s) => !s.rises || s.dips < 1 || s.twice || s.longest > 3);
+    expect('jokaisen maailman käyrä nousee, hengähtää, eikä kiipeä kolmea pidempään',
       bad.length === 0,
-      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa`)
-        .join(', '));
+      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} `
+        + `${s.dips} notkoa, pisin nousu ${s.longest}`).join(', '));
+
+    /*
+     * KAHDEKSAN KENTÄN MAAILMAN MUOTO, ja se on tämän päivän päätös kirjoitettuna
+     * porttiin eikä roadmapiin.
+     *
+     * ROADMAP piti kysymystä auki näin: *"Kahdeksan kenttää maailmassa on eri
+     * muoto kuin neljä. Nykyinen kaava on kolme kenttää ja linnake. Kahdeksan ei
+     * ole 'sama kaksi kertaa' vaan tila välipomolle, haaralle ja
+     * hengähdyskentälle."*
+     *
+     * Päätetty muoto: **seitsemän numeroitua kenttää ja linnake, ja kävelyssä
+     * kaksi hengähdystä.** Perustelu kolmessa osassa, ja kaikki kolme ovat
+     * mitattavissa:
+     *
+     *   **Miksi ei kahta kaarta.** "Sama kaksi kertaa" tarkoittaisi kahta
+     *   huippua, ja kahden huipun maailma on kaksi maailmaa joiden välistä
+     *   puuttuu linnake — pelaaja lukee toisen huipun lopuksi ja saa jatkoa.
+     *   Yksi maailma on yksi kaari yhteen huippuun, ja se huippu on linnake.
+     *   Kahdeksan kenttää ei siis muuta kaarta vaan venyttää sitä.
+     *
+     *   **Miksi kaksi hengähdystä eikä yksi.** Venytetty kaari on kuuden nousun
+     *   putki, ja sääntö 4 yllä sanoo pelin oman mittauksen: pisin kiipeäminen
+     *   jonka tämä peli on koskaan pyytänyt on kolme askelta. Kaksi notkoa on se
+     *   pienin määrä joka pitää seitsemän askelta sen mitan sisällä ilman että
+     *   ne ovat peräkkäin (3 + 2 + 1 tai 2 + 3 + 1 ja niin edelleen).
+     *
+     *   **Miksi ei haaraa ja välipomoa jokaiseen maailmaan**, vaikka ROADMAP
+     *   ne mainitsee: molemmat ovat jo sidottuja päätöksiä muualla. Haaran pitää
+     *   olla eriarvoinen ja vaikeamman haaran pitää maksaa jotain jota ei saa
+     *   muualta (omistajan päätös 9.8.2026), ja koko pelissä on **yksi** sellainen
+     *   palkinto (`REWARDS.break`), jonka ainoa lähde on maailman 2 välipomo.
+     *   Seitsemän uutta samanarvoista palkintoa keksittäisiin tässä vain muodon
+     *   täytteeksi, ja se on väärin päin. Haara ja välipomo pysyvät siis
+     *   **maailman ominaisuutena eivätkä muodon osana** — maailma 2 on
+     *   haarautuva kahdeksankin kentän mitassa, koska kahdeksan kentän muoto ei
+     *   sano mitään siitä montako askelta on haaroja.
+     *
+     * Väite on siksi askelina eikä kenttinä: kahdeksan kentän maailmassa on
+     * seitsemän askelta *jos* mikään niistä ei ole haara, ja maailma 2 saa olla
+     * kuusi askelta samalla kahdeksalla kentällä. Notkojen määrä on kaksi
+     * kummassakin tapauksessa.
+     */
+    const eight = shapes.filter((s) => s.levels === 8);
+    const wrong = eight.filter((s) => s.dips !== 2);
+    expect('kahdeksan kentän maailmassa on kaksi hengähdystä',
+      eight.length >= 2 && wrong.length === 0,
+      `${eight.length} kahdeksan kentän maailmaa `
+      + `(${eight.map((s) => `${s.id} ${s.seq.length} askelta, ${s.dips} notkoa`).join('; ') || '—'})`);
 
     /*
      * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
@@ -3716,21 +3804,41 @@ const report = await page.evaluate(async () => {
     };
 
     /*
-     * 1. KUUSI ASKELTA, EI NELJÄ.
+     * 1. JOKAINEN ASKEL ON TAPPELU, EIKÄ VAIN VIIMEINEN.
      *
-     * Kenttien lukumäärä ei kelpaisi väitteeksi: maailmassa 2 on kuusi kenttää
-     * ja se on silti tavallisen muotoinen, koska kaksi niistä on saman haaran
-     * kaksi vaihtoehtoa. Askel eli `tiersOf`in taso on se mitä pelaaja kävelee,
-     * ja siinä mitassa jokainen tähänastinen maailma on **neljä** — kolme
-     * kenttää ja linnake — myös se jossa on haara.
+     * **Tässä luki 9.8.2026 asti "viimeinen maailma on kuusi askelta, muut
+     * neljä", ja se väite jouduttiin vaihtamaan.** Syy kannattaa lukea, koska se
+     * on esimerkki portista joka mittasi oikein mutta väitti väärää asiaa.
+     *
+     * Väite oli **kahden luvun erotus**: kuusi vastaan neljä. Toinen puolisko
+     * niistä luvuista — muiden maailmojen neljä — ei ollut maailman 8
+     * ominaisuus lainkaan vaan sen ajan hetken ominaisuus jolloin jokainen muu
+     * maailma oli kolme kenttää ja linnake. ROADMAPin oma tavoite (kahdeksan
+     * kenttää joka maailmaan) tekee siitä epätoden ensimmäisenä päivänä jona
+     * joku alkaa tehdä sitä työtä, eikä maailmalle 8 tapahdu silloin mitään.
+     * Portti olisi siis kaatunut oikeasta työstä, ja portti joka kaatuu
+     * oikeasta työstä sammutetaan.
+     *
+     * Tilalle väite joka kestää minkä tahansa kenttämäärän, koska se on
+     * **osuus eikä lukumäärä**: viimeisessä linnakkeessa jokainen askel päättyy
+     * tappeluun, muualla vain viimeinen. Mitattuna maailma 8 on 6/6 = 100 % ja
+     * jokainen muu 1/n — ja kun maailmat kasvavat kahdeksaan kenttään, tämä
+     * väite **vahvistuu** eikä heikkene: nimittäjä kasvaa, osuus pienenee.
+     *
+     * Nollatestinä yhä muu peli, samalla koodilla. Jos jokainen maailma antaisi
+     * saman osuuden, väite ei erottaisi mitään.
      */
-    const steps = WORLDS.map((w) => ({ id: w.id, n: tiersOf(w).length }));
+    const steps = WORLDS.map((w) => {
+      const tiers = tiersOf(w);
+      const fights = tiers.filter((t) => t.levels.some((id) => getLevel(id).boss)).length;
+      return { id: w.id, n: tiers.length, fights, share: (fights / tiers.length) * 100 };
+    });
     const last = steps[steps.length - 1];
     const rest = steps.slice(0, -1);
-    expect('viimeinen maailma on kuusi askelta, muut neljä',
-      steps.length === 8 && last.id === 'w8' && last.n === 6
-      && rest.every((s) => s.n === 4),
-      steps.map((s) => `${s.id} ${s.n}`).join(', '));
+    expect('viimeisessä maailmassa jokainen askel on tappelu, muualla vain viimeinen',
+      steps.length === 8 && last.id === 'w8' && last.share === 100 && last.n >= 6
+      && rest.every((s) => s.fights === 1 && s.share <= 25),
+      steps.map((s) => `${s.id} ${s.fights}/${s.n} = ${s.share.toFixed(0)} %`).join(', '));
 
     /*
      * 2. EI ULKOPUOLTA.
@@ -11947,6 +12055,160 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
  * them, so somebody else has to.
  */
 /*
+ * GENERAATTORI TUNTEE JOKAISEN TEEMAN EHDOT, JA NE ON KOETELTU RIKKINÄISELLÄ
+ * KENTÄLLÄ.
+ *
+ * Maailmat 6, 7 ja 8 kirjoittivat itselleen rakennesäännön — luussa taivas on
+ * auki eikä mikään roiku, pilvessä mikään ei seiso maassa eikä ohut pilvi ole
+ * tyhjän päällä, linnakkeessa ei ole ulkopuolta eikä lippua — ja jokainen niistä
+ * on portissa **palikkatiedostoa vasten**. Se riitti niin kauan kuin nuo
+ * maailmat olivat käsintehtyjä: palikka on se paikka jossa käsi tekee virheen.
+ *
+ * Generoitu kenttä ei kuitenkaan kokoa palikoita vaan kirjoittaa ruudukon, joten
+ * jokainen noista säännöistä menisi generaattorin ohi ilman että mikään sanoo
+ * mitään. Sääntö joka koskee sisältöä mutta ei sen konetta on puolikas sääntö.
+ *
+ * Tämä portti kysyy siis kolme asiaa, ja kolmas on se joka tekee kahdesta
+ * ensimmäisestä muuta kuin koristetta:
+ *
+ *   1  generaattori tuntee kaikki kahdeksan teemaa (ei seitsemää, ei yhdeksää —
+ *      lista luetaan `THEMES`istä eikä kirjoiteta tänne käsin)
+ *   2  jokainen generoitu kenttä läpäisee oman teemansa ehdon
+ *   3  **jokainen teeman ehto hylkää sitä rikkovan koekentän.** Ilman tätä
+ *      kohta 2 olisi tosi myös silloin kun tarkistus ei tarkista mitään — ja
+ *      juuri niin kävisi, koska generaattori ei tällä hetkellä tuota yhtään
+ *      kenttää luuhun, pilveen, tehtaaseen tai linnakkeeseen. Neljä ehtoa
+ *      viidestä olisi tyhjä lupaus ilman rikkinäistä koekenttää.
+ */
+{
+  let problems = [];
+  let themeNames = [];
+  let checked = 0;
+  let fixturesRun = 0;
+  try {
+    const gen = await import('./gen-levels.mjs');
+    const { GENERATED_LEVELS } = await import('../src/data/generated.js');
+    const tiles = await readFile(join(ROOT, 'src/gfx/tiles.js'), 'utf8');
+    const table = /export const THEMES = \{([\s\S]*?)\n\};/.exec(tiles);
+    themeNames = table ? [...table[1].matchAll(/^ {2}(\w+): \{/gm)].map((m) => m[1]) : [];
+
+    const missing = themeNames.filter((t) => !gen.THEME_RULES[t]);
+    const extra = Object.keys(gen.THEME_RULES).filter((t) => !themeNames.includes(t));
+    if (!themeNames.length) problems.push('THEMES-taulua ei löytynyt lähdetekstistä');
+    problems.push(...missing.map((t) => `generaattori ei tunne teemaa ${t}`));
+    problems.push(...extra.map((t) => `generaattori tuntee teeman ${t} jota ei ole`));
+
+    for (const [id, def] of Object.entries(GENERATED_LEVELS)) {
+      const bad = gen.themeProblems(def.theme, def.rows);
+      checked++;
+      problems.push(...bad.map((p) => `${id}: ${p}`));
+    }
+
+    /* Rikkinäinen koekenttä **sääntöä** kohti eikä teemaa kohti: sama pohja joka
+     * kerta, yksi vika kerrallaan, ja teeman oma ehto on ainoa asia joka erottaa
+     * ne. Pari per sääntö siksi että luussa, pilvessä ja linnakkeessa niitä on
+     * kaksi, ja portti joka koettelee niistä toisen näyttää täsmälleen samalta
+     * kuin portti joka koettelee molemmat. */
+    for (const [theme, rule] of Object.entries(gen.THEME_RULES)) {
+      if ((rule.fixtures || []).length !== rule.rules.length) {
+        problems.push(`${theme}: ${rule.rules.length} sääntöä mutta `
+          + `${(rule.fixtures || []).length} koekenttäparia`);
+      }
+      for (const make of rule.fixtures || []) {
+        const { clean, broken } = make();
+        fixturesRun++;
+        if (gen.themeProblems(theme, clean).length) {
+          problems.push(`${theme}: ehto hylkää oman kelvollisen koekenttänsä`);
+        }
+        if (!gen.themeProblems(theme, broken).length) {
+          problems.push(`${theme}: ehto siunaa koekentän joka rikkoo sen`);
+        }
+      }
+    }
+  } catch (err) {
+    problems.push(`teematarkistus ei päässyt ajoon: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'generaattori tuntee jokaisen teeman ehdot, ja ehdot hylkäävät rikkinäisen kentän',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 5).join('; ')
+      : `${themeNames.length} teemaa, ${checked} generoitua kenttää, ${fixturesRun} koekenttäparia`,
+  });
+  if (problems.length) report.failures.push(...problems);
+}
+
+/*
+ * ALKUPERÄISYYSTARKISTUS: MITÄ ON MITATTU JA MITÄ EI, EIKÄ MITÄÄN SILTÄ VÄLILTÄ.
+ *
+ * DESIGN.md kohta 3 sanoo että generaattori hylkää kentän jos yksikään **8
+ * sarakkeen ikkuna** osuu korpukseen, ja kohta 4 lisää käskyn: *aja generaattori
+ * aina `VGLC_DIR` asetettuna*. Korpus ei ole repossa eikä saa olla, joten käsky
+ * on ainoa mitä repo voi tehdä — ja käsky on juuri se muoto jonka kolmas tekijä
+ * unohtaa.
+ *
+ * **Miksi tämä ei ole kaatava portti "tarkistamattomalle sisällölle".** Sellainen
+ * portti olisi punainen jokaisessa ympäristössä jossa korpusta ei ole, eli tässä
+ * repossa aina — ja tämä tiedosto sanoo itse muualla mitä pysyvästi punaiselle
+ * portille tapahtuu: se sammutetaan. Pahempaa, se painostaisi merkitsemään
+ * kentän tarkistetuksi jotta ajo menisi läpi, mikä on tasan se valhe jota vastaan
+ * koko kohta 3 on kirjoitettu.
+ *
+ * Sen sijaan portti väittää **ympäristöstä ja tallenteesta yhdessä**, ja se on
+ * kaatava molempiin suuntiin:
+ *
+ *   - `VGLC_DIR` asetettu → korpus luetaan tässä ja nyt, ja jokaisen generoidun
+ *     kentän jokainen 8 sarakkeen ikkuna verrataan siihen. Yksikin osuma
+ *     kaataa. Tämä on se "kyllä vai ei" jonka omistaja saa yhdellä komennolla.
+ *   - `VGLC_DIR` asettamatta → tarkistusta ei voi tehdä, eikä sitä teeskennellä.
+ *     Portti vaatii silloin että **jokainen generoitu kenttä kantaa merkinnän
+ *     siitä ettei sitä ole tarkistettu**, ja kaataa ajon jos jokin kenttä
+ *     väittää olevansa tarkistettu ilman että kukaan voi todentaa sitä.
+ *
+ * Eli: repo saa olla vihreä ilman korpusta, mutta se ei saa **väittää** mitään
+ * ilman korpusta. Ero on koko kohta 3.
+ */
+{
+  const problems = [];
+  let detail = '';
+  try {
+    const { corpusHits, CORPUS_DIR } = await import('./originality.mjs');
+    const { GENERATED_LEVELS } = await import('../src/data/generated.js');
+    const levels = Object.entries(GENERATED_LEVELS);
+    if (!levels.length) problems.push('yhtään generoitua kenttää ei löytynyt');
+
+    if (CORPUS_DIR) {
+      let hits = 0;
+      let files = 0;
+      for (const [id, def] of levels) {
+        const r = await corpusHits(def.rows);
+        files = r.files;
+        hits += r.hits;
+        if (r.hits) problems.push(`${id}: ${r.hits} kahdeksan sarakkeen ikkunaa osuu korpukseen`);
+        if (def.origin !== 'checked') {
+          problems.push(`${id}: korpus on käytettävissä mutta kenttä on generoitu ilman sitä `
+            + '(merkintä "not checked") — aja: VGLC_DIR=… node tools/gen-levels.mjs');
+        }
+      }
+      detail = `${levels.length} kenttää, ${files} korpustiedostoa, ${hits} osumaa`;
+    } else {
+      const lying = levels.filter(([, def]) => def.origin !== 'not checked');
+      problems.push(...lying.map(([id, def]) => `${id}: merkintä "${def.origin}" ilman korpusta `
+        + '— tarkistusta ei ole tehty, joten se ei saa lukea tehdyksi'));
+      detail = `${levels.length} kenttää, kaikki merkitty "not checked" — `
+        + 'VGLC_DIR asettamatta, aja: VGLC_DIR=… node tools/originality.mjs';
+    }
+  } catch (err) {
+    problems.push(`alkuperäisyystarkistus ei päässyt ajoon: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'generoitu kenttä kantaa sen mitä sen alkuperästä on mitattu, ei enempää',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 3).join('; ') : detail,
+  });
+  if (problems.length) report.failures.push(...problems);
+}
+
+/*
  * JOKAISELLA VIHOLLISMERKILLÄ ON HINTA VAIKEUSMITTARISSA.
  *
  * Piikkiukko lähti tuotantoon pisteillä **0**: se puuttui `ENEMY_COST`-taulusta
@@ -12219,14 +12481,25 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     rules: await readFile(join(ROOT, 'src/data/rules.js'), 'utf8'),
     gen: await readFile(join(ROOT, 'tools/gen-levels.mjs'), 'utf8'),
     diff: await readFile(join(ROOT, 'tools/difficulty.mjs'), 'utf8'),
+    orig: await readFile(join(ROOT, 'tools/originality.mjs'), 'utf8'),
   };
   const sinkLine = /const SINK = new Set\(\[[^\]]*\]\);/;
   const inRules = (src.rules.match(sinkLine) || [])[0];
   const inGen = (src.gen.match(sinkLine) || [])[0];
+  const inOrig = (src.orig.match(sinkLine) || [])[0];
   const places = [
     ['src/gfx/tiles.js', /QUICKSAND: '~'/.test(src.tiles) && /\[T\.QUICKSAND\]:/.test(src.tiles)],
     ['src/data/rules.js', !!inRules && inRules.includes("'~'")],
     ['tools/gen-levels.mjs', !!inGen && inGen === inRules],
+    /* A FOURTH COPY APPEARED, and this line is what stops it from being the one
+     * that rots. `tools/originality.mjs` folds every character it does not
+     * recognise into air before comparing against the corpus, so a tile missing
+     * from its sets is compared as if the level had a hole where the tile is —
+     * exactly the failure the comment in rules.js describes, one module further
+     * out. The comment in gen-levels.mjs says the fourth copy is the moment to
+     * move the set into `src/gfx/tiles.js`; that is still true and still not
+     * done, so until it is, the copy is checked as a string like the others. */
+    ['tools/originality.mjs', !!inOrig && inOrig === inRules],
     ['tools/difficulty.mjs', /QUICKSAND_COST|'~'/.test(src.diff)],
   ];
   const missing = places.filter(([, ok]) => !ok).map(([f]) => f);

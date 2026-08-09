@@ -161,9 +161,12 @@ otetaan rahaa, nimi on ensimmäinen asia joka kannattaa harkita uudelleen.
 
 ## 3. Kenttägenerointi: rytmi kyllä, layout ei
 
-Maailman 5 kentät rakentaa `tools/gen-levels.mjs` tilastoista, jotka
-`tools/mine-pacing.mjs` louhii ulkoisesta kenttäkorpuksesta. Raja on vedetty
-näin:
+Generoidut kentät rakentaa `tools/gen-levels.mjs` tilastoista, jotka
+`tools/mine-pacing.mjs` louhii ulkoisesta kenttäkorpuksesta. Aluksi se koski
+maailmaa 5; 9.8.2026 alkaen se on **se tapa jolla uudet kentät tehdään**
+(v26.08.09.43, maailmat 1 ja 3 ensimmäisinä), joten tämän kohdan raja ei ole
+enää bonusmaailman erikoisjärjestely vaan koko sisällöntuotannon raja. Se on
+vedetty näin:
 
 **Otetaan** (`tools/pacing-stats.json`, pelkkiä aggregaattilukuja):
 - montako saraketta rauhaa on haasteiden välissä (mediaani, p90, jakauma)
@@ -189,12 +192,43 @@ Käytännön suojatoimet:
 3. **Palikat ovat omia.** Generaattorin sanasto on tämän pelin mekaniikkoja:
    ummetusportti, kaasupilvikuilu, närästyssuihkut, nuottipalikat,
    hyppyradan piirtävä kolikkokaari.
-4. **Samankaltaisuustarkistus.** Kun `VGLC_DIR` on asetettu, generaattori
-   kanonisoi sekä oman tuotoksensa että korpuksen samaan aakkostoon ja hylkää
-   kentän, jos yksikään **8 sarakkeen ikkuna** osuu korpukseen. Ilman
-   `VGLC_DIR`:iä tarkistusta ei voi tehdä, ja generaattori sanoo sen suoraan
-   (`not checked`). Nykyiset kentät on generoitu tarkistus päällä, osumia 0 —
-   **aja generaattori aina `VGLC_DIR` asetettuna.**
+4. **Samankaltaisuustarkistus, ja se on nyt merkintä datassa eikä ohje.**
+   Kun `VGLC_DIR` on asetettu, `tools/originality.mjs` kanonisoi sekä oman
+   tuotoksemme että korpuksen samaan aakkostoon ja hylkää kentän, jos yksikään
+   **8 sarakkeen ikkuna** osuu korpukseen. Ilman `VGLC_DIR`:iä tarkistusta ei voi
+   tehdä, eikä sitä teeskennellä.
+
+   Tässä luki pitkään *"nykyiset kentät on generoitu tarkistus päällä, osumia 0 —
+   aja generaattori aina `VGLC_DIR` asetettuna"*, ja se lause on juuri se muoto
+   jonka kolmas tekijä unohtaa: korpus ei ole repossa (kohta 1), joten
+   tarkistamatta jättäminen ei maksanut mitään eikä näkynyt missään. Nyt näkyy,
+   kolmella tavalla:
+
+   - **Jokainen generoitu kenttä kantaa merkintänsä.** `src/data/generated.js`:n
+     jokaisella kentällä on `origin`, generaattorin kirjoittamana:
+     `'checked'` (korpus luettiin, osumia 0) tai `'not checked'` (tarkistusta ei
+     tehty — mikä ei ole "ei osumia" vaan vastauksen puuttuminen).
+   - **Yksi komento vastaa kysymykseen ilman että se korvaa vastauksen.**
+     `VGLC_DIR="…" node tools/originality.mjs` lukee committoidun datan
+     sellaisenaan, tulostaa rivin per kenttä ja palaa nollasta poikkeavalla
+     koodilla jos yksikin ikkuna osuu. Ennen tarkistuksen saattoi ajaa vain
+     generoimalla uudestaan, eli kysymys "onko tämä alkuperäistä" ei ollut
+     esitettävissä ilman että sisältö samalla vaihtui.
+   - **`tools/verify.mjs` väittää ympäristöstä ja tallenteesta yhdessä.**
+     `VGLC_DIR` asetettuna: korpus luetaan ja jokainen ikkuna verrataan, ja ajo
+     kaatuu sekä osumasta että kentästä joka on merkitty `not checked`
+     ympäristössä jossa tarkistus olisi ollut mahdollinen. `VGLC_DIR`
+     asettamatta: ajo kaatuu jos jokin kenttä **väittää** olevansa tarkistettu.
+
+   Kaatavaa porttia "tarkistamattomalle sisällölle" ei ole, ja se on harkittu:
+   sellainen olisi punainen jokaisessa ympäristössä jossa korpusta ei ole, ja
+   pysyvästi punainen portti sammutetaan — tai pahempaa, se painostaisi
+   merkitsemään kentän tarkistetuksi jotta ajo menisi läpi. Sääntö on siksi
+   toisin päin: **repo saa olla vihreä ilman korpusta, mutta se ei saa väittää
+   mitään ilman korpusta.**
+
+   Ohje pysyy: **aja generaattori aina `VGLC_DIR` asetettuna.** Erona vain se,
+   että sen laiminlyönti lukee nyt datassa.
 5. **Skaalaus omaan hyppybudjettiin.** Kuilut mitoitetaan mitattuun
    hyppybudjettiin (`tools/jump-budget.json`), ei lähdepelin ruutuihin. Sama
    *vaikeus*, eri *mitat*.
@@ -221,8 +255,17 @@ kertoo tarkalleen mitä pitäisi säätää.
 
 Nämä eivät ole tyylivalintoja vaan tarkistettavia sääntöjä: `tools/gen-levels.mjs`
 hylkää kentän joka rikkoo niitä. **Tarkistus koskee vain generoituja kenttiä**
-(5-1…5-3); käsintehdyissä säännöt ovat suunnitteluohje, ja jos ne joskus halutaan
-taata koko pelille, sama validaattori pitää ajaa `tools/verify.mjs`:stä.
+(1-4…1-7, 3-4…3-7, 5-1…5-3); käsintehdyissä säännöt ovat suunnitteluohje, ja jos
+ne joskus halutaan taata koko pelille, sama validaattori pitää ajaa
+`tools/verify.mjs`:stä.
+
+Sen lisäksi jokainen generoitu kenttä on **oman teemansa mittainen**: luussa
+taivas on auki eikä mikään roiku, pilvessä mikään ei seiso maassa eikä lauta
+silloita kuoppaa, tehtaassa on katto, linnakkeessa ei ole ulkopuolta eikä lippua.
+Nuo ehdot kirjoitettiin maailmoille 6–8 palikkatiedostoja vasten, mikä riitti
+niin kauan kuin ne maailmat tehtiin käsin; generoitu kenttä ei kokoa palikoita,
+joten `THEME_RULES` sanoo saman valmiista ruudukosta ja `verify.mjs` todistaa
+jokaisen ehdon rikkinäisellä koekentällä.
 
 ### Tehostus avaa paikkoja, ei kenttää
 

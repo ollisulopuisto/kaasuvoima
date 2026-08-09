@@ -193,12 +193,18 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 6 LUULAAKSO | hautausmaa keskiyöllä | **LUURANKO**, joka hajoaa jokaisesta osumasta ja kokoaa itsensä |
 | 7 KAASUKEHÄ | pilvikerroksen päällä | **SÄÄHERRA**, joka nousee ilmaan jokaisesta osumasta |
 
-Jokaisessa maailmassa on kolme kenttää, hernetalo ja linnake. Kentän läpäisy avaa
-siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
+Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: neljä
+maailmaa on kasvanut kahdeksan kentän mittaan ja loput kasvavat. Kentän läpäisy
+avaa siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
 
-Maailman 5 kentät 5-1…5-3 ovat **generoituja**: rytmi tulee mitatuista
-tilastoista, palikat pelin omasta sanastosta. Linnake 5-F on käsintehty kuten
-muutkin linnakkeet. Ks. [DESIGN.md](DESIGN.md) kohta 3.
+Kahdeksan kentän maailman muoto on `W-1`…`W-7` ja `W-F`, ja sen
+vaikeuskäyrässä on **kaksi hengähdyskenttää** yhden sijaan — perustelu on
+[CHANGELOG.md](CHANGELOG.md):ssä ja sääntö on `tools/verify.mjs`:ssä.
+
+Kentät **1-4…1-7, 3-4…3-7 ja 5-1…5-3 ovat generoituja**: rytmi tulee mitatuista
+tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siitä
+onko sen alkuperäisyys tarkistettu korpusta vasten. Linnakkeet ja maailman
+opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.
 
 ## Työkalut
 
@@ -208,10 +214,18 @@ npm i -D playwright && npx playwright install chromium   # kerran
 node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
 node tools/playable.mjs      # pelkkä geometria: onko kentät läpäistävissä ilman tehostuksia
 node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
-node tools/gen-levels.mjs    # generoi maailman 5 kentät tilastoista
-node tools/gen-levels.mjs --telemetry loki.json   # ...ja säätää niitä pelidatan mukaan
+node tools/gen-levels.mjs    # generoi kaikki generoidut kentät tilastoista
+node tools/gen-levels.mjs --world w3               # ...vain yhden maailman
+node tools/gen-levels.mjs --telemetry loki.json    # ...ja säätää niitä pelidatan mukaan
+node tools/originality.mjs   # vertaa committoidut kentät korpukseen (vaatii VGLC_DIR)
+node tools/difficulty.mjs    # vaikeuskäyrä; --write päivittää src/data/difficulty.js
 node tools/make-card.mjs     # päivittää linkkien esikatselukuvan card.png
 ```
+
+**Generoi ennen kuin kytket kartalle.** `gen-levels.mjs` lataa vaikeusmittarin,
+joka kävelee koko pelin, joten se kaatuu jos `src/data/worlds.js`:ssä on solmu
+kenttään jota ei vielä ole. Järjestys on: generoi → levitä `levels/worldN.js`:ään
+→ lisää solmut kartalle → `node tools/difficulty.mjs --write`.
 
 `verify.mjs` tarjoilee sivuston itse, ajaa botin läpi jokaisen kentän ja
 tarkistaa mekaniikat, tilatallennuksen, pistetaulun, grafiikan ja äänet. Se
@@ -223,6 +237,17 @@ ovat FAILURES-listan rivit.
 siemenellä ja päästä läpi vain se jolla kaikki kentät menevät `playable.mjs`:ssä
 läpi voimatasolla 0 — muuten "uudet kentät" tarkoittaa tuntemattoman laatuisia
 kenttiä. Maailman 5 nykyinen siemen on **60606**, ja se valittiin näin.
+
+Kentät joilla on `aim`-luku suunnitelmassa valitsevat siemenensä itse: haku
+kokeilee 80 siementä, hylkää jokaisen joka rikkoo säännön, ja pitää niistä
+kelvollisista sen jonka mitattu vaikeus on lähimpänä tavoitetta. Tavoite on
+suunnittelupäätös joka tehdään ensin — haku ei voi ostaa lukua kentällä joka ei
+kelpaa muutenkin.
+
+**Alkuperäisyys on merkintä datassa.** Jokainen generoitu kenttä kantaa
+`origin`-kentän: `'checked'` tarkoittaa että korpus luettiin ja osumia oli 0,
+`'not checked'` että tarkistusta ei tehty. `verify.mjs` kaatuu jos merkintä ja
+ympäristö ovat ristiriidassa kumpaan tahansa suuntaan. Ks. DESIGN.md kohta 3.
 
 `playable.mjs` kysyy yhden asian: onko *maasto* läpäistävissä. Se poistaa kaikki
 viholliset ja vaarat ja ajaa botin läpi kahdesti — kerran voimatasolla 0
