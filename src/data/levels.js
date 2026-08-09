@@ -52,8 +52,14 @@ const LEVEL_DEFS = {
     ],
   },
 
+  /*
+   * The two open desert levels are shot in Cinemascope. It is the one place in
+   * the game where the picture is nothing but sky, dunes and distance, which is
+   * the only thing a wider frame is actually good for — and the same bars over
+   * a fortress corridor would just be a smaller fortress corridor.
+   */
   '2-1': {
-    theme: 'desert', bg: 'dunes', music: 'level',
+    theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
     chunks: [
       'start', 'flat', 'power', 'walkers', 'sun', 'corks',
       'pipe_plant', 'pit_s', 'heartburn', 'coins', 'shell', 'plat_steps',
@@ -70,9 +76,19 @@ const LEVEL_DEFS = {
       'note_pair', 'steps_down', 'run_up', 'goal', 'goal_end',
     ],
   },
-  // The desert world's night level: windy, and there is a moon to jump on.
+  /*
+   * The desert world's night level: windy, and there is a moon to jump on.
+   *
+   * It is also the one level lit by a lamp. That is not a coin toss: it is
+   * already night, so the darkness is the level agreeing with itself rather
+   * than an effect laid over it; its theme asks for no other atmosphere, so
+   * nothing is displaced; and it is off the direct route through world 2, so a
+   * player who does not get on with it can go round. It stays out of world 1
+   * on principle — the first world is where the game teaches, and a lesson in
+   * the dark is not a lesson.
+   */
   '2-N': {
-    theme: 'night', bg: 'dunes', music: 'level', wind: true,
+    theme: 'night', bg: 'dunes', music: 'level', wind: true, spotlight: true,
     chunks: [
       'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
       'moon_night', 'coins', 'shell', 'plat_steps', 'pit_l', 'corks',
@@ -81,7 +97,7 @@ const LEVEL_DEFS = {
     ],
   },
   '2-3': {
-    theme: 'desert', bg: 'peaks', music: 'level',
+    theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
       'start', 'flat', 'power', 'sun', 'lava_gap', 'walker',
       'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'soup_stop',

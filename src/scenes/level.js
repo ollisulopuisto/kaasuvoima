@@ -10,6 +10,7 @@ import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 import { Music, Sfx } from '../core/audio.js';
+import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 
@@ -28,6 +29,61 @@ const CAM_LOOK_AHEAD = 34;    // px the view leans ahead at full running speed
 const CAM_LOOK_GAIN = 0.035;  // how fast the lean builds
 const CAM_LOOK_RETURN = 0.07; // and how fast it settles back when you stop
 const CAM_BAND_EASE = 0.18;   // how fast the view crosses to another band
+
+/*
+ * The vertical camera hangs off the player's **feet**, and the two constants
+ * below are where that is expressed.
+ *
+ * `applySize()` keeps the bottom of the body fixed and changes `h`, so ducking
+ * on a pipe moved `p.y` down 13 px in a single frame at power level 3 — and the
+ * camera, which was anchored to `p.y`, went with it. The backdrop does not
+ * parallax vertically, so the whole ground appeared to jolt for no reason the
+ * player could see. Feet do not move when a body changes size, so anchoring
+ * there removes the cause instead of smoothing over it, and it also stops the
+ * framing sliding around as you collect power-ups.
+ *
+ * `CAM_STAND` is the standing height the framing was tuned at (the mushroom
+ * size, PLAYER_SIZES[1]); subtracting it keeps a standing player's view pixel
+ * for pixel what it was before.
+ */
+const CAM_EYE = 0.55;         // how far down the window the player sits
+const CAM_STAND = 26;         // the body height that framing assumes
+
+/*
+ * And genuine vertical movement is eased.
+ *
+ * This is not the inertia rejected below: that argument is about the axis you
+ * aim with, and you do not aim upwards. A step down off a ledge as a hard cut
+ * reads as the level moving; the same step over a few frames reads as the view
+ * following you.
+ *
+ * 0.25 closes a 16 px step to under a pixel in about thirteen frames, and in a
+ * sustained fall at TERMINAL it settles at a lag of 4 / 0.25 = 16 px — one
+ * tile, against the ~90 px of window below the player, so the ground you are
+ * falling towards is never off the bottom of the screen. Past CAM_SNAP the
+ * view is not lagging, it is somewhere else entirely — a respawn, a warp, a
+ * pit — and those cut rather than glide.
+ */
+const CAM_V_EASE = 0.25;
+const CAM_SNAP = 48;
+
+/*
+ * Cinemascope, for the levels that ask for it (`letterbox: true`).
+ *
+ * The bars are a **crop, not a mask**. Widescreen is a narrower window on the
+ * world, not the same window with paint over its edges, so the camera's
+ * vertical range narrows by exactly what the bars cover — see `viewH`. Pasting
+ * bars over the usual 208 rows would show the same picture and only take away
+ * the part of it you were reading.
+ *
+ * 24 px a side leaves a 320x160 window: 2.00:1, ten tiles tall. That is as
+ * narrow as it can safely go. The highest jump in the game rises **100 px**
+ * (measured; see tools/measure-jump.mjs), and standing on the desert floor the
+ * player's head sits 102 px below the top of the band — so the apex fits even
+ * before the camera rises with it. Any taller a bar and you would be jumping
+ * blind out of the top of the frame.
+ */
+const LETTERBOX_BAR = 24;
 
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
@@ -100,6 +156,9 @@ export class LevelScene {
      * half-state, and what makes the save state need one field instead of a
      * second copy of the map. */
     this.switchTimer = 0;
+    this.bar = this.def.letterbox ? LETTERBOX_BAR : 0;
+    /** How much level the view actually shows. Everything vertical reads this. */
+    this.viewH = VIEW_H - 2 * this.bar;
     this.cam = { x: 0, y: 0 };
     this.camLook = 0;
     this.tick = 0;
@@ -730,6 +789,10 @@ export class LevelScene {
    * you are going: the view shifts ahead in the direction you are running, and
    * eases back when you stop. Inside the dead zone the camera does not move at
    * all, so small hops and turns leave the screen still.
+   *
+   * The vertical axis is a different problem and gets a different answer: it is
+   * not the axis you aim with, so a short glide there costs nothing and saves
+   * every step down from reading as a cut. See CAM_V_EASE.
    */
   updateCamera() {
     const p = this.player;
@@ -746,9 +809,16 @@ export class LevelScene {
     this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.widthPx - VIEW_W));
 
     const want = this.cameraY();
-    // Inside a band there is barely anywhere to go, so the ease is invisible;
-    // it is there for the moment the band under the player changes.
-    this.cam.y = this.def.bands ? this.cam.y + (want - this.cam.y) * CAM_BAND_EASE : want;
+    const fall = want - this.cam.y;
+    if (this.def.bands) {
+      // A band change is the one big vertical move that is meant to be watched
+      // rather than cut, so it is the one that is never snapped.
+      this.cam.y += fall * CAM_BAND_EASE;
+    } else if (Math.abs(fall) > CAM_SNAP) {
+      this.cam.y = want;
+    } else {
+      this.cam.y += fall * CAM_V_EASE;
+    }
   }
 
   /**
@@ -759,12 +829,14 @@ export class LevelScene {
    * view would follow every jump over 208 pixels of free travel, which is the
    * seasickness the horizontal camera goes to such lengths to avoid — and it
    * would show the secret above or below while you walked past underneath.
+   *
+   * Measured from the feet — see CAM_STAND for why that is not a detail.
    */
   cameraY() {
     const p = this.player;
-    const target = p.y - VIEW_H * 0.55;
+    const target = p.y + p.h - this.viewH * CAM_EYE - CAM_STAND;
     const bands = this.def.bands;
-    if (!bands) return clamp(target, 0, Math.max(0, this.heightPx - VIEW_H));
+    if (!bands) return clamp(target, 0, Math.max(0, this.heightPx - this.viewH));
     // The view holds still while you die: following the body down would pan it
     // straight through whatever is under the pit you just fell into.
     if (p.dying) return this.cam.y;
@@ -775,7 +847,7 @@ export class LevelScene {
     const span = bands.rows * TILE;
     const feet = Math.floor((p.y + p.h - 1) / span) * span;
     const top = clamp(feet, 0, this.heightPx - span);
-    return clamp(target, top, top + span - VIEW_H);
+    return clamp(target, top, top + span - this.viewH);
   }
 
   centerCamera() {
@@ -960,15 +1032,18 @@ export class LevelScene {
   draw(ctx) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, VIEW_W, VIEW_H);
+    ctx.rect(0, this.bar, VIEW_W, this.viewH);
     ctx.clip();
+    // From here down the origin is the top-left of the *window*, so nothing
+    // below has to know a bar is there.
+    ctx.translate(0, this.bar);
 
     /* The scenery belongs to the ground band. Once the camera is above it —
      * up the beanstalk — the hills have to get out of the way, or a platform
      * twenty tiles in the air looks like it is standing on them. */
     const bandDrop = this.def.bands
       ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
-    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, VIEW_H, this.tick, bandDrop);
+    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick, bandDrop);
 
     const jitter = this.shakeAmp > 0
       ? { x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp),
@@ -992,8 +1067,28 @@ export class LevelScene {
     }
     this.player.draw(ctx);
 
+    /* The lamp follows the player, and this is the only place its screen
+     * position is already known: the camera rounding, the shake jitter and the
+     * letterbox offset have all been applied by now. Working it out anywhere
+     * else would mean deriving the same three numbers a second time, and the
+     * light would sit a shake behind the thing it is lighting. */
+    if (this.def.spotlight) {
+      PostFX.setFocus(this.player.cx - camX, this.player.cy - camY + this.bar);
+    }
+
     ctx.restore();
+    if (this.bar) this.drawLetterbox(ctx);
     this.drawHud(ctx);
+  }
+
+  /**
+   * The bars. Playfield only — the HUD is not part of the picture, and a
+   * widescreen score readout is just a score readout with a slice missing.
+   */
+  drawLetterbox(ctx) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, VIEW_W, this.bar);
+    ctx.fillRect(0, VIEW_H - this.bar, VIEW_W, this.bar);
   }
 
   /**
@@ -1020,11 +1115,11 @@ export class LevelScene {
       if (!deaths && !stuck) continue;
       if (deaths) {
         ctx.fillStyle = `rgba(255,48,48,${0.12 + 0.5 * (deaths / heat.worst)})`;
-        ctx.fillRect(tx * TILE, camY, TILE, VIEW_H);
+        ctx.fillRect(tx * TILE, camY, TILE, this.viewH);
       }
       if (stuck) {
         ctx.fillStyle = `rgba(64,160,255,${0.1 + 0.4 * (stuck / heat.worst)})`;
-        ctx.fillRect(tx * TILE, camY + VIEW_H - 6, TILE, 6);
+        ctx.fillRect(tx * TILE, camY + this.viewH - 6, TILE, 6);
       }
     }
   }
@@ -1037,7 +1132,7 @@ export class LevelScene {
    */
   drawUnderground(ctx, camX, camY) {
     const top = this.def.bands.cave * TILE;
-    if (camY + VIEW_H <= top) return;
+    if (camY + this.viewH <= top) return;
     ctx.fillStyle = '#150e1c';
     ctx.fillRect(camX, top, VIEW_W, this.heightPx - top);
   }
@@ -1046,7 +1141,7 @@ export class LevelScene {
     const tx0 = Math.max(0, Math.floor(camX / TILE));
     const tx1 = Math.min(this.w - 1, Math.floor((camX + VIEW_W) / TILE));
     const ty0 = Math.max(0, Math.floor(camY / TILE));
-    const ty1 = Math.min(this.h - 1, Math.floor((camY + VIEW_H) / TILE));
+    const ty1 = Math.min(this.h - 1, Math.floor((camY + this.viewH) / TILE));
 
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {

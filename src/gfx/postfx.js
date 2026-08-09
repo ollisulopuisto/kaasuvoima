@@ -65,6 +65,45 @@ export const THEME_AMBIENCE = {
 /** Factory heat is half strength: indoors, and the levels are busy enough. */
 const AMBIENCE_STRENGTH = { desert: 1, factory: 0.5, ice: 1 };
 
+/*
+ * The lamp, for a level marked `spotlight: true`. It is an ambience like the
+ * others — same slot, same WebGL-plus-fallback pair — except that it is asked
+ * for by the level rather than by its theme, because being dark is a property
+ * of one level and not of everything sharing a palette.
+ *
+ * **The radius is a safety number, not a taste one.** Darkness may hide the
+ * route and the rewards; it may not hide a spike. So the lit core has to be
+ * wider than the ground the player covers between seeing a thing and having
+ * stopped in front of it, at the fastest they can be moving:
+ *
+ *   full sprint          MAX_P            3.5 px/frame
+ *   noticing it          ~15 frames       52.5 px
+ *   skidding to a halt   SKID 0.125       3.5 / 0.125 = 28 frames,
+ *                                         mean 1.75 px  ->  49 px
+ *                                         ------------------------
+ *                                         101.5 px
+ *
+ * 120 px clears that by a fifth, and it happens to clear the other two ways of
+ * arriving somewhere too: the highest jump in the game rises 100 px, and 15
+ * frames of falling at TERMINAL is 60 px. One number covers all three.
+ *
+ * A big lamp is the honest consequence of the rule, and it is not a problem:
+ * the camera keeps the player between screen x 126 and 194, so 194 px is the
+ * furthest anything can get from the light without leaving the view, and the
+ * falloff is done well before that. The level is dark at its edges, not in
+ * front of your feet.
+ */
+const SPOT_LIT = 120;
+const SPOT_EDGE = 48;
+/**
+ * And the floor: outside the beam the picture drops to this and stops there,
+ * so a spike bed is dim rather than absent. Measured rather than chosen — at
+ * the darkest a hazard can legitimately reach, with the CRT vignette dimming
+ * that same edge again, spikes still stand ~35 luminance levels clear of the
+ * air above them. Twenty is where a thing stops being visible on a bad screen.
+ */
+const SPOT_DIM = 0.24;
+
 /**
  * Height of the HUD strip along the bottom, mirroring `HUD_H` in
  * scenes/level.js. Atmosphere stops here: the HUD is not air and not a window,
@@ -105,6 +144,8 @@ uniform float uVignette;
 uniform float uAberration;
 uniform float uHeat;
 uniform float uFrost;
+uniform float uDark;       // spotlight strength
+uniform vec2 uFocus;       // where the lamp is, in texture coords
 uniform float uTime;
 uniform float uFloor;      // top edge of the HUD, in texture coords from below
 uniform float uMask;       // aperture grille strength
@@ -154,6 +195,18 @@ void main() {
              + texture2D(uTex, uv - vec2(texel * 2.0, 0.0)).rgb;
     vec3 smeared = color * 0.44 + near * 0.20 + far * 0.08;
     color = mix(color, smeared, uBleed);
+  }
+
+  /* The lamp. Distance is measured in source pixels, so the radius means the
+   * same thing here as it does in the Canvas 2D pass — and it is measured in
+   * the *curved* uv, so the light stays on the player rather than on the flat
+   * screen the player is no longer at. Multiplied before the gamma work below
+   * because the fallback paints the same falloff as a black gradient, and a
+   * gradient multiplies in exactly this space. */
+  if (uDark > 0.0 && uv.y > uFloor) {
+    float lit = 1.0 - smoothstep(${SPOT_LIT.toFixed(1)}, ${(SPOT_LIT + SPOT_EDGE).toFixed(1)},
+                                 length((uv - uFocus) * uSource));
+    color *= mix(1.0, mix(${SPOT_DIM.toFixed(3)}, 1.0, lit), uDark);
   }
 
   // One dark line per *source* row, not per screen pixel. Tying this to the
@@ -240,9 +293,11 @@ export const PostFX = {
   /** The canvas that should actually be on screen and sized by the page. */
   displayCanvas: null,
   scale: 1,
-  /** Set from the level's theme; see THEME_AMBIENCE. */
+  /** Set from the level's theme or its flags; see THEME_AMBIENCE. */
   ambience: null,
   ambienceAmount: 0,
+  /** Where the spotlight points, in source pixels. */
+  focus: { x: 160, y: 120 },
   tick: 0,
   _gl: null,
   _copy: null,
@@ -296,14 +351,35 @@ export const PostFX = {
   },
 
   /**
-   * Sets the level atmosphere from a theme name. Anything unknown — the title
-   * screen, the world map, a theme with nothing to say — clears it.
+   * Sets the level atmosphere from a theme name and, where there is one, the
+   * level definition. Anything unknown — the title screen, the world map, a
+   * theme with nothing to say — clears it.
+   *
+   * A level flag outranks the theme table: `spotlight` belongs to the one level
+   * that is dark, not to every level that shares its palette.
    */
-  setAmbience(theme) {
-    const kind = THEME_AMBIENCE[theme] || null;
+  setAmbience(theme, def = null) {
+    const kind = def && def.spotlight ? 'spotlight' : (THEME_AMBIENCE[theme] || null);
     this.ambience = kind;
-    this.ambienceAmount = kind ? (AMBIENCE_STRENGTH[theme] || 1) : 0;
+    this.ambienceAmount = kind === 'spotlight' ? 1 : (kind ? (AMBIENCE_STRENGTH[theme] || 1) : 0);
+    // Centre it again, so a leftover position from the last level cannot put
+    // the light somewhere nobody is standing on the first frame of the next.
+    this.setFocus(this.source ? this.source.width / 2 : 160,
+      this.source ? this.source.height / 2 : 120);
     return kind;
+  },
+
+  /**
+   * Aims the spotlight, in source pixels. Pushed in by the scene rather than
+   * pulled out of the game: the scene is the only place that already knows the
+   * camera rounding, the screen shake and the letterbox offset, and anything
+   * that re-derived them would light where the player was, not where they are.
+   */
+  setFocus(x, y) {
+    // Assigned rather than mutated: `Object.create(PostFX)` is how the tests
+    // make an instance, and mutating an inherited object would write through
+    // to every one of them.
+    this.focus = { x, y };
   },
 
   cyclePreset() {
@@ -370,6 +446,8 @@ export const PostFX = {
         gain: gl.getUniformLocation(program, 'uGain'),
         heat: gl.getUniformLocation(program, 'uHeat'),
         frost: gl.getUniformLocation(program, 'uFrost'),
+        dark: gl.getUniformLocation(program, 'uDark'),
+        focus: gl.getUniformLocation(program, 'uFocus'),
         time: gl.getUniformLocation(program, 'uTime'),
       };
       this.displayCanvas = canvas;
@@ -431,6 +509,7 @@ export const PostFX = {
     if (this.mode !== 'webgl' && this.ambience && this.ambienceAmount > 0) {
       if (this.ambience === 'heat') this._heatPass(ctx, source);
       else if (this.ambience === 'frost') this._frostPass(ctx, source);
+      else if (this.ambience === 'spotlight') this._spotlightPass(ctx, source);
     }
 
     this._bloomPass(ctx, source);
@@ -562,6 +641,27 @@ export const PostFX = {
     }
   },
 
+  /**
+   * The lamp without a shader: one radial gradient of black over the
+   * playfield. `rgba(0,0,0,a)` over the picture is a multiply by `1-a`, which
+   * is the same operation the shader does, so both paths dim by the same
+   * amount — and a canvas gradient carries its last stop out to infinity, so
+   * the corners are covered without a second fill.
+   *
+   * The HUD is left out, exactly as the heat and the frost leave it out.
+   */
+  _spotlightPass(ctx, source) {
+    const { x, y } = this.focus;
+    const grad = ctx.createRadialGradient(x, y, SPOT_LIT, x, y, SPOT_LIT + SPOT_EDGE);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(0,0,0,${(1 - SPOT_DIM) * this.ambienceAmount})`);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, source.width, source.height - HUD_H);
+  },
+
   _scanlinePass(ctx, source) {
     if (!this._scanline) {
       const c = makeCanvas(1, 2);
@@ -625,6 +725,10 @@ export const PostFX = {
     gl.uniform1f(this._uniforms.floor, HUD_H / this.source.height);
     gl.uniform1f(this._uniforms.heat, this.ambience === 'heat' ? this.ambienceAmount : 0);
     gl.uniform1f(this._uniforms.frost, this.ambience === 'frost' ? this.ambienceAmount : 0);
+    gl.uniform1f(this._uniforms.dark, this.ambience === 'spotlight' ? this.ambienceAmount : 0);
+    // The texture is uploaded flipped, so the lamp's y has to be flipped too.
+    gl.uniform2f(this._uniforms.focus, this.focus.x / this.source.width,
+      1 - this.focus.y / this.source.height);
     gl.uniform1f(this._uniforms.time, this.tick / 60);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return true;

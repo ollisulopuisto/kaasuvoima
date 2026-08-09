@@ -2155,6 +2155,310 @@ const report = await page.evaluate(async () => {
     game.fx.setPreset('hehku');
   }
 
+  /* ------------------------ kuvasuhde ja valokeila --------------------- */
+  {
+    const { VIEW_W, VIEW_H, HUD_H } = await import('/src/scenes/level.js');
+    const { PostFX } = await import('/src/gfx/postfx.js');
+    const { T, TILE } = await import('/src/gfx/tiles.js');
+
+    // A fresh instance per case, as in the kuvaefektit block above: the live
+    // PostFX is attached to the real canvas and must not be re-initialised.
+    const makeFX = () => Object.create(PostFX);
+    const shot = () => {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H + HUD_H;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.imageSmoothingEnabled = false;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, c.width, c.height);
+      return { c, g };
+    };
+    const data = (c) => c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const at = (x, y) => 4 * (y * VIEW_W + x);
+    const luma = (d, i) => (d[i] * 54 + d[i + 1] * 183 + d[i + 2] * 19) >> 8;
+    const rowBlack = (d, y) => {
+      for (let x = 0; x < VIEW_W; x++) {
+        const i = at(x, y);
+        if (d[i] || d[i + 1] || d[i + 2]) return false;
+      }
+      return true;
+    };
+    const strip = (d, y0, y1) => [...d.slice(at(0, y0), at(0, y1))].join(',');
+
+    /* Cinemascope is a crop, not a mask: if the camera's vertical range does not
+     * narrow with the bars, the level is showing the same picture with a slice
+     * painted out — which takes away the part you were reading and adds nothing. */
+    reset();
+    const wide = new LevelScene(game, '2-1');
+    expect('2-1 and 2-3 are letterboxed and world 1 is not',
+      wide.bar === 24 && wide.viewH === 160
+      && new LevelScene(game, '2-3').bar === 24
+      && new LevelScene(game, '1-1').bar === 0
+      && new LevelScene(game, '1-1').viewH === VIEW_H,
+      `2-1 bar ${wide.bar}, viewH ${wide.viewH}`);
+
+    {
+      const input = mkInput();
+      let hi = -Infinity;
+      let escaped = 0;
+      for (let f = 0; f < 900; f++) {
+        input.held.right = true;
+        input.held.run = true;
+        input.pressed.jump = f % 47 === 0;
+        input.held.jump = f % 47 < 12;
+        input.held.down = f % 137 < 20;          // crouching must not break it either
+        wide.update(input);
+        hi = Math.max(hi, wide.cam.y);
+        if (wide.cam.y < -0.001 || wide.cam.y + wide.viewH > wide.heightPx + 0.001) escaped++;
+      }
+      expect('the letterbox camera stays inside the narrowed band, and the crop is real',
+        escaped === 0 && hi > wide.heightPx - VIEW_H,
+        `${escaped} frames outside, max cam.y ${hi.toFixed(1)} `
+        + `vs full-height limit ${wide.heightPx - VIEW_H}`);
+    }
+
+    /* The bars belong to the playfield. A widescreen score readout is just a
+     * score readout with a slice missing. */
+    {
+      reset();
+      const s = new LevelScene(game, '2-1');
+      const a = shot();
+      s.draw(a.g);
+      const d = data(a.c);
+      let bars = true;
+      for (let y = 0; y < s.bar; y++) if (!rowBlack(d, y)) bars = false;
+      for (let y = VIEW_H - s.bar; y < VIEW_H; y++) if (!rowBlack(d, y)) bars = false;
+      const reaches = !rowBlack(d, s.bar) && !rowBlack(d, VIEW_H - s.bar - 1);
+
+      const s2 = new LevelScene(game, '2-1');
+      s2.bar = 0;
+      s2.viewH = VIEW_H;
+      const b = shot();
+      s2.draw(b.g);
+      expect('the bars sit in the playfield only and leave the HUD alone',
+        bars && reaches && strip(d, VIEW_H, VIEW_H + HUD_H)
+          === strip(data(b.c), VIEW_H, VIEW_H + HUD_H),
+        `bars ${bars}, picture at both band edges ${reaches}`);
+    }
+
+    /* A narrower window must still hold the highest jump in the game — 100 px,
+     * measured. Standing on the desert floor the head sits 102 px below the top
+     * of the band, so the apex fits before the camera even follows it up. */
+    {
+      reset();
+      game.state.power = { type: 'shroom', level: 3 };
+      let worst = Infinity;
+      let ground = 0;
+      for (const id of ['2-1', '2-3']) {
+        const s = new LevelScene(game, id);
+        const input = mkInput();
+        for (let f = 0; f < 900; f++) {
+          input.held.right = true;
+          input.held.run = true;
+          input.pressed.jump = f % 53 === 0;
+          input.held.jump = f % 53 < 34;
+          s.update(input);
+          if (s.player.dying) continue;
+          const head = s.player.y - s.cam.y;
+          worst = Math.min(worst, head);
+          if (s.player.onGround) ground = Math.max(ground, head);
+        }
+      }
+      expect('the highest jump still fits inside the letterbox band',
+        worst >= -0.5 && ground >= 90,
+        `head rests ${ground.toFixed(1)} px below the band top, jumps to ${worst.toFixed(1)}`);
+    }
+
+    /* `applySize()` pins the bottom of the body and changes its height, so
+     * ducking used to shove `p.y` down 13 px in one frame and the camera went
+     * with it — a jolt with no cue, because the backdrop has no vertical
+     * parallax to move with it. The vertical camera hangs off the feet now. */
+    {
+      reset();
+      game.state.power = { type: 'shroom', level: 3 };
+      const results = [];
+      for (const id of ['1-1', '1-2', '1-3', '2-2']) {
+        const s = new LevelScene(game, id);
+        let spot = null;
+        for (let tx = 4; tx < s.w && !spot; tx++) {
+          for (let ty = 3; ty < s.h; ty++) {
+            if (s.rawTileAt(tx, ty) === T.PIPE_TL) { spot = { tx, ty }; break; }
+          }
+        }
+        if (!spot) continue;
+        s.player.x = spot.tx * TILE + 4;
+        s.player.y = spot.ty * TILE - s.player.h;
+        s.player.vy = 0;
+        s.player.onGround = true;
+        s.centerCamera();
+        const input = mkInput();
+        for (let f = 0; f < 60; f++) s.update(input);
+        const camBefore = s.cam.y;
+        const yBefore = s.player.y;
+        input.held.down = true;
+        s.update(input);
+        results.push({
+          id, jump: Math.abs(s.cam.y - camBefore), body: Math.abs(s.player.y - yBefore),
+          ducked: s.player.ducking,
+        });
+      }
+      const worst = results.reduce((a, b) => (b.jump > a.jump ? b : a));
+      expect('crouching on a pipe does not jolt the camera',
+        results.length >= 3 && results.every((r) => r.ducked && r.body > 8 && r.jump < 0.5),
+        `body moves ${worst.body} px, camera moves ${worst.jump.toFixed(2)} px (${worst.id})`);
+
+      // …and anchoring to the feet must not re-frame ordinary play.
+      const s = new LevelScene(game, '1-3');
+      s.player.power = { type: 'shroom', level: 1 };
+      s.player.applySize();
+      const old = Math.max(0, Math.min(s.player.y - s.viewH * 0.55, s.heightPx - s.viewH));
+      expect('a standing mushroom-sized player is framed exactly as before',
+        Math.abs(s.cameraY() - old) < 0.001, `${s.cameraY().toFixed(2)} vs ${old.toFixed(2)}`);
+    }
+
+    /* Vertical easing is fine; a camera that watches a fall from behind is not.
+     * What matters is how much ground is still visible under the feet. */
+    {
+      reset();
+      const rows = [];
+      for (const id of ['1-1', '1-3', '2-1', '1-2']) {
+        const s = new LevelScene(game, id);
+        const input = mkInput();
+        s.player.y -= 120;
+        s.player.onGround = false;
+        let lag = 0;
+        let below = Infinity;
+        for (let f = 0; f < 240; f++) {
+          s.update(input);
+          lag = Math.max(lag, Math.abs(s.cam.y - s.cameraY()));
+          below = Math.min(below, s.cam.y + s.viewH - (s.player.y + s.player.h));
+          if (s.player.onGround && f > 40) break;
+        }
+        rows.push({ id, lag, below });
+      }
+      expect('a fall keeps the landing point on screen',
+        rows.every((r) => r.below > 24 && r.lag <= 28),
+        rows.map((r) => `${r.id} ${r.below.toFixed(0)}px alla / ${r.lag.toFixed(0)}px jäljessä`).join(' '));
+    }
+
+    /* The lamp. It is an ambience like the heat and the frost, so it has to work
+     * on a machine with no WebGL — and it must never be the reason a hazard is
+     * invisible, which is the one thing this game does not do. */
+    {
+      reset();
+      const night = new LevelScene(game, '2-N');
+      game.setScene(night);
+      const on = game.fx.ambience;
+      game.toWorldMap();
+      expect('2-N is lit by a lamp, and leaving the level puts it out',
+        on === 'spotlight' && game.fx.ambience === null, `${on} -> ${game.fx.ambience}`);
+    }
+
+    const realGet = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, opts) {
+      if (String(type).startsWith('webgl')) return null;
+      return realGet.call(this, type, opts);
+    };
+    try {
+      reset();
+      const s = new LevelScene(game, '2-N');
+      const a = shot();
+      s.draw(a.g);
+      const fx = makeFX();
+      fx.init(a.c);
+      fx.source = a.c;
+      fx.setPreset('hehku');
+      fx.setAmbience('night', s.def);
+      const focus = { ...PostFX.focus };       // the scene pushed it while drawing
+      fx.setFocus(focus.x, focus.y);
+      const before = data(a.c).slice();
+      fx.apply(a.g);
+      const after = data(a.c);
+
+      const near = at(Math.round(focus.x), Math.round(focus.y) - 40);
+      const far = at(focus.x > VIEW_W / 2 ? 4 : VIEW_W - 5, 40);
+      const keptNear = luma(after, near) / Math.max(1, luma(before, near));
+      const keptFar = luma(after, far) / Math.max(1, luma(before, far));
+      expect('without WebGL the lamp still lights the player and darkens the distance',
+        fx.mode === '2d' && keptNear > 0.95 && keptFar < 0.45,
+        `mode ${fx.mode}, lähellä ${keptNear.toFixed(2)}, kaukana ${keptFar.toFixed(2)}`);
+      expect('the lamp never touches the HUD strip',
+        strip(before, VIEW_H, VIEW_H + HUD_H) === strip(after, VIEW_H, VIEW_H + HUD_H));
+
+      /* Darkness may hide the route and the rewards. It may not hide a spike:
+       * a hazard you can only learn by dying is the one thing this game is not
+       * supposed to have. Measured at the darkest a hazard can legitimately get
+       * — the far side of the view, with the CRT vignette dimming it again. */
+      const spikes = [];
+      for (let ty = 0; ty < s.h; ty++) {
+        for (let tx = 0; tx < s.w; tx++) {
+          if (s.rawTileAt(tx, ty) === T.SPIKE) spikes.push({ tx, ty });
+        }
+      }
+      let worst = null;
+      for (const sp of spikes) {
+        const s2 = new LevelScene(game, '2-N');
+        s2.player.y = sp.ty * TILE;
+        s2.centerCamera();
+        const sx = 300;
+        s2.cam.x = sp.tx * TILE - sx;
+        if (s2.cam.x < 0 || s2.cam.x > s2.widthPx - VIEW_W) continue;
+        const sy = sp.ty * TILE - Math.round(s2.cam.y);
+        if (sy < 0 || sy + TILE > VIEW_H) continue;
+        const b = shot();
+        s2.draw(b.g);
+        // The dead zone and the look-ahead keep the player between screen x 126
+        // and 194, so 194 px is as far as a hazard can get from the light.
+        fx.source = b.c;
+        fx.setPreset('crt');
+        fx.setAmbience('night', s2.def);
+        fx.setFocus(sx + TILE / 2 - 194, sy + 8);
+        fx.apply(b.g);
+        const d2 = data(b.c);
+        let tip = 0;
+        let air = 0;
+        let n = 0;
+        for (let y = sy + 6; y < sy + TILE; y++) {
+          for (let x = sx; x < sx + TILE; x++) tip = Math.max(tip, luma(d2, at(x, y)));
+        }
+        for (let y = sy - 10; y < sy + 5; y++) {
+          for (let x = sx; x < sx + TILE; x++) { air += luma(d2, at(x, y)); n++; }
+        }
+        const gap = tip - air / Math.max(1, n);
+        if (!worst || gap < worst.gap) worst = { gap, tx: sp.tx, ty: sp.ty };
+      }
+      expect('a lethal tile outside the beam is still readable',
+        worst && worst.gap >= 20,
+        worst ? `piikit erottuvat ${worst.gap.toFixed(1)} luminanssia taustasta`
+          : 'no spike tile could be placed');
+      fx.setPreset('hehku');
+    } finally {
+      HTMLCanvasElement.prototype.getContext = realGet;
+    }
+
+    /* A GLSL error is silent — `_initGL` returns false and the game falls back
+     * to Canvas 2D forever. So the shader is compiled and run on purpose. */
+    {
+      const probe = document.createElement('canvas').getContext('webgl2')
+        || document.createElement('canvas').getContext('webgl');
+      const gfx = makeFX();
+      const a = shot();
+      gfx.init(a.c);
+      gfx.setAmbience('night', { spotlight: true });
+      gfx.setFocus(100, 100);
+      let presented = false;
+      try { presented = gfx.present(); } catch { presented = false; }
+      expect('the spotlight shader compiles and runs where there is a GPU',
+        !probe || (gfx.mode === 'webgl' && presented
+          && gfx._uniforms.dark && gfx._uniforms.focus),
+        probe ? `mode ${gfx.mode}, present ${presented}` : 'ei WebGL:ää — ohitettu');
+      if (gfx.displayCanvas) gfx.displayCanvas.remove();
+    }
+
+    game.fx.setAmbience(null);
+  }
+
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music, audioTap } = await import('/src/core/audio.js');
 
