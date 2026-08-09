@@ -7,6 +7,24 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.3 — bloom hiljaisemmaksi
+
+Palaute: teksti oli osin lukukelvotonta ja kirkkaat kohdat paloivat puhki.
+Kolme muutosta, joista kaksi ensimmäistä ovat sävyä ja kolmas periaate:
+
+- Kynnys 168 → **206**. Kolikot hehkuivat, mutta niin hehkui jokainen valkoinen
+  kirjain ruudulla. Lukukelvoton pistelaskuri on huonompi vaihtokauppa kuin
+  kolikko joka ei kimallla. Nyt hehkuu vain se mikä on aidosti kirkasta:
+  aurinko, tulipallo, tähti.
+- Voimakkuus 0,45 → **0,24**, eli puhkipalaminen loppuu.
+- **HUD-palkki jätetään passin ulkopuolelle kokonaan.** Se on tekstiä tasaisella
+  tummalla nauhalla, ja additiivinen valo pienten valkoisten kirjainten päällä on
+  nopein tapa tehdä pelistä lukukelvoton. Pistelaskuri ei ole maisemaa.
+
+Mitattuna: taivas ja maa pikselilleen ennallaan, HUD terävä, aurinko hehkuu.
+
+---
+
 ## v26.08.09.2 — kytkinruudut
 
 Painikelohko (`S`) kentässä 3-2. Osuma siihen muuttaa kentän **tiilet kolikoiksi

@@ -31,7 +31,7 @@ export const PRESET_NAMES = { pois: 'EI EFEKTEJÄ', hehku: 'HEHKU', crt: 'KUVAPU
  * this is the point where the halo still follows the shape that made it. */
 const BLOOM_W = 80;
 const BLOOM_H = 60;
-const BLOOM_ALPHA = 0.45;
+const BLOOM_ALPHA = 0.24;
 const SCANLINE_ALPHA = 0.24;
 /**
  * Only pixels brighter than this glow, measured as luminance.
@@ -40,9 +40,14 @@ const SCANLINE_ALPHA = 0.24;
  * cannot tell a bright blue sky from a white sun, because the sky's blue
  * channel is already at 252. The result was the whole picture lifting by ~45
  * levels and going milky. Luminance can tell them apart: this sky is 153, a
- * coin is 179 and the sun is 251, so 168 glows the coin and leaves the sky be.
+ * coin is 179 and the sun is 251.
+ *
+ * Set high on purpose. At 168 the coins glowed, but so did every white letter
+ * on screen — and a score you cannot read is a worse trade than a coin that
+ * does not sparkle. 206 leaves only the genuinely bright things: the sun, a
+ * fireball, a star. The HUD is excluded from the pass entirely; see `_bloomPass`.
  */
-const BLOOM_THRESHOLD = 168;
+const BLOOM_THRESHOLD = 206;
 
 /**
  * Per-level atmosphere, keyed by the level's theme.
@@ -478,10 +483,15 @@ export const PostFX = {
     }
     g.putImageData(img, 0, 0);
 
+    /* Only the playfield glows. The HUD is text on a flat dark strip, and
+     * additive light on small white letters is the fastest way to make a game
+     * unreadable — the score is not scenery. */
+    const playH = source.height - HUD_H;
+    const bandH = Math.round((BLOOM_H * playH) / source.height);
     ctx.imageSmoothingEnabled = true;
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = BLOOM_ALPHA;
-    ctx.drawImage(this._bloom, 0, 0, source.width, source.height);
+    ctx.drawImage(this._bloom, 0, 0, BLOOM_W, bandH, 0, 0, source.width, playH);
   },
 
   /**
