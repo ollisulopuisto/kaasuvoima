@@ -281,6 +281,42 @@ Suositus: yksi jaettu apufunktio piirtokoodin puolelle (`src/gfx/sprites.js`),
 1 px:n amplitudi, vaihesiirto oliokohtaisesti, laatikot koskematta — ja
 jaksonpituus säädettynä silmällä ennen kuin se kirjataan vakioksi.
 
+### Toisen tason seisonta-animaatiot: kolme, teemoittain
+
+Pelaajalla on jo seisonta-animaatio (hengitys) ja teemakohtaiset lisät
+(väristys jäässä, hiki aavikossa). Omistaja haluaa **toisen tason**: isomman,
+hitaammin laukeavan ja hauskan.
+
+| teema | mitä tapahtuu |
+| --- | --- |
+| tavallinen | hahmo **nukahtaa**: pää nyökkii, animoitu ZZZ nousee |
+| jää | hahmo **hengittää ulos jääpuikkoja** |
+| aavikko | hahmon **tukka syttyy**, ja hän sammuttaa sen paniikissa |
+
+Viisi asiaa jotka ratkaisevat onko tästä hauska vai rasittava:
+
+1. **Kuollut aika ennen laukeamista on koko vitsi.** Lyhyellä silmukalla gägi
+   lakkaa olemasta gägi ensimmäisen tunnin jälkeen. Mittatikku on jo olemassa:
+   esittelytila odottaa alkuruudulla **20 sekuntia** ennen kuin kone alkaa
+   pelata itselleen. Toisen tason seisonta saa olla vähintään sitä luokkaa, ja
+   nykyinen hengitys jää ensimmäiseksi tasoksi joka alkaa heti.
+2. **Sen pitää katketa yhdessä framessa.** Nämä lisäävät hiukkasia ja vievät
+   katseen; jos vihollinen lähestyy nukkuvaa pelaajaa, animaation pitää loppua
+   *heti* eikä sykliään loppuun. Sama vaatimus kuin esittelytilalla, joka antaa
+   koneen takaisin yhdessä framessa, ja samasta syystä: pelaaja ei saa koskaan
+   joutua tappelemaan animaation kanssa.
+3. **Kolme ideaa eivät ole samaa lajia, ja se pitää päättää.** Jääpuikkohengitys
+   ja syttyvä tukka ovat **huoneen tekoja hahmolle** — kylmä ja kuumuus
+   toimivat, eli ne ovat diegeettisiä siinä merkityksessä jonka DESIGN.md kohta
+   8 antaa. **ZZZ on symboli**, sarjakuvan konventio jota tämä peli ei ole
+   toistaiseksi käyttänyt kertaakaan. Se on hyvä idea, mutta se on *uusi
+   kuvakielen laji*, ei uusi animaatio — päätä se tietoisesti äläkä vahingossa.
+4. **Ei saa vaikuttaa pelattavuuteen.** Osumalaatikko ei muutu, haavoittuvuus ei
+   muutu, tukan palaminen ei vahingoita. Se on esitystä ja vain esitystä.
+5. **Toimittava kaikilla viidellä voimatasolla ja neljällä tehostustyypillä.**
+   Sama vaatimus jonka takia animaatiokierrokset ylipäätään käydään läpi: mikä
+   näyttää oikealta yhdessä koossa hajoaa toisessa.
+
 ## Seuraavaksi
 
 ### 1. Kuvaefektit: jäljellä olevat efektit
