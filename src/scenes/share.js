@@ -16,10 +16,17 @@
  *
  * Ruutu ei koskaan jää jumiin: portaan 3 osoite on näkyvissä koko ajan, ja
  * takaisin pääsee kahdella eri napilla riippumatta siitä mitä jako teki.
+ *
+ * **Linkki kantaa myös tuloksen** (`?s=45200&n=OLLI&l=2-3`), eli tämä on
+ * haasteen lähettävä pää; vastaanottava pää on `src/core/challenge.js` ja
+ * alkuruutu. Sekin tapahtuu kokonaan selaimessa: parametrit ovat merkkejä
+ * osoitteessa, ei tallennus jossakin. Tyhjä pistetaulu jakaa pelkän osoitteen —
+ * `?s=0` olisi haaste jonka voittaa kävelemällä ensimmäisen kolikon ohi.
  */
 import { drawText } from '../gfx/font.js';
 import { Sfx } from '../core/audio.js';
 import { loadScores, GAME_VERSION } from '../core/scores.js';
+import { appendChallenge } from '../core/challenge.js';
 
 const W = 320;
 
@@ -67,6 +74,46 @@ export function bragEntry(back) {
   if (!list.length) return null;
   const hi = back && typeof back.highlight === 'number' ? back.highlight : -1;
   return list[hi] || list[0] || null;
+}
+
+/**
+ * Se osoite joka oikeasti lähtee: peliosoite ja tulos kyselyparametreina.
+ *
+ * Tämä on koko haasteen lähettävä pää. Perusosoite tulee edelleen `og:url`
+ * -tagista — parametrit **lisätään** siihen eivätkä korvaa sitä, jotta linkin
+ * esikatselukuva säilyy: Slack ja WhatsApp lukevat `card.png`:n sen osoitteen
+ * tagien perusteella, ja kyselyparametri ei muuta sitä mikä sivu se on.
+ *
+ * Ja se mitä tässä *ei* ole: mitään mitä osoiteriviltä olisi luettu. Linkki
+ * rakennetaan `og:url`-tagista ja tämän selaimen omasta pistetaulusta, joten
+ * kaverilta saatu haaste ei voi tarttua mukaan matkalla eteenpäin.
+ */
+export function bragUrl(entry, base = shareUrl()) {
+  return appendChallenge(base, entry);
+}
+
+/**
+ * Mitä osoitelaatikossa lukee. **Perusosoite, ei haastelinkkiä**, ja se on
+ * harkittu ero.
+ *
+ * Laatikko on porras 3: se osoite jonka pelaaja kirjoittaa ylös tai valokuvaa
+ * kun jakovalikkoa ja leikepöytää ei ole. Haastelinkki ei kelpaa siihen
+ * kahdesta syystä, ja ensimmäinen on ehdoton:
+ *
+ *   1. **Pelin oma fontti ei osaa piirtää `&`-merkkiä.** `src/gfx/font.js` on
+ *      5x7-bittikartta, jossa on kirjaimet, numerot ja kourallinen välimerkkejä
+ *      — ei et-merkkiä. Kyselymerkkijono piirtyisi siis muodossa
+ *      `?S=12345 N=PIKKU L=2-3`, ja käsin kopioituna se on rikkinäinen osoite.
+ *      Ruudulla lukeva osoite joka ei toimi on pahempi kuin ei osoitetta.
+ *   2. Pisimmillään linkki on 64 merkkiä prosenttikoodattuine ääkkösineen
+ *      (`?s=9999999&n=%C3%84%C3%84KK%C3%96S&l=5-F`). Sitä ei kirjoita ylös
+ *      kukaan, saati lapsi.
+ *
+ * Jaettu ja kopioitu osoite on silti täysi haastelinkki — se kulkee koneen
+ * kautta eikä silmän. Ero sanotaan ääneen ruudulla eikä jätetä arvattavaksi.
+ */
+export function boxUrl() {
+  return shareUrl();
 }
 
 /** Se rivi joka lähtee linkin mukana. Osoite ei ole tässä — se menee omanaan. */
@@ -132,7 +179,11 @@ export class ShareScene {
     this.error = '';
     this.entry = bragEntry(back);
     this.text = shareText(this.entry);
-    this.url = shareUrl();
+    // `url` on se mikä lähtee, `shown` se mikä lukee laatikossa. Ne ovat sama
+    // asia silloin kun kehuttavaa ei ole, ja eri asia silloin kun on.
+    this.url = bragUrl(this.entry);
+    this.shown = boxUrl();
+    this.carries = this.url !== this.shown;
     this.how = shareCapability();
     // Ilman jakoa ja leikepöytää ruutu ei ole "valmis odottamaan nappia" vaan
     // valmiiksi siinä tilassa johon muut portaat päätyvät: osoite on ruudulla.
@@ -295,12 +346,22 @@ export class ShareScene {
     ctx.fillStyle = '#2c3c68';
     ctx.fillRect(24, boxY, 272, 1);
     ctx.fillRect(24, boxY + 21, 272, 1);
-    drawText(ctx, this.url, W / 2, boxY + 8, { color: '#8fe04a', align: 'center' });
+    drawText(ctx, this.shown, W / 2, boxY + 8, { color: '#8fe04a', align: 'center' });
+
+    /* Se mitä laatikko *ei* kerro. Jaettuna ja kopioituna linkki kantaa
+     * tuloksen; ylös kirjoitettuna ei. Ero on pieni mutta se on olemassa, ja
+     * arvattavaksi jätettynä se olisi juuri sellainen hiljainen pettymys jota
+     * kukaan ei osaa raportoida. */
+    if (this.carries) {
+      drawText(ctx, 'KÄSIN KIRJOITETTUNA TULOS EI KULJE MUKANA', W / 2, 130, {
+        color: '#70708c', align: 'center',
+      });
+    }
 
     const state = STATUS[this.status];
     if (state) {
       wrapText(state.text, 46).slice(0, 2).forEach((line, i) => {
-        drawText(ctx, line, W / 2, 138 + i * 11, { color: state.color, align: 'center' });
+        drawText(ctx, line, W / 2, 142 + i * 11, { color: state.color, align: 'center' });
       });
     }
 

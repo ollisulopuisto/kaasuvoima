@@ -13,6 +13,7 @@ import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { ShareScene } from './scenes/share.js';
 import { qualifies, GAME_VERSION } from './core/scores.js';
+import { takeChallenge } from './core/challenge.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
 import { Touch, LAYOUT_NAMES } from './core/touch.js';
@@ -39,6 +40,13 @@ class Game {
     this.flash = '';
     this.flashTimer = 0;
     this.pendingNode = null;
+
+    /* Kaverin tulos, jos tänne tultiin haastelinkistä. Se asetetaan
+     * käynnistyksessä ja elää **vain muistissa**: haasteen vastaanotto ei
+     * kirjoita tallennukseen, pistetauluun eikä pelidataan. Sama vaatimus kuin
+     * esittelytilalla, ja samasta syystä — vieraan lähettämä linkki ei saa
+     * jättää jälkeä siihen mikä on pelaajan omaa. */
+    this.challenge = null;
 
     // Deaths per level in this sitting, so a clear can record what it cost.
     // Deliberately not persisted: it is an input to one telemetry event, not
@@ -90,8 +98,14 @@ class Game {
     this.setScene(new WorldMapScene(this));
   }
 
-  toHighScores(highlight = -1) {
-    this.setScene(new HighScoreScene(this, highlight));
+  /**
+   * `runScore` on juuri päättyneen kierroksen tulos, tai -1 kun taululle
+   * tullaan valikosta. Se on erillään `highlight`istä siksi että kierros voi
+   * jäädä listan ulkopuolelle ja **silti voittaa haasteen** — kymmenes sija ei
+   * ole sama asia kuin kaverin päihittäminen.
+   */
+  toHighScores(highlight = -1, runScore = -1) {
+    this.setScene(new HighScoreScene(this, highlight, null, runScore));
   }
 
   /* -------------------------------- jako ------------------------------- */
@@ -152,16 +166,21 @@ class Game {
       // place the difference between a clean run and a sixth try shows up.
       continues: this.state.continues || 0,
     };
-    // A run that skipped worlds is not a run. No mark would be honest enough.
+    /* A run that skipped worlds is not a run. No mark would be honest enough.
+     * Se ei myöskään voita haastetta: jos kierros ei kelpaa omalle taululle,
+     * se ei kelpaa kaverinkaan päihittämiseen. Tilatallennuksella pelattu
+     * kierros sen sijaan kelpaa molempiin — taulu merkitsee sen tähdellä, ja
+     * haaste seuraa taulua eikä keksi omaa sääntöään. */
     if (this.state.debugWarped) {
       this.toHighScores();
       return;
     }
     if (!qualifies(result.score)) {
-      this.toHighScores();
+      this.toHighScores(-1, result.score);
       return;
     }
-    this.setScene(new NameEntryScene(this, result, (index) => this.toHighScores(index)));
+    this.setScene(new NameEntryScene(this, result,
+      (index) => this.toHighScores(index, result.score)));
   }
 
   /** Builds a level scene without showing it — used by save-state restore. */
@@ -600,6 +619,12 @@ Input.onFirstInput = () => {
   Sfx.resume();
   if (!isMuted()) Music.play(Music.current || 'map');
 };
+
+/* Haastelinkin parametrit luetaan kerran ja pyyhitään osoiteriviltä. Tämä on
+ * `Touch.install`in jälkeen mutta ennen ensimmäistä kohtausta: `?touch=1`
+ * ehtii lukea omansa (ja jää osoiteriville, koska se ei ole meidän), ja
+ * alkuruutu näkee haasteen jo ensimmäisellä framella. */
+game.challenge = takeChallenge();
 
 game.toTitle();
 requestAnimationFrame((t) => game.frame(t));

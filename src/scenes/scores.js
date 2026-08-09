@@ -3,6 +3,7 @@ import { drawItem } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { loadScores, addScore, NAME_LENGTH, GAME_VERSION } from '../core/scores.js';
 import { padNum } from '../core/utils.js';
+import { beats, groupThousands } from '../core/challenge.js';
 
 /** `YYYY-MM-DD` in local time, which is the day the player would call it. */
 function isoDay(stamp) {
@@ -160,18 +161,40 @@ export class NameEntryScene {
   }
 }
 
-/** The board itself. `highlight` flashes the row that was just added. */
+/**
+ * The board itself. `highlight` flashes the row that was just added.
+ *
+ * `runScore` on juuri päättyneen kierroksen tulos, tai -1 kun taululle tullaan
+ * valikosta. Se on se ainoa paikka jossa haastelinkki muuttuu joksikin muuksi
+ * kuin kuvatekstiksi: **haaste jonka voittamisesta ei kerrota kenellekään on
+ * pelkkä kuvateksti.** Pistetaulu on jokaisen kierroksen pääteasema —
+ * `finishRun` päätyy tänne aina, pääsi tulos listalle tai ei — joten tämä on
+ * ainoa ruutu joka näkee jokaisen kierroksen tuloksen.
+ *
+ * Tulos on tarkoituksella erillään `highlight`istä: kierros voi jäädä listan
+ * ulkopuolelle ja silti voittaa haasteen. Oma taulu ja kaverin tulos ovat kaksi
+ * eri kysymystä.
+ */
 export class HighScoreScene {
-  constructor(game, highlight = -1, next = null) {
+  constructor(game, highlight = -1, next = null, runScore = -1) {
     this.game = game;
     this.highlight = highlight;
     this.next = next || (() => this.game.toTitle());
     this.tick = 0;
     this.scores = loadScores();
+    this.runScore = runScore;
+    this.challenge = (game && game.challenge) || null;
+    this.beat = beats(runScore, this.challenge);
+    /* Merkintä elää istunnon muistissa eikä levyllä, joten alkuruutu osaa sen
+     * jälkeen kehua eikä haastaa uudelleen. Mitään ei kirjoiteta. */
+    if (this.beat) this.challenge.beaten = true;
   }
 
   enter() {
     Music.play('title');
+    // Voitto on uutinen, ja uutinen ilman ääntä jää huomaamatta ruudulla joka
+    // on muutenkin täynnä numeroita.
+    if (this.beat) Sfx.play('oneup');
   }
 
   update(input) {
@@ -231,6 +254,29 @@ export class HighScoreScene {
       }
       drawText(ctx, padNum(entry.score, 6), COL.score, y, { color, align: 'right' });
     });
+
+    /* Haasteen tulos. Kolme eri asiaa sanottavana, ja ne ovat eri asioita:
+     * voitto (kierros pelattiin ja se riitti), tappio (kierros pelattiin eikä
+     * riittänyt) ja pelkkä muistutus (taululle tultiin valikosta, kierrosta ei
+     * ole). Rivi 200 on kymmenennen tuloksen (rivi 190) ja merkkiselitteen
+     * (212) välissä, eli se mahtuu myös täydelle taululle. */
+    if (this.challenge) {
+      const target = groupThousands(this.challenge.score);
+      const played = this.runScore >= 0;
+      let line;
+      let color;
+      if (this.beat) {
+        line = `VOITIT HAASTEEN! ${this.challenge.name} SAI ${target}`;
+        color = Math.floor(this.tick / 8) % 2 ? '#ffffff' : '#8fe04a';
+      } else if (played) {
+        line = `${this.challenge.name} JOHTAA YHÄ: ${target}`;
+        color = '#ffd048';
+      } else {
+        line = `HAASTE: ${this.challenge.name} ${target}`;
+        color = '#8890b0';
+      }
+      drawText(ctx, line, 160, 200, { color, align: 'center', shadow: '#101018' });
+    }
 
     /* One legend line, and only for the marks the board is actually showing —
      * a key to symbols nobody's row carries is just clutter. */
