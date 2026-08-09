@@ -63,7 +63,13 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    kulkee nyt ohitusasennon kautta, ja tarkistus on portissa.
 4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
    (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
-5. **Luumaailma** ja luurankopomo tehtaan jälkeen.
+5. **Luumaailma** ja luurankopomo tehtaan jälkeen. **Musiikki on päätetty
+   9.8.2026:** Saint-Saëns'n *Danse macabre* (1874, vapautui 1.1.1992). Se ei
+   ole tyylivalinta vaan aihevalinta — teos *on* tanssivia luurankoja
+   keskiyöllä, ja sen ksylofonikuvio on nimenomaan kalisevat luut. Sama vitsi
+   kuin säveltäjän omassa "Fossiles"-osassa. Ehdot ovat
+   [DESIGN.md](DESIGN.md):n kohdassa 1 b: sävelet kirjoitetaan käsin
+   `TRACKS`-tauluun, ei äänitettä eikä nuottilaitosta, ja lähde nimetään.
 6. **Salaisuuksien löydettävyys** — kolmesta osasta yksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
    löytynyt, **ei koskaan missä** (v26.08.09.17). Jäljellä: demo näyttää

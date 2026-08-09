@@ -14,7 +14,7 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 | osa-alue | miten tehty | mitä *ei* ole käytetty |
 | --- | --- | --- |
 | Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä. |
-| Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita olemassa olevista sävelmistä. |
+| Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. Melodiat ovat omia **tai** tekijänoikeudesta vapaata sävelmistöä, nimettynä (kohta 1 b). | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita **suojatuista** sävelmistä. |
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
 | Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
 
@@ -24,8 +24,44 @@ Slack ja muut eivät renderöi SVG:tä esikatselussa. Se ei ole ulkopuolista
 materiaalia eikä sitä piirretty käsin.
 
 Melodiat on sävelletty tätä peliä varten. Jos joskus lisätään sävelmä joka
-muistuttaa jotain olemassa olevaa, se ei mene sisään — samankaltaisuus on
-sävellyksessä eri asia kuin tyylilajissa.
+muistuttaa jotain **suojattua**, se ei mene sisään — samankaltaisuus on
+sävellyksessä eri asia kuin tyylilajissa. Tämä sääntö ei muuttunut.
+
+## 1 b. Vapautunut sävelmistö saa tulla sisään, nimettynä
+
+Päätetty 9.8.2026. Aiemmin tämä dokumentti sanoi että kaikki melodiat ovat
+omia, piste. Sääntö oli tarpeettoman tiukka: **tekijänoikeus vanhenee**, ja
+vanhentunut sävellys on yhtä vapaata materiaalia kuin genrekonventio kohdassa 2.
+
+Ehto on että lähde **nimetään**, eikä sitä oteta hiljaa. Se on tarkoituksella
+ankarampi kuin vanha sääntö eikä löysempi: "kaikki on itse tehtyä" on väite jota
+kukaan ei voi tarkistaa, kun taas "Camille Saint-Saëns (1835–1921), *Danse
+macabre* op. 40, 1874" on lause jonka kuka tahansa voi käydä todentamassa
+kymmenessä sekunnissa. Nimeäminen menee sekä tähän kohtaan että
+[CHANGELOG.md](CHANGELOG.md):hen, joka on jo olemassa osittain juuri tätä varten
+— "todiste siitä mistä mikäkin on peräisin".
+
+**Miksi tämä on turvallista juuri tässä pelissä.** Vapautuminen koskee
+*sävellystä*. Yksittäinen äänite ja yksittäinen nuottilaitos ovat eri teoksia
+omine oikeuksineen, ja niihin useimmat kompastuvat. Me emme koske kumpaankaan:
+sävelet kirjoitetaan käsin `TRACKS`-taulukkoon ja syntetisoidaan ajossa, joten
+repoon ei tule sampleja, MIDI-rippiä eikä skannattua nuottia. Suojan kesto on
+Suomessa ja EU:ssa **tekijän elinaika + 70 vuotta**, laskettuna kuolinvuoden
+lopusta.
+
+Käytetty sävelmistö, tässä on koko lista:
+
+| teos | säveltäjä | vapautui | missä |
+| --- | --- | --- | --- |
+| *Danse macabre* op. 40 (1874) | Camille Saint-Saëns, k. 1921 | 1.1.1992 | luumaailma (tulossa) |
+
+**Varoitus joka kannattaa lukea ennen kuin innostuu:** Jean Sibelius kuoli
+20.9.1957, joten hänen teoksensa vapautuvat vasta **1.1.2028**. *Finlandia* ja
+*Karelia* ovat juuri se hylly johon suomalaisessa pelissä ensimmäisenä
+kurkotetaan, ja se on ainoa hylly josta ei vielä saa ottaa.
+
+> Kohta 1 b kuvaa miten ratkaisut on tehty. Se ei ole oikeudellinen neuvo, ja
+> suoja-ajat lasketaan maakohtaisesti.
 
 ## 2. Genre on vapaa, ilmaisu ei
 

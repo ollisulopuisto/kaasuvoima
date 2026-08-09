@@ -7,6 +7,44 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.27 — vapautunut sävelmistö sallitaan, nimettynä
+
+Sääntömuutos, ei koodimuutos. [DESIGN.md](DESIGN.md) sai kohdan **1 b**, ja
+[README.md](README.md) kertoo sen lyhyesti heti alussa.
+
+Kohta 1 sanoi tähän asti että kaikki melodiat ovat omia, piste. Sääntö oli
+tarpeettoman tiukka: **tekijänoikeus vanhenee**, ja vanhentunut sävellys on
+yhtä vapaata materiaalia kuin genrekonventio kohdassa 2 — se on nimenomaan sen
+kohdan oma logiikka vietynä loppuun.
+
+Ehto on että lähde **nimetään**. Se on ankarampi kuin vanha sääntö eikä
+löysempi, ja tämä on koko muutoksen ydin: *"kaikki on itse tehtyä"* on väite
+jota kukaan ei voi tarkistaa, kun taas *"Camille Saint-Saëns (1835–1921), Danse
+macabre op. 40, 1874"* on lause jonka kuka tahansa todentaa kymmenessä
+sekunnissa. Nimeäminen menee sekä DESIGN.md:n taulukkoon että tänne.
+
+**Miksi tämä on turvallista juuri tässä pelissä.** Vapautuminen koskee
+*sävellystä*; yksittäinen äänite ja yksittäinen nuottilaitos ovat eri teoksia
+omine oikeuksineen, ja niihin useimmat kompastuvat. Tämä peli ei koske
+kumpaankaan — sävelet kirjoitetaan käsin `TRACKS`-tauluun ja syntetisoidaan
+ajossa, joten repoon ei tule sampleja, MIDI-rippiä eikä skannattua nuottia.
+Sama piirre joka on aina ollut alkuperäväite (kohta 1) tekee tästä halvan.
+
+Muuttumatta jäi se sääntö joka oikeasti suojaa: **suojattua muistuttava sävelmä
+ei mene sisään.** Vain sana "olemassa oleva" vaihtui sanaksi "suojattu".
+
+Ensimmäinen ja toistaiseksi ainoa käyttö on **luumaailman teema**:
+*Danse macabre* (1874, vapautui 1.1.1992). Valinta on aihevalinta eikä
+tyylivalinta — teos *on* tanssivia luurankoja keskiyöllä, ja sen ksylofonikuvio
+on nimenomaan kalisevat luut. Sävellystä ei ole vielä kirjoitettu; se tulee
+luumaailman mukana.
+
+Kirjattiin myös se mitä **ei** saa ottaa: Jean Sibelius kuoli 20.9.1957, joten
+*Finlandia* ja *Karelia* vapautuvat vasta **1.1.2028**. Se on juuri se hylly
+johon suomalaisessa pelissä ensimmäisenä kurkotetaan.
+
+---
+
 ## v26.08.09.26 — portti ei enää heitä kolikkoa äänitestissä
 
 `a spoken line is loud enough to hear` kaatui satunnaisesti noin joka toinen
