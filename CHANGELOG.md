@@ -7,6 +7,53 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.9 — hyppybudjetti mitattu oikeaksi, ja maailma 3 sen mukaan
+
+`tools/jump-budget.json` lupasi 121 px nousun ja 200 px kantaman. Mitattuna 71
+ja 155. `src/level/physics.js` ei ole muuttunut sitten sen commitin joka
+kirjoitti tiedoston, ja vakioista laskettuna nousu on ~72 px — **tiedosto oli
+siis väärässä jo syntyessään**, ei vanhentunut matkalla. Ainoa rivi joka oli
+oikein oli P-vauhti, mikä sopii samaan tarinaan.
+
+### Tärkein osa on testi eikä korjaus
+
+`verify.mjs` tarkistaa nyt että budjettitiedosto on **toistettavissa nykyisistä
+vakioista**, ja johtaa suunnittelubudjetin uudelleen samalla kaavalla.
+
+Tätä bugia ei voinut saada kiinni millään aiemmalla portilla, ja syy on se joka
+kannattaa muistaa: **sekä `rules.js` että `difficulty.mjs` lukevat saman
+tiedoston.** Liian antelias budjetti ei siis näy rikkeinä vaan päinvastoin — se
+saa jokaisen kentän näyttämään hyväksytyltä. Mittari joka mittaa itseään omalla
+väärällä mitallaan on aina vihreä.
+
+### Maailma 3
+
+Oikea budjetti nostaa kaikkia vaikeuslukuja, koska kuiluriski pisteytetään
+suhteessa siihen mitä hyppy kantaa. Se paljasti että **maailman 3 avauskenttä
+oli sen vaikein** (3-1 204, 3-3 174): 3-1:n kuiluista kolme oli budjetin
+rajalla. Vanha tiedosto oli piilottanut sen.
+
+Korjattu 3-1:stä eikä 3-3:sta — avauskentän liika vaikeus *oli* se vika, ja
+3-3:n nostaminen olisi ollut luvun virittämistä kentän sijaan. Kaksi uutta
+jääkohtaista palikkaa (`ice_pit`, `ice_twin`), koska alkuperäiset ovat yhteisiä
+maailmojen 1, 2 ja 4 kanssa.
+
+**Perustelu leveydelle on sama mitattu tiedosto:** kuuden ruudun budjetti on
+70 % *juoksu*kantamasta ja olettaa että paikalle saavutaan juosten. Jäällä se ei
+ole valinta, joten maailman 3 kuilut mitoitettiin kävelykantamaan samalla
+säännöllä — 87 px × 0,7 ≈ 4 ruutua. `pit_twin`in oma kommentti sanoo että sen
+vaikeus on pysähtyminen kahden ruudun saarekkeelle, ja pysähtyminen on juuri se
+mitä tämä maailma ei salli.
+
+Kaventaminen eikä astinkiviä: `ice_crumble`in kommentti perustelee jo miksi
+jäällä ei anneta lepopaikkoja kesken kuilun.
+
+w3 nousee taas: 162 → 133 → 174, notkoja yksi. Koko pelin käyrä
+128,5 → 149,0 → 172,3 → 187,0 → 226,5.
+
+**Maailmaa 5 ei generoitu uusiksi.** Sen kentät läpäisevät validaattorin myös
+uusilla luvuilla; uusi generointiajo on oma päätöksensä.
+
 ## v26.08.09.8 — mekaniikat kaikkiin maailmoihin, jakoruutu, mobiiliohjaus ja yksi fysiikkabugi
 
 Iso erä, ja pääosin rinnakkaisten alaagenttien tekemä: kuusi työtä omissa
