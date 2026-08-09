@@ -53,9 +53,15 @@ näppäimistöasettelu ei siirrä niitä.
 | 6 | kosketusohjaus esiin / vaihda malli |
 | 7 | kuvaefektit: ei efektejä → hehku → kuvaputki |
 | 8 | vie pelidata tiedostoon (JSON) |
-| 9 tai ` | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
+| 9 | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
 
 F5 / F8 / F6 / F3 toimivat myös, jos käyttöjärjestelmä ei vie niitä — macOS vie.
+
+Apuvälineet ovat numerorivillä eivätkä missään muualla. `event.code` on
+fyysinen paikka, mutta **mikä fyysinen paikka riippuu siitä onko näppäimistö
+ANSI vai ISO**, ja ne eroavat juuri vasemmasta alakulmasta jossa toimintonäppäimet
+ovat. Debug oli aiemmin myös `Backquote`illa, joka on Macin ISO-näppäimistöllä
+vasemman vaihdon ja Z:n välissä — yhden näppäimen päässä hypystä.
 Peliohjain (standard gamepad) toimii.
 
 ## Pisteet, kolikot ja mittarit

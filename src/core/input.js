@@ -50,8 +50,18 @@ const KEYMAP = {
   Numpad1: 'quicksave',
   Numpad2: 'quickload',
   Numpad3: 'slot',
-  Backquote: 'debug',
   KeyM: 'mute',
+  /*
+   * `Backquote` used to open the developer overlay, and on a Mac ISO keyboard
+   * that is the key **between left Shift and Z** — one key from jump. It was
+   * being opened by accident mid-jump. On an ANSI board the same code sits
+   * under Esc, which is why it looked safe when it was chosen.
+   *
+   * The lesson generalises: `event.code` is a physical position, but which
+   * physical position depends on whether the board is ANSI or ISO, and the two
+   * disagree exactly around the bottom-left corner where the action keys live.
+   * Utility keys belong on the number row, which does not move.
+   */
   F5: 'quicksave',
   F6: 'slot',
   F8: 'quickload',

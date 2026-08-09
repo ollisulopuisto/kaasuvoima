@@ -1000,6 +1000,21 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* ------------------------------ näppäimet ------------------------------ */
+  /* No utility key may sit in the corner where the action keys live. `Backquote`
+   * opened the developer overlay and on a Mac ISO board that is the key between
+   * left Shift and Z — it was being hit mid-jump. `event.code` is a physical
+   * position, but which one depends on ANSI vs ISO, and they disagree exactly
+   * there. */
+  {
+    const src = await (await fetch('/src/core/input.js')).text();
+    const map = src.slice(src.indexOf('const KEYMAP'), src.indexOf('const PADMAP'));
+    const risky = ['Backquote', 'IntlBackslash', 'Backslash', 'IntlRo'];
+    const found = risky.filter((k) => new RegExp(`^\\s*${k}:`, 'm').test(map));
+    expect('no utility key sits next to the action keys',
+      found.length === 0, found.length ? found.join(', ') : 'numerorivi vain');
+  }
+
   /* --------------------------------- kuu -------------------------------- */
   /* Bouncing off the moon drops a prize. It must fall *out* of the moon, not
    * bud out of its top the way a question block does — a moon hanging in the
