@@ -21,6 +21,7 @@ teoksia kuin vapautunut sävellys. Koko lista ja perustelu ovat
 | [DESIGN.md](DESIGN.md) | suunnitteluperiaatteet, kenttäsuunnittelun säännöt ja sisällön alkuperä |
 | [CHANGELOG.md](CHANGELOG.md) | muutokset perusteluineen (CalVer) |
 | [PHYSICS.md](PHYSICS.md) | liikkeen vakiot ja mitattu hyppybudjetti |
+| [IDEAS.md](IDEAS.md) | lainattavia mekaniikkoja ja niistä johdettuja omia — harkittavaksi, ei päätettyä |
 
 Moottorin kompastuskivet ovat [DESIGN.md](DESIGN.md):n kohdassa 6 — lue ne
 ennen kuin muutat moottoria.
