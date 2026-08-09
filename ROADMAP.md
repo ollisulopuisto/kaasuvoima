@@ -114,6 +114,35 @@ Rakenne on jo lähellä: kartta on solmuja ja linkkejä, ja `isLinkOpen` päätt
 polun avoimuuden. Lukitut polut ja oikoreitit ovat pääosin dataa. Kallista on
 vain vaikeuden näyttäminen kartalla ja käyrän mittarin muuttaminen.
 
+
+### Jonossa: ruututyypit teemakohtaisiksi muodoltaan, ei vain väriltään
+
+Toiminta pysyy samana, ulkonäkö vaihtuu maailman mukaan: aavikossa toisenlaiset
+lohkot kuin linnakkeessa, jäässä toisenlaiset kuin tehtaassa.
+
+**Mikä on jo olemassa:** `THEMES` antaa jokaiselle teemalle oman palettinsa, ja
+`drawTile` saa teeman nimen, joten ruudut ovat jo teemakohtaisia **väriltään**.
+`drawGround`illa on lisäksi `surface`-vaihtelu (korret, aallot, niitit).
+
+**Mikä puuttuu:** muoto. Tiili on sama tiili joka maailmassa, vain eri värisenä,
+ja sama koskee `?`-lohkoa ja putkea. Tämä kohta on siis "eri piirtofunktio per
+teema" eikä "eri paletti per teema".
+
+Kolme asiaa jotka kannattaa päättää ennen kuin tätä aloitetaan:
+
+1. **Kaikkien pitää lukea samaksi asiaksi.** Pelaaja oppii maailmassa 1 että
+   tuo on rikottava lohko, ja maailmassa 4 sen pitää olla tunnistettavissa
+   ilman uutta opettelua. Vaihtelu saa olla materiaalissa, ei siluetissa.
+   Mitattava sama tapa kuin nyt: uusi ruutu maan ja kovan maan vieressä, ja
+   pikseliero raportoituna jokaisessa teemassa.
+2. **Kustannus on kuusi kertaa suurempi kuin miltä näyttää.** Kuusi teemaa
+   kertaa neljä ruutua on 24 piirtofunktiota ylläpidettäväksi. Halvempi malli
+   on yksi funktio joka ottaa muotoparametrit teemataulusta — sama tapa jolla
+   `THEMES` hoitaa jo värit.
+3. **Odota kunnes uusi kuvakieli on paikallaan.** Tiili, `?`-lohko, putki ja
+   rikkoutuminen ovat juuri nyt uudistettavina. Teemakohtaiset muodot
+   kannattaa rakentaa sen päälle eikä sen rinnalle, tai työ tehdään kahdesti.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
