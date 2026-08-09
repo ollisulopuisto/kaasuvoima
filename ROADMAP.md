@@ -12,7 +12,7 @@ ennen pushia on `node tools/verify.mjs`.
 
 ## Tila 9.8.2026
 
-Kaikki alla oleva on tuotannossa ja testattu: **5 maailmaa, 22 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **6 maailmaa, 26 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
 
@@ -32,7 +32,10 @@ varrella, murtavan tehostuksen ainoa lähde (v26.08.09.14) · maailma 5 generoit
 uusiksi niin että aamun mekaniikat näkyvät myös siellä, siemen valittu
 mittaamalla (v26.08.09.12) · vaikeuskäyrä nousee joka maailmassa, tasan yksi
 notko per maailma · nyrkkeilijäpomo · jäätikkö laavan tilalle jäämaailmassa ·
-kaksoisovet · voittoruutu hernekeitolla · sirppikuu.
+kaksoisovet · voittoruutu hernekeitolla · sirppikuu · **maailma 6 LUULAAKSO**
+(v26.08.09.33): oma teema, oma tausta, yksitoista luupalikkaa, kentät 6-1…6-F,
+karttaruudukko ja luurankopomo, jonka jokainen osuma hajottaa ja joka on
+`VOICES`-taulun ensimmäinen puhuja pelaajan jälkeen.
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
 esittelytila · teemakohtaiset seisonta-animaatiot kentissä ja kartalla · oma
@@ -45,7 +48,9 @@ tunnisteesta johdetun käyrän mukaan jota myös nappula kävelee (v26.08.09.30)
 
 **Portit ja työkalut:** playable.mjs · difficulty.mjs, joka kirjoittaa
 `src/data/difficulty.js`:n vain lipun takana ja jonka vanhentumisen `verify.mjs`
-huomaa johtamalla luvut uudelleen · kaistavalidointi, joka kattaa kaikki kolme
+huomaa johtamalla luvut uudelleen · **käyrän muoto on portti eikä tuloste**
+(v26.08.09.33): jokaisen maailman on noustava ja notkahdettava tasan kerran, ja
+`verify.mjs` tarkistaa sen · kaistavalidointi, joka kattaa kaikki kolme
 kaistaa ja siis myös bonushuoneet (v26.08.09.11) · hyppybudjetin
 toistettavuustesti · debug-warp (näppäin 4, kaataa pistetaulun) ·
 salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
@@ -68,13 +73,19 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    kulkee nyt ohitusasennon kautta, ja tarkistus on portissa.
 4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
    (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
-5. **Luumaailma** ja luurankopomo tehtaan jälkeen. **Musiikki on päätetty
-   9.8.2026:** Saint-Saëns'n *Danse macabre* (1874, vapautui 1.1.1992). Se ei
-   ole tyylivalinta vaan aihevalinta — teos *on* tanssivia luurankoja
-   keskiyöllä, ja sen ksylofonikuvio on nimenomaan kalisevat luut. Sama vitsi
-   kuin säveltäjän omassa "Fossiles"-osassa. Ehdot ovat
-   [DESIGN.md](DESIGN.md):n kohdassa 1 b: sävelet kirjoitetaan käsin
-   `TRACKS`-tauluun, ei äänitettä eikä nuottilaitosta, ja lähde nimetään.
+5. ✔ **Luumaailma ja luurankopomo** — tehty (v26.08.09.33). Maailma 6
+   LUULAAKSO: `THEMES.bone`, `bg: 'bones'`, `chunks/bone.js`, kentät 6-1…6-F,
+   kartta ja `bossVariant: 4`. Musiikki on Saint-Saëns'n *Danse macabre*
+   (1874, vapautui 1.1.1992) käsin kirjoitettuna `TRACKS`-tauluun, ja
+   [DESIGN.md](DESIGN.md):n kohdan 1 b ehto on nyt portti eikä lupaus: raita
+   kantaa lähteensä (`source`) ja `verify.mjs` vaatii nimen molempiin
+   dokumentteihin. Kolme asiaa jäi kirjatuksi muitakin maailmoja varten:
+   **luupalikoiden ehto on tehtaan ehdon peilikuva** (ei kattoa, ei roikkuvaa
+   luuta), **kolmijakoisuus on datassa** (jokainen ääni ja rumpukuvio on kuuden
+   askeleen monikerta), ja **botti sanelee geometrian** — kolme kertaa peräkkäin
+   ketjutettu kuoppa, nelirivinen tiiliseinä ennen kuoppaa ja hautakivi kuopan
+   huulella kaatoivat kukin läpäisytestin, ja jokainen niistä on kirjattu siihen
+   palikkaan jonka se muutti.
 6. ✔ **Luolakaistan oma musiikki** — tehty (v26.08.09.32). Griegin
    *Vuorenkuninkaan luolassa* (1875, vapautui 1.1.1978) on nyt `cave`-raita
    `TRACKS`-taulussa, käsin kirjoitettuina sävelinä, ja luolakaista soittaa sen.
@@ -238,9 +249,16 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on 5 maailmaa ja 22 kenttää. Tavoite on 64, eli **kolminkertainen määrä
-sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää aloittaa,
-koska kaikki muu seuraa siitä.
+Nyt on 6 maailmaa ja 26 kenttää. Tavoite on 64, eli **yhä yli kaksinkertainen
+määrä sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää
+aloittaa, koska kaikki muu seuraa siitä.
+
+**Luumaailma (v26.08.09.33) on ensimmäinen mittapiste tälle kohdalle**, ja sen
+hinta kannattaa lukea ennen kuin seuraavia luvataan: yksi maailma käsin on
+teema (paletti, taustat, palikat, musiikki), yksitoista palikkaa, kolme
+kenttää, linnake, karttaruudukko ja pomo. Se on tehtävissä, mutta kohdan 1
+suositus — käsin vain ensimmäinen ja viimeinen kenttä — näyttää sen jälkeen
+oikeammalta eikä vähemmän oikealta.
 
 **Tilanne muuttui 9.8.2026: neljästä esteestä kaksi on poissa ja yksi halpeni.**
 Kohta 3 (vaikeuskäyrän mittari) on tehty — muototarkistus lukee nyt tasoja eikä
@@ -261,10 +279,12 @@ Alkuperäiset neljä, tila merkittynä:
    tehdään. Päätös jota tämä vaatii: **mikä osuus tehdään käsin.** Suositus:
    maailman ensimmäinen ja viimeinen kenttä käsin, väli generoiden ja käsin
    viimeistellen — käsi opettaa ja päättää, generaattori täyttää.
-2. **Kuusi teemaa ei riitä kahdeksalle maailmalle.** Nyt: ruoho, aavikko, yö,
-   jää, tehdas, linnake. Luumaailma on jo jonossa. Kaksi maailmaa tarvitsee
-   siis vielä oman teemansa, ja teema on paletti + taustat + palikat +
-   musiikki, ei pelkkä väri.
+2. **Seitsemän teemaa ei vielä riitä kahdeksalle maailmalle.** Nyt: ruoho,
+   aavikko, yö, jää, tehdas, linnake ja **luu** (v26.08.09.33). Yksi maailma
+   tarvitsee siis vielä oman teemansa, ja teema on paletti + taustat + palikat
+   + musiikki, ei pelkkä väri — luumaailma tehtiin juuri tuon listan mukaan, ja
+   sen neljä osaa ovat `THEMES.bone`, `bg: 'bones'`, `chunks/bone.js` ja
+   `TRACKS.bone`.
 3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
    väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja se on yhä
    päättämättä. Mittarin puoli on sen sijaan tehty: `difficulty.mjs`:n

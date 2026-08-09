@@ -398,8 +398,10 @@ export function voxPlan(word = 'a', dur = 0.32) {
  * spikes — deliberately stay shared, because a warning has to mean the same
  * thing whoever is making it.
  *
- * There is exactly one entry, because there is exactly one speaker so far. A
- * voice nobody speaks with is the same mistake as a sound nobody triggers.
+ * Two entries. The table sat here with one for as long as there was one
+ * speaker — a voice nobody speaks with is the same mistake as a sound nobody
+ * triggers — and the skeleton in world 6 is the first character with a reason
+ * to have his own: he is the only one who says anything *at* the player.
  */
 export const VOICES = {
   player: {
@@ -411,6 +413,33 @@ export const VOICES = {
     vibDepth: 0.03,
     hiss: 1,                // consonant level relative to the voiced path
     jitter: [0.92, 1.1],    // so no two takes are identical
+  },
+  /**
+   * Luuranko, maailman 6 pomo. Every number here is the same number the player
+   * has, moved in the direction "this is not a person":
+   *
+   *   - **kanttiaalto** eikä saha. A square wave is hollow where a sawtooth is
+   *     rich, and hollow is exactly the thing being described.
+   *   - **puoli sävelkorkeudesta.** Not "a lower man" but an octave down, which
+   *     is far enough that nobody hears the player in it.
+   *   - **loivat formantit** (q 3.5/4.5 vastaan 7/9). Sharp formants are what a
+   *     mouth with soft tissue in it does; a skull has no soft tissue, so the
+   *     resonances are broad and the vowels come out barely distinguishable.
+   *     This is the one that makes it read as bone rather than as a big man.
+   *   - **kaksinkertainen konsonantti** (hiss 2). The clatter is the point:
+   *     what is loud about a skeleton is the parts that knock together.
+   *   - **nopea ja matala vibrato**, ja leveämpi jitter: a rattle rather than a
+   *     wobble, and no two takes alike.
+   */
+  luuranko: {
+    wave: 'square',
+    pitchScale: 0.5,
+    formant: 0.82,
+    q: [3.5, 4.5],
+    vibRate: 9,
+    vibDepth: 0.018,
+    hiss: 2,
+    jitter: [0.86, 1.18],
   },
 };
 
@@ -882,6 +911,27 @@ const SFX = {
   cursor: () => tone({ from: 620, dur: 0.05, gain: 0.14, hold: 0.4 }),
   select: () => tone({ from: 700, to: 1050, dur: 0.13, gain: 0.18, detune: 10 }),
   pipe: () => tone({ type: 'sawtooth', from: 400, to: 80, dur: 0.36, gain: 0.18, vibrato: 8 }),
+  /**
+   * Luurangon nauru, ja sen kaksi puoliskoa.
+   *
+   * "HEHHEH" puhuttuna omalla äänellään (`VOICES.luuranko`), ja sen alla
+   * neljä lyhyttä kolmiosävelen naksausta jotka putoavat: se on se osa joka
+   * kalisee. Nauru yksinään olisi vain matala mies; naksaukset yksinään
+   * olisivat rekvisiittaa. Yhdessä ne ovat luuranko.
+   *
+   * Soitetaan silloin kun kruunu lähtee päästä eli kun pomoon voi taas osua —
+   * ei sitä laitettaessa, koska varoituksella on jo äänensä ja kaksi merkkiä
+   * samasta asiasta opettaa lukemaan väärää (DESIGN.md kohta 8).
+   */
+  luuranko: () => {
+    vox({
+      word: 'hehheh', dur: 0.5, pitch: 250, bend: 0.8, gain: 0.4, voice: VOICES.luuranko,
+    });
+    [1180, 980, 860, 760].forEach((f, i) => tone({
+      type: 'triangle', from: f, to: f * 0.9, dur: 0.05, gain: 0.1,
+      hold: 0.05, delay: 0.06 + i * 0.085,
+    }));
+  },
   boss: () => {
     farty({ dur: 0.5, base: 62, gain: 0.36, wobble: 9, wet: 0.9, vary: 0.5 });
     tone({ type: 'sawtooth', from: 120, to: 46, dur: 0.45, gain: 0.16, detune: 14, hold: 0.5 });
@@ -1563,6 +1613,17 @@ const TRACKS = {
    * the tonic. Two phrases and not four, because the piece has one tune.
    */
   cave: {
+    /* Sama ehto kuin `bone`illa, ja tämä raita on syy sanoa se ääneen: `cave`
+     * kirjoitettiin tuntia ennen kuin nimeämisestä tuli portti, joten se oli
+     * hetken ajan juuri se tapaus jota kohta 1 b pelkää — lainattu sävelmä
+     * jonka nimeäminen on kiinni siitä että joku muistaa. `TRACK_SOURCES` ei
+     * nähnyt sitä lainkaan, eli portti raportoi "1 lainattua raitaa" kun niitä
+     * oli kaksi. Portti joka kattaa puolet tapauksista on huonompi kuin
+     * puuttuva portti, koska se näyttää kattavan kaikki. */
+    source: {
+      composer: 'Edvard Grieg',
+      work: 'Vuorenkuninkaan luolassa',
+    },
     tempo: 88,
     /*
      * The accelerando, as a rate rather than a switch: `per` is how much of the
@@ -1648,6 +1709,132 @@ const TRACKS = {
       kick: 'x.......x.......',
       snare: '........x.......',
       hat: '................',
+    },
+  },
+
+  /*
+   * LUULAAKSO — Camille Saint-Saëns, *Danse macabre* op. 40 (1874).
+   *
+   * Säveltäjä kuoli 1921, joten teos vapautui 1.1.1992 (tekijänoikeus =
+   * elinaika + 70 vuotta). DESIGN.md kohta 1 b päästää vapautuneen sävellyksen
+   * sisään yhdellä ehdolla, ja ehto on tässä täytetty kahdesti: **sävelet on
+   * kirjoitettu käsin tähän tauluun** ja syntetisoidaan ajossa, joten repoon ei
+   * tule sampleja, MIDI-rippiä eikä skannattua nuottia — vapautuminen koskee
+   * sävellystä, ja yksittäinen äänite tai nuottilaitos on eri teos omine
+   * oikeuksineen. Ja lähde **nimetään**: `source` alla, DESIGN.md:n taulukossa
+   * ja muutoslokissa, ja `verify.mjs` tarkistaa että kaikki kolme sanovat saman.
+   *
+   * Rehellisyyden nimissä yksi asia sanottava ääneen: tämä on **sovitus, ei
+   * transkriptio**. Kolme ääntä ja rummut eivät ole orkesteri, ja nuotit on
+   * kirjoitettu korvakuulolta teoksen aiheista — ei mistään laitoksesta, mikä
+   * on nimenomaan se mitä sääntö vaatii.
+   *
+   * Miksi juuri tämä teos: se ei ole tyylivalinta vaan aihevalinta. Teos *on*
+   * tanssivia luurankoja keskiyöllä, ja sen kuuluisin yksityiskohta —
+   * ksylofonin kalisteleva kuvio — on nimenomaan luut. Saint-Saëns käytti
+   * saman vitsin uudestaan "Fossiles"-osassa, eli hän piti sitä itsekin luiden
+   * äänenä.
+   *
+   * Neljä fraasia, ja jokainen on yksi teoksen ajatuksista:
+   *
+   *   0  **keskiyö**: kaksitoista lyöntiä D:tä, sitten viulun tritonus A–Es.
+   *      Teos alkaa kellonlyönneillä ja sävelletyllä väärinviritetyllä
+   *      viululla; kaksitoista on siis kellonaika eikä koriste, ja
+   *      `verify.mjs` laskee ne.
+   *   1  **tanssi**: valssin pääajatus, laskeva d-molli, jossa nouseva
+   *      johtosävel (cis) kääntää seitsemännen tahdin dominantiksi. Se yksi
+   *      sävel erottaa valssin moodivampista.
+   *   2  **ksylofoni**: kalisevat luut. Kuudestoistaosapareja kromaattisesti
+   *      alas, ja se soitetaan kolmiolla lyhyellä soinnilla eikä kanttiaallolla
+   *      — lyömäsoitin on isku ja vaimeneminen, ei ääni joka jää päälle.
+   *   3  **laulava teema**: pitkiä nuotteja, vastapaino fraasille 2.
+   *
+   * Kaikki kolmijakoista: tahti on kuusi kuudestoistaosaa. Sekvensserin oma
+   * tahti on 16 askelta, joten jokainen ääni ja jokainen rumpukuvio on kuuden
+   * monikerta — muuten valssi vaeltaisi tahtilajia vasten. Se on väite jonka
+   * `verify.mjs` tarkistaa, koska sen rikkoo yhdellä nuotilla.
+   */
+  bone: {
+    source: {
+      composer: 'Camille Saint-Saëns',
+      work: 'Danse macabre',
+    },
+    tempo: 96,
+    lead: {
+      // Ksylofoni: kolmioaalto, lyhyt kesto ja melkein olematon pito. Isku ja
+      // vaimeneminen, ei jatkuva sävel — se on koko ero soittimeen.
+      wave: 'triangle', gain: 0.15, staccato: 0.34, attack: 0.003, hold: 0.08,
+      octave: 0,
+      phrases: [
+        // 0 — keskiyö: kaksitoista lyöntiä, sitten tritonus A–Es
+        [[-7, 2], [-7, 2], [-7, 2], [-7, 2], [-7, 2], [-7, 2],
+          [-7, 2], [-7, 2], [-7, 2], [-7, 2], [-7, 2], [-7, 2],
+          [0, 3], [6, 3], [0, 3], [6, 3],
+          [0, 6], [6, 6]],
+        // 1 — tanssi
+        [[5, 2], [3, 2], [1, 2],
+          [0, 4], [1, 2],
+          [3, 2], [1, 2], [0, 2],
+          [-2, 6],
+          [1, 2], [0, 2], [-2, 2],
+          [-4, 4], [-2, 2],
+          [0, 2], [4, 2], [-2, 2],
+          [-7, 6]],
+        // 2 — ksylofoni, kalisevat luut
+        [[5, 1], [5, 1], [4, 1], [4, 1], [3, 1], [3, 1],
+          [1, 1], [1, 1], [0, 1], [0, 1], [-1, 1], [-1, 1],
+          [-2, 1], [-2, 1], [-4, 1], [-4, 1], [-5, 1], [-5, 1],
+          [-7, 3], [-7, 3],
+          [5, 1], [5, 1], [4, 1], [4, 1], [3, 1], [3, 1],
+          [1, 1], [1, 1], [0, 1], [0, 1], [-1, 1], [-1, 1],
+          [-2, 1], [-2, 1], [-4, 1], [-4, 1], [-5, 1], [-5, 1],
+          [0, 3], [6, 3]],
+        // 3 — laulava teema
+        [[5, 4], [3, 2],
+          [1, 4], [0, 2],
+          [-2, 6],
+          [0, 6],
+          [8, 4], [5, 2],
+          [3, 4], [1, 2],
+          [0, 4], [4, 2],
+          [5, 6]],
+      ],
+      notes: [[5, 2], [3, 2], [1, 2], [0, 4], [1, 2], [3, 2], [1, 2], [0, 2], [-2, 6],
+        [1, 2], [0, 2], [-2, 2], [-4, 4], [-2, 2], [0, 2], [4, 2], [-2, 2], [-7, 6]],
+    },
+    harm: {
+      // Yksi sointu per tahti, oktaavia alempaa: i i iv i V7 i V7 i.
+      wave: 'sawtooth', gain: 0.038, octave: -12, staccato: 0.9, attack: 0.02, hold: 0.7,
+      notes: [
+        [[-7, -4, 0], 6], [[-7, -4, 0], 6],
+        [[-2, 1, 5], 6], [[-7, -4, 0], 6],
+        [[0, 4, 7, 10], 6], [[-7, -4, 0], 6],
+        [[0, 4, 7, 10], 6], [[-7, -4, 0], 6],
+      ],
+    },
+    bass: {
+      // Um-pa-pa: pohja iskulle yksi, soinnun sävelet kahdelle ja kolmelle.
+      // Se on valssisäestys sellaisenaan, ja se on myös ainoa ääni jota mikään
+      // variaatio ei saa pudottaa — siksi tanssi ei lakkaa missään kohdassa.
+      wave: 'triangle', gain: 0.18, staccato: 0.6, attack: 0.004, hold: 0.3,
+      accent: 'x.....',
+      notes: [
+        [-19, 2], [-12, 2], [-16, 2],
+        [-19, 2], [-12, 2], [-16, 2],
+        [-26, 2], [-19, 2], [-23, 2],
+        [-19, 2], [-12, 2], [-16, 2],
+        [-24, 2], [-17, 2], [-20, 2],
+        [-19, 2], [-12, 2], [-16, 2],
+        [-24, 2], [-17, 2], [-20, 2],
+        [-19, 2], [-12, 2], [-16, 2],
+      ],
+    },
+    drums: {
+      // Kuuden askeleen kuviot: kuvioita luetaan oman pituutensa modulona, joten
+      // kuusi on tässä kokonainen 3/4-tahti eikä kolme neljäsosaa neljästä.
+      kick: 'x.....',
+      snare: '..x..x',
+      hat: 'x.x.x.',
     },
   },
 
@@ -2052,3 +2239,18 @@ export function toggleMute() {
 
 export const isMuted = () => muted;
 export const TRACK_NAMES = Object.keys(TRACKS);
+
+/**
+ * Lainatut sävelmät ja niiden lähteet, raidan nimen mukaan.
+ *
+ * Tämä on DESIGN.md kohdan 1 b ehto koneluettavassa muodossa: vapautunut
+ * sävellys saa tulla sisään, jos lähde **nimetään**. `verify.mjs` lukee tämän
+ * ja vaatii että sekä säveltäjä että teoksen nimi lukevat DESIGN.md:ssä ja
+ * CHANGELOG.md:ssä — eli ehto ei ole enää lupaus vaan portti.
+ *
+ * Raita ilman `source`-kenttää on tätä peliä varten sävelletty eikä se näy
+ * täällä. Sääntö koskee lainattua, ei kaikkea.
+ */
+export const TRACK_SOURCES = Object.fromEntries(
+  Object.entries(TRACKS).filter(([, t]) => t.source).map(([name, t]) => [name, t.source]),
+);

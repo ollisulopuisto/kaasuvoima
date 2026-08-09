@@ -1192,7 +1192,15 @@ export class Boss extends Enemy {
   constructor(level, x, y, variant = 0) {
     super(level, x, y, 30, 32);
     this.variant = variant;
-    this.hp = variant === 3 ? 5 : 3 + Math.min(1, variant);
+    /*
+     * Health per variant, and the two special cases are special for opposite
+     * reasons. The giant (3) has five because every hit makes him bigger and
+     * the fight needs room to change address. The skeleton (4) has four rather
+     * than five because his own answer to a hit — coming apart, see `stomp` —
+     * already costs the player a couple of seconds of getting off the floor,
+     * so a fifth window would be padding rather than a fight.
+     */
+    this.hp = variant === 3 ? 5 : variant === 4 ? 4 : 3 + Math.min(1, variant);
     this.score = 5000 + variant * 1000;
     this.invuln = 0;
     this.jumpTimer = 90;
@@ -1256,6 +1264,19 @@ export class Boss extends Enemy {
       this.spikeTimer = this.openFrames;
       this.doffTimer = SPIKE_DOFF;
       Sfx.play('pipe');
+      /*
+       * Ja luuranko nauraa.
+       *
+       * Se on tässä kohdassa eikä kruunua laitettaessa, ja se on koko päätös.
+       * Kruunun nouseminen päähän on **varoitus**, ja varoituksella on jo oma
+       * äänensä (`spikes`) joka tarkoittaa samaa asiaa jokaisen pomon kohdalla
+       * — toinen ääni sen päälle olisi kaksi merkkiä samasta asiasta, mikä on
+       * juuri se mitä DESIGN.md kohta 8 kieltää. Kruunun laskeminen sen sijaan
+       * on hetki jolloin häneen voi taas osua, ja siihen hetkeen kuuluu
+       * ilkkuminen: "tässä olen, tule hakemaan". Se on tieto jonka pelaaja
+       * saisi muutenkin kuvasta, ja siksi ääni saa olla luonnetta eikä ohjetta.
+       */
+      if (this.variant === 4) Sfx.play('luuranko');
     }
   }
 
@@ -1388,6 +1409,30 @@ export class Boss extends Enemy {
       // changing address, and a signal that fires when nothing changed is the
       // fastest way to teach a player to ignore it.
       if (this.targetScale > before) this.deckDust = DUST_FRAMES;
+    } else if (this.variant === 4) {
+      /*
+       * LUURANKO HAJOAA JA KOKOAA ITSENSÄ.
+       *
+       * Every other boss answers a hit by speeding up, which is a number the
+       * player feels three seconds later. A skeleton can answer it in the same
+       * frame: he comes apart, the bones clatter out along the floor, and he is
+       * standing again by the time they are gone. So a hit on this one *pays
+       * out in information* — you see that it landed — and it also pays a bill,
+       * because the two waves are two things to get away from.
+       *
+       * `Shockwave` and not a new entity, deliberately. It is the object the
+       * player already knows means "get off the floor" (the giant makes them
+       * when he lands), and reusing it keeps `REGISTRY` in `savestate.js`
+       * exactly as it is — a new entity class here would be a save-state
+       * migration for what is, honestly, a puff of bones.
+       *
+       * He speeds up too, but by less than the others: the clatter is the
+       * escalation, and two escalations for one hit is one too many.
+       */
+      this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
+      this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
+      this.level.shake(3);
+      this.speed += 0.2;
     } else {
       this.speed += 0.35;
     }

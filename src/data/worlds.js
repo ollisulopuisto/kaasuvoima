@@ -8,8 +8,9 @@ import { DIFFICULTY } from './difficulty.js';
  * Terrain characters:
  *   . grass  , dark grass  T tree  M mountain  ~ water  S sand
  *   C cactus  R rock  I ice  P pine  " bush  F factory floor  E machinery
+ *   b bone ground  K skull
  *
- * Seven of those stand up out of the ground (`TALL_TERRAIN`), and where they
+ * Eight of those stand up out of the ground (`TALL_TERRAIN`), and where they
  * may stand is not up to whoever edits the grid: `worldProblems` refuses a map
  * that plants one on the road or next to it. See `clearZone`.
  *
@@ -212,6 +213,51 @@ const WORLD_DEFS = [
       { a: 'w5-3', b: 'w5-f', path: [[16, 6]] },
     ],
   },
+  /*
+   * LUULAAKSO, maailma 6 — hautausmaa keskiyöllä.
+   *
+   * The shape is world 4's, deliberately: start, first level, a house hanging
+   * off it, then two bends and the fortress. A new world is not the place to
+   * also invent a new road, and the shape is measured to be readable — nodes
+   * two tiles apart, links that bend without leaving their own tiles.
+   *
+   * The scenery is skulls and headstones on bare bone ground, and every one of
+   * them was placed by the rule rather than by eye: rule 8 in `worldProblems`
+   * refuses anything tall on a path tile or beside one, so the grid was built
+   * by taking the road's clear zone out first and planting into what was left.
+   * Twenty-one pieces asked for, twenty-one placed, none refused.
+   */
+  {
+    id: 'w6',
+    name: 'LUULAAKSO',
+    theme: 'bone',
+    terrain: [
+      'KbbbbbbbbbbbbKbbbbKb',
+      'bbRbbbKbbbKbbbbbbbbK',
+      'RbbbbbbbbRbbbbbbbbbb',
+      'bbbbbbbbbbbbbbbbbbbb',
+      'bbbbbbbbbbbbbbbbbbbR',
+      'bbbbbbbbbbbbbbbbbbbb',
+      'bbbKbbRbbbbbbbbbbbKb',
+      'bKRbbbbbbbbbbbKbbRbb',
+      'bbbbbbKbbKbRbbbRbbbb',
+    ],
+    nodes: [
+      { id: 'w6-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
+      { id: 'w6-1', tx: 4, ty: 4, type: 'level', level: '6-1', name: 'HAUTAUSMAA' },
+      { id: 'w6-h', tx: 4, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w6-2', tx: 8, ty: 6, type: 'level', level: '6-2', name: 'KUUN ALLA' },
+      { id: 'w6-3', tx: 12, ty: 3, type: 'level', level: '6-3', name: 'LUUTANSSI' },
+      { id: 'w6-f', tx: 16, ty: 5, type: 'fortress', level: '6-F', name: 'LUURANKO' },
+    ],
+    links: [
+      { a: 'w6-s', b: 'w6-1' },
+      { a: 'w6-1', b: 'w6-h' },
+      { a: 'w6-1', b: 'w6-2', path: [[8, 4]] },
+      { a: 'w6-2', b: 'w6-3', path: [[12, 6]] },
+      { a: 'w6-3', b: 'w6-f', path: [[16, 3]] },
+    ],
+  },
 ];
 
 export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.terrain) }));
@@ -324,13 +370,13 @@ export function linkCurve(world, link) {
  * pixels from the top of the tile:
  *
  *   T tree 1..14 · P pine 1..14 · M mountain 3..15 · C cactus 3..14
- *   R rock 8..13 · " bush 6..13 · E machinery 1..14
+ *   R rock 8..13 · " bush 6..13 · E machinery 1..14 · K skull 4..14
  *
  * The path dot's own ink is y+5..y+10 inside the tile, so every one of them
  * collides head-on. The flat glyphs — grass, dark grass, sand, ice, factory
- * plating, water — are ground texture and belong under the road.
+ * plating, bone ground, water — are ground texture and belong under the road.
  */
-export const TALL_TERRAIN = 'TPMCR"E';
+export const TALL_TERRAIN = 'TPMCR"EK';
 
 /** Every tile a link crosses, node centres included. */
 export function pathTiles(world) {

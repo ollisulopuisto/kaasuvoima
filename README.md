@@ -182,6 +182,7 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 3 JÄÄTÄVÄ VETO | jää | nopeampi versio, joka syöksyy pelaajaa kohti |
 | 4 PIERUTEHDAS | tehdas | **PIERUPRINSSI**, joka pullistuu jokaisesta osumasta 3-kertaiseksi |
 | 5 JÄLKIPYYKKI | sekateema | uusintaottelu prinssin kanssa |
+| 6 LUULAAKSO | hautausmaa keskiyöllä | **LUURANKO**, joka hajoaa jokaisesta osumasta ja kokoaa itsensä |
 
 Jokaisessa maailmassa on kolme kenttää, hernetalo ja linnake. Kentän läpäisy avaa
 siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
