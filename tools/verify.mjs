@@ -3785,6 +3785,220 @@ const report = await page.evaluate(async () => {
       same.length === 0, same.slice(0, 4).join('; '));
   }
 
+  /* ------------------ vihollisten laatikot ja hengitys ------------------- */
+  /*
+   * The audit above, pointed at the things that walk at him. Same method —
+   * measure the picture, not the numbers that made it — and it found the same
+   * two kinds of fault.
+   *
+   *  1. `Walker` is declared 16x16 and drew x+1..+15, y+3..+16, so a three
+   *     pixel band above its head hurt without ever being visible (DESIGN.md
+   *     §7). Fixed by growing the art into the box, never by shrinking the box
+   *     onto the art: the walker is the enemy every other one is a variation
+   *     of, so its box is the size of a stomp everywhere in the game, and
+   *     trimming it would quietly make every walker harder to land on.
+   *  2. Nothing that walks had any vertical motion at all. Everything alive
+   *     breathes now — one pixel — and two neighbours must not breathe in step.
+   *
+   * `over` is art outside the box: visible, harmless, a wing or a spine.
+   * `under` is box with no art on it: invisible, harmful, and the worse of the
+   * two. Both are named per enemy rather than tolerated as slack, because
+   * slack is where the next one hides — every non-zero number below is a
+   * finding somebody may still decide to fix.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const W = 88; const H = 72; const OX = 28; const OY = 24;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    /* Every colour an enemy body is painted in. Trailing gas and the stink
+     * cloud's shadow are deliberately not on the list: they are translucent, so
+     * they only reach full alpha where they land on the stacked outline, and a
+     * puff of gas behind an enemy is not part of its body. */
+    const ART = new Set([
+      '160,104,40', '122,76,24', '76,44,8', '248,248,248', '16,16,24',
+      '62,162,58', '28,107,31', '248,232,160', '240,208,96', '200,160,48',
+      '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
+      '232,224,200', '168,152,120', '224,64,64', '31,111,38', '160,32,32',
+      '112,16,16', '216,168,96', '156,106,40', '138,90,42', '92,58,22',
+      '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
+      '106,68,36',
+    ]);
+    const shot = (paint) => {
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const art = new Uint8Array(W * H);
+      let x0 = 1e9; let y0 = 1e9; let x1 = -1; let y1 = -1;
+      let rows = 0; let n = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] !== 255) continue;
+          if (!ART.has(`${d[i]},${d[i + 1]},${d[i + 2]}`)) continue;
+          art[y * W + x] = 1;
+          if (x < x0) x0 = x;
+          if (y < y0) y0 = y;
+          if (x > x1) x1 = x;
+          if (y > y1) y1 = y;
+          rows += y;
+          n++;
+        }
+      }
+      /* One body, not a pile of parts — the same flood fill as the player's
+       * audit, and here for the same reason: his breath used to lift the shirt
+       * off the trousers, and a breath that pins the top of a sprite while it
+       * moves the middle is exactly the shape of mistake that does it again. */
+      let pieces = 0;
+      const seen2 = new Uint8Array(W * H);
+      const stack = [];
+      for (let q0 = 0; q0 < W * H; q0++) {
+        if (!art[q0] || seen2[q0]) continue;
+        pieces++;
+        stack.push(q0);
+        seen2[q0] = 1;
+        while (stack.length) {
+          const q = stack.pop();
+          const qx = q % W;
+          if (qx > 0 && art[q - 1] && !seen2[q - 1]) { seen2[q - 1] = 1; stack.push(q - 1); }
+          if (qx < W - 1 && art[q + 1] && !seen2[q + 1]) { seen2[q + 1] = 1; stack.push(q + 1); }
+          if (q >= W && art[q - W] && !seen2[q - W]) { seen2[q - W] = 1; stack.push(q - W); }
+          if (q < W * (H - 1) && art[q + W] && !seen2[q + W]) { seen2[q + W] = 1; stack.push(q + W); }
+        }
+      }
+      // `lift` is the art's vertical centre of mass in hundredths of a pixel:
+      // it moves whenever any part of the body moves up or down, and it does
+      // not care where along the ground the sprite was drawn.
+      return { x0, y0, x1, y1, pieces, lift: n ? Math.round((rows / n) * 100) : -1 };
+    };
+
+    const none = { over: {}, under: {} };
+    const subjects = [
+      { n: 'walker', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+        paint: (ox, t, f) => sprites.drawWalker(g, ox, OY, Math.floor(t / 8), f, false) },
+      // A flattened walker is scenery for twenty-two frames and cannot hurt
+      // anybody, so it is not held to the box it no longer fills.
+      { n: 'flyer', box: [0, 0, 16, 16], over: { left: 4, right: 4 }, under: {},
+        paint: (ox, t, f) => sprites.drawFlyer(g, ox, OY, t, f) },
+      { n: 'shell walking', box: [1, 0, 14, 24], breathes: true, clock: 1,
+        over: {}, under: { top: 1 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'walk') },
+      { n: 'shell', box: [1, 0, 14, 14], over: { left: 1, right: 1 }, under: { top: 2 },
+        paint: (ox, t, f) => sprites.drawShell(g, ox, OY, t, f, 'shell') },
+      { n: 'spikeguy', box: [0, 0, 16, 16], breathes: true, clock: 2,
+        over: { top: 2 }, under: { left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawSpikeGuy(g, ox, OY, Math.floor(t / 2), f) },
+      { n: 'plant', box: [0, 0, 16, 32], breathes: true, clock: 1,
+        over: {}, under: { left: 1, right: 1 }, facings: [1],
+        paint: (ox, t) => sprites.drawPlant(g, ox, OY, t) },
+      { n: 'corkguy', box: [1, 0, 14, 16], breathes: true, clock: 1,
+        over: {}, under: { top: 2, left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawCorkGuy(g, ox, OY, t, f) },
+      { n: 'stink cloud', box: [0, 0, 20, 14],
+        over: {}, under: { top: 1, bottom: 1, left: 1, right: 1 },
+        paint: (ox, t, f) => sprites.drawStinkCloud(g, ox, OY, t, f, true) },
+      { n: 'bean baron', box: [0, 0, 18, 26], ...none,
+        paint: (ox, t, f) => sprites.drawBeanBaron(g, ox, OY, Math.floor(t / 7), f, 0, false) },
+    ];
+
+    // One line per distinct fault, not one per frame: 176 frames of the same
+    // three pixel band is one bug, and a list of 700 of them hides the next.
+    const seen = new Map();
+    const disagree = [];
+    const note = (what, t) => {
+      if (!seen.has(what)) { seen.set(what, t); disagree.push(what); }
+    };
+    const worst = [];
+    for (const s of subjects) {
+      const [dx, dy, bw, bh] = s.box;
+      const bx0 = OX + dx; const by0 = OY + dy;
+      const bx1 = bx0 + bw - 1; const by1 = by0 + bh - 1;
+      let gap = 0;
+      for (const facing of (s.facings || [1, -1])) {
+        for (let t = 0; t < 176; t += 2) {
+          const m = shot(() => s.paint(OX, t, facing));
+          if (m.x1 < 0) { note(`${s.n} f${facing}: nothing drawn`, t); continue; }
+          if (m.pieces !== 1) note(`${s.n} f${facing}: came apart into ${m.pieces} pieces`, t);
+          const over = { top: by0 - m.y0, bottom: m.y1 - by1, left: bx0 - m.x0, right: m.x1 - bx1 };
+          const under = { top: m.y0 - by0, bottom: by1 - m.y1, left: m.x0 - bx0, right: bx1 - m.x1 };
+          for (const k of ['top', 'bottom', 'left', 'right']) {
+            if (under[k] > gap) gap = under[k];
+            if (over[k] > (s.over[k] || 0)) {
+              note(`${s.n} f${facing}: ${over[k]}px of art ${k} of the box, ${s.over[k] || 0} allowed`, t);
+            }
+            if (under[k] > (s.under[k] || 0)) {
+              note(`${s.n} f${facing}: ${under[k]}px of box with no art at the ${k}, ${s.under[k] || 0} allowed`, t);
+            }
+          }
+        }
+      }
+      worst.push(`${s.n} ${gap}`);
+    }
+    // The measurement, not just the verdict: the widest band of box that no
+    // pixel of the enemy ever covers. Zero is what the walker was grown for.
+    expect('every enemy\'s drawing agrees with the box it hurts you with',
+      disagree.length === 0,
+      disagree.length ? disagree.join('; ') : `laatikossa kattamatta: ${worst.join(', ')}`);
+
+    /*
+     * One shared breath, offset per enemy — the trick the world map already
+     * uses on its tiles. Without the offset a row of walkers pulses as one
+     * body and reads as a rendering fault rather than as life. Measured three
+     * ways: it moves at all, a neighbour a tile away is out of step with it,
+     * and one pixel of walking does not jump its phase.
+     *
+     * Not on the list, because they already have vertical motion of their own
+     * and a second one would fight it: the stink cloud (bobs on a sine), the
+     * flyer (bounces off the floor), the bean baron (hops), the angry sun and
+     * the moon (both hover), and anything sealed in a bubble.
+     */
+    const flat = [];
+    const lockstep = [];
+    const measured = [];
+    const PERIOD = sprites.BREATH_PERIOD;
+    const flipOf = (ser) => {
+      for (let i = 1; i < ser.length; i++) if (ser[i] !== ser[0]) return i;
+      return -1;
+    };
+    for (const s of subjects.filter((q) => q.breathes)) {
+      const series = (ox) => {
+        const out = [];
+        for (let t = 0; t < PERIOD + 16; t++) out.push(shot(() => s.paint(ox, t, 1)).lift);
+        return out;
+      };
+      // A whole tile's worth of standing positions, so whatever the phase is
+      // derived from, this walks across at least one of its boundaries.
+      const steps = [0, 4, 8, 12, 16].map((d) => series(OX + d));
+      const here = steps[0];
+      let apart = 0;
+      for (let i = 0; i < here.length; i++) if (here[i] !== steps[4][i]) apart++;
+      // How far the breath's phase moved for four pixels of ground. It has to
+      // move — that is what keeps neighbours apart — but it may only ever
+      // drift, never snap, or an enemy would change its breathing the moment
+      // it stepped over a tile boundary. The slack is one step of the sprite's
+      // own animation clock, which for the walker is eight frames because that
+      // is the only clock it is given.
+      let jumped = 0;
+      for (let i = 1; i < steps.length; i++) {
+        const a = flipOf(steps[i - 1]); const b = flipOf(steps[i]);
+        if (a < 0 || b < 0) continue;
+        const d = Math.abs(a - b);
+        jumped = Math.max(jumped, Math.min(d, PERIOD - d));
+      }
+      const slack = 4 + s.clock;
+      if (new Set(here).size < 2) flat.push(`${s.n} never moves`);
+      if (apart < 3) lockstep.push(`${s.n}: the next tile along differs on ${apart} frames`);
+      if (jumped > slack) lockstep.push(`${s.n}: four pixels of travel snapped the breath ${jumped} frames, ${slack} allowed`);
+      measured.push(`${s.n} ${apart}/${jumped}`);
+    }
+    expect('everything alive breathes, and neighbours are not in step',
+      flat.length === 0 && lockstep.length === 0,
+      [...flat, ...lockstep, `naapurin ero / 4px:n siirtymä: ${measured.join(', ')}`].join('; '));
+  }
+
   /* ---------------------------- voittoruutu ----------------------------- */
   /* Clearing a castle used to leave the player standing on the edge of the
    * arena while the map loaded. The card must appear, must be skippable, and
