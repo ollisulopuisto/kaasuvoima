@@ -1015,6 +1015,54 @@ const report = await page.evaluate(async () => {
       found.length === 0, found.length ? found.join(', ') : 'numerorivi vain');
   }
 
+  /* ------------------------------- lentäjä ------------------------------- */
+  /* Reported from play: stomp a flyer, it loses its wings, and the same jump
+   * kills the walker underneath. `Flyer.stomp` appends the walker to the array
+   * `collisions()` is iterating, so it is visited later in that same loop with
+   * the same fall speed and stomped by a jump already spent. */
+  {
+    const { Flyer, Walker } = await import('/src/entities/enemies.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    const p = s.player;
+
+    const groundY = p.y + p.h;
+    const fly = new Flyer(s, p.cx - 8, groundY - 16);
+    fly.active = true;
+    fly.alwaysActive = true;
+    fly.vx = 0;
+    fly.vy = 0;
+    s.add(fly);
+
+    // Overlapping and arriving downwards, which is what a stomp is.
+    p.y = fly.y - p.h + 4;
+    p.vy = 4;
+    p.onGround = false;
+    s.collisions();
+
+    const walker = s.entities.find((e) => e instanceof Walker);
+    expect('stomping a flyer leaves a walker instead of killing it outright',
+      !!walker && !walker.dying && !walker.remove && walker.squash === 0,
+      walker ? `dying ${walker.dying} squash ${walker.squash}` : 'ei kävelijää');
+
+    /* …and the grace has to actually end, or it would be immortal. The player
+     * is parked out of the way first: left where he is, he lands on the walker
+     * the moment it becomes vulnerable and squashes it, which measures the
+     * stomp rather than the grace. */
+    p.y = 32;
+    p.x = s.spawn.x + 240;
+    p.vy = 0;
+    for (let f = 0; f < 20; f++) s.update(i);
+    expect('the new walker becomes vulnerable again a moment later',
+      !!walker && walker.spawnGrace === 0 && !walker.bubbled,
+      walker ? `grace ${walker.spawnGrace}, squash ${walker.squash}, `
+        + `remove ${walker.remove}` : 'ei kävelijää');
+  }
+
   /* --------------------------------- kuu -------------------------------- */
   /* Bouncing off the moon drops a prize. It must fall *out* of the moon, not
    * bud out of its top the way a question block does — a moon hanging in the

@@ -193,15 +193,29 @@ export class Walker extends Enemy {
     super(level, x, y, 16, 16);
     this.speed = 0.55;
     this.squash = 0;
+    this.spawnGrace = 0;
   }
 
   get bubbleable() { return true; }
 
-  // A flattened walker is scenery for the rest of its animation.
-  get harmless() { return this.bubbled || this.squash > 0; }
+  /*
+   * A flattened walker is scenery for the rest of its animation — and a walker
+   * that has just been shaken out of a flyer is untouchable for a moment.
+   *
+   * Reported from play: stomp a flying enemy, it loses its wings, and the same
+   * jump kills the walker underneath. `Flyer.stomp` adds the walker to
+   * `level.entities` — the very array `collisions()` is iterating — so the new
+   * walker is visited later in that same loop, against the same `fallVy`, and
+   * is stomped by a jump that has already been spent.
+   *
+   * Twelve frames: long enough for the bounce (-4.0 px/frame) to carry the
+   * player clear of a 16 px body, short enough that nobody waits for it.
+   */
+  get harmless() { return this.bubbled || this.squash > 0 || this.spawnGrace > 0; }
 
   update() {
     this.tick++;
+    if (this.spawnGrace > 0) this.spawnGrace--;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
     if (this.squash > 0) {
@@ -380,6 +394,7 @@ export class Flyer extends Enemy {
     const walker = new Walker(this.level, this.x, this.y);
     walker.facing = this.facing;
     walker.active = true;
+    walker.spawnGrace = 12;
     this.level.add(walker);
     this.remove = true;
     this.level.awardScore(this.score, this.cx, this.y);
