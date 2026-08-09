@@ -50,15 +50,12 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 1. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
    Tekotapa on kirjattu jo silloin kun kaistat tehtiin: lohko pudottaa pavun, ja
    pavusta kasvaa varsi ruutu kerrallaan ylöspäin (`setTile` animoituna).
-2. **Kiipeilyanimaatio** — hahmo selin, ote varresta. **Puolet on jo koodissa
-   turhaan**: `animFrame` lasketaan köydelle kahden framen sykliksi ja
-   heitetään pois, koska `Player.state()` palauttaa `'jump'` kiipeillessä.
-   Työ on siis `state()`:n paluuarvo ja asento, ei ajastin.
+2. ✔ **Kiipeilyanimaatio** — tehty (v26.08.09.22). `state()` palauttaa nyt
+   `'climb'`, ja se kahden framen sykli jota köydelle jo laskettiin on vihdoin
+   käytössä.
 3. ✔ **Spritejen animaatiokierrokset** käyty läpi kaikilla viidellä
-   voimatasolla (v26.08.09.18): 2220 yhdistelmää mitattuna, neljä bugia
-   korjattu, ja tarkistus on nyt portissa. **Jäljellä yksi**: kävelysyklistä
-   puuttuu ohitusasento — `%3` menee auki→auki ilman välivaihetta. Korjaus on
-   `player.js`:ssä `% 4` ja taulu `[0,1,2,1]`, ja piirtopuoli sietää sen jo.
+   voimatasolla (v26.08.09.18) ja loputkin korjattu (v26.08.09.22): kävely
+   kulkee nyt ohitusasennon kautta, ja tarkistus on portissa.
 4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
    (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
 5. **Luumaailma** ja luurankopomo tehtaan jälkeen.

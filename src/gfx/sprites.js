@@ -8,7 +8,14 @@
  * and where that sprite is kept is nobody else's business.
  */
 
-export { PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer, drawCork } from './sprites/player.js';
+export {
+  PLAYER_SIZES, PLAYER_DUCK_SIZES, drawPlayer, drawCork,
+  /* Re-exported so the screens that draw a walking player outside a level —
+   * the title cast, the victory card, the map pawn — drive the cycle from the
+   * same constant the engine does. They used a literal 3, which is how they
+   * kept the apart→apart wrap after the level fixed it. */
+  WALK_FRAMES,
+} from './sprites/player.js';
 export {
   drawWalker, drawShell, drawFlyer, drawPlant, drawStinkCloud, drawCorkGuy,
   drawAngrySun, drawSunTrail, SUN_TRAIL_LIFE, breath, BREATH_PERIOD,

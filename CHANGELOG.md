@@ -7,6 +7,74 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.22 — kävelyn ohitusasento, kiipeilyasento ja kolme toisen tason seisontaa
+
+### Kävely kulkee ohitusasennon kautta
+
+Kolme jalka-framea olivat aina oikein — 0 ja 2 ovat kosketukset, 1 on ohitus —
+mutta ajuri pyöritti niitä `% 3`:lla, joten kerran jokaisessa askelparissa 2
+kiertyi suoraan 0:aan ja hahmo laski **molemmat jalat maahan kahdesti peräkkäin.**
+Nyt `% 4` ja taulu `[0,1,2,1]`.
+
+Auditointi ennusti korjauksen oikein, mutta kaksi asiaa piti mitata:
+
+- **Piirtopuolen `s.frame % 3` piti silti muuttaa.** Kutsujien osalta ennuste
+  piti — 0, 1 ja 2 kuvautuvat itselleen — mutta framea 3 ei ollut, joten se
+  olisi piirtynyt framena 0 ja tuottanut auki→auki uudelleen.
+- **`% 4` yksin on kolmannes vähemmän askelia samalle matkalle.** Kävelykatolla
+  vanha ajastin antaa 6,8 px kosketusta kohti, ja saappaanjälkien väli on 7 px —
+  lähes täydellinen istutus. Korjaamaton `% 4` antaisi 9,1. `animTimer` on siis
+  skaalattu, jolloin tahti säilyy ja vain epätasaisuus poistuu.
+
+Samalla kutsupaikat pelin ulkopuolella (alkuruudun kävelijä, voittokortti,
+karttanappula) ajavat sykliä nyt samasta vakiosta kuin moottori. Ne käyttivät
+kirjaimellista kolmosta, ja **juuri siksi ne olisivat jääneet vanhaan
+kiertoon sen jälkeen kun kenttä korjattiin.**
+
+### Kiipeilyasento, ja puolet siitä oli jo koodissa
+
+`animFrame` laskettiin köydelle kahden framen sykliksi ja **heitettiin pois**,
+koska `Player.state()` palautti `'jump'`. Nyt se palauttaa `'climb'`, ja asento
+on olemassa: hahmo selin, ei silmää, niska varjossa, kädet ylös nostettuina
+niille samoille sarakkeille joissa riippuvat kädet jo ovat — joten laatikkoon ei
+kosketa. Jalat nousevat vastakkain ylhäällä olevan käden kanssa.
+
+Piirtäminen pakotti yhden korjauksen: 14 pikselin kehossa pää on yhdeksän, joten
+nostettu käsi asettui kiinni päähän ja ne sulautuivat ihonväriseksi möhkäleeksi
+jolla on hattu. Yhden pikselin varjoreuna erottaa ne.
+
+### Kolme toisen tason seisontaa
+
+Tavallisessa kentässä hahmo **nukahtaa**, jäässä **hengittää ulos jääpuikkoja**,
+aavikossa **tukka syttyy** ja hän sammuttaa sen paniikissa.
+
+**Laukeaa 1200 framen jälkeen, ja luku on lainattu eikä valittu:** se on
+alkuruudun oma `DEMO_AFTER`, joten pelissä on **yksi kuollut aika eikä kahta**,
+ja pelaaja oppii sen kerran. Ensimmäisen tason hengitys on koskematta ja alkaa
+yhä heti. Katkeaa yhdessä framessa: `threatNear()` nollaa laskurin kun mikä
+tahansa aktiivinen vihollinen tai vaara on kuuden ruudun sisällä.
+
+**ZZZ on symboli, ja se ratkaistiin eikä sivuutettu.** Roadmap oli oikeassa
+siinä että jääpuikot ja liekki ovat huoneen tekoja hahmolle mutta ZZZ ei ole.
+Konventio ei kuitenkaan ole tälle pelille uusi: `addScorePop` leijuttaa jo
+sanoja maailman koordinaateissa niiden yläpuolella jotka ne ansaitsivat, ja
+`UMMETUS` ponnahtaa pelaajan omasta päästä. ZZZ liittyy siihen kerrokseen eikä
+avaa uutta.
+
+Raja kirjattiin siihen **missä koodi asuu**: symboli piirretään kehon templaatin
+ulkopuolella, kiinteässä koossa joka **ei skaalaudu voimatason mukana**, eikä se
+ota kehon sävytystä. *Ajatus ei kasva siitä että ajattelija syö sienen.*
+
+### Kaksi bugia jotka portti nappasi ja silmä ei
+
+4×4 Z:n yhden pikselin diagonaali kosketti vain kulmista, joten kirjain hajosi
+kahdeksi kappaleeksi. Ja kolme Z:tä lyhyellä matkalla sulautui yhdeksi nauhaksi.
+Molemmat löytyivät yhtenäisyystarkistuksesta — samasta vuotäytöstä joka löysi
+hengityksen repimän pelaajan v26.08.09.18:ssa.
+
+**Ja yksi jonka silmä nappasi ja portti ei:** pesukarhun korvat jäivät
+paikoilleen kun pää nyökkäsi.
+
 ## v26.08.09.21 — kävelijä täyttää laatikkonsa, ja kaikki elävä hengittää
 
 ### Kävelijän piirros laatikkoon

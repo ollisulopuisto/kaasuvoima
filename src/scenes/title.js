@@ -1,5 +1,5 @@
 import { drawText, textWidth } from '../gfx/font.js';
-import { drawPlayer, drawWalker, drawGasPuff } from '../gfx/sprites.js';
+import { drawPlayer, drawWalker, drawGasPuff, WALK_FRAMES } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
 import { challengeLine } from '../core/challenge.js';
@@ -121,7 +121,7 @@ export class TitleScene {
       type: 'leaf',
       level: 1,
       facing: 1,
-      frame: Math.floor(this.tick / 6) % 3,
+      frame: Math.floor(this.tick / 6) % WALK_FRAMES,
       state: 'walk',
       ducking: false,
       running: false,
