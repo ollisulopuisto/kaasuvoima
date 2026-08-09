@@ -10,34 +10,59 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
-## Työn alla
+## Tila 9.8.2026
 
-- [x] **Kamera**: kuollut alue + katse juoksusuuntaan. Ei inertiaa jarrutuksessa
-      — se on se mikä tekee 2D-tasohyppelystä pahoinvoivan.
-- [x] **Vokaalit** ("jee!", "hup", "oof") formanttisynteesillä, hyppyäänet
-      satunnaistettuna 18 %:iin.
-- [x] **Telemetria, vaiheet 1–2**: paikallinen kirjaus, lämpökartta, JSON-vienti.
-- [x] **Kosketusohjaus**: kaksi mallia (näppäimet / peukalot), oma osumatarkistus,
-      monikosketus, testattu. Ei enää "myöhemmin".
-- [x] **Kuvaefektit**: bloom, juovat, vinjetti ja WebGL-kuvaputki, esiasetukset
-      näppäimessä 7, fallback testattuna. Kuvaputki on oletus.
-- [x] **Kenttäkohtainen tunnelma**: kuumuus aavikkoon ja tehtaaseen, huurre jäähän.
-- [x] **Murenevat lavat** (`%`) ja **spritekohtainen värjäys/hehku**.
-- [x] **`tools/playable.mjs`**: geometrian läpäisytesti ilman vihollisia.
-- [x] **Generaattori lukee telemetriaa** (`--telemetry`).
-- [x] **Pavunvarret ja piilotetut alueet** — 1-2 on 45 riviä korkea: taivaskaista,
-      reitti ja luolahuone. Muut maailmat odottavat, ks. kohta 5.
+Kaikki alla oleva on tuotannossa ja testattu. `node tools/verify.mjs` on portti,
+`node tools/playable.mjs` tarkistaa geometrian ja `node tools/difficulty.mjs`
+vaikeuskäyrän.
 
-### Tila 9.8.2026 aamulla
+**Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
+vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
+kuopalle/laavalle/kellolle) · kytkinruudut · murenevat lavat · pavunvarsi ja
+warp-putki (45 rivin kenttä) · salaisuudet tavallisissa tiilissä (29 kpl) ·
+piikkiukko · pomon determinististä piikkisykli.
 
-`node tools/playable.mjs` sanoo: 4-3 ei mene läpi botilla edes tuplahypyllä, ja
-2-1, 3-1, 3-F ja 5-F vaativat tuplahypyn. **Tarkistin 4-3:n käsin: se ei ole
-rikki** — kuilun yli mennään riveillä 8 ja 10 olevia kelluvia lavoja pitkin,
-joita botti ei osaa käyttää. Loput ovat todennäköisesti samaa lajia, mutta niitä
-ei ole tarkistettu ruutu ruudulta. **Älä muuta kenttädataa botin raportin
-perusteella katsomatta karttaa.**
+**Sisältö:** maailma 5 generoitu uusiksi (siemen valittu mittaamalla) ·
+vaikeuskäyrä nousee joka maailmassa, tasan yksi notko per maailma ·
+nyrkkeilijäpomo · jäätikkö laavan tilalle jäämaailmassa · kaksoisovet ·
+voittoruutu hernekeitolla · sirppikuu.
 
-Kytkinruudut on tehty (v26.08.09.2, kenttä 3-2).
+**Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
+kosketusohjaus kahdella mallilla · esittelytila · teemakohtaiset
+seisonta-animaatiot kentissä ja kartalla.
+
+**Työkalut:** playable.mjs · difficulty.mjs · debug-warp (näppäin 4, kaataa
+pistetaulun) · salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva
+generaattori.
+
+### Seuraava työ, tässä järjestyksessä
+
+1. **Uudet ominaisuudet kaikkiin maailmoihin.** Ne ovat nyt yhdessä kentässä
+   kutakin — se on oikein valmiissa pelissä ja väärin nyt, koska niitä ei
+   pääse näkemään. **Tämä estää pelitestauksen, joten se on ensimmäisenä.**
+2. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
+3. **Kiipeilyanimaatio** — hahmo selin, ote varresta.
+4. **Spritejen animaatiokierrosten tarkistus** kaikilla viidellä voimatasolla.
+5. **Murtava tehostus** — tiilet rikki sivusta juosten.
+6. **Minipomotaistelut kartalle** — kaksi "vasaraveljeä" aavikkoon, palkintona
+   murtava tehostus. Ainoa lähde sille.
+7. **Luumaailma** ja luurankopomo tehtaan jälkeen.
+8. **Salaisuuksien löydettävyys**: karttaan "salaisuudet 0/1" (kertoo *että*,
+   ei *missä*), demo näyttää tempun, kolikkojonot osoittavat.
+
+### Avoimet kysymykset
+
+- `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
+  tuplahypyn. **4-3 on tarkistettu käsin eikä ole rikki** — kuilun yli mennään
+  kelluvia lavoja pitkin, joita botti ei osaa käyttää. Muita ei ole tarkistettu.
+- **5-F sai vaikeuspisteet 295**, selvästi muita korkeammalle. Suurin yksittäinen
+  tulkinta vaikeuskäyrätyössä, ja ansaitsee ihmisen silmät.
+- **Jättiläispomo kasvaa ulottumattomiin.** Voimatason 0 hyppy kantaa ~71 px;
+  kahden osuman jälkeen jättiläisen pää on lattiatasolta saavuttamattomissa, ja
+  loput osumat vaativat areenan yläkannen lavoja. Vanha suunnittelu, ei uusi
+  bugi, mutta se on nyt kirjattu.
+- **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
+  rytmiä. Suurin mallintamaton termi.
 
 ## Seuraavaksi
 
