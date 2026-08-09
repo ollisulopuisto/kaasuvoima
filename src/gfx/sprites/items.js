@@ -117,13 +117,26 @@ export function drawFart(ctx, x, y, tick, opts) {
   const py = Math.round(y);
   const p = Math.floor(tick / 4) % 2;
   const tint = opts && opts.tint;
+  /*
+   * Opaque, outlined and bright in the middle.
+   *
+   * It used to be a translucent green blob, and against grass, a green hill or
+   * the factory's haze it simply disappeared — an 8x8 sprite has no room to be
+   * subtle. The dark rim is the same trick the characters use (`outlined`): it
+   * is what makes a small sprite survive a busy background, and it costs four
+   * rectangles.
+   */
   const body = (surface) => {
     const g = recolored(surface, tint);
-    g.fillStyle = 'rgba(140,220,80,0.9)';
+    g.fillStyle = '#14300a';
+    g.fillRect(px, py + 1, 8, 6);
+    g.fillRect(px + 1, py, 6, 8);
+    g.fillStyle = '#5ca81e';
     g.fillRect(px + 1, py + 1, 6, 6);
-    g.fillRect(px, py + 2, 8, 4);
-    g.fillRect(px + 2, py, 4, 8);
-    g.fillStyle = 'rgba(232,255,180,0.9)';
+    g.fillStyle = '#a8e04a';
+    g.fillRect(px + 1, py + 2, 5, 4);
+    g.fillRect(px + 2, py + 1, 4, 6);
+    g.fillStyle = '#f4ffd0';
     g.fillRect(px + 2 + p, py + 2, 2, 2);
   };
   if (opts && opts.glow) glowing(ctx, px + 4, py + 4, opts.glow, body);

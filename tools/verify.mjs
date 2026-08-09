@@ -1155,6 +1155,23 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* ----------------------------- pierupallo ------------------------------ */
+  /* Reported from play: the player outruns their own shot. They did — the ball
+   * moved at 3.2 px/frame and the P-meter top speed is 3.5. A projectile you
+   * can beat in a footrace is not a weapon, so this is an invariant now. */
+  {
+    const { FartBall } = await import('/src/entities/items.js');
+    const { MAX_RUN } = await import('/src/entities/player.js');
+    reset({ type: 'flower', level: 2 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const ball = new FartBall(s, s.player.cx, s.player.cy, 1);
+    // 3.5 is MAX_P, the P-meter cap, which is the fastest the player ever goes.
+    expect('a fart ball outruns the fastest possible player',
+      Math.abs(ball.vx) > 3.5 && Math.abs(ball.vx) > MAX_RUN,
+      `pallo ${Math.abs(ball.vx)}, juoksu ${MAX_RUN}, P-katto 3.5`);
+  }
+
   /* ------------------------------- kuori -------------------------------- */
   /* Reported from play: stomp a shell walker, walk into the shell, lose a power
    * level. The kick landed — and then the shell, having moved 3.4 px out of a

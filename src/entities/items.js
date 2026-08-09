@@ -78,13 +78,22 @@ export class Item extends Entity {
   }
 }
 
+/** Comfortably above the player's 3.5 px/frame top speed — see the constructor. */
+const FART_SPEED = 5.0;
+
 export class FartBall extends Entity {
   constructor(level, x, y, dir) {
     super(level, x, y, 8, 8);
     this.kind = 'projectile';
     this.alwaysActive = true;
     this.active = true;
-    this.vx = 3.2 * dir;
+    /*
+     * Faster than the player can possibly run, and that is a rule rather than a
+     * taste: at 3.2 it was slower than `MAX_P` (3.5), so a sprinting player
+     * outran their own shot and watched it trail behind them. A projectile you
+     * can beat in a footrace is not a weapon.
+     */
+    this.vx = FART_SPEED * dir;
     this.vy = 1;
     this.life = 200;
     Sfx.play('fart');
