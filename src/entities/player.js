@@ -131,6 +131,12 @@ export class Player extends Entity {
     this.controllable = true;
     this.jumpHeld = false;
     this.coyote = 0;
+    /* The size change is already frozen for a few frames; this is what those
+     * frames are for. `morphFrom` is the body he had a moment ago, and the
+     * drawing alternates between the two so the change reads as a change
+     * rather than as a sprite that was swapped while nobody was looking. */
+    this.morphFrom = 0;
+    this.morphTimer = 0;
     this.climbing = false;
     /* Frames before a warp pipe will take this player anywhere again. Without
      * it, holding the button on arrival sends you straight back. */
@@ -178,6 +184,7 @@ export class Player extends Entity {
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
     if (this.corked > 0) this.corked--;
+    if (this.morphTimer > 0) this.morphTimer--;
     if (this.star > 0) this.star--;
     if (this.warpLock > 0) this.warpLock--;
     if (this.wag !== 0 || this.type === 'leaf') this.wag += this.flying > 0 ? 0.5 : 0.12;
@@ -451,6 +458,7 @@ export class Player extends Entity {
       this.die(cause);
       return true;
     }
+    this.startMorph(this.power.level);
     this.power = makePower(this.power.level - 1 === 0 ? null : this.power.type,
       this.power.level - 1);
     this.ducking = false;
@@ -478,6 +486,7 @@ export class Player extends Entity {
           if (this.power.type && this.power.type !== itemKind) {
             this.level.storeReserve(this.power.type);
           }
+          this.startMorph(this.power.level);
           this.power = powerAfterItem(this.power, itemKind);
           this.applySize();
           this.frozen = 18;
@@ -517,6 +526,12 @@ export class Player extends Entity {
     }
   }
 
+  /** Remembers the body he is leaving, for the size-change flicker. */
+  startMorph(fromLevel) {
+    this.morphFrom = fromLevel;
+    this.morphTimer = 20;
+  }
+
   /** `cause` is only carried through to telemetry; it changes nothing in play. */
   die(cause = 'enemy') {
     if (this.dying) return;
@@ -552,7 +567,11 @@ export class Player extends Entity {
     const spinning = this.spin > 0;
     drawPlayer(ctx, this.x, this.y, {
       type: this.power.type,
-      level: this.power.level,
+      // Flickering between the old body and the new one. The hitbox is already
+      // the new size — only the picture alternates, so nothing about the change
+      // is decided by which frame you are on.
+      level: this.morphTimer > 0 && Math.floor(this.tick / 3) % 2
+        ? this.morphFrom : this.power.level,
       facing: spinning ? (Math.floor(this.spin / 3) % 2 ? -this.facing : this.facing) : this.facing,
       frame: this.animFrame,
       state: this.state(),

@@ -77,6 +77,7 @@ const booted = await page.evaluate(() => !!window.sfb3);
 
 const report = await page.evaluate(async () => {
   const { LevelScene } = await import('/src/scenes/level.js');
+  const { PLAYER_SIZES } = await import('/src/gfx/sprites.js');
   const { isSolid } = await import('/src/gfx/tiles.js');
   const { levelIds } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
@@ -1127,6 +1128,40 @@ const report = await page.evaluate(async () => {
       expect('the level clock holds far more windows than the boss has health',
         worst >= 4, `${rows.join(' ')} — huonoin ${worst.toFixed(1)} per osuma`);
     }
+  }
+
+  /* ---------------------------- koon vaihtuminen ------------------------ */
+  /* Growing and shrinking used to be a sprite swapped while nobody was looking.
+   * The freeze frames were already there; this is what they are for. The
+   * hitbox must NOT flicker with the picture — only the picture. */
+  {
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 6; f++) s.update(i);
+    const p = s.player;
+
+    p.collect('shroom');
+    const grew = p.morphTimer > 0 && p.morphFrom === 1 && p.powerLevel === 2;
+    const boxAtOnce = p.h === PLAYER_SIZES[2].h;
+    let flickered = false;
+    const seen = new Set();
+    for (let f = 0; f < 20; f++) {
+      seen.add(p.morphTimer > 0 && Math.floor(p.tick / 3) % 2 ? p.morphFrom : p.powerLevel);
+      if (p.h !== PLAYER_SIZES[2].h) flickered = true;
+      s.update(i);
+    }
+    const ran = p.morphTimer === 0;
+
+    p.invuln = 0;
+    p.frozen = 0;
+    p.hurt();
+    const shrank = p.morphTimer > 0 && p.morphFrom === 2 && p.powerLevel === 1;
+    expect('growing and shrinking flicker between the two bodies',
+      grew && shrank && boxAtOnce && !flickered && ran && seen.size === 2,
+      `kasvu ${grew}, kutistus ${shrank}, laatikko vakaa ${!flickered}, `
+      + `kokoja ${seen.size}`);
   }
 
   /* ------------------------------ katto --------------------------------- */
