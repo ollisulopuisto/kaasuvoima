@@ -50,6 +50,38 @@ generaattori.
 8. **Salaisuuksien löydettävyys**: karttaan "salaisuudet 0/1" (kertoo *että*,
    ei *missä*), demo näyttää tempun, kolikkojonot osoittavat.
 
+
+### Jonossa: ruutuefektit ja neljännen seinän rikkominen
+
+Neljä erillistä ideaa, tahallaan erillään — ne jakavat teeman muttei toteutusta.
+
+**1. Voimakkaampi ruudun tärinä (halpa).** `scene.shake(amount)` on jo olemassa,
+katto 6 px, ja linnakkeissa siitä on viitteitä. Pomon laskeutuminen, jättiläisen
+askel ja iskuaalto ansaitsevat oman voimakkuutensa, ja tärinän pitäisi olla
+*suunnattua* (pystyisku tärisyttää pystyyn) eikä aina samaa ympyrää. Kuvaputken
+jälkikäsittely voi vahvistaa sen — se näkee jo valmiin kuvan.
+
+**2. Auringon palava jälki (halpa, ei ruutuefekti).** Tämä on entiteettikohtainen
+eikä koko ruudun asia, ja siksi se kuuluu `sprites/enemies.js`:ään eikä
+`postfx.js`:ään. Sääntö on jo kirjattu: yhtä oliota koskeva efekti kuuluu
+piirtokoodiin, koko ruutua koskeva jälkikäsittelyyn, eikä väliin jää mitään.
+
+**3. Pomo hyökkää pelikentän kimppuun (keskihintainen).** Iskuaalto irrottaa
+laattoja, halkeamat leviävät lattiassa. **Tämä on halpa vain siksi että ruudukko
+on jo osoitettu muunneltavaksi ja tallennusturvalliseksi**: murenevat lavat ja
+kytkinruudut tekivät sen työn, ja tilatallennus tallentaa koko ruudukon.
+Riski jonka tiedämme etukäteen: `rules.js` validoi kentän *lähtötilan*, joten
+pomo joka rikkoo lattian voi tehdä areenasta läpäisemättömän. Vaatii saman
+takaisinkasvun kuin mureneva lava, ja samasta syystä.
+
+**4. Pomo järjestää kentän uusiksi (kallis, ja paras idea).** Vaihe jossa pomo
+muokkaa areenaa — nostaa pilareita, avaa kuiluja — ja pelaajan pitää sopeutua.
+Tämä on aito neljännen seinän rikkominen siinä mielessä että vihollinen koskee
+siihen mitä pelaaja luuli vakioksi. Vaatii että muutos on **ennakoitu, palautuva
+ja validoitu**: pelaaja näkee sen tulevan, areena palautuu jos pomo kaatuu, ja
+mikään järjestely ei saa tehdä ovea saavuttamattomaksi. Ilman noita kolmea se on
+epäreiluuden generaattori.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
