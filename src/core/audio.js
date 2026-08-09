@@ -717,6 +717,30 @@ const SFX = {
     noise({ dur: 0.34, from: 900, to: 160, q: 1.3, gain: 0.24 });
     farty({ dur: 0.26, base: 84, gain: 0.2, wobble: 10, wet: 0.6, delay: 0.05 });
   },
+  sprout: () => {
+    /*
+     * A beanstalk leaving a block, and it has to be a *rising* sound that lasts
+     * as long as the growing does.
+     *
+     * The three payouts a `?` block already has are all over in a tenth of a
+     * second — `coin` chimes, `powerup` runs its arpeggio, `bump` thuds — and
+     * every one of them says "here, take it". A beanstalk is not handed over;
+     * it climbs for a second and a half, most of it above the top of the
+     * screen, and the player has to know that what they started is still going
+     * on up there. So this is the one block sound with a length to it: a wooden
+     * knock as the bean pops out, then a filtered rustle and a glide that climb
+     * together for the 1.4 s the eighteen tiles take (GROW_FRAMES in
+     * entities/items.js). Nothing else on this bus rises and holds, which is
+     * the point — DESIGN.md §8, a second signal that sounds like a first one is
+     * worse than no signal.
+     */
+    tone({ type: 'square', from: 620, to: 300, dur: 0.07, gain: 0.2, hold: 0.2, curve: 'lin' });
+    tone({
+      type: 'triangle', from: 170, to: 560, dur: 1.35, gain: 0.11, hold: 0.7,
+      delay: 0.05, curve: 'lin', vibrato: 5, vibratoRate: 7,
+    });
+    noise({ dur: 1.3, from: 260, to: 2600, q: 4, gain: 0.13, delay: 0.06, attack: 0.22 });
+  },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
   spikes: () => {
     // Bone sliding out of a back. Rising, so it reads as a warning rather than

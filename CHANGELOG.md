@@ -7,6 +7,118 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.26 — portti ei enää heitä kolikkoa äänitestissä
+
+`a spoken line is loud enough to hear` kaatui satunnaisesti noin joka toinen
+ajo. Se ei ollut äänivika vaan mittausvika, ja **portti joka kaatuu sattumalta
+on pahempi kuin puuttuva testi**: se opettaa ohittamaan punaisen.
+
+Rivi mittasi väylän pohjakohinan odotettuaan kiinteät 900 ms. Perustelu oli
+oikea — suite on soittanut ääniä minuutin ajan, väylän pitää antaa rauhoittua —
+mutta luku oli arvaus siitä miten pitkä häntä viimeisellä äänellä sattuu
+olemaan. Mitattuna tausta oli milloin **0,000 ja milloin 3,029**: rivi ei
+mitannut kohinaa vaan sitä ehtikö edellinen ääni loppua. Vika on vanha, ei
+tämän aamun: todennettu ajamalla `230dacc` sellaisenaan (`ok` / `FAIL 3,029`).
+
+Nyt väylää kuunnellaan kunnes se on hiljaa, **samalla 200 ms:n ikkunalla jolla
+lopputulos mitataan** ja kaksi peräkkäistä ikkunaa. Molemmat ehdot ovat
+mittaustuloksia eivätkä makuasioita:
+
+- eri ikkuna hiljaisuudelle (60 ms) ja mittaukselle (200 ms) kaatui omaan
+  mittaansa — "hiljeni 182 ms, tausta 19,450", eli portti julisti hiljaisuuden
+  keskellä ryminää;
+- yksi ikkuna kahden sijaan osui `sprout`in **sisäiseen taukoon** (kopsahdus,
+  hiljaisuus, nouseva kahina): tausta 0,000 ja heti perään ääni 4,250, eli
+  mittaus luuli mittaavansa yhtä puhuttua riviä ja mittasi kahinaa sen päällä.
+
+Punainen tehtiin tahallaan, koska satunnaista vikaa ei voi muuten toistaa:
+neljä ääntä soi yhtä aikaa juuri ennen mittausta. Vanhalla odotuksella se
+kaataa rivin **3/3 ajossa** (tausta 0,104 / 0,116 / 0,104), uudella se menee
+läpi **5/5** ja tausta on joka kerta 0,000. Rauhoittuminen kestää mitattuna
+1473–1618 ms, eli 900 ms ei koskaan riittänyt.
+
+---
+
+## v26.08.09.25 — pavunvarsi kasvaa lohkosta
+
+Varsi oli tähän asti **pysyvästi näkyvissä**: salaisuuden palkinto seisoi
+kentässä ensimmäisestä framesta lähtien. Nyt se on seuraus lohkon lyömisestä —
+tavallisen näköinen `?` pudottaa pavun, papu putoaa lattialle ja varsi kasvaa
+siitä ruutu kerrallaan taivaskaistalle asti.
+
+### Validointi ratkaistiin ensin, ei viimeisenä
+
+Tämä oli koko työn vaikea kohta. `rules.js` todistaa taivaskaistan
+saavutettavuuden **varresta**: `vineCrossings` etsii ruudukosta yhtenäisen
+köysipylvään joka ylittää kaistojen sauman. Jos varren ruudut yksinkertaisesti
+poistaisi kenttädatasta, validaattori ei enää löytäisi vartta eikä saumaa — se
+ei kaatuisi vaan **hiljenisi**, ja hiljainen kattavuuden menetys on pahempi kuin
+punainen portti.
+
+Ratkaisu: **kenttädata on kasvanut kenttä**, ja moottori johtaa siitä kasvamattoman.
+`chunks/secrets.js` piirtää varren kokonaan, `LevelScene.plantVines` nostaa sen
+elävästä ruudukosta pois ja jättää tilalle `?`-lohkon varren omaan sarakkeeseen
+bumppirivillä. Yksi totuuden lähde, ja portti tarkistaa juuri sen tilan jonka
+pelaaja lopulta saa.
+
+Ero kahden kuvan välillä on rehellinen vain niin kauan kuin kasvaminen on
+**taattu**, joten se tarkistetaan eikä oleteta. Uusi `checkBeanBlocks` kysyy
+jokaiselta sauman ylittävältä varrelta kolme asiaa, ja jokainen on se osa
+"lohkoon yltää" -väitteestä johon ruudukko osaa vastata:
+
+- **onko varsi juurtunut** — alimman ruudun alla on oltava jotain jonka päällä
+  seistään. Sinne papu putoaa, sieltä varsi lähtee, ja se on myös ainoa paikka
+  josta valmiiseen varteen tartutaan.
+- **mahtuuko lohko siihen** — se riippuu `BEAN_BLOCK_OVER_FLOOR` (4) riviä
+  lattian yllä varren omassa sarakkeessa, joten varren on oltava sen mittainen.
+- **yltääkö siihen** — pienimmän kehon pää on rivin lattian yllä, eli lohko on
+  kolme riviä sen yläpuolella mitattua neljän ruudun hyppybudjettia vastaan.
+  Vakio molemmin puolin, ja juuri siksi tarkistettu eikä muistettu.
+
+Kirjattu myös se mitä **ei** tarkisteta: lohko itse on kiinteä ruutu joka on
+olemassa vain ajonaikaisesti. Se ei ole luotettu vaan rajattu — se seisoo
+solussa jonka kenttädata sanoo köydeksi, ja `checkVines` on jo todistanut sen ja
+molemmat naapurisarakkeet kivestä vapaiksi suurimmalla koolla.
+
+### Lohko on varressa, ei sen alla — ja se on mittaustulos
+
+Ensimmäinen toteutus oli ilmeinen kuva: lohko bumppirivillä ja varsi kasvamassa
+sen päältä ylöspäin. **Mitattuna se oli rikki.** Varteen tartutaan seisomalla
+sen juurella ja painamalla ylös; kun varsi alkaa vasta bumppiriviltä, lohko
+itse on hypyn tiellä, ja kaikista tarttumisyrityksistä (kävellen ja juosten,
+kaikki hyppyframet 0–59) **yksikään ei onnistunut voimatasoilla 0 ja 1** —
+salaisuus muuttui saavuttamattomaksi juuri sillä koolla jolla kentän luvataan
+toimivan. Siksi lohko istuu varren **sisällä** ja kasvu kirjoittaa köysiruudun
+kulutetun lohkon päälle ohi mennessään: valmis varsi kulkee lattiasta taivaaseen
+katkeamatta, ja tarttuminen on täsmälleen se mikä se ennenkin oli.
+
+### Kuva ja ääni yhdessä
+
+Papu tulee ulos lohkon **alapuolelta** — jokainen muu `?`-lohkon palkinto
+nousee yläkautta, ja kaksi samannäköistä tapahtumaa opettaa yhden väärän
+opetuksen kumpikin (DESIGN.md §8). `drawSprout` on oma spritensä eikä
+paukkupavun uusiokäyttö samasta syystä: paukkupapu on ruskea, halkeillut ja
+poimittava, tämä on vaalean vihreä siemen jota ei voi koskea.
+
+Ääni `sprout` on ainoa lohkoääni jolla on **pituutta**: kolikko, tehostus ja
+tömäys ovat ohi kymmenesosasekunnissa ja sanovat "tässä, ota", mutta varsi
+kiipeää puolitoista sekuntia ja suurimmaksi osaksi ruudun yläpuolella. Puinen
+kopsahdus, sitten nouseva suodatettu kahina ja liuku jotka kestävät kasvun yli.
+
+### Muut jäljet
+
+- `Beanstalk` on entiteetti eikä ajastin kohtauksessa: kasvava kärki on jotain
+  mitä katsotaan, ja `savestate.js` sarjallistaa jo jokaisen entiteetin oman
+  kentän — pikatallennus puolimatkassa palaa puolimatkaan ilman uutta kenttää
+  missään. Lisätty `REGISTRY`-tauluun (DESIGN.md §6).
+- Debug-overlayn salaisuuslaskuri laskee istuttamattoman varren varreksi. Luku
+  joka ilmestyy vasta kun testaaja on jo löytänyt asian ei auta ketään.
+- `tools/verify.mjs`: punainen ennen vihreää sekä mekaniikalle että
+  validaattorille — kolme rikottua kiinnitintä (varsi ilmassa, varsi kuilun
+  päällä, varsi liian lyhyt) ja sama kiinnitin ehjänä.
+
+---
+
 ## v26.08.09.24 — ruskea pilvi näyttää vihdoin siltä miltä se käyttäytyy
 
 Kuolleiden lippujen auditoinnin (9.8.2026) **taso A, kohta 1** — ainoa löydös

@@ -47,9 +47,14 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 
 ### Seuraava työ, tässä järjestyksessä
 
-1. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
-   Tekotapa on kirjattu jo silloin kun kaistat tehtiin: lohko pudottaa pavun, ja
-   pavusta kasvaa varsi ruutu kerrallaan ylöspäin (`setTile` animoituna).
+1. ✔ **Pavunvarsi kasvaa `?`-lohkosta** — tehty (v26.08.09.25). Lohko pudottaa
+   pavun, papu putoaa lattialle ja varsi kasvaa siitä ruutu kerrallaan
+   taivaskaistalle. Kaksi asiaa jäi kirjatuksi muitakin muutoksia varten:
+   **validointi ratkaistiin ensin** — kenttädata on kasvanut kenttä ja moottori
+   johtaa siitä kasvamattoman, jotta `rules.js` yhä todistaa saumanylityksen ja
+   uusi `checkBeanBlocks` todistaa että kasvaminen tapahtuu — ja lohko istuu
+   varren *sisällä* eikä sen alla, koska mitattuna varsi joka alkaa vasta
+   bumppiriviltä on saavuttamaton voimatasoilla 0 ja 1.
 2. ✔ **Kiipeilyanimaatio** — tehty (v26.08.09.22). `state()` palauttaa nyt
    `'climb'`, ja se kahden framen sykli jota köydelle jo laskettiin on vihdoin
    käytössä.
@@ -648,6 +653,13 @@ kenttiä joita luetaan joka framessa.
 
 - Botti `verify.mjs`:ssä osaa vain juosta ja hypätä, joten sen kuolemat
   vihollisiin ovat normaalia. Vain FAILURES-rivit merkitsevät.
+- `playable.mjs` sanoo **4-3: EI LÄPI EDES TUPLAHYPYLLÄ** (kuilu sarakkeessa
+  235). Sama botin rajoitus: reitti kulkee kelluvien lavojen yli, ja botti
+  hyppää suoraan eteenpäin. Todennettu vanhaksi ajamalla `230dacc` erikseen.
+- **Ajastettua ääntä ei voi mitata kellolla.** `sprout`in sisällä on tauko,
+  joten "onko väylä hiljaa" pitää kysyä kahdelta peräkkäiseltä ikkunalta ja
+  samalta ikkunalta jolla tulos mitataan (v26.08.09.26). Jos uusia pitkiä
+  ääniä tulee lisää, tämä on se kohta joka pettää ensimmäisenä.
 - Pistetaulu on selainkohtainen (localStorage), ei jaettu laitteiden kesken.
 - Rytmitilastojen louhinta vaatii ulkoisen korpuksen (`VGLC_DIR`), jota ei
   säilytetä repossa. Aja generaattori aina `VGLC_DIR` asetettuna, jotta
