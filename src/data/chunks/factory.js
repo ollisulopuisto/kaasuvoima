@@ -257,21 +257,4 @@ export const FACTORY_CHUNKS = {
     13: '################',
     14: '################',
   }),
-
-  /** Roomy arena with landing platforms: the giant needs headroom. */
-  boss_arena_big: ck(48, {
-    0: G + G + G,
-    1: G + G + G,
-    2: 'XX                                            XX',
-    3: 'XX                                            XX',
-    5: '         o o                      o o',
-    6: '        -----                    -----',
-    7: '         o o                      o o',
-    9: '                     b',
-    10: '                                            DD',
-    11: '                                            DD',
-    12: '                                            DD',
-    13: G + G + G,
-    14: G + G + G,
-  }),
 };

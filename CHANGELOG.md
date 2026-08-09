@@ -7,6 +7,83 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.23 — putken suunta kenttiin asti, ja kamera ennakoi nousun
+
+### `WARP_COMPAT` on poissa
+
+v26.08.09.19 korjasi säännön moottoriin mutta jätti yhteensopivuuslipun päälle,
+koska kenttien ulostuloputket seisoivat lattialla ja tiukka sääntö olisi
+**sulkenut pelaajan bonushuoneeseen**. Nyt kentät on korjattu ja lippu poistettu.
+
+Kaikki suut ovat **rivillä 9**, eikä se ole makuasia: suun alahuulen pitää
+mahtua korkeimman pään yli (21×43 = kolme ruuturiviä) **ja** pysyä pienimmän
+ulottuvilla, joten kolme tyhjää riviä lattian yllä on ainoa korkeus jota
+jokainen koko voi käyttää.
+
+**Yksi moottorin muutos, jonka mitta pakotti:** ylöspäin kurottaminen *pään*
+suhteen ei voi toimia. Kuusi kehoa ovat 16/26/30/34/38/43 px, joten kiinteällä
+lattialla ja kiinteällä suulla pään ja suun väli on eri luku joka voimatasolla —
+ja yksi ruutu ei kata 27 pikselin hajontaa. **Mitattuna tasan kolme kuudesta
+koosta pääsi sisään.** Kurotus on nyt kolme ruutua **jaloista**, mikä on se
+"seiso suun alla" -sääntö jota vanha kommentti jo väitti tarkoittavansa.
+
+`fac_duct` jakautui kahdeksi (`fac_duct_down`, `fac_duct_up`) ja `fac_loft` ei
+muuttunut lainkaan — siitä poistuminen on alaspäin, ja se sanoo sen nyt itse.
+
+**Kattoputki tietää suuntansa naapurista:** `drawTile` saa jo `above`-ruudun
+(alun perin maatiilen ruohoa varten), joten putki yläpuolella tarkoittaa että
+tämä suu on riippuvan putken alapää, ja piirros peilataan ruudun keskiviivan yli
+yhdellä muunnoksella — suu ja hohde samassa, jotta ne eivät voi ajautua erilleen.
+
+`rules.js` osaa nyt suunnan: `warpMouths` palauttaa suun **ja sen ainoan suunnan
+johon siitä voi matkustaa**. Aiemmin validaattori siunasi lattiaputken
+ulospääsyksi ylöspäin — juuri se tarkistus jonka tehtävä on estää jäämästä
+lukkoon.
+
+Todistettu ajamalla eikä lukemalla: viisi bonushuonetta × kuusi kokoa, jokainen
+sisään ja ulos.
+
+### Kamera ennakoi nousun
+
+Omistajan raportti: pito toimii ja alaspäin seuraaminen on hyvä, mutta kun hahmo
+nousee tarpeeksi korkealle, **kuva hyppää** eikä liu'u.
+
+Syy oli v26.08.09.19:n oma valinta: `CAM_TOP_MARGIN` sovellettiin **kovana
+rajana easen jälkeen**. Sillä framella kun pää ylitti rajan, kuva siirtyi
+kertaheitolla seuraamaan sitä.
+
+Korjaus ei ole rajan pehmentäminen vaan **aikaisemmin liikkeelle lähteminen**:
+raja tähtää siihen missä pää on kolmen framen päästä, jolloin ease on jo
+vauhdissa kun raja alkaisi purra. Kolme on `(1 − CAM_V_EASE)/CAM_V_EASE`, eli
+easen oma asettumisviive — **pidemmät ennakot mitattiin ja ne olivat huonompia**
+(pahin frame ennakoilla 3/4/5/6/8 = 1,95/2,21/2,49/2,68/2,88 px), koska ennakko
+kertoo nopeuden ja pieruhyppy portaittaa sen.
+
+**Suurin yhden framen kameraliike noustessa: 2,92 px → 1,95 px**, ja saavutettu
+usean framen aikana yhden sijaan. Pää ei enää yllä rajaan lainkaan (16,00 →
+16,02…16,28), eli **kova raja siirtää kuvaa nykyään 0,00 px ja on verkko eikä
+mekanismi.**
+
+`CAM_SNAP` tarkistettiin eikä muutettu: se **ei laukea** noustessa, 0 framea
+seitsemässä mitatussa tapauksessa.
+
+Kaksi rehellistä huomiota luvuista. Mittari piti rajata hyppyihin jotka alkavat
+*asettuneesta* kuvasta — rajaamattomana se lukee 6,70 px, mutta se on kuva joka
+liukuu juuri saavutetulle tasanteelle, eli alaspäin seuraaminen toimimassa. Ja
+`the view does not ride a jump upward` lukee 2-1:n voimatasolla 3 nyt 0,27
+px/frame eikä 0,00: se hyppy huipentuu 16,4 px kuvan reunasta, **0,4 px vajaaksi
+vanhan rajan laukaisemisesta**, joten se aina liikutti kameraa — nyt se ajelehtii
+0,93 px koko kaaren aikana sen sijaan että astuisi.
+
+### Kaksi velkaa maksettu
+
+`watchSecrets`-kääre on poistettu: `bumpTile` ja `tryWarp` kirjaavat löydöt itse.
+Avain otetaan **raa'asta ruudusta**, koska päällä oleva kytkin näyttää tiilet
+kolikkoina. `worldmap.js` ei enää tuo `LevelScene`ä.
+
+Ja `boss_arena_big`in kuollut kopio `factory.js`:ssä on poistettu — elävä on
+`fortress.js`:ssä, ja portti vahti varjostusta siihen asti.
+
 ## v26.08.09.22 — kävelyn ohitusasento, kiipeilyasento ja kolme toisen tason seisontaa
 
 ### Kävely kulkee ohitusasennon kautta
