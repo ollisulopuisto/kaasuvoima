@@ -164,7 +164,20 @@ export class LevelScene {
 
   tileAt(tx, ty) {
     if (tx < 0 || tx >= this.w) return T.HARD;   // solid level edges
-    if (ty < 0 || ty >= this.h) return T.EMPTY;
+    /*
+     * The sky is a lid, for the same reason the sides are walls.
+     *
+     * Reported from play: in 1-F the opening screen has no ceiling, so you can
+     * jump up beside where the ceiling starts, land on top of it, and run the
+     * whole level along the roof — past the boss, with no way down and no way
+     * to win. The level was not broken; the world simply had no top, and any
+     * level whose ceiling does not reach its own start edge has the same hole.
+     *
+     * Closing it here fixes every level at once, including generated ones, and
+     * it cannot be forgotten the next time somebody writes a chunk.
+     */
+    if (ty < 0) return T.HARD;
+    if (ty >= this.h) return T.EMPTY;
     const ch = this.grid[ty][tx];
     if (this.switchTimer > 0) return SWITCH_MAP[ch] || ch;
     return ch;

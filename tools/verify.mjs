@@ -939,6 +939,35 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------------------ katto --------------------------------- */
+  /* Reported from play: in 1-F you could jump up where the opening screen has
+   * no ceiling, land on the roof, and run the level along the top — past the
+   * boss, unable to come down and unable to win. The fix is that the world has
+   * a lid, so this asserts the lid rather than the one level that lacked it. */
+  {
+    reset({ type: 'shroom', level: 2 });
+    const s = new LevelScene(game, '1-F');
+    game.setScene(s);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    expect('the top of the world is solid', s.solidAt(4, -1) && s.solidAt(4, -3));
+
+    // Jump for the sky from the open start area and stay inside the level.
+    const i = mkInput();
+    let highest = s.player.y;
+    for (let f = 0; f < 240; f++) {
+      i.held = blank();
+      i.held.right = f > 60;
+      i.held.run = true;
+      i.held.jump = f % 30 < 18;
+      i.pressed = blank();
+      i.pressed.jump = f % 30 === 0;
+      s.update(i);
+      highest = Math.min(highest, s.player.y);
+    }
+    expect('the player cannot get on top of the ceiling and run the roof',
+      highest >= 0 && s.player.y >= 0, `ylin y ${Math.round(highest)}`);
+  }
+
   /* --------------------------- debug-warp -------------------------------- */
   /* A testing tool, and the two things that make it safe to have one: it does
    * nothing without the developer overlay up (an invisible warp is a cheat code
