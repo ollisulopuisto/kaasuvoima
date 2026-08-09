@@ -65,7 +65,7 @@ mutta se on kaksi tarkistusta eikä yksi, ja siksi molemmat lukevat tässä.
 
 Ja koska kaksi tarkistusta ei ole sama asia kuin kaksi *muistettua* tarkistusta,
 portti lukee nyt raidan `source`-kentät kaikki eikä kahta nimettyä
-(v26.08.09.38). Sovittajan nimi oli aiemmin kenttä jonka olisi voinut kirjoittaa
+(v26.08.09.42). Sovittajan nimi oli aiemmin kenttä jonka olisi voinut kirjoittaa
 koodiin ilman että se olisi joutunut kumpaankaan dokumenttiin — eli täsmälleen
 se puoliksi kattava portti jota tämä kohta pelkää. Sukunimi ei myöskään riitä:
 taulukossa lukee **Nikolai** Rimski-Korsakov, ja portti vaatii sen merkkijonon
