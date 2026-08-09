@@ -7,6 +7,195 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.8 — mekaniikat kaikkiin maailmoihin, jakoruutu, mobiiliohjaus ja yksi fysiikkabugi
+
+Iso erä, ja pääosin rinnakkaisten alaagenttien tekemä: kuusi työtä omissa
+työkopioissaan, yhdistettynä ja portti ajettuna kerran kaikelle yhdessä.
+
+### Mekaniikat maailmoihin 2, 3 ja 4
+
+Uudet ominaisuudet olivat yhdessä kentässä kutakin. Se on oikein valmiissa
+pelissä ja väärin nyt, koska niitä ei pääse näkemään — ja se esti pelitestauksen.
+
+- **Maailma 2**: tähti 2-1:een (aavikko omistaa sen vihollisen jota tallaus ei
+  kaada — aurinko herää ja seuraa, ja tähti sammuttaa sen), salainen alue
+  2-2:een, mureneva lava 2-N:ään, kytkin 2-3:een. 2-N sai murenevan lavan
+  siksi että **yön paletissa tiili ja maa ovat lähes sama ruskea**, joten
+  sinne kuuluu se mekaniikka joka luetaan liikkeestä eikä väristä: tärinä,
+  halkeama, pudotus. Hiekkaa jokaisen lankun alla — lampun valossa ei näe
+  kuinka pitkä pudotus on, joten pudotus ei saa olla rangaistus.
+- **Maailma 3**: tähti 3-1:een, salaisuus 3-2:een, mureneva lattia 3-3:een.
+  **Oletus että jää tekee murenevasta lattiasta julmemman osoittautui
+  vääräksi**: mureneva lattia tappaa vain sen joka jää seisomaan, ja seisominen
+  on juuri se mitä tämä maailma ei salli. Vaara on kokonaan toisessa päässä,
+  josta lähdetään vauhdilla jota ei saa pysäytettyä. Sitova tapaus on **pienin**
+  pelaaja, koska pienellä on *vähemmän* kitkaa (0,0391 vs 0,0547) — ensimmäinen
+  versio mitoitti loppusuoran isolla vakiolla ja olisi jäänyt kaksi kolmasosaa
+  ruudusta lyhyeksi. Mitattuna moottorista: 154,9 px liukua, loppusuora 12 ruutua.
+- **Maailma 4**: tähti 4-1:een, salaisuus 4-2:een, kytkin 4-3:een.
+  **Tehtaan salaisuus ei voinut olla pavunvarsi**: `world4.js` sanoo että tehdas
+  on sisätila ensimmäisestä ruudusta viimeiseen, ja `drawVine` maalaa lehdet
+  kovakoodatun ruohonvihreinä ilman teemaparametria — se olisi reikä katossa,
+  ja lehtiä reiässä. Ratkaisu on **putki ylöspäin** tehtaan omalle katolle
+  suljettuun konehuoneeseen: `tryWarp` osaa jo `dir = -1`, huoneen lattia *on*
+  tehtaan katto, ja tehtaan taustakuva palaa ennen kaistasiirtymää, joten
+  näkymä ylhäältä on oikea ilmaiseksi. Suljettu huone eikä avoin kattotaso,
+  koska kattotasoa pitkin juokseminen olisi oikotie kentän ohi.
+
+Vaikeuskäyrä nousee yhä joka maailmassa (103,7 → 123,5 → 151,9 → 174,7 → 193,8)
+ja jokaisessa on tasan yksi notko. Keskiarvot laskivat 4–5 pistettä, ja se on
+laimennusta eikä helpotusta: mittari on saraketta kohti, ja palkintohuone on
+määritelmällisesti se osa kenttää joka ei ole haaste. **Yksikään agentti ei
+kuroa lukua takaisin lisäämällä vihollisia palkintohuoneisiin** — se olisi
+mittarin virittämistä väärästä päästä.
+
+### Liu'un jarrutus ei ole maan sääntö
+
+Omistajan raportti: "laskeutuessa liikkuu vielä sivuttain, eikä ehdi väistää
+vihollista jota kohti on menossa". Mitattuna oire osoitti väärään paikkaan:
+**maassa jarruttaminen maksaa 24 px 179 pikselin reaktiomatkasta — 87 %
+tapahtuu ilmassa.** Osumalaatikko on kapeampi kuin piirros joka voimatasolla,
+ja tallausikkuna on 40 px eli 16 framea.
+
+Syy oli `player.js`:n ehto `const skidding = this.onGround && …`. Lähteen
+(`PRG008_ABB8`) haara joka valitsee jarrutusnopeuden **ei lue `Player_InAir`ia
+lainkaan**; ilmassa oleva suunnanvaihto jarrutti siis 0,0547:llä kun sen pitää
+olla 0,125 — alle puolet siitä auktoriteetista joka samalla pelaajalla on
+maassa, juuri siinä vaiheessa jossa koko reaktio tapahtuu. Vakiot olivat siis
+uskollisia, yksi ehto ei ollut.
+
+Vaikutus: P-vauhdissa ilmassa tehty käännös vaatii 183 px sijaan 154 px, eli
+102 %:sta näkyvästä 86 %:iin — mahdottomasta mahdolliseksi. Hyppybudjettiin ja
+vaikeuskäyrään ei vaikutusta, koska hyppy pitää suuntaa eikä liu'un nopeus
+kytkeydy.
+
+### Jakoruutu
+
+Peliä ollaan antamassa kavereille, joten linkki pitää saada eteenpäin
+puhelimesta. `navigator.share` → leikepöytä → osoite ruudulla, **eikä mitään
+muuta**: uudessa tiedostossa ei ole yhtään verkkokutsua, ja testi väittää sen
+lukemalla tiedoston lähdekoodin. Sama peruste kuin telemetrian palvelinkohdassa,
+ja täällä painavampi, koska pelaajat ovat lapsia.
+
+Jaettava osoite luetaan `og:url`-tagista eikä `location.href`istä: sivun oma
+osoite voi olla localhost tai esikatselu, ja vain `og:url` avautuu
+esikatselukortin kanssa.
+
+Yksi epäilyttävän näköinen ratkaisu, joka on oikea: **jako laukeaa napin
+noustessa eikä painuessa** — ainoana asiana pelissä. `navigator.share` vaatii
+tuoreen käyttäjäeleen, ja kosketuksella se kirjataan `pointerup`issa; peli
+lukee syötteen omassa 60 Hz askeleessaan, joten ainoa frame joka on varmasti
+eleen sisällä on se joka seuraa sormen nostoa. Painalluksesta laukaistuna jako
+hylättäisiin juuri puhelimessa, eli siinä laitteessa jota varten ruutu on.
+
+Peruutettu jako ei ole virhe eikä valu leikepöydälle. Jos kumpaakaan rajapintaa
+ei ole, ruutu aukeaa valmiiksi osoite näkyvissä eikä tarjoa nappia — nappi joka
+lupaa jotain mitä se ei voi tehdä on huonompi kuin ei nappia.
+
+### Kosketusohjaus: kolmas malli, ja zoomiloukku
+
+**Zoomiloukun pahempi puoli oli meidän eikä Safarin.** Sisään pääsi koska
+`user-scalable=no` ei ole tehonnut iOS 10:n jälkeen. Ulos ei päässyt koska
+`#touch.on` on `position: fixed; inset: 0; touch-action: none` — ensimmäisen
+kosketuksen jälkeen ohjainpeite kattaa koko näkymän ja kieltää kaikki eleet,
+myös sen nipistyksen jolla olisi päässyt takaisin. **Ohjaimet olivat lukko.**
+
+Korjaus on ehdollinen eikä yleinen: `touch-action: manipulation` juuressa
+tappaa kaksoisnapautuksen mutta jättää nipistyksen, ja `visualViewport.scale`in
+ohjaama `.zoomed` antaa zoomatussa tilassa kaikki eleet takaisin myös peitteen
+yli. `maximum-scale`ia ei lisätty: selaimissa jotka sitä tottelevat se veisi
+nipistyksen, eli tekisi loukusta pahemman kuin bugi.
+
+Ohjainten asettelusta: **kumpikaan ehdotetuista ratkaisuista ei toimi.**
+Peukalon rullaaminen napilta toiselle vapauttaa juoksun, koska näyttö raportoi
+sormen yhtenä pisteenä — sama koodipolku joka tekee ristiohjaimesta
+ristiohjaimen. Yhdistelmänappi taas antaisi paikaltaan hypyn, koska juoksu
+nostaa nopeuskattoa ja vauhti kertyy juostessa, eli juoksua pitää pitää pohjassa
+*ennen* hyppyä. Uusi `rulla`-malli ottaa idean ja jättää mekanismin: oikealla on
+**yksi kenttä kahden napin sijaan**, ja hyppyympyrä on kokonaan pierukentän
+sisällä. Piste osuu molempiin suorakulmioihin yhtä aikaa, eikä moottoriin
+tarvittu riviäkään. Hinta sanottuna ääneen: tässä mallissa ei voi hypätä ilman
+juoksua. Vanhat mallit ovat koskematta, eikä kenenkään tallennettua valintaa
+hylätty — vain oletus vaihtui.
+
+Automaattinen juoksu hylättiin vaikka se olisi halvin: kuilut on mitoitettu
+mitattuun hyppybudjettiin, joten aina päällä oleva juoksu on kenttäsuunnittelua
+ohjausvalikon kautta.
+
+### Piikkiukko maksaa vihdoin jotain
+
+`ENEMY_CHARS`issa on `x` (piikkiukko) mutta `difficulty.mjs`:n `ENEMY_COST`issa
+ei ollut, joten **jokainen piikkiukko koko pelissä oli painanut nollan**. Siksi
+3-1 saattoi saada tallaamattoman vihollisen ja piikkipedin ja mittari kirjasi
+laskun. Hinta 1,4: kävelee kuten yksikkö, mutta oletusvastaus ei toimi — ja
+toisin kuin putkikasvi (1,1), joka on toinen tallaamaton, se ei pysy paikallaan.
+
+## v26.08.09.7 — uusi kuvakieli vuorovaikutteisille ruuduille, ja valojärjestelmä
+
+Kaksi muutosta jotka koskevat sitä miltä peli näyttää, eivät sitä miten se
+toimii. Kumpikin oli tehty koodiin ennen kuin ne olivat tässä; tämä merkintä
+on jälkikäteen kirjoitettu, ja se on juuri se laji velkaa jota tämä tiedosto
+on olemassa estämään.
+
+### Tiili, `?`-lohko ja putki omalla kuvakielellään
+
+Ne olivat viimeiset kohdat joissa peli lainasi muotokieltä eikä pelkkää
+lajityyppiä.
+
+**Tiilestä naulattu laudoitus:** pystysuorat laudat, poikkirima ja
+naulankannat. Pystysyy on luettavuuden kannalta se ratkaiseva valinta — pelin
+jokainen muu kiinteä pinta kulkee vaakasuunnassa, joten pelkkä syyn suunta
+erottaa rikottavan kiinteästä täydessä vauhdissa. Maa ja kova maa saumautuvat
+toisiinsa, tiili on kehystetty: kehystetty laatikko lukee esineenä seinällä
+eikä lisää seinää.
+
+**`?`-lohkosta paineastia mittarilla.** Kysymysmerkki on poissa kokonaan, ja se
+on tarkoituksellista: symboli on aina jonkun toisen symboli, kun taas näkyvästi
+paineen alla oleva säiliö sanoo "tässä on jotain" ilman symbolia. Vilkkuva
+mittari on se "lyö minua" — mikään muu pelissä ei vilku. Käytetty lohko on sama
+astia sisäänpäin painettuna: kupera-kirkas-vilkkuva vastaan
+kovera-tumma-kuollut.
+
+**Putkesta peltinen hormi:** taitetut tasopinnat, niitattu sauma, laippa joka
+istuu tasan eikä ulkone. Kaksi versiota heitettiin pois matkalla; hieno
+poimutus mittasi hyvin mutta luki ikkunaluukkuna, eikä luukkuun mennä sisään.
+
+**Rikkoutuminen:** neljä identtistä neliötä korvattu kahdellatoista vaihtelevalla
+sirpaleella, omat painovoimat ja pyörimisnopeudet. Ensimmäinen versio oli kaunis
+ja putosi 144 pikselistä 53:een framea kohti — juuri se virhe jota vastaan
+varoitettiin. Nyt 145, mutta kahtenatoista muotona neljän sijaan.
+
+Mitattuna: tiilen ero maahan parani kaikissa kuudessa teemassa. Heikoin pari on
+yhä yö (27,8 / 34 %) ja **se on paletti eikä muoto** — `night.brick` ja
+`night.ground` ovat lähes sama ruskea. Se jää auki tähän kirjattuna.
+
+### Valojärjestelmä: maailma kantaa omia valojaan
+
+Valokeila oli yksi lamppu pelaajassa kiinni. Nyt valoja on kahdeksan, joista
+yksi on pelaajan lamppu ja seitsemän maailman omia. Pierupallo valaisee maata
+jota pitkin se pomppii, joten pimeään voi ampua ja seurata omaa kaasuaan
+nähdäkseen mitä siellä on.
+
+Valonlähdevihollinen on närästys, ja valinta on se kiinnostava laji: **se mikä
+näyttää lattian on se mikä tappaa sen päällä seistessä.** Liekin valo seuraa
+täsmälleen sen omia vaiheita, joten se ei ole toinen opeteltava signaali liekin
+päälle. 2-N sai yhden liekin toisen dyynipalikan tilalle — sama leveys ja sama
+maasto, joten `playable` on tavulleen ennallaan.
+
+Pelaajan lamppu **ei** ole yksi niistä seitsemästä: seitsemän palloa ilmassa ei
+saa voida äänestää ulos sitä valoa jonka varassa kävellään.
+
+Valot yhdistyvät kertomalla sen minkä kukin jättää pimeäksi, ei maksimilla. Niin
+valo käyttäytyy, ja se on ainoa yhdistely jonka Canvas 2D toistaa tarkalleen —
+pelkkä lamppu tuottaa pikselilleen saman kuvan kuin ennen.
+
+Mitattuna: vaaran luettavuus keilojen ulkopuolella 35,5 luminanssia, sama kuin
+ennen muutosta, ja sama myös kun kaikki seitsemän paikkaa on käytetty muualla.
+Rakenteellisesti se ei voi taantua, koska valot vain kertovat kohti ykköstä.
+Framebudjetti 1,33 ms kahdeksalla valolla, katto 2,5.
+
+---
+
 ## v26.08.09.6 — kuplaloukku, esittelytila, kaksoisovi ja jäätikkö
 
 Iso erä. Kaksi näistä teki alaagentti.

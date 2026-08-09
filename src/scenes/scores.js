@@ -241,6 +241,10 @@ export class HighScoreScene {
       drawText(ctx, marks.join('   '), 160, 212, { color: '#c88040', align: 'center' });
     }
     drawText(ctx, 'ENTER JATKA', 160, 228, { color: '#8890b0', align: 'center' });
+    /* Sama opaste kuin alkuruudussa, ja samasta syystä täällä eikä silmukassa:
+     * pistetaulu on jokaisen kierroksen pääteasema, eli se hetki jolloin on
+     * jotain kerrottavaa. */
+    drawText(ctx, 'X KERRO KAVERILLE', 316, 2, { color: '#6a7a9a', align: 'right' });
 
     // a little decoration so the screen is not just a spreadsheet
     drawItem(ctx, 'star', 34, 12, this.tick);

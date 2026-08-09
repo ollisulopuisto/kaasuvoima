@@ -11,6 +11,7 @@ import { InterludeScene, GameOverScene, EndingScene, VictoryScene } from './scen
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
+import { ShareScene } from './scenes/share.js';
 import { qualifies, GAME_VERSION } from './core/scores.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
@@ -63,6 +64,18 @@ class Game {
 
   setScene(scene) {
     this.scene = scene;
+    /* A pause happened to a level; it is not a mode the machine is in. Leaving
+     * it set across a scene change is a dead end rather than a cosmetic bug:
+     * the pause key only answers inside a LevelScene, so a paused world map
+     * cannot be un-paused by anything, and `step` skips its update. The debug
+     * warp is the easiest way to get there — pause, then jump worlds — but any
+     * scene change made while paused does it.
+     *
+     * Cleared here for the same reason the ambience is: it belongs to the place
+     * you were in, and leaving each scene to remember to turn it off is how it
+     * got left on in the first place. `quickLoad` clears it by hand too; that
+     * line is now redundant, and harmless. */
+    this.paused = false;
     // Atmosphere belongs to the place you are in, so it is set from the scene
     // rather than left for each scene to remember to turn off.
     PostFX.setAmbience(scene.theme || null, scene.def || null);
@@ -79,6 +92,28 @@ class Game {
 
   toHighScores(highlight = -1) {
     this.setScene(new HighScoreScene(this, highlight));
+  }
+
+  /* -------------------------------- jako ------------------------------- */
+
+  /**
+   * Missä jakoruutu roikkuu: alkuruudussa ja pistetaulussa, ei muualla.
+   *
+   * Nämä kaksi ovat ne ruudut joissa pelaaja seisoo paikallaan ja päättää
+   * jotain, ja pistetaulu on lisäksi jokaisen pelatun kierroksen pääteasema —
+   * `finishRun` päätyy sinne aina, pääsi tulos listalle tai ei. Peli poikki
+   * -ruutu hylättiin tarkoituksella: se on valikko joka päättää säilyykö
+   * kierros, ja sitä painetaan jo nyt vahingossa. Kentästä ei voi jakaa
+   * ollenkaan, koska kohtauksen vaihto keskellä kenttää tappaisi juoksun.
+   */
+  canShareHere() {
+    return this.scene instanceof TitleScene || this.scene instanceof HighScoreScene;
+  }
+
+  /** Sama kohtausolio talteen, jotta paluu tuo pistetaulun korostuksineen. */
+  toShare() {
+    if (this.scene instanceof ShareScene) return;
+    this.setScene(new ShareScene(this, this.scene));
   }
 
   /* ------------------------------- attract ----------------------------- */
@@ -385,6 +420,17 @@ class Game {
       Sfx.play('cursor');
     }
     if (this.flashTimer > 0) this.flashTimer--;
+
+    /* Jakoruutu avataan juoksunapilla eikä numerolla, ja se on puhelimen takia:
+     * numerorivi on siellä missä muutkin apunäppäimet, mutta puhelimessa ei ole
+     * numeroriviä. X on molemmissa kosketusmalleissa ja molemmissa
+     * käsijärjestyksissä, eikä alkuruutu tai pistetaulu lue sitä mihinkään —
+     * kentässä juoksu on juoksu, ja siellä tätä ei ole. */
+    if (this.canShareHere() && Input.pressed.run) {
+      Input.consume('run');
+      Sfx.play('select');
+      this.toShare();
+    }
 
     const pausable = this.scene instanceof LevelScene;
     if (pausable && Input.pressed.start) {

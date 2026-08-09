@@ -1,3 +1,7 @@
 node_modules/
 .vercel
 .DS_Store
+# Rinnakkaisten agenttien väliaikaiset git-worktreet. Ne ovat saman repon
+# työkopioita, eivät projektin tiedostoja — committoituna ne toisivat koko
+# puun mukaansa toiseen kertaan.
+.claude/worktrees/

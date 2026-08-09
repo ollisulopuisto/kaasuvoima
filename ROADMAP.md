@@ -28,8 +28,10 @@ nyrkkeilijäpomo · jäätikkö laavan tilalle jäämaailmassa · kaksoisovet ·
 voittoruutu hernekeitolla · sirppikuu.
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
-kosketusohjaus kahdella mallilla · esittelytila · teemakohtaiset
-seisonta-animaatiot kentissä ja kartalla.
+esittelytila · teemakohtaiset
+seisonta-animaatiot kentissä ja kartalla · oma kuvakieli tiilelle, `?`-lohkolle
+ja putkelle · valojärjestelmä, jossa maailma kantaa omat valonsa · kosketusohjaus
+kolmella mallilla · jakoruutu (`navigator.share`, ei palvelinta).
 
 **Työkalut:** playable.mjs · difficulty.mjs · debug-warp (näppäin 4, kaataa
 pistetaulun) · salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva
@@ -37,9 +39,14 @@ generaattori.
 
 ### Seuraava työ, tässä järjestyksessä
 
-1. **Uudet ominaisuudet kaikkiin maailmoihin.** Ne ovat nyt yhdessä kentässä
-   kutakin — se on oikein valmiissa pelissä ja väärin nyt, koska niitä ei
-   pääse näkemään. **Tämä estää pelitestauksen, joten se on ensimmäisenä.**
+1. ✔ **Uudet ominaisuudet kaikkiin maailmoihin** — tehty maailmoihin 2, 3 ja 4
+   (v26.08.09.8). Kukin sai sen mitä siltä puuttui ja **tasan yhden** salaisen
+   alueen. Käyrä nousee yhä joka maailmassa, notkoja tasan yksi kussakin.
+
+   **Jäljellä maailma 5**, ja se on eri työ: sen numeroidut kentät tulevat
+   generaattorista, joten mekaniikat leviävät sinne vain opettamalla
+   `gen-levels.mjs`:lle uudet merkit — ja se arpoo maailman uusiksi, eli kolmen
+   kentän mitattu vaikeus muuttuu kerralla. Oma päätöksensä, ei tämän erän jatko.
 2. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
 3. **Kiipeilyanimaatio** — hahmo selin, ote varresta.
 4. **Spritejen animaatiokierrosten tarkistus** kaikilla viidellä voimatasolla.
@@ -139,9 +146,11 @@ Kolme asiaa jotka kannattaa päättää ennen kuin tätä aloitetaan:
    kertaa neljä ruutua on 24 piirtofunktiota ylläpidettäväksi. Halvempi malli
    on yksi funktio joka ottaa muotoparametrit teemataulusta — sama tapa jolla
    `THEMES` hoitaa jo värit.
-3. **Odota kunnes uusi kuvakieli on paikallaan.** Tiili, `?`-lohko, putki ja
-   rikkoutuminen ovat juuri nyt uudistettavina. Teemakohtaiset muodot
-   kannattaa rakentaa sen päälle eikä sen rinnalle, tai työ tehdään kahdesti.
+3. ✔ **Odota kunnes uusi kuvakieli on paikallaan.** Tiili, `?`-lohko, putki ja
+   rikkoutuminen on uudistettu (v26.08.09.7), joten tämä ehto on täytetty ja
+   teemakohtaiset muodot rakennetaan sen päälle. **Tämä oli ainoa este, eli
+   kohta on nyt aloitettavissa** — jäljellä ovat vain ehdot 1 ja 2, jotka ovat
+   tekotapaa koskevia eivätkä esteitä.
 
 
 ### Jonossa: maahanisku (ground pound)
@@ -180,6 +189,96 @@ syöksyn ääni, osuman ääni, tärinä jonka voimakkuus seuraa korkeutta, ja
 iskuaalto joka on **eri väriä ja eri rytmiä kuin pomon iskuaalto** — kaksi
 samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
+### Omistajan palaute 9.8.2026
+
+Kuusi asiaa kerralla, omistajan omin sanoin puhelimella pelatessa. Kirjattu
+tähän kokonaisuutena, koska ne kertovat yhdessä jotain mitä yksikään niistä ei
+kerro yksin: **peli on menossa muiden käsiin.** Jakoruutu, kosketusohjaus ja
+törmäystuntuma ovat kaikki sitä samaa — ne eivät haittaa tekijää, joka osaa
+pelinsä, vaan sitä joka saa linkin.
+
+1. ✔ **Tauko jäi jumiin** debug-warpin jälkeen. Korjattu (`setScene` nollaa
+   tauon). Diagnoosi ei ollut se mitä oire lupasi: tauko- ja debug-ruutu eivät
+   kilpailleet mistään, vaan tauko jäi päälle kohtaukseen jossa sitä ei voi
+   ottaa pois.
+2. **Mobiili-Safari, kaksi vikaa.** Kaksoisnapautus zoomaa sivun eikä siitä
+   pääse takaisin — `user-scalable=no` ei ole tehonnut iOS 10:n jälkeen, eli
+   korjaus on `touch-action` ja synteettisen kaksoisnapautuksen nieleminen.
+   Toinen on ohjaimen asettelu: **juoksu/pierunappia ei voi pitää pohjassa ja
+   hypätä samalla.** Omistajan kaksi ehdotusta: pierunappi alas oikealle niin
+   että peukalon keskiosa lepää sillä ja kärki nousee hyppynapille, tai kolmas
+   virtuaalinappi joka tarkoittaa "pidä juoksu pohjassa". Jälkimmäinen lisää
+   tilan, ja tila on asia joka pitää oppia ja johon voi jäädä jumiin.
+3. **Jakoruutu, kevyt toteutus.** Syy on aikataulullinen eikä tekninen: peliä
+   ollaan antamassa kavereille testattavaksi. Kevyt tarkoittaa tässä
+   **selainpuolta ja vain sitä** — `navigator.share` ja leikepöytä, ei
+   palvelinta. Sama peruste kuin telemetrian kohdassa 4, ja täällä vielä
+   painavampi: pelaajat ovat lapsia. Linkin esikatselukortti on jo olemassa,
+   joten vaikein osa on tehty.
+4. **Törmäystuntuma.** "Laskeutuessa liikkuu vielä sivuttain, eikä ehdi
+   väistää vihollista jota kohti on menossa." Tämä on **diagnoosi ennen
+   korjausta**: oire nimeää kaksi eri epäiltyä (osumalaatikot ja liikemäärä),
+   eikä kumpikaan ole vielä mitattu. `PHYSICS.md`:n vakiot eivät ole vapaasti
+   säädettävissä — ne mitoittavat koko pelin vaikeuskäyrän — joten "toimii
+   kuten suunniteltu, tässä luku" on kelvollinen lopputulos.
+5. **Kahdeksan maailmaa ja kahdeksan kenttää kussakin.** Oma kohtansa alla.
+
+### Jonossa: kahdeksan maailmaa, kahdeksan kenttää kussakin
+
+Nyt on 5 maailmaa ja 21 kenttää. Tavoite on 64, eli **kolminkertainen määrä
+sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää aloittaa,
+koska kaikki muu seuraa siitä.
+
+Neljä asiaa jotka pitää ratkaista ennen kuin yhtäkään uutta kenttää kirjoitetaan:
+
+1. **Käsin ei tehdä 43 uutta kenttää.** Nykyiset käsintehdyt ovat maailman
+   parasta sisältöä, mutta ne ovat myös hidas tapa. Generaattori on olemassa
+   ja tekee jo maailman 5:n, telemetria syöttää sitä, ja tässä mittakaavassa
+   se lakkaa olemasta bonusmaailman kikka ja alkaa olla se tapa jolla peli
+   tehdään. Päätös jota tämä vaatii: **mikä osuus tehdään käsin.** Suositus:
+   maailman ensimmäinen ja viimeinen kenttä käsin, väli generoiden ja käsin
+   viimeistellen — käsi opettaa ja päättää, generaattori täyttää.
+2. **Kuusi teemaa ei riitä kahdeksalle maailmalle.** Nyt: ruoho, aavikko, yö,
+   jää, tehdas, linnake. Luumaailma on jo jonossa. Kaksi maailmaa tarvitsee
+   siis vielä oman teemansa, ja teema on paletti + taustat + palikat +
+   musiikki, ei pelkkä väri.
+3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
+   väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja
+   `difficulty.mjs`:n muototarkistus mittaa nykyään jonoa. **Tämä on sama
+   uudelleenkirjoitus jonka haarautuva kartta jo vaatii** — kaksi kohtaa,
+   yksi työ, ja ne kannattaa tehdä yhdessä eikä peräkkäin.
+4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä.** Nykyinen kaava on
+   kolme kenttää ja linnake. Kahdeksan ei ole "sama kaksi kertaa" vaan tila
+   välipomolle, haaralle ja hengähdyskentälle — eli juuri ne kohdat jotka ovat
+   jo erikseen jonossa (minipomot, haarautuva kartta). Tämä kohta on siis se
+   joka **antaa niille tilan**, ei kilpaile niiden kanssa.
+
+### Päätetty: pistetaulu ei mene palvelimelle, tulos menee linkkiin
+
+Kysymys 9.8.2026: voisiko pistetaulu olla globaali? **Ei — tulos kulkee
+jakolinkissä.** Tekninen puoli on helppo (Vercel on jo alla), eli päätös
+tehdään muilla perusteilla, ja niitä on kolme:
+
+1. **Pistetaulussa on nimi.** `NameEntryScene` kysyy sen, ja lapsi kirjoittaa
+   siihen etunimensä. Globaali taulu lähettäisi sen ulos ja **näyttäisi sen
+   vieraille** — eli sama päätös kuin telemetrian kohdassa 4, mutta raskaampi,
+   koska julkisuus on tässä koko idea. Korjaus on sanalistasta valittava nimi,
+   ja se on isompi työ kuin palvelin.
+2. **Pisteet laskee selain**, joten globaali taulu on kunniajärjestelmä jossa
+   on POST-osoite. Peli välittää taulun rehellisyydestä jo nyt: tilatallennus
+   antaa tähden ja warpattu kierros ei pääse taululle lainkaan. Globaali taulu
+   tekisi noista tarkistuksista koristeita.
+3. **Se olisi ensimmäinen ajonaikainen riippuvuus** (DESIGN.md kohta 7) — eli
+   ensimmäinen tapa jolla peli voi olla rikki ilman että kukaan koski koodiin.
+
+**Tehdään sen sijaan:** tulos jakolinkin osoiteparametreihin
+(`?s=45200&n=OLLI&l=2-3`), ja vastaanottajan alkuruutu kertoo mihin pitää yltää.
+Ei palvelinta, ei tallennettuja nimiä, eikä huijaaminen ole ongelma jota
+kannattaisi ratkaista — oman kehulinkin väärentäminen on itseään vastaan.
+Jakoruutu on jo olemassa ja lukee osoitteen `og:url`-tagista, joten tämä on
+laajennus eikä uusi ruutu. Jos globaali taulu joskus tehdään, se tehdään tämän
+jälkeen ja paremmin tiedoin.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
@@ -193,6 +292,62 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
   bugi, mutta se on nyt kirjattu.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
+- **Hyppybudjetti on vanhentunut, ja se on ollut sitä alusta asti.**
+  `tools/jump-budget.json` ja `PHYSICS.md`:n taulukko lupaavat 121 px nousun ja
+  200 px kantaman; mitattuna nyt 71 ja 155. Vakiot eivät ole muuttuneet sitten
+  sen commitin joka kirjoitti tiedoston viimeksi (`src/level/physics.js`), ja
+  vakioista laskettuna tulee ~72 px — eli **tiedosto oli väärässä jo
+  syntyessään**: fysiikkamuutos ja budjettitiedosto tulivat samassa commitissa,
+  eikä budjettia mitattu uudelleen muutoksen jälkeen.
+
+  **Mikään ei ole rikki:** validaattori ajettiin kaikille 21 kentälle sekä
+  tallennetulla (8/13/6) että mitatulla (6/9/4) budjetilla, ja rikkeitä on
+  molemmilla nolla. Yksikään kuilu ei siis ole liian leveä.
+
+  Seurauksena **kohta 3 (d) peruttiin** 9.8.2026: sen peruste oli tämä väärä
+  luku. Se osa on siis hoidettu.
+
+  **Jäljellä oleva päätös: korjataanko itse tiedosto?** Se ei ole ilmainen, ja
+  hinta on nyt mitattu eikä arvattu. `difficulty.mjs` pisteyttää kuiluriskin
+  suhteessa budjettiin (`(span / gapTiles) ** 2`), joten oikea budjetti tekee
+  kuiluista suhteessa vaikeampia ja nostaa kaikkia lukuja. Ajettuna arvoilla
+  6/9/4:
+
+  - koko pelin käyrä nousee yhä joka maailmassa, mutta epätasaisesti:
+    w3→w4 kutistuu +4,0:aan ja w4→w5 kasvaa +39,5:een
+  - **maailma 3 ei enää nouse kokonaisuutena**: 3-1 204 → 3-2 133 → 3-3 174,
+    eli avauskenttä on maailman vaikein
+
+  Tuo viimeinen on oikeaa tietoa jota vanhentunut tiedosto piilotti, ei uusi
+  vika: 3-1:n kuilut ovat suhteessa oikeaan hyppyyn leveämmät kuin luultiin.
+  Mutta se on **maailman 3 muotoa koskeva kysymys**, ei kirjanpitoa, joten
+  tiedostoa ei korjattu ohimennen. Kolme vaihtoehtoa: korjaa tiedosto ja hyväksy
+  että mittari valittaa maailmasta 3 kunnes sen muoto korjataan; korjaa tiedosto
+  ja korjaa maailma 3 samalla; tai jätä molemmat ja pidä tämä kirjaus.
+  **Muista myös että maailma 5 on generoitu vanhoilla luvuilla** — sen kentät
+  läpäisevät validaattorin myös uusilla, mutta seuraava generointiajo tuottaisi
+  erilaisia kenttiä.
+
+  Ansa jonka tämä paljasti: **`measure-jump.mjs` kirjoittaa
+  `jump-budget.json`in sivuvaikutuksena**, eli pelkkä mittaaminen muuttaa sitä
+  tiedostoa jota generaattori lukee.
+- **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan**, kaikki samaa muotoa:
+  `fort_blocks`in tiilihylly (rivi 9) ja sen yllä oleva holvi (rivi 6) jättävät
+  väliin kaksi riviä kun tarvitaan kolme. Osuu kenttiin 1-F, 2-F ja 3-F.
+  Validaattori ei huomauta siitä syystä joka on myös vastaus siihen onko se
+  bugi: **hylly ei ole maareitillä**, alla oleva lattia on kuljettava, eikä
+  kenttä ole missään koossa mahdoton. Isoin pelaaja vain törmää näkymättömään
+  kattoon jos kiipeää sinne.
+- **Bonushuoneita ei validoi mikään.** `rules.js` lukee vain sen kaistan jossa
+  aloitusmerkki on, joten taivas- ja luolakaistan huoneet menevät läpi
+  tarkistamatta — ja juuri siellä liian matala katto olisi pahin, koska
+  `secrets.js`:n oma sääntö on että bonus josta ei pääse pois on ansa.
+  Maailmojen 2–4 uudet huoneet on tarkistettu ajamalla moottoria kaikilla
+  kuudella koolla, mutta se oli käsityötä eikä portti.
+- **Yön paletissa tiili ja maa ovat lähes sama ruskea** (27,8 / 34 %, heikoin
+  pari kaikista kuudesta teemasta). Uusi kuvakieli paransi eron joka teemassa,
+  mutta tämä jäljelle jäänyt on **paletti eikä muoto**, joten se ei korjaannu
+  teemakohtaisilla muodoilla vaan `night.brick`in ja `night.ground`in väreillä.
 
 ## Seuraavaksi
 
@@ -324,13 +479,24 @@ bugi on tehtaan pääntila: isoimmalla voimatasolla siellä on kohtia joihin ei
 mahdu. **Korjaa se ensin.**
 
 Järjestys: (a) tehtaan pääntila ✔, (b) tehostuspalikka jokaisen kentän alkuun ✔,
-(c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille — **kesken**.
+(c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille —
+**peruttu 9.8.2026, ks. alla. Koko kohta 3 on siis valmis.**
 
-Kohdat a–c on tehty ja **validaattori on puhdas kaikille 20 kentälle** — tästä
+Kohdat a–c on tehty ja **validaattori on puhdas kaikille 21 kentälle** — tästä
 eteenpäin sääntörikkeen ilmestyminen on regressio, joten `verify.mjs`:n voi
-kytkeä kaatamaan ajon myös käsintehdyistä kentistä. Jäljellä on
-vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
-juoksuhyppy kantaa nyt 12,5. Se ei riko mitään, mutta tekee kentistä helppoja.
+kytkeä kaatamaan ajon myös käsintehdyistä kentistä.
+
+**Miksi (d) peruttiin.** Se perustui lauseeseen "kuilut on mitoitettu vanhalle
+budjetille (6 ruutua), kun juoksuhyppy kantaa nyt 12,5". **Juoksuhyppy kantaa
+9,7 ruutua.** Luku 12,5 tuli `tools/jump-budget.json`ista, joka on ollut väärässä
+siitä commitista asti joka sen kirjoitti — vakiot eivät ole muuttuneet sen
+jälkeen, ja niistä laskettuna hypyn nousu on ~72 px eikä tiedoston lupaama 121.
+
+Kentät eivät siis ole liian helppoja sillä perusteella jonka tämä kohta esitti,
+eikä 21 kentän kuilujen levennys ole tasapainotusta vaan tuntemattoman suuruinen
+muutos tuntemattomaan suuntaan. **Jos kentät joskus tuntuvat helpoilta, se
+korjataan pelaamalla ja mittaamalla eikä laskutoimituksella joka on jo kerran
+osoittautunut vääräksi.**
 
 ### 4. Uudet ruututyypit: murenevat lavat ja kytkimet
 
@@ -347,11 +513,12 @@ astuu, tärisee ja halkeaa 52 framea, putoaa, kasvaa takaisin 220 framen jälkee
 Takaisinkasvu ei ole koristetta: ilman sitä kuolema puolivälissä jättäisi kentän
 mahdottomaksi loppuyritykseksi. Käytössä 4-1:n `fac_crumble`-palikassa.
 
-**Kytkinruudut** (P-switch-tyyliin): **älä kirjoita ruudukkoa uusiksi.** Puhtaampi
-tapa on käännöstaulu `tileAt()`:ssa: kun kytkin on päällä, tietyt merkit
-luetaan toisina (esim. tiili ↔ kolikko). Silloin ruudukko pysyy muuttumattomana,
-tilatallennus tarvitsee vain yhden totuusarvon, eikä kytkimen loppuminen voi
-jättää kenttää rikkinäiseen välitilaan.
+**Kytkinruudut** (P-switch-tyyliin) ✔ **tehty** (v26.08.09.2) juuri niin kuin
+tähän kirjattiin: ruudukkoa ei kirjoiteta uusiksi, vaan `tileAt()`:ssa on
+käännöstaulu — kun kytkin on päällä, tietyt merkit luetaan toisina (tiili ↔
+kolikko). Ruudukko pysyy muuttumattomana, tilatallennus tarvitsee vain yhden
+totuusarvon, eikä kytkimen loppuminen voi jättää kenttää rikkinäiseen
+välitilaan. Käytössä 3-2:n `switch_wall`-palikassa.
 
 **Ylläpitokustannus, joka on syytä tietää etukäteen:** uusi merkki pitää lisätä
 myös `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai

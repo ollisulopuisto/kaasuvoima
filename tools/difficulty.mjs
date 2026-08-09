@@ -55,6 +55,13 @@ const ENEMY_COST = {
   p: 1.1,   // pipe plant: telegraphed and stationary, but not stompable
   r: 1.5,   // stink cloud: bobs at head height and drifts toward you
   c: 1.2,   // cork guy: hops unpredictably, but corking is a nuisance not damage
+  x: 1.4,   /* spiky walker: it walks at you like the unit does, but the default
+             * answer does not work on it — and unlike the plant, which is the
+             * other unstompable thing at 1.1, it does not stay where you left
+             * it. Slower than a walker (0.4) on purpose, so it is priced below
+             * the flyer: it will never catch you from behind, it just refuses
+             * to be removed the usual way. It was missing from this table
+             * entirely, which meant every one of them scored zero. */
   H: 1.5,   /* heartburn jet: cannot be killed, but it is bolted to one column
              * and fires on a fixed period. Timing a metronome is the cheapest
              * skill on this list — the plant next door is the same deal and

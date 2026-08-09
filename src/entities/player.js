@@ -263,7 +263,21 @@ export class Player extends Entity {
     if (this.ducking) {
       this.vx = approach(this.vx, 0, friction * 1.4);
     } else if (dir !== 0) {
-      const skidding = this.onGround && Math.sign(this.vx) === -dir && Math.abs(this.vx) > 0.2;
+      /*
+       * The skid rate is not a ground rule. In the disassembly the branch that
+       * picks it (PRG008_ABB8: "Player is pressing left/right", INY INY, then
+       * `AND Player_MoveLR` -> "suddenly reversed direction") never looks at
+       * `Player_InAir`. The two things that *are* gated on being airborne are
+       * both still below: plain friction with no direction held, and the bleed
+       * back down to the speed cap.
+       *
+       * Requiring `onGround` here was measured as the reason a jump at speed
+       * felt unavoidable. At the run cap the arc carries 155 px through the
+       * air and only 24 px after landing, so nearly all of the reaction
+       * happens mid-air — and mid-air was braking at 0.0547 instead of 0.125,
+       * less than half the authority the same player has with his feet down.
+       */
+      const skidding = Math.sign(this.vx) === -dir && Math.abs(this.vx) > 0.2;
       this.vx = approach(this.vx, cap * dir, skidding ? SKID : ACC);
       if (Math.abs(this.vx) > cap && this.onGround) this.vx = approach(this.vx, cap * dir, 0.06);
       this.facing = dir;

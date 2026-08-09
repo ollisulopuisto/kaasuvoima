@@ -134,5 +134,11 @@ export class TitleScene {
     drawText(ctx, 'NUOLET/WASD  HYPPY Z/L/VÄLI  JUOKSU X/K', 160, panelY + panelH + 2, {
       color: '#8890b0', align: 'center',
     });
+    /* Ominaisuus jota kukaan ei löydä ei ole olemassa, ja jaon koko tarkoitus on
+     * että linkki lähtee eteenpäin. Vihje piirretään täällä eikä `Game.render`
+     * issä, koska se kuuluu tähän ruutuun: kohtaus piirtää oman opasteensa, ja
+     * silmukka joka tuntee kaksi kohtausta nimeltä on se tapa jolla piirtokoodi
+     * valuu väärään paikkaan. */
+    drawText(ctx, 'X KERRO KAVERILLE', 316, 2, { color: '#6a7a9a', align: 'right' });
   }
 }

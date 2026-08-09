@@ -1,15 +1,28 @@
 /**
- * Touch controls, in two layouts that are genuinely different rather than two
- * arrangements of the same thing.
+ * Touch controls, in three layouts that are genuinely different rather than
+ * three arrangements of the same thing.
  *
- *   napit     A visible d-pad and two buttons. Familiar, precise, and it eats
- *             the bottom third of the screen.
+ *   rulla     The default. Same d-pad as `napit`, but the right hand gets one
+ *             field instead of two buttons: the fart pad fills the corner where
+ *             the flat of the thumb rests, and the jump circle sits inside it,
+ *             up and left where the tip reaches. Touching anywhere in the field
+ *             runs; rolling the tip onto the circle jumps *while still running*.
+ *   napit     A visible d-pad and two separate buttons. Familiar, precise, and
+ *             holding run while you jump takes a second thumb.
  *   peukalot  Nothing visible. The left half is a stick that appears where your
  *             thumb lands, the right half is jump. More game visible, less
  *             precision.
  *
- * Which one is better is not a question anyone can answer from a desk, so both
- * ship and the switch is on screen.
+ * Which one is better is not a question anyone can answer from a desk, so all
+ * three ship and the switch is on screen.
+ *
+ * Why `rulla` exists, since the reasoning is easy to lose: on a phone, run has
+ * to be *held* while you steer and jump, and two separate buttons make that a
+ * two-thumb job on a one-thumb hand. Moving jump next to run does not fix it —
+ * a finger is one point to every touchscreen ever built, so rolling the thumb
+ * from one button to the next *releases* the first, which is precisely what
+ * makes the d-pad work and precisely what ruins this. Overlapping rectangles
+ * fix it: while the point is inside both, both are down.
  *
  * Design rules this file follows, in order of how much trouble they save:
  *
@@ -23,12 +36,24 @@
  *   3. **Nothing appears until a finger appears.** Plenty of laptops report
  *      touch support they never use; the overlay shows on the first real touch.
  *   4. **The overlay is above the game canvas and swallows its own gestures.**
- *      `touch-action: none` everywhere, or Android turns a jump into a scroll.
+ *      `touch-action: none` on it, or Android turns a jump into a scroll — but
+ *      only while the page is at 1:1. A full-screen gesture ban also bans the
+ *      pinch that undoes an accidental zoom, and a player stuck at 2x with the
+ *      controls holding him there has a worse bug than the one being prevented.
+ *      See `_guardZoom` and the `.zoomed` rules in styles.css.
  */
 
+/*
+ * The stored value is still a bare layout name, so the version does not move:
+ * `rulla` is a new name in the same shape, and every value written by an older
+ * build still reads back as itself. Bumping the key would throw away a choice
+ * somebody made on purpose, which is the one thing a stored preference exists
+ * to prevent. Only the *default* changed, and that is not stored.
+ */
 const KEY = 'sfb3.touch.v1';
-export const LAYOUTS = ['napit', 'peukalot'];
-export const LAYOUT_NAMES = { napit: 'NÄPPÄIMET', peukalot: 'PEUKALOT' };
+export const LAYOUTS = ['rulla', 'napit', 'peukalot'];
+const DEFAULT_LAYOUT = 'rulla';
+export const LAYOUT_NAMES = { rulla: 'RULLA', napit: 'NÄPPÄIMET', peukalot: 'PEUKALOT' };
 
 /** Movement thresholds for the floating stick, in CSS pixels. */
 const STICK_DEAD = 14;
@@ -39,7 +64,9 @@ export const Touch = {
   installed: false,
   /** True once a real touch has happened — the overlay stays hidden until then. */
   visible: false,
-  layout: 'napit',
+  /** True while the browser reports the page zoomed in past 1:1. */
+  zoomed: false,
+  layout: DEFAULT_LAYOUT,
   input: null,
   root: null,
   _zones: [],
@@ -50,6 +77,7 @@ export const Touch = {
     this.input = input;
     this.layout = this.loadLayout();
     this._build();
+    this._guardZoom();
     this.installed = true;
     if (force) this.reveal();
     return true;
@@ -58,14 +86,14 @@ export const Touch = {
   loadLayout() {
     try {
       const saved = localStorage.getItem(KEY);
-      return LAYOUTS.includes(saved) ? saved : 'napit';
+      return LAYOUTS.includes(saved) ? saved : DEFAULT_LAYOUT;
     } catch {
-      return 'napit';
+      return DEFAULT_LAYOUT;
     }
   },
 
   setLayout(name) {
-    this.layout = LAYOUTS.includes(name) ? name : 'napit';
+    this.layout = LAYOUTS.includes(name) ? name : DEFAULT_LAYOUT;
     try {
       localStorage.setItem(KEY, this.layout);
     } catch {
@@ -110,6 +138,7 @@ export const Touch = {
         <div class="key big" data-act="jump">Z<small>hyppy</small></div>
       </div>
       <div class="stick" hidden><i></i></div>
+      <div class="zoomnote">SIVU ON ZOOMATTU<br>NIPISTÄ KAHDELLA SORMELLA PIENEMMÄKSI</div>
       <div class="bar">
         <button type="button" class="tool" data-tool="layout">OHJAUS</button>
         <button type="button" class="tool" data-tool="start">ENTER</button>
@@ -138,6 +167,69 @@ export const Touch = {
     addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') this.reveal();
     }, { capture: true });
+  },
+
+  /* ---------------------------- selaimen zoom --------------------------- */
+
+  /*
+   * Two things, both about the same accident: a double tap beside the canvas
+   * zooms the page in, and the control overlay then makes it impossible to
+   * zoom back out.
+   *
+   * The zoom itself is stopped in CSS — `touch-action: manipulation` on the
+   * root element, which is the only mechanism that works, since iOS Safari has
+   * ignored `user-scalable=no` since iOS 10. What is here is the belt to that
+   * pair of braces and the way out if something zooms the page anyway.
+   */
+  _guardZoom() {
+    /*
+     * Belt: swallow the second tap of a double tap ourselves. Deliberately
+     * narrow — one finger only, within 350 ms and 40 px of the first, and never
+     * on the overlay, where the toolbar buttons are ordinary DOM and need the
+     * synthetic click that `preventDefault` would eat. Nothing else on the page
+     * listens for clicks, so outside the overlay there is nothing to break.
+     */
+    let lastTap = -Infinity;
+    let lastX = 0;
+    let lastY = 0;
+    addEventListener('touchend', (e) => {
+      if (e.touches.length) return;                     // still a pinch, leave it alone
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const el = t.target;
+      if (el && el.closest && el.closest('#touch')) return;
+      const now = performance.now();
+      const near = Math.abs(t.clientX - lastX) < 40 && Math.abs(t.clientY - lastY) < 40;
+      if (now - lastTap < 350 && near && e.cancelable) e.preventDefault();
+      lastTap = now;
+      lastX = t.clientX;
+      lastY = t.clientY;
+    }, { passive: false });
+
+    /*
+     * The way out: watch the visual viewport, and while it is zoomed let the
+     * browser have its gestures back (see styles.css). The overlay is a
+     * full-screen `touch-action: none`, so without this a page that got zoomed
+     * — by an older iOS, by the accessibility zoom, by a build without this fix
+     * — stays zoomed for good, and the game is unplayable with no way to say so.
+     *
+     * The class goes on the root element rather than on <body>, because that is
+     * where the `touch-action` it has to override lives.
+     */
+    const vv = typeof visualViewport === 'undefined' ? null : visualViewport;
+    if (!vv) return;
+    const sync = () => this.setZoomed(vv.scale > 1.05);
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    sync();
+  },
+
+  setZoomed(on) {
+    this.zoomed = !!on;
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('zoomed', this.zoomed);
+    }
+    return this.zoomed;
   },
 
   _tool(name) {
@@ -209,8 +301,14 @@ export const Touch = {
     for (const action of before) if (!next.has(action)) this._refresh(action);
   },
 
-  /* ------------------------------- napit ------------------------------- */
+  /* --------------------------- napit ja rulla --------------------------- */
 
+  /*
+   * Both button layouts run through here, and the difference between them is
+   * entirely in the CSS. `_keysAt` returns *every* rectangle under the point,
+   * so a layout that overlaps two of them gets both actions for one finger —
+   * which is how `rulla` holds run through a jump. Nothing here knows about it.
+   */
   _padDown(e) {
     this._assign(e.pointerId, this._keysAt(e.clientX, e.clientY));
   },
@@ -263,6 +361,11 @@ export const Touch = {
   },
 
   diag() {
-    return { layout: this.layout, visible: this.visible, pointers: this._pointers.size };
+    return {
+      layout: this.layout,
+      visible: this.visible,
+      zoomed: this.zoomed,
+      pointers: this._pointers.size,
+    };
   },
 };

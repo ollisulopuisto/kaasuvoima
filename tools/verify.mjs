@@ -48,9 +48,10 @@ function serve() {
 }
 
 let chromium;
+let devices;
 try {
   // PW_MODULE lets a global install be used instead of a local devDependency.
-  ({ chromium } = await import(process.env.PW_MODULE || 'playwright'));
+  ({ chromium, devices } = await import(process.env.PW_MODULE || 'playwright'));
 } catch {
   console.error('playwright is missing. Run:  npm i -D playwright && npx playwright install chromium');
   process.exit(2);
@@ -646,6 +647,247 @@ const report = await page.evaluate(async () => {
     game.quickSave();
     game.quickLoad();
     expect('loading a save state marks the run as assisted', game.state.usedSaveState === true);
+  }
+
+  /* ------------------------------- jakoruutu ---------------------------- */
+  /* Jakoruudulla on neljä maailmaa — jako + leikepöytä, pelkkä jako, pelkkä
+   * leikepöytä, ei kumpaakaan — eikä yhteenkään niistä voi luottaa selaimen
+   * oletuksena, joten jokainen pakotetaan tyngällä. Kolme asiaa jotka tämä
+   * vahtii: peruutus ei ole virhe, mikään ei lähde palvelimelle, eikä ruudulle
+   * jää jumiin missään yhdistelmässä. */
+  {
+    const share = await import('/src/scenes/share.js');
+    const scores = await import('/src/core/scores.js');
+    const { HighScoreScene } = await import('/src/scenes/scores.js');
+    const { Input } = await import('/src/core/input.js');
+    const { textWidth } = await import('/src/gfx/font.js');
+
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    const stub = (shareFn, clipFn) => {
+      Object.defineProperty(navigator, 'share', {
+        value: shareFn || undefined, configurable: true, writable: true,
+      });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: clipFn ? { writeText: clipFn } : undefined, configurable: true, writable: true,
+      });
+    };
+    const unstub = () => {
+      delete navigator.share;
+      delete navigator.clipboard;
+    };
+    /* Yhden framen napautus kosketuksen tietä. Sama polku kuin puhelimessa,
+     * eli myös nousureuna syntyy siellä missä oikeastikin. */
+    const tap = (action) => {
+      Input.setAction(action, true);
+      game.step();
+      Input.setAction(action, false);
+      game.step();
+    };
+
+    stub(null, null);
+    scores.clearScores();
+    scores.addScore({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+
+    /* Reitti sisään ja ulos. Se on jakoruudun ensimmäinen vaatimus: sinne pitää
+     * päästä ja sieltä pitää päästä pois, riippumatta siitä mitä jako teki. */
+    reset();
+    game.toHighScores(0);
+    const board = game.scene;
+    tap('run');
+    const openedFromBoard = game.scene.constructor.name;
+    for (let f = 0; f < 8; f++) game.step();
+    tap('start');
+    expect('pistetaulusta pääsee jakoruutuun ja ENTER tuo takaisin samaan tauluun',
+      openedFromBoard === 'ShareScene' && game.scene === board,
+      `${openedFromBoard} -> ${game.scene.constructor.name}`);
+
+    game.toTitle();
+    tap('run');
+    const openedFromTitle = game.scene.constructor.name;
+    for (let f = 0; f < 8; f++) game.step();
+    tap('run');
+    expect('alkuruudusta pääsee jakoruutuun ja X tuo takaisin',
+      openedFromTitle === 'ShareScene' && game.scene.constructor.name === 'TitleScene',
+      `${openedFromTitle} -> ${game.scene.constructor.name}`);
+
+    // Juoksunappi on kentässä juoksu. Kohtauksen vaihto kesken hypyn tappaisi
+    // kierroksen, joten jako ei ole siellä.
+    reset();
+    const midLevel = new LevelScene(game, '1-1');
+    game.setScene(midLevel);
+    tap('run');
+    expect('kentästä ei voi avata jakoruutua juoksunapilla',
+      game.scene === midLevel, game.scene.constructor.name);
+    game.toTitle();
+
+    /* Osoite on se jonka og:tagi ilmoittaa, ei sivun oma. Testipalvelin ajaa
+     * 127.0.0.1:ssä, joten tämä testi erottaa ne kaksi toisistaan. */
+    const meta = document.querySelector('meta[property="og:url"]').getAttribute('content');
+    expect('jaettava osoite on og:url eikä sivun oma osoite',
+      share.shareUrl() === meta && !share.shareUrl().includes('127.0.0.1'), share.shareUrl());
+
+    const brag = share.shareText({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+    const plain = share.shareText(null);
+    expect('jaettava rivi kertoo pisteet ja kentän, ja tyhjä taulu ei keksi tulosta',
+      brag.includes('12345') && brag.includes('2-3') && brag.includes('Super Fart Bros 3')
+      && !/\d{3}/.test(plain), `${brag} | ${plain}`);
+
+    const combos = [
+      [() => Promise.resolve(), () => Promise.resolve(), 'share'],
+      [() => Promise.resolve(), null, 'share'],
+      [null, () => Promise.resolve(), 'clipboard'],
+      [null, null, 'none'],
+    ];
+    const detected = combos.map(([s, c, want]) => {
+      stub(s, c);
+      return share.shareCapability() === want;
+    });
+    expect('selaimen kyvyt tunnistetaan kaikissa neljässä yhdistelmässä',
+      detected.every(Boolean), detected.join(','));
+
+    /**
+     * Avaa jakoruudun annetuilla tyngillä, painaa ja päästää jakonapin, odottaa
+     * lupaukset ja poistuu. Palauttaa mitä tyngät näkivät ja mihin tilaan ruutu
+     * jäi. Nousureuna on tässä olennainen: jako lähtee siitä eikä painalluksesta.
+     */
+    const runShare = async (shareFn, clipFn) => {
+      const saw = { share: null, clip: null };
+      stub(shareFn && ((d) => { saw.share = d; return shareFn(d); }),
+        clipFn && ((t) => { saw.clip = t; return clipFn(t); }));
+      const back = new HighScoreScene(game, 0);
+      const scene = new share.ShareScene(game, back);
+      game.setScene(scene);
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) scene.update(i);
+      i.pressed = blank();
+      i.pressed.jump = true;
+      scene.update(i);
+      const armed = scene.armed;
+      i.pressed = blank();
+      i.released = blank();
+      i.released.jump = true;
+      scene.update(i);
+      await settle();
+      await settle();
+      const status = scene.status;
+      const j = mkInput();
+      j.pressed.start = true;
+      scene.update(j);
+      return { saw, armed, status, left: game.scene === back, scene };
+    };
+
+    const abort = () => Promise.reject(Object.assign(new Error('cancel'), { name: 'AbortError' }));
+    const denied = () => Promise.reject(Object.assign(new Error('nope'), { name: 'NotAllowedError' }));
+    const ok = () => Promise.resolve();
+
+    const both = await runShare(ok, ok);
+    expect('jako ja leikepöytä: jakovalikko saa otsikon, rivin ja osoitteen',
+      both.status === 'shared' && both.armed && both.left
+      && both.saw.share && both.saw.share.url === meta
+      && both.saw.share.text.includes('12345') && both.saw.clip === null,
+      `${both.status}, leikepöytä ${both.saw.clip === null ? 'koskematta' : 'kosketettu'}`);
+
+    const cancelled = await runShare(abort, ok);
+    expect('peruutettu jako ei ole virhe eikä valu leikepöydälle',
+      cancelled.status === 'cancelled' && cancelled.saw.clip === null && cancelled.left,
+      `${cancelled.status}, leikepöytä ${cancelled.saw.clip === null ? 'koskematta' : 'kosketettu'}`);
+
+    const fellBack = await runShare(denied, ok);
+    expect('kaatunut jako putoaa leikepöydälle osoitteen kanssa',
+      fellBack.status === 'copied' && typeof fellBack.saw.clip === 'string'
+      && fellBack.saw.clip.includes(meta) && fellBack.left,
+      `${fellBack.status}, ${fellBack.saw.clip}`);
+
+    const shareOnly = await runShare(denied, null);
+    expect('ilman leikepöytää kaatunut jako jättää osoitteen ruudulle',
+      shareOnly.status === 'manual' && shareOnly.scene.url === meta && shareOnly.left,
+      `${shareOnly.status}, ${shareOnly.scene.url}`);
+
+    const clipOnly = await runShare(null, ok);
+    expect('pelkkä leikepöytä kopioi rivin ja osoitteen',
+      clipOnly.status === 'copied' && clipOnly.saw.clip.includes(meta)
+      && clipOnly.saw.clip.includes('12345') && clipOnly.left,
+      `${clipOnly.status}, ${clipOnly.saw.clip}`);
+
+    const clipDenied = await runShare(null, denied);
+    expect('kieltäytynyt leikepöytä ei jätä ruutua roikkumaan',
+      clipDenied.status === 'manual' && !clipDenied.scene.busy && clipDenied.left,
+      `${clipDenied.status}, busy ${clipDenied.scene.busy}`);
+
+    const nothing = await runShare(null, null);
+    expect('ilman jakoa ja leikepöytää ruutu näyttää osoitteen eikä lupaa nappia',
+      nothing.status === 'manual' && nothing.scene.how === 'none'
+      && nothing.scene.url === meta && nothing.left,
+      `${nothing.status}, ${nothing.scene.how}`);
+
+    const threw = await runShare(() => { throw new Error('synkroninen'); }, ok);
+    expect('synkronisesti heittävä jako kaatuu leikepöydälle eikä sivulle',
+      threw.status === 'copied' && threw.left, threw.status);
+
+    /* Nousureuna ilman painallusta ei saa laukaista mitään. Edellisestä
+     * ruudusta roikkuva nappi tuottaa juuri sellaisen. */
+    let ghost = null;
+    stub((d) => { ghost = d; return Promise.resolve(); }, null);
+    const loose = new share.ShareScene(game, null);
+    const li = mkInput();
+    for (let f = 0; f < 8; f++) loose.update(li);
+    li.released = blank();
+    li.released.jump = true;
+    loose.update(li);
+    await settle();
+    expect('pelkkä napin nousu ilman painallusta ei jaa mitään',
+      ghost === null && loose.status === 'idle', `${loose.status}`);
+
+    /* Mikään tässä ruudussa ei saa ottaa yhteyttä mihinkään. Sama peruste kuin
+     * telemetrian palvelinlähetyksen jättämisessä tekemättä. */
+    const shareSrc = await (await fetch('/src/scenes/share.js')).text();
+    const net = ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'img.src']
+      .filter((n) => shareSrc.includes(n));
+    expect('jakoruutu ei lähetä mitään minnekään', net.length === 0, net.join(', ') || 'ei verkkokutsuja');
+
+    // Pisin mahdollinen kehu: kuusi kirjainta, seitsemän numeroa, linnake.
+    const widest = share.wrapText(
+      share.shareText({ name: 'ÄÄKKÖS', score: 9999999, world: 5, level: '5-F' }), 46,
+    );
+    const tooWide = widest.filter((l) => textWidth(l) > 300);
+    expect('pisin mahdollinen kehu rivittyy ruudun leveyteen',
+      tooWide.length === 0 && widest.length <= 3, `${widest.length} riviä, ${tooWide.length} yli`);
+
+    {
+      const c = document.createElement('canvas');
+      c.width = 320;
+      c.height = 240;
+      const g = c.getContext('2d');
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      const leaks = [];
+      let flat = 0;
+      for (const st of ['idle', 'busy', 'shared', 'copied', 'cancelled', 'manual']) {
+        for (const how of ['share', 'clipboard', 'none']) {
+          const scene = new share.ShareScene(game, null);
+          scene.how = how;
+          scene.status = st;
+          g.clearRect(0, 0, 320, 240);
+          scene.draw(g);
+          if (g.globalAlpha !== 1) leaks.push(`${how}/${st} alpha ${g.globalAlpha}`);
+          if (g.globalCompositeOperation !== 'source-over') leaks.push(`${how}/${st} ${g.globalCompositeOperation}`);
+          if (g.filter && g.filter !== 'none') leaks.push(`${how}/${st} filter ${g.filter}`);
+          const px = g.getImageData(0, 0, 320, 240).data;
+          const seen = new Set();
+          for (let p = 0; p < px.length; p += 4 * 37) {
+            seen.add((px[p] << 16) | (px[p + 1] << 8) | px[p + 2]);
+          }
+          if (seen.size < 5) flat++;
+        }
+      }
+      expect('jakoruudun piirto jättää canvasin tilan ennalleen ja piirtää jotain',
+        leaks.length === 0 && flat === 0, leaks.join(', ') || `${flat} tyhjää`);
+    }
+
+    unstub();
+    scores.clearScores();
+    reset();
+    game.toTitle();
   }
 
   /* ------------------------------ telemetry ---------------------------- */
@@ -1461,6 +1703,85 @@ const report = await page.evaluate(async () => {
       + `kokoja ${seen.size}`);
   }
 
+  /* ------------------------------ ilmajarru ----------------------------- */
+  /*
+   * Reported from play: "there is a bit of inertia when you jump and land, you
+   * still move sideways, and it is really hard to react so that you could
+   * avoid the enemy you are heading towards."
+   *
+   * Measured (tools/measure-braking.mjs): almost none of that distance is
+   * spent on the ground. At the run cap a jump carries 155 px through the air
+   * and only 24 px after landing — so the reaction happens, or fails to
+   * happen, in mid-air.
+   *
+   * The cause was one word. `skidding` required `onGround`, so turning round
+   * in the air braked at the acceleration rate (0.0547) instead of the skid
+   * rate (0.125). The SMB3 disassembly gates two things on `Player_InAir` —
+   * plain friction with no direction held, and the bleed back down to the
+   * speed cap — and gates the skid rate on neither. Both of those gates are
+   * still here; this one never should have been.
+   */
+  {
+    const flat = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      s.time = 400;
+      return s;
+    };
+    /** Runs up to the cap, jumps, then holds the other way for the whole arc. */
+    const turnRoundInAir = (power) => {
+      const s = flat(power);
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      i.held.right = true; i.held.run = true;
+      for (let f = 0; f < 90; f++) { s.update(i); i.pressed = blank(); }
+      const v0 = p.vx;
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      i.held.right = false; i.held.left = true; i.held.jump = false;
+      let frames = 0;
+      while (!p.onGround && p.vx > 0 && frames < 200) {
+        s.update(i); i.pressed = blank(); frames++;
+      }
+      return { v0, frames, stopped: p.vx <= 0 };
+    };
+
+    const air = turnRoundInAir({ type: 'shroom', level: 1 });
+    // 2.5 / 0.125 = 20 frames at the skid rate; 46 at the acceleration rate.
+    expect('turning round in mid-air brakes at the skid rate, not the walk rate',
+      air.stopped && air.frames <= 24,
+      `${air.v0.toFixed(2)} -> 0 in ${air.frames}f, pysähtyi ${air.stopped}`);
+
+    /*
+     * And the two gates that *are* faithful must stay. Letting go of the pad
+     * in mid-air keeps every pixel per frame of speed — that is what makes a
+     * jump commit — and it is the same rule for every body size.
+     */
+    const coastInAir = (power) => {
+      const s = flat(power);
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      i.held.right = true; i.held.run = true;
+      for (let f = 0; f < 90; f++) { s.update(i); i.pressed = blank(); }
+      const v0 = p.vx;
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      i.held.right = false; i.held.run = false; i.held.jump = false;
+      for (let f = 0; f < 20; f++) { s.update(i); i.pressed = blank(); }
+      return { v0, v1: p.vx, air: !p.onGround };
+    };
+    const coast = coastInAir({ type: 'shroom', level: 1 });
+    expect('letting go in mid-air still costs nothing — no air friction',
+      coast.air && Math.abs(coast.v1 - coast.v0) < 0.001,
+      `${coast.v0.toFixed(2)} -> ${coast.v1.toFixed(2)}`);
+  }
+
   /* ------------------------------ katto --------------------------------- */
   /* Reported from play: in 1-F you could jump up where the opening screen has
    * no ceiling, land on the roof, and run the level along the top — past the
@@ -1520,6 +1841,47 @@ const report = await page.evaluate(async () => {
     game.debug = false;
     game.state.debugWarped = false;
     scores.clearScores();
+  }
+
+  /* ----------------------- tauko ei jää jumiin --------------------------- */
+  /* A pause is something that happened to a level, not a mode the machine is
+   * in. Warping out from under the pause screen used to leave `paused` true on
+   * the world map — and nothing there can clear it, because the pause key only
+   * answers inside a LevelScene. The map never updated, Enter did nothing, and
+   * the only way out was a reload.
+   *
+   * The warp is only the shortest way to reproduce it. Any scene change made
+   * while paused does the same, which is why the fix is in `setScene` and this
+   * test checks the state of the game rather than the state of the warp. */
+  {
+    reset();
+    game.debug = true;
+    game.setScene(new LevelScene(game, '1-1'));
+    game.paused = true;
+    game.debugWarp();
+    const cleared = game.paused === false;
+    const onMap = game.scene.constructor.name === 'WorldMapScene';
+
+    /* Asserted on the flag and not by running a frame: `game.step()` drives the
+     * whole loop, including the attract-mode idle counter, and a test that
+     * borrows it hands the next three tests a title screen that has already
+     * been waiting. Found the hard way — it failed the demo tests, not this
+     * one. `paused` on a scene with no pause key *is* the stuck state, so the
+     * flag is the thing worth asserting. */
+    expect('warping out from under the pause screen leaves the game running',
+      cleared && onMap,
+      `paused ${game.paused}, ${game.scene.constructor.name}`);
+
+    /* And the same for the ordinary way out of a level, which shares the fix. */
+    reset();
+    game.setScene(new LevelScene(game, '1-1'));
+    game.paused = true;
+    game.toWorldMap();
+    expect('any scene change clears the pause, not just the warp',
+      game.paused === false, `paused ${game.paused}`);
+
+    game.debug = false;
+    game.state.debugWarped = false;
   }
 
   /* --------------------------- salaisuuslaskuri -------------------------- */
@@ -2014,6 +2376,7 @@ const report = await page.evaluate(async () => {
   /* --------------------------- kosketusohjaus -------------------------- */
   {
     const { Input } = await import('/src/core/input.js');
+    const { LAYOUTS } = await import('/src/core/touch.js');
     const touch = game.touch;
     touch.reveal();
 
@@ -2107,6 +2470,56 @@ const report = await page.evaluate(async () => {
     expect('the right half jumps low down and farts up top',
       jump === 'jump' && run === 'run', `alhaalla "${jump}", ylhäällä "${run}"`);
 
+    /* The rolling layout: the fart pad is a field low and right where the flat
+     * of the thumb rests, and the jump button sits *inside* it, up and left
+     * where the tip reaches. One finger is one point to every touchscreen ever
+     * built, so the only way one thumb can hold two buttons is for the two
+     * rectangles to overlap. That containment is the whole mechanism, so it is
+     * asserted directly rather than through the pixels it happens to have. */
+    touch.setLayout('rulla');
+    letGo();
+    expect('the old layouts are still on offer',
+      LAYOUTS.includes('napit') && LAYOUTS.includes('peukalot'), LAYOUTS.join(','));
+    expect('the rolling layout keeps the d-pad', rect('left').width > 0, `${rect('left').width}`);
+
+    const runPad = rect('run');
+    const jumpPad = rect('jump');
+    expect('the jump button lies wholly inside the fart pad, above and left of the thumb rest',
+      jumpPad.left >= runPad.left && jumpPad.right <= runPad.right
+      && jumpPad.top >= runPad.top && jumpPad.bottom <= runPad.bottom
+      && jumpPad.left > runPad.left && jumpPad.bottom < runPad.bottom,
+      `pieru ${Math.round(runPad.left)},${Math.round(runPad.top)} ${Math.round(runPad.width)}x${Math.round(runPad.height)}`
+      + ` hyppy ${Math.round(jumpPad.left)},${Math.round(jumpPad.top)} ${Math.round(jumpPad.width)}x${Math.round(jumpPad.height)}`);
+
+    /* This is the bug the owner reported, written as a gesture: rest the thumb
+     * on the fart pad, roll the tip up onto jump, roll back. Run must never let
+     * go — a jump that drops the run bit is a short jump, and short jumps miss
+     * gaps that were measured for long ones. */
+    letGo();
+    const rest = [runPad.right - 18, runPad.bottom - 18];
+    send('pointerdown', 20, ...rest);
+    const resting = held();
+    send('pointermove', 20, ...at('jump'));
+    const rolledUp = held();
+    send('pointermove', 20, ...rest);
+    const rolledBack = held();
+    send('pointerup', 20, ...rest);
+    const lifted = held();
+    expect('one thumb holds the fart button down and still reaches jump',
+      resting === 'run' && rolledUp === 'jump,run' && rolledBack === 'run' && lifted === '',
+      `lepo "${resting}" ylös "${rolledUp}" alas "${rolledBack}" irti "${lifted}"`);
+
+    // Steering with the other hand has to keep working through all of it.
+    letGo();
+    send('pointerdown', 21, ...at('right'));
+    send('pointerdown', 22, ...at('jump'));
+    const runJumpRight = held();
+    for (const id of [21, 22]) send('pointerup', id, 0, 0);
+    expect('the rolling layout still runs, jumps and steers at once',
+      runJumpRight === 'jump,right,run', `"${runJumpRight}"`);
+
+    expect('the rolling layout is remembered too', touch.loadLayout() === 'rulla', touch.loadLayout());
+
     // Switching layout mid-press must not leave an action stuck down.
     letGo();
     touch.setLayout('napit');
@@ -2119,6 +2532,56 @@ const report = await page.evaluate(async () => {
     touch.setLayout('napit');
     letGo();
     expect('the touch layout is remembered', touch.loadLayout() === 'napit', touch.loadLayout());
+  }
+
+  /* --------------------- selaimen zoom mobiiliselaimessa --------------------- */
+  /*
+   * Two halves of one bug. Double-tapping beside the canvas zooms the page in,
+   * and the full-screen control overlay then swallows the pinch that would
+   * take it back out. `user-scalable=no` does not help: iOS Safari has ignored
+   * it since iOS 10, and on Android it makes the trap worse by disabling the
+   * way back out.
+   */
+  {
+    const touch = game.touch;
+    const root = document.getElementById('touch');
+    const meta = document.querySelector('meta[name="viewport"]').content;
+
+    touch.setZoomed?.(false);
+    expect('nothing in the viewport meta can lock a player out of zooming back out',
+      !/user-scalable\s*=\s*(no|0)/i.test(meta) && !/maximum-scale/i.test(meta), meta);
+
+    expect('the double tap is killed by touch-action on the root element',
+      getComputedStyle(document.documentElement).touchAction === 'manipulation',
+      getComputedStyle(document.documentElement).touchAction);
+
+    const playing = getComputedStyle(root).touchAction;
+    touch.setZoomed?.(true);
+    const zoomedRoot = getComputedStyle(document.documentElement).touchAction;
+    const zoomedOverlay = getComputedStyle(root).touchAction;
+    touch.setZoomed?.(false);
+    expect('the overlay eats browser gestures while playing and gives them back while zoomed',
+      playing === 'none' && zoomedOverlay === 'auto' && zoomedRoot === 'auto',
+      `pelatessa "${playing}", zoomattuna juuri "${zoomedRoot}" / peite "${zoomedOverlay}"`);
+
+    /* The belt to that pair of braces: swallow the second tap ourselves. It has
+     * to stay off the controls — the toolbar is ordinary DOM and needs the
+     * synthetic click that preventDefault would eat. */
+    const tap = (target, x, y) => {
+      const t = new window.Touch({ identifier: 1, target, clientX: x, clientY: y });
+      const ev = new TouchEvent('touchend', {
+        bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [t],
+      });
+      target.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    };
+    const first = tap(document.body, 40, 40);
+    const second = tap(document.body, 42, 41);
+    const tool = root.querySelector('.tool');
+    const onTool = tap(tool, 4, 4) || tap(tool, 4, 4);
+    expect('a double tap beside the game is swallowed, and the controls are not',
+      first === false && second === true && onTool === false,
+      `1. "${first}" 2. "${second}" työkalu "${onTool}"`);
   }
 
   /* ------------------------------ kuvaefektit -------------------------- */
@@ -2826,6 +3289,106 @@ const report = await page.evaluate(async () => {
     audio: { sfx: Sfx.names(), music: Music.names() },
   };
 });
+
+/* ---------------------- kosketusohjaus puhelimen mitoissa ----------------- */
+/*
+ * A second context with an iPhone's viewport, pixel ratio and touch support.
+ *
+ * What this proves: that the layout survives 390 CSS pixels of width, that the
+ * phone-only media queries — which never run in the desktop page above — put
+ * the buttons where they are meant to be, and that the hit-testing still reads
+ * a thumb roll at that size.
+ *
+ * What it does NOT prove: anything about Safari. This is Chromium wearing an
+ * iPhone's measurements. Double-tap zoom, pinch and `touch-action` handling are
+ * WebKit's own, and only a real phone can confirm them.
+ */
+{
+  const phone = await browser.newContext({ ...devices['iPhone 13'] });
+  const page2 = await phone.newPage();
+  page2.on('pageerror', (e) => errors.push(`[iphone pageerror] ${e.message}`));
+  page2.on('console', (m) => {
+    const text = m.text();
+    if (m.type() === 'error' && !text.includes('favicon')) errors.push(`[iphone console] ${text}`);
+  });
+  await page2.goto(`http://127.0.0.1:${PORT}`, { waitUntil: 'networkidle' });
+  await page2.waitForTimeout(400);
+
+  const mobile = await page2.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name: `${name} (iPhone-mitat)`, ok, detail });
+      if (!ok) failures.push(`${name} [iPhone-mitat]${detail ? ` (${detail})` : ''}`);
+    };
+    const { Input } = await import('/src/core/input.js');
+    const touch = window.sfb3.touch;
+    touch.reveal();
+
+    // A phone that has never been given a preference gets the layout that was
+    // built for one thumb. Anyone who has chosen keeps their choice — that is
+    // what localStorage is for, and this context has nothing stored.
+    expect('a phone with no stored preference starts in the rolling layout',
+      touch.layout === 'rulla', touch.layout);
+
+    touch.setLayout('rulla');
+    const rect = (act) => document.querySelector(`#touch [data-act="${act}"]`).getBoundingClientRect();
+    const send = (type, id, x, y) => {
+      document.getElementById('touch').dispatchEvent(new PointerEvent(type, {
+        pointerId: id, clientX: x, clientY: y, pointerType: 'touch', bubbles: true, cancelable: true,
+      }));
+    };
+    const held = () => {
+      Input.poll();
+      return Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    };
+
+    expect('the root element still forbids double-tap zoom on a phone',
+      getComputedStyle(document.documentElement).touchAction === 'manipulation',
+      getComputedStyle(document.documentElement).touchAction);
+
+    const runPad = rect('run');
+    const jumpPad = rect('jump');
+    const dpad = ['left', 'right', 'up', 'down'].map(rect);
+    const small = [runPad, jumpPad, ...dpad].filter((r) => r.width < 44 || r.height < 44);
+    expect('no control is under the 44 px a fingertip needs', small.length === 0,
+      small.map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
+
+    expect('the jump button stays inside the fart pad at phone width',
+      jumpPad.left >= runPad.left && jumpPad.right <= runPad.right
+      && jumpPad.top >= runPad.top && jumpPad.bottom <= runPad.bottom,
+      `pieru ${Math.round(runPad.left)}..${Math.round(runPad.right)} / hyppy ${Math.round(jumpPad.left)}..${Math.round(jumpPad.right)}`);
+
+    const clash = dpad.filter((r) => r.right > runPad.left && r.bottom > runPad.top && r.top < runPad.bottom);
+    expect('the fart pad does not land on the d-pad at 390 px of width',
+      clash.length === 0, `d-pad ends at ${Math.round(Math.max(...dpad.map((r) => r.right)))}, pieru alkaa ${Math.round(runPad.left)}`);
+
+    const offscreen = [runPad, jumpPad, ...dpad]
+      .filter((r) => r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight);
+    expect('every control is on the screen', offscreen.length === 0,
+      `${Math.round(innerWidth)}x${Math.round(innerHeight)}, ulkona ${offscreen.length}`);
+
+    touch._releaseAll();
+    Input.poll();
+    Input.poll();
+    const rest = [runPad.right - 16, runPad.bottom - 16];
+    send('pointerdown', 30, ...rest);
+    const resting = held();
+    send('pointermove', 30, jumpPad.left + jumpPad.width / 2, jumpPad.top + jumpPad.height / 2);
+    const rolled = held();
+    send('pointermove', 30, ...rest);
+    const back = held();
+    send('pointerup', 30, ...rest);
+    expect('the thumb roll works at phone size too',
+      resting === 'run' && rolled === 'jump,run' && back === 'run',
+      `lepo "${resting}" ylös "${rolled}" alas "${back}"`);
+
+    return { checks, failures };
+  });
+  report.checks.push(...mobile.checks);
+  report.failures.push(...mobile.failures);
+  await phone.close();
+}
 
 await browser.close();
 server.close();
