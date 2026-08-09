@@ -772,21 +772,45 @@ export class Moon extends Enemy {
       const half = Math.round(Math.sqrt(Math.max(0, 324 - dy * dy)));
       ctx.fillRect(cx - half, cy + dy, half * 2, 1);
     }
+    /*
+     * A crescent, not a disc: it is a *moon*, and a plain bright circle in a
+     * night sky is a sun with the lights off.
+     *
+     * Drawn as a disc minus a second disc offset up and to the right, one row
+     * at a time. Subtracting spans rather than compositing keeps it a single
+     * pass with no canvas state to restore, and keeps the edge pixel-sharp
+     * instead of the soft rim a composite operation would leave.
+     */
+    const R = 10;
+    const BITE_R = 9;
+    const biteX = 5;
+    const biteY = -3;
     ctx.fillStyle = this.used ? '#8a8470' : '#e8d89a';
-    for (let dy = -10; dy <= 10; dy++) {
-      const half = Math.round(Math.sqrt(Math.max(0, 100 - dy * dy)));
-      ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+    for (let dy = -R; dy <= R; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, R * R - dy * dy)));
+      if (half <= 0) continue;
+      const bd = dy - biteY;
+      const bite = bd * bd < BITE_R * BITE_R
+        ? Math.round(Math.sqrt(BITE_R * BITE_R - bd * bd)) : -1;
+      const left = cx - half;
+      const right = cx + half;
+      // Where the bite starts, on this row. Everything right of it is gone.
+      const cut = bite >= 0 ? cx + biteX - bite : right;
+      if (cut > left) ctx.fillRect(left, cy + dy, Math.min(right, cut) - left, 1);
     }
+
+    // The lit inner edge, following the same crescent so it cannot drift off it
     ctx.fillStyle = this.used ? '#a8a290' : '#fff8d8';
-    for (let dy = -8; dy <= 6; dy++) {
-      const half = Math.round(Math.sqrt(Math.max(0, 64 - dy * dy)) * 0.8);
-      ctx.fillRect(cx - half - 1, cy + dy - 1, half * 2, 1);
+    for (let dy = -R + 2; dy <= R - 2; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, R * R - dy * dy)));
+      if (half <= 1) continue;
+      ctx.fillRect(cx - half, cy + dy, 2, 1);
     }
-    // craters, and a face only once it has been used up
+
+    // two craters, kept on the thick side of the crescent
     ctx.fillStyle = this.used ? '#8a8470' : '#d8c88a';
-    ctx.fillRect(cx - 5, cy - 4, 3, 3);
-    ctx.fillRect(cx + 2, cy + 1, 4, 3);
-    ctx.fillRect(cx - 2, cy + 5, 2, 2);
+    ctx.fillRect(cx - 6, cy - 3, 3, 3);
+    ctx.fillRect(cx - 5, cy + 3, 2, 2);
   }
 }
 
