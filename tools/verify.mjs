@@ -8303,6 +8303,274 @@ const report = await page.evaluate(async () => {
         + ` — mittaamatta portissa: ${rest.map((r) => `${r.n} ${r.v.toFixed(1)} (${r.th})`).join(', ')}`);
     }
   }
+
+  /* ------------------ tehostusten laatikko, siluetti ja tausta ----------- */
+  /*
+   * The same audit as the two above, pointed at the things the player picks
+   * up. It is here because the pickups were the last set of sprites nobody had
+   * measured, and measuring them is what turned DESIGN.md §1's claim about the
+   * graphics from a sentence in a file header into something a machine checks.
+   *
+   * A pickup has one job and it is read in a tenth of a second: *which* power
+   * this is. That splits into four measurements, and every one of them is a
+   * number rather than an opinion:
+   *
+   *   1. **It fills the box it is picked up by.** `Item` is 16x16 (see
+   *      entities/items.js) and that box is also the frame of the goal card,
+   *      which is exactly 16 wide — so a sprite that paints outside the box
+   *      paints outside the card's border, and a sprite that leaves a band of
+   *      the box empty gets collected off thin air.
+   *   2. **No two of them are the same picture.** Measured the way the eye
+   *      asks the question: what fraction of the box actually *looks*
+   *      different — counting a pixel one of them paints and the other does
+   *      not, and a pixel both paint in colours less than a fifth apart as
+   *      the same. Shape and palette in one number, because the player is not
+   *      told which of the two is carrying the difference.
+   *   3. **It survives all eight themes.** The tile audit already forbids two
+   *      *tiles* from being the same colour; a pickup that matches the ground
+   *      it is lying on is the same fault one layer up, and the pickup is the
+   *      one the player is supposed to run towards.
+   *   4. **It breathes on the shared clock.** Everything else alive in this
+   *      game does (`breath`), and these are organs and fungi and a bowl of
+   *      something still cooking — a still one reads as a pasted-on icon.
+   *
+   * Translucency is deliberately not body: the wisp of gas leaking out of a
+   * pickup and the star's halo are light and vapour, not the thing you touch,
+   * so they are allowed outside the box and do not count towards filling it.
+   * That is the same line the enemy audit above draws for trailing gas.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const { THEMES } = await import('/src/gfx/tiles.js');
+    const KINDS = ['shroom', 'oneup', 'flower', 'leaf', 'soup', 'pop', 'star'];
+    const BOX = 16;
+    const W = 48; const H = 48; const OX = 16; const OY = 16;
+    const PERIOD = sprites.BREATH_PERIOD;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+
+    /** How far apart two colours are, on the same 0..100 scale the tile audit uses. */
+    const gap = (a, b) => ((Math.abs(((a >> 16) & 255) - ((b >> 16) & 255))
+      + Math.abs(((a >> 8) & 255) - ((b >> 8) & 255))
+      + Math.abs((a & 255) - (b & 255))) / 3 / 255) * 100;
+
+    /** One frame of one sprite, reduced to the colour of every pixel of its box. */
+    const shot = (paint) => {
+      g.clearRect(0, 0, W, H);
+      paint();
+      const d = g.getImageData(0, 0, W, H).data;
+      const px = new Int32Array(BOX * BOX).fill(-1);
+      const inside = new Uint8Array(BOX * BOX);
+      const colors = new Map();
+      let n = 0; let rows = 0; let far = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] !== 255) continue;
+          const dx = x - OX; const dy = y - OY;
+          if (dx >= 0 && dx < BOX && dy >= 0 && dy < BOX) {
+            const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+            px[dy * BOX + dx] = key;
+            inside[dy * BOX + dx] = 1;
+            n++;
+            rows += dy;
+            colors.set(key, (colors.get(key) || 0) + 1);
+          } else {
+            far = Math.max(far, -dx, dx - (BOX - 1), -dy, dy - (BOX - 1));
+          }
+        }
+      }
+      let cols = 0; let lines = 0;
+      for (let k = 0; k < BOX; k++) {
+        let anyCol = 0; let anyRow = 0;
+        for (let q = 0; q < BOX; q++) {
+          if (inside[q * BOX + k]) anyCol = 1;
+          if (inside[k * BOX + q]) anyRow = 1;
+        }
+        cols += anyCol;
+        lines += anyRow;
+      }
+      // `lift` is the body's vertical centre of mass in hundredths of a pixel,
+      // the same measure the enemy breath is read from.
+      return { px, inside, colors, n, far, cols, lines,
+        lift: n ? Math.round((rows / n) * 100) : -1 };
+    };
+
+    /**
+     * The smallest fraction of the box, over the whole cycle, on which two
+     * sprites do not look the same. A pixel counts as different when one of
+     * them paints it and the other does not, or when both paint it more than a
+     * fifth apart — the same fifth this file uses below to say a pickup is not
+     * its background.
+     */
+    const apart = (a, b) => {
+      let worst = 1e9;
+      for (let i = 0; i < a.length && i < b.length; i++) {
+        let diff = 0;
+        for (let q = 0; q < BOX * BOX; q++) {
+          const p = a[i].px[q]; const r = b[i].px[q];
+          if (p < 0 && r < 0) continue;
+          if (p < 0 || r < 0 || gap(p, r) >= 20) diff++;
+        }
+        worst = Math.min(worst, diff);
+      }
+      return (worst / (BOX * BOX)) * 100;
+    };
+
+    const seen = new Map();
+    for (const kind of KINDS) {
+      const frames = [];
+      for (let t = 0; t < PERIOD; t++) frames.push(shot(() => sprites.drawItem(g, kind, OX, OY, t)));
+      seen.set(kind, frames);
+    }
+
+    /* 1. the box */
+    const loose = [];
+    const filled = [];
+    for (const kind of KINDS) {
+      const frames = seen.get(kind);
+      let minFill = 1e9; let minCols = 16; let minRows = 16; let bleed = 0;
+      for (const f of frames) {
+        minFill = Math.min(minFill, f.n);
+        minCols = Math.min(minCols, f.cols);
+        minRows = Math.min(minRows, f.lines);
+        bleed = Math.max(bleed, f.far);
+      }
+      // 40 % of the box is the smallest a pickup can be and still be the thing
+      // the box belongs to; below that the player is collecting the air around
+      // it. All sixteen columns and rows must be touched at every frame.
+      if (minFill < 102 || minCols < BOX || minRows < BOX || bleed > 0) {
+        loose.push(`${kind}: ${Math.round((minFill / 256) * 100)} % täynnä, `
+          + `${minCols}/${BOX} saraketta, ${minRows}/${BOX} riviä`
+          + (bleed > 0 ? `, ${bleed} px laatikon ulkopuolella` : ''));
+      }
+      filled.push(`${kind} ${Math.round((minFill / 256) * 100)}%`);
+    }
+    expect('jokainen tehostus täyttää poimintalaatikkonsa eikä vuoda sen yli',
+      loose.length === 0, loose.length ? loose.join('; ') : filled.join(', '));
+
+    /*
+     * 2. no two pickups are the same picture, and the threshold is not invented.
+     *
+     * **Where 40 % comes from.** The same measurement was run over the five
+     * enemies that share this 16x16 box and that a player is already expected
+     * to tell apart across a room. The tightest pair of *species* is the spiky
+     * one and the kurnuttaja at 43.8 %; the loosest comparison in the game is
+     * the walker and the flyer at **0.8 %**, and that one is not a fault but
+     * the clearest possible statement of what this box can and cannot hold —
+     * inside it the flyer simply *is* the walker, and the wings that tell them
+     * apart are drawn outside the box entirely. So 40 % is a hair under what
+     * the game already ships and defends, and the enemy figure is measured
+     * again here rather than remembered, so that it is visible if it drifts.
+     *
+     * The old pickups had eight pairs under that line and the worst of them
+     * was the flower and the leaf at 29.7 %. The pair this was written for was
+     * the mushroom and the 1-up: one drawing, two hues, 35.9 % apart, and the
+     * difference between one more hit and one more life.
+     */
+    const APART = 40;
+    const pairs = [];
+    for (let a = 0; a < KINDS.length; a++) {
+      for (let b = a + 1; b < KINDS.length; b++) {
+        pairs.push({ pair: `${KINDS[a]}/${KINDS[b]}`,
+          d: apart(seen.get(KINDS[a]), seen.get(KINDS[b])) });
+      }
+    }
+    pairs.sort((p, q) => p.d - q.d);
+    const same = pairs.filter((p) => p.d < APART);
+    // The calibration, re-measured. Guarded because the enemies live in
+    // somebody else's file and a missing one must not fail the pickups.
+    const species = [
+      ['walker', sprites.drawWalker, (f, t) => f(g, OX, OY, Math.floor(t / 8), 1, false)],
+      ['spikeguy', sprites.drawSpikeGuy, (f, t) => f(g, OX, OY, Math.floor(t / 2), 1)],
+      ['corkguy', sprites.drawCorkGuy, (f, t) => f(g, OX, OY, t, 1)],
+      ['kurnuttaja', sprites.drawKurnuttaja, (f, t) => f(g, OX, OY, t, 1)],
+    ].filter(([, fn]) => typeof fn === 'function')
+      .map(([name, fn, call]) => [name, (t) => call(fn, t)]);
+    const beasts = new Map();
+    for (const [name, paint] of species) {
+      const frames = [];
+      for (let t = 0; t < PERIOD; t += 4) frames.push(shot(() => paint(t)));
+      beasts.set(name, frames);
+    }
+    let floor = { pair: '-', d: -1 };
+    for (let a = 0; a < species.length; a++) {
+      for (let b = a + 1; b < species.length; b++) {
+        const d = apart(beasts.get(species[a][0]), beasts.get(species[b][0]));
+        if (floor.d < 0 || d < floor.d) floor = { pair: `${species[a][0]}/${species[b][0]}`, d };
+      }
+    }
+    expect('kaksi tehostusta eivät ole sama kuva',
+      same.length === 0,
+      (same.length ? `${same.map((p) => `${p.pair} ${p.d.toFixed(1)} %`).join('; ')} — ` : '')
+        + `lähin pari ${pairs[0].pair} ${pairs[0].d.toFixed(1)} %, toiseksi lähin `
+        + `${pairs[1].pair} ${pairs[1].d.toFixed(1)} % (raja ${APART} %, `
+        + `vihollislajien tiukin pari ${floor.pair} ${floor.d.toFixed(1)} %)`);
+
+    /* 3. the eight themes, plus the two frames a pickup is drawn in */
+    const grounds = [];
+    for (const [name, th] of Object.entries(THEMES)) {
+      for (const [what, css] of [['taivas', th.sky[0]], ['horisontti', th.sky[1]],
+        ['maa', th.ground], ['pinta', th.groundTop], ['tiili', th.brick],
+        ['kova', th.hard], ['kukkula', th.hill]]) {
+        grounds.push({ name: `${name} ${what}`, rgb: [parseInt(css.slice(1, 3), 16),
+          parseInt(css.slice(3, 5), 16), parseInt(css.slice(5, 7), 16)] });
+      }
+    }
+    // The two backgrounds that are not a theme at all and are the extremes:
+    // the HUD's reserve box is nearly black and the goal card is nearly white.
+    grounds.push({ name: 'HUD-lokero', rgb: [0x20, 0x20, 0x38] });
+    grounds.push({ name: 'maalikortti', rgb: [0xf8, 0xf8, 0xf8] });
+    const vanish = [];
+    const worstBg = [];
+    for (const kind of KINDS) {
+      let worst = 1e9; let where = '';
+      for (const bg of grounds) {
+        let least = 1e9;
+        for (const f of seen.get(kind)) {
+          let stands = 0;
+          for (const [key, count] of f.colors) {
+            const dr = Math.abs(((key >> 16) & 255) - bg.rgb[0]);
+            const dg = Math.abs(((key >> 8) & 255) - bg.rgb[1]);
+            const db = Math.abs((key & 255) - bg.rgb[2]);
+            if (((dr + dg + db) / 3 / 255) * 100 >= 20) stands += count;
+          }
+          least = Math.min(least, stands);
+        }
+        if (least < worst) { worst = least; where = bg.name; }
+      }
+      // 40 px is a 6x7 patch — the smallest blob of this artwork that is still
+      // a shape and not a speck — and 20 % is twice the gap the tile audit
+      // already calls indistinguishable (fortress ground vs brick, 8.6 %).
+      if (worst < 40) vanish.push(`${kind}: vain ${worst} px erottuu taustasta ${where}`);
+      worstBg.push(`${kind} ${worst}px (${where})`);
+    }
+    expect('yksikään tehostus ei katoa yhteenkään taustaan',
+      vanish.length === 0, vanish.length ? vanish.join('; ') : worstBg.join(', '));
+
+    /* 4. the shared breath */
+    const still = [];
+    const beats = [];
+    for (const kind of KINDS) {
+      const frames = seen.get(kind);
+      let hi = 0; let hiN = 0; let lo = 0; let loN = 0;
+      for (let t = 0; t < PERIOD; t++) {
+        if (sprites.breath(t, OX, OY)) { hi += frames[t].lift; hiN++; } else { lo += frames[t].lift; loN++; }
+      }
+      // Positive means the body sits higher on the frames the shared clock is
+      // inhaling on, in hundredths of a pixel of centre of mass.
+      const rise = (loN && hiN) ? (lo / loN) - (hi / hiN) : 0;
+      if (rise < 20) still.push(`${kind} nousee ${(rise / 100).toFixed(2)} px`);
+      beats.push(`${kind} ${(rise / 100).toFixed(2)}`);
+    }
+    expect('jokainen tehostus hengittää muun pelin kellolla',
+      still.length === 0,
+      still.length ? still.join('; ') : `nousu hengityksen tahdissa: ${beats.join(', ')} px`);
+  }
+
   /* ------------------------ kävelyn ohitusasento ------------------------ */
   /*
    * A walk is contact, pass, contact, pass. The three leg frames were always

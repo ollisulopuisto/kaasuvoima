@@ -13,29 +13,10 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 
 | osa-alue | miten tehty | mitä *ei* ole käytetty |
 | --- | --- | --- |
-| Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä. |
+| Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. **Myös muodot ovat omia, eivät vain pikselit** (kohta 1 c). | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä — eikä käsin piirrettyä kopiota sellaisesta. |
 | Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. Melodiat ovat omia **tai** tekijänoikeudesta vapaata sävelmistöä, nimettynä (kohta 1 b). | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita **suojatuista** sävelmistä. |
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
-| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti, piikkiukko, papuparooni, kurnuttaja, sääherra, luuranko, **pöhö**, **pönttö**, **nielu**. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
-
-**Päähahmon ulkonäkö rakennettiin uusiksi 9.8.2026.** Hahmolla oli lippalakki,
-ja pierusienen jälkeen se oli punainen valkoisine pilkkuineen paidan ja housujen
-päällä. Se ei ole kohdan 2 tarkoittamaa vapaata genrekonventiota vaan **tietty
-ilmaisu**, ja siksi se on poissa. Tilalla on hiukset, yksiosainen haalari, vyö
-jossa on messinkinen paineventtiili, ja kaasulehden mukana tuleva **kaasuletku**
-entisen pesukarhunhännän ja -korvien sijasta. Perustelu ei ole pelkkä
-välttäminen: hahmo laskeutuu suolistoon Pieruprinssin perään, ja se on
-uskottavampi lähtökohta puvustukselle kuin "ei ainakaan putkimies".
-
-Viisi voimatasoa erottuvat nyt koko asusta ja hiusten väristä eivätkä lakin
-väristä. Ajatus jonka mukaan **tehostuksen oma merkintä näkyy kantajassaan** on
-tämän pelin oma ja se jäi: pilkut ovat nyt kaasukuplia haalarissa. Väripaletti
-on yhdessä taulukossa (`POWER_LOOKS`, `src/gfx/sprites/player.js`), ja
-**kaksi mitattua väitettä pitää ratkaisun paikallaan** (`tools/verify.mjs`):
-pään on oltava vähintään neljä pikseliä osumalaatikkoa kapeampi — lakin lippa
-oli tasan laatikon levyinen, 12 px 14:stä ja 10 px 12:sta — ja lähimmätkin kaksi
-voimatasoa eroavat toisistaan vähintään 45 % hahmon omista pikseleistä. Mitattu
-uudella asulla 53 % ja 57 %, vanhalla 28 % ja 23 %.
+| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti, paukkupapu, piikkiukko, papuparooni, kurnuttaja, sääherra, luuranko, **pöhö**, **pönttö**, **nielu**, **virvatuli**, **varapallo**. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
 
 Repon ainoa binääri on `card.png`, linkkien esikatselukuva. Sekin on generoitu
 **pelistä itsestään** (`node tools/make-card.mjs` valokuvaa alkuruudun), koska
@@ -106,7 +87,57 @@ kysytä miltään: sääntö koskee lainattua, ei kaikkea.
 > Kohta 1 b kuvaa miten ratkaisut on tehty. Se ei ole oikeudellinen neuvo, ja
 > suoja-ajat lasketaan maakohtaisesti.
 
-## 1 c. Kolme vanhinta vihollista piirrettiin uusiksi
+## 1 c. Muoto on ilmaisua siinä missä pikselikin
+
+Päätetty 9.8.2026. Yllä oleva taulukko on aina väittänyt että grafiikka on
+itse tehtyä, ja teknisesti se on ollut totta koko ajan: jokainen pikseli
+piirretään ajossa `fillRect`-kutsuilla eikä repossa ole yhtään kuvatiedostoa.
+Väite oli silti **puoliksi katettu**, ja kohta 2 sanoo miksi: suojattua on
+*nimenomainen ilmaisu*, ja ilmaisu on se mitä kuva esittää — ei se millä
+työkalulla se on maalattu. Käsin kirjoitettu `fillRect` joka piirtää jonkun
+toisen pelin tunnistettavan esineen on kopio, ei omaa työtä.
+
+Poimittavat esineet (`src/gfx/sprites/items.js`) olivat juuri sitä. Nimet olivat
+omia — pierusieni, kaasulehti — mutta muodot eivät: lakillinen sieni valkoisine
+täplineen, silmällinen kukka varressa, vaahteranlehti, tähti. Ne on piirretty
+uudelleen. Konventio jää, koska konventio on vapaa: peli saa yhä olla peli jossa
+yksi esine kasvattaa, toinen antaa heitettävän ja kolmas tekee hetkeksi
+haavoittumattomaksi. Muoto on nyt tämän pelin omaa aihepiiriä — kaasua,
+ruoansulatusta, sisuskaluja — samasta rekisteristä kuin ummetuskorkki ja
+kurnuttaja:
+
+| esine | mikä se on nyt |
+| --- | --- |
+| pierusieni | tuhkelo: pelkkä itiöpussi ja reikä päällä, ei lakkia eikä jalkaa |
+| varapallo (1-up) | solmittu ilmapallo, eli varakaasu taskussa |
+| pierukukka | torvimainen kukka, aukko osoittaa jonnekin |
+| kaasulehti | pavun parilehti, kaksi lehdykkää kuin siivet |
+| hernekeitto | pata ja kauha, kasa keittoa reunan yli |
+| paukkupapu | halkeava papu, vihreä maltopinta esillä |
+| virvatuli | suokaasun sininen liekki (metaani palaa sinisenä) |
+
+**Miksi tämä on portti eikä lupaus.** Sama vika voi tulla takaisin ensi kerralla
+kun joku piirtää uuden esineen, ja "näyttääkö tämä liikaa joltakin" on
+mielipide. Siksi `tools/verify.mjs` mittaa neljä asiaa numeroina:
+
+1. **Laatikko.** Piirros pysyy 16x16 poimintalaatikossaan, koskettaa jokaista
+   riviä ja saraketta eikä vuoda yli. (Vanha: kuudessa esineessä oli tyhjää
+   laatikkoa, sienen kaasu vuoti maalikortin kehyksen yli.)
+2. **Kaksi esinettä eivät ole sama kuva.** Mitataan se osuus laatikosta joka
+   *näyttää* erilaiselta. Raja 40 % on kalibroitu pelin omaan grafiikkaan:
+   vihollislajeista tiukin pari on piikikäs ja kurnuttaja **43,8 %**. Vanhoista
+   esineistä kahdeksan paria alitti rajan, huonoimpana kukka ja lehti 29,7 % —
+   ja sieni ja 1-up olivat sama piirros kahdella värillä, 35,9 %.
+3. **Tausta.** Esine ei katoa yhteenkään kahdeksasta teemasta eikä HUDin
+   lokeroon tai maalikorttiin. (Vanha: lehti erottui aavikon maasta **nollalla**
+   pikselillä, tähti ruohon tiilestä nollalla.)
+4. **Hengitys.** Jokainen esine liikkuu pelin jaetulla hengityskellolla.
+   (Vanha: nolla seitsemästä.)
+
+Mitattu, ei muistettu — ja mittaus on tässä nimenomaan se osa joka tekee
+taulukon ensimmäisestä rivistä tarkistettavan eikä uskonasian.
+
+### Kolme vanhinta vihollista
 
 Päätetty 9.8.2026. Yllä oleva taulukko sanoi jo että grafiikka on itse tehtyä,
 ja se piti paikkansa siinä mielessä että jokainen suorakulmio oli kirjoitettu

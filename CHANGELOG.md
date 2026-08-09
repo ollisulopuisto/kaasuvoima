@@ -7,6 +7,99 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.47 — tehostukset piirretty uusiksi: muoto on ilmaisua
+
+Poimittavat esineet (`src/gfx/sprites/items.js`) on piirretty kokonaan
+uudelleen, ja mukana tuli neljä uutta porttia `tools/verify.mjs`:ään. Uusi
+[DESIGN.md](DESIGN.md) kohta **1 c** kertoo säännön, tämä merkintä sen mitä
+mitattiin.
+
+### Ongelma: taulukon ensimmäinen rivi oli puoliksi katettu
+
+DESIGN.md kohta 1 on aina sanonut että grafiikka on itse tuotettua, ja
+teknisesti se piti paikkansa: jokainen pikseli piirretään ajossa
+`fillRect`-kutsuilla eikä repossa ole kuvatiedostoja. Se ei silti ole koko
+väite. Kohta 2 sanoo että suojattua on *nimenomainen ilmaisu* — ja ilmaisu on
+se **mitä kuva esittää**, ei se millä työkalulla se maalattiin. Käsin
+kirjoitettu `fillRect` joka piirtää jonkun toisen pelin tunnistettavan esineen
+on kopio.
+
+Esineiden nimet olivat omia (pierusieni, kaasulehti, hernekeitto); muodot eivät
+olleet. `drawItem` piirsi lakillisen sienen valkoisine täplineen, silmällisen
+kukan varressa, vaahteranlehden ja tähden. Konventio — yksi esine kasvattaa,
+toinen antaa heitettävän, kolmas tekee hetkeksi haavoittumattomaksi — on vapaa
+ja jää. Piirros vaihtui.
+
+### Mitä tilalle, ja miksi juuri se
+
+Rekisteri on pelin oma: kaasua, ruoansulatusta, sisuskaluja, samasta perheestä
+kuin ummetuskorkki ja kurnuttaja. Jokainen muoto myös **selittää voimansa**:
+
+- **pierusieni → tuhkelo.** Sieni joka on pelkkä itiöpussi ja reikä päällä; sitä
+  puristamalla lähtee pilvi. Juuri sitä tämä tehostus tekee: sen antamat
+  lisähypyt ovat puhalluksia venttiilistä. Ei lakkia, ei jalkaa, ei kasvoja —
+  ja täplien tilalla **huokoset**, koska täplä on lakin päällä ja huokonen on
+  reikä pussissa.
+- **1-up → varapallo.** Solmittu ilmapallo. Vanha 1-up oli pierusieni vihreänä,
+  eli sama piirros kahdella värillä; lisäelämä ja lisäosuma eivät ole sama asia.
+- **pierukukka → torvikukka.** Kukka jonka terä on torven suu ja joka nojaa
+  sivuun. Se on ainoa tehostus joka lähtee pelaajan kehosta ulos, joten esine
+  on rakennettu aukon ympärille. Ei silmiä: silmät kuuluvat niille jotka
+  kävelevät päälle.
+- **kaasulehti → pavun parilehti.** Kaksi lehdykkää yhdessä varressa, kolme
+  riviä eri korkeudella. Pari lukee siipinä, ja peli on jo täynnä papuja
+  (pavunvarsi, paukkupapu, papuparooni).
+- **hernekeitto → pata ja kauha.** Kulho oli ennestään oma keksintö mutta se
+  jätti kahdeksan riviä laatikosta tyhjäksi ja oli vaalean taivaan väristä.
+- **paukkupapu** säilyi — se oli jo tämän pelin muoto — mutta kasvoi laatikkoon
+  ja sai halkeamaansa **läpinäkymättömän vihreän maltopinnan**.
+- **tähti → virvatuli.** Suokaasu joka syttyy: sama aine kuin koko peli, ja
+  suomalaista kansanperinnettä. **Metaani palaa sinisenä**, joten se on sininen
+  — ainoa väri jota mikään muu tässä pelissä ei käytä. Neljä kärkeä ja tylpät:
+  piikit tarkoittavat tässä pelissä muualla "tähän ei saa hypätä".
+
+### Punainen ennen vihreää, ja mitä punainen sanoi
+
+Testit kirjoitettiin ensin ja ne mittaavat kuvaa, eivät koodia. Vanhalla
+grafiikalla:
+
+| portti | vanha tulos |
+| --- | --- |
+| täyttää poimintalaatikkonsa (16x16, joka rivi ja sarake, ei ylivuotoa) | 6/7 esinettä rikki: keitto peitti 8/16 riviä, kukka 12/16 saraketta, lehti vuoti 1 px yli |
+| kaksi esinettä eivät ole sama kuva | 8 paria alle rajan; kukka/lehti 29,7 %, **sieni/1-up 35,9 %** |
+| ei katoa yhteenkään taustaan (8 teemaa + HUD + maalikortti) | lehti erottui aavikon maasta **0 pikselillä**, tähti ruohon tiilestä **0 pikselillä**, papu yön maasta 4 |
+| hengittää pelin jaetulla kellolla | **0,00 px, seitsemän seitsemästä** |
+
+Uudella: laatikko 44–61 % täynnä ja 16/16 joka framella, lähin pari
+papu/virvatuli **50,4 %**, huonoin tausta keitto yön maata vasten **48 px**,
+hengitys 0,31–0,63 px.
+
+### Mistä raja 40 % tulee — kalibrointi pelin omaan grafiikkaan
+
+"Näyttääkö tämä liikaa joltakin toiselta" on mielipide, joten se mitataan: kuinka
+suuri osa 16x16 laatikosta **näyttää erilaiselta**, kun eri pikseliksi lasketaan
+se jonka toinen maalaa ja toinen ei, ja se jonka molemmat maalaavat yli viidesosan
+päässä toisistaan. Muoto ja väri yhtenä lukuna, koska pelaajalle ei kerrota
+kumpi niistä kantaa eron.
+
+Raja otettiin vihollisista, jotka pelaaja on jo osannut erottaa kentässä:
+tiukin **laji**pari on piikikäs ja kurnuttaja **43,8 %**. Sama mittaus paljastaa
+myös pelin löysimmän parin, eikä se ole virhe vaan tarkin mahdollinen kuvaus
+siitä mitä tämä laatikko voi kantaa: **kävelijä ja lentäjä ovat 0,8 % erillään**,
+koska laatikon sisällä lentäjä *on* kävelijä — siivet jotka erottavat ne on
+piirretty laatikon ulkopuolelle. Portin raja 40 % on hiuksen verran sen alle
+mitä peli jo puolustaa, ja vihollisluku mitataan joka ajolla uudestaan niin että
+sen valuminen näkyy.
+
+### Sivuvaikutus jonka piti tulla mukana
+
+Maalikortti kasvoi 16x16:sta **20x20:een**. Esine on tasan 16 leveä, joten yhtä
+leveä kortti jäi kokonaan piirroksen alle sillä hetkellä kun piirros lakkasi
+olemasta pieni kuvio keskellä laatikkoaan. Neljä pikseliä marginaalia on sama
+suhde joka HUDin varalokerolla on ollut alusta asti.
+
+---
+
 ## v26.08.09.46 — kahdeksan kentän maailma: muoto päätetty, generaattori osaa kaikki teemat, maailmat 1 ja 3 tehty
 
 Peli on nyt **8 maailmaa ja 44 kenttää** (oli 36). Maailmat 1 ja 3 ovat
