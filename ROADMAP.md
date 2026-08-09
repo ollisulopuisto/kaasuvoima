@@ -223,10 +223,24 @@ Vaiheet:
    sarakenumerot eivät tarkoita mitään muutoksen jälkeen (kenttä rakennetaan
    siksi kahdesti), kaikilla esteillä ei ole korkeutta jota madaltaa, ja
    säädetyt kentät lyhenevät koska levennetty lepo syö sisältöä.
-4. Vercel-funktio + KV vastaanottoon, cron joka ajaa generaattorin.
+4. **Palvelinlähetys: päätetty jättää tekemättä toistaiseksi** (9.8.2026).
 
-Vaihe 4 rikkoo "ei ajonaikaisia riippuvuuksia" -periaatteen ja vaatii sen
-suostumuskysymyksen, jota vaiheet 1–3 eivät tarvitse. Se on oma päätöksensä.
+   Kaksi syytä, joista jälkimmäinen on painavampi. Se rikkoisi "ei ajonaikaisia
+   riippuvuuksia" -periaatteen: peli on staattinen sivusto, ja lähetys tarkoittaa
+   funktiota ja tallennusta. Ja **oletuksena päällä oleva lähetys ei kelpaa
+   tässä tapauksessa**: koko syy siihen ettei nykyinen keräys tarvitse
+   suostumusikkunaa on se että data ei poistu selaimesta eikä sitä voi yhdistää
+   kehenkään. Siirto palvelimelle muuttaa sen, EU:ssa valmiiksi rastitettu ruutu
+   ei ole pätevä suostumus, ja peliä pelaa lapsi kavereineen.
+
+   Käytännön puoli ratkaisi asian: **data ei ole pullonkaula.** Kourallinen
+   pelaajia tuottaa generaattorin kynnyksen ylittävän aineiston paikallisesti
+   muutamassa illassa, ja näppäin 8 saa sen ulos tiedostona ilman infraa ja
+   ilman kysymystä. Jos peli leviää perheen ulkopuolelle, tämä harkitaan
+   uudelleen — ja silloin **kysyen, oletus ei**.
+
+Vaiheet 1–3 ovat käytössä ja riittävät: kirjaus, vienti ja generaattorin
+luenta toimivat ilman että mitään lähtee selaimesta.
 
 ### 3. Maailmojen 1–4 uudistus uudelle hyppybudjetille
 
