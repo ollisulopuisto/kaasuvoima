@@ -1,8 +1,15 @@
 /**
  * World 3's chunks. Ice adds fewer pieces than the other worlds because most of
  * its difficulty comes from the floor being slippery, which is a physics change
- * and not a chunk — so what is here is the two things the world teaches with
- * geometry instead.
+ * and not a chunk — so what is here is what the world has to teach with geometry
+ * instead.
+ *
+ * Two of these are the same mechanics other worlds already own, rebuilt rather
+ * than copied, because sliding changes what they mean. `ice_star` picks a
+ * different payoff from grass's `star_block` since the star does nothing about
+ * the glacier, and `ice_crumble` is mostly run-off where `fac_crumble` is mostly
+ * catwalk. If either is ever tuned, tune it here — the argument for the numbers
+ * is the world's floor, not the mechanic.
  */
 
 import { ck, G } from './common.js';
@@ -26,4 +33,93 @@ export const ICE_CHUNKS = {
    * would teach the wrong thing.
    */
   spike_walk: ck(16, { 9: '   o o o', 12: '        x', 13: G, 14: G }),
+
+  /**
+   * Supertähti, and the two things in this world it actually answers.
+   *
+   * Grass has `star_block` and this is deliberately not a copy of it. The star
+   * replaces exactly one thing — the hit an inhabitant would land — and the ice
+   * world's two inhabitants worth spending it on are the spiky walker, which is
+   * the one enemy here a stomp does not remove, and a bed of ground spikes.
+   * Both are covered; the glacier is not, and neither is a pit. That is why
+   * there is no `W` anywhere near this chunk: standing a star in front of the
+   * glacier would promise something it does not do, and the player would only
+   * find that out by dying in it.
+   *
+   * Skippable, like every reward here. Without the star the walker is jumped
+   * and the spike bed is jumped, on flat open ground with six tiles of landing
+   * between them — the same "room to back off" `spike_walk` is built around,
+   * and the reason the spikes sit at the very end of the chunk rather than in
+   * the middle of it.
+   */
+  ice_star: ck(16, {
+    9: '  *',
+    12: '      x      ^^^',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * The floor that leaves, on the world whose whole idea is that you cannot
+   * stop on the floor. Nine crumbling tiles at ground level, nothing under
+   * them, four tiles of ground before and **twelve after**.
+   *
+   * The inversion worth writing down, because it is the opposite of what it
+   * looks like: ice makes the catwalk itself *easier*, not harder. A crumbling
+   * floor only kills people who stand still — each tile gives 52 frames from
+   * the moment it is stepped on, so anyone still moving is always ahead of the
+   * hole — and standing still is the one thing this world will not let you do.
+   * The factory version of this is a test of nerve. Here it is barely a test at
+   * all.
+   *
+   * What ice adds is at the far end, and that is where the whole design went.
+   * You come off the catwalk carrying whatever speed got you across, and the
+   * run-off has to be long enough that letting go of everything still works.
+   * The worst case is not the one it looks like — it is the *smallest* player,
+   * because small has less friction than big, not more:
+   *
+   *   fastest ground speed anyone can reach   MAX_P 3.5 px/frame
+   *   deceleration on release, small          FRICTION_SMALL 0.0391 px/frame²
+   *   deceleration on release, big            FRICTION_BIG   0.0547 px/frame²
+   *   distance to a standstill, small         3.5² / (2 × 0.0391) = 157 px
+   *   distance to a standstill, big           3.5² / (2 × 0.0547) = 112 px
+   *
+   * Measured in the engine rather than trusted: released at MAX_P a power-0
+   * player coasts 154.9 px in 90 frames — 9.68 tiles — and a power-1 one
+   * 110.2 px. Twelve tiles is what the run-off gets, so the worst case anyone
+   * can produce lands with two tiles to spare, and the first draft's nine would
+   * have been two thirds of a tile short of it. Run in 3-3: let go the moment
+   * the catwalk ends at column 253 and a power-0 player comes to rest at column
+   * 262, with the run-off ending at 264. (Skidding instead of releasing stops
+   * in 49 px, so the player who reacts is never the one at risk.)
+   *
+   * The run-off is bare ground on purpose: a coin, a block or an enemy in it
+   * would turn the spare tiles into a reason to be somewhere precise, and the
+   * spare tiles are the entire safety argument. It is also self-contained on
+   * purpose — the guarantee must not depend on which chunk the playlist happens
+   * to put next.
+   *
+   * The entry side gets four tiles and no more, and that is also deliberate.
+   * Four tiles is not enough to stop in from any real speed, so arriving fast
+   * means arriving committed — and committed is the safe state here. A long
+   * approach would only invite the player to stop and think on the one surface
+   * that punishes thinking.
+   *
+   * Things tried and thrown out:
+   *   - a solid tile in the middle of the catwalk, as a place to rest. Ice does
+   *     not let you rest on it, so it is a promise the floor cannot keep.
+   *   - the glacier underneath instead of open air. Lava has no ledge to land
+   *     on — that is why the difficulty meter prices it above spikes — and a
+   *     floor that leaves over a surface with no recovery is two unfair things
+   *     stacked, not one interesting one.
+   *
+   * The coins sit over the crumbling tiles rather than the safe ends, the same
+   * way round as `fac_crumble`: the greedy line and the safe line are one line,
+   * so the tension is pace and never a choice made before you start.
+   */
+  ice_crumble: ck(25, {
+    9: '     o o o o',
+    13: '####%%%%%%%%%############',
+    14: '####         ############',
+  }),
 };
