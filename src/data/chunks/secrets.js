@@ -59,11 +59,23 @@ export const SECRET_CHUNKS = {
    *     over the pipe's own left column, so the jump that takes it lands you on
    *     the lid — which is where you have to be standing to find out. Nothing
    *     points at the mouth, and nothing is centred on it.
-   *   - **the same three coins sit on the ordinary pipe.** 2-2 puts a plain
-   *     `pipe_short` one chunk ahead of this one precisely so the warp is not a
-   *     signpost; hinting only this one would have undone that. Measured over
-   *     the whole game: 6 % of the coin rows in the bump band sit at a secret,
-   *     so a coin row is a common sight and a poor oracle.
+   *   - **the same three coins sit on the ordinary pipe.** Every level with a
+   *     warp in it now puts a plain `pipe_short` in front of the warp precisely
+   *     so the warp is not a signpost; hinting only this one would have undone
+   *     that. Measured over the whole game: 4,7 % of the coin rows in the bump
+   *     band sit at a secret, so a coin row is a common sight and a poor oracle.
+   *
+   * **The coin row is only half of the camouflage, and the other half is the
+   * pipe.** A hint that is a poor oracle on its own is still a good one in
+   * combination — "a coin row over a two-tile pipe" was a different and much
+   * sharper signal than "a coin row", because four of the game's six two-tile
+   * floor pipes were warps and the rule fired two times in three. That is a
+   * routine and not a discovery. The fix was more pipes that go nowhere rather
+   * than fewer coins: 1-1 (a second one), 1-2, 1-3, 2-1, 2-N, 3-2 and 3-3 all
+   * gained one, taking the game from 6 short pipes to 13 with the same four
+   * warps — 30,8 %, under the one-in-three ceiling `tools/verify.mjs` now
+   * asserts. Coins were never the thing to remove: a hint that costs nothing
+   * to follow is the whole design (see the first bullet).
    *
    * The `?` block that starts a beanstalk needs none of this and does not get
    * it, for the same reason a star block does not: it looks like every other

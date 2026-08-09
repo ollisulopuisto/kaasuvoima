@@ -15,6 +15,20 @@
  * single exception — so the difficulty curve barely moves: measured, the world
  * average went 124.2 -> 123.5, the per-level shape 94 -> 111 -> 98 -> 140
  * became 94 -> 105 -> 100 -> 141, and the world still has exactly one dip.
+ *
+ * **What this world took over from world 1, 9.8.2026.** 1-2 was measured as
+ * introducing seven things at once and was cut back to the three it is about
+ * (see levels/world1.js). Two of the four it shed landed here, and neither is
+ * new content — both species already appeared in these levels and simply became
+ * the first place anybody meets them:
+ *
+ *   2-1  the pipe plant, at column 101, where it already stood
+ *   2-2  the stink cloud at column 146 and the note block at column 309
+ *
+ * "One mechanic per level, and no level gets two" is still the rule for the
+ * *optional* mechanics named above. Enemy species are not mechanics in that
+ * sense and there is no world in which they are one per level; what they have
+ * to obey is the one-screen rule, and `tools/verify.mjs` now asserts it.
  */
 
 export const WORLD2_LEVELS = {
@@ -97,11 +111,24 @@ export const WORLD2_LEVELS = {
    * near, the kurnuttaja comes up out of a hole you have to be in the air over
    * and does not care where you are standing. Read side by side they are a
    * contrast; a screen apart they would have been a repeat.
+   *
+   * That pipe plant is now also the **first** one in the game, because 1-2 gave
+   * up the one it had. It is a better first plant than 1-2's was: there it sat
+   * fifteen columns from the beanstalk and had to share the screen with it,
+   * here it has thirty columns of clear ground behind it and the angry sun is
+   * long past. Nothing had to be added — the chunk was already here.
+   *
+   * Chunk 1 is `pipe_short` and not `flat`, and it costs nothing: the chunk it
+   * replaced was sixteen columns of empty ground. What it buys is one more
+   * ordinary two-tile pipe in a game where two thirds of them used to be warps
+   * (see 1-1 in levels/world1.js for the whole argument). The three coins over
+   * the lid are the same three coins every such pipe carries, and this level
+   * has no warp for them to point at.
    */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
     chunks: [
-      'start', 'flat', 'power', 'walkers', 'sun', 'corks',
+      'start', 'pipe_short', 'power', 'walkers', 'sun', 'corks',
       'pipe_plant', 'pit_croak', 'heartburn', 'dune_sink', 'shell', 'plat_steps',
       'pit_l', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
@@ -146,6 +173,21 @@ export const WORLD2_LEVELS = {
    * beanstalk (the vine chunk carries its own coins) and `plat_hi` paid for
    * the warp pipe — its coins were a bonus platform, and the room below is a
    * much larger one.
+   *
+   * That decoy turned out to be the first of nine rather than a one-off: the
+   * same argument applies to every level with a warp in it, and 1-2, 3-2 and
+   * 1-1 have since been given their own ordinary short pipes for the same
+   * reason. The ratio is the point and it is now a gate — at most one warp in
+   * three two-tile floor pipes, measured 4/13 = 30,8 %.
+   *
+   * **This level is also where the stink cloud and the note block are first
+   * met**, since 9.8.2026, and neither is a new chunk here: `clouds` at chunk 9
+   * and `note_pair` at chunk 19 were both already in this playlist, and 1-2
+   * simply stopped coming first. Their columns are 146 and 309 — 163 apart,
+   * which is eight screens, so the level introduces them one at a time by a
+   * wide margin. The cloud arriving on the screen right after the beanstalk is
+   * not a problem the one-screen rule sees, because the beanstalk is not new
+   * here; it is the same vine the player climbed in 1-2.
    */
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level',
@@ -187,12 +229,29 @@ export const WORLD2_LEVELS = {
    * it must not become is a reason to skip the level: the planks carry coins
    * and nothing else, the sand under them is the route, and the crumbling row
    * is four tiles above it.
+   *
+   * **It moved four chunks to the right on 9.8.2026, and that is the third of
+   * the three crowded screens.** The boardwalk stood at column 116 and the moon
+   * at column 104 — twelve columns apart, so the level's two new ideas were on
+   * one screen and the player was asked to work out a floor that leaves and a
+   * jumpable moon at the same time. Neither was in the other's way physically;
+   * they were simply both new. `dune_crumble` and `corks` changed places, which
+   * costs nothing (same chunks, same count, 124.2 either way) and puts the
+   * planks at column 180, 76 columns clear of the moon, in the second half of
+   * the level where they read as a variation instead of a second headline.
+   *
+   * The chunk it now follows is `pit_l` and that is fine rather than lucky: the
+   * boardwalk's own floor rows are solid ground, so the planks are a bonus
+   * overhead and never the route, and the four columns of ground between the
+   * pit's far lip and the first pier are the same landing they always were.
+   *
+   * Chunk 1 is `pipe_short` in place of `flat` for the reason given in 2-1.
    */
   '2-N': {
     theme: 'night', bg: 'dunes', music: 'level', wind: true, spotlight: true,
     chunks: [
-      'start', 'flat', 'power', 'dune_night', 'walkers', 'pit_s',
-      'moon_night', 'dune_crumble', 'shell', 'plat_steps', 'pit_l', 'corks',
+      'start', 'pipe_short', 'power', 'dune_night', 'walkers', 'pit_s',
+      'moon_night', 'corks', 'shell', 'plat_steps', 'pit_l', 'dune_crumble',
       'heartburn', 'spike_bridge', 'flyer', 'pit_plat', 'shell', 'steps_up',
       'run_up', 'goal', 'goal_end',
     ],
@@ -241,11 +300,19 @@ export const WORLD2_LEVELS = {
    *     expensive to retry. A hazard in the run-up to a fight you are meant to
    *     want to retry is the same mistake spelled differently.
    *   - **not 2-F.** A fortress has stone floors and no sand in it.
+   *
+   * Chunk 4 is `note_pair` where it was `walker`, and it is a swap in the
+   * strictest sense: `note_pair` carries a walker of its own, so the level has
+   * the same enemy in the same chunk and two bouncing blocks it did not have.
+   * The reason is arithmetic rather than taste — 1-2 gave up its note blocks in
+   * the same change, and one appearance in the whole game is too thin a life
+   * for a mechanic. 2-2 stays the level that introduces it (it comes first on
+   * both branches); this is the second place it turns up.
    */
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
-      'start', 'power', 'walkers', 'lava_gap', 'walker',
+      'start', 'power', 'walkers', 'lava_gap', 'note_pair',
       'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'dune_switch',
       'soup_stop', 'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'dune_sink_deep', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',

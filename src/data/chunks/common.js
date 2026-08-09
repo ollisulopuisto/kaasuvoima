@@ -211,6 +211,14 @@ export const COMMON_CHUNKS = {
    * asserts the two chunks' coin rows are identical, because the way this
    * breaks is somebody hinting the secret one and forgetting its twin.
    *
+   * **And how OFTEN this chunk appears is part of the same promise.** Identical
+   * coins on identical pipes prove nothing if nearly every such pipe turns out
+   * to be a warp — which is where the game was: six two-tile floor pipes, four
+   * of them warps, so "press down on a coined short pipe" was right two times
+   * in three. This chunk is the answer to that and there is no such thing as
+   * too many of it, so `verify.mjs` caps the warps at one pipe in three rather
+   * than capping these. Nine of the thirteen in the game are this chunk.
+   *
    * The row is the ordinary bump row, offset left rather than centred: the run
    * approaches from the way you are walking and its last coin sits over the
    * pipe's own left column, so the jump that takes it lands you on the lid.

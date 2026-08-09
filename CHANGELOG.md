@@ -7,6 +7,128 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.38 — yksi ruutu, yksi uusi asia
+
+`tools/curriculum.mjs` on mitannut elokuun 9. päivästä lähtien missä kukin pelin
+ominaisuus kohdataan ensimmäisen kerran ja onko se ensiesittely turvallinen. Se
+rakennettiin vastaamaan yhteen kysymykseen — kannattaisiko koko kurriculum-
+järjestelmä rakentaa — ja vastaus oli **ei**: viimeinen uusi asia esitellään
+kentässä 5-3, 18 kenttää 30:stä ei esittele mitään uutta, ja generaattori
+noudattaa sääntöä "vain esitelty on sallittu" jo nyt 56 kertaa 58:sta. Mutta
+yhden todellisen ja toistuvan vian se löysi, ja omistaja päätti korjata
+täsmälleen sen eikä muuta.
+
+### 1. Yhden ruudun sääntö on nyt portti, ei raportti
+
+**Kahden ominaisuuden ensiesittely ei saa olla saman ruudun sisällä.** Ruutu on
+20 laattaa = 320 px, eli se mitä pelaaja näkee kerralla. Mittari kutsui tätä
+ehtoa YKSINiksi ja se hylkäsi **6 ensiesittelyä 26:sta**, kolmena parina:
+
+    vine@1-2:150   / enemy_p@1-2:165     pavunvarsi ja putkikasvi
+    star@1-3:195   / enemy_c@1-3:204     supertähti ja ummetuskorkki
+    crumble@2-N:116 / enemy_O@2-N:104    mureneva lava ja kuu
+
+Portti on `tools/verify.mjs`:ssä ja se lukee mittarin tuloksen sen sijaan että
+kävelisi kartan uudestaan — toinen kävely olisi toinen totuus. **Se väittää
+`earliest`istä**, eli siitä kentästä jossa asian voi *ensimmäisenä* kohdata
+jollain reitillä, koska maailma 2 haarautuu 2-2:ssa ja yhdellä ominaisuudella on
+siksi kolme eri vastausta siihen missä se kohdataan ensin. `guaranteed`
+sallisi tungoksen toisella haaralla sillä perusteella että toinen haara on jo
+opettanut toisen asian, mikä on lupaus väärälle pelaajalle.
+
+Punainen ennen vihreää, kuten DESIGN.md kohta 7 vaatii: testi kirjoitettiin
+ensin ja se sanoi `6/26: star@1-3:195 crumble@2-N:116 vine@1-2:150
+enemy_p@1-2:165 enemy_c@1-3:204 enemy_O@2-N:104`. Nyt se sanoo `26
+ensiesittelyä, väljin pakka 20 laattaa`.
+
+### 2. Kenttä 1-2 esitteli seitsemän asiaa kerralla — nyt kolme
+
+Mittarin kova löydös. **1-2 oli pelin ensimmäinen paikka jossa kohtaa
+pavunvarren, warp-putken, piilokaistat, nuottipalikan, lentäjän, putkikasvin ja
+ruskean pilven.** Seuraavaksi pahin kenttä koko pelissä esitteli kolme. Se on
+pelin *toinen* kenttä, mikä on huonoin mahdollinen paikka sille.
+
+Neljä muutti pois, kaikki vaihtoina — pala palasta, samanlevyisenä, mitään
+poistamatta:
+
+| ominaisuus | ennen | nyt | mikä maksoi |
+| --- | --- | --- | --- |
+| nuottipalikka | 1-2 | 2-2 | `note_pair` → `coins`, ja 2-3 sai toisen esiintymän (`walker` → `note_pair`, jossa on oma kävelijänsä) |
+| putkikasvi | 1-2 | 2-1 | `pipe_plant` → `pipe_short`; 2-1:ssä oli putkikasvi jo valmiiksi |
+| lentäjä | 1-2 | 1-F | `flyer` → `walkers` 1-2:ssa, `flyer` → `plat_float` 1-3:ssa |
+| ruskea pilvi | 1-2 | 2-2 | `clouds` → `coin_stack` 1-2:ssa, `clouds` → `ledge` 1-3:ssa |
+
+Kenttäkohtaiset ensiesittelyt ennen ja jälkeen: **1-2 7 → 3**, 1-3 3 → 3,
+1-F 2 → 3, 2-1 2 → 3, 2-2 0 → 2, 2-N 2 → 2 (siirto kentän sisällä), muut
+ennallaan. Maailma 1 lukee nyt näin: 1-1 puulava, kävelijä, kuoriukko — 1-2
+pavunvarsi, warp-putki, piilokaista — 1-3 ummetuskorkki, supertähti, piikkirivi
+— 1-F laava, lentäjä, pomo. Toinenkin portti tuli: yksikään kenttä ei saa
+esitellä yli kolmea, ja kolme on mitattu pelistä eikä valittu — se oli pelin
+seuraavaksi pahin luku ennen tätä.
+
+Kaksi jäljellä olevaa tungosparia korjattiin siirtämällä palikka kentän sisällä
+eikä poistamalla mitään: 1-3:ssa `corks` ja `pipe_pair` vaihtoivat paikkaa (ensimmäinen
+ummetuskorkki sarakkeeseen 149, 46 saraketta ennen tähteä — `star_block`in oma
+kaveriporukka on nyt kolmas kohdattu korkki eikä ensimmäinen, mikä on juuri se
+oletus jolle sen palkinto on rakennettu), ja 2-N:ssä `dune_crumble` ja `corks`
+vaihtoivat paikkaa (mureneva lava sarakkeeseen 180, 76 saraketta kuusta).
+
+Mitattu hinta: 1-2 122.8 → 114.6, 1-3 101.2 → 98.0, 3-2 133.4 → 130.3, muut
+ennallaan. Maailmojen muoto ja maailmasta maailmaan nouseva käyrä ovat molemmat
+portteja, ja molemmat pitävät: w1 70 → 115 → 98, yksi notko, ja käyrä nousee
+joka maailmassa. `node tools/difficulty.mjs --write` ajettu.
+
+### 3. Warppeja ei saa arvata: neljä kuudesta oli liikaa
+
+**Kuudesta kahden ruudun lattiaputkesta neljä oli warp-putkia.** Pelaaja joka
+oppi säännön "paina alas jokaisen lyhyen putken päällä jossa on kolikoita" oli
+oikeassa kahdesti kolmesta — ja salaisuus jonka arvaa kahdesti kolmesta on
+rutiini eikä salaisuus. Vika löytyi kun kolikkojonot lisättiin (v26.08.09.29) ja
+sama agentti nimesi rehellisen korjauksen: **lisää tavallisia lyhyitä putkia**,
+ei vähemmän kolikoita. Kolikko putken päällä on ilmaista rahaa ja sen pitää olla,
+koska vihjeen koko idea on että sen seuraaminen ei maksa mitään.
+
+Yhdeksän uutta `pipe_short`ia: 1-1 (toinen), 1-2, 1-3, 2-1, 2-N, 3-2, 3-3 —
+kaikki *vaihtoina* (`flat` → `pipe_short`, `coins` → `pipe_short`,
+`spikes` → `pipe_short`). Peli: 6 putkea → 13, warppeja edelleen 4, eli
+**66,7 % → 30,8 %**.
+
+**Miksi kolmasosa.** Luku ei ole makuasia: se on sama kaista jonka peli jo
+asettaa toiselle tavalliselta näyttävälle esineelle joka joskus onkin salaisuus.
+`verify.mjs` vaatii että alle 35 % tiilistä kätkee jotain (mitattu 19 %), ja
+lyhyt lattiaputki on täsmälleen sama väite eri esineestä. Kolmasosa on lähin
+luku jonka alle nykyiset neljä warppia mahtuvat, ja se on myös se kohta jossa
+väite muuttuu laadullisesti: puolikkaalla "useimmat lyhyet putket ovat
+tavallisia" kääntyy takaisin yhdestä lisätystä warpista, kolmasosalla uusi warp
+maksaa kolme uutta tavallista putkea. Sivutuotteena kolikkorivien
+salaisuusosuus laski 6,4 %:sta 4,7 %:iin.
+
+**Ja mitä siirtyi: ei mitään.** Edellinen agentti nimesi oikean riskin —
+palikan *lisääminen* siirtää jokaisen sen jälkeisen piilotiilen, koska ne ovat
+paikan hajautus (`src/core/secrets.js`) — ja siksi tässä muutoksessa ei lisätä
+yhtään palikkaa. Jokainen muutos on samanlevyisen palikan vaihto
+samanlevyiseen, ja `bricks`-palikan siirtämisen sijaan 1-3:ssa vaihdettiin
+`corks` ja `pipe_pair`. Mitattu ennen ja jälkeen: 325 tiiltä → 325, 83
+salaisuutta → 83, ja jokaisen kentän salaisuusavaimet merkki merkiltä samat.
+Kartan salaisuuslaskurit, tallennukset ja sarakkeeseen naulatut testit (1-2:n
+varsi 150, warp 229) pysyivät siis koskemattomina.
+
+### Tiedossa, ei korjattu
+
+- **`ENEMY_CHARS.U` (kurnuttaja) puuttuu mittarin vihollistaulusta.** Kurnuttaja
+  ja mittari syntyivät samana päivänä eivätkä tienneet toisistaan. Rivin
+  lisääminen kaataisi 2-1:n kahdesti: olento on sarakkeessa 117, putkikasvi
+  101:ssä ja närästysliekki 134:ssä — ja `levels/world2.js` perustelee pitkästi
+  miksi kasvi kuuluu juuri sille ruudulle. Se on aito erimielisyys säännön ja
+  suunnittelupäätöksen välillä eikä siivottava lipsahdus, ja se on kirjattu
+  `tools/curriculum.mjs`:ään korjausohjeineen (2-1:ssä `pit_croak` ja `pit_l`
+  vaihtoon, jolloin olento siirtyy sarakkeeseen 197).
+- **Laavan ensiesittely 1-F:ssä hylkää SEURA-ehdon**, koska `fort_gap` asettaa
+  kuoriukon kolme saraketta laavaan. Se on eri vika kuin tungos ja pelin ainoa
+  laatuaan; omistajan päätös oli portittaa yhden ruudun sääntö eikä muuta.
+
+---
+
 ## v26.08.09.37 — kurnuttaja, ja 90 framea ennen kuin hyppy on sidottu
 
 Uusi vihollinen, **KURNUTTAJA**: se asuu kuilun pohjalla ja loikkaa sieltä

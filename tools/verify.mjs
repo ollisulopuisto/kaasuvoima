@@ -6307,6 +6307,40 @@ const report = await page.evaluate(async () => {
     expect('kahden ruudun lattiaputket kantavat saman kolikkorivin, warppasi tai ei',
       pipes.length >= 6 && shapes.size === 1 && warps < pipes.length,
       `${pipes.length} putkea, ${warps} warppia, kolikkorivit [${[...shapes].join('] [')}]`);
+
+    /*
+     * 5. JA SAMA VÄITE MUODOSTA: lyhyt putki ei saa olla warpin synonyymi.
+     *
+     * Kohta 4 takaa että kaikki kahden ruudun lattiaputket *näyttävät*
+     * samalta. Se ei takaa mitään siitä miten usein sellaisen alle menee
+     * jotain — ja jos niitä on kuusi ja neljä on warppeja, "paina alas jokaisen
+     * kolikoidun lyhyen putken päällä" osuu kahdesti kolmesta. Salaisuus jonka
+     * arvaa kahdesti kolmesta ei ole salaisuus vaan rutiini, ja koko
+     * kolikkovihjeen idea (kohta 3c) kaatuu sen mukana: vihje näyttäisi
+     * vihjeeltä ja toimisi kylttinä.
+     *
+     * **Miksi kolmasosa.** Luku ei ole makuasia eikä sitä ole poimittu ilmasta,
+     * vaan se on *sama kaista jonka peli jo asettaa toiselle tavalliselta
+     * näyttävälle esineelle joka joskus onkin salaisuus*: piilotiili. Tuon
+     * testin raja tässä samassa tiedostossa on `share < 0.35` — alle 35 % kaikista
+     * tiilistä saa kätkeä jotain. Lyhyt lattiaputki on täsmälleen sama väite eri
+     * esineestä, joten se saa saman katon, ja kolmasosa on lähin luku jonka
+     * alle nykyiset neljä warppia mahtuvat: 4/12 = 33,3 %.
+     *
+     * Kolmasosa on myös se kohta jossa väite muuttuu laadullisesti. Puolikkaalla
+     * "useimmat lyhyet putket ovat tavallisia" on totta yhden putken erolla ja
+     * kääntyy takaisin heti kun joku lisää yhden warpin. Kolmasosalla pelaaja
+     * joka painaa alas jokaisen lyhyen putken päällä on väärässä kaksi kertaa
+     * useammin kuin oikeassa, ja uusi warp maksaa kolme uutta tavallista
+     * putkea — mikä on juuri se hinta jonka sen kuuluu maksaa.
+     *
+     * Ei alarajaa. Tavallisia putkia ei voi olla liikaa: jokainen niistä on
+     * ilmaisia kolikoita ja yksi vertailukohta lisää.
+     */
+    expect('lyhyt lattiaputki ei ole warpin synonyymi',
+      warps * 3 <= pipes.length,
+      `${warps}/${pipes.length} lattiaputkesta warppaa = ${(warps * 100 / pipes.length).toFixed(1)} %`
+      + ` (katto 33,3 %, sama kuin piilotiilen 35 %)`);
   }
 
   /* ---------------- salaisuudet kartalla: kertoo että, ei missä ----------- */
@@ -10283,6 +10317,80 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     && compareTable(dropped, measured).length === 1
     && compareTable(extra, measured).length === 1)) {
     report.failures.push('vaikeustaulun vertailu ei huomaa vanhentumista');
+  }
+}
+
+/*
+ * YKSI RUUTU, YKSI UUSI ASIA — opetusjärjestyksen ainoa portti.
+ *
+ * `tools/curriculum.mjs` mittaa kolmea ehtoa (POHJA, SEURA, YKSIN) ja on
+ * raportti eikä portti. Omistaja päätti 9.8.2026 nostaa niistä *yhden*
+ * portiksi, koska vain se osoitti toistuvan ja korjattavan vian: YKSIN hylkäsi
+ * kuusi ensiesittelyä 26:sta, ja hylätyt tulivat kolmena parina — kolme kenttää
+ * joissa kaksi uutta asiaa esitellään samalla ruudulla. POHJA hylkäsi nolla ja
+ * SEURA kaksi, eikä kumpikaan kelpaa portiksi ilman että ne ensin korjataan.
+ *
+ * **Mitä "ensiesittely" tarkoittaa, kun kartta haarautuu.** Maailma 2 haarautuu
+ * 2-2:ssa, joten yhdellä ominaisuudella on kolme eri vastausta siihen missä se
+ * kohdataan ensin: *earliest* (aikaisin kenttä jollain reitillä), *guaranteed*
+ * (kenttä johon mennessä jokainen reitti on sen kohdannut) ja *branch-only*
+ * (vain toisella haaralla esiintyvä). **Tämä portti väittää `earliest`istä**,
+ * ja syy on että se on pahin tapaus: se on ensimmäinen paikka jossa kukaan voi
+ * kohdata asian, ja jos kaksi asiaa on siellä samalla ruudulla, ne ovat samalla
+ * ruudulla jollekulle. `guaranteed` sallisi tungoksen niin kauan kuin *toinen*
+ * reitti on jo opettanut toisen niistä, mikä on lupaus väärälle pelaajalle.
+ *
+ * Kulkua ei kävellä täällä uudestaan: `curriculum.mjs` kävelee graafin samoilla
+ * säännöillä kuin `worldProblems` (linkit suunnattuja, reitti päättyy
+ * linnakkeeseen, talot kävellään läpi), ja tämä tiedosto lukee sen tuloksen.
+ * Toinen kävely olisi toinen totuus.
+ *
+ * Ruutu on 20 laattaa = 320 px, eli canvasin leveys jaettuna laatalla. Se on
+ * oikea yksikkö siksi että kysymys ei ole siitä kuinka kaukana kaksi esittelyä
+ * on toisistaan tiedostossa vaan siitä näkyvätkö ne yhtä aikaa.
+ */
+{
+  const { CURRICULUM_ROWS, CURRICULUM_INTRO, SCREEN_COLS } = await import('./curriculum.mjs');
+  const measured = CURRICULUM_ROWS.filter((r) => r.enc && !r.feature.core);
+  const crowded = measured.filter((r) => !r.safety.yksin);
+  const where = (r) => `${r.feature.key}@${r.enc.earliest}:${r.inst.x0}`;
+  report.checks.push({
+    name: `kahta ensiesittelyä ei ole saman ${SCREEN_COLS} laatan ruudun sisällä`,
+    ok: crowded.length === 0,
+    detail: crowded.length
+      ? `${crowded.length}/${measured.length}: ${crowded.map(where).join(' ')}`
+      : `${measured.length} ensiesittelyä, väljin pakka ${SCREEN_COLS} laattaa`,
+  });
+  if (crowded.length) {
+    report.failures.push(...crowded.map((r) => `ensiesittely ruudun sisällä toisesta: ${where(r)}`));
+  }
+
+  /*
+   * JA SAMAN ASIAN TOINEN PUOLI: montako uutta asiaa yksi kenttä esittelee.
+   *
+   * YKSIN mittaa etäisyyttä, tämä lukumäärää, ja ne eivät ole sama väite. Kenttä
+   * voi levittää seitsemän ensiesittelyä 400 sarakkeelle ja läpäistä YKSINin
+   * moitteetta — juuri niin 1-2 teki kaikkien muiden paitsi yhden parin osalta —
+   * ja silti pyytää pelaajaa oppimaan seitsemän asiaa yhdessä kentässä. 1-2 oli
+   * pelin toinen kenttä, mikä on huonoin mahdollinen paikka sille.
+   *
+   * Raja on **kolme**, eikä se ole pyöristys: kolme oli pelin *seuraavaksi*
+   * pahin kenttä ennen tätä korjausta (1-1 ja 1-3, kumpikin kolme), joten raja
+   * on mitattu pelistä eikä valittu. Se sanoo "1-2 ei saa olla poikkeus", ei
+   * "kolme on oikea luku". Perussanasto ei ole mukana samasta syystä kuin
+   * työkalussa: ensimmäisen ruudun aakkosia ei voi aikatauluttaa.
+   */
+  const over = CURRICULUM_INTRO.filter((l) => l.features.length > 3);
+  const busiest = CURRICULUM_INTRO.reduce((a, b) => (b.features.length > a.features.length ? b : a));
+  report.checks.push({
+    name: 'yksikään kenttä ei esittele yli kolmea uutta asiaa',
+    ok: over.length === 0,
+    detail: over.length
+      ? over.map((l) => `${l.id} ${l.features.length}: ${l.features.map((f) => f.feature.key).join(' ')}`).join(' — ')
+      : `eniten ${busiest.id} ${busiest.features.length} kpl`,
+  });
+  if (over.length) {
+    report.failures.push(...over.map((l) => `${l.id} esittelee ${l.features.length} uutta asiaa kerralla`));
   }
 }
 
