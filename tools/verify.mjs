@@ -1703,6 +1703,85 @@ const report = await page.evaluate(async () => {
       + `kokoja ${seen.size}`);
   }
 
+  /* ------------------------------ ilmajarru ----------------------------- */
+  /*
+   * Reported from play: "there is a bit of inertia when you jump and land, you
+   * still move sideways, and it is really hard to react so that you could
+   * avoid the enemy you are heading towards."
+   *
+   * Measured (tools/measure-braking.mjs): almost none of that distance is
+   * spent on the ground. At the run cap a jump carries 155 px through the air
+   * and only 24 px after landing — so the reaction happens, or fails to
+   * happen, in mid-air.
+   *
+   * The cause was one word. `skidding` required `onGround`, so turning round
+   * in the air braked at the acceleration rate (0.0547) instead of the skid
+   * rate (0.125). The SMB3 disassembly gates two things on `Player_InAir` —
+   * plain friction with no direction held, and the bleed back down to the
+   * speed cap — and gates the skid rate on neither. Both of those gates are
+   * still here; this one never should have been.
+   */
+  {
+    const flat = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      s.time = 400;
+      return s;
+    };
+    /** Runs up to the cap, jumps, then holds the other way for the whole arc. */
+    const turnRoundInAir = (power) => {
+      const s = flat(power);
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      i.held.right = true; i.held.run = true;
+      for (let f = 0; f < 90; f++) { s.update(i); i.pressed = blank(); }
+      const v0 = p.vx;
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      i.held.right = false; i.held.left = true; i.held.jump = false;
+      let frames = 0;
+      while (!p.onGround && p.vx > 0 && frames < 200) {
+        s.update(i); i.pressed = blank(); frames++;
+      }
+      return { v0, frames, stopped: p.vx <= 0 };
+    };
+
+    const air = turnRoundInAir({ type: 'shroom', level: 1 });
+    // 2.5 / 0.125 = 20 frames at the skid rate; 46 at the acceleration rate.
+    expect('turning round in mid-air brakes at the skid rate, not the walk rate',
+      air.stopped && air.frames <= 24,
+      `${air.v0.toFixed(2)} -> 0 in ${air.frames}f, pysähtyi ${air.stopped}`);
+
+    /*
+     * And the two gates that *are* faithful must stay. Letting go of the pad
+     * in mid-air keeps every pixel per frame of speed — that is what makes a
+     * jump commit — and it is the same rule for every body size.
+     */
+    const coastInAir = (power) => {
+      const s = flat(power);
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      i.held.right = true; i.held.run = true;
+      for (let f = 0; f < 90; f++) { s.update(i); i.pressed = blank(); }
+      const v0 = p.vx;
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      i.held.right = false; i.held.run = false; i.held.jump = false;
+      for (let f = 0; f < 20; f++) { s.update(i); i.pressed = blank(); }
+      return { v0, v1: p.vx, air: !p.onGround };
+    };
+    const coast = coastInAir({ type: 'shroom', level: 1 });
+    expect('letting go in mid-air still costs nothing — no air friction',
+      coast.air && Math.abs(coast.v1 - coast.v0) < 0.001,
+      `${coast.v0.toFixed(2)} -> ${coast.v1.toFixed(2)}`);
+  }
+
   /* ------------------------------ katto --------------------------------- */
   /* Reported from play: in 1-F you could jump up where the opening screen has
    * no ceiling, land on the roof, and run the level along the top — past the
