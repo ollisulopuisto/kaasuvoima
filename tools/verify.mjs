@@ -649,6 +649,247 @@ const report = await page.evaluate(async () => {
     expect('loading a save state marks the run as assisted', game.state.usedSaveState === true);
   }
 
+  /* ------------------------------- jakoruutu ---------------------------- */
+  /* Jakoruudulla on neljä maailmaa — jako + leikepöytä, pelkkä jako, pelkkä
+   * leikepöytä, ei kumpaakaan — eikä yhteenkään niistä voi luottaa selaimen
+   * oletuksena, joten jokainen pakotetaan tyngällä. Kolme asiaa jotka tämä
+   * vahtii: peruutus ei ole virhe, mikään ei lähde palvelimelle, eikä ruudulle
+   * jää jumiin missään yhdistelmässä. */
+  {
+    const share = await import('/src/scenes/share.js');
+    const scores = await import('/src/core/scores.js');
+    const { HighScoreScene } = await import('/src/scenes/scores.js');
+    const { Input } = await import('/src/core/input.js');
+    const { textWidth } = await import('/src/gfx/font.js');
+
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+    const stub = (shareFn, clipFn) => {
+      Object.defineProperty(navigator, 'share', {
+        value: shareFn || undefined, configurable: true, writable: true,
+      });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: clipFn ? { writeText: clipFn } : undefined, configurable: true, writable: true,
+      });
+    };
+    const unstub = () => {
+      delete navigator.share;
+      delete navigator.clipboard;
+    };
+    /* Yhden framen napautus kosketuksen tietä. Sama polku kuin puhelimessa,
+     * eli myös nousureuna syntyy siellä missä oikeastikin. */
+    const tap = (action) => {
+      Input.setAction(action, true);
+      game.step();
+      Input.setAction(action, false);
+      game.step();
+    };
+
+    stub(null, null);
+    scores.clearScores();
+    scores.addScore({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+
+    /* Reitti sisään ja ulos. Se on jakoruudun ensimmäinen vaatimus: sinne pitää
+     * päästä ja sieltä pitää päästä pois, riippumatta siitä mitä jako teki. */
+    reset();
+    game.toHighScores(0);
+    const board = game.scene;
+    tap('run');
+    const openedFromBoard = game.scene.constructor.name;
+    for (let f = 0; f < 8; f++) game.step();
+    tap('start');
+    expect('pistetaulusta pääsee jakoruutuun ja ENTER tuo takaisin samaan tauluun',
+      openedFromBoard === 'ShareScene' && game.scene === board,
+      `${openedFromBoard} -> ${game.scene.constructor.name}`);
+
+    game.toTitle();
+    tap('run');
+    const openedFromTitle = game.scene.constructor.name;
+    for (let f = 0; f < 8; f++) game.step();
+    tap('run');
+    expect('alkuruudusta pääsee jakoruutuun ja X tuo takaisin',
+      openedFromTitle === 'ShareScene' && game.scene.constructor.name === 'TitleScene',
+      `${openedFromTitle} -> ${game.scene.constructor.name}`);
+
+    // Juoksunappi on kentässä juoksu. Kohtauksen vaihto kesken hypyn tappaisi
+    // kierroksen, joten jako ei ole siellä.
+    reset();
+    const midLevel = new LevelScene(game, '1-1');
+    game.setScene(midLevel);
+    tap('run');
+    expect('kentästä ei voi avata jakoruutua juoksunapilla',
+      game.scene === midLevel, game.scene.constructor.name);
+    game.toTitle();
+
+    /* Osoite on se jonka og:tagi ilmoittaa, ei sivun oma. Testipalvelin ajaa
+     * 127.0.0.1:ssä, joten tämä testi erottaa ne kaksi toisistaan. */
+    const meta = document.querySelector('meta[property="og:url"]').getAttribute('content');
+    expect('jaettava osoite on og:url eikä sivun oma osoite',
+      share.shareUrl() === meta && !share.shareUrl().includes('127.0.0.1'), share.shareUrl());
+
+    const brag = share.shareText({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
+    const plain = share.shareText(null);
+    expect('jaettava rivi kertoo pisteet ja kentän, ja tyhjä taulu ei keksi tulosta',
+      brag.includes('12345') && brag.includes('2-3') && brag.includes('Super Fart Bros 3')
+      && !/\d{3}/.test(plain), `${brag} | ${plain}`);
+
+    const combos = [
+      [() => Promise.resolve(), () => Promise.resolve(), 'share'],
+      [() => Promise.resolve(), null, 'share'],
+      [null, () => Promise.resolve(), 'clipboard'],
+      [null, null, 'none'],
+    ];
+    const detected = combos.map(([s, c, want]) => {
+      stub(s, c);
+      return share.shareCapability() === want;
+    });
+    expect('selaimen kyvyt tunnistetaan kaikissa neljässä yhdistelmässä',
+      detected.every(Boolean), detected.join(','));
+
+    /**
+     * Avaa jakoruudun annetuilla tyngillä, painaa ja päästää jakonapin, odottaa
+     * lupaukset ja poistuu. Palauttaa mitä tyngät näkivät ja mihin tilaan ruutu
+     * jäi. Nousureuna on tässä olennainen: jako lähtee siitä eikä painalluksesta.
+     */
+    const runShare = async (shareFn, clipFn) => {
+      const saw = { share: null, clip: null };
+      stub(shareFn && ((d) => { saw.share = d; return shareFn(d); }),
+        clipFn && ((t) => { saw.clip = t; return clipFn(t); }));
+      const back = new HighScoreScene(game, 0);
+      const scene = new share.ShareScene(game, back);
+      game.setScene(scene);
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) scene.update(i);
+      i.pressed = blank();
+      i.pressed.jump = true;
+      scene.update(i);
+      const armed = scene.armed;
+      i.pressed = blank();
+      i.released = blank();
+      i.released.jump = true;
+      scene.update(i);
+      await settle();
+      await settle();
+      const status = scene.status;
+      const j = mkInput();
+      j.pressed.start = true;
+      scene.update(j);
+      return { saw, armed, status, left: game.scene === back, scene };
+    };
+
+    const abort = () => Promise.reject(Object.assign(new Error('cancel'), { name: 'AbortError' }));
+    const denied = () => Promise.reject(Object.assign(new Error('nope'), { name: 'NotAllowedError' }));
+    const ok = () => Promise.resolve();
+
+    const both = await runShare(ok, ok);
+    expect('jako ja leikepöytä: jakovalikko saa otsikon, rivin ja osoitteen',
+      both.status === 'shared' && both.armed && both.left
+      && both.saw.share && both.saw.share.url === meta
+      && both.saw.share.text.includes('12345') && both.saw.clip === null,
+      `${both.status}, leikepöytä ${both.saw.clip === null ? 'koskematta' : 'kosketettu'}`);
+
+    const cancelled = await runShare(abort, ok);
+    expect('peruutettu jako ei ole virhe eikä valu leikepöydälle',
+      cancelled.status === 'cancelled' && cancelled.saw.clip === null && cancelled.left,
+      `${cancelled.status}, leikepöytä ${cancelled.saw.clip === null ? 'koskematta' : 'kosketettu'}`);
+
+    const fellBack = await runShare(denied, ok);
+    expect('kaatunut jako putoaa leikepöydälle osoitteen kanssa',
+      fellBack.status === 'copied' && typeof fellBack.saw.clip === 'string'
+      && fellBack.saw.clip.includes(meta) && fellBack.left,
+      `${fellBack.status}, ${fellBack.saw.clip}`);
+
+    const shareOnly = await runShare(denied, null);
+    expect('ilman leikepöytää kaatunut jako jättää osoitteen ruudulle',
+      shareOnly.status === 'manual' && shareOnly.scene.url === meta && shareOnly.left,
+      `${shareOnly.status}, ${shareOnly.scene.url}`);
+
+    const clipOnly = await runShare(null, ok);
+    expect('pelkkä leikepöytä kopioi rivin ja osoitteen',
+      clipOnly.status === 'copied' && clipOnly.saw.clip.includes(meta)
+      && clipOnly.saw.clip.includes('12345') && clipOnly.left,
+      `${clipOnly.status}, ${clipOnly.saw.clip}`);
+
+    const clipDenied = await runShare(null, denied);
+    expect('kieltäytynyt leikepöytä ei jätä ruutua roikkumaan',
+      clipDenied.status === 'manual' && !clipDenied.scene.busy && clipDenied.left,
+      `${clipDenied.status}, busy ${clipDenied.scene.busy}`);
+
+    const nothing = await runShare(null, null);
+    expect('ilman jakoa ja leikepöytää ruutu näyttää osoitteen eikä lupaa nappia',
+      nothing.status === 'manual' && nothing.scene.how === 'none'
+      && nothing.scene.url === meta && nothing.left,
+      `${nothing.status}, ${nothing.scene.how}`);
+
+    const threw = await runShare(() => { throw new Error('synkroninen'); }, ok);
+    expect('synkronisesti heittävä jako kaatuu leikepöydälle eikä sivulle',
+      threw.status === 'copied' && threw.left, threw.status);
+
+    /* Nousureuna ilman painallusta ei saa laukaista mitään. Edellisestä
+     * ruudusta roikkuva nappi tuottaa juuri sellaisen. */
+    let ghost = null;
+    stub((d) => { ghost = d; return Promise.resolve(); }, null);
+    const loose = new share.ShareScene(game, null);
+    const li = mkInput();
+    for (let f = 0; f < 8; f++) loose.update(li);
+    li.released = blank();
+    li.released.jump = true;
+    loose.update(li);
+    await settle();
+    expect('pelkkä napin nousu ilman painallusta ei jaa mitään',
+      ghost === null && loose.status === 'idle', `${loose.status}`);
+
+    /* Mikään tässä ruudussa ei saa ottaa yhteyttä mihinkään. Sama peruste kuin
+     * telemetrian palvelinlähetyksen jättämisessä tekemättä. */
+    const shareSrc = await (await fetch('/src/scenes/share.js')).text();
+    const net = ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'img.src']
+      .filter((n) => shareSrc.includes(n));
+    expect('jakoruutu ei lähetä mitään minnekään', net.length === 0, net.join(', ') || 'ei verkkokutsuja');
+
+    // Pisin mahdollinen kehu: kuusi kirjainta, seitsemän numeroa, linnake.
+    const widest = share.wrapText(
+      share.shareText({ name: 'ÄÄKKÖS', score: 9999999, world: 5, level: '5-F' }), 46,
+    );
+    const tooWide = widest.filter((l) => textWidth(l) > 300);
+    expect('pisin mahdollinen kehu rivittyy ruudun leveyteen',
+      tooWide.length === 0 && widest.length <= 3, `${widest.length} riviä, ${tooWide.length} yli`);
+
+    {
+      const c = document.createElement('canvas');
+      c.width = 320;
+      c.height = 240;
+      const g = c.getContext('2d');
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      const leaks = [];
+      let flat = 0;
+      for (const st of ['idle', 'busy', 'shared', 'copied', 'cancelled', 'manual']) {
+        for (const how of ['share', 'clipboard', 'none']) {
+          const scene = new share.ShareScene(game, null);
+          scene.how = how;
+          scene.status = st;
+          g.clearRect(0, 0, 320, 240);
+          scene.draw(g);
+          if (g.globalAlpha !== 1) leaks.push(`${how}/${st} alpha ${g.globalAlpha}`);
+          if (g.globalCompositeOperation !== 'source-over') leaks.push(`${how}/${st} ${g.globalCompositeOperation}`);
+          if (g.filter && g.filter !== 'none') leaks.push(`${how}/${st} filter ${g.filter}`);
+          const px = g.getImageData(0, 0, 320, 240).data;
+          const seen = new Set();
+          for (let p = 0; p < px.length; p += 4 * 37) {
+            seen.add((px[p] << 16) | (px[p + 1] << 8) | px[p + 2]);
+          }
+          if (seen.size < 5) flat++;
+        }
+      }
+      expect('jakoruudun piirto jättää canvasin tilan ennalleen ja piirtää jotain',
+        leaks.length === 0 && flat === 0, leaks.join(', ') || `${flat} tyhjää`);
+    }
+
+    unstub();
+    scores.clearScores();
+    reset();
+    game.toTitle();
+  }
+
   /* ------------------------------ telemetry ---------------------------- */
   {
     const tele = await import('/src/core/telemetry.js');

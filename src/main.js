@@ -11,6 +11,7 @@ import { InterludeScene, GameOverScene, EndingScene, VictoryScene } from './scen
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
+import { ShareScene } from './scenes/share.js';
 import { qualifies, GAME_VERSION } from './core/scores.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
@@ -91,6 +92,28 @@ class Game {
 
   toHighScores(highlight = -1) {
     this.setScene(new HighScoreScene(this, highlight));
+  }
+
+  /* -------------------------------- jako ------------------------------- */
+
+  /**
+   * Missä jakoruutu roikkuu: alkuruudussa ja pistetaulussa, ei muualla.
+   *
+   * Nämä kaksi ovat ne ruudut joissa pelaaja seisoo paikallaan ja päättää
+   * jotain, ja pistetaulu on lisäksi jokaisen pelatun kierroksen pääteasema —
+   * `finishRun` päätyy sinne aina, pääsi tulos listalle tai ei. Peli poikki
+   * -ruutu hylättiin tarkoituksella: se on valikko joka päättää säilyykö
+   * kierros, ja sitä painetaan jo nyt vahingossa. Kentästä ei voi jakaa
+   * ollenkaan, koska kohtauksen vaihto keskellä kenttää tappaisi juoksun.
+   */
+  canShareHere() {
+    return this.scene instanceof TitleScene || this.scene instanceof HighScoreScene;
+  }
+
+  /** Sama kohtausolio talteen, jotta paluu tuo pistetaulun korostuksineen. */
+  toShare() {
+    if (this.scene instanceof ShareScene) return;
+    this.setScene(new ShareScene(this, this.scene));
   }
 
   /* ------------------------------- attract ----------------------------- */
@@ -398,6 +421,17 @@ class Game {
     }
     if (this.flashTimer > 0) this.flashTimer--;
 
+    /* Jakoruutu avataan juoksunapilla eikä numerolla, ja se on puhelimen takia:
+     * numerorivi on siellä missä muutkin apunäppäimet, mutta puhelimessa ei ole
+     * numeroriviä. X on molemmissa kosketusmalleissa ja molemmissa
+     * käsijärjestyksissä, eikä alkuruutu tai pistetaulu lue sitä mihinkään —
+     * kentässä juoksu on juoksu, ja siellä tätä ei ole. */
+    if (this.canShareHere() && Input.pressed.run) {
+      Input.consume('run');
+      Sfx.play('select');
+      this.toShare();
+    }
+
     const pausable = this.scene instanceof LevelScene;
     if (pausable && Input.pressed.start) {
       Input.consume('start');
@@ -420,6 +454,12 @@ class Game {
       drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
       drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
         { color: '#8890b0', align: 'center' });
+    }
+    /* Ominaisuus jota kukaan ei löydä ei ole olemassa, ja tämän koko tarkoitus
+     * on että linkki lähtee eteenpäin. Vihje on siksi niillä kahdella ruudulla
+     * joista jako aukeaa, yläkulmassa jossa ei ole muuta. */
+    if (this.canShareHere()) {
+      drawText(ctx, 'X KERRO KAVERILLE', W - 4, 2, { color: '#6a7a9a', align: 'right' });
     }
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });
