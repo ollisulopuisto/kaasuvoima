@@ -12,6 +12,7 @@ import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
+import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 
 export const VIEW_W = 320;
@@ -139,64 +140,30 @@ const TRANSIT_HOLD = 5;       // the beat where nothing is on screen
 const TRANSIT_OUT = 13;       // and back out at the far end
 
 /*
- * How far above the head a ceiling pipe's mouth may be and still be enterable.
+ * How far above the ground a ceiling pipe's mouth may be and still be enterable.
  *
  * Pressing **down** needs no reach: gravity holds the feet against the tile
  * they are standing on, so the mouth is exactly the tile under the feet.
  * Pressing **up** has no such contact — the player stands on the floor and the
- * mouth hangs from the ceiling some pixels above the head, and how many depends
- * on the power level, because every body is a different height. One tile of
- * reach makes the rule "stand under the mouth", which is what it looks like,
- * instead of "be exactly this tall".
+ * mouth hangs from the ceiling some pixels above the head.
+ *
+ * **Measured from the feet, not from the head, and that is the whole point.**
+ * The reach used to be one tile over the head, which reads like "stand under
+ * the mouth" and is not: the six bodies are 16, 26, 30, 34, 38 and 43 px tall,
+ * so with the floor and the mouth both fixed, the gap over the head is a
+ * different number for every power level, and a single tile of slack cannot
+ * span 27 px of it. Measured on the shipped rooms: exactly three of the six
+ * sizes could enter any given ceiling pipe, and which three depended on how
+ * high the mouth was hung. That is "be exactly this tall" wearing the other
+ * rule's comment.
+ *
+ * From the feet it is one number for everybody. Three tiles is the tallest
+ * body (43 px, 2.7 tiles) rounded up to a whole row, so the rule is: the mouth
+ * hangs no more than a body-height above the ground you are standing on, and
+ * it is above your head. Every size then enters the same pipe from the same
+ * floor — which is what a pipe in the ceiling looks like it should do.
  */
-const WARP_UP_REACH = TILE;
-
-/*
- * **TEMPORARY.** The old, wrong upward warp: pressing up while standing *on
- * top of* a pipe.
- *
- * The rule now is the genre's — the direction you travel matches the
- * orientation of the mouth you enter — so an upward warp reads the tiles above
- * the head and a pipe standing on the floor is a downward pipe only. Every
- * upward warp shipped in `src/data/` is still drawn the old way, and turning
- * this off before that content changes seals the player inside a bonus room,
- * which is the one thing `secrets.js` exists to prevent. So the old behaviour
- * stays as a fallback, tried only after the ceiling test has failed.
- *
- * **What has to change before it can go**, all of it in `src/data/`, which is
- * not this file's to edit — every one of these is a mouth that is pressed *up*
- * on today and would become unreachable, and the first three would seal the
- * player in:
- *
- *   - `secrets.js` `cave_room`, the exit at row 12 cols 26-27. It has to hang
- *     from the ceiling instead: mouth `()` on the row directly above the head
- *     of a player standing on row 13, with `{}` above that. Used by 1-2 and
- *     3-2, so one edit fixes both.
- *   - `desert.js` `tomb_cave`, the exit at row 11 cols 11-12 with `{}` at row
- *     12 — the same change, and the pipe is already two rows tall, so it is
- *     mostly a matter of turning it upside down.
- *   - `factory.js` `fac_cellar`, the exit at row 12 cols 12-13.
- *   - `factory.js` `fac_duct`, the *entry* at row 11 cols 5-6. This one is
- *     used twice in 4-2 and only the second (column 240, up to `fac_loft`) is
- *     an upward warp, so the chunk has to become two — a floor duct going down
- *     and a ceiling duct going up. That also gives up the "the same chunk for
- *     both directions, and nothing says which" idea the chunk's own comment
- *     argues for; the honest replacement is that a duct in the ceiling and a
- *     duct in the floor are already two different things to look at.
- *   - `fac_loft`'s exit (row 12 cols 12-13) needs **no** change: the loft is
- *     the band above the route, so leaving it is a downward warp and it is
- *     already a floor pipe.
- *
- * Two things outside this file will also want attention when that happens:
- * `src/data/rules.js` (`warpMouths` finds "a run of `()` with air above it"
- * and `checkBonusBand` tries both directions from it, so it would still call
- * a floor pipe a legal way out), and `drawTile`'s pipe mouth, which is drawn
- * mouth-up whichever way round the tile is used.
- *
- * It is an object rather than a `const` so `tools/verify.mjs` can switch it off
- * and prove the real rule; nothing in the game writes to it.
- */
-export const WARP_COMPAT = { upFromFloor: true };
+const WARP_UP_REACH = 3 * TILE;
 
 /*
  * The fortress door, from the boss falling over to the level ending.
@@ -605,9 +572,11 @@ export class LevelScene {
    * of a pipe and pressing up, which is the genre's rule backwards and reads,
    * correctly, as a bug: the pipe you are standing on is capped at the bottom.
    *
-   * `WARP_COMPAT.upFromFloor` is the bridge for content that still relies on
-   * the old reading; it is a fallback and not an alternative, so a ceiling pipe
-   * always wins where there is one.
+   * There is no compatibility path left. `WARP_COMPAT.upFromFloor` carried the
+   * shipped rooms while their exits still stood on the floor; every upward warp
+   * in the game hangs from a ceiling now (`cave_room`, `tomb_cave`,
+   * `fac_cellar`, `fac_duct_up`), and `fac_loft`'s exit never needed to move
+   * because leaving a loft is a downward journey.
    *
    * Two things can still refuse: rock where you would arrive, and a band with
    * no ground under the arrival. The second is what stops the surface pipe from
@@ -620,29 +589,23 @@ export class LevelScene {
     const dir = input.held.down ? 1 : input.held.up ? -1 : 0;
     if (!dir) return;
 
-    const under = Math.floor((p.y + p.h) / TILE);
-    /* Which way the body slides out of sight, and the world row it disappears
-     * behind. They are the travel direction for an honest pipe, and they are
-     * not for the compatibility case: a pipe standing on the floor is entered
-     * downwards through its mouth even when the far end is a band up, because
-     * that is the only edge there is to hide behind. */
-    let slide = dir;
+    /** The world edge the body disappears behind: the mouth's own near lip. */
     let hide;
     if (dir > 0) {
+      const under = Math.floor((p.y + p.h) / TILE);
       if (!this.warpMouthAt(under)) return;
       hide = under * TILE;                       // the mouth's top edge
     } else {
+      /* Every row that lies wholly above the head and whose lower lip is within
+       * reach of the ground being stood on. The lowest lip wins: the mouth of a
+       * hanging pipe is its bottom tile and everything above that is shaft. See
+       * WARP_UP_REACH for why the reach is measured from the feet. */
       let mouth = -1;
-      for (let ty = Math.floor((p.y - WARP_UP_REACH) / TILE);
-        ty <= Math.floor((p.y - 1) / TILE); ty++) {
-        if (ty >= 0 && this.warpMouthAt(ty)) mouth = ty;
-      }
-      if (mouth >= 0) {
-        hide = (mouth + 1) * TILE;               // the ceiling mouth's bottom edge
-      } else if (WARP_COMPAT.upFromFloor && this.warpMouthAt(under)) {
-        slide = 1;
-        hide = under * TILE;
-      } else return;
+      const first = Math.max(0, Math.ceil((p.y + p.h - WARP_UP_REACH) / TILE) - 1);
+      const last = Math.floor(p.y / TILE) - 1;
+      for (let ty = first; ty <= last; ty++) if (this.warpMouthAt(ty)) mouth = ty;
+      if (mouth < 0) return;
+      hide = (mouth + 1) * TILE;                 // the ceiling mouth's bottom edge
     }
 
     const shift = dir * bands.rows * TILE;
@@ -654,13 +617,18 @@ export class LevelScene {
     p.beginTransit({
       kind: 'warp',
       axis: 'y',
-      slide: slide * (p.h + 4),
+      slide: dir * (p.h + 4),
       out: dir * (p.h + 4),
       arriveX: p.x,
       arriveY: p.y + shift,
       hide,
-      hideDir: slide,
+      hideDir: dir,
     });
+    /* Arriving in a hidden band *is* finding the secret, so the find is written
+     * here, where the journey is decided, rather than by something watching the
+     * scene from outside. `noteSecret` filters against the level's own key
+     * list, so this writes nothing in a level that has no hidden band. */
+    this.noteBand(p.y + shift + p.h);
     /* Going in gets the falling sweep and coming out gets the rising one, so
      * the two ends of the journey do not sound like the same event happening
      * twice (DESIGN.md §8). */
@@ -818,10 +786,38 @@ export class LevelScene {
 
   /* ------------------------------- bumping ----------------------------- */
 
+  /**
+   * Records having found a hidden band, from the height of a pair of feet.
+   *
+   * Standing in the room is the find — not touching the vine, which you can do
+   * by walking past it, and not clearing the level. `noteSecret` filters
+   * against the level's own keys, so this writes nothing in a level with only
+   * one band.
+   */
+  noteBand(feetY) {
+    const bands = this.def.bands;
+    if (!bands || !this.game.state) return;
+    const band = Math.floor((feetY - 1) / (bands.rows * TILE));
+    if (band <= 0) noteSecret(this.game.state, this.id, SKY);
+    else if (band >= 2) noteSecret(this.game.state, this.id, CAVE);
+  }
+
+  /**
+   * A block that has been hit.
+   *
+   * The find is written where the block is spent, and the key is built from the
+   * **raw** tile rather than `tileAt`: while a switch is running, a brick reads
+   * as a coin, and a secret recorded under the character the player happened to
+   * see would not match the level's own key list. A block that hides nothing
+   * writes nothing — `noteSecret` filters — so this does not have to know which
+   * bricks are the interesting ones.
+   */
   bumpTile(tx, ty, player) {
     const ch = this.tileAt(tx, ty);
     const meta = info(ch);
     if (!meta.bumpable) return;
+    const raw = this.rawTileAt(tx, ty);
+    const found = () => noteSecret(this.game.state, this.id, tileKey(raw, tx, ty));
 
     const key = `${tx},${ty}`;
     if (this.bumps.has(key)) return;
@@ -830,6 +826,7 @@ export class LevelScene {
 
     if (meta.question) {
       this.setTile(tx, ty, T.USED);
+      found();
       if (ch === T.QCOIN) {
         this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
         this.addCoin(tx * TILE + 8, ty * TILE);
@@ -849,6 +846,7 @@ export class LevelScene {
         // smashes, whatever size you are, so the reward cannot be lost by
         // being too strong.
         this.setTile(tx, ty, T.USED);
+        found();
         if (secret === 'coin') {
           this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
           this.addCoin(tx * TILE + 8, ty * TILE);
@@ -869,6 +867,7 @@ export class LevelScene {
 
     if (meta.switch) {
       this.setTile(tx, ty, T.USED);
+      found();
       this.startSwitch();
       return;
     }
@@ -953,6 +952,11 @@ export class LevelScene {
     this.updateCrumbles();
     this.updateSwitch();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
+    /* Feet, not head: bumping your head into the sky band is not arriving. The
+     * pipe records its own arrival the moment the journey is committed, but a
+     * beanstalk has no such moment — climbing into the sky is a position and
+     * not an event, so the position is what is asked, every frame. */
+    if (this.player) this.noteBand(this.player.y + this.player.h);
   }
 
   /**

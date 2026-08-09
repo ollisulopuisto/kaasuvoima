@@ -34,23 +34,32 @@ export const SECRET_CHUNKS = {
     8: '          ooooo',
     9: '       ---------',
   }, 6, 6, 14)),
-  /* The cave band: a sealed room under the warp pipe. The exit pipe stands one
-   * tile lower than the entry one, which is exactly the height difference that
-   * puts you back on the surface standing on the floor. */
+  /* The cave band: a sealed room under the warp pipe.
+   *
+   * **The exit hangs from the ceiling**, because the way out of here is up and
+   * the direction you travel has to match the mouth you enter (`tryWarp`). It
+   * used to stand on the floor and be pressed *up* on, which is the genre's
+   * rule backwards — you would be climbing in through the capped end.
+   *
+   * Row 9 is not a taste: the mouth's lower lip has to be within a body-height
+   * of the floor at row 13 and still clear the head of the tallest power level
+   * (21x43 px, so three tile rows). Three empty rows — 10, 11, 12 — is the one
+   * height that both admits the biggest body and stays in reach of the
+   * smallest. See `WARP_UP_REACH` in `src/scenes/level.js`.
+   *
+   * The exit also sits where the *surface* above it is clear, not where it
+   * looks tidiest down here: a brick row on the surface two columns over is
+   * enough to make the warp refuse, and the biggest player would be sealed in a
+   * bonus room with no way out. */
   cave_room: ck(32, {
     5: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-    6: ' X                            X',
-    7: ' X                            X',
-    8: ' X                            X',
-    9: ' X        ?B!B?               X',
+    6: ' X                        {}  X',
+    7: ' X                        {}  X',
+    8: ' X                        {}  X',
+    9: ' X        ?B!B?           ()  X',
     10: ' X                            X',
     11: ' X        oooooooooo          X',
-    /* The exit sits where the *surface* above it is clear, not where it looks
-     * tidiest down here. The tallest power level is 21x43 px — three tiles wide
-     * and nearly three tall — so a brick row on the surface two columns over is
-     * enough to make the warp refuse, and the biggest player would be sealed in
-     * a bonus room with no way out. */
-    12: ' X        oooooooooo      ()  X',
+    12: ' X        oooooooooo          X',
     13: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
     14: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   }),

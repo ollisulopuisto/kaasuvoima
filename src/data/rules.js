@@ -249,24 +249,55 @@ function checkWalls(floor, from, to, reach, problems, where) {
 /* --------------------------- warps and vines ------------------------------ */
 
 /**
- * Every warp mouth in the grid: a run of `()` with air above it, which is what
- * the player can stand on and press down or up over. Coordinates are whole-grid
- * rows, because a warp is the one thing that crosses bands.
+ * Every warp a level offers, as a mouth **and the one direction it can be
+ * travelled in**. Coordinates are whole-grid rows, because a warp is the one
+ * thing that crosses bands.
+ *
+ * The direction is not a property of the level's intent, it is a property of
+ * the picture, and `LevelScene.tryWarp` reads it the same way: you enter a
+ * mouth facing the way you are going. So a run of `()` with air above it is a
+ * pipe standing on the floor — you stand on it and press **down** — and a run
+ * with air below it hangs from a ceiling and is entered pressing **up** from
+ * underneath. This used to return the mouths alone and let the caller try both
+ * ways from each, which blessed every floor pipe as a way out of a bonus room
+ * upwards. The engine has refused that since the direction rule landed; this is
+ * the validator catching up, and the gap mattered — it is exactly the check
+ * that exists to stop somebody being sealed in.
+ *
+ * A lone `()` with air on both sides is genuinely both, and is returned twice,
+ * because that is what the engine would let you do with it.
  */
 function warpMouths(rows, w) {
   const mouths = [];
+  const clear = (y, x0, x1) => {
+    if (y < 0 || y >= rows.length) return true;
+    for (let x = x0; x <= x1; x++) if (SOLID.has(rows[y][x])) return false;
+    return true;
+  };
   for (let y = 0; y < rows.length; y++) {
     for (let x = 0; x < w; x++) {
       if (!WARP.has(rows[y][x])) continue;
       if (x > 0 && WARP.has(rows[y][x - 1])) continue;
       let end = x;
       while (end + 1 < w && WARP.has(rows[y][end + 1])) end++;
-      const above = y > 0 ? rows[y - 1].slice(x, end + 1) : ' '.repeat(end - x + 1);
-      if (![...above].some((ch) => SOLID.has(ch))) mouths.push({ x0: x, x1: end, y });
+      if (clear(y - 1, x, end)) mouths.push({ x0: x, x1: end, y, dir: 1 });
+      if (clear(y + 1, x, end)) mouths.push({ x0: x, x1: end, y, dir: -1 });
     }
   }
   return mouths;
 }
+
+/**
+ * The row a body's feet are on while it uses a mouth.
+ *
+ * Standing **on** a floor pipe, that is the mouth's own row. Standing **under**
+ * a ceiling pipe it is HEAD + 1 rows below: the tallest body fills exactly HEAD
+ * rows, and `WARP_UP_REACH` in the engine is HEAD tiles measured from the feet,
+ * so the floor that every size can use the mouth from is the one directly under
+ * the space that body occupies. It is the same number from both directions,
+ * which is why a room's exit is built to it.
+ */
+const standRow = (mouth) => (mouth.dir > 0 ? mouth.y : mouth.y + HEAD + 1);
 
 /**
  * The engine's own two conditions for a warp, as `LevelScene.tryWarp` states
@@ -277,8 +308,8 @@ function warpMouths(rows, w) {
  *
  * @param {number} head how many rows the body needs — HEAD for the tallest
  */
-function warpLands(rows, w, mouth, dir, head) {
-  const feet = mouth.y + dir * ROWS;
+function warpLands(rows, w, mouth, head) {
+  const feet = standRow(mouth) + mouth.dir * ROWS;
   if (feet < 0 || feet >= rows.length) return null;
   if (feet - head < 0) return null;
   for (let y = feet - head; y < feet; y++) {
@@ -364,18 +395,16 @@ function checkBonusBand(rows, w, band, b, routeIndex, mouths, seams, reach, prob
   const seeds = [];
 
   for (const m of mouths) {
-    if (Math.floor(m.y / ROWS) === b) continue;
-    for (const dir of [1, -1]) {
-      const landing = warpLands(rows, w, m, dir, SMALL_HEAD);
-      if (!landing || landing.band !== b) continue;
-      const fy = landing.feet - b * ROWS;
-      arrivals.push({ x0: m.x0, x1: m.x1 });
-      /* Seeded at the smallest body, to match the size the way in was tested
-       * at. A taller box would poke through a low ceiling and let the flood
-       * fill out of the very room it is supposed to be measuring. */
-      for (let y = Math.max(0, fy - SMALL_HEAD); y <= Math.min(ROWS - 1, fy); y++) {
-        for (let x = m.x0; x <= m.x1; x++) seeds.push([x, y]);
-      }
+    if (Math.floor(standRow(m) / ROWS) === b) continue;
+    const landing = warpLands(rows, w, m, SMALL_HEAD);
+    if (!landing || landing.band !== b) continue;
+    const fy = landing.feet - b * ROWS;
+    arrivals.push({ x0: m.x0, x1: m.x1 });
+    /* Seeded at the smallest body, to match the size the way in was tested
+     * at. A taller box would poke through a low ceiling and let the flood
+     * fill out of the very room it is supposed to be measuring. */
+    for (let y = Math.max(0, fy - SMALL_HEAD); y <= Math.min(ROWS - 1, fy); y++) {
+      for (let x = m.x0; x <= m.x1; x++) seeds.push([x, y]);
     }
   }
   for (const s of seams) {
@@ -392,18 +421,44 @@ function checkBonusBand(rows, w, band, b, routeIndex, mouths, seams, reach, prob
   const air = airFrom(band, w, seeds);
   const inAir = (x, y) => air.has(y * w + x);
 
-  /* A warp mouth in this band counts as a way out when the air you would stand
-   * in above it is air you can actually be in, and the warp itself is legal for
-   * the tallest body. */
+  /* A warp counts as a way out when the tallest body can be in the place it is
+   * entered from, and the journey itself is legal for that body.
+   *
+   * "The place it is entered from" is the one thing that differs by direction,
+   * and it is the direction rule again: a floor pipe is entered from the air
+   * directly *above* it, a ceiling pipe from the HEAD rows of air *below* it
+   * with something under them to stand on. Asking that of the flood fill is
+   * what makes this a way out rather than a picture of one — the air has to be
+   * air the arrival can actually reach. */
   const exits = [];
   for (const m of mouths) {
-    if (Math.floor(m.y / ROWS) !== b) continue;
+    const feet = standRow(m);
+    if (Math.floor(feet / ROWS) !== b) continue;
     const my = m.y - b * ROWS;
+    const fy = feet - b * ROWS;
     let standable = false;
-    for (let x = m.x0; x <= m.x1; x++) if (my > 0 && inAir(x, my - 1)) standable = true;
+    if (m.dir > 0) {
+      for (let x = m.x0; x <= m.x1; x++) if (my > 0 && inAir(x, my - 1)) standable = true;
+    } else if (fy < ROWS) {
+      /* Every row the body would fill has to be reachable air, and the row the
+       * feet are on has to hold. Otherwise the mouth is a mouth hanging over a
+       * pit, or over a floor too far below to reach it from. */
+      standable = true;
+      for (let y = my + 1; y < fy; y++) {
+        let any = false;
+        for (let x = m.x0; x <= m.x1; x++) if (inAir(x, y)) any = true;
+        if (!any) standable = false;
+      }
+      let footing = false;
+      for (let x = m.x0; x <= m.x1; x++) {
+        const ch = band[fy][x];
+        if (SOLID.has(ch) || SEMI.has(ch)) footing = true;
+      }
+      if (!footing) standable = false;
+    }
     if (!standable) continue;
-    const out = [1, -1].map((dir) => warpLands(rows, w, m, dir, HEAD)).find((l) => l && l.band !== b);
-    if (out) exits.push({ x0: m.x0, x1: m.x1 });
+    const out = warpLands(rows, w, m, HEAD);
+    if (out && out.band !== b) exits.push({ x0: m.x0, x1: m.x1 });
   }
   const vineOut = seams.some((s) => (s.upper === b || s.upper + 1 === b)
     && [...Array(ROWS).keys()].some((y) => band[y][s.x] === VINE && inAir(s.x, y)));
