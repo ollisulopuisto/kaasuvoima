@@ -70,7 +70,18 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    kuin säveltäjän omassa "Fossiles"-osassa. Ehdot ovat
    [DESIGN.md](DESIGN.md):n kohdassa 1 b: sävelet kirjoitetaan käsin
    `TRACKS`-tauluun, ei äänitettä eikä nuottilaitosta, ja lähde nimetään.
-6. **Salaisuuksien löydettävyys** — kolmesta osasta yksi tehty:
+6. **Luolakaistan oma musiikki:** Griegin *Vuorenkuninkaan luolassa* (1875,
+   vapautui 1.1.1978). Näistä kolmesta ainoa jolle on käyttö **jo tänään** —
+   piilokaistat ovat olemassa (`cave_room`, `fac_cellar`, `tomb_cave`) eivätkä
+   ne kuulosta miltään erityiseltä. Teos kiihtyy, eli se sanoo "älä jää tänne"
+   ilman että sitä kirjoitetaan ruudulle. Tekotapa: uusi `cave`-raita
+   `TRACKS`-tauluun ja vaihto kaistan mukaan siellä missä `noteSecret` jo
+   päättelee kaistan jaloista (`level.js` ~rivi 913). **Kysymys joka pitää
+   ratkaista ensin:** kaistalle saapuminen *on* jo salaisuuden löytyminen ja
+   sillä on merkkinsä — musiikinvaihto ei saa olla toinen samaa sanova merkki
+   (§8), vaan sen pitää sanoa eri asia: löytyminen on tapahtuma, musiikki on
+   paikka. *Yö Autiovuorella* odottaa viimeistä linnaketta.
+7. **Salaisuuksien löydettävyys** — kolmesta osasta yksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
    löytynyt, **ei koskaan missä** (v26.08.09.17). Jäljellä: demo näyttää
    tempun, ja kolikkojonot osoittavat.

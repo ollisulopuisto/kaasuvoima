@@ -53,7 +53,15 @@ Käytetty sävelmistö, tässä on koko lista:
 
 | teos | säveltäjä | vapautui | missä |
 | --- | --- | --- | --- |
+| *Vuorenkuninkaan luolassa* (Peer Gynt, 1875) | Edvard Grieg, k. 1907 | 1.1.1978 | luolakaista (`cave`) |
 | *Danse macabre* op. 40 (1874) | Camille Saint-Saëns, k. 1921 | 1.1.1992 | luumaailma (tulossa) |
+| *Yö Autiovuorella* (1867), Rimski-Korsakovin sovitus 1886 | Modest Mussorgski, k. 1881; N. Rimski-Korsakov, k. 1908 | 1.1.1952 / 1.1.1979 | viimeinen linnake (tulossa) |
+
+**Kaksi säveltäjää yhdellä rivillä ei ole huolimattomuutta.** *Yö
+Autiovuorella* tunnetaan lähes yksinomaan Rimski-Korsakovin sovituksena, ja
+**sovitus on oma teoksensa omine suoja-aikoineen** — juuri se on se kohta jossa
+"tämähän on vanhaa musiikkia" menee useimmiten pieleen. Molemmat ovat vapaita,
+mutta se on kaksi tarkistusta eikä yksi, ja siksi molemmat lukevat tässä.
 
 **Varoitus joka kannattaa lukea ennen kuin innostuu:** Jean Sibelius kuoli
 20.9.1957, joten hänen teoksensa vapautuvat vasta **1.1.2028**. *Finlandia* ja
