@@ -894,7 +894,20 @@ export class LevelScene {
       if (!overlaps(p.box, e.box)) continue;
 
       const stomping = fallVy > 0 && p.y + p.h - fallVy <= e.y + e.h * 0.6;
-      if (stomping && e.stompable) {
+
+      /*
+       * Spines beat the stomp, and they beat it the way the floor spikes do: a
+       * hit and a shove back off the points, never a stomp that quietly did
+       * nothing. The star is deliberately not covered here — it falls through
+       * to the shell hit below, because protection from the inhabitants is
+       * exactly what it promises.
+       */
+      if (stomping && e.spiky && p.star <= 0) {
+        if (p.hurt('spike')) p.vy = -3;
+        continue;
+      }
+
+      if (stomping && e.stompable && !e.spiky) {
         if (e.stomp()) {
           p.bounce(this.game.input.held.jump);
           Sfx.play('stomp');

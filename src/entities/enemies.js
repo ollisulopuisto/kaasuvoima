@@ -379,6 +379,53 @@ export class Flyer extends Enemy {
 }
 
 /**
+ * Piikkiukko — a walker with a back full of spines. Jumping on it is the one
+ * thing that does not work; a fart ball, a tail whack and a sliding shell all
+ * still do, so it is an enemy that changes which tool you reach for rather than
+ * a wall.
+ *
+ * Careful about ledges, like the shell walkers: an enemy you are not allowed to
+ * stomp is one you have to walk around, and one that keeps throwing itself off
+ * the platform it was guarding does not guard anything.
+ */
+export class SpikeGuy extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    // Slower than a walker. It is already the harder one to deal with; making
+    // it fast as well would just make it a thing that catches you from behind.
+    this.speed = 0.4;
+    this.score = 200;
+  }
+
+  get spiky() { return true; }
+
+  get bubbleable() { return true; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
+    this.vx = this.speed * this.facing;
+    if (moveX(this, this.level)) this.facing *= -1;
+    if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
+      this.facing *= -1;
+    }
+    applyGravity(this, 0.9);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  draw(ctx) {
+    const frame = Math.floor(this.tick / 2);
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawSpikeGuy(ctx, this.x, this.y, frame, this.facing));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawSpikeGuy(g, this.x, this.y, frame, this.facing));
+  }
+}
+
+/**
  * The one walking-speed enemy a fart ball still kills outright. It is bolted to
  * a pipe — box, drawing and state machine are all measured from the pipe mouth
  * — and a plant that floated away in a bubble would leave that pipe harmless
@@ -750,6 +797,28 @@ export class Shockwave extends Enemy {
   }
 }
 
+/*
+ * The boss's spine cycle, in frames at 60 Hz. Three beats, always in this
+ * order, never random:
+ *
+ *   open (stompable) -> telegraph (stompable, spines rising, sound) -> spiky
+ *
+ * The telegraph is the whole reason this is a pattern and not a trap. It is
+ * still stompable while the spines are coming up, so a jump started on the last
+ * open frame is not punished for a decision that was correct when it was made.
+ *
+ * What tightens as the boss loses health is the length of the open window, and
+ * nothing else: same beats, same order, same warning, less room. A cycle that
+ * changed shape when you hurt it would have to be learned twice.
+ */
+const SPIKE_TELEGRAPH = 48;
+const SPIKE_ON = 132;
+const SPIKE_OPEN = 180;
+const SPIKE_OPEN_STEP = 24;
+const SPIKE_OPEN_MIN = 120;
+/** The spines drop out of sight fast, so visible points always mean danger. */
+const SPIKE_RETRACT = 8;
+
 /**
  * Fortress boss. `variant` picks the move set:
  *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates.
@@ -773,9 +842,48 @@ export class Boss extends Enemy {
     this.baseH = 32;
     this.spawnX = x;
     this.spawnY = y;
+    this.maxHp = this.hp;
+    // Starts open, so the first thing the player ever sees this boss do is the
+    // thing they are supposed to do back.
+    this.spikePhase = 'open';
+    this.spikeTimer = SPIKE_OPEN;
   }
 
   get giant() { return this.variant === 3; }
+
+  /** How long the vulnerable window is at the current health. */
+  get openFrames() {
+    return Math.max(SPIKE_OPEN_MIN, SPIKE_OPEN - (this.maxHp - this.hp) * SPIKE_OPEN_STEP);
+  }
+
+  get spiky() { return this.spikePhase === 'spiky'; }
+
+  /** 0..1 for the drawing: how far the spines have pushed through. */
+  get spineOut() {
+    if (this.spikePhase === 'spiky') return 1;
+    if (this.spikePhase === 'telegraph') return 1 - this.spikeTimer / SPIKE_TELEGRAPH;
+    // Clamped because a hit landed mid-window shortens `openFrames` under the
+    // timer that is already running.
+    const since = this.openFrames - this.spikeTimer;
+    return Math.max(0, Math.min(1, 1 - since / SPIKE_RETRACT));
+  }
+
+  updateSpikes() {
+    if (--this.spikeTimer > 0) return;
+    if (this.spikePhase === 'open') {
+      this.spikePhase = 'telegraph';
+      this.spikeTimer = SPIKE_TELEGRAPH;
+      Sfx.play('spikes');
+      this.level.shake(1);
+    } else if (this.spikePhase === 'telegraph') {
+      this.spikePhase = 'spiky';
+      this.spikeTimer = SPIKE_ON;
+    } else {
+      this.spikePhase = 'open';
+      this.spikeTimer = this.openFrames;
+      Sfx.play('pipe');
+    }
+  }
 
   applyScale() {
     const bottom = this.y + this.h;
@@ -799,7 +907,18 @@ export class Boss extends Enemy {
       this.applyScale();
     }
 
-    if (player && this.charging <= 0) this.facing = player.cx < this.cx ? -1 : 1;
+    this.updateSpikes();
+
+    /*
+     * While the spines are out it stops hunting and just barrels along, turning
+     * at walls. That is not decoration: a boss that chases with points up can
+     * pin a powerless player against the end of the arena with nothing to do
+     * about it, and the promise is that this fight is winnable at the smallest
+     * size. Blind, it can always be walked around.
+     */
+    if (player && this.charging <= 0 && !this.spiky) {
+      this.facing = player.cx < this.cx ? -1 : 1;
+    }
 
     if (this.charging > 0) {
       this.charging--;
@@ -828,7 +947,7 @@ export class Boss extends Enemy {
       this.jumpTimer = (this.giant ? 60 : 80) + Math.floor(Math.random() * 60);
       Sfx.play('boss');
     }
-    if (this.variant >= 2 && this.onGround && --this.chargeTimer <= 0) {
+    if (this.variant >= 2 && this.onGround && !this.spiky && --this.chargeTimer <= 0) {
       this.charging = 45;
       this.chargeTimer = 200 + Math.floor(Math.random() * 120);
     }
@@ -892,7 +1011,8 @@ export class Boss extends Enemy {
         drawBoss(ctx, this.x - 1, this.y, frame, this.facing, false, this.variant, this.scale));
       return;
     }
-    drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0, this.variant, this.scale);
+    drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0, this.variant,
+      this.scale, this.spineOut);
   }
 }
 
@@ -989,6 +1109,7 @@ export const ENEMY_CHARS = {
   p: (level, tx, ty) => new Plant(level, tx * TILE + 8, (ty + 1) * TILE - 32),
   r: (level, tx, ty) => new StinkCloud(level, tx * TILE, ty * TILE),
   c: (level, tx, ty) => new CorkGuy(level, tx * TILE + 1, ty * TILE),
+  x: (level, tx, ty) => new SpikeGuy(level, tx * TILE, ty * TILE),
   A: (level, tx, ty) => new AngrySun(level, tx * TILE, ty * TILE),
   H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
   b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),

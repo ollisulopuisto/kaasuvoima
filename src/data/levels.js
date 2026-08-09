@@ -100,7 +100,7 @@ const LEVEL_DEFS = {
   '3-1': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
-      'start', 'flat', 'power', 'walkers', 'pit_s', 'qrow',
+      'start', 'spike_walk', 'power', 'walkers', 'pit_s', 'qrow',
       'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'pit_twin',
       'spikes', 'cork_gap', 'sky_run', 'pit_plat', 'power_hi', 'plat_steps',
       'steps_up', 'run_up', 'goal', 'goal_end',
@@ -152,7 +152,7 @@ const LEVEL_DEFS = {
   '4-3': {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
-      'start', 'fac_floor', 'fort_power', 'fac_vents', 'fac_belt', 'fac_shaft',
+      'start', 'spike_walk', 'fort_power', 'fac_vents', 'fac_belt', 'fac_shaft',
       'heartburn_pair', 'cloud_run', 'fac_gap', 'fac_press', 'corks', 'fac_belt',
       'heartburn', 'fac_shaft', 'cloud_run', 'fac_vents', 'cork_gap', 'steps_up',
       'run_up', 'goal', 'goal_end',

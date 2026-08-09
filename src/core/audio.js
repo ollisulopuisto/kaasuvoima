@@ -375,6 +375,13 @@ const SFX = {
     tone({ type: 'square', from: 260, to: 90, dur: 0.1, gain: 0.14, hold: 0.2 });
   },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
+  spikes: () => {
+    // Bone sliding out of a back. Rising, so it reads as a warning rather than
+    // as something that has already happened, and scratchy enough to be heard
+    // over the fortress track.
+    tone({ type: 'sawtooth', from: 140, to: 720, dur: 0.42, gain: 0.16, hold: 0.35, detune: 11 });
+    noise({ dur: 0.4, from: 600, to: 3000, q: 7, gain: 0.12, attack: 0.06 });
+  },
   pop: () => {
     // A bubble skin letting go. Nothing already here is a pop: `cork` is a bung
     // going in and everything else is a fart, and this one fires often enough

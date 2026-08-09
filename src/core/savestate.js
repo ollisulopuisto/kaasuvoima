@@ -1,7 +1,7 @@
 import { Player } from '../entities/player.js';
 import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
-  Moon,
+  Moon, SpikeGuy,
 } from '../entities/enemies.js';
 import { Item, FartBall } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
@@ -14,7 +14,8 @@ import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
  */
 const REGISTRY = {
   Player, Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn,
-  Shockwave, Boss, AngrySun, Moon, Item, FartBall, Puff, ScorePop, BrickPiece, CoinPop,
+  Shockwave, Boss, AngrySun, Moon, SpikeGuy, Item, FartBall, Puff, ScorePop, BrickPiece,
+  CoinPop,
 };
 
 export const SLOT_COUNT = 3;

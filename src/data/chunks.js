@@ -258,6 +258,16 @@ export const CHUNKS = {
     14: '####################',
   }),
 
+  /**
+   * The spiky walker, on open flat ground on purpose.
+   *
+   * The lesson is "reach for another tool", not "die to a surprise": there is
+   * room to back off, nothing to fall into, and a power block earlier in the
+   * level answers the question. Pairing it with a forced jump or a narrow ledge
+   * would teach the wrong thing.
+   */
+  spike_walk: ck(16, { 9: '   o o o', 12: '        x', 13: G, 14: G }),
+
   /* ----------------------------- platforms ----------------------------- */
   plat_hi: ck(16, {
     5: '     o o',

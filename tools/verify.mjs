@@ -939,6 +939,196 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* --------------------------- piikit / spines -------------------------- */
+  {
+    const E = await import('/src/entities/enemies.js');
+    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F'];
+
+    const arena = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 6; f++) s.update(i);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      return s;
+    };
+    const place = (s, Ctor) => {
+      const groundY = s.player.y + s.player.h;
+      const e = new Ctor(s, s.player.cx - 8, groundY - 16);
+      e.active = true; e.alwaysActive = true; e.vx = 0;
+      s.entities.push(e);
+      return e;
+    };
+    const dropOn = (s, e) => {
+      const p = s.player;
+      p.x = e.cx - p.w / 2;
+      p.y = e.y - p.h + 4;
+      p.vy = 3; p.invuln = 0; p.frozen = 0;
+      s.collisions();
+    };
+
+    expect("ENEMY_CHARS has the spiky enemy on 'x'",
+      !!E.ENEMY_CHARS.x && E.ENEMY_CHARS.x(null, 0, 0) instanceof E.SpikeGuy);
+
+    {
+      const s = arena({ type: 'shroom', level: 1 });
+      const e = place(s, E.SpikeGuy);
+      dropOn(s, e);
+      expect('stomping a spiky enemy hurts the player and leaves it standing',
+        s.player.powerLevel === 0 && !e.remove && !e.dying, `power ${s.player.powerLevel}`);
+    }
+    {
+      const s = arena({ type: 'leaf', level: 3 });
+      const a = place(s, E.SpikeGuy);
+      a.hitByProjectile(1);
+      const bubbled = a.bubbled;
+      a.popBubble(1);
+      const b = place(arena({ type: 'leaf', level: 3 }), E.SpikeGuy);
+      b.hitByTail(1);
+      const c = place(arena({ type: 'leaf', level: 3 }), E.SpikeGuy);
+      c.hitByShell(1);
+      expect('a spiky enemy still dies to a fart ball, a tail whack and a shell',
+        bubbled && a.dying && b.dying && c.dying);
+    }
+    {
+      const s = arena({ type: 'shroom', level: 1 });
+      const e = place(s, E.SpikeGuy);
+      s.player.star = 300;
+      dropOn(s, e);
+      expect('the star beats the spines, as it beats every other inhabitant',
+        e.dying && s.player.powerLevel === 1);
+    }
+    {
+      const s = arena({ type: 'shroom', level: 1 });
+      place(s, E.SpikeGuy);
+      const snap = captureState(game);
+      expect('a spiky enemy survives a save state — REGISTRY',
+        !!snap && snap.level.entities.some((d) => d.t === 'SpikeGuy'));
+    }
+
+    {
+      reset();
+      const s = new LevelScene(game, '1-F');
+      const trace = (b) => {
+        const out = [];
+        for (let f = 0; f < 1200; f++) { b.update(); out.push(b.spikePhase); }
+        return out;
+      };
+      const a = trace(new E.Boss(s, 100, 100, 0));
+      const b = trace(new E.Boss(s, 100, 100, 0));
+      const seen = [];
+      a.forEach((phase, f) => {
+        if (!seen.length || seen[seen.length - 1].phase !== phase) seen.push({ phase, at: f });
+      });
+      const order = seen.slice(1).map((x) => x.phase);
+      const cycle = ['open', 'telegraph', 'spiky'];
+      const start = cycle.indexOf(order[0]);
+      const ordered = order.every((phase, k) => phase === cycle[(start + k) % 3]);
+      expect('the boss spine cycle is deterministic and always in the same order',
+        ordered && a.join('') === b.join(''), order.slice(0, 4).join('>'));
+    }
+
+    {
+      reset({ type: 'shroom', level: 1 });
+      const s = new LevelScene(game, '1-F');
+      game.setScene(s);
+      const boss = s.entities.find((e) => e instanceof E.Boss);
+      boss.spikePhase = 'spiky'; boss.spikeTimer = 100;
+      const hp = boss.hp;
+      dropOn(s, boss);
+      const spikedHp = boss.hp;
+      const spikedPower = s.player.powerLevel;
+      boss.spikePhase = 'open'; boss.spikeTimer = 100; boss.invuln = 0;
+      s.player.invuln = 0; s.player.frozen = 0;
+      dropOn(s, boss);
+      expect('stomping the spines hurts, stomping in the window damages',
+        spikedHp === hp && spikedPower === 0 && boss.hp === hp - 1,
+        `spiky hp ${hp}->${spikedHp}, open hp ${spikedHp}->${boss.hp}`);
+    }
+
+    {
+      reset();
+      const s = new LevelScene(game, '3-F');
+      game.setScene(s);
+      const boss = s.entities.find((e) => e instanceof E.Boss);
+      boss.spikePhase = 'telegraph';
+      boss.spikeTimer = 10;
+      restoreState(game, JSON.parse(JSON.stringify(captureState(game))));
+      const back = game.scene.entities.find((e) => e.constructor.name === 'Boss');
+      expect('the boss keeps its place in the cycle across a save state',
+        !!back && back.spikePhase === 'telegraph' && back.spikeTimer === 10,
+        back ? `${back.spikePhase}/${back.spikeTimer}` : 'ei pomoa');
+    }
+
+    /* The promise the lead designer set himself: a powerless player can beat
+     * every boss. Taken apart into the two things it needs — one window is long
+     * enough to walk up and land a stomp at its tightest, and the clock holds
+     * far more windows than the boss has health. */
+    for (const id of BOSS_LEVELS) {
+      reset();
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      const boss = s.entities.find((e) => e instanceof E.Boss);
+      const idle = mkInput();
+      for (let f = 0; f < 90; f++) s.update(idle);
+
+      boss.hp = 1;
+      boss.spikePhase = 'open';
+      const openWindow = boss.openFrames;
+      boss.spikeTimer = openWindow;
+
+      const p = s.player;
+      p.y = boss.y + boss.h - p.h;
+      p.x = boss.cx - 90;
+      p.vx = 0; p.vy = 0;
+      s.centerCamera();
+
+      const i = mkInput();
+      let hitAt = -1;
+      for (let f = 0; f < openWindow && hitAt < 0; f++) {
+        boss.jumpTimer = 999; boss.chargeTimer = 999; boss.charging = 0;
+        const dx = boss.cx - p.cx;
+        const adx = Math.abs(dx);
+        i.held = blank();
+        i.pressed = blank();
+        if (!p.onGround) {
+          const want = Math.sign(dx) * Math.min(2.2, adx / 8);
+          if (p.vx < want - 0.15) i.held.right = true;
+          else if (p.vx > want + 0.15) i.held.left = true;
+          if (p.vy < 0) i.held.jump = true;
+        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+          i.held[dx > 0 ? 'right' : 'left'] = true;
+          i.held.run = true;
+        } else {
+          i.pressed.jump = true;
+          i.held.jump = true;
+        }
+        s.update(i);
+        if (boss.hp < 1 || s.bossDefeated) hitAt = f;
+      }
+      expect(`${id}: a power-0 stomp fits inside the tightest window`,
+        hitAt >= 0, `osui framella ${hitAt}/${openWindow}`);
+    }
+
+    {
+      const rows = [];
+      let worst = Infinity;
+      for (const id of BOSS_LEVELS) {
+        reset();
+        const s = new LevelScene(game, id);
+        const boss = s.entities.find((e) => e instanceof E.Boss);
+        boss.hp = 1;
+        const cycle = boss.openFrames + 48 + 132;
+        const windows = Math.floor((s.time * 24) / cycle);
+        rows.push(`${id} ${boss.maxHp}hp/${windows}`);
+        worst = Math.min(worst, windows / boss.maxHp);
+      }
+      expect('the level clock holds far more windows than the boss has health',
+        worst >= 4, `${rows.join(' ')} — huonoin ${worst.toFixed(1)} per osuma`);
+    }
+  }
+
   /* ------------------------------ katto --------------------------------- */
   /* Reported from play: in 1-F you could jump up where the opening screen has
    * no ceiling, land on the roof, and run the level along the top — past the
@@ -1940,6 +2130,16 @@ const report = await page.evaluate(async () => {
           tint: t, glow: sprites.GLOWS && sprites.GLOWS.star,
         });
         check('player starred');
+      }
+      for (const out of [0, 0.3, 1]) {
+        sprites.drawSpines(g, 20, 40, 30, out, 12);
+        check(`spines ${out}`);
+      }
+      sprites.drawSpikeGuy(g, 20, 40, 7, -1);
+      check('spikeguy');
+      for (const v of [0, 1, 2, 3]) {
+        sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
+        check(`boss ${v} spiny`);
       }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));

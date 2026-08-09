@@ -916,8 +916,10 @@ export function drawSpines(ctx, x, y, w, out, tick, warning = false, unit = 8) {
   // its size grows its spines instead of sprouting three times as many.
   const count = Math.max(3, Math.round(w / unit));
   const step = w / count;
-  const full = Math.max(4, Math.round(step * 1.1));
-  const half = Math.max(2, Math.round(step * 0.32));
+  // Half again as tall as they are wide: a spine that is as thick as it is long
+  // reads as a battlement, and the fortress bosses already wear a crown.
+  const full = Math.max(5, Math.round(step * 1.5));
+  const half = Math.max(1, Math.round(step * 0.42));
   const h = Math.max(1, Math.round(full * out));
   // While they are still coming out the tips flash, so the warning reads even
   // on the frames where the points are still short enough to miss.
@@ -928,10 +930,10 @@ export function drawSpines(ctx, x, y, w, out, tick, warning = false, unit = 8) {
   for (let i = 0; i < count; i++) {
     const sx = Math.round(px + step * (i + 0.5));
     for (let r = 0; r < h; r++) {
-      // Widest at the base, one pixel at the point.
-      const hw = Math.max(1, Math.round((half * (r + 1)) / h));
+      // One pixel at the point, widening all the way to the base.
+      const wide = Math.max(1, Math.round((2 * half * (r + 1)) / h));
       ctx.fillStyle = r < h / 2 ? tip : '#a89878';
-      ctx.fillRect(sx - hw, py - h + r, hw * 2, 1);
+      ctx.fillRect(sx - (wide >> 1), py - h + r, wide, 1);
     }
   }
 }
