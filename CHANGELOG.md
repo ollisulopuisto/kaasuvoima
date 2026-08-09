@@ -7,6 +7,28 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.4 — maailma 5 uusiksi, siemen valittu mittaamalla
+
+Kentät 5-1…5-3 on generoitu uudelleen siemenellä **60606**. Vanhat korvattiin,
+eli maailma 5 on kokonaan uutta pelattavaa.
+
+**Siementä ei valittu katsomalla vaan mittaamalla.** Ensimmäinen kokeiltu siemen
+(päivämäärä, 20260809) tuotti kentät joista jokainen vaati tuplahypyn ja 5-1
+kaatui jo sarakkeessa 21 — mitattuna huonompia kuin ne jotka korvattiin. Sen
+jälkeen ajettiin kolmetoista siementä läpi `tools/playable.mjs`:llä ja
+pysähdyttiin ensimmäiseen jolla **kaikki kolme kenttää menevät läpi voimatasolla
+0**. Tulos: 60606, 100 % eteneminen kaikissa kolmessa.
+
+Tämä on työkalun oikea käyttö: generaattori tuottaa ehdotuksia, ja läpäisytesti
+päättää mikä niistä kelpaa. Ilman sitä "uudet kentät" tarkoittaisi käytännössä
+"tuntemattoman laatuisia kentät".
+
+Originaalisuustarkistus ajettiin päälle (`VGLC_DIR`): **0 korpusosumaa**
+jokaisessa kolmessa. README kehottaa ajamaan generaattorin aina se asetettuna, ja
+tämä on syy — ilman sitä tarkistus vain ohitetaan hiljaa.
+
+---
+
 ## v26.08.09.3 — bloom hiljaisemmaksi
 
 Palaute: teksti oli osin lukukelvotonta ja kirkkaat kohdat paloivat puhki.

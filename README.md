@@ -168,6 +168,11 @@ palauttaa nollasta poikkeavan paluuarvon jos jokin menee rikki. Botti osaa vain
 juosta ja hypätä, joten sen kuolemat vihollisiin ovat normaalia — merkitseviä
 ovat FAILURES-listan rivit.
 
+**Generoitujen kenttien siemen valitaan mittaamalla.** Aja generaattori usealla
+siemenellä ja päästä läpi vain se jolla kaikki kentät menevät `playable.mjs`:ssä
+läpi voimatasolla 0 — muuten "uudet kentät" tarkoittaa tuntemattoman laatuisia
+kenttiä. Maailman 5 nykyinen siemen on **60606**, ja se valittiin näin.
+
 `playable.mjs` kysyy yhden asian: onko *maasto* läpäistävissä. Se poistaa kaikki
 viholliset ja vaarat ja ajaa botin läpi kahdesti — kerran voimatasolla 0
 (suunnittelulupaus: maareitin pitää aueta pienimmällä koolla) ja kerran
