@@ -561,6 +561,8 @@ export class Player extends Entity {
       tick: this.tick,
       wag: this.wag,
       idle: this.idle,
+      // Where he is standing changes how he stands there; see idlePose.
+      theme: this.level.theme,
       tint,
       glow: this.star > 0 ? GLOWS.star : null,
     });

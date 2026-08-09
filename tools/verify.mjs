@@ -939,6 +939,49 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------------- teemakohtainen seisonta -------------------- */
+  /* Standing about is where the character says what kind of place this is: he
+   * shivers on the ice and mops his brow in the desert. Asserted by pixel count
+   * against the same pose in a temperate world, because "it is in there
+   * somewhere" is how the first version shipped a four-pixel bead nobody could
+   * see. Same idle value on both sides — comparing different idle values only
+   * measures the ordinary idle beats. */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 40;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const shot = (o) => {
+      g.clearRect(0, 0, 40, 40);
+      sprites.drawPlayer(g, 8, 4, {
+        type: null, level: 1, facing: 1, state: 'idle', frame: 0, wag: 0, ...o,
+      });
+      return g.getImageData(0, 0, 40, 40).data;
+    };
+    const diff = (a, b) => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]
+          || a[i + 3] !== b[i + 3]) n++;
+      }
+      return n;
+    };
+    const cold = diff(shot({ tick: 100, idle: 210, theme: 'grass' }),
+      shot({ tick: 100, idle: 210, theme: 'ice' }));
+    const hot = diff(shot({ tick: 100, idle: 300, theme: 'grass' }),
+      shot({ tick: 100, idle: 300, theme: 'desert' }));
+    const shivers = diff(shot({ tick: 100, idle: 210, theme: 'ice' }),
+      shot({ tick: 102, idle: 210, theme: 'ice' }));
+    // A temperate world must stay exactly as it was.
+    const plainSame = diff(shot({ tick: 100, idle: 300, theme: 'grass' }),
+      shot({ tick: 100, idle: 300 }));
+    expect('the hero shivers on the ice and sweats in the desert',
+      cold > 40 && hot > 20 && shivers > 40 && plainSame === 0,
+      `jää ${cold}px, aavikko ${hot}px, värinä ${shivers}px, niitty ${plainSame}px`);
+  }
+
   /* ---------------------------- voittoruutu ----------------------------- */
   /* Clearing a castle used to leave the player standing on the edge of the
    * arena while the map loaded. The card must appear, must be skippable, and

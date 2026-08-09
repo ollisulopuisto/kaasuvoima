@@ -304,7 +304,9 @@ function idlePose(s) {
   const tick = s.tick || 0;
   const idle = s.idle || 0;
   const still = s.state === 'idle' && !s.ducking;
-  const pose = { breath: 0, eye: 0, blink: false, scratch: 0, tap: 0, look: 0 };
+  const pose = {
+    breath: 0, eye: 0, blink: false, scratch: 0, tap: 0, look: 0, shiver: 0, sweat: -1,
+  };
   if (!still) return pose;
 
   // Breathing: the torso rises and settles about once every one and a half
@@ -326,7 +328,52 @@ function idlePose(s) {
     pose.tap = Math.floor(phase / 7) % 2;                            // foot tapping
   }
   pose.eye = pose.look;
+
+  /*
+   * Standing about is where a character says what kind of place this is. The
+   * ice world makes him shiver and the desert makes him mop his brow, which is
+   * the cheapest scenery in the game: it costs a couple of pixels and it tells
+   * you the temperature without a word.
+   *
+   * Layered on top of the ordinary idle beats rather than replacing them, so
+   * the character keeps his own habits and only picks up the weather.
+   */
+  if (s.theme === 'ice') {
+    // Shivering comes in bursts. A constant tremble reads as a broken sprite.
+    const shake = (idle - 200) % 150;
+    if (shake < 46) pose.shiver = Math.floor(tick / 2) % 2 ? 1 : -1;
+  } else if (s.theme === 'desert' || s.theme === 'factory') {
+    // A bead of sweat, then a wipe. `sweat` is how far down the bead has got,
+    // -1 for none; the arm goes up during the wipe, which is `pose.scratch`.
+    /* 360 rather than 300: the ordinary idle beats also cycle on 360, so a
+     * different period made the wipe drift onto the frames that already
+     * scratch, where it added nothing anyone could see. Locked to the same
+     * clock, the wipe lands on the "look down" beat and reads as its own move. */
+    const beat2 = (idle - 200) % 360;
+    if (beat2 > 30 && beat2 < 200) pose.sweat = Math.min(7, Math.floor((beat2 - 30) / 22));
+    else if (beat2 >= 200 && beat2 < 250) {
+      pose.scratch = 2;
+      pose.look = 0;
+      pose.eye = 0;
+    }
+  }
   return pose;
+}
+
+/**
+ * A bead running down the temple.
+ *
+ * Drawn with a dark rim rather than as a pale dot: measured against the plain
+ * sprite, the first version changed four pixels, which at this size is not an
+ * animation, it is a rounding error. The rim is what makes it read against skin.
+ */
+function sweatBead(ctx, x, y) {
+  ctx.fillStyle = '#2a4a6a';
+  ctx.fillRect(x - 1, y - 1, 4, 6);
+  ctx.fillStyle = '#7fc8f0';
+  ctx.fillRect(x, y, 2, 4);
+  ctx.fillStyle = '#e8f8ff';
+  ctx.fillRect(x, y, 1, 2);
 }
 
 /** Draws the player at template scale. `s.type` picks the palette. */
@@ -337,7 +384,10 @@ function drawPlayerBase(ctx, x, y, s, small) {
   const pose = idlePose(s);
 
   flip(ctx, x, w, s.facing < 0, (bx) => {
-    const px = Math.round(bx);
+    // The shiver moves the whole body, so it is applied to the origin rather
+    // than to each part — a character whose head trembles out of step with his
+    // shoulders looks broken, not cold.
+    const px = Math.round(bx) + pose.shiver;
     const py = Math.round(y);
 
     if (s.type === 'leaf') {
@@ -367,6 +417,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
       ctx.fillStyle = pal.pantsDark;
       ctx.fillRect(px + 3, py + 11, 6, 1);
       if (s.type === 'leaf') ears(ctx, px, py, 12);
+      if (pose.sweat >= 0) sweatBead(ctx, px + 11, py + 2 + pose.sweat);
       if (s.state === 'jump') {
         ctx.fillStyle = pal.pants;
         ctx.fillRect(px + 2, py + 14, 4, 2);
@@ -429,6 +480,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
     ctx.fillRect(px + 4, py + 19, 1, 1);
     ctx.fillRect(px + 9, py + 19, 1, 1);
     if (s.type === 'leaf') ears(ctx, px + 1, py, 12);
+    if (pose.sweat >= 0) sweatBead(ctx, px + 12, py + 3 + pose.sweat);
 
     if (s.state === 'jump') {
       ctx.fillStyle = pal.pants;
