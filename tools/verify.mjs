@@ -6075,6 +6075,36 @@ const report = await page.evaluate(async () => {
     }
     expect('every tile type draws in every theme', badTile.length === 0, badTile.join(' '));
 
+    /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
+     * enforces is invisible and the warp reads as broken. The tile knows from
+     * the neighbour it is already handed: pipe overhead means this mouth is the
+     * bottom end of something hanging, so it is drawn mirrored. Asserted as the
+     * mirror rather than as "different", because "different" would also pass if
+     * the two were merely two shades of the same wrong picture. */
+    {
+      const px = (d, x, y) => (d[(y * 320 + x) * 4] << 16) | (d[(y * 320 + x) * 4 + 1] << 8)
+        | d[(y * 320 + x) * 4 + 2];
+      const tile = (above) => {
+        g.clearRect(0, 0, 320, 208);
+        drawTile(g, '(', 0, 0, 'factory', 3, 5, 0, above, {});
+        drawTile(g, ')', 16, 0, 'factory', 4, 5, 0, above, {});
+        return g.getImageData(0, 0, 320, 208).data;
+      };
+      const floor = tile(' ');
+      const ceiling = tile('{');
+      let mirrored = 0;
+      let same = 0;
+      for (let x = 0; x < 32; x++) {
+        for (let y = 0; y < 16; y++) {
+          if (px(floor, x, y) === px(ceiling, x, 15 - y)) mirrored++;
+          if (px(floor, x, y) === px(ceiling, x, y)) same++;
+        }
+      }
+      expect('a pipe hanging from the ceiling is drawn the other way up',
+        mirrored === 512 && same < 512,
+        `peilattuja ${mirrored}/512, samoja ${same}/512`);
+    }
+
     /* Sprites now tint and glow, and glowing means switching the composite mode
      * mid-draw. One that is not switched back corrupts every tile drawn after
      * it, which looks like a graphics bug rather than a leak — so this is
