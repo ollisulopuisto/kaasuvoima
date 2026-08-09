@@ -6,6 +6,7 @@ import { WORLDS, startNode, findNode } from './data/worlds.js';
 import { TitleScene } from './scenes/title.js';
 import { WorldMapScene } from './scenes/worldmap.js';
 import { LevelScene } from './scenes/level.js';
+import { DemoScene } from './scenes/demo.js';
 import { InterludeScene, GameOverScene, EndingScene } from './scenes/cards.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
@@ -79,6 +80,25 @@ class Game {
 
   toHighScores(highlight = -1) {
     this.setScene(new HighScoreScene(this, highlight));
+  }
+
+  /* ------------------------------- attract ----------------------------- */
+
+  /** The title screen has been left alone: play the game to nobody. */
+  startDemo() {
+    this.setScene(new DemoScene(this));
+  }
+
+  /**
+   * Back to the title, from a keypress or from the bot running out of level.
+   * Either way the title is where the machine belongs: it is the one screen a
+   * player can start from, and it re-arms the idle timer, so the demo comes
+   * back around on its own if the room stays empty.
+   */
+  endDemo() {
+    if (!(this.scene instanceof DemoScene)) return;
+    this.scene.dispose();
+    this.toTitle();
   }
 
   /**
@@ -256,6 +276,16 @@ class Game {
         Music.current = null;
         Music.play(track);
       }
+    }
+
+    /* Attract mode hands the machine back the instant anyone touches it. This
+     * sits ahead of every other key on purpose: the press that ends the demo
+     * must not also quicksave, cycle the effects or, once the title is back,
+     * pick a menu item nobody chose. Whoever pressed it gets a title screen and
+     * decides from there. */
+    if (this.scene instanceof DemoScene && (Input.anyKeyPressed || this.scene.aborted)) {
+      this.endDemo();
+      return;
     }
 
     if (Input.pressed.mute) this.toast(toggleMute() ? 'ÄÄNI POIS' : 'ÄÄNI PÄÄLLE', 60);

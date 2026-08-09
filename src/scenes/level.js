@@ -1028,6 +1028,13 @@ export class LevelScene {
             switchOn: this.switchTimer > 0,
             // A door is several tiles; each slice needs to know which of its
             // sides are the outside of the whole door.
+            /* A ground tile beside a spike bed gets a hazard stripe on that
+             * edge. Computed here because the drawing code sees one tile at a
+             * time and this is a question about the tile next door. */
+            warn: ch === T.GROUND
+              ? (this.tileAt(tx - 1, ty - 1) === T.SPIKE ? -1
+                : this.tileAt(tx + 1, ty - 1) === T.SPIKE ? 1 : 0)
+              : 0,
             doorEdges: ch === T.DOOR ? {
               l: this.tileAt(tx - 1, ty) !== T.DOOR,
               r: this.tileAt(tx + 1, ty) !== T.DOOR,

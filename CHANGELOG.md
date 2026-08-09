@@ -7,6 +7,65 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.6 — kuplaloukku, esittelytila, kaksoisovi ja jäätikkö
+
+Iso erä. Kaksi näistä teki alaagentti.
+
+### Kuplaloukku (Bubble Bobble -tyyliin)
+Pierupallo ei enää tapa vihollista vaan **sulkee sen kuplaan**. Kuplassa oleva
+vihollinen leijuu, on vaaraton, ja **kuplan puhkaiseminen on se mikä tappaa** —
+ja maksaa kaksinkertaiset pisteet, jottei muutos tunnu heikennykseltä. Neljän
+sekunnin jälkeen kupla puhkeaa itsestään ja vihollinen **vapautuu vihaisena:
+1,6-kertainen vauhti ja välkkyvä väritys.**
+
+Ratkaiseva rakennepäätös: kupla on **tila vihollisessa**, ei erillinen olio joka
+pitää vankia sisällään. Vanki-olio olisi vetänyt mukaansa takaisinviittauksen
+kohtaukseen ja tehnyt tilatallennuksesta syklisen, ja sen kiertäminen olisi
+vaatinut moduulisyklin `savestate.js`:n kanssa. Tilana koko `REGISTRY` ei
+tarvinnut mitään, vanhat tallennukset lukevat puuttuvan kentän "ei kuplassa"
+-tilaksi, ja jokainen olemassa oleva tappotapa — kuori, häntä, alta puhkaistu
+lohko — puhkaisee kuplan ilmaiseksi.
+
+Kuplaan menevät vain vaeltavat viholliset. Putkikasvi ei: se on pultattu
+putkeensa, ja leijumaan lähtenyt kasvi jättäisi putken vaarattomaksi lopuksi
+kenttää. Aurinko, pomo ja iskuaalto hoitavat osumansa itse.
+
+### Esittelytila
+Alkuruudun oltua rauhassa 20 sekuntia peli alkaa pelata itseään kentässä 1-1,
+kuten kolikkopelit. **Mikä tahansa näppäin lopettaa sen yhdessä framessa** —
+pelaaja ei saa koskaan joutua tappelemaan botin kanssa ohjauksesta.
+
+Demo ei voi koskea tallennukseen, pistetauluun eikä telemetriaan, eikä siksi
+että olisimme varovaisia vaan **rakenteen takia**: kenttä saa sijaispelioliona
+`Object.create(game)`:n omalla tilallaan, joten jokainen kirjoitus osuu
+kertakäyttöiseen olioon. `finishLevel` on ainoa ovi tallennukseen ja
+pistetauluun, ja sijaisen versio vain asettaa lipun. Koko localStorage on
+tavulleen sama demon jälkeen.
+
+### Kaksoisovi
+Ovi oli yksi 16 pikselin ruutu; isoin hahmo on 43 pikseliä korkea, eli hän ei
+kävellyt siitä läpi vaan astui sen yli. Ovi on nyt 2×3 ruutua ja jokainen ruutu
+piirtää oman viipaleensa naapuritiedon perusteella.
+
+### Jäätikkö laavan tilalle
+Jäämaailmassa ei ole enää laavaa. Sama ruutu, sama kuolema, eri kuva:
+sulavesi sinivalkoisen jään alla ja rikkonainen hyllynreuna. Sulanut kivi
+jäätikössä oli vitsi jota kenttä ei tarkoittanut.
+
+### Piikeille ennakkovaroitus
+Piikkipedin viereiseen maaruutuun piirtyy **vaararaidoitus** sille reunalle
+jonka yli ollaan menossa. Piikit ovat lattian tasossa ja samanväriset kuin puolet
+ruutusarjoista, joten juoksuvauhdissa ensimmäinen merkki niistä oli voimatason
+menettäminen. Vaara jonka voi oppia vain kuolemalla on juuri se laji jota tässä
+pelissä ei pitäisi olla.
+
+### Kartan polut ja pistetaulun päiväys
+Ks. edelliset commitit: polkupisteillä on oma tumma reuna (jäämaailmassa polun
+ja maaston luminanssiero oli **kaksi yksikköä 255:stä**), ja pistetaulu näyttää
+päivän muodossa 2026-08-09.
+
+---
+
 ## v26.08.09.5 — supertähti, nyrkkeilijäpomo, salaiset tiilet ja jalat takaisin
 
 Neljä pääsuunnittelijan toivetta ja yksi bugiraportti.

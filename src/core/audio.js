@@ -375,6 +375,13 @@ const SFX = {
     tone({ type: 'square', from: 260, to: 90, dur: 0.1, gain: 0.14, hold: 0.2 });
   },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
+  pop: () => {
+    // A bubble skin letting go. Nothing already here is a pop: `cork` is a bung
+    // going in and everything else is a fart, and this one fires often enough
+    // to need its own short, dry sound.
+    tone({ type: 'sine', from: 1500, to: 420, dur: 0.06, gain: 0.28, hold: 0.2, curve: 'lin' });
+    noise({ dur: 0.07, from: 3400, to: 900, q: 1.2, gain: 0.16, type: 'highpass', attack: 0.004 });
+  },
   cork: () => {
     // the pop of a bung going in, then the muffled protest of a blocked player
     tone({ type: 'sine', from: 900, to: 260, dur: 0.07, gain: 0.3, hold: 0.15, curve: 'lin' });

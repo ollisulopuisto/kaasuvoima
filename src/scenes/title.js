@@ -3,6 +3,14 @@ import { drawPlayer, drawWalker, drawGasPuff } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
 
+/*
+ * Silence this long and the cabinet starts playing by itself. Twenty seconds is
+ * a couple of passes over the menu at reading speed: long enough that nobody
+ * still making up their mind gets interrupted, short enough that a machine left
+ * alone in the room is showing the game rather than a still picture.
+ */
+const DEMO_AFTER = 20 * 60;
+
 export class TitleScene {
   constructor(game) {
     this.game = game;
@@ -10,6 +18,7 @@ export class TitleScene {
     this.cursor = 0;
     this.options = [];
     this.puffs = [];
+    this.idle = 0;
   }
 
   enter() {
@@ -18,10 +27,21 @@ export class TitleScene {
       ? ['JATKA PELIÄ', 'UUSI PELI', 'PARHAAT PIERUT']
       : ['UUSI PELI', 'PARHAAT PIERUT'];
     this.cursor = 0;
+    this.idle = 0;
   }
 
   update(input) {
     this.tick++;
+
+    // A held key is somebody deciding as much as a fresh press is, so both
+    // count: only real silence runs the clock down.
+    const busy = input.anyKeyPressed || Object.values(input.held).some(Boolean);
+    this.idle = busy ? 0 : this.idle + 1;
+    if (this.idle >= DEMO_AFTER) {
+      this.game.startDemo();
+      return;
+    }
+
     if (this.tick % 9 === 0) {
       this.puffs.push({ x: 20 + Math.random() * 280, y: 250, r: 3 + Math.random() * 5, v: 0.4 + Math.random() * 0.6 });
     }

@@ -823,6 +823,190 @@ const report = await page.evaluate(async () => {
       `cam.y ${Math.round(worst)}`);
   }
 
+  /* ------------------------------ kuplaloukku -------------------------- */
+  {
+    const E = await import('/src/entities/enemies.js');
+    const { FartBall } = await import('/src/entities/items.js');
+
+    /** A scene with one enemy `dx` px to the player's right, on the same floor. */
+    const setup = (dx = 60, Ctor = E.Walker) => {
+      reset({ type: 'flower', level: 2 });
+      const s = new LevelScene(game, '1-1');
+      game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-1');
+      game.setScene(s);
+      s.entities = [];
+      const p = s.player;
+      const e = new Ctor(s, p.x + dx, p.y + p.h - 16);
+      e.active = true;
+      s.add(e);
+      return { s, e, p };
+    };
+    const idle = mkInput();
+    const run = (s, n) => { for (let f = 0; f < n; f++) s.update(idle); };
+
+    {
+      const { s, e, p } = setup(50);
+      s.add(new FartBall(s, p.x + p.w, p.y + p.h * 0.45, 1));
+      let f = 0;
+      while (!e.bubbled && !e.dying && f < 90) { s.update(idle); f++; }
+      expect('a fart ball bubbles an enemy instead of killing it',
+        e.bubbled && !e.dying && !e.remove && game.state.score === 0,
+        `bubbled ${e.bubbled}, dying ${e.dying}, pisteet ${game.state.score}`);
+      expect('a bubbled enemy is harmless and a bigger target than the enemy in it',
+        e.harmless === true && e.box.w > e.w && e.box.h > e.h,
+        `${e.box.w}x${e.box.h} vs ${e.w}x${e.h}`);
+    }
+
+    {
+      const { s, e, p } = setup(50);
+      e.trap();
+      p.power = { type: null, level: 0 };
+      p.applySize();
+      const before = game.state.score;
+      const walk = mkInput();
+      walk.held.right = true;
+      let f = 0;
+      while (!e.dying && f < 200) {
+        walk.pressed.jump = f % 24 === 0;
+        walk.held.jump = f % 24 < 12;
+        s.update(walk);
+        f++;
+      }
+      expect('touching a bubble kills the enemy and never the player',
+        e.dying && !p.dying && p.power.level === 0, `${f} framea`);
+      expect('popping a bubble pays at least what the old instant kill did',
+        game.state.score - before >= e.score, `${game.state.score - before} vs ${e.score}`);
+    }
+
+    {
+      const { s, e } = setup(96);
+      e.trap();
+      run(s, E.BUBBLE_FRAMES - 100);
+      const quiet = e.bursting;
+      run(s, 60);
+      expect('a bubble warns before it bursts', quiet === false && e.bursting === true,
+        `100 jäljellä: ${quiet}, 40 jäljellä: ${e.bursting}`);
+    }
+
+    {
+      const { s, e } = setup(96);
+      const was = e.speed;
+      e.trap();
+      run(s, E.BUBBLE_FRAMES + 2);
+      const x0 = e.x;
+      run(s, 60);
+      expect('an untouched bubble expires and lets an angry enemy out',
+        !e.bubbled && !e.dying && !e.remove && e.angry && Math.abs(e.x - x0) > 6,
+        `angry ${e.angry}, ${Math.round(x0)} -> ${Math.round(e.x)}`);
+      expect('the escaped enemy is faster than it went in',
+        Math.abs(e.speed - was * E.ANGRY_SPEED) < 1e-9, `${was} -> ${e.speed}`);
+    }
+
+    {
+      const want = {
+        Walker: true, ShellGuy: true, Flyer: true, StinkCloud: true, CorkGuy: true,
+        Plant: false, AngrySun: false, Boss: false, Moon: false, Shockwave: false,
+      };
+      const bad = [];
+      for (const [name, yes] of Object.entries(want)) {
+        const s = setup(60).s;
+        const e = new E[name](s, 64, 100, 0);
+        e.active = true;
+        s.add(e);
+        e.hitByProjectile(1);
+        if (!!e.bubbled !== yes) bad.push(`${name}: ${e.bubbled}`);
+      }
+      expect('only the wandering enemies can be bubbled', bad.length === 0, bad.join(' '));
+    }
+
+    {
+      const { s, e } = setup(96);
+      e.trap();
+      run(s, 30);
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      const before = `${e.constructor.name}|${e.bubbleTimer}|${Math.round(e.x)}|${Math.round(e.y)}`;
+      s.entities = [];
+      restoreState(game, snap);
+      const r = game.scene;
+      const back = r.entities.find((x) => x.bubbled);
+      const after = back
+        ? `${back.constructor.name}|${back.bubbleTimer}|${Math.round(back.x)}|${Math.round(back.y)}`
+        : 'poissa';
+      expect('a save state round-trips a bubbled enemy', before === after, `${before} vs ${after}`);
+      for (let f = 0; f < E.BUBBLE_FRAMES; f++) r.update(idle);
+      expect('a restored bubble still runs out and turns angry',
+        !!back && !back.bubbled && back.angry, back ? `angry ${back.angry}` : 'poissa');
+    }
+  }
+
+  /* ------------------------------- attract ----------------------------- */
+  {
+    const { DemoScene } = await import('/src/scenes/demo.js');
+    const key = (code) => {
+      dispatchEvent(new KeyboardEvent('keydown', { code }));
+      dispatchEvent(new KeyboardEvent('keyup', { code }));
+    };
+    const storage = () => {
+      const all = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        all[localStorage.key(i)] = localStorage.getItem(localStorage.key(i));
+      }
+      return JSON.stringify(all);
+    };
+    const toDemo = () => {
+      game.toTitle();
+      for (let f = 0; f < 1300 && !(game.scene instanceof DemoScene); f++) game.step();
+      return game.scene instanceof DemoScene;
+    };
+
+    reset();
+    game.toTitle();
+    let startedAt = -1;
+    for (let f = 0; f < 2000 && startedAt < 0; f++) {
+      game.step();
+      if (game.scene instanceof DemoScene) startedAt = f + 1;
+    }
+    expect('the title screen starts playing by itself when left alone',
+      startedAt > 60 && startedAt <= 1300 && game.scene.level.id === '1-1',
+      `${startedAt} framea, ${game.scene.level && game.scene.level.id}`);
+
+    const back = [];
+    for (const code of ['KeyZ', 'KeyQ']) {
+      if (!toDemo()) { back.push(`${code}:ei esittelyä`); continue; }
+      key(code);
+      game.step();
+      back.push(`${code}:${game.scene.constructor.name}`);
+    }
+    expect('any key ends the demo within a frame',
+      back.every((r) => r.endsWith('TitleScene')), back.join(' '));
+
+    reset();
+    const before = storage();
+    const lives = game.state.lives;
+    const score = game.state.score;
+    const started = toDemo();
+    let died = false;
+    let frames = 0;
+    for (; frames < 6000 && game.scene instanceof DemoScene; frames++) {
+      game.step();
+      game.render();
+      if (game.scene instanceof DemoScene && game.scene.level.state === 'dead') died = true;
+    }
+    expect('the demo survives the bot dying and returns to the title',
+      started && died && game.scene.constructor.name === 'TitleScene',
+      `${frames} framea, kuoli ${died}, ${game.scene.constructor.name}`);
+    expect('the demo writes nothing and spends nothing',
+      storage() === before && game.state.lives === lives && game.state.score === score,
+      `${lives}/${score} -> ${game.state.lives}/${game.state.score}`);
+
+    if (toDemo()) game.scene.level.update = () => { throw new Error('botti hajosi'); };
+    game.step();
+    game.render();
+    expect('an error inside the demo ends the demo, not the game',
+      game.scene.constructor.name === 'TitleScene', game.scene.constructor.name);
+    game.toTitle();
+  }
+
   /* ------------------------------- piikit ------------------------------- */
   /* Reported from play: "the player passed on top of the spikes but still took
    * damage". The spikes are drawn in the bottom ten pixels of their tile, but

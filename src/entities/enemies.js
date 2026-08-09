@@ -3,10 +3,30 @@ import { moveX, moveY, applyGravity, footingAhead } from '../level/physics.js';
 import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun,
+  drawBubble, bubbleRadius, recolored, TINTS,
 } from '../gfx/sprites.js';
 import { TILE } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { Item } from './items.js';
+
+/*
+ * The bubble trap.
+ *
+ * Four seconds is long enough to cross most of a screen, jump, and come back
+ * for the kill, and short enough that walking past a bubble is a decision with
+ * a price rather than a free win. The last one and a bit of those seconds are
+ * the warning: longer than the heartburn's beat of warning, because what comes
+ * out of a bubble is not a flame you step around but an enemy you now have to
+ * live with for the rest of the level.
+ */
+export const BUBBLE_FRAMES = 240;
+const BUBBLE_WARN = 72;
+/** How long a fresh bubble climbs before it just hangs there — see updateBubbled. */
+const BUBBLE_CLIMB = 48;
+/** What breaking out is worth to an enemy. Fast, but still slower than a walk. */
+export const ANGRY_SPEED = 1.6;
+/** And what popping one is worth to the player, or the trap is a nerf. */
+const POP_BONUS = 2;
 
 export class Enemy extends Entity {
   constructor(level, x, y, w, h) {
@@ -16,24 +36,125 @@ export class Enemy extends Entity {
     this.dying = false;
     this.score = 100;
     this.facing = -1;
+    this.bubbleTimer = 0;
+    this.angry = false;
   }
 
-  /** Knocked over by a fart ball, a sliding shell or a tail whack. */
-  flipDie(dir = 1) {
-    if (this.dying) return;
+  /**
+   * Whether a fart ball traps this one instead of knocking it over. Anything
+   * with hit logic of its own says no — see the overrides. A bubbleable enemy
+   * walks on `speed`, which is what breaking out multiplies.
+   */
+  get bubbleable() { return false; }
+
+  get bubbled() { return this.bubbleTimer > 0; }
+
+  /** True once the bubble has started warning that it is about to go. */
+  get bursting() { return this.bubbleTimer > 0 && this.bubbleTimer < BUBBLE_WARN; }
+
+  get box() {
+    if (!this.bubbled) return { x: this.x, y: this.y, w: this.w, h: this.h };
+    const r = bubbleRadius(this.w, this.h);
+    return { x: this.cx - r, y: this.cy - r, w: r * 2, h: r * 2 };
+  }
+
+  /** Goes limp and falls out of the world. */
+  tumble(dir) {
     this.dying = true;
     this.noclip = true;
     this.stompable = false;
     this.vy = -4.2;
     this.vx = 0.8 * dir;
+  }
+
+  /** Knocked over by a sliding shell or a tail whack. */
+  flipDie(dir = 1) {
+    if (this.dying) return;
+    // While a bubble is up it is the only thing there is to hit, so everything
+    // that would have killed the enemy bursts the bubble instead.
+    if (this.bubbled) {
+      this.popBubble(dir);
+      return;
+    }
+    this.tumble(dir);
     this.level.awardScore(this.score, this.cx, this.y);
     Sfx.play('kick');
   }
 
-  /** True while the enemy is on screen but can no longer hurt anyone. */
-  get harmless() { return false; }
+  /** Caught by a fart ball: floats, harmless, and worth double to whoever pops it. */
+  trap() {
+    if (this.dying || this.bubbled) return;
+    this.bubbleTimer = BUBBLE_FRAMES;
+    this.vx = 0;
+    this.vy = 0;
+    this.level.spawnPuff(this.cx, this.cy);
+    Sfx.play('squeak');
+  }
 
-  hitByProjectile(dir) { this.flipDie(dir); }
+  /** The burst is the kill, and it pays better than the shot on its own did. */
+  popBubble(dir = 1) {
+    if (!this.bubbled || this.dying) return;
+    this.bubbleTimer = 0;
+    this.tumble(dir);
+    this.level.spawnPuff(this.cx, this.cy);
+    this.level.awardScore(this.score * POP_BONUS, this.cx, this.y);
+    Sfx.play('pop');
+  }
+
+  /** Nobody came: it breaks out faster than it went in, and blinking. */
+  escape() {
+    this.bubbleTimer = 0;
+    if (!this.angry) {
+      this.angry = true;
+      this.speed *= ANGRY_SPEED;
+    }
+    this.level.spawnPuff(this.cx, this.cy, true);
+    // The same burst as a kill, followed downwards: the bubble went the wrong way.
+    Sfx.play('pop');
+    Sfx.play('kick');
+  }
+
+  /**
+   * A bubble rises for a moment and then hangs there swaying. It has to stop
+   * climbing: one that kept going would carry the kill up out of jumping range
+   * and make escaping the usual outcome instead of the punishment.
+   */
+  updateBubbled() {
+    if (--this.bubbleTimer <= 0) {
+      this.escape();
+      return;
+    }
+    const age = BUBBLE_FRAMES - this.bubbleTimer;
+    this.vx = Math.sin(this.tick / 22) * 0.4;
+    this.vy = age < BUBBLE_CLIMB ? -0.55 : Math.sin(this.tick / 30) * 0.25;
+    moveX(this, this.level);
+    moveY(this, this.level);
+  }
+
+  /** True while the enemy is on screen but can no longer hurt anyone. */
+  get harmless() { return this.bubbled; }
+
+  /** An escapee blinks, so a fast one is never mistaken for a fresh one. */
+  get tint() { return this.angry && Math.floor(this.tick / 4) % 2 ? TINTS.flash : null; }
+
+  /**
+   * Every enemy that can be trapped paints through here, so the bubble and the
+   * angry blink are each written once instead of once per species.
+   */
+  drawSprite(ctx, paint) {
+    if (this.bubbled) {
+      drawBubble(ctx, this.cx, this.cy, bubbleRadius(this.w, this.h), this.tick, this.bursting,
+        (g) => paint(recolored(g, this.tint)));
+      return;
+    }
+    paint(recolored(ctx, this.tint));
+  }
+
+  hitByProjectile(dir) {
+    if (this.bubbleable && !this.bubbled) this.trap();
+    else this.flipDie(dir);
+  }
+
   hitByShell(dir) { this.flipDie(dir); }
   hitByTail(dir) { this.flipDie(dir); }
 
@@ -67,12 +188,15 @@ export class Walker extends Enemy {
     this.squash = 0;
   }
 
+  get bubbleable() { return true; }
+
   // A flattened walker is scenery for the rest of its animation.
-  get harmless() { return this.squash > 0; }
+  get harmless() { return this.bubbled || this.squash > 0; }
 
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
     if (this.squash > 0) {
       if (--this.squash === 0) this.remove = true;
       return;
@@ -96,9 +220,9 @@ export class Walker extends Enemy {
     const frame = Math.floor(this.tick / 8);
     if (this.dying) {
       this.drawFlipped(ctx, () => drawWalker(ctx, this.x, this.y, frame, this.facing, false));
-    } else {
-      drawWalker(ctx, this.x, this.y, frame, this.facing, this.squash > 0);
+      return;
     }
+    this.drawSprite(ctx, (g) => drawWalker(g, this.x, this.y, frame, this.facing, this.squash > 0));
   }
 }
 
@@ -109,6 +233,19 @@ export class ShellGuy extends Enemy {
     this.speed = 0.5;
     this.reviveTimer = 0;
     this.score = 100;
+  }
+
+  get bubbleable() { return true; }
+
+  trap() {
+    // A shell caught mid-slide comes out of the bubble at rest. Left sliding it
+    // would resume at the zero speed the trap gave it: a shell that mows down
+    // whatever it is touching and never moves off it again.
+    if (this.mode === 'sliding') {
+      this.mode = 'shell';
+      this.reviveTimer = 420;
+    }
+    super.trap();
   }
 
   toShell() {
@@ -140,6 +277,7 @@ export class ShellGuy extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
 
     if (this.mode === 'walk') {
       this.vx = this.speed * this.facing;
@@ -186,7 +324,7 @@ export class ShellGuy extends Enemy {
       this.drawFlipped(ctx, () => drawShell(ctx, this.x - 1, this.y, frame, this.facing, this.mode));
       return;
     }
-    drawShell(ctx, this.x - 1, this.y, frame, this.facing, this.mode);
+    this.drawSprite(ctx, (g) => drawShell(g, this.x - 1, this.y, frame, this.facing, this.mode));
   }
 }
 
@@ -198,9 +336,12 @@ export class Flyer extends Enemy {
     this.score = 200;
   }
 
+  get bubbleable() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     applyGravity(this, 0.85);
@@ -224,12 +365,18 @@ export class Flyer extends Enemy {
     const frame = this.tick;
     if (this.dying) {
       this.drawFlipped(ctx, () => drawFlyer(ctx, this.x, this.y, frame, this.facing));
-    } else {
-      drawFlyer(ctx, this.x, this.y, frame, this.facing);
+      return;
     }
+    this.drawSprite(ctx, (g) => drawFlyer(g, this.x, this.y, frame, this.facing));
   }
 }
 
+/**
+ * The one walking-speed enemy a fart ball still kills outright. It is bolted to
+ * a pipe — box, drawing and state machine are all measured from the pipe mouth
+ * — and a plant that floated away in a bubble would leave that pipe harmless
+ * for the rest of the level.
+ */
 export class Plant extends Enemy {
   /** Offsets at or beyond this are "down the pipe": not drawn, cannot hurt. */
   static HIDDEN_OFFSET = 24;
@@ -335,9 +482,20 @@ export class StinkCloud extends Enemy {
     this.y = y + Math.sin(this.phase) * this.amplitude;
   }
 
+  get bubbleable() { return true; }
+
+  escape() {
+    // It carries on bobbing from wherever the bubble left it. Keeping the old
+    // home line would drop it back into the lane it was in four seconds ago —
+    // a teleport, and away from the player who had just failed to reach it.
+    this.homeY = this.y - Math.sin(this.phase) * this.amplitude;
+    super.escape();
+  }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
 
     const player = this.level.player;
     if (player) {
@@ -364,7 +522,7 @@ export class StinkCloud extends Enemy {
       this.drawFlipped(ctx, () => drawStinkCloud(ctx, this.x, this.y, this.tick, this.facing, true));
       return;
     }
-    drawStinkCloud(ctx, this.x, this.y, this.tick, this.facing, true);
+    this.drawSprite(ctx, (g) => drawStinkCloud(g, this.x, this.y, this.tick, this.facing, true));
   }
 }
 
@@ -457,9 +615,12 @@ export class CorkGuy extends Enemy {
     this.hopTimer = 40;
   }
 
+  get bubbleable() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
     if (this.onGround && --this.hopTimer <= 0) {
@@ -476,7 +637,7 @@ export class CorkGuy extends Enemy {
       this.drawFlipped(ctx, () => drawCorkGuy(ctx, this.x - 1, this.y, this.tick, this.facing));
       return;
     }
-    drawCorkGuy(ctx, this.x - 1, this.y, this.tick, this.facing);
+    this.drawSprite(ctx, (g) => drawCorkGuy(g, this.x - 1, this.y, this.tick, this.facing));
   }
 }
 

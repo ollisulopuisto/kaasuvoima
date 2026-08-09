@@ -524,6 +524,41 @@ function drawSpike(ctx, x, y, tick) {
   ctx.fillRect(x, y + 15, TILE, 1);
 }
 
+/**
+ * A crevasse: the ice world's version of the lava pool.
+ *
+ * Same tile, same death — molten rock in a glacier was simply absurd, and the
+ * fix is what it looks like, not what it does. Meltwater under blue-white ice
+ * reads as "do not step here" to anyone who has seen a frozen lake, and the
+ * shelf edges say the hole has a bottom a long way down.
+ */
+function drawCrevasse(ctx, x, y, tick, tx) {
+  const wave = Math.sin((x + tick * 0.9) / 11) * 1.2;
+  ctx.fillStyle = '#0a1a34';
+  ctx.fillRect(x, y + 2, TILE, TILE - 2);
+  ctx.fillStyle = '#123a68';
+  ctx.fillRect(x, y + 5, TILE, TILE - 5);
+  ctx.fillStyle = '#2f7fb8';
+  ctx.fillRect(x, y + 3 + Math.round(wave), TILE, 3);
+  ctx.fillStyle = '#bfe6ff';
+  ctx.fillRect(x, y + 3 + Math.round(wave), TILE, 1);
+
+  // broken shelf along the rim, so the edge does not read as a tidy pool
+  const seed = hashNoise(tx, 11);
+  ctx.fillStyle = '#dff2ff';
+  ctx.fillRect(x, y, TILE, 2);
+  ctx.fillStyle = '#9fc8e8';
+  ctx.fillRect(x + Math.floor(seed * 8), y + 2, 3 + Math.floor(seed * 4), 1);
+
+  // a floe drifting past, on its own clock per column
+  const period = 90 + Math.floor(seed * 70);
+  const age = (tick + Math.floor(seed * period)) % period;
+  if (age < 30) {
+    ctx.fillStyle = '#e8f6ff';
+    ctx.fillRect(x + 2 + Math.round((age / 30) * 8), y + 7 + Math.round(wave), 4, 2);
+  }
+}
+
 function drawLava(ctx, x, y, tick, tx) {
   const wave = Math.sin((x + tick * 1.6) / 9) * 1.5;
   ctx.fillStyle = '#8c1808';
@@ -700,10 +735,31 @@ function drawSwitch(ctx, x, y, th, tick, pressed) {
   }
 }
 
+/**
+ * Hazard stripes painted into the lip of the ground tile beside a spike bed.
+ *
+ * Spikes sit flush in the floor and are the same pale grey as half the tilesets,
+ * so at running speed the first thing that tells you they are there is losing a
+ * power level. That is a surprise, not a puzzle — a hazard you can only learn by
+ * dying is the one kind this game is not supposed to have. `side` is -1 when the
+ * spikes are to the left, +1 to the right, so the marking sits on the edge you
+ * are about to cross.
+ */
+function drawHazardEdge(ctx, x, y, side) {
+  const sx = side > 0 ? x + TILE - 5 : x;
+  ctx.fillStyle = '#f0c020';
+  ctx.fillRect(sx, y, 5, 3);
+  ctx.fillStyle = '#201808';
+  for (let i = 0; i < 3; i++) ctx.fillRect(sx + (side > 0 ? i * 2 : i * 2 + 1), y, 1, 3);
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
-    case T.GROUND: drawGround(ctx, x, y, th, !isSolid(above), tx, ty); break;
+    case T.GROUND:
+      drawGround(ctx, x, y, th, !isSolid(above), tx, ty);
+      if (opts.warn) drawHazardEdge(ctx, x, y, opts.warn);
+      break;
     case T.HARD: drawHard(ctx, x, y, th, tx, ty); break;
     case T.BRICK: drawBrick(ctx, x, y, th, tx, ty); break;
     case T.QCOIN:
@@ -723,7 +779,12 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
-    case T.LAVA: drawLava(ctx, x, y, tick, tx); break;
+    case T.LAVA:
+      // The hazard is the same everywhere; only the ice world's picture of it
+      // differs, because lava in a glacier is a joke the level did not intend.
+      if (themeName === 'ice') drawCrevasse(ctx, x, y, tick, tx);
+      else drawLava(ctx, x, y, tick, tx);
+      break;
     case T.DOOR: drawDoor(ctx, x, y, th, tick, !!opts.doorOpen, opts.doorEdges); break;
     default: break;
   }

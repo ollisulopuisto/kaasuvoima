@@ -773,6 +773,76 @@ export function drawHeartburn(ctx, x, y, height, tick) {
   ctx.fillRect(px + 2, base - 3, 12, 4);
 }
 
+/* ------------------------------- bubbles ------------------------------- */
+
+/** How much of itself a trapped enemy keeps once it is sealed in. */
+const BUBBLE_SHRINK = 0.7;
+
+/**
+ * A bubble is round and wider than the thing inside it, so the hitbox comes
+ * from here too — the player is aiming at what they can see, not at the box
+ * of an enemy that is no longer where it looks.
+ */
+export function bubbleRadius(w, h) {
+  return Math.round((Math.max(w, h) * BUBBLE_SHRINK) / 2) + 3;
+}
+
+/**
+ * A trapped enemy, shrunk and sealed in gas. `paint` is the enemy's ordinary
+ * artwork: there is no second set of sprites for the inside of a bubble.
+ *
+ * Once `warning` is on the wobble triples its rate and the skin flashes. A
+ * bubble that burst without saying so first would be an enemy appearing out of
+ * nowhere, which is the one thing this game does not do to anybody.
+ */
+export function drawBubble(ctx, cx, cy, radius, tick, warning, paint) {
+  // The shrink is a plain scale, like the star's halo: the softened edges read
+  // as something seen through a film, which is what it is.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(BUBBLE_SHRINK, BUBBLE_SHRINK);
+  ctx.translate(-cx, -cy);
+  paint(ctx);
+  ctx.restore();
+
+  const wob = Math.sin(tick * (warning ? 0.42 : 0.14)) * (warning ? 2 : 1);
+  const rx = radius + wob;
+  const ry = radius - wob;
+  const flash = warning && Math.floor(tick / 3) % 2 === 0;
+  const px = Math.round(cx);
+  const py = Math.round(cy);
+  const half = (dy, hx, hy) => (
+    Math.abs(dy) >= hy ? 0 : Math.round(hx * Math.sqrt(1 - (dy * dy) / (hy * hy))));
+  const top = Math.ceil(ry);
+
+  ctx.fillStyle = flash ? 'rgba(255,255,255,0.35)' : 'rgba(160,220,255,0.22)';
+  for (let dy = -top; dy <= top; dy++) {
+    const inner = half(dy, rx - 2, ry - 2);
+    if (inner > 0) ctx.fillRect(px - inner, py + dy, inner * 2, 1);
+  }
+  ctx.fillStyle = flash ? '#ffffff' : 'rgba(200,240,255,0.85)';
+  for (let dy = -top; dy <= top; dy++) {
+    const outer = half(dy, rx, ry);
+    if (outer <= 0) continue;
+    const inner = half(dy, rx - 2, ry - 2);
+    ctx.fillRect(px - outer, py + dy, outer - inner, 1);
+    ctx.fillRect(px + inner, py + dy, outer - inner, 1);
+  }
+
+  // A shaded underside, or the skin disappears into a bright sky — which is
+  // exactly the theme where an enemy floating past most needs an outline.
+  ctx.fillStyle = 'rgba(48,96,144,0.45)';
+  for (let dy = 1; dy <= top; dy++) {
+    const outer = half(dy, rx, ry);
+    if (outer > 0) ctx.fillRect(px + outer - 2, py + dy, 2, 1);
+  }
+
+  // The glint is what makes it a bubble rather than a ring.
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(px - Math.round(rx * 0.5), py - Math.round(ry * 0.55), 2, 2);
+  ctx.fillRect(px - Math.round(rx * 0.62), py - Math.round(ry * 0.28), 1, 2);
+}
+
 /**
  * World 1's boss, to the lead designer's specification: a boxer.
  *
@@ -1047,4 +1117,4 @@ export function drawBrickShard(ctx, x, y, color) {
   ctx.fillRect(Math.round(x), Math.round(y) + 4, 6, 2);
 }
 
-export { C as SPRITE_COLORS, CARD_ICONS, TINTS, STAR_TINTS, GLOWS };
+export { C as SPRITE_COLORS, CARD_ICONS, TINTS, STAR_TINTS, GLOWS, recolored };
