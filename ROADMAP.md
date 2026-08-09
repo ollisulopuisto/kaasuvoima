@@ -531,6 +531,63 @@ pelinsä, vaan sitä joka saa linkin.
 - **Telemetriaa ei lähetetä palvelimelle** — ks. kohta 2, vaihe 4.
 - **Jokaiselle pomolle oma ääni, jaetut toimintaäänet** — ks. Myöhemmin.
 
+## Kuolleiden lippujen auditointi 9.8.2026
+
+Kolme kuollutta lippua löytyi päivän mittaan vahingossa, joten koko koodi
+käytiin läpi (commit `1353654`). Työkalut jäivät istunnon mukana, mutta
+löydökset ovat tässä.
+
+**Oikaisu ensin, koska se oli minun virheeni:** `note`-lippu on kuollut, mutta
+**nuottipalikka ei ole**. `bumpTile` kysyy `ch === T.NOTE` pitkin kirjaimin ja
+asettaa `vy = -6.2` sekä soittaa `kick`in — palikka siis **pomppauttaa**.
+Todennettu pomppaamalla kaikki neljä selaimessa. Se on sama tarina kuin ovella:
+ilmoitettu lippu, pitkin kirjaimin kysytty kysymys, toimiva mekaniikka. Aiempi
+väite "ei tee mitään" oli väärä.
+
+### Taso A — kyky joka koodissa on ja jota peli ei koskaan pyydä
+
+1. **Ruskea pilvi on pysyvästi vihainen.** `drawStinkCloud(…, angry)` saa
+   molemmilta kutsupaikoilta kirjaimellisen `true`:n, joten **rauhallista
+   naamaa ei piirretä koskaan** — eikä olion *oikea* `angry`-tila (kuplasta
+   karannut, `ANGRY_SPEED` 1,6×) ohjaa sitä. Eli vihastunut pilvi näyttää
+   samalta kuin rauhallinen, vaikka se liikkuu puolitoista kertaa nopeammin.
+   **Tämä on ainoa löydös jonka pelaaja huomaa**, ja se on juuri väärinpäin:
+   nopeutunut vihollinen on se joka pitäisi näkyä.
+2. `drawNote(…, bumped)` saa kovakoodatun `false`:n. Kuollut haara elävän
+   mekanismin takana — `drawTiles` siirtää palikkaa yleisellä bump-siirtymällä,
+   joten liike näkyy silti.
+3. `drawItem(…, opts)`:n `tint` ei tule yhdeltäkään pelin 11 kutsupaikasta,
+   vain `verify.mjs`:stä.
+
+### Taso B — seitsemän lippua lisää oven kaavassa
+
+`TILE_INFO`:n oikeat kuluttajat ovat `solid, semi, climb, warp, door, bumpable,
+question, switch`. Kuolleita: `note`, `breakable`, `pipe` (×6), `crumble`,
+`coin`, `hazard` (×2), `goal`. Jokainen niiden nimeämä käyttäytyminen on
+olemassa `ch === T.X`:nä. Pelaajaan ei vaikuta; hinta on se että ne näyttävät
+elävältä.
+
+### Taso C — siivousta (16 kpl)
+
+`Game.pauseBlink`, tilatallennuksen `stamp`, `slotLabel` (ei yhtään kutsujaa),
+`Music._section`, `KEY_PLAN`, `PostFX._program`, `Touch._zones`, `C.purple`,
+`flat8` (ainoa kuollut palikka 88:sta), `CAUSES`, `RULE_CONSTANTS`, `MAP_W`,
+`TRACK_NAMES`, `drawCrumble`in `tx/ty`, `warpLands`in `w`, `Sfx.oof`.
+
+**Koe:** kaikki 34 ehdokasta poistettiin kerralla ja portti pysyi vihreänä.
+
+### Mitä tällainen auditointi ei voi tietää
+
+Repossa on 736 dynaamisen avaimen käyttöä ja `savestate.js` käy läpi jokaisen
+olion jokaisen oman kentän, joten nimien törmäys eri olioiden välillä on se
+vaikea osa — juuri se piilotti `note`n. Vihreä portti ei ole kattavuus, eikä
+lukemalla erota "hylättyä" ja "ei vielä kytkettyä".
+
+Ja auditointi teki itse sen virheen jota vastaan se varoitti: ensimmäinen
+versio työkalusta luuli `this.life / this.maxLife`-lauseketta sijoitukseksi,
+eikä käynyt oikeaa puolta läpi — kuusi itsevarmaa väärää löydöstä, kaikki
+kenttiä joita luetaan joka framessa.
+
 ## Avoimet kysymykset
 
 - **Putken suunta on korjattu moottoriin mutta ei kenttiin.** `tryWarp` vaatii
