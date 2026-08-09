@@ -2348,6 +2348,65 @@ const report = await page.evaluate(async () => {
       `${secrets}/${bricks} tiiltä = ${Math.round(share * 100)} %`);
   }
 
+  /* ------------------- generoitujen kenttien uusi sanasto ---------------- */
+  /*
+   * The generated world gets its own assertions, and they are here rather than
+   * in the generator because the generator only knows what it wrote. These ask
+   * the *engine* what is in the shipped grid.
+   *
+   * The one that matters most is the secret. Which brick hides something is a
+   * pure function of position, so it costs nothing and applies to generated
+   * levels for free — and "for free" is how the levels this replaced ended up
+   * with 5-1 and 5-2 holding no secret at all. `gen-levels.mjs` now guarantees
+   * one, using its own copy of the two rates in `src/scenes/level.js` because
+   * that module cannot be loaded outside a browser. This test is what makes the
+   * copy safe: it asks `brickSecret` itself, so if the rates ever drift apart
+   * the gate fails instead of the world quietly going empty.
+   */
+  {
+    reset();
+    const { T } = await import('/src/gfx/tiles.js');
+    const generated = ['5-1', '5-2', '5-3'];
+    const world = { crumble: 0, switches: 0, stars: 0 };
+    const perLevel = [];
+    for (const id of generated) {
+      const sc = new LevelScene(game, id);
+      const seen = { crumble: 0, switches: 0, stars: 0, bricks: 0, secrets: 0 };
+      for (let ty = 0; ty < sc.h; ty++) {
+        for (let tx = 0; tx < sc.w; tx++) {
+          const ch = sc.rawTileAt(tx, ty);
+          if (ch === T.CRUMBLE) seen.crumble++;
+          if (ch === T.SWITCH) seen.switches++;
+          if (ch === T.QSTAR) seen.stars++;
+          if (ch === T.BRICK) {
+            seen.bricks++;
+            if (sc.brickSecret(tx, ty)) seen.secrets++;
+          }
+        }
+      }
+      world.crumble += seen.crumble;
+      world.switches += seen.switches;
+      world.stars += seen.stars;
+      perLevel.push({ id, ...seen });
+    }
+    const say = perLevel.map((l) => `${l.id}: %${l.crumble} S${l.switches} *${l.stars} `
+      + `${l.secrets}/${l.bricks} salaista`).join(' · ');
+
+    expect('every generated level hides something in an ordinary brick',
+      perLevel.every((l) => l.secrets > 0), say);
+    /* Exactly one star per level: none means the level never got the surprise,
+     * two means it stopped being one. */
+    expect('every generated level has exactly one star block',
+      perLevel.every((l) => l.stars === 1), say);
+    /* Coverage is the world's promise, not the level's — the hand-made worlds
+     * hand out mechanics one per level too. */
+    expect('the generated world carries crumbling platforms and a switch block',
+      world.crumble > 0 && world.switches > 0, say);
+    /* A switch with nothing to change is furniture. */
+    expect('every switch block has bricks in the same level to change',
+      perLevel.every((l) => l.switches === 0 || l.bricks > 0), say);
+  }
+
   /* ------------------------- teemakohtainen seisonta -------------------- */
   /* Standing about is where the character says what kind of place this is: he
    * shivers on the ice and mops his brow in the desert. Asserted by pixel count

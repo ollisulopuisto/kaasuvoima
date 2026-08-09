@@ -11,12 +11,21 @@
  * block rows float, how big a coin group tends to be.
  *
  * It takes no layout. The vocabulary below is this game's own — fart double
- * jumps, ummetus corks, hernekeitto, närästys jets, stink clouds — arranged by
- * rules written against this game's *measured* jump budget (tools/jump-budget.json,
- * produced by tools/measure-jump.mjs), so the geometry follows the physics
- * instead of a number somebody wrote down once. A generated level should read
- * as a Super Fart Bros level that happens to breathe at a classic tempo, not as
- * a copy of anything.
+ * jumps, ummetus corks, hernekeitto, närästys jets, stink clouds, crumbling
+ * catwalks, switch blocks, star blocks and the secrets hiding in ordinary
+ * bricks — arranged by rules written against this game's *measured* jump budget
+ * (tools/jump-budget.json, produced by tools/measure-jump.mjs), so the geometry
+ * follows the physics instead of a number somebody wrote down once. A generated
+ * level should read as a Super Fart Bros level that happens to breathe at a
+ * classic tempo, not as a copy of anything.
+ *
+ * That distinction is the whole licence argument (DESIGN.md §3 point 3), so it
+ * survives every addition to the vocabulary: a new character may take its
+ * *size* from the mined histograms — how long a block run is, how wide a gap
+ * is against the jump budget, how much calm precedes it — and nothing else.
+ * None of the pieces below reproduces an arrangement from anywhere; where they
+ * came from is this game's own hand-made chunks (`dune_crumble`,
+ * `switch_wall`), which is a source we own.
  *
  * Every level is checked before it is written: gaps and walls stay inside the
  * jump budget, nothing spawns inside a wall, there is headroom for the tallest
@@ -33,13 +42,19 @@ import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateLevel } from '../src/data/rules.js';
+import { hashNoise } from '../src/core/utils.js';
 import { readTelemetry, RULES } from './read-telemetry.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const stats = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
 
+/*
+ * The default seed is the one world 5 actually ships with, so a bare run
+ * rebuilds the file that is in the repository instead of a fourth world nobody
+ * has measured. It was not chosen by taste: see the changelog for the sweep.
+ */
 const seedArg = process.argv.indexOf('--seed');
-const SEED = seedArg > 0 ? Number(process.argv[seedArg + 1]) : 20260808;
+const SEED = seedArg > 0 ? Number(process.argv[seedArg + 1]) : 44444;
 
 const telArg = process.argv.indexOf('--telemetry');
 const TELEMETRY_FILE = telArg > 0 ? process.argv[telArg + 1] : null;
@@ -263,6 +278,58 @@ const PIECES = {
     return w;
   },
 
+  /**
+   * A crumbling catwalk over a pit — `%`, the tile that holds just long enough.
+   *
+   * The deck is written at floor level with nothing under it, the same shape
+   * the hand-made `fac_crumble` and `dune_crumble` use, and the piers at both
+   * ends are ordinary ground so that stopping to look is a decision rather than
+   * an accident.
+   *
+   * The one placement rule that matters: **the deck is never wider than a plain
+   * jump.** `%` is solid to the validator (src/data/rules.js says why), so a
+   * crumbling deck silences the gap check — which would let this piece smuggle
+   * in a pit no jump can cross, hidden behind a floor that will not be there.
+   * Capping the span at REACH.gap means the level survives the mechanic
+   * betraying you, which is DESIGN.md §5 applied to a tile that disappears.
+   */
+  crumbleWalk(c, x, ctx) {
+    const w = Math.max(3, Math.min(REACH.gap, Math.round(
+      sampleHist(stats.gapWidth, { min: 2, max: 8 }) * GAP_SCALE,
+    )) - ctx.ease);
+    c.ground(x, 3);
+    for (let i = 0; i < w; i++) c.set(x + 3 + i, FLOOR, '%');
+    // Coins over the deck and not over the piers, so the greedy line and the
+    // fast line are the same line.
+    if (rnd() < 0.6) coinArc(c, x + 3, w);
+    c.ground(x + 3 + w, 3);
+    return 3 + w + 3;
+  },
+
+  /**
+   * A switch block and the bricks it has something to say to.
+   *
+   * The pairing *is* the mechanic: `S` turns `B` into coins for ten seconds, so
+   * a switch with no bricks in sight is furniture and a brick wall with no
+   * switch is a brick wall. This piece therefore always writes both, the switch
+   * first, in the same screen — the reward has to be visible from the button or
+   * pressing it is an act of faith.
+   *
+   * Both sit at FLOOR-4, the height everything bumpable in this generator sits
+   * at: reachable from the ground at every power level, and clear of the three
+   * rows the tallest body needs. The brick run is floating rather than stacked
+   * on the ground on purpose — the switch may only ever make the level *less*
+   * solid, so nothing the player walks on is allowed to depend on it.
+   */
+  switchWall(c, x) {
+    const run = Math.min(6, Math.max(3, sampleHist(stats.blockRun, { min: 3, max: 9 })));
+    const w = run + 12;
+    c.ground(x, w);
+    c.set(x + 3, FLOOR - 4, 'S');
+    for (let i = 0; i < run; i++) c.set(x + 7 + i, FLOOR - 4, 'B');
+    return w;
+  },
+
   /** Note blocks — bouncy, and this game's cheapest way to gain height. */
   notes(c, x) {
     const w = 8;
@@ -392,6 +459,7 @@ const PALETTES = {
     weights: {
       gap: 4, enemies: 5, blockRow: 4, stairs: 2, pipe: 2, platforms: 3,
       coins: 2, notes: 1, stinkGap: 2, corkGate: 1, highReward: 2,
+      crumbleWalk: 2, switchWall: 2,
     },
   },
   dunes: {
@@ -399,7 +467,7 @@ const PALETTES = {
     weights: {
       gap: 3, enemies: 4, blockRow: 3, stairs: 2, platforms: 3, spikes: 2,
       heartburn: 3, sun: 1, coins: 2, stinkGap: 2, corkGate: 2, lava: 1,
-      highReward: 2,
+      highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
   },
   glacier: {
@@ -407,10 +475,91 @@ const PALETTES = {
     weights: {
       gap: 4, enemies: 4, blockRow: 3, platforms: 4, stairs: 2, spikes: 2,
       coins: 2, notes: 1, stinkGap: 3, corkGate: 2, lava: 2, heartburn: 2,
-      highReward: 2,
+      highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
   },
 };
+
+/* --------------------------- the quiet characters ------------------------ */
+
+/*
+ * Two of the four new characters are not set pieces, because neither of them is
+ * a *place*. A star block is one block among many that happens to hold the
+ * level's biggest surprise, and a secret is an ordinary brick with something
+ * behind it. Both are therefore passes over a finished level rather than pieces
+ * in the weighting, which is also the only way to say "exactly one per level".
+ */
+
+/**
+ * Promotes one existing `?` block to a star block.
+ *
+ * `TILE_INFO` gives `*` the same drawing as `?` deliberately — a block that
+ * announced itself would turn the surprise into an errand — so the star is not
+ * a new shape in the level, it is a claim about one block that is already
+ * there. Hence promotion rather than placement: the geometry is untouched and
+ * the star inherits whatever it cost to reach that block.
+ *
+ * Which one: the highest candidate past the opening quarter. The first quarter
+ * belongs to the guaranteed mushroom (DESIGN.md §5), and a star found before
+ * you have even been hit once is the cheapest possible version of it.
+ */
+function placeStar(c, notBefore) {
+  const cands = [];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = notBefore; x < c.width; x++) if (c.get(x, y) === '?') cands.push([x, y]);
+  }
+  if (!cands.length) return false;
+  cands.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  c.set(cands[0][0], cands[0][1], '*');
+  return true;
+}
+
+/*
+ * The secret-brick rates, copied from src/scenes/level.js.
+ *
+ * Copied and not imported, because they are private to `LevelScene` and that
+ * module cannot be loaded outside a browser. The copy is a real coupling and it
+ * is checked rather than trusted: `tools/verify.mjs` asks the *engine's own*
+ * `brickSecret` whether each generated level actually hides something, so if
+ * these two numbers ever drift apart the gate says so instead of the generator
+ * quietly building levels with nothing in them.
+ */
+const SECRET_COIN_RATE = 0.07;
+const SECRET_POWER_RATE = 0.015;
+const hidesSomething = (x, y) => hashNoise(x * 7 + 13, y * 11 + 5) < SECRET_POWER_RATE
+  || hashNoise(x * 3 + 1, y * 5 + 2) < SECRET_COIN_RATE;
+
+/**
+ * Makes sure at least one ordinary brick in the level is hiding something.
+ *
+ * Which bricks hide what is a pure function of tile position, so it applies to
+ * generated levels for free — and "for free" is exactly the problem: measured
+ * against the levels this replaces, 5-1 and 5-2 held **no secret at all**, and
+ * nobody would have known. A mechanic that is present in the engine and absent
+ * from the content is not a mechanic.
+ *
+ * The fix is the smallest one that does not disturb the rhythm: extend an
+ * existing brick run by a single tile into air beside it. A run of five
+ * becoming a run of six is well inside the mined run-length distribution, so
+ * the level still breathes the way the statistics say — nothing here invents a
+ * new brick row, it only lengthens one the pacing already asked for.
+ */
+function ensureSecret(c) {
+  const bricks = [];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < c.width; x++) if (c.get(x, y) === 'B') bricks.push([x, y]);
+  }
+  if (bricks.some(([x, y]) => hidesSomething(x, y))) return true;
+  for (const [x, y] of bricks) {
+    for (const nx of [x - 1, x + 1]) {
+      if (nx < 0 || nx >= c.width || c.get(nx, y) !== ' ') continue;
+      if (!hidesSomething(nx, y)) continue;
+      c.set(nx, y, 'B');
+      return true;
+    }
+  }
+  return false;
+}
 
 function weightedPiece(weights) {
   const entries = Object.entries(weights);
@@ -515,7 +664,14 @@ function buildLevel({ palette, targetWidth, tuning = null, intensity = 1 }) {
   x += 10;
   c.set(x + 3, FLOOR - 1, 'F');
   c.ground(x, 10);
-  return { rows: c.rows(), trace };
+
+  /* The two characters that are claims about blocks rather than places. Both
+   * run last, on the finished level, and both report failure to the validator
+   * instead of shrugging — see `validate`. */
+  const star = placeStar(c, quarter);
+  const secret = ensureSecret(c);
+
+  return { rows: c.rows(), trace, star, secret };
 }
 
 /* ------------------------------ telemetry ------------------------------- */
@@ -529,7 +685,7 @@ function buildLevel({ palette, targetWidth, tuning = null, intensity = 1 }) {
 const REST_BOOST = 2;
 
 /** The pieces whose difficulty is a height or a distance, i.e. the ones `ease` can lower. */
-const EASEABLE = new Set(['gap', 'stinkGap', 'corkGate', 'stairs', 'platforms']);
+const EASEABLE = new Set(['gap', 'stinkGap', 'corkGate', 'stairs', 'platforms', 'crumbleWalk']);
 
 /**
  * Turns hotspots into per-iteration adjustments.
@@ -588,13 +744,44 @@ function planTuning(hot, trace) {
 
 /* ------------------------------ validation ------------------------------ */
 
-const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}']);
+/**
+ * Kept identical to src/data/rules.js's own SOLID, and it has to be: this set
+ * is what `originality` canonicalises our output with, so a solid character
+ * missing from here would be compared to the corpus as if it were air and the
+ * similarity check would be looking at the wrong grid. `%`, `S` and `*` joined
+ * it with the tiles they name.
+ */
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 
-function validate(id, rows) {
+/**
+ * `rules.js` owns everything that is true of any level in the game. What is
+ * added here is what is only true of a *generated* one — the promises the
+ * generator makes about its own vocabulary, which a hand-made level keeps by
+ * having a person look at it.
+ */
+function validate(id, rows, built) {
   const problems = validateLevel(rows, budget);
   if (!rows.some((r) => r.includes('1'))) problems.push('no player start');
   if (!rows.some((r) => r.includes('F'))) problems.push('no goal');
+
+  const grid = rows.join('');
+  const count = (ch) => grid.split(ch).length - 1;
+
+  /* A switch with nothing to change is furniture, and a switch is the only
+   * thing that makes a floating brick row more than decoration. The pairing is
+   * the mechanic, so neither half is allowed to appear alone. */
+  if (count('S') && !count('B')) problems.push('switch block with no bricks to change');
+
+  /* Exactly one star. Zero means the level never got the surprise; more than
+   * one means it stopped being one. */
+  const stars = count('*');
+  if (stars !== 1) problems.push(`${stars} star blocks, want exactly 1`);
+  if (built && !built.star) problems.push('no ? block past the first quarter to promote to a star');
+
+  /* And at least one ordinary brick with something behind it. */
+  if (built && !built.secret) problems.push('no brick in the level hides anything');
+
   return problems.map((p) => `${id}: ${p}`);
 }
 
@@ -637,11 +824,18 @@ async function originality(rows) {
  * left alone; the other two are pushed up around it, so the world keeps the
  * rise-with-a-breather shape instead of turning into a straight climb.
  *
- * NOTE: src/data/generated.js has NOT been rebuilt with these values. The
- * originality check needs the corpus behind VGLC_DIR (DESIGN.md §3), and
- * regenerating without it would quietly drop that safeguard. Run
+ * The numbers below are unchanged, but which level is the peak is not a
+ * property of them: it is the seed's. Under seed 44444 the breather is 5-2 and
+ * the peak is 5-3, which is the shape world 4 has too. `intensity` decides how
+ * hard a level pushes, never where the world's high point lands — that is
+ * measured afterwards with tools/difficulty.mjs, and the seed is chosen on it.
  *
- *   VGLC_DIR="…" node tools/gen-levels.mjs
+ * Always run this with the corpus behind VGLC_DIR (DESIGN.md §3 point 4).
+ * Without it the similarity check cannot run at all, and the report below says
+ * `not checked` rather than pretending; regenerating that way would quietly
+ * drop the one safeguard that makes the whole approach defensible.
+ *
+ *   VGLC_DIR="…" node tools/gen-levels.mjs [--seed N]
  *
  * and re-run tools/difficulty.mjs to see what it did.
  */
@@ -663,6 +857,7 @@ for (const spec of PLAN) {
     rnd = mulberry32(seed);
     const build = { palette: spec.palette, targetWidth: spec.width, intensity: spec.intensity };
     const plain = buildLevel(build);
+    let made = plain;
     rows = plain.rows;
     notes = [];
 
@@ -672,10 +867,11 @@ for (const spec of PLAN) {
       notes = plan.notes;
       if (plan.tuning.size) {
         rnd = mulberry32(seed);
-        rows = buildLevel({ ...build, tuning: plan.tuning }).rows;
+        made = buildLevel({ ...build, tuning: plan.tuning });
+        rows = made.rows;
       }
     }
-    problems = validate(spec.id, rows);
+    problems = validate(spec.id, rows, made);
   }
   if (problems.length) {
     failures.push(...problems);
@@ -687,6 +883,27 @@ for (const spec of PLAN) {
     continue;
   }
   built.push({ spec, rows, orig, notes });
+}
+
+/*
+ * Coverage, asked of the world and not of the level.
+ *
+ * The hand-made worlds hand out mechanics one per level — the star in 2-1, the
+ * secret in 2-2, the switch in 2-3 — because a thing you meet in every level is
+ * scenery. So the promise here is the world's: somewhere in 5-1…5-3 there is a
+ * crumbling deck and somewhere there is a switch, and which level got which is
+ * the weighting's business.
+ *
+ * It is a hard failure rather than a warning for the same reason the rule
+ * checks are: a seed that builds a world with no switch block in it is a seed
+ * we do not ship, and the run should say so instead of leaving it to whoever
+ * reads the numbers afterwards. Pick another seed.
+ */
+if (built.length === PLAN.length) {
+  const world = built.map(({ rows }) => rows.join('')).join('');
+  for (const [ch, name] of [['%', 'crumbling platform'], ['S', 'switch block'], ['*', 'star block']]) {
+    if (!world.includes(ch)) failures.push(`world 5: no ${name} anywhere in the world`);
+  }
 }
 
 if (failures.length) {
@@ -728,11 +945,20 @@ await writeFile(join(ROOT, 'src/data/generated.js'), out);
 console.log(`\nGenerated ${built.length} levels with seed ${SEED}:\n`);
 for (const { spec, rows, orig } of built) {
   const cols = rows[0].length;
-  const enemies = rows.join('').split('').filter((ch) => ENEMY.has(ch)).length;
-  const coins = rows.join('').split('').filter((ch) => ch === 'o').length;
+  const grid = rows.join('');
+  const enemies = grid.split('').filter((ch) => ENEMY.has(ch)).length;
+  const coins = grid.split('').filter((ch) => ch === 'o').length;
+  const n = (ch) => grid.split(ch).length - 1;
+  // The new vocabulary, counted out loud: a mechanic that is in the engine and
+  // absent from the content is the failure mode this line exists to catch.
+  const bricks = n('B');
+  const secrets = rows.flatMap((row, y) => [...row]
+    .map((ch, x) => (ch === 'B' && hidesSomething(x, y) ? 1 : 0))).reduce((a, b) => a + b, 0);
   console.log(`  ${spec.id}  ${String(cols).padStart(3)} cols   ${
     String(enemies).padStart(2)} enemies   ${String(coins).padStart(2)} coins   `
     + `originality ${orig.checked ? `${orig.hits} corpus matches` : 'not checked (set VGLC_DIR)'}`);
+  console.log(`        ${n('%')} crumbling  ${n('S')} switch  ${n('*')} star  `
+    + `${bricks} bricks of which ${secrets} hide something`);
 }
 
 if (TELEMETRY) {
