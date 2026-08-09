@@ -8,7 +8,7 @@ import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
-import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
+import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
 import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
@@ -22,6 +22,42 @@ export const HUD_H = 32;
 const GOAL_HEIGHT = 6 * TILE;
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
+
+/*
+ * MAAHANISKUN OSUMA. The dive itself lives in player.js; these are the numbers
+ * for what it does when it arrives, and they are the balance of the move.
+ *
+ * Read them against a stomp, because that is the thing this must not replace:
+ * a stomp reaches the width of one body (16 px), kills, and costs nothing. So
+ * the pound is wider than a stomp even at its weakest and much wider at its
+ * best, but it only *kills* from a height an ordinary jump cannot reach —
+ * POUND_KILL_AT is half the room, and a standing jump off the floor of a
+ * fifteen-tile level is worth about a third of it. Everything under that mark
+ * is a knock-over, which is a different answer and not a cheaper stomp.
+ *
+ * POUND_REACH_FLOOR is what is left of the reach at zero height, so the number
+ * never collapses to nothing on a dive begun a few pixels up.
+ *
+ * The shockwave threshold is the one place a power level buys something other
+ * than width: at power 0 it needs three quarters of the room above the landing,
+ * and each level pays back POUND_WAVE_PER_LEVEL of that down to a floor of
+ * POUND_WAVE_FLOOR — so a level 5 player still cannot get it from a hop, and a
+ * level 0 player still gets it from the ceiling. Strengthened, never unlocked.
+ *
+ * POUND_LIFT is how far off the floor the blast reaches. One tile and a bit:
+ * enough to catch what is standing beside the landing, not enough to swat a
+ * flyer out of the sky, which would make the move an anti-air weapon as well.
+ */
+const POUND_REACH = 30;
+const POUND_REACH_FLOOR = 0.5;
+const POUND_REACH_PER_LEVEL = 5;
+const POUND_KILL_AT = 0.5;
+const POUND_WAVE_AT = 0.75;
+const POUND_WAVE_PER_LEVEL = 0.09;
+const POUND_WAVE_FLOOR = 0.3;
+const POUND_LIFT = 20;
+const POUND_SHAKE_MIN = 1.5;
+const POUND_SHAKE_RANGE = 4.5;
 
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
@@ -330,6 +366,11 @@ export class LevelScene {
     this.stateTimer = 0;
     this.bossDefeated = false;
     this.shakeAmp = 0;
+    /* What the last ground pound measured, or null if there has not been one.
+     * A report of something that already finished, not state the level runs on
+     * — which is why it is not in `savestate.js`: a restored snapshot has no
+     * impact in flight, and the next one writes this again. */
+    this.lastPound = null;
     this.gust = 0;
     this.goal = null;
     this.cardIndex = 0;
@@ -518,6 +559,86 @@ export class LevelScene {
         e.hitByProjectile(Math.sign(e.cx - x) || 1);
       }
     }
+  }
+
+  /**
+   * MAAHANISKU: what happens the moment the dive's feet arrive.
+   *
+   * `strength` is the normalised height of the fall, 0…1, and it is the only
+   * input besides the power level — see `poundScale` in player.js for why that
+   * number can be trusted across levels of different heights. Everything below
+   * is either the fall or the power level, and the split between the two is the
+   * promise from DESIGN.md §5:
+   *
+   *   - **the fall decides what the hit does.** Below POUND_KILL_AT it knocks
+   *     enemies over the way a fart ball does — a bubble for whatever can be
+   *     bubbled, a tumble for whatever cannot. That is not a weak version of a
+   *     stomp, it is a *different* answer, and it is deliberately the answer
+   *     you get from an ordinary jump's worth of height: the everyday ground
+   *     pound stuns, and the stomp is still the move that kills. Only a fall
+   *     with real room above it turns the impact lethal.
+   *   - **the power level only strengthens.** It widens the reach and it lowers
+   *     the bar the shockwave needs, and it never gates anything: at power 0 a
+   *     dive from the ceiling of the room throws the wave exactly as it does at
+   *     power 5, it just has to be earned with the whole height instead of half
+   *     of it.
+   *
+   * And spines beat all of it. `e.spiky` is skipped outright rather than merely
+   * doing nothing, so a spiky walker under the landing is left standing and the
+   * ordinary collision pass then hurts the player for having landed on it — the
+   * same loss a stomp takes, which is the point. If a ground pound could clear
+   * spines the boss's spike cycle would stop being a cycle and spikiness would
+   * stop meaning anything.
+   */
+  poundImpact(p, strength) {
+    const t = clamp(strength, 0, 1);
+    const reach = Math.round(POUND_REACH * (POUND_REACH_FLOOR + (1 - POUND_REACH_FLOOR) * t))
+      + p.powerLevel * POUND_REACH_PER_LEVEL;
+    const kills = t >= POUND_KILL_AT;
+    const waveAt = Math.max(POUND_WAVE_FLOOR, POUND_WAVE_AT - p.powerLevel * POUND_WAVE_PER_LEVEL);
+    const wave = t >= waveAt;
+    const shake = POUND_SHAKE_MIN + t * POUND_SHAKE_RANGE;
+    const feet = p.y + p.h;
+
+    /* The numbers, kept where they can be read back. The sound, the shake, the
+     * wave and the blast all have to be the same measurement or the screen and
+     * the damage stop agreeing, and a measurement nobody can check is exactly
+     * what "mitattu, ei muistettu" is about. */
+    this.lastPound = {
+      x: p.cx, y: feet, fromY: p.poundFromY, fall: p.y - p.poundFromY, room: p.y,
+      strength: t, reach, kills, wave, shake,
+    };
+
+    for (let i = 0; i < 6; i++) {
+      this.add(new Puff(this, p.cx + ((i - 2.5) / 2.5) * reach, feet,
+        { spread: 2.4, size: 4, life: 20 }));
+    }
+    if (wave) this.add(new PoundWave(this, p.cx, feet, reach));
+
+    for (const e of this.entities) {
+      if (e.kind !== 'enemy' || e === p || e.dying || e.remove) continue;
+      if (e.spiky) continue;
+      /*
+       * Whatever he landed on top of is always in range, however the reach came
+       * out. A shallow dive whose radius fell short of the body directly under
+       * it would lose to that body on the very next line of `collisions()`, and
+       * losing to the thing you landed on is the one outcome this move may not
+       * have — that is what the stomp is for.
+       */
+      const near = overlaps(p.box, e.box)
+        || (Math.abs(e.cx - p.cx) <= reach
+          && e.cy > feet - POUND_LIFT && e.cy < feet + POUND_LIFT);
+      if (!near) continue;
+      const dir = Math.sign(e.cx - p.cx) || 1;
+      // `hitByShell` rather than `flipDie` for the lethal tier, so the tough
+      // customers stay tough: the boss still spends one of his three, the sun
+      // still needs her hits, and one path serves every species.
+      if (kills) e.hitByShell(dir);
+      else e.hitByProjectile(dir);
+    }
+
+    this.shake(shake);
+    Sfx.play('slam');
   }
 
   smashBrick(tx, ty) {

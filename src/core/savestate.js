@@ -4,7 +4,7 @@ import {
   Moon, SpikeGuy, BeanBaron, BeanBomb,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
-import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
+import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
 
 /**
  * Emulator-style save states: a whole snapshot of the running game, taken and
@@ -20,7 +20,7 @@ const REGISTRY = {
    * this entity's own list. Leaving it out would restore a level with half a
    * vine in it and nothing left to finish the job. */
   Beanstalk,
-  Puff, ScorePop, BrickPiece, CoinPop,
+  Puff, ScorePop, BrickPiece, CoinPop, PoundWave,
 };
 
 export const SLOT_COUNT = 3;

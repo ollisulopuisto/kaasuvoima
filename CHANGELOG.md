@@ -7,6 +7,113 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.31 — maahanisku, ja sen hinta
+
+Ilmassa **alas + hyppy** syöksee Pieruprinssin maahan pierun voimalla. Ohjaus
+oli jo vapaana: `down` + `jump` yhdessä ei tarkoittanut ilmassa mitään.
+
+Suurin osa tästä kirjauksesta on hinnasta eikä liikkeestä, koska hinta on se
+mikä ratkaisee onko peliin tullut uusi liike vai onko siitä tullut ainoa liike.
+
+### Se ei saa korvata tallausta, joten se maksaa aikaa jona et ohjaa
+
+Tallaus on pelin perusverbi: se tappaa, se pomppauttaa sinut turvaan, ja se ei
+maksa yhtään ohjattavaa framea. Pelkästään isompi liike olisi lopettanut
+tallauksen uran ilmestymispäivänään, joten maahanisku ostaa leveytensä ajalla:
+
+| vaihe | framea | mitä pelaaja voi tehdä |
+| --- | --- | --- |
+| lataus (`POUND_CHARGE`) | 12 | ei mitään — hahmo roikkuu paikallaan |
+| syöksy (`POUND_SPEED` 7,5 px/frame) | korkeudesta riippuen | ei mitään, ei sivuttaisohjausta |
+| maassa (`POUND_LAG_MIN` + korkeus) | 16…36 | ei mitään, **eikä ole kuolematon** |
+
+Mitattu `verify.mjs`:ssä samalta korkeudelta, sama nappi pohjassa: **tallaus 0
+framea ilman ohjausta, maahanisku 47.** Ja sivusuunnassa: sama pudotus oikealle
+painaen kantaa vapaassa pudotuksessa 16 px, maahaniskussa **0 px**.
+
+Lataus ei ole pelkkä maksu vaan myös ainoa hetki jona ruudulla oleva ehtii
+lukea liikkeen ja siirtyä alta pois. Maassa oloaika kasvaa korkeuden mukana
+tarkoituksella: se versio joka osuu kovimmin on myös se joka jättää sinut
+seisomaan pisimpään, koska tasainen maksu olisi tehnyt parhaasta tapauksesta
+suoraan parhaan.
+
+**Eikä se korvaa tallausta myöskään vahingoltaan.** Tavallisen hypyn korkeus on
+mitattuna noin kolmannes huoneesta (`1-1`: 70 px 192:sta = 0,36), ja
+`POUND_KILL_AT` on puolet. Arkinen maahanisku siis **tainnuttaa** — kupla, sama
+kuin pierupallolla — ja tallaus on yhä se liike joka tappaa. Vasta pudotus
+jonka yllä on oikeasti tilaa muuttuu tappavaksi.
+
+### Voimataso vahvistaa, ei avaa
+
+Sama lupaus kuin muualla (DESIGN.md kohta 5). Perusliike toimii voimatasolla 0
+— mitattu — ja voimataso ostaa kaksi asiaa: sädettä (`POUND_REACH_PER_LEVEL`
+5 px/taso) ja halvemman kynnyksen iskuaallolle. Aalto vaatii voimatasolla 0
+kolme neljäsosaa huoneesta ja voimatasolla 5 kolme kymmenesosaa, eli **taso 0
+saa sen korkeudella ja taso 5 halvemmalla, mutta kumpikaan ei saa sitä
+hyppäämällä paikaltaan.**
+
+Ummetus tukkii koko liikkeen samasta syystä kuin se tukkii pieruhypyn, hännän
+ja murtavan olkapään: syöksy on kaasua ja korkki on korkki. Se ei ole voimaportti
+— korkki on ajastin jonka joku laittoi sinuun, ei taso jota et kerännyt.
+
+### Piikit voittavat sen
+
+Päätetty etukäteen ja toteutettu kirjaimellisesti: `poundImpact` ohittaa
+`e.spiky`-viholliset kokonaan, jolloin alle jäänyt piikkiukko jää seisomaan ja
+tavallinen törmäystarkistus sattuu pelaajaan — **täsmälleen se tappio jonka
+tallauskin ottaa.** Mitattu sekä piikkiukolla (voimataso 3 → 2, piikkiukko
+hengissä) että pomolla: piikkivaiheessa **0 osumaa ja pelaaja menetti tason**,
+avoimena **1 osuma eikä menettänyt mitään**. Ilman tätä juuri rakennettu pomon
+piikkisykli olisi lakannut olemasta sykli.
+
+### Korkeus mitataan, ei arvata
+
+`poundScale(fromY, toY)` normalisoi pudotuksen laskeutumiskohdan omaan y:hyn.
+Perustelu on moottorissa: `tileAt` vastaa `T.HARD` kaikelle `ty < 0`, eli taivas
+on kansi eikä minkään kappaleen yläreuna voi olla nollan yläpuolella. Suurin
+mahdollinen pudotus kohtaan `toY` on siis `toY` itse — mitattu luku eikä vakio,
+ja siksi 1,00 tarkoittaa "tämän huoneen katosta" yhtä lailla 15 ruudun kentässä
+kuin 30 ruudun kentässä. Todennettu kahdella kentällä joiden katto on eri
+korkeudella: **1-1 pudotus 192 px = 1,000 ja 1-2 pudotus 432 px = 1,000**, ero
+240 px. Vakioon sidottu asteikko ei voi antaa kumpaakin.
+
+### Kuva ja ääni kuuluvat tähän työhön (DESIGN.md kohta 8)
+
+Kaksi uutta ääntä, ja niiden **pituus on se mikä erottaa ne**. Muutosloki sai
+juuri (v26.08.09.25) `sprout`in: pelin ainoa lohkoääni jolla on kesto, koska
+se mitä se kuvaa kestää. Sama argumentti käännettynä ylösalaisin:
+
+- **`dive` kestää 0,55 s** ja on `sprout` väärinpäin — liuku laskee siinä missä
+  pavunvarren nousee, suodin sulkeutuu siinä missä pavunvarren aukeaa. Syöksy
+  kestää, ja lyhyt haukahdus olisi sanonut "valmista" sillä hetkellä kun mikään
+  ei ole valmista.
+- **`slam` kestää 0,2 s** ja on kokonaan etupainoinen. Se on myös kokonaisen
+  oktaavin `stomp`in alapuolella (110→34 Hz vastaan 700→130 Hz), koska juuri
+  tallaus on se liike jota tämä ei saa korvata ja se soi jatkuvasti.
+
+Iskuaalto on uusi olio (`PoundWave`) eikä pomon `Shockwave`, ja ero mitataan
+pikseleistä: **isku rgb(164,227,105), vihreä−punainen +63; pomo rgb(208,172,106),
+−36.** Rytmi samoin: pomon aalto välkkyy kahden kuvan väliä kolmen framen
+jaksolla ja jää ruudulle 90 framea, maahaniskun aalto aukeaa kerran pehmeästi
+ja on poissa — **12 framessa erilaisia ruutuja: isku 12, pomo 2.** Tärinä
+seuraa korkeutta (1,5…6,0, mitattu 2,4 matalalta ja 6,0 katosta).
+
+Pelaajan sprite ei muutu. Se oli valinta: tintit tarkoittavat tässä pelissä
+"ei voi satuttaa", ja maassa oloaika on juuri se hetki jona voi — värjätty
+hahmo olisi valehdellut siitä mikä on koko liikkeen hinta.
+
+### Portti
+
+Neljätoista uutta tarkistusta `verify.mjs`:ään, ja punainen ensin: kahdeksan
+kaatui ennen muutosta (`iskua ei tullut 400 framessa`, `vapaa pudotus 24 framea
+ja 16 px sivuun, maahanisku 400 framea ja 580 px`, `poundScale is not a
+function`, `korkeusasteikko … ero 0 px`). Testit eivät kysy onko liike olemassa
+— se olisi mennyt läpi myös silloin kun liike on korvannut tallauksen — vaan
+mittaavat hinnan, rajat ja asteikon. `PoundWave` on `REGISTRY`-taulussa, ja
+pikatallennus kesken syöksyn palaa kesken syöksyn ja laskeutuu loppuun.
+
+---
+
 ## v26.08.09.30 — kartta saa hengittää: polku raivattuna, laatta väljänä, tiet mutkalla
 
 Kolme valitusta omistajalta, joka pelasi kartan läpi. Ne ovat yksi työ, koska

@@ -154,7 +154,40 @@ vastineeksi olisi saanut riskin: pelaaja oppii maailmassa 1 miltä rikottava
 lohko näyttää, ja jokainen uusi siluetti on uusi opettelu. Vaihtelu materiaalissa
 oli aina oikea puolisko — ja se on jo tehty.
 
-### Maahanisku (ground pound)
+### ✔ Tehty (v26.08.09.31): maahanisku (ground pound)
+
+**Tehty.** Alas + hyppy ilmassa, ja hinta on se osa joka kannattaa lukea:
+12 framea latausta paikallaan, ohjaamaton syöksy 7,5 px/frame, ja 16…36 framea
+maassa jona pelaaja **ei ole kuolematon**. Mitattu samalta korkeudelta: tallaus
+0 framea ilman ohjausta, maahanisku 47, ja sivusuunnassa 16 px vastaan 0 px.
+
+Neljä kohtaa alla, sellaisina kuin ne ratkesivat:
+
+1. **Ei korvaa tallausta** — eikä vain ajan takia. `POUND_KILL_AT` on puolet
+   huoneesta ja tavallinen hyppy on mitattuna kolmannes, joten arkinen
+   maahanisku **tainnuttaa** ja tallaus on yhä se liike joka tappaa.
+2. **Voimataso vahvistaa, ei avaa.** Perusliike toimii voimatasolla 0. Taso
+   ostaa sädettä (5 px/taso) ja halvemman kynnyksen iskuaallolle (0,75 → 0,30),
+   eikä kumpikaan pää saa aaltoa hyppäämällä paikaltaan.
+3. **Piikit voittavat sen.** `poundImpact` ohittaa `e.spiky`-viholliset, jolloin
+   alle jäänyt piikkiukko jää seisomaan ja pelaaja ottaa sen tappion jonka
+   tallauskin ottaisi. Pomo mitattuna: piikkivaiheessa 0 osumaa ja pelaaja
+   menetti tason, avoimena 1 osuma eikä menettänyt mitään.
+4. **Korkeus mitataan.** `poundScale` normalisoi pudotuksen laskeutumiskohdan
+   omaan y:hyn, koska `ty < 0` on kiinteä eikä minkään kappaleen yläreuna voi
+   olla nollan yläpuolella. Kaksi eri korkuista kattoa antavat molemmat 1,000
+   (1-1: 192 px, 1-2: 432 px) — vakioon sidottu asteikko ei voi antaa kumpaakin.
+
+Kuva ja ääni tulivat mukana: `dive` kestää 0,55 s ja on `sprout` väärinpäin,
+`slam` kestää 0,2 s ja on oktaavin `stomp`in alla, ja `PoundWave` on vihreä ja
+kertaluontoinen siinä missä pomon `Shockwave` on ruskea ja välkkyvä (mitattu:
+vihreä−punainen +63 vastaan −36, erilaisia ruutuja 12 framessa 12 vastaan 2).
+
+Yksi asia jätettiin tarkoituksella tekemättä: **pelaajan sprite ei muutu.**
+Tintit tarkoittavat tässä pelissä "ei voi satuttaa", ja maassa oloaika on juuri
+se hetki jona voi.
+
+#### Alkuperäinen kuvaus
 
 Ilmassa alas + hyppy syöksee hahmon maahan pierun voimalla. Osuma tainnuttaa tai
 tappaa lähellä olevat viholliset, ja **mitä korkeammalta pudotaan, sitä kovempaa
@@ -554,8 +587,8 @@ pelinsä, vaan sitä joka saa linkin.
 
 ### Muut sitovat päätökset ovat omissa kohdissaan
 
-- **Maahanisku tehdään, ja piikit voittavat sen** — ks. *Maahanisku* kohdassa
-  Jonossa.
+- **Maahanisku tehdään, ja piikit voittavat sen** — tehty (v26.08.09.31), ja
+  piikit voittavat sen. Ks. *Maahanisku* kohdassa Jonossa.
 - **Pomo järjestää areenan uusiksi**, ei halvempaa laattojen irrottamista — ks.
   *Ruutuefektit ja neljännen seinän rikkominen*, kohta 4.
 - **Telemetriaa ei lähetetä palvelimelle** — ks. kohta 2, vaihe 4.
