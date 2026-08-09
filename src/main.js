@@ -28,8 +28,7 @@ class Game {
     this.ctx = canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
     this.input = Input;
-    this.state = Save.load();
-    this.state.cards = [];
+    this.adoptState(Save.load());
     this.scene = null;
     this.paused = false;
     this.pauseBlink = 0;
@@ -114,6 +113,9 @@ class Game {
       // castle door is the whole story of a run.
       level: (this.pendingNode && this.pendingNode.level) || '',
       assisted: !!this.state.usedSaveState,
+      // Continues are unlimited and cost no points, so the count is the only
+      // place the difference between a clean run and a sixth try shows up.
+      continues: this.state.continues || 0,
     };
     // A run that skipped worlds is not a run. No mark would be honest enough.
     if (this.state.debugWarped) {
@@ -136,18 +138,28 @@ class Game {
     return new LevelScene(this, levelId);
   }
 
+  /**
+   * Takes on a freshly loaded save. Saves written before continues were counted
+   * carry no count, so it is normalized to a number here rather than left for
+   * the board to guess at — a blank continue column and a zero mean different
+   * things and only one of them is true.
+   */
+  adoptState(state) {
+    this.state = state;
+    this.state.cards = [];
+    if (typeof this.state.continues !== 'number') this.state.continues = 0;
+  }
+
   newGame() {
     Save.clear();
-    this.state = Save.load();
-    this.state.cards = [];
+    this.adoptState(Save.load());
     this.state.node = startNode(WORLDS[0]).id;
     this.persist();
     this.toWorldMap();
   }
 
   continueGame() {
-    this.state = Save.load();
-    this.state.cards = [];
+    this.adoptState(Save.load());
     if (this.state.lives < 1) this.state.lives = 4;
     this.toWorldMap();
   }

@@ -95,6 +95,11 @@ export class GameOverScene {
       Sfx.play('select');
       if (this.choice === 0) {
         // The run goes on, so nothing is banked: the board is for finished runs.
+        // Nothing is taken away either — no points, no cap on how often. The
+        // continue is counted instead, and the count rides to the board with
+        // the score, which is why the option below says so before it is picked.
+        this.game.state.continues = (this.game.state.continues || 0) + 1;
+        this.game.persist();
         this.game.toWorldMap();
       } else {
         this.game.finishRun();
@@ -127,7 +132,12 @@ export class GameOverScene {
     });
     drawText(ctx, 'KAASU LOPPUI', 160, 66, { color: '#8fe04a', align: 'center' });
 
-    this.drawOption(ctx, 0, 'JATKA', 'SAMA MAAILMA, PISTEET SAILYVAT', 110);
+    const used = this.game.state.continues || 0;
+    if (used) {
+      drawText(ctx, `JATKOJA KAYTETTY ${used}`, 160, 84, { color: '#c88040', align: 'center' });
+    }
+
+    this.drawOption(ctx, 0, 'JATKA', 'PISTEET SAILYVAT, JATKOT LASKETAAN', 110);
     this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'PISTEET PISTETAULUUN', 150);
 
     drawText(ctx, 'NUOLET VALITSE   Z HYVAKSY', 160, 200, {

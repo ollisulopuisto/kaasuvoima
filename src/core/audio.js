@@ -10,7 +10,9 @@
 let ctx = null;
 let master = null;
 let musicBus = null;
+let musicOut = null;
 let sfxBus = null;
+let bedBus = null;
 let noiseBuffer = null;
 let muted = false;
 
@@ -44,10 +46,19 @@ function ensure() {
   tame.frequency.value = 4800;
   tame.Q.value = 0.4;
   musicBus.connect(tame).connect(master);
+  musicOut = tame;
 
   sfxBus = ctx.createGain();
   sfxBus.gain.value = 0.95;
   sfxBus.connect(master);
+
+  // The per-level beds ride the sfx bus. They are things in the world, the
+  // same as a coin or a stomp, so they are muted, limited and — the part that
+  // matters when somebody asks whether they are too loud — *measured* on the
+  // same meter as everything else the world makes.
+  bedBus = ctx.createGain();
+  bedBus.gain.value = 1;
+  bedBus.connect(sfxBus);
 
   // Slapback echo on the music only — a cheap sense of space.
   const echo = ctx.createDelay(0.5);
@@ -473,10 +484,350 @@ function hatAt2(delay) {
   hatAt(ctx.currentTime + delay, 0.1, false);
 }
 
+/* ---------------------------- rooms and beds ---------------------------- */
+
+/**
+ * Per-level audio treatment, keyed by the level's theme.
+ *
+ * The same idea as `THEME_AMBIENCE` in gfx/postfx.js, and deliberately the same
+ * shape: what you hear belongs to the place you are in, not to a settings menu,
+ * and a theme with nothing to say gets nothing. Grass is silent because there
+ * is nothing to say about a field, and the factory is silent because its drum
+ * track is already a machine shop.
+ */
+export const THEME_AMBIENCE = {
+  fortress: 'hall',      // a big stone room — which is a reverb, not a sound
+  desert: 'wind',        // a long way off, and never quite the same twice
+  ice: 'crackle',        // something giving, somewhere you cannot see
+};
+
+/*
+ * The stone hall, as a ConvolverNode over an impulse response generated here.
+ *
+ * The alternative was to grow the existing feedback delay into a reverb, and it
+ * was rejected on the arithmetic. A hall's late tail is *dense* — thousands of
+ * reflections a second — and getting that out of delay lines means eight or
+ * more of them plus allpass diffusers, every length picked by ear until the
+ * flutter stops, and it still rings on one note somewhere. An impulse response
+ * is four lines of arithmetic, and it is tuned by number rather than by ear:
+ * decay time, pre-delay, how fast the top comes off. One node instead of twenty
+ * and no modes to chase.
+ *
+ * The slapback in `ensure()` stays exactly where it is. That is a 190 ms echo on
+ * the music for a bit of air, which is a different job in every level.
+ */
+const HALL_SECONDS = 1.8;
+const HALL_PREDELAY = 0.022;
+/*
+ * Both buses feed it, at different depths.
+ *
+ * A room applies to everything heard inside it; sending only the music would be
+ * an effect on the soundtrack rather than a place. But the sound effects are the
+ * game telling you what just happened, and a stomp still ringing a second and a
+ * half later is telling you about a stomp you have already stopped caring about.
+ * So the effects get half the music's send, through the same filters — enough to
+ * put them in the room, not enough to leave a trail behind every jump.
+ */
+const HALL_MUSIC_SEND = 0.34;
+const HALL_SFX_SEND = 0.16;
+const HALL_FADE = 0.5;
+
+let hall = null;
+
+function hallImpulse() {
+  const rate = ctx.sampleRate;
+  const pre = Math.floor(rate * HALL_PREDELAY);
+  const len = Math.floor(rate * HALL_SECONDS);
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    // Independent noise per channel, so the tail is wide rather than a mono
+    // blob sitting on top of the tune.
+    let lp = 0;
+    for (let i = pre; i < len; i++) {
+      const t = (i - pre) / (len - pre);
+      // A one-pole lowpass that closes as the tail dies. Air and stone eat the
+      // top first; without it this is hiss with an envelope on it.
+      lp += ((Math.random() * 2 - 1) - lp) * (0.5 - 0.42 * t);
+      d[i] = lp * Math.exp(-6.2 * t);            // ~-54 dB by the end
+    }
+  }
+  return buf;
+}
+
+function buildHall() {
+  const conv = ctx.createConvolver();
+  conv.buffer = hallImpulse();
+  /*
+   * What goes into a room decides whether it is a room or a mess. The bass is
+   * cut because a tail built out of the kick and the bassline is the definition
+   * of mush, and the top because half the sounds in this game are filtered
+   * noise and they would come back as a wash of hiss.
+   */
+  const cut = ctx.createBiquadFilter();
+  cut.type = 'highpass';
+  cut.frequency.value = 240;
+  const damp = ctx.createBiquadFilter();
+  damp.type = 'lowpass';
+  damp.frequency.value = 2600;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.0001;
+  cut.connect(damp).connect(conv).connect(wet).connect(master);
+
+  const music = ctx.createGain();
+  music.gain.value = HALL_MUSIC_SEND;
+  music.connect(cut);
+  const sfx = ctx.createGain();
+  sfx.gain.value = HALL_SFX_SEND;
+  sfx.connect(cut);
+  return { wet, music, sfx, sending: false };
+}
+
+/**
+ * Opens and closes the sends. Closing them rather than only turning the wet
+ * down matters: a convolver with nothing connected to it stops costing anything
+ * once its tail has run out, and a level with no stone in it should not be
+ * paying for a 1.8-second convolution it cannot hear.
+ */
+function hallSends(on) {
+  if (!hall || hall.sending === on) return;
+  hall.sending = on;
+  if (on) {
+    musicOut.connect(hall.music);
+    sfxBus.connect(hall.sfx);
+  } else {
+    musicOut.disconnect(hall.music);
+    sfxBus.disconnect(hall.sfx);
+  }
+}
+
+/**
+ * Distant desert wind: two noise loops through a lowpass, with slow LFOs on the
+ * colour and on the level.
+ *
+ * Ten nodes, started once and stopped once. The rates do not divide into each
+ * other and the two loops run at unrelated speeds, because one two-second noise
+ * loop on its own starts to sound like a two-second noise loop.
+ */
+const WIND_GAIN = 0.05;
+
+function buildWind() {
+  const out = ctx.createGain();
+  out.gain.value = WIND_GAIN;
+  out.connect(bedBus);
+  const swell = ctx.createGain();
+  swell.gain.value = 0.75;
+  swell.connect(out);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 520;
+  lp.Q.value = 0.9;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 170;              // out of the way of the bassline
+  hp.connect(lp).connect(swell);
+
+  const nodes = [];
+  for (const rate of [0.61, 1]) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = true;
+    src.playbackRate.value = rate;
+    src.connect(hp);
+    nodes.push(src);
+  }
+  const lfo = (rate, amount, target) => {
+    const osc = ctx.createOscillator();
+    osc.frequency.value = rate;
+    const amt = ctx.createGain();
+    amt.gain.value = amount;
+    osc.connect(amt).connect(target);
+    nodes.push(osc);
+  };
+  lfo(0.071, 230, lp.frequency);
+  lfo(0.043, 0.32, swell.gain);
+
+  const t0 = ctx.currentTime;
+  for (const n of nodes) n.start(t0);
+  return { out, nodes };
+}
+
+/**
+ * Ice giving somewhere out of sight.
+ *
+ * A handful of nodes for a tenth of a second, once every ten seconds or so.
+ * That is four orders of magnitude away from the per-frame oscillator problem,
+ * and it is the only shape this can take: a crack is an event, and an event
+ * held open is a drone.
+ *
+ * The gap is random inside a wide range on purpose. Anything regular turns into
+ * a tick, and a tick is a second metronome for the music to fight.
+ */
+const CRACK_GAP = [6.5, 16];
+
+function crack() {
+  const near = rnd(0.45, 1);             // some of them are much further off
+  noise({
+    dur: 0.05, from: 1900 * near, to: 320, q: 6,
+    gain: 0.085 * near, attack: 0.002, bus: bedBus,
+  });
+  // The groan under it. Distance takes the snap away long before it takes this.
+  tone({
+    type: 'triangle', from: 150 * near, to: 62, dur: 0.55, gain: 0.05 * near,
+    hold: 0.1, curve: 'lin', bus: bedBus,
+  });
+  // A crack that runs: a sheet failing in more than one place at once.
+  if (Math.random() < 0.4) {
+    noise({
+      dur: 0.035, from: 2400 * near, to: 500, q: 7,
+      gain: 0.06 * near, attack: 0.002, delay: rnd(0.09, 0.26), bus: bedBus,
+    });
+  }
+}
+
+/** How long a bed keeps sounding after the last `hold`, and how often we look. */
+const BED_HOLD_MS = 320;
+const BED_WATCH_MS = 90;
+
+export const Ambience = {
+  /** The bed the current level asked for, or null. */
+  current: null,
+  live: false,
+  _held: 0,
+  _timer: null,
+  _wind: null,
+  _nextCrack: 0,
+  _gust: 0,
+
+  /**
+   * Chooses the bed from the level's theme, exactly as `PostFX.setAmbience`
+   * chooses the picture's — and a level flag outranks the table here for the
+   * same reason it does there: the night level is windy because *that level* is
+   * windy, not because everything sharing its palette is.
+   */
+  set(theme, def = null) {
+    const kind = (def && def.wind ? 'wind' : null) || THEME_AMBIENCE[theme] || null;
+    if (kind !== this.current) {
+      this.stop();
+      this.current = kind;
+    }
+    this.hold();
+    return kind;
+  },
+
+  /**
+   * The scene saying "I am still here", once a frame.
+   *
+   * This is a dead man's switch, and that is the whole point. A bed that had to
+   * be *told* to stop would outlive the first exit path somebody forgot about,
+   * and there are several: dying, the clear jingle, the pause key, a save-state
+   * load, a demo handing the machine back, the title screen. None of those runs
+   * the level's `update`, so all of them silence the bed without knowing it
+   * exists. This project has already shipped one drone that survived a scene
+   * change; the fix for the second one should not be a list of call sites.
+   *
+   * @param {number} gust 0..1 — the wind the level is currently pushing with.
+   */
+  hold(gust = 0) {
+    if (!this.current) return;
+    this._held = performance.now();
+    this._gust = gust;
+    if (!this.live) this._start();
+    if (!this._timer && this.live) this._timer = setTimeout(() => this._watch(), BED_WATCH_MS);
+  },
+
+  /** Immediate and final: the level is over, not merely paused. */
+  stop() {
+    this.current = null;
+    this._silence();
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
+  },
+
+  _start() {
+    if (!ensure()) return;
+    this.live = true;
+    if (this.current === 'hall') {
+      if (!hall) hall = buildHall();
+      hallSends(true);
+      const t = ctx.currentTime;
+      hall.wet.gain.cancelScheduledValues(t);
+      hall.wet.gain.setValueAtTime(Math.max(0.0001, hall.wet.gain.value), t);
+      hall.wet.gain.exponentialRampToValueAtTime(1, t + HALL_FADE);
+    } else if (this.current === 'wind') {
+      this._wind = buildWind();
+    } else if (this.current === 'crackle') {
+      // Not on the first frame: a crack the instant a level starts reads as a
+      // sound effect the player caused.
+      this._nextCrack = ctx.currentTime + rnd(2, 5);
+    }
+  },
+
+  /** Stops the nodes but remembers what we are, so unpausing brings it back. */
+  _silence() {
+    if (!this.live) return;
+    this.live = false;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (hall) {
+      hall.wet.gain.cancelScheduledValues(t);
+      hall.wet.gain.setValueAtTime(Math.max(0.0001, hall.wet.gain.value), t);
+      hall.wet.gain.exponentialRampToValueAtTime(0.0001, t + HALL_FADE);
+      hallSends(false);
+    }
+    const w = this._wind;
+    if (w) {
+      this._wind = null;
+      // Ramped, not cut. A looping noise source stopped on a whim is a click.
+      w.out.gain.cancelScheduledValues(t);
+      w.out.gain.setValueAtTime(w.out.gain.value, t);
+      w.out.gain.linearRampToValueAtTime(0, t + 0.3);
+      for (const n of w.nodes) n.stop(t + 0.35);
+    }
+  },
+
+  _watch() {
+    this._timer = null;
+    if (!this.live) return;
+    if (performance.now() - this._held > BED_HOLD_MS) {
+      this._silence();
+      return;
+    }
+    this._pump();
+    this._timer = setTimeout(() => this._watch(), BED_WATCH_MS);
+  },
+
+  /**
+   * Everything a live bed does over time. Eleven times a second, not sixty:
+   * the gust takes two seconds to build and a crack is ten seconds away, so
+   * there is nothing here that a frame rate would improve.
+   */
+  _pump() {
+    if (this._wind) {
+      // The wind you hear is the wind pushing the player — the level already
+      // knows when it is gusting, so it says so rather than us guessing.
+      this._wind.out.gain.setTargetAtTime(
+        WIND_GAIN * (1 + this._gust * 1.1), ctx.currentTime, 0.2,
+      );
+    }
+    if (this.current === 'crackle' && ctx.currentTime >= this._nextCrack) {
+      crack();
+      this._nextCrack = ctx.currentTime + rnd(CRACK_GAP[0], CRACK_GAP[1]);
+    }
+  },
+};
+
 /** What the audio engine is actually doing, for the debug overlay. */
-/** The sfx bus and its context, for measuring loudness from a test harness. */
+/**
+ * Taps for measuring loudness from a test harness: the sfx bus, and the master
+ * sum. Both are needed. A coin is on the sfx bus and the music is on the music
+ * bus, so `master` is the only point where the two can honestly be compared —
+ * and it is the only place the hall's wet return is heard at all.
+ */
 export function audioTap() {
-  return ensure() ? { ctx, bus: sfxBus } : null;
+  return ensure() ? { ctx, bus: sfxBus, master } : null;
 }
 
 export function audioDiag() {

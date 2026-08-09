@@ -11,6 +11,25 @@ function isoDay(stamp) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * Where each field of a score row starts, `score` and `continues` measured
+ * from their right edge. The row is narrow and has had an overlap bug in it
+ * before, so the whole budget lives here instead of as numbers spread through
+ * draw(). Worst case is a six-letter name, a star, a four-character level id,
+ * a ten-character date, "J99+" and a seven-digit score — 190 of the 260 pixels
+ * between the margins. The tightest boundary is the star hard against the end
+ * of a full-length name, at 3px; everything else has 5px or more.
+ */
+const COL = {
+  rank: 30,
+  name: 52,
+  star: 52 + NAME_LENGTH * 6 + 2,
+  level: 100,
+  date: 128,
+  continues: 232,
+  score: 290,
+};
+
 /** Letters a name can be built from. The last two slots are edit commands. */
 const ALPHABET = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖ0123456789 '];
 
@@ -21,7 +40,7 @@ const ALPHABET = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖ0123456789 '];
 export class NameEntryScene {
   constructor(game, result, next) {
     this.game = game;
-    this.result = result;               // { score, world, assisted }
+    this.result = result;               // { score, world, level, assisted, continues }
     this.next = next;
     this.tick = 0;
     this.letters = ['A', ' ', ' ', ' ', ' ', ' '];
@@ -102,8 +121,16 @@ export class NameEntryScene {
     drawText(ctx, `PISTEET ${padNum(this.result.score, 7)}`, 160, 56, {
       color: '#8fe04a', align: 'center',
     });
+    // What the row is about to say about this run, said before it is filed.
+    let noteY = 70;
     if (this.result.assisted) {
-      drawText(ctx, '* TILATALLENNUS KÄYTÖSSÄ', 160, 70, { color: '#c88040', align: 'center' });
+      drawText(ctx, '* TILATALLENNUS KÄYTÖSSÄ', 160, noteY, { color: '#c88040', align: 'center' });
+      noteY += 12;
+    }
+    if (this.result.continues > 0) {
+      drawText(ctx, `J JATKOT ${this.result.continues}`, 160, noteY, {
+        color: '#c88040', align: 'center',
+      });
     }
 
     drawText(ctx, 'NIMI:', 160, 96, { color: '#ffffff', align: 'center' });
@@ -179,29 +206,39 @@ export class HighScoreScene {
       const y = 46 + i * 16;
       const lit = i === this.highlight && Math.floor(this.tick / 8) % 2 === 0;
       const color = lit ? '#ffffff' : i === this.highlight ? '#ffd048' : '#c8c8dc';
-      drawText(ctx, `${i + 1}`.padStart(2), 30, y, { color: '#8890b0' });
-      drawText(ctx, entry.name, 52, y, { color });
-      if (entry.assisted) drawText(ctx, '*', 52 + NAME_LENGTH * 6 + 2, y, { color: '#c88040' });
+      drawText(ctx, `${i + 1}`.padStart(2), COL.rank, y, { color: '#8890b0' });
+      drawText(ctx, entry.name, COL.name, y, { color });
+      if (entry.assisted) drawText(ctx, '*', COL.star, y, { color: '#c88040' });
       /* World and level, because "world 3" says nothing about whether they died
        * walking in or on the castle door. Older rows have no level and fall
        * back to the world alone rather than showing a blank. */
-      drawText(ctx, entry.level || `M${entry.world}`, 126, y, { color: '#8fe04a' });
+      drawText(ctx, entry.level || `M${entry.world}`, COL.level, y, { color: '#8fe04a' });
       /* The day the score was set, ISO order: year, month, day. It sorts the
        * same way it reads, and there is no continent on which it means
        * something else. The build version is still stored on the entry — it is
        * just not what anyone wants to read off a scoreboard. */
       if (entry.at) {
-        drawText(ctx, isoDay(entry.at), 158, y, {
+        drawText(ctx, isoDay(entry.at), COL.date, y, {
           color: entry.version === GAME_VERSION ? '#6a7a9a' : '#8a6a4a',
         });
       }
-      drawText(ctx, padNum(entry.score, 6), 290, y, { color, align: 'right' });
+      /* How many continues the run took. Right-aligned so a growing number
+       * grows away from the score, and blank at zero: an unmarked row is the
+       * clean run, the same way an unstarred one is. */
+      if (entry.continues > 0) {
+        const n = entry.continues > 99 ? '99+' : `${entry.continues}`;
+        drawText(ctx, `J${n}`, COL.continues, y, { color: '#c88040', align: 'right' });
+      }
+      drawText(ctx, padNum(entry.score, 6), COL.score, y, { color, align: 'right' });
     });
 
-    if (this.scores.some((e) => e.assisted)) {
-      drawText(ctx, '* TILATALLENNUS KÄYTÖSSÄ', 160, 212, {
-        color: '#c88040', align: 'center',
-      });
+    /* One legend line, and only for the marks the board is actually showing —
+     * a key to symbols nobody's row carries is just clutter. */
+    const marks = [];
+    if (this.scores.some((e) => e.assisted)) marks.push('* TILATALLENNUS KÄYTÖSSÄ');
+    if (this.scores.some((e) => e.continues > 0)) marks.push('J JATKOT');
+    if (marks.length) {
+      drawText(ctx, marks.join('   '), 160, 212, { color: '#c88040', align: 'center' });
     }
     drawText(ctx, 'ENTER JATKA', 160, 228, { color: '#8890b0', align: 'center' });
 

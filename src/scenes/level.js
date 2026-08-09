@@ -9,7 +9,7 @@ import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
-import { Music, Sfx } from '../core/audio.js';
+import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
@@ -212,6 +212,9 @@ export class LevelScene {
     const track = this.def.boss && !this.bossDefeated ? 'boss' : (this.def.music || 'level');
     Music.play(track);
     Music.setHurry(this.time <= HURRY_TIME);
+    // The room and the weather, from the theme — the audio half of what
+    // PostFX.setAmbience does to the picture.
+    Ambience.set(this.theme, this.def);
   }
 
   /** Kicks the camera for a frame or two. Purely cosmetic. */
@@ -379,6 +382,7 @@ export class LevelScene {
     this.stateTimer = 0;
     this.recordDeath(cause);
     Music.stop();
+    Ambience.stop();
   }
 
   /* ----------------------------- telemetry ----------------------------- */
@@ -624,6 +628,10 @@ export class LevelScene {
     }
 
     if (this.def.wind) this.updateWind();
+    /* The bed sounds while the level is being played, and only then. This one
+     * line is also how it stops: pausing, dying, clearing and every scene
+     * change all stop calling it. See Ambience.hold. */
+    if (this.state === 'play') Ambience.hold(this.gust);
     if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
@@ -1024,6 +1032,7 @@ export class LevelScene {
     this.player.ducking = false;
     this.awardScore(Math.max(0, this.time) * 50);
     Music.stop();
+    Ambience.stop();
     Sfx.play('clear');
   }
 

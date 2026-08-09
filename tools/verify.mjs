@@ -1088,6 +1088,73 @@ const report = await page.evaluate(async () => {
       s.entities.filter((e) => e.kind === 'item').length === before + 1 && m.used);
   }
 
+  /* ---------------------------- jatkolaskuri ----------------------------- */
+  /* Continues are unlimited and cost no points — the third time this project
+   * has answered "should the game stop them?" with "no, the board says so".
+   * That only holds if the count is real: taken on every continue, carried to
+   * the entry, absent from rows that predate it, and persisted. */
+  {
+    const scores = await import('/src/core/scores.js');
+    const { GameOverScene } = await import('/src/scenes/cards.js');
+
+    reset();
+    scores.clearScores();
+    game.state.score = 50000;
+    game.state.continues = 0;
+    for (let n = 1; n <= 2; n++) {
+      game.setScene(new GameOverScene(game));
+      for (let f = 0; f < 32; f++) game.scene.update(mkInput());
+      const i = mkInput();
+      i.pressed.jump = true;
+      game.scene.update(i);
+    }
+    expect('continuing counts the continue, resumes the run and banks nothing',
+      game.state.continues === 2
+      && game.scene.constructor.name === 'WorldMapScene'
+      && scores.loadScores().length === 0,
+      `jatkot ${game.state.continues}, ${game.scene.constructor.name},`
+      + ` ${scores.loadScores().length} riviä`);
+
+    reset();
+    scores.clearScores();
+    game.state.score = 77000;
+    game.state.continues = 4;
+    game.pendingNode = { id: 'w2-3', level: '2-3' };
+    game.finishRun();
+    const offered = game.scene.constructor.name === 'NameEntryScene'
+      && game.scene.result.continues === 4;
+    if (game.scene.submit) game.scene.submit();
+    const row = scores.loadScores()[0];
+    expect('the continue count reaches the high score entry',
+      offered && row && row.continues === 4 && row.score === 77000,
+      `${game.scene.constructor.name}, ${JSON.stringify(row)}`);
+
+    scores.clearScores();
+    scores.addScore({ name: 'NEW', score: 3000, world: 1, continues: 7 });
+    localStorage.setItem('sfb3.scores.v1', JSON.stringify([
+      { name: 'RAW', score: 9000, world: 1, at: 1 },
+      ...JSON.parse(localStorage.getItem('sfb3.scores.v1')),
+    ]));
+    const [raw, fresh] = scores.loadScores();
+    expect('a row saved without a continue count still loads, as zero',
+      raw.continues === 0 && fresh.continues === 7, `${raw.continues}/${fresh.continues}`);
+
+    // It has to survive a reload, or the board would forget by morning.
+    reset();
+    game.state.continues = 5;
+    game.persist();
+    const { Save } = await import('/src/core/save.js');
+    expect('the continue count is written to the save', Save.load().continues === 5,
+      `${Save.load().continues}`);
+
+    reset();
+    game.state.continues = 6;
+    game.newGame();
+    expect('starting a new game resets the continue count',
+      game.state.continues === 0, `${game.state.continues}`);
+    scores.clearScores();
+  }
+
   /* ------------------------------- kuori -------------------------------- */
   /* Reported from play: stomp a shell walker, walk into the shell, lose a power
    * level. The kick landed — and then the shell, having moved 3.4 px out of a

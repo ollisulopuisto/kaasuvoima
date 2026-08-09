@@ -5,6 +5,15 @@
  * An entry carries an `assisted` flag, set when the run used a save state.
  * That is not cheating exactly, but a rewound run and a clean one do not
  * belong in the same column without a mark, so those show a star.
+ *
+ * `continues` is the third time this project has answered the same question the
+ * same way. A rewound run gets a star; a warped run is kept off the board
+ * altogether (main.js); a continued run carries its count. Continues stay
+ * unlimited and keep their score on purpose — locking a child out of their own
+ * game, or wiping a hundred thousand points over one bad jump, punishes harder
+ * than losing a world does. A run with no continues and a run with six are
+ * different achievements, and saying which is the board's job. The game does
+ * not punish; the board is honest.
  */
 
 const KEY = 'sfb3.scores.v1';
@@ -35,6 +44,9 @@ export function loadScores() {
         // The level id the run reached, e.g. "2-3". Older rows have none.
         level: typeof e.level === 'string' ? e.level.slice(0, 4) : '',
         assisted: !!e.assisted,
+        // Rows saved before continues were counted have none, and zero is the
+        // honest thing to say about a run from a build that never asked.
+        continues: Math.max(0, Math.floor(Number(e.continues) || 0)),
         version: typeof e.version === 'string' ? e.version : '',
         at: Number(e.at) || 0,
       }))
@@ -65,13 +77,16 @@ export function qualifies(score) {
  * did not make the cut. Ties keep the older entry ahead — you have to beat
  * a score, not match it.
  */
-export function addScore({ name, score, world = 1, level = '', assisted = false }) {
+export function addScore({
+  name, score, world = 1, level = '', assisted = false, continues = 0,
+}) {
   const entry = {
     name: (name || '???').slice(0, NAME_LENGTH),
     score: Math.max(0, Math.floor(score)),
     world,
     level: String(level || '').slice(0, 4),
     assisted: !!assisted,
+    continues: Math.max(0, Math.floor(Number(continues) || 0)),
     version: GAME_VERSION,
     at: Date.now(),
   };

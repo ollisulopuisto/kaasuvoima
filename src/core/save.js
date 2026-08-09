@@ -11,6 +11,7 @@ export const DEFAULT_SAVE = () => ({
   cleared: {},      // nodeId -> true
   worldsOpen: 1,    // how many worlds are reachable
   usedSaveState: false,   // set once a run has been rewound from a save state
+  continues: 0,           // continues this run has used; the board shows the count
 });
 
 export const Save = {
@@ -37,6 +38,7 @@ export const Save = {
         cleared: state.cleared,
         worldsOpen: state.worldsOpen,
         usedSaveState: !!state.usedSaveState,
+        continues: state.continues || 0,
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */

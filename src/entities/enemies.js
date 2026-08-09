@@ -5,7 +5,7 @@ import {
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBubble, bubbleRadius, recolored, TINTS,
 } from '../gfx/sprites.js';
-import { TILE } from '../gfx/tiles.js';
+import { TILE, T } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { Item } from './items.js';
 
@@ -247,6 +247,9 @@ export class Walker extends Enemy {
   }
 }
 
+/** How fast a kicked shell travels, and keeps travelling after a bounce. */
+const SHELL_SPEED = 3.4;
+
 export class ShellGuy extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 14, 24);
@@ -288,9 +291,35 @@ export class ShellGuy extends Enemy {
     this.stompable = true;
   }
 
+  /**
+   * Breaks any plain brick the shell is pressed against.
+   *
+   * A brick hiding something is left alone and bounces the shell like stone:
+   * its reward is for a player who bumps it from below, and a shell demolishing
+   * it would delete a secret nobody ever saw.
+   *
+   * @returns true when something broke, so the caller knows not to bounce.
+   */
+  smashAhead() {
+    const level = this.level;
+    const ahead = this.vx > 0
+      ? Math.floor((this.x + this.w + 1) / TILE)
+      : Math.floor((this.x - 1) / TILE);
+    const top = Math.floor(this.y / TILE);
+    const bottom = Math.floor((this.y + this.h - 1) / TILE);
+    let broke = false;
+    for (let ty = top; ty <= bottom; ty++) {
+      if (level.tileAt(ahead, ty) !== T.BRICK) continue;
+      if (level.brickSecret && level.brickSecret(ahead, ty)) continue;
+      level.smashBrick(ahead, ty);
+      broke = true;
+    }
+    return broke;
+  }
+
   kick(dir) {
     this.mode = 'sliding';
-    this.vx = 3.4 * dir;
+    this.vx = SHELL_SPEED * dir;
     this.facing = dir;
     this.reviveTimer = 0;
     /*
@@ -326,10 +355,22 @@ export class ShellGuy extends Enemy {
         this.facing *= -1;
       }
     } else if (this.mode === 'sliding') {
+      // A shell that hits something goes through it or comes back off it, and
+      // which one depends on what it hit. Bricks are the soft thing in this
+      // game; everything else is masonry.
       if (moveX(this, this.level)) {
-        this.vx = -this.vx;
-        this.facing = Math.sign(this.vx) || 1;
-        Sfx.play('bump');
+        if (!this.smashAhead()) {
+          /* Bounce off it, at speed.
+           *
+           * This used to be `this.vx = -this.vx`, and `moveX` zeroes the
+           * velocity when it stops something — so the shell was negating a zero
+           * and stopping dead against every wall. Shells have never actually
+           * bounced in this game; they parked. Rebuild the speed from the
+           * direction instead of from whatever survived the collision. */
+          this.facing = -this.facing;
+          this.vx = SHELL_SPEED * this.facing;
+          Sfx.play('bump');
+        }
       }
       this.level.shellSweep(this);
     } else {
@@ -834,10 +875,10 @@ export class Shockwave extends Enemy {
  * The boss's spine cycle, in frames at 60 Hz. Three beats, always in this
  * order, never random:
  *
- *   open (stompable) -> telegraph (stompable, spines rising, sound) -> spiky
+ *   open (stompable) -> telegraph (stompable, crown going on, sound) -> spiky
  *
  * The telegraph is the whole reason this is a pattern and not a trap. It is
- * still stompable while the spines are coming up, so a jump started on the last
+ * still stompable while the crown is going on, so a jump started on the last
  * open frame is not punished for a decision that was correct when it was made.
  *
  * What tightens as the boss loses health is the length of the open window, and
@@ -849,8 +890,18 @@ const SPIKE_ON = 132;
 const SPIKE_OPEN = 180;
 const SPIKE_OPEN_STEP = 24;
 const SPIKE_OPEN_MIN = 120;
-/** The spines drop out of sight fast, so visible points always mean danger. */
-const SPIKE_RETRACT = 8;
+/*
+ * Taking the crown off again is the first stretch of the open window, not a
+ * beat of its own: adding a fourth phase would have lengthened the cycle and
+ * quietly changed the fight. Nothing about who can be stomped when moves — the
+ * boss is stompable from the first frame of `open`, exactly as before, and this
+ * only says how long his hands take to put the thing away.
+ *
+ * The points themselves are gone within the first quarter of it (see
+ * CROWN_SPINES in the sprite), sooner than the eight frames the old retract
+ * took, so "visible points mean danger" got tighter rather than looser.
+ */
+const SPIKE_DOFF = 20;
 
 /**
  * Fortress boss. `variant` picks the move set:
@@ -880,6 +931,10 @@ export class Boss extends Enemy {
     // thing they are supposed to do back.
     this.spikePhase = 'open';
     this.spikeTimer = SPIKE_OPEN;
+    // Counts the take-it-off animation down. Zero at spawn on purpose: a boss
+    // that started mid-doff would open the fight wearing the one thing that is
+    // supposed to mean "not now".
+    this.doffTimer = 0;
   }
 
   get giant() { return this.variant === 3; }
@@ -891,17 +946,19 @@ export class Boss extends Enemy {
 
   get spiky() { return this.spikePhase === 'spiky'; }
 
-  /** 0..1 for the drawing: how far the spines have pushed through. */
-  get spineOut() {
+  /**
+   * 0..1 for the drawing: one clock for the whole crown, run up through the
+   * telegraph and back down through the doff. The sprite reads every keyframe
+   * — hands, band, points — off this single number.
+   */
+  get crownOn() {
     if (this.spikePhase === 'spiky') return 1;
     if (this.spikePhase === 'telegraph') return 1 - this.spikeTimer / SPIKE_TELEGRAPH;
-    // Clamped because a hit landed mid-window shortens `openFrames` under the
-    // timer that is already running.
-    const since = this.openFrames - this.spikeTimer;
-    return Math.max(0, Math.min(1, 1 - since / SPIKE_RETRACT));
+    return Math.max(0, this.doffTimer / SPIKE_DOFF);
   }
 
   updateSpikes() {
+    if (this.doffTimer > 0) this.doffTimer--;
     if (--this.spikeTimer > 0) return;
     if (this.spikePhase === 'open') {
       this.spikePhase = 'telegraph';
@@ -914,6 +971,7 @@ export class Boss extends Enemy {
     } else {
       this.spikePhase = 'open';
       this.spikeTimer = this.openFrames;
+      this.doffTimer = SPIKE_DOFF;
       Sfx.play('pipe');
     }
   }
@@ -1045,7 +1103,7 @@ export class Boss extends Enemy {
       return;
     }
     drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0, this.variant,
-      this.scale, this.spineOut);
+      this.scale, this.crownOn);
   }
 }
 
