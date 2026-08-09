@@ -76,45 +76,59 @@ siis vanhene fysiikan mukana.
 
 | tapaus | vauhti | nousu | kantama |
 | --- | --- | --- | --- |
-| paikaltaan, näpäytys | 0 | 31 px (1.9 ruutua) | 0 |
-| paikaltaan, pohjassa | 0 | 121 px (7.6) | 0 |
-| kävellen | 1.5 | 121 px (7.6) | 120 px (7.5) |
-| juosten | 2.5 | 121 px (7.6) | 200 px (12.5) |
+| paikaltaan, näpäytys | 0 | 21 px (1.3 ruutua) | 0 |
+| paikaltaan, pohjassa | 0 | 71 px (4.4) | 0 |
+| kävellen | 1.5 | 78 px (4.9) | 87 px (5.4) |
+| juosten | 2.5 | 85 px (5.3) | 155 px (9.7) |
 | P-nopeudella | 3.5 | 100 px (6.3) | 245 px (15.3) |
-| juosten + pieruhyppy | 2.5 | 240 px (15.0) | 387 px (24.2) |
+| juosten + pieruhyppy | 2.5 | 174 px (10.9) | 285 px (17.8) |
 
-Suunnittelubudjetti jättää varaa mitattuun maksimiin: **kuilu 8 ruutua** (70 %
-juoksuhypyn kantamasta), pieruhypyllä 13 (55 % sen kantamasta) ja seinä 6 (80 %
-nousukorkeudesta). Aiempi budjetti oli 6 / 8 / 4, eli kentistä tuli väljempiä.
+Suunnittelubudjetti jättää varaa mitattuun maksimiin: **kuilu 6 ruutua** (70 %
+juoksuhypyn kantamasta), pieruhypyllä 9 (55 % sen kantamasta) ja seinä 4 (80 %
+nousukorkeudesta).
 
 Huomaa että P-nopeus **madaltaa** hyppyä (kaari litistyy) mutta pidentää sitä —
 juuri kuten alkuperäisessä.
 
-### Yllä oleva taulukko on vanhentunut — ja se on tarkoituksella jätetty
+### Mitä tässä taulukossa aiemmin luki, ja miksi se ei tule takaisin
 
-Sama komento ajettuna tässä puussa antaa muut luvut:
+Tämä taulukko ja `tools/jump-budget.json` lupasivat pitkään **121 px nousun ja
+200 px kantaman**, eli budjetin 8 / 13 / 6. Ne luvut on nyt korvattu mitatuilla
+(9.8.2026), ja tämä kappale on tässä siksi ettei kukaan johda niitä uudelleen.
 
-| tapaus | vauhti | nousu | kantama |
-| --- | --- | --- | --- |
-| paikaltaan, näpäytys | 0 | 21 px | 0 |
-| paikaltaan, pohjassa | 0 | 71 px | 0 |
-| kävellen | 1.5 | 78 px | 87 px |
-| juosten | 2.5 | 85 px | 155 px |
-| P-nopeudella | 3.5 | 100 px | 245 px |
-| juosten + pieruhyppy | 2.5 | 174 px | 285 px |
+**Ne eivät olleet vanhentuneet vaan vääriä alusta asti.** `src/level/physics.js`
+ei ole muuttunut sen commitin jälkeen joka kirjoitti budjettitiedoston
+viimeksi — fysiikkamuutos ja budjettitiedosto tulivat samassa commitissa, eikä
+budjettia mitattu uudelleen muutoksen jälkeen. Nykyisillä vakioilla 121 px ei
+ole mahdollinen: lähtönopeudesta −3.5 päästään 0.0625:n painovoimalla arvoon
+−2.0 kahdessakymmenessäneljässä framessa (~66 px) ja loput 0.3125 syö parissa
+kuudessa (~6 px), eli **noin 72 px**. Mitattu 71. Laskutoimitus ja mittaus ovat
+samaa mieltä, ja vain tiedosto oli eri mieltä.
 
-Suunnittelubudjetiksi tuosta tulisi **6 / 9 / 4** eikä 8 / 13 / 6.
+Kaksi seurausta, joista kumpikaan ei ole rikki:
 
-121 px ei ole nykyisillä vakioilla mahdollinen: lähtönopeudesta −3.5 päästään
-0.0625:n painovoimalla arvoon −2.0 kahdessakymmenessäneljässä framessa (~66 px)
-ja loput 0.3125 syö parissa kuudessa (~6 px). Eli **noin 72 px, ei 121.**
-Jotain hypyssä on muutettu sen jälkeen kun budjetti viimeksi mitattiin.
+- **Maailmat 1–4 eivät riko sääntöjä.** Validaattori ajettiin kaikille 21
+  kentälle sekä vanhalla (8/13/6) että mitatulla (6/9/4) budjetilla, rikkeitä
+  molemmilla nolla. Yksikään kuilu ei ole liian leveä oikeallakaan hypyllä.
+- **Maailma 5 on generoitu vanhoilla luvuilla** eikä sitä ole generoitu
+  uudelleen. Sen kentät läpäisevät validaattorin myös uusilla luvuilla, joten ne
+  jäävät sellaisiksi kuin ovat; uudelleengenerointi muuttaisi kolmen kentän
+  vaikeuden kerralla eikä se ole tämän korjauksen tehtävä. Jos
+  `tools/gen-levels.mjs` joskus ajetaan, se tuottaa eri kentät kuin nyt repossa
+  olevat — se on odotettua eikä regressio.
 
-Vanhoja lukuja ei ole korvattu tässä, koska **maailman 5 kentät on generoitu
-niillä**: 8 / 13 / 6 on se mitta joka selittää nykyiset kuilut. Jos budjetti
-mitataan uudelleen, `src/data/generated.js` pitää generoida samalla — muuten
-kentät on suunniteltu mitalle jota ei enää ole. `tools/jump-budget.json` on
-tästä syystä jätetty koskematta.
+Mitä korjaus paljasti: `tools/difficulty.mjs` pisteyttää kuilun suhteessa
+budjettiin (`(span / gapTiles) ** 2`), joten oikea budjetti tekee kuiluista
+suhteessa vaikeampia. Sillä mitalla **maailman 3 avauskenttä oli maailman
+vaikein** (3-1 204, 3-2 133, 3-3 174). Se oli totta jo ennen korjausta — väärä
+luku vain piilotti sen — ja se korjattiin kentästä eikä mittarista, ks.
+`src/data/levels/world3.js` ja `src/data/chunks/ice.js` (`ice_pit`,
+`ice_twin`).
+
+**Ansa jonka tämä paljasti:** `measure-jump.mjs` *kirjoittaa*
+`jump-budget.json`in sivuvaikutuksena. Pelkkä mittaaminen siis muuttaa sitä
+tiedostoa jota generaattori lukee. Se on tässä tapauksessa juuri se mekanismi
+jolla korjaus tehtiin, mutta se on syytä tietää ennen kuin mittaa uteliaisuuttaan.
 
 ## Reaktiobudjetti — paljonko tilaa väistämiseen jää
 
@@ -167,12 +181,18 @@ eli 11–13 framea, ja se **levenee** voimatason mukana (taso 0: 38 px, taso 5:
 
 ## Mitä tämä teki vanhoille kentille
 
-Maailmat 1–4 on suunniteltu vanhalle budjetille, joten ne ovat nyt
-**helpompia**: kaikki kuilut ovat hyvin hypättävissä ja seinät matalia.
-Maailma 5 on generoitu uudella budjetilla.
+Käsintehdyt kentät (maailmat 1–4) on suunniteltu silmällä ja tarkistettu
+validaattorilla, eivät mitoitettu budjettitiedostosta. Siksi budjetin korjaus
+ei tehnyt niistä yhtään riketta: kuilut mahtuvat mitattuun hyppyyn ja seinät
+mitattuun nousuun.
 
-Tämä on tiedossa oleva avoin asia: maailmat 1–4 kannattaa joko käydä läpi käsin
-tai generoida uudelleen samalla työkalulla.
+Mitä se muutti on **vaikeuslukema**, koska `tools/difficulty.mjs` suhteuttaa
+kuilun budjettiin. Kaikkien kenttien pisteet nousivat, ja yksi maailma meni
+väärään muotoon: maailma 3 luki 204 → 133 → 174 eli avauskenttä oli maailman
+vaikein. Se korjattiin 3-1:stä (ks. yllä). Muut maailmat säilyttivät muotonsa.
+
+Maailma 5 on generoitu vanhoilla luvuilla eikä sitä ole generoitu uudelleen —
+perustelu on ylempänä.
 
 ## Säätäminen
 

@@ -26,12 +26,38 @@ export const WORLD3_LEVELS = {
    * either side of it. The star deletes the cork guys and does nothing at all
    * about the gap, which is the whole lesson: it is protection from the
    * inhabitants, never from the level.
+   *
+   * The pits are `ice_pit` and `ice_twin` and not the common `pit_s` and
+   * `pit_twin`, which is the one thing about this level that was changed on
+   * evidence rather than on taste. Correcting `tools/jump-budget.json`
+   * (9.8.2026 — the file had claimed a 200 px running carry since the commit
+   * that wrote it, measured 155) dropped the gap budget from eight tiles to
+   * six, and the difficulty meter, which prices a gap as (span / budget)²,
+   * then read this level at 204 against 3-2's 133 and 3-3's 174. **The
+   * world's opening level was its hardest**, and the single reason was that
+   * three of its gaps sat at or one tile under the budget: `pit_s` at six of
+   * six, `pit_twin` at five and five with a two-tile island between them.
+   *
+   * That was true before the file was corrected — the stale number was hiding
+   * it, not causing it. So the fix is the level and not the meter: 3-1 lost
+   * the two gaps that had no argument for being that wide, and kept
+   * `cork_gap`, which does have one (it is the star's lesson, above). Why the
+   * gaps and not the enemies: the meter reads 3-1 as the world's *gentlest*
+   * level for enemies (24.9 against 3-2's 36.7), so widening the difference
+   * there would have flattened the level rather than shaped it.
+   *
+   * Deliberately not done: making 3-3 harder. It would have produced the same
+   * "rises overall" verdict out of the same measurements, and would have been
+   * tuning the number instead of the level.
+   *
+   * After: 3-1 162 → 3-2 133 → 3-3 174, which is the shape the world was
+   * always supposed to have.
    */
   '3-1': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
-      'start', 'spike_walk', 'power', 'walkers', 'pit_s', 'qrow',
-      'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'pit_twin',
+      'start', 'spike_walk', 'power', 'walkers', 'ice_pit', 'qrow',
+      'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
       'spikes', 'ice_star', 'cork_gap', 'sky_run', 'pit_plat', 'power_hi',
       'plat_steps', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],

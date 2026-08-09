@@ -491,6 +491,87 @@ const report = await page.evaluate(async () => {
       `${door.length} ruutua, ${doorH} korkea, finished ${JSON.stringify(finished)}`);
   }
 
+  /*
+   * The jump budget must be reproducible from the engine that is in the tree.
+   *
+   * This is the one bug in this project's history that nothing could catch.
+   * `tools/jump-budget.json` claimed a 121 px rise and a 200 px carry from the
+   * commit that wrote it until 9.8.2026 — the physics change and the budget
+   * file landed together and the budget was never re-measured, so the file was
+   * wrong on arrival rather than gone stale. Nothing failed: the validator
+   * reads the same file, so a too-generous budget makes every level *pass*, and
+   * `difficulty.mjs` reads it too, so the curve looked fine as well. Both
+   * gates were measuring against the claim instead of against the game.
+   *
+   * So this asserts the claim itself. It re-runs the two headline cases of
+   * `measure-jump.mjs` — the standing held jump's rise and the running jump's
+   * carry — and compares them with what the file says. It does NOT write the
+   * file: `measure-jump.mjs` does that as a side effect, which is exactly why
+   * a read-only check has to exist somewhere else.
+   *
+   * The tolerance is ±3 px. The measurement is deterministic (fixed 60 Hz
+   * steps, no randomness), so anything beyond a rounding difference means the
+   * constants moved and the file did not follow.
+   */
+  {
+    const budget = await (await fetch('/tools/jump-budget.json')).json();
+    const runway = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      return s;
+    };
+    /** One held jump on clear floor; `runFrames` of held right first. */
+    const arc = (runFrames, run) => {
+      const s = runway({ type: 'shroom', level: 1 });
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      i.held.right = runFrames > 0;
+      i.held.run = run;
+      for (let f = 0; f < runFrames; f++) { s.update(i); i.pressed = blank(); }
+      const x0 = p.x; const y0 = p.y;
+      let peak = 0; let air = 0;
+      i.pressed.jump = true; i.held.jump = true;
+      s.update(i); i.pressed = blank();
+      while (air < 400) {
+        air++;
+        i.held.jump = p.vy < 0;
+        s.update(i);
+        i.pressed = blank();
+        peak = Math.max(peak, y0 - p.y);
+        if (p.onGround && air > 4) break;
+      }
+      return { pFull: p.pFull, height: Math.round(peak), distance: Math.round(p.x - x0) };
+    };
+
+    const stand = arc(0, false);
+    const runJump = arc(90, true);
+    const claimed = (label) => budget.cases.find((c) => c.label === label) || {};
+    const near = (a, b) => Math.abs(a - b) <= 3;
+    const standClaim = claimed('standing, held');
+    const runClaim = claimed('running, held');
+    expect('the stored jump budget is reproducible from the current physics',
+      !runJump.pFull
+      && near(stand.height, standClaim.height) && near(runJump.height, runClaim.height)
+      && near(runJump.distance, runClaim.distance),
+      `paikaltaan ${stand.height}px (tiedostossa ${standClaim.height}), `
+      + `juosten ${runJump.height}px / ${runJump.distance}px `
+      + `(tiedostossa ${runClaim.height} / ${runClaim.distance})`);
+
+    /* And that the design budget the validator uses is the one those numbers
+     * imply. Same formula and same margin as measure-jump.mjs — duplicated on
+     * purpose, so that editing the file by hand is caught rather than blessed. */
+    const gap = Math.max(3, Math.floor((runJump.distance * 0.7) / 16));
+    const wall = Math.max(2, Math.floor((runJump.height * 0.8) / 16));
+    expect('the design budget follows from the measured jump',
+      budget.margin === 0.7 && budget.gapTiles === gap && budget.wallTiles === wall,
+      `kuilu ${budget.gapTiles} (mitattu ${gap}), seinä ${budget.wallTiles} (mitattu ${wall})`);
+  }
+
   /* The design rules, applied to EVERY level in the game rather than only the
    * generated ones. Worlds 1-4 predate the current jump budget, so their
    * violations are reported as a work list, not as a build failure. */

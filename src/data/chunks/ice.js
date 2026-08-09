@@ -35,6 +35,56 @@ export const ICE_CHUNKS = {
   spike_walk: ck(16, { 9: '   o o o', 12: '        x', 13: G, 14: G }),
 
   /**
+   * The world's own pit, and the reason it is not `pit_s`.
+   *
+   * A gap is scored — and played — against what the jump carries, and the
+   * measured budget (`tools/jump-budget.json`) sizes a gap at 70 % of the
+   * *running* jump: 155 px carry, so six tiles. That number assumes the player
+   * arrives running. On every other floor that is a choice; on this one it is
+   * not. Ice does not let you set up a jump, it hands you whatever speed the
+   * approach happened to leave you with, and a six-tile gap taken at a walk is
+   * a death with no tell.
+   *
+   * So this world's pits are sized to the *walking* jump instead, by the same
+   * 70 % rule and the same measured file: 87 px carry × 0.7 = 61 px, which is
+   * three tiles and change. Four tiles is what that rounds to and what is
+   * written here — a gap that clears from a walk, and clears from a run with
+   * more room than the budget asks for.
+   *
+   * That is not a softer world, it is the same world measured honestly. What
+   * makes world 3 hard is the floor, and the floor's tax is paid on every tile
+   * of the level; pits at the edge of a budget the floor will not let you meet
+   * charge for it a second time.
+   */
+  ice_pit: ck(16, { 13: '######    ######', 14: '######    ######' }),
+
+  /**
+   * `pit_twin` rebuilt, and this one is a correction rather than a variation.
+   *
+   * The common chunk's own note says what it is for: "the first one has to
+   * *stop*, because the landing is two tiles wide and the next gap starts
+   * immediately after it." That is a fine idea in the grass and in the desert.
+   * Here it asks for the one thing this world is built to refuse — a power-0
+   * player released at P-speed coasts 9.7 tiles (measured; see `ice_crumble`
+   * below), so a two-tile island between two gaps is not a landing, it is a
+   * slide into the second gap at whatever speed the first one gave you.
+   *
+   * Same shape, therefore, with the two numbers the floor decides: the island
+   * is four tiles instead of two, and each gap is three instead of five. The
+   * skill asked for is still two jumps in a row rather than one big one, which
+   * was the point of the original; what is gone is the requirement to brake on
+   * ice between them.
+   *
+   * Coins over the gaps and not over the island, the same way round as
+   * `ice_crumble`: the line that pays and the line that survives are one line.
+   */
+  ice_twin: ck(16, {
+    9: '    o o    o o',
+    13: '####   ####   ##',
+    14: '####   ####   ##',
+  }),
+
+  /**
    * Supertähti, and the two things in this world it actually answers.
    *
    * Grass has `star_block` and this is deliberately not a copy of it. The star
