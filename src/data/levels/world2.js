@@ -290,11 +290,21 @@ export const WORLD2_LEVELS = {
    *     only level in the world that hides anything. A new hazard in its route
    *     band would be a second thing to notice in the one place where noticing
    *     is the mechanic.
-   *   - **not 2-N.** The night palette's brick and ground measure 0.4 % apart —
-   *     the weakest pair in the game and a known open problem — so it is the
-   *     one level where a tile that has to be recognised by *colour* must not
-   *     make its debut. 2-N already owns the mechanic that answers that
-   *     problem: the crumbling boardwalk announces itself by moving.
+   *   - **not 2-N**, and the reason has since been repaired underneath this
+   *     paragraph, which is worth recording rather than quietly rewriting.
+   *     When the sand was placed, the night palette's brick and ground
+   *     measured **0,4 % apart** — the weakest pair in the game and a known
+   *     open problem — so 2-N was the one level where a tile that has to be
+   *     recognised by *colour* must not make its debut. That fault was fixed
+   *     the same evening (v26.08.09.40, brick lightened, ground untouched:
+   *     **0,4 % → 17,8 %**), so the original objection no longer holds.
+   *
+   *     The placement stands anyway, on the argument that outlived it: 2-N
+   *     already owns the mechanic that answers this one — the crumbling
+   *     boardwalk announces itself by *moving* — and two hazards whose whole
+   *     point is "the floor is not what it looks like" in one level is one
+   *     lesson taught twice. If a later round wants sand in the night, the
+   *     palette is no longer the thing standing in the way.
    *   - **not 2-M.** Its walk exists to hand out a power-up and give the arena a
    *     horizon, and the file says why: padding it makes losing the fight more
    *     expensive to retry. A hazard in the run-up to a fight you are meant to

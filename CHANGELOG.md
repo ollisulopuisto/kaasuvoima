@@ -55,10 +55,6 @@ mitä kanavakohtainen keskiero aliarvioi ja mitä silmä lukee helpommin kuin
 kirkkauseroa. Luumaailman väite koko pelin selvimmästä parista pitää yhä:
 48,7 % vastaan yön 17,8 %.
 
-## v26.08.09.38 — laatikko kuvaputken ympäriltä pois, kuvasta ei pikseliäkään
-
----
-
 ## v26.08.09.39 — laatikko kuvaputken ympäriltä pois, kuvasta ei pikseliäkään
 
 Omistajan havainto Chromella GitHub Pagesista: **"kuvaputkiruudun ympärillä on
