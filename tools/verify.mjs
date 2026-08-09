@@ -685,7 +685,9 @@ const report = await page.evaluate(async () => {
     if (door.length) {
       s2.player.x = door[0].tx * 16;
       s2.player.y = door[0].ty * 16;
-      for (let f = 0; f < 200 && !finished; f++) { s2.update(i); i.pressed = blank(); }
+      // 260 and not 200: going in is a walk now, and the clear sequence that
+      // used to start on contact starts when the body is gone. See below.
+      for (let f = 0; f < 260 && !finished; f++) { s2.update(i); i.pressed = blank(); }
     }
     /* The door is several tiles now — big enough that the largest power level
      * walks through it rather than steps over it — so what matters is that it
@@ -696,6 +698,109 @@ const report = await page.evaluate(async () => {
     expect('the fortress door opens once the boss is beaten',
       door.length > 0 && doorH * 16 >= 43 && !!finished && finished.cleared,
       `${door.length} ruutua, ${doorH} korkea, finished ${JSON.stringify(finished)}`);
+
+    /*
+     * Red before green (DESIGN.md §7) for the three ways the door did not work.
+     *
+     * 1. It never opened. `drawDoor` took an `open` parameter and spent it on a
+     *    blinking handle and a faint halo — the leaves themselves never moved,
+     *    so the one promise the whole fortress is built around was plumbed all
+     *    the way to the drawing code and dropped there.
+     * 2. Touching it ended the level on the same frame, and `completeLevel`
+     *    sets `autoWalk`, so the player walked *past* the door he had just
+     *    finished the game by entering.
+     * 3. `TILE_INFO`'s `door` flag was read nowhere.
+     */
+    {
+      const { drawTile } = await import('/src/gfx/tiles.js');
+      reset({ type: 'shroom', level: 1 });
+      const s3 = new LevelScene(game, '1-F');
+      // The boss is not what this is about.
+      s3.entities = s3.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s3.time = 9999;
+      game.setScene(s3);
+      let done = null;
+      game.finishLevel = (r) => { done = r; };
+
+      // The swing is a picture, so it is measured as one. Three moments of the
+      // same door tile have to be three different pictures.
+      const shots = [0, 0.5, 1].map((o) => {
+        const c = document.createElement('canvas');
+        c.width = 16; c.height = 16;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        g.fillStyle = '#000';
+        g.fillRect(0, 0, 16, 16);
+        drawTile(g, 'D', 0, 0, 'fortress', 4, 6, 0,
+          ' ', { doorOpen: o, doorEdges: { l: true, r: false, t: false, b: false } });
+        return [...g.getImageData(0, 0, 16, 16).data].join(',');
+      });
+      expect('the fortress door visibly swings instead of only glowing',
+        shots[0] !== shots[1] && shots[1] !== shots[2] && shots[0] !== shots[2],
+        `kiinni=puoliauki ${shots[0] === shots[1]}, puoliauki=auki ${shots[1] === shots[2]}`);
+
+      // A door that has only just been unlocked is not a door you can walk
+      // into: the leaves are still moving.
+      s3.bossDefeated = s3.tick + 1;
+      const shut = s3.doorOpen;
+      for (let f = 0; f < 40; f++) s3.tick++;
+      expect('the door takes a moment to swing and then stays open',
+        shut < 0.2 && s3.doorOpen === 1, `${shut} -> ${s3.doorOpen}`);
+
+      // Walking in: the level must not end on contact, the body must go out of
+      // sight, and the clear sequence must land on the frame it does.
+      const cells = [];
+      for (let ty = 0; ty < s3.h; ty++) {
+        for (let tx = 0; tx < s3.w; tx++) if (s3.grid[ty][tx] === 'D') cells.push({ tx, ty });
+      }
+      const left = Math.min(...cells.map((c) => c.tx));
+      const bottom = Math.max(...cells.map((c) => c.ty));
+      s3.player.x = left * 16 - s3.player.w + 2;
+      s3.player.y = (bottom + 1) * 16 - s3.player.h;
+      s3.player.onGround = true;
+      s3.centerCamera();
+      const walk = mkInput();
+      walk.held.right = true;
+      let contactAt = -1;
+      let clearAt = -1;
+      let hidden = 0;
+      for (let f = 0; f < 120 && clearAt < 0; f++) {
+        walk.pressed = blank();
+        s3.update(walk);
+        if (contactAt < 0 && s3.player.transit) contactAt = f;
+        if (s3.player.transit && s3.player.transit.phase === 'hold') hidden++;
+        if (s3.state === 'clear' && clearAt < 0) clearAt = f;
+      }
+      /* The body is drawn clipped to the near side of `transit.hide`, so by the
+       * end of the walk-in it is entirely on the far side of that line — which
+       * is what "the player disappears" means when tiles draw before entities
+       * and there is no depth buffer.
+       *
+       * Still 'gone' after the level has cleared, and still on the far side of
+       * the line it disappeared behind: `completeLevel` sets `autoWalk`, and a
+       * player who reappeared and strolled back out of the door would be the
+       * original complaint with an animation in front of it. */
+      const t = s3.player.transit;
+      const gone = !!t && t.phase === 'gone'
+        && (t.hideDir > 0 ? s3.player.x >= t.hide : s3.player.x + s3.player.w <= t.hide);
+      let strolled = 0;
+      const x0 = s3.player.x;
+      for (let f = 0; f < 60; f++) { s3.update(walk); walk.pressed = blank(); }
+      strolled = Math.abs(s3.player.x - x0);
+      expect('walking into the door takes the player in before the level ends',
+        contactAt >= 0 && clearAt > contactAt + 10 && hidden >= 3
+        && s3.state === 'clear' && gone && strolled < 0.001,
+        `kosketus ${contactAt}, selvä ${clearAt}, piilossa ${hidden} framea, `
+        + `poissa ${gone}, käveli vielä ${strolled.toFixed(1)} px`);
+      /* And where the clear sequence sits: on the frame the body is gone, not
+       * on the frame it touched the door. 14 frames of walking in plus 5 of
+       * empty doorway, so ~19; asserted as a window, because the exact number
+       * is a tuning constant and the ordering is the decision. */
+      expect('and the clear jingle waits for the picture, not the other way round',
+        contactAt >= 0 && clearAt - contactAt >= 15 && clearAt - contactAt <= 25
+        && done === null,
+        `kosketuksesta selväksi ${clearAt - contactAt} framea, finished ${JSON.stringify(done)}`);
+    }
   }
 
   /*
@@ -1668,12 +1773,14 @@ const report = await page.evaluate(async () => {
       // area you cannot leave is a trap, not a bonus.
       const c = mk(power);
       put(c, 229, 26);
-      hold(c, i, ['down'], 40);
+      // 90 and not 40: going down a pipe is a slide now, and there is still a
+      // drop to the cave floor at the end of it.
+      hold(c, i, ['down'], 90);
       const inCave = c.player.y > 30 * 16 && c.player.onGround && !c.player.dying;
       put(c, 250, 42);
       hold(c, i, [], 3);
       c.player.warpLock = 0;
-      hold(c, i, ['up'], 40);
+      hold(c, i, ['up'], 90);
       hold(c, i, [], 20);
       expect(`the warp pipe takes power ${power.level} down and the cave lets it out`,
         inCave && c.player.y < 30 * 16 && c.player.onGround && !c.player.dying
@@ -1713,6 +1820,211 @@ const report = await page.evaluate(async () => {
     }
     expect('the ground route never shows another band', worst <= 15 * 16 + 32,
       `cam.y ${Math.round(worst)}`);
+  }
+
+  /* ------------------- putken suunta ja putkessa kulkeminen -------------- */
+  /*
+   * Red before green (DESIGN.md §7) for the rule that the direction you travel
+   * has to match the mouth you enter.
+   *
+   * The fixture is a real level with two pipes pasted into it, because the
+   * shipped content has no ceiling pipe at all yet — every upward warp in the
+   * game is still drawn standing on the floor, which is exactly why
+   * `WARP_COMPAT.upFromFloor` is still on. Both halves of the rule are proved
+   * with the compatibility off: a ceiling pipe goes up, and a floor pipe does
+   * not, whatever is pressed.
+   */
+  {
+    const levelMod = await import('/src/scenes/level.js');
+    /* Named rather than destructured, and asserted: on an engine without the
+     * switch this file has to report that by name instead of dying on it. */
+    expect('the engine exposes the upward-warp compatibility switch',
+      !!levelMod.WARP_COMPAT, 'WARP_COMPAT puuttuu src/scenes/level.js:stä');
+    const WARP_COMPAT = levelMod.WARP_COMPAT || { upFromFloor: true };
+    const mk = (power) => {
+      reset(power);
+      const s = new LevelScene(game, '1-2');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      game.scene = s;
+      return s;
+    };
+    const put = (s, tx, ty) => {
+      s.player.x = tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = ty * 16 - s.player.h;
+      s.player.vy = 0;
+      s.player.onGround = true;
+      s.player.climbing = false;
+      s.player.warpLock = 0;
+      s.centerCamera();
+    };
+    const hold = (s, i, keys, frames) => {
+      for (let f = 0; f < frames; f++) {
+        i.held = blank();
+        for (const k of keys) i.held[k] = true;
+        i.pressed = blank();
+        s.update(i);
+      }
+    };
+    const i = mkInput();
+
+    /* A ceiling pipe over the cave room's floor, at the columns the room keeps
+     * clear for its exit. Rows 40-41 hang from nothing in particular — what
+     * matters to `tryWarp` is that the mouth is the *lowest* tile of the pipe
+     * and that it is above the player's head. */
+    const ceiling = (s, tx, ty) => {
+      s.grid[ty][tx] = '('; s.grid[ty][tx + 1] = ')';
+      s.grid[ty - 1][tx] = '{'; s.grid[ty - 1][tx + 1] = '}';
+    };
+
+    const was = WARP_COMPAT.upFromFloor;
+    try {
+      WARP_COMPAT.upFromFloor = false;
+
+      // 1. A pipe hanging from the ceiling, entered upward from under it.
+      const up = mk({ type: null, level: 0 });
+      ceiling(up, 249, 41);          // mouth bottom edge exactly at the head
+      put(up, 249, 43);                       // standing on the cave room floor
+      const fromY = up.player.y;
+      hold(up, i, ['up'], 60);
+      expect('pressing up enters a pipe that hangs from the ceiling',
+        up.player.y < 30 * 16 && Math.abs(up.player.y - (fromY - 15 * 16)) < 1
+        && !up.player.dying && !up.player.transit,
+        `${Math.round(fromY)} -> ${Math.round(up.player.y)}`);
+
+      // 2. …and the same press on a pipe standing on the floor does nothing.
+      const floor = mk({ type: null, level: 0 });
+      put(floor, 250, 42);                    // on top of the cave room's exit
+      const stayY = floor.player.y;
+      hold(floor, i, ['up'], 60);
+      expect('pressing up on a pipe standing on the floor is not a way in',
+        Math.abs(floor.player.y - stayY) < 1 && !floor.player.transit,
+        `${Math.round(stayY)} -> ${Math.round(floor.player.y)}`);
+
+      // 3. Down through a floor pipe still works, or the rule ate both cases.
+      const down = mk({ type: null, level: 0 });
+      put(down, 229, 26);
+      hold(down, i, ['down'], 60);
+      expect('pressing down on a pipe you are standing on still goes down',
+        down.player.y > 30 * 16 && !down.player.dying,
+        `y ${Math.round(down.player.y)}`);
+    } finally {
+      WARP_COMPAT.upFromFloor = was;
+    }
+
+    /* And the state of the migration, asserted rather than remembered. While
+     * this is on, the five upward warps in `src/data/` still work; the moment
+     * it goes off, they must already have grown ceilings or the player is
+     * sealed in a bonus room. The list, with the change each one needs, is on
+     * `WARP_COMPAT` in src/scenes/level.js. */
+    expect('the temporary upward-warp compatibility is still on, and says so',
+      WARP_COMPAT.upFromFloor === true,
+      'jos tämä on pois, cave_room / tomb_cave / fac_cellar / fac_duct on korjattava ensin');
+
+    /* ----------------------- putkessa kulkeminen ----------------------- */
+    /*
+     * The warp used to be `p.y += shift` on one frame. It is a slide now, and
+     * the three things that must be true of any such slide: it takes time, the
+     * player cannot act or be acted upon while it runs, and it ends exactly
+     * where the instant version ended.
+     */
+    {
+      const s = mk({ type: 'shroom', level: 1 });
+      put(s, 229, 26);
+      /* Measured at the feet, not at `y`. Pressing down ducks a big player on
+       * the way in, and `applySize` pins the bottom of the body and moves `y`;
+       * the feet are the thing that is actually one band lower afterwards. */
+      const before = s.player.y + s.player.h;
+      const shift = 15 * 16;
+      let frames = 0;
+      let acted = 0;
+      let hurtLanded = 0;
+      i.held = blank(); i.held.down = true; i.pressed = blank();
+      s.update(i);
+      const started = !!s.player.transit;
+      while (s.player.transit && frames < 200) {
+        frames++;
+        // Everything a player could try, every frame, plus an enemy's worth of
+        // damage. None of it may reach him.
+        i.held = blank();
+        i.held.right = true; i.held.jump = true; i.held.run = true;
+        i.pressed = blank(); i.pressed.jump = true; i.pressed.run = true;
+        const px = s.player.x;
+        if (s.player.hurt('enemy')) hurtLanded++;
+        s.update(i);
+        if (Math.abs(s.player.x - px) > 0.001 || s.player.vx !== 0 || s.player.vy !== 0) acted++;
+      }
+      // Measured where the slide left him and not a moment later: the arrival
+      // is two tiles above the cave floor and gravity has it from here.
+      // `controllable` is in here because taking the controls away is easy and
+      // giving them back is the half that gets forgotten.
+      expect('entering a pipe is a slide, and nothing reaches the player during it',
+        started && frames > 20 && frames < 60 && acted === 0 && hurtLanded === 0
+        && s.player.powerLevel === 1 && s.player.controllable === true
+        && Math.abs((s.player.y + s.player.h) - (before + shift)) < 1,
+        `${frames} framea, liikkui ${acted}, osumia ${hurtLanded}, `
+        + `ohjattavissa ${s.player.controllable}, jalat `
+        + `${Math.round(before)} -> ${Math.round(s.player.y + s.player.h)} `
+        + `(odotus ${before + shift})`);
+    }
+
+    /*
+     * A quicksave taken mid-slide. The state is a plain object on the player,
+     * so `savestate.js` carries it with no help; the load has to come back
+     * inside the pipe and finish the journey at the right place. Refusing the
+     * save was the alternative and it is worse — a quicksave key that silently
+     * does nothing for half a second is a bug report, not a policy.
+     */
+    {
+      const s = mk({ type: 'shroom', level: 1 });
+      put(s, 229, 26);
+      const target = s.player.y + s.player.h + 15 * 16;      // feet, see above
+      game.setScene(s);
+      i.held = blank(); i.held.down = true; i.pressed = blank();
+      for (let f = 0; f < 8; f++) s.update(i);
+      const midway = !!s.player.transit && s.player.transit.phase === 'in';
+      game.slot = 3;
+      game.quickSave();
+      game.quickLoad();
+      const back = game.scene;
+      const restored = !!(back.player.transit && back.player.transit.phase === 'in');
+      const idle = mkInput();
+      for (let f = 0; f < 90 && back.player.transit; f++) back.update(idle);
+      expect('a quicksave taken inside a pipe loads back inside it and finishes',
+        midway && back !== s && restored && !back.player.transit
+        && !back.player.dying
+        && Math.abs((back.player.y + back.player.h) - target) < 1,
+        `tallennettu ${midway}, palautettu ${restored}, jalat `
+        + `${Math.round(back.player.y + back.player.h)} (odotus ${Math.round(target)})`);
+      game.slot = 1;
+    }
+
+    /*
+     * The scene stops updating 140 frames after a death (DESIGN.md §6), so a
+     * transit that could outlive that would leave a body parked inside a pipe.
+     * It cannot: the clock stops, the collisions stand aside and `hurt`
+     * refuses, so nothing in the level can kill a travelling player — and a
+     * death forced from outside drops the transit rather than racing it.
+     */
+    {
+      const s = mk({ type: null, level: 0 });
+      put(s, 229, 26);
+      s.time = 1;
+      s.timeSub = 20;      // four frames from zero, and the trip lasts thirty
+      i.held = blank(); i.held.down = true; i.pressed = blank();
+      s.update(i);
+      let ticked = 0;
+      while (s.player.transit && ticked < 200) { s.update(i); ticked++; }
+      const clockHeld = s.time === 1 && s.state === 'play';
+      const forced = mk({ type: null, level: 0 });
+      put(forced, 229, 26);
+      forced.update(i);
+      const running = !!forced.player.transit;
+      forced.player.die('debug');
+      expect('nothing can kill a player inside a pipe, and a forced death ends the trip',
+        clockHeld && running && forced.player.transit === null && forced.player.dying,
+        `kello ${s.time}, tila ${s.state}, kesken ${running}`);
+    }
   }
 
   /* ------------------------------ kuplaloukku -------------------------- */
@@ -4187,6 +4499,72 @@ const report = await page.evaluate(async () => {
       expect('the highest jump still fits inside the letterbox band',
         worst >= -0.5 && ground >= 90,
         `head rests ${ground.toFixed(1)} px below the band top, jumps to ${worst.toFixed(1)}`);
+    }
+
+    /*
+     * Red before green (DESIGN.md §7) for the owner's report: "the ground
+     * disappears from view pretty often when jumping".
+     *
+     * The measurement is the complaint, stated as a number: over a run of
+     * ordinary running jumps, on how many airborne frames is the tile the
+     * player took off from — the one they are about to land back on — still
+     * inside the window? Before the camera anchor it was **58.4 %** in 2-1 at
+     * power level 0 and 58.8 % at level 3, with the tile as much as 42 px past
+     * the bottom edge. In 1-1, where the window is 208 rows and the camera has
+     * only 32 px of travel, it was already 100 %, which is why this only ever
+     * showed up in the letterboxed desert.
+     *
+     * It is asserted at 100 % and not at "better than before": the rule is that
+     * the view does not follow a jump upward at all, so there is no arc that
+     * can take the ground with it, and any frame that fails is the rule being
+     * broken rather than a threshold being missed.
+     */
+    {
+      const rows = [];
+      for (const [id, power] of [['2-1', { type: null, level: 0 }],
+        ['2-1', { type: 'shroom', level: 3 }], ['1-1', { type: 'shroom', level: 3 }]]) {
+        reset(power);
+        const s = new LevelScene(game, id);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const input = mkInput();
+        let air = 0;
+        let seen = 0;
+        let rise = 0;
+        let takeoff = null;
+        for (let f = 0; f < 1200; f++) {
+          input.held = blank();
+          input.pressed = blank();
+          input.held.right = true;
+          input.held.run = true;
+          const phase = f % 60;
+          if (phase === 40 && s.player.onGround) { input.pressed.jump = true; input.held.jump = true; }
+          else if (phase > 40 && phase < 74) input.held.jump = true;
+          const wasGround = s.player.onGround;
+          const camBefore = s.cam.y;
+          s.update(input);
+          const p = s.player;
+          if (p.dying) break;
+          if (wasGround && !p.onGround) takeoff = p.y + p.h;
+          if (!p.onGround && takeoff !== null) {
+            air++;
+            if (takeoff < s.cam.y + s.viewH) seen++;
+            // How far the view climbed on a single airborne frame.
+            rise = Math.max(rise, camBefore - s.cam.y);
+          }
+          if (p.onGround) takeoff = null;
+        }
+        rows.push({ id, level: power.level, air, seen, rise });
+      }
+      expect('the ground you jumped off stays on screen for the whole jump',
+        rows.every((r) => r.air > 200 && r.seen === r.air),
+        rows.map((r) => `${r.id} taso ${r.level}: ${r.seen}/${r.air} framea`).join(', '));
+      /* And the mechanism, not just its effect: the view may rise a little near
+       * the apex to keep the head in frame (CAM_TOP_MARGIN), and it must never
+       * ride the arc. A jump lifts the body ~5 px on its fastest frame. */
+      expect('the view does not ride a jump upward',
+        rows.every((r) => r.rise < 2),
+        rows.map((r) => `${r.id} ${r.rise.toFixed(2)} px/frame`).join(', '));
     }
 
     /* `applySize()` pins the bottom of the body and changes its height, so

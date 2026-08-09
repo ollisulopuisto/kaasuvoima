@@ -64,6 +64,10 @@ export const TILE_INFO = {
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
   [T.GOAL]: { goal: true },
+  /* The fortress exit. The flag is what the scene asks — "is this tile a
+   * door" — in `playerTiles` and in the edge test that shapes the drawing; it
+   * used to be declared here and read nowhere, with `ch === T.DOOR` written
+   * out at every call site instead. */
   [T.DOOR]: { door: true },
 };
 
@@ -776,6 +780,13 @@ function drawLava(ctx, x, y, tick, tx) {
  */
 function drawDoor(ctx, x, y, th, tick, open, edges) {
   const e = edges || { l: true, r: true, t: true, b: true };
+  /*
+   * `open` is **how far**, 0…1, and not whether. It used to be a boolean and
+   * it only ever reached a blinking handle and a faint halo, so the door the
+   * whole fortress is built around never actually moved — the promise was
+   * plumbed all the way here and then dropped. See `LevelScene.doorOpen`.
+   */
+  const o = Math.max(0, Math.min(1, Number(open) || 0));
   ctx.fillStyle = th.hardDark;
   ctx.fillRect(x, y, TILE, TILE);
   if (e.t) {
@@ -787,23 +798,66 @@ function drawDoor(ctx, x, y, th, tick, open, edges) {
   const iw = TILE - (e.l ? 2 : 0) - (e.r ? 2 : 0);
   const iy = y + (e.t ? 1 : 0);
   const ih = TILE - (e.t ? 1 : 0) - (e.b ? 1 : 0);
-  ctx.fillStyle = '#3a2008';
-  ctx.fillRect(ix, iy, iw, ih);
-  ctx.fillStyle = '#7a4c20';
-  ctx.fillRect(ix + 1, iy + 1, iw - 2, ih - (e.b ? 1 : 0));
 
-  // planks, so a three-tile leaf does not read as one flat slab
-  ctx.fillStyle = '#5c3410';
-  for (let px = ix + 4; px < ix + iw - 2; px += 5) ctx.fillRect(px, iy + 1, 1, ih - 1);
-  if (e.t) {
-    ctx.fillStyle = '#9c6a30';
-    ctx.fillRect(ix + 1, iy + 1, iw - 2, 1);
+  /* What is behind the leaves, painted across the whole opening first. Whatever
+   * the leaves uncover has to be the way out and not the wall the door is set
+   * into, or opening it would read as the door being deleted. */
+  ctx.fillStyle = '#0d0710';
+  ctx.fillRect(ix, iy, iw, ih);
+  if (o > 0) {
+    /* An even veil over the whole opening and a bright line on the threshold.
+     * The first version shaded the bottom half of *each tile*, which drew one
+     * stripe per row of a three-tile door — a ladder, not a corridor. A tile
+     * does not know how far down the door it is, but it does know whether it
+     * is the bottom one, and that is the only row where light on the floor
+     * means anything. */
+    ctx.fillStyle = `rgba(255,186,84,${(0.06 + 0.10 * o).toFixed(3)})`;
+    ctx.fillRect(ix, iy, iw, ih);
+    if (e.b) {
+      ctx.fillStyle = `rgba(255,206,120,${(0.10 + 0.20 * o).toFixed(3)})`;
+      ctx.fillRect(ix, iy + ih - 3, iw, 3);
+    }
   }
 
-  // The seam between the two leaves runs down the inside edge of each half.
-  if (!e.r) {
+  /*
+   * One leaf, swinging back onto its hinge — which is the outer edge of the
+   * door, so the gap opens down the middle and widens outwards. Returns the x
+   * of its free edge, which is where the seam and the handle belong; they
+   * travel with the leaf rather than staying painted on the frame.
+   */
+  const leaf = (lx, lw, hingeLeft) => {
+    const w = Math.round(lw * (1 - o));
+    if (w <= 0) return null;
+    const px = hingeLeft ? lx : lx + lw - w;
+    ctx.fillStyle = '#3a2008';
+    ctx.fillRect(px, iy, w, ih);
+    ctx.fillStyle = '#7a4c20';
+    ctx.fillRect(px + 1, iy + 1, Math.max(0, w - 2), ih - (e.b ? 1 : 0));
+    // planks, so a three-tile leaf does not read as one flat slab
+    ctx.fillStyle = '#5c3410';
+    for (let cx = px + 3; cx < px + w - 2; cx += 5) ctx.fillRect(cx, iy + 1, 1, ih - 1);
+    if (e.t) {
+      ctx.fillStyle = '#9c6a30';
+      ctx.fillRect(px + 1, iy + 1, Math.max(0, w - 2), 1);
+    }
+    // The seam runs down the free edge of each leaf.
     ctx.fillStyle = '#2a1806';
-    ctx.fillRect(x + TILE - 1, iy, 1, ih);
+    ctx.fillRect(hingeLeft ? px + w - 1 : px, iy, 1, ih);
+    return hingeLeft ? px + w : px;
+  };
+
+  /* Which half of the door this tile is, read off the same `edges` the frame
+   * is drawn from: an outer left edge means a left-hung leaf, an outer right
+   * edge a right-hung one, both means the whole door fits in this one tile. */
+  let freeL = null;
+  let freeR = null;
+  if (e.l && e.r) {
+    freeL = leaf(ix, Math.ceil(iw / 2), true);
+    freeR = leaf(ix + Math.ceil(iw / 2), Math.floor(iw / 2), false);
+  } else if (e.r) {
+    freeR = leaf(ix, iw, false);
+  } else {
+    freeL = leaf(ix, iw, true);
   }
 
   ctx.fillStyle = '#c8c8d8';
@@ -817,18 +871,23 @@ function drawDoor(ctx, x, y, th, tick, open, edges) {
   }
 
   // Handles sit at the seam, and only on the middle row of a tall door.
-  const glow = open && Math.floor(tick / 8) % 2 === 0;
+  const glow = o >= 1 && Math.floor(tick / 8) % 2 === 0;
   const middle = !e.t && !e.b;
   if (middle || (e.t && e.b)) {
     ctx.fillStyle = glow ? '#fff0a0' : '#ffd048';
-    if (!e.r) ctx.fillRect(x + TILE - 4, y + 7, 2, 3);
-    if (!e.l) ctx.fillRect(x + 2, y + 7, 2, 3);
-    if (e.l && e.r) ctx.fillRect(x + 10, y + 9, 2, 2);
+    if (freeL !== null) ctx.fillRect(freeL - 3, y + 7, 2, 3);
+    if (freeR !== null) ctx.fillRect(freeR + 1, y + 7, 2, 3);
   }
 
-  if (open) {
-    ctx.fillStyle = 'rgba(255,224,120,0.12)';
-    ctx.fillRect(x - 2, y - 2, TILE + 4, TILE + 4);
+  /* Light spilling onto the wall, and only where there is wall: painting the
+   * halo around every tile of the door stacked it on every internal seam and
+   * made a plaid of it. */
+  if (o > 0) {
+    ctx.fillStyle = `rgba(255,224,120,${(0.14 * o).toFixed(3)})`;
+    if (e.l) ctx.fillRect(x - 2, y, 2, TILE);
+    if (e.r) ctx.fillRect(x + TILE, y, 2, TILE);
+    if (e.t) ctx.fillRect(x, y - 2, TILE, 2);
+    if (e.b) ctx.fillRect(x, y + TILE, TILE, 2);
   }
 }
 
@@ -998,7 +1057,8 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
       if (themeName === 'ice') drawCrevasse(ctx, x, y, tick, tx);
       else drawLava(ctx, x, y, tick, tx);
       break;
-    case T.DOOR: drawDoor(ctx, x, y, th, tick, !!opts.doorOpen, opts.doorEdges); break;
+    // Passed through as a number: `drawDoor` swings, it does not toggle.
+    case T.DOOR: drawDoor(ctx, x, y, th, tick, opts.doorOpen, opts.doorEdges); break;
     default: break;
   }
 }

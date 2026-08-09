@@ -68,6 +68,41 @@ const CAM_V_EASE = 0.25;
 const CAM_SNAP = 48;
 
 /*
+ * ...but it does not follow a jump.
+ *
+ * The line above is anchored to `camAnchor`, the last feet position the player
+ * actually **settled** at, and not to the feet themselves. A jump moves the
+ * body and leaves the anchor where it was, so the view stays put and the
+ * ground stays on screen; landing, standing, climbing and falling all move the
+ * anchor at once, because those are the moments where the player really is
+ * somewhere else. Falling in particular has to follow promptly — you must see
+ * what you are falling towards — and it does, because the anchor tracks any
+ * downward move on the frame it happens.
+ *
+ * Why hysteresis and not a smaller `CAM_EYE`: the complaint is about the
+ * letterboxed desert (2-1, 2-3), where the window is 160 rows instead of 208
+ * and the camera therefore has 80 px of vertical travel instead of 32. The
+ * camera rode the whole jump arc up and took the desert floor with it —
+ * measured, the tile the player took off from was off the bottom of the window
+ * for **41.6 % of every airborne frame**. `CAM_EYE` applies while standing too,
+ * so lowering it would re-frame all 24 levels to fix a mid-jump problem, and it
+ * would not fix it in the levels where the camera has less travel; the anchor
+ * fixes the cause everywhere and changes nothing about how a standing player is
+ * framed.
+ *
+ * `CAM_TOP_MARGIN` is the one thing that overrides the held line, and it is
+ * stated in the window rather than in the world on purpose: the reason to break
+ * the hold is that the body is about to leave the top of the picture, so the
+ * threshold belongs where that is measured. One tile of headroom, so the head
+ * never touches the frame edge. In a 208-row window it is never reached (the
+ * standing head sits 106 px below the line and the highest jump in the game
+ * rises 100), so a normal level's camera now holds still through every jump;
+ * in the letterboxed one it takes over near the apex and the view rises exactly
+ * as far as it must, and no further.
+ */
+const CAM_TOP_MARGIN = 16;
+
+/*
  * Cinemascope, for the levels that ask for it (`letterbox: true`).
  *
  * The bars are a **crop, not a mask**. Widescreen is a narrower window on the
@@ -84,6 +119,100 @@ const CAM_SNAP = 48;
  * blind out of the top of the frame.
  */
 const LETTERBOX_BAR = 24;
+
+/*
+ * Going into something, and coming out of it somewhere else.
+ *
+ * One mechanism serves the warp pipes and the fortress door, because they are
+ * the same event: the player stops being an actor, slides out of sight behind a
+ * piece of the level, the picture holds for a beat, and then something else
+ * happens. Two implementations of that would drift apart on exactly the details
+ * that matter — who can hurt you while you are inside, what a quicksave taken
+ * mid-slide contains — so there is one, `Player.transit`, and both callers fill
+ * in the same fields.
+ *
+ * Thirty-odd frames in total. Long enough to read as travelling and short
+ * enough that a player who knows the pipe is there is not made to watch it.
+ */
+const TRANSIT_IN = 14;        // sliding into the mouth, until the body is gone
+const TRANSIT_HOLD = 5;       // the beat where nothing is on screen
+const TRANSIT_OUT = 13;       // and back out at the far end
+
+/*
+ * How far above the head a ceiling pipe's mouth may be and still be enterable.
+ *
+ * Pressing **down** needs no reach: gravity holds the feet against the tile
+ * they are standing on, so the mouth is exactly the tile under the feet.
+ * Pressing **up** has no such contact — the player stands on the floor and the
+ * mouth hangs from the ceiling some pixels above the head, and how many depends
+ * on the power level, because every body is a different height. One tile of
+ * reach makes the rule "stand under the mouth", which is what it looks like,
+ * instead of "be exactly this tall".
+ */
+const WARP_UP_REACH = TILE;
+
+/*
+ * **TEMPORARY.** The old, wrong upward warp: pressing up while standing *on
+ * top of* a pipe.
+ *
+ * The rule now is the genre's — the direction you travel matches the
+ * orientation of the mouth you enter — so an upward warp reads the tiles above
+ * the head and a pipe standing on the floor is a downward pipe only. Every
+ * upward warp shipped in `src/data/` is still drawn the old way, and turning
+ * this off before that content changes seals the player inside a bonus room,
+ * which is the one thing `secrets.js` exists to prevent. So the old behaviour
+ * stays as a fallback, tried only after the ceiling test has failed.
+ *
+ * **What has to change before it can go**, all of it in `src/data/`, which is
+ * not this file's to edit — every one of these is a mouth that is pressed *up*
+ * on today and would become unreachable, and the first three would seal the
+ * player in:
+ *
+ *   - `secrets.js` `cave_room`, the exit at row 12 cols 26-27. It has to hang
+ *     from the ceiling instead: mouth `()` on the row directly above the head
+ *     of a player standing on row 13, with `{}` above that. Used by 1-2 and
+ *     3-2, so one edit fixes both.
+ *   - `desert.js` `tomb_cave`, the exit at row 11 cols 11-12 with `{}` at row
+ *     12 — the same change, and the pipe is already two rows tall, so it is
+ *     mostly a matter of turning it upside down.
+ *   - `factory.js` `fac_cellar`, the exit at row 12 cols 12-13.
+ *   - `factory.js` `fac_duct`, the *entry* at row 11 cols 5-6. This one is
+ *     used twice in 4-2 and only the second (column 240, up to `fac_loft`) is
+ *     an upward warp, so the chunk has to become two — a floor duct going down
+ *     and a ceiling duct going up. That also gives up the "the same chunk for
+ *     both directions, and nothing says which" idea the chunk's own comment
+ *     argues for; the honest replacement is that a duct in the ceiling and a
+ *     duct in the floor are already two different things to look at.
+ *   - `fac_loft`'s exit (row 12 cols 12-13) needs **no** change: the loft is
+ *     the band above the route, so leaving it is a downward warp and it is
+ *     already a floor pipe.
+ *
+ * Two things outside this file will also want attention when that happens:
+ * `src/data/rules.js` (`warpMouths` finds "a run of `()` with air above it"
+ * and `checkBonusBand` tries both directions from it, so it would still call
+ * a floor pipe a legal way out), and `drawTile`'s pipe mouth, which is drawn
+ * mouth-up whichever way round the tile is used.
+ *
+ * It is an object rather than a `const` so `tools/verify.mjs` can switch it off
+ * and prove the real rule; nothing in the game writes to it.
+ */
+export const WARP_COMPAT = { upFromFloor: true };
+
+/*
+ * The fortress door, from the boss falling over to the level ending.
+ *
+ * The door takes half a second to swing. `onBossDefeated` already had a sound
+ * for it (`Sfx.play('door')`) and no picture, which is the half of DESIGN.md §8
+ * that goes unnoticed; now the leaves actually move.
+ *
+ * `bossDefeated` stops being `true` and becomes **the tick the boss fell**,
+ * because that is a number the save state already carries (so does `tick`), and
+ * a swing derived from those two survives a quickload without a new field in
+ * `savestate.js` — which this agent may not edit. It stays truthy, so every
+ * existing reader is unaffected, and an old snapshot restoring `true` reads as
+ * "opened long ago", which is exactly right.
+ */
+const DOOR_OPEN_FRAMES = 30;
 
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
@@ -161,6 +290,8 @@ export class LevelScene {
     this.viewH = VIEW_H - 2 * this.bar;
     this.cam = { x: 0, y: 0 };
     this.camLook = 0;
+    /** The feet line the framing hangs from — see CAM_TOP_MARGIN. */
+    this.camAnchor = 0;
     this.tick = 0;
     this.time = this.def.time;
     this.timeSub = 0;
@@ -368,8 +499,21 @@ export class LevelScene {
     }
   }
 
+  /**
+   * How far the fortress door has swung, 0…1. Derived from two numbers the
+   * save state already carries rather than kept in a field of its own — see
+   * DOOR_OPEN_FRAMES. A snapshot from before this change restores
+   * `bossDefeated === true`, and `tick - true` is `tick - 1`, which reads as
+   * fully open the way it should.
+   */
+  get doorOpen() {
+    if (!this.bossDefeated) return 0;
+    return clamp((this.tick - this.bossDefeated) / DOOR_OPEN_FRAMES, 0, 1);
+  }
+
   onBossDefeated() {
-    this.bossDefeated = true;
+    // The tick, not `true`. Still truthy for every existing reader.
+    this.bossDefeated = this.tick + 1;
     Music.play(this.def.music || 'fortress');
     Sfx.play('clear');
     Sfx.play('door');
@@ -440,28 +584,66 @@ export class LevelScene {
 
   /* -------------------------------- warping ---------------------------- */
 
+  /** True when any column the body covers holds a warp mouth on row `ty`. */
+  warpMouthAt(ty) {
+    const p = this.player;
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    for (let tx = x0; tx <= x1; tx++) if (info(this.tileAt(tx, ty)).warp) return true;
+    return false;
+  }
+
   /**
    * Warp pipes. The bands of a tall level are a fixed number of rows apart, so
    * travelling between them is an addition and nothing else: no second scene,
    * no transition, no save logic of its own. Down goes down a band, up goes up.
    *
-   * Two things can refuse: rock where you would arrive, and a band with no
-   * ground under the arrival. The second is what stops the surface pipe from
+   * **The direction you travel has to match the mouth you enter.** Stand on a
+   * pipe whose mouth faces up and press down; stand under a pipe that hangs
+   * from the ceiling and press up. Both directions used to test the same tile —
+   * the one under the feet — so an upward warp was entered by standing on top
+   * of a pipe and pressing up, which is the genre's rule backwards and reads,
+   * correctly, as a bug: the pipe you are standing on is capped at the bottom.
+   *
+   * `WARP_COMPAT.upFromFloor` is the bridge for content that still relies on
+   * the old reading; it is a fallback and not an alternative, so a ceiling pipe
+   * always wins where there is one.
+   *
+   * Two things can still refuse: rock where you would arrive, and a band with
+   * no ground under the arrival. The second is what stops the surface pipe from
    * being a way to drop yourself out of the sky onto your own head.
    */
   tryWarp(input) {
     const bands = this.def.bands;
     const p = this.player;
-    if (!bands || p.dying || !p.onGround || p.warpLock > 0) return;
+    if (!bands || p.dying || p.transit || !p.onGround || p.warpLock > 0) return;
     const dir = input.held.down ? 1 : input.held.up ? -1 : 0;
     if (!dir) return;
 
     const under = Math.floor((p.y + p.h) / TILE);
-    const x0 = Math.floor(p.x / TILE);
-    const x1 = Math.floor((p.x + p.w - 1) / TILE);
-    let onPipe = false;
-    for (let tx = x0; tx <= x1; tx++) if (info(this.tileAt(tx, under)).warp) onPipe = true;
-    if (!onPipe) return;
+    /* Which way the body slides out of sight, and the world row it disappears
+     * behind. They are the travel direction for an honest pipe, and they are
+     * not for the compatibility case: a pipe standing on the floor is entered
+     * downwards through its mouth even when the far end is a band up, because
+     * that is the only edge there is to hide behind. */
+    let slide = dir;
+    let hide;
+    if (dir > 0) {
+      if (!this.warpMouthAt(under)) return;
+      hide = under * TILE;                       // the mouth's top edge
+    } else {
+      let mouth = -1;
+      for (let ty = Math.floor((p.y - WARP_UP_REACH) / TILE);
+        ty <= Math.floor((p.y - 1) / TILE); ty++) {
+        if (ty >= 0 && this.warpMouthAt(ty)) mouth = ty;
+      }
+      if (mouth >= 0) {
+        hide = (mouth + 1) * TILE;               // the ceiling mouth's bottom edge
+      } else if (WARP_COMPAT.upFromFloor && this.warpMouthAt(under)) {
+        slide = 1;
+        hide = under * TILE;
+      } else return;
+    }
 
     const shift = dir * bands.rows * TILE;
     if (!this.fits(p.x, p.y + shift, p.w, p.h)) return;
@@ -469,13 +651,143 @@ export class LevelScene {
     const bandEnd = (Math.floor(feet / bands.rows) + 1) * bands.rows - 1;
     if (!this.footingWithin(p.x, p.w, feet, bandEnd)) return;
 
-    p.y += shift;
+    p.beginTransit({
+      kind: 'warp',
+      axis: 'y',
+      slide: slide * (p.h + 4),
+      out: dir * (p.h + 4),
+      arriveX: p.x,
+      arriveY: p.y + shift,
+      hide,
+      hideDir: slide,
+    });
+    /* Going in gets the falling sweep and coming out gets the rising one, so
+     * the two ends of the journey do not sound like the same event happening
+     * twice (DESIGN.md §8). */
+    Sfx.play('pipe');
+  }
+
+  /**
+   * Walking into the fortress door once it has swung open.
+   *
+   * It is the same transit as a pipe, turned on its side: the body slides its
+   * own width further in and is not drawn past the line it was already
+   * standing at, so it goes *into* the doorway rather than stopping in front
+   * of it. Nothing arrives at the far end, because the far end of this one is
+   * the end of the level — see the 'hold' branch of `updateTransit`.
+   */
+  enterDoor(tx, ty) {
+    const p = this.player;
+    if (p.transit || this.state !== 'play') return;
+    let left = tx;
+    let right = tx;
+    while (left > 0 && info(this.tileAt(left - 1, ty)).door) left--;
+    while (right < this.w - 1 && info(this.tileAt(right + 1, ty)).door) right++;
+    const middle = (left + right + 1) * TILE / 2;
+    const dirX = middle >= p.cx ? 1 : -1;
+
+    p.vx = 0;
     p.vy = 0;
-    p.climbing = false;
-    p.warpLock = 24;
-    this.centerCamera();
-    this.spawnPuff(p.cx, p.y + p.h);
+    p.ducking = false;
+    p.facing = dirX;
+    p.beginTransit({
+      kind: 'door',
+      axis: 'x',
+      slide: dirX * (p.w + 4),
+      /* The edge the body disappears behind is where its leading edge already
+       * is, not the door's own boundary: the player is inside the frame by the
+       * time this runs, and clipping at the frame would chop them on the first
+       * frame instead of taking them in. */
+      hide: dirX > 0 ? p.x + p.w : p.x,
+      hideDir: dirX,
+    });
     Sfx.play('door');
+  }
+
+  /* -------------------------------- transit ---------------------------- */
+
+  /**
+   * Drives whatever the player is currently disappearing into — see the
+   * TRANSIT_* constants for why there is only one of these.
+   *
+   * Nothing can reach the player while it runs: `playerTiles`, `collisions`
+   * and the clock all step aside, and `Player.hurt` refuses. That is not
+   * belt-and-braces, it is the answer to the death question — a transit cannot
+   * outlive the scene's own liveness because it cannot start after a death
+   * (`state === 'play'` and `p.dying` both gate it) and it cannot cause or
+   * survive one. `Player.die` still clears it, for a death forced from outside
+   * the level (the debug keys, a test).
+   *
+   * A quicksave taken mid-transit is a **valid** save and is not refused. The
+   * whole of the state lives on the player as plain numbers, and
+   * `savestate.js` serialises every own property of every entity, so a snapshot
+   * carries the phase, the frame counter and the arrival — and `cam` is saved
+   * beside it, so the held picture comes back held. Refusing the save was the
+   * alternative and it is worse: the player has no way to know these thirty
+   * frames are special, and a quicksave key that silently does nothing is a
+   * bug report.
+   */
+  updateTransit() {
+    const p = this.player;
+    const t = p.transit;
+    if (!t || t.phase === 'gone') return;
+    t.f++;
+
+    if (t.phase === 'in') {
+      const k = Math.min(1, t.f / TRANSIT_IN);
+      if (t.axis === 'x') p.x = t.fromX + t.slide * k;
+      else p.y = t.fromY + t.slide * k;
+      if (t.f >= TRANSIT_IN) { t.phase = 'hold'; t.f = 0; }
+      return;
+    }
+
+    if (t.phase === 'hold') {
+      if (t.f < TRANSIT_HOLD) return;
+      t.phase = 'out';
+      t.f = 0;
+      if (t.kind === 'door') {
+        /* The door is the end of the level, so the far end of this transit is
+         * the clear sequence itself. It starts **here**, on the frame the body
+         * is gone, and not on the frame the player touched the door: the jingle
+         * is the reward for finishing, finishing is going through the door, and
+         * a jingle that plays while the player is still visibly walking says
+         * the level is over while the picture says it is not. That is the
+         * mismatch DESIGN.md §8 is about, and the price is 19 frames.
+         *
+         * The transit is not cleared, it goes to 'gone': `completeLevel` sets
+         * `autoWalk`, which is right for the flagpole and would have the
+         * player stroll back out of the door he just went into. Held here he
+         * stays inside it, out of sight, for the whole clear sequence — which
+         * is the third of the owner's three complaints. */
+        t.phase = 'gone';
+        this.completeLevel(null);
+        return;
+      }
+      // Cross to the far band out of sight, and take the view with us.
+      p.x = t.arriveX;
+      p.y = t.arriveY;
+      p.vy = 0;
+      p.climbing = false;
+      this.centerCamera();
+      p.y = t.arriveY - t.out;
+      t.hide = null;
+      this.spawnPuff(p.cx, t.arriveY + p.h);
+      Sfx.play('door');
+      return;
+    }
+
+    // 'out': back into the world, still not in charge of it.
+    const k = Math.min(1, t.f / TRANSIT_OUT);
+    p.y = (t.arriveY - t.out) + t.out * k;
+    if (t.f >= TRANSIT_OUT) {
+      p.y = t.arriveY;
+      p.controllable = t.wasControllable;
+      p.transit = null;
+      p.vy = 0;
+      // Its own job, and not this one: it stops the button you are still
+      // holding from sending you straight back.
+      p.warpLock = 24;
+    }
   }
 
   /** True when a box that size has no solid tile in it at (x, y). */
@@ -610,6 +922,7 @@ export class LevelScene {
       this.player.update(input);
       this.playerTiles();
       this.tryWarp(input);
+      this.updateTransit();
       this.updateProgress();
     } else if (this.state === 'clear') {
       this.player.update(input);
@@ -657,6 +970,10 @@ export class LevelScene {
   }
 
   updateTimer() {
+    // Nothing counts down while you are between places. Thirty frames is not a
+    // gift worth arguing about, and the alternative is a clock that can kill
+    // the player inside a pipe, where nothing can be done about it.
+    if (this.player.transit) return;
     if (++this.timeSub >= 24) {
       this.timeSub = 0;
       this.time--;
@@ -802,8 +1119,29 @@ export class LevelScene {
    * not the axis you aim with, so a short glide there costs nothing and saves
    * every step down from reading as a cut. See CAM_V_EASE.
    */
+  /**
+   * Moves the line the view hangs from — and, far more often, does not.
+   *
+   * Three things count as being somewhere else: going down (any downward move
+   * at all, on the frame it happens, because you must see what you are falling
+   * towards), standing on something, and hanging off a vine. A jump is none of
+   * them, so the anchor sits still through the whole arc and the ground stays
+   * where it was. Landing on a platform above the old line is `onGround` on the
+   * frame the feet touch, and `CAM_V_EASE` then glides the view up to it.
+   *
+   * Dying and travelling both freeze it: in both the body is going somewhere
+   * the view has no business following.
+   */
+  updateCamAnchor() {
+    const p = this.player;
+    if (p.dying || p.transit) return;
+    const feet = p.y + p.h;
+    if (feet > this.camAnchor || p.onGround || p.climbing) this.camAnchor = feet;
+  }
+
   updateCamera() {
     const p = this.player;
+    this.updateCamAnchor();
     const speed = Math.abs(p.vx);
     const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * Math.min(1, speed / MAX_RUN) : 0;
     this.camLook += (wanted - this.camLook) * (Math.abs(wanted) > Math.abs(this.camLook)
@@ -827,6 +1165,16 @@ export class LevelScene {
     } else {
       this.cam.y += fall * CAM_V_EASE;
     }
+
+    /* And the headroom is a limit, not a destination. Easing towards it is
+     * still lagging behind it, and a limit you arrive at four frames late is
+     * not one — measured, the apex poked 2.6 px out of the top of the
+     * letterbox band while the view was on its way to where it should already
+     * have been. So the ease does its work and then this has the last word.
+     * It only ever moves the view up, and only as far as the band allows. */
+    if (!p.dying && !p.transit) {
+      this.cam.y = this.clampCamY(Math.min(this.cam.y, p.y - CAM_TOP_MARGIN));
+    }
   }
 
   /**
@@ -842,23 +1190,36 @@ export class LevelScene {
    */
   cameraY() {
     const p = this.player;
-    const target = p.y + p.h - this.viewH * CAM_EYE - CAM_STAND;
-    const bands = this.def.bands;
-    if (!bands) return clamp(target, 0, Math.max(0, this.heightPx - this.viewH));
+    /* The settled line, then the one thing allowed to override it: the head
+     * must not leave the top of the window. Frozen bodies get the line alone —
+     * a dying player flies upwards and a travelling one is not in the room. */
+    const rest = this.camAnchor - this.viewH * CAM_EYE - CAM_STAND;
+    const target = p.dying || p.transit ? rest : Math.min(rest, p.y - CAM_TOP_MARGIN);
     // The view holds still while you die: following the body down would pan it
     // straight through whatever is under the pit you just fell into.
-    if (p.dying) return this.cam.y;
+    if (p.dying && this.def.bands) return this.cam.y;
+    return this.clampCamY(target);
+  }
+
+  /** The vertical range the view is allowed, level or band. */
+  clampCamY(y) {
+    const bands = this.def.bands;
+    if (!bands) return clamp(y, 0, Math.max(0, this.heightPx - this.viewH));
     /* Which band you are in is decided by your feet, not your middle. Falling
      * into a pit puts your middle in the band below for the few frames before
      * the lava under the pit gets you, and that was enough to lurch the view
      * down and show the secret to someone who was only dying. */
     const span = bands.rows * TILE;
+    const p = this.player;
     const feet = Math.floor((p.y + p.h - 1) / span) * span;
     const top = clamp(feet, 0, this.heightPx - span);
-    return clamp(target, top, top + span - this.viewH);
+    return clamp(y, top, top + span - this.viewH);
   }
 
   centerCamera() {
+    // A cut is the one moment the held line is simply wrong: wherever the body
+    // has been put, that is where it has settled.
+    this.camAnchor = this.player.y + this.player.h;
     this.camLook = 0;
     this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
     this.cam.y = this.cameraY();
@@ -868,7 +1229,7 @@ export class LevelScene {
 
   playerTiles() {
     const p = this.player;
-    if (p.dying) return;
+    if (p.dying || p.transit) return;
     const x0 = Math.floor(p.x / TILE);
     const x1 = Math.floor((p.x + p.w - 1) / TILE);
     const y0 = Math.floor(p.y / TILE);
@@ -895,8 +1256,8 @@ export class LevelScene {
             x: tx * TILE, y: ty * TILE + SPIKE_TOP, w: TILE, h: TILE - SPIKE_TOP,
           };
           if (overlaps(p.box, box) && p.hurt('spike')) p.vy = -3;
-        } else if (ch === T.DOOR && this.bossDefeated) {
-          this.completeLevel(null);
+        } else if (info(ch).door && this.doorOpen >= 1) {
+          this.enterDoor(tx, ty);
           return;
         }
       }
@@ -912,7 +1273,7 @@ export class LevelScene {
 
   collisions() {
     const p = this.player;
-    if (p.dying) return;
+    if (p.dying || p.transit) return;
     const spin = p.spinBox;
     // The stomp test has to use the speed the player *arrived* with. Bouncing
     // off the first enemy flips vy upwards, and without this snapshot every
@@ -1090,11 +1451,45 @@ export class LevelScene {
       const glow = lit ? e.light : null;
       if (glow) PostFX.addLight(glow.x - camX, glow.y - camY + this.bar, glow.r, glow.i);
     }
-    this.player.draw(ctx);
+    this.drawPlayerInto(ctx, camX, camY);
 
     ctx.restore();
     if (this.bar) this.drawLetterbox(ctx);
     this.drawHud(ctx);
+  }
+
+  /**
+   * The player, and the reason a pipe swallows him instead of being painted
+   * over.
+   *
+   * Tiles are drawn before entities, so a body sliding into a mouth would sit
+   * on top of the pipe it is supposed to be inside. There is no depth here and
+   * there should not be one for a single case: a clip to the half of the world
+   * on the near side of `transit.hide` costs one rectangle and does exactly
+   * what a sprite behind a tile would look like. The 8 px slack on the other
+   * three sides is so nothing gets clipped that was not meant to be — the
+   * shake jitter can push a frame a couple of pixels either way.
+   */
+  drawPlayerInto(ctx, camX, camY) {
+    const t = this.player.transit;
+    if (!t || t.hide === null || t.hide === undefined) {
+      this.player.draw(ctx);
+      return;
+    }
+    ctx.save();
+    ctx.beginPath();
+    const l = camX - 8;
+    const top = camY - 8;
+    const r = camX + VIEW_W + 8;
+    const b = camY + this.viewH + 8;
+    if (t.axis === 'x') {
+      if (t.hideDir > 0) ctx.rect(l, top, t.hide - l, b - top);
+      else ctx.rect(t.hide, top, r - t.hide, b - top);
+    } else if (t.hideDir > 0) ctx.rect(l, top, r - l, t.hide - top);
+    else ctx.rect(l, t.hide, r - l, b - t.hide);
+    ctx.clip();
+    this.player.draw(ctx);
+    ctx.restore();
   }
 
   /**
@@ -1174,7 +1569,8 @@ export class LevelScene {
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,
           this.tileAt(tx, ty - 1),
           {
-            doorOpen: this.bossDefeated,
+            // How far, not whether: the leaves swing. See DOOR_OPEN_FRAMES.
+            doorOpen: this.doorOpen,
             crumble: this.crumbleProgress(tx, ty),
             switchOn: this.switchTimer > 0,
             // A door is several tiles; each slice needs to know which of its
@@ -1186,11 +1582,14 @@ export class LevelScene {
               ? (this.tileAt(tx - 1, ty - 1) === T.SPIKE ? -1
                 : this.tileAt(tx + 1, ty - 1) === T.SPIKE ? 1 : 0)
               : 0,
-            doorEdges: ch === T.DOOR ? {
-              l: this.tileAt(tx - 1, ty) !== T.DOOR,
-              r: this.tileAt(tx + 1, ty) !== T.DOOR,
-              t: this.tileAt(tx, ty - 1) !== T.DOOR,
-              b: this.tileAt(tx, ty + 1) !== T.DOOR,
+            /* `info(ch).door` and not `ch === T.DOOR`: the flag existed and was
+             * read nowhere, which is a thing that looks live and is not. It is
+             * the question being asked here, so it is the thing to ask. */
+            doorEdges: info(ch).door ? {
+              l: !info(this.tileAt(tx - 1, ty)).door,
+              r: !info(this.tileAt(tx + 1, ty)).door,
+              t: !info(this.tileAt(tx, ty - 1)).door,
+              b: !info(this.tileAt(tx, ty + 1)).door,
             } : null,
           });
       }
