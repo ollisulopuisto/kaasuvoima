@@ -4119,6 +4119,192 @@ const report = await page.evaluate(async () => {
       measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}` : 'ei mitattu');
   }
 
+  /*
+   * Consonants.
+   *
+   * The vocals used to be five vowels and nothing else, so every line was one
+   * glide with a shape on it. Three things have to be true of the consonants and
+   * not one of them can be read off the source:
+   *
+   *   - a plosive's silence has to be *in the waveform*. Without it the ear
+   *     hears a tap, and a burst scheduled 35 ms after a vowel that is still
+   *     ringing is exactly that.
+   *   - a fricative is broadband noise and a vowel is two narrow bandpass peaks.
+   *     They do not arrive at the same level for the same nominal gain, so the
+   *     numbers are measured against the same references as everything else on
+   *     this bus (coin 0.32, death 0.57).
+   *   - the vowel-only words the game already speaks ('iea', 'ou', 'eo', 'uo')
+   *     have to come out of the segmented path exactly as they did out of the
+   *     single-glide one.
+   */
+  {
+    const audio = await import('/src/core/audio.js');
+    const { vox, voxPlan, Ambience } = audio;
+    const tap = audioTap();
+    const measured = tap && tap.ctx.state === 'running';
+    const check = (name, fn) => {
+      try {
+        const [ok, detail] = fn();
+        expect(name, ok, detail);
+      } catch (err) {
+        expect(name, false, `heitti: ${err.message}`);
+      }
+    };
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    const kinds = (plan) => plan.map((s) => s.kind).join(' ');
+
+    check('a vowel-only word is still one unbroken glide', () => {
+      const p = voxPlan('iea', 0.32);
+      const t = p[0] && p[0].targets;
+      return [
+        p.length === 1 && p[0].kind === 'run' && p[0].at === 0
+          && near(p[0].dur, 0.32, 1e-9) && t.length === 3
+          && near(t[0].at, 0, 1e-9) && near(t[1].at, 0.136, 1e-6)
+          && near(t[2].at, 0.272, 1e-6),
+        `${kinds(p)}, kohdat ${t ? t.map((x) => x.at.toFixed(3)).join('/') : '-'}`,
+      ];
+    });
+
+    check('a plosive is silence before it is a burst', () => {
+      const bad = [];
+      for (const c of ['p', 't', 'k']) {
+        const p = voxPlan(`a${c}a`, 0.4);
+        const [, gap, burst] = p;
+        if (kinds(p) !== 'run silence burst run') { bad.push(`${c}: ${kinds(p)}`); continue; }
+        if (gap.dur < 0.03) bad.push(`${c}: hiljaisuus vain ${(gap.dur * 1000).toFixed(0)} ms`);
+        if (!near(burst.at, gap.at + gap.dur, 1e-9)) bad.push(`${c}: purske ei seuraa hiljaisuutta`);
+      }
+      const g = voxPlan('ata', 0.4)[1];
+      return [bad.length === 0, bad.join(', ') || `esim. t: ${(g.dur * 1000).toFixed(0)} ms kiinni`];
+    });
+
+    /* Unknown letters used to become an 'a'. With five-letter vowel words that
+     * was harmless; with real words a stray letter turning into an extra "ah"
+     * adds a syllable nobody wrote. They are dropped now — and a word left with
+     * nothing at all still falls back to an 'a', because a sound effect that
+     * silently does nothing is the failure that never gets reported. */
+    check('an unknown letter is dropped instead of becoming an "a"', () => {
+      const same = JSON.stringify(voxPlan('jee', 0.3)) === JSON.stringify(voxPlan('ee', 0.3));
+      const empty = voxPlan('jvlr', 0.3);
+      const fallback = empty.length === 1 && empty[0].targets.length === 1
+        && empty[0].targets[0].f[0] === 730;
+      return [same && fallback, `jee=ee ${same}, tuntematon sana -> ${kinds(empty)}`];
+    });
+
+    if (measured) {
+      /*
+       * The attract demo plays the game to nobody after twenty seconds on the
+       * title screen, and it fires jumps and stomps into the very bus these
+       * checks read. Going back to the title re-arms that timer, which buys the
+       * twenty seconds this block needs — the readings below were varying by a
+       * factor of two before, and it was the demo landing a coin in the window.
+       */
+      game.toTitle();
+      Music.stop();
+      Ambience.stop();                       // no room tail across the closures
+      const an = tap.ctx.createAnalyser();
+      an.fftSize = 32768;                    // 743 ms of contiguous waveform at 44.1k
+      tap.bus.connect(an);
+      const wave = new Float32Array(an.fftSize);
+      const rate = tap.ctx.sampleRate;
+      const peakFor = async (ms) => {
+        let peak = 0;
+        const t0 = performance.now();
+        while (performance.now() - t0 < ms) {
+          an.getFloatTimeDomainData(wave);
+          for (let i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i]));
+          await new Promise((r) => setTimeout(r, 8));
+        }
+        return peak;
+      };
+      const quiet = async () => new Promise((r) => setTimeout(r, 300));
+      const say = async (word, gain = 0.44, dur = 0.34, ms = 420) => {
+        await quiet();
+        vox({ word, dur, gain });
+        return peakFor(ms);
+      };
+
+      const checkA = async (name, fn) => {
+        try {
+          const [ok, detail] = await fn();
+          expect(name, ok, detail);
+        } catch (err) {
+          expect(name, false, `heitti: ${err.message}`);
+        }
+      };
+
+      /* Every consonant on its own. A fricative or a burst that never made it
+       * out of the graph would still leave the word around it sounding fine. */
+      const levels = {};
+      await checkA('every consonant makes a sound of its own', async () => {
+        for (const c of ['s', 'š', 'f', 'h', 'p', 't', 'k', 'm', 'n', 'a']) {
+          levels[c] = await say(c);
+        }
+        const mute = Object.entries(levels).filter(([, v]) => v < 0.05).map(([c]) => c);
+        return [mute.length === 0,
+          Object.entries(levels).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(' ')];
+      });
+
+      /* A fricative is noise where a vowel is two resonances: it will not land
+       * at the same level for the same nominal gain, and both numbers only mean
+       * something next to the coin and the death sound on this same bus. */
+      await checkA('a fricative is audible against the same reference as a vowel', async () => [
+        levels.s > 0.16 && levels.s < levels.a,
+        `s ${levels.s.toFixed(3)}, vokaali ${levels.a.toFixed(3)}, `
+        + `h ${levels.h.toFixed(3)}, t-purske ${levels.t.toFixed(3)} (kolikko 0.32)`,
+      ]);
+
+      /* And the silence, in the recorded waveform rather than in the schedule.
+       * `ata` is a vowel, a closure and a burst: if the closure is not really
+       * there the envelope never comes down between the two vowels. */
+      await checkA('a plosive keeps its silence in the waveform', async () => {
+        await quiet();
+        await new Promise((r) => setTimeout(r, 200));
+        vox({ word: 'ata', dur: 0.42, gain: 0.44 });
+        await new Promise((r) => setTimeout(r, 560));
+        an.getFloatTimeDomainData(wave);
+        const block = 64;                    // 1.45 ms per step
+        const env = [];
+        for (let i = 0; i + block <= wave.length; i += block) {
+          let m = 0;
+          for (let j = i; j < i + block; j++) m = Math.max(m, Math.abs(wave[j]));
+          env.push(m);
+        }
+        const top = Math.max(...env);
+        const start = env.findIndex((v) => v > top * 0.25);
+        /*
+         * The longest quiet stretch inside the word that is answered by
+         * something loud. "Answered" is looked for over the 12 ms after the
+         * silence rather than in the first block out of it, because a burst
+         * starts from nothing and its own attack would end the count early.
+         *
+         * Twelve and not forty: with a wider window this check passed a build
+         * whose closures had been deleted, because a vowel fading in over 30 ms
+         * leaves a quiet stretch of its own. The window is now shorter than any
+         * onset that is not a transient.
+         */
+        const reply = Math.round((0.012 * rate) / block);
+        let gap = 0;
+        let run = 0;
+        let after = 0;
+        for (let i = Math.max(0, start); i < env.length; i++) {
+          if (env[i] < top * 0.06) { run++; continue; }
+          if (run > gap) {
+            let hi = 0;
+            for (let j = i; j < Math.min(env.length, i + reply); j++) hi = Math.max(hi, env[j]);
+            if (hi > top * 0.2) { gap = run; after = hi; }
+          }
+          run = 0;
+        }
+        const ms = (gap * block * 1000) / rate;
+        return [top > 0.2 && ms >= 20 && after > top * 0.2,
+          `kiinni ${ms.toFixed(0)} ms, huippu ${top.toFixed(2)}, `
+          + `purskeen jälkeen ${after.toFixed(2)}`];
+      });
+      an.disconnect();
+    }
+  }
+
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
    * seconds behind the audio clock. Playing that backlog would build thousands
    * of oscillators in one turn of the event loop and freeze the keyboard. */

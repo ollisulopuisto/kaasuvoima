@@ -229,22 +229,191 @@ function farty({
  * filters between vowel targets while the pitch bends gives a recognisable
  * "yeah" without anybody having to record one.
  *
- * Vowel formants (F1, F2) in Hz, rounded from the usual reference values.
+ * Vowels can only ever glide, so for a long time every line in the game was one
+ * long moan with a shape. Consonants are what put edges into speech, and they
+ * are not one mechanism but three:
+ *
+ *   - **fricatives** (s, š, f, h) have no pitch at all. They are filtered noise:
+ *     a narrow band up at 6 kHz is an "s", a broad low one is an "f" or an "h".
+ *     Nothing of the voiced path is involved.
+ *   - **plosives** (p, t, k) are *silence* and then a click. The silence is the
+ *     consonant — a mouth closing is the only thing the ear has to go on, and a
+ *     burst without it is a tap, not a "p". It is scheduled as its own segment
+ *     of the plan for exactly that reason: it is a thing, not a gap.
+ *   - **nasals** (m, n) are the voiced path with different numbers. The murmur
+ *     sits low (F1 ~250 Hz) and almost nothing survives above it, which is what
+ *     a closed mouth does. New filter targets, not new machinery.
+ *
+ * The word is split into segments and each segment is scheduled on its own. A
+ * run of consecutive voiced letters is *one* oscillator gliding between its
+ * targets, which is precisely what the whole word used to be — so a vowel-only
+ * word ('iea', 'ou', 'eo', 'uo') comes out of the new path as one run over the
+ * full duration, node for node and ramp for ramp what it was before.
  */
-const VOWELS = {
-  a: [730, 1090],
-  e: [530, 1840],
-  i: [270, 2290],
-  o: [570, 840],
-  u: [325, 700],
-};
 
 /**
- * @param {object} o
- * @param {string} o.word vowels to glide through, e.g. 'iea' for "yeah"
- * @param {number} o.pitch starting pitch in Hz
- * @param {number} o.bend pitch multiplier at the end
+ * The phoneme table. Letters are Finnish, because the game is.
+ *
+ *   kind 'v'  voiced    [F1, F2] in Hz, `lo`/`hi` the level of each formant
+ *                       band, `w` how much of the sung time this target is
+ *                       worth next to a vowel.
+ *   kind 'f'  fricative [centre, Q] of the noise band, `s` its length in
+ *                       seconds, `g` its level next to the other consonants.
+ *   kind 'p'  plosive   `gap` seconds of closure, then an `s`-second burst.
+ *
+ * Consonant lengths are in seconds and vowels share out whatever is left, not
+ * the other way round: a consonant is about as long in a slow word as in a fast
+ * one, and stretching an "s" to fill a long line just sounds like a leak.
+ *
+ * The lines this game speaks use a e i o u m n s h p t. `š`, `f` and `k` are in
+ * the table and spoken by nothing yet — which is a different thing from a sound
+ * nobody triggers: a family here is one mechanism with a frequency in it, so
+ * these are three rows of numbers rather than three code paths, and a phoneme
+ * missing from the alphabet is a Finnish word that cannot be written.
  */
+const PHONEMES = {
+  a: { kind: 'v', f: [730, 1090], lo: 1, hi: 0.6, w: 1 },
+  e: { kind: 'v', f: [530, 1840], lo: 1, hi: 0.6, w: 1 },
+  i: { kind: 'v', f: [270, 2290], lo: 1, hi: 0.6, w: 1 },
+  o: { kind: 'v', f: [570, 840], lo: 1, hi: 0.6, w: 1 },
+  u: { kind: 'v', f: [325, 700], lo: 1, hi: 0.6, w: 1 },
+  // Nasals: same two filters, F1 down in the murmur and the upper band shut
+  // down to a tenth. `m` and `n` differ only in F2, which is the whole
+  // difference between them in a real mouth too.
+  //
+  // `lo` is 0.5 and not 1 because it was measured. A bandpass down at 250 Hz
+  // sits on the fundamental of a 230 Hz voice and passes it nearly whole, where
+  // a vowel's F1 at 730 Hz only catches a harmonic worth a third of it — so at
+  // equal level a nasal came out 0.81 against the vowel's 0.58, i.e. *louder*
+  // than the mouth it is supposed to be closing. Halved, it sits just under.
+  m: { kind: 'v', f: [250, 1100], lo: 0.50, hi: 0.06, w: 0.75 },
+  n: { kind: 'v', f: [250, 1700], lo: 0.50, hi: 0.08, w: 0.75 },
+  // Fricatives, in order of how high the hiss sits.
+  s: { kind: 'f', band: [6200, 2.2], s: 0.075, g: 1 },
+  'š': { kind: 'f', band: [2600, 1.6], s: 0.075, g: 1 },
+  f: { kind: 'f', band: [1500, 0.7], s: 0.06, g: 0.7 },
+  h: { kind: 'f', band: [1300, 0.5], s: 0.055, g: 0.55 },
+  // Plosives. Finnish stops are unaspirated, so the burst is all there is
+  // after the closure — no puff of breath behind it.
+  p: { kind: 'p', gap: 0.035, band: [800, 1.0], s: 0.012, g: 0.8 },
+  t: { kind: 'p', gap: 0.035, band: [3600, 1.4], s: 0.011, g: 1 },
+  k: { kind: 'p', gap: 0.040, band: [1900, 1.2], s: 0.014, g: 0.9 },
+};
+
+/** A word may not spend more than this much of its length on consonants. */
+const VOX_CONS_MAX = 0.7;
+
+/**
+ * What a line *says*, as a timed list of segments — separate from what it
+ * sounds like, which is the voice (below) and is applied when the plan is
+ * rendered. Exported because it is the seam the tests measure at: a plan can be
+ * asserted exactly, where a waveform can only be measured.
+ *
+ * Unknown letters are **dropped**, where they used to be replaced with an 'a'.
+ * With five-letter vowel words a substituted 'a' was harmless; with real words
+ * it is not — "jippii" spelled 'ipii' is right, but a stray letter turning into
+ * an extra "ah" adds a syllable that nobody wrote and it sounds like a bug in
+ * the game rather than a typo in a word. Dropping degrades in the right
+ * direction, because the letters this alphabet is missing are the approximants
+ * (j, v, l, r), which are carried by the vowels around them anyway.
+ *
+ * A word that ends up with nothing in it at all falls back to a single 'a', so
+ * a mistyped word is a wrong noise rather than no noise. A sound effect that
+ * silently does nothing is the one failure that never gets reported.
+ *
+ * @param {string} word phonemes, e.g. 'hups' or 'iea'
+ * @param {number} dur total length in seconds
+ * @returns {Array<object>} segments with `kind` ('run' | 'silence' | 'burst' |
+ *   'fric'), `at` seconds from the start of the word, and `dur`.
+ */
+export function voxPlan(word = 'a', dur = 0.32) {
+  let letters = [...String(word)].map((c) => PHONEMES[c]).filter(Boolean);
+  if (!letters.length) letters = [PHONEMES.a];
+
+  let fixed = 0;
+  let weight = 0;
+  for (const p of letters) {
+    if (p.kind === 'v') weight += p.w;
+    else fixed += (p.gap || 0) + p.s;
+  }
+  // A short line with a lot of consonants in it must still have a voice in it.
+  const squeeze = weight > 0 && fixed > dur * VOX_CONS_MAX
+    ? (dur * VOX_CONS_MAX) / fixed
+    : 1;
+  const unit = weight > 0 ? (dur - fixed * squeeze) / weight : 0;
+
+  const segs = [];
+  let run = null;
+  let at = 0;
+  for (const p of letters) {
+    if (p.kind === 'v') {
+      if (!run) {
+        run = { kind: 'run', at, dur: 0, targets: [] };
+        segs.push(run);
+      }
+      run.targets.push({ f: p.f, lo: p.lo, hi: p.hi, w: p.w, at: 0 });
+      run.dur += p.w * unit;
+      at += p.w * unit;
+      continue;
+    }
+    run = null;                              // a consonant always breaks the glide
+    if (p.kind === 'p') {
+      const gap = p.gap * squeeze;
+      segs.push({ kind: 'silence', at, dur: gap });
+      at += gap;
+    }
+    segs.push({
+      kind: p.kind === 'p' ? 'burst' : 'fric',
+      at,
+      dur: p.s * squeeze,
+      band: p.band,
+      gain: p.g,
+    });
+    at += p.s * squeeze;
+  }
+
+  // When each target is reached inside its run. The last one lands at 85% of
+  // the run so it is held rather than still moving when the note ends — which
+  // is the rule the vowel-only version has always used.
+  for (const seg of segs) {
+    if (seg.kind !== 'run') continue;
+    seg.targets[0].at = seg.at;
+    const total = seg.targets.reduce((s, t) => s + t.w, 0) - seg.targets[0].w;
+    let cum = 0;
+    for (let i = 1; i < seg.targets.length; i++) {
+      cum += seg.targets[i].w;
+      seg.targets[i].at = seg.at + (seg.dur * 0.85 * cum) / total;
+    }
+  }
+  return segs;
+}
+
+/**
+ * What a line *sounds like*, as opposed to what it says.
+ *
+ * Everything in here is a property of the speaker and nothing in here is a
+ * property of the line, which is the split that makes per-boss voices a table
+ * entry instead of a rewrite: a boss says `vox({ word, voice: VOICES.whoever })`
+ * and keeps every other argument. The action sounds — shockwave, landing,
+ * spikes — deliberately stay shared, because a warning has to mean the same
+ * thing whoever is making it.
+ *
+ * There is exactly one entry, because there is exactly one speaker so far. A
+ * voice nobody speaks with is the same mistake as a sound nobody triggers.
+ */
+export const VOICES = {
+  player: {
+    wave: 'sawtooth',
+    pitchScale: 1,          // transposes the speaker, not the line
+    formant: 1,             // <1 is a bigger head: every formant target moves down
+    q: [7, 9],              // how sharp the two formants are
+    vibRate: 5.5,
+    vibDepth: 0.03,
+    hiss: 1,                // consonant level relative to the voiced path
+    jitter: [0.92, 1.1],    // so no two takes are identical
+  },
+};
+
 /**
  * Makeup gain for the formant filters.
  *
@@ -258,53 +427,178 @@ const VOWELS = {
  */
 const VOX_MAKEUP = 4.0;
 
-function vox({ word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.44, delay = 0 }) {
-  if (muted || !ensure()) return;
-  const t0 = ctx.currentTime + delay;
-  const vowels = [...word].map((v) => VOWELS[v] || VOWELS.a);
-  const jitter = rnd(0.92, 1.1);
-  const f0 = pitch * jitter;
+/**
+ * The same question again for the noise path, and it does not have the same
+ * answer — which is the whole reason there are two constants and not one.
+ *
+ * A vowel is a sawtooth squeezed through two very narrow peaks and loses almost
+ * everything, hence the 4x above. A fricative is broadband noise through one
+ * wide band and loses far less. Guessing which way that lands is exactly the
+ * mistake the comment above was written about, so it was measured.
+ *
+ * On the sfx bus at a nominal gain of 0.44, three takes each, against a coin at
+ * 0.32 and the death sound at 0.57:
+ *
+ *   vowel 'a'  0.584      (the voiced path, VOX_MAKEUP already in it)
+ *   's' 0.320   'š' 0.242   'f' 0.192   'h' 0.162
+ *   't' 0.279   'k' 0.258   'p' 0.139
+ *   'm' 0.476   'n' 0.473
+ *
+ * Medians of five takes. The voiced ones repeat to three decimals; the noisy
+ * ones wander some 15% either side, because every one of them takes a different
+ * slice of the shared noise buffer, which is the whole point of taking one.
+ *
+ * The hiss constant came out at **1.0, and that is a measurement rather than a
+ * default**: the noise path lands about 6 dB under the boosted vowel path on its
+ * own, and noise has roughly three times the crest factor of a resonance, so in
+ * RMS that is some 10 dB under — about the ratio a real /s/ has to the vowel
+ * beside it. The click needed 1.4 to bring a burst up to the level of a coin,
+ * and a burst can carry it: eleven milliseconds is far quieter than its peak.
+ *
+ * Re-measure both if the bands, their Q, or the noise buffer change.
+ */
+const VOX_HISS = 1.0;
+const VOX_CLICK = 1.4;
 
-  const osc = ctx.createOscillator();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(f0, t0);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(40, f0 * bend), t0 + dur * 0.8);
-  // A little vibrato is most of what separates a voice from a buzzer.
-  const lfo = ctx.createOscillator();
-  lfo.frequency.value = 5.5;
-  const lfoAmt = ctx.createGain();
-  lfoAmt.gain.value = f0 * 0.03;
-  lfo.connect(lfoAmt).connect(osc.frequency);
-
-  const peak = gain * VOX_MAKEUP;
+/**
+ * One noise segment: a fricative, or the burst that follows a plosive's silence.
+ *
+ * Three nodes, and the buffer is the shared one — a voice never allocates.
+ */
+function voxNoise(t0, dur, band, gain, attack, holdTo) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.loop = true;
+  src.loopStart = rnd(0, 1.5);             // a different slice of noise every time
+  src.loopEnd = src.loopStart + 0.4;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = band[0];
+  bp.Q.value = band[1];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0.0001, t0);
-  env.gain.exponentialRampToValueAtTime(peak, t0 + 0.03);
-  env.gain.setValueAtTime(peak, t0 + dur * 0.6);
+  env.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+  env.gain.setValueAtTime(gain, t0 + Math.max(attack, dur * holdTo));
   env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  env.connect(sfxBus);
+  src.connect(bp).connect(env).connect(sfxBus);
+  src.start(t0, src.loopStart);
+  src.stop(t0 + dur + 0.02);
+}
 
-  // Two formants, each sliding through the vowels in turn.
-  for (let band = 0; band < 2; band++) {
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = band === 0 ? 7 : 9;
-    filter.frequency.setValueAtTime(vowels[0][band] * jitter, t0);
-    vowels.forEach((v, i) => {
-      if (i === 0) return;
-      filter.frequency.linearRampToValueAtTime(
-        v[band] * jitter, t0 + (dur * 0.85 * i) / (vowels.length - 1),
-      );
-    });
-    const level = ctx.createGain();
-    level.gain.value = band === 0 ? 1 : 0.6;
-    osc.connect(filter).connect(level).connect(env);
+/**
+ * @param {object} o
+ * @param {string} o.word phonemes to speak, e.g. 'hups' — see `voxPlan`
+ * @param {number} o.pitch starting pitch in Hz
+ * @param {number} o.bend pitch multiplier at the end
+ * @param {object} o.voice who is speaking — see `VOICES`
+ */
+export function vox({
+  word = 'a', dur = 0.32, pitch = 230, bend = 1.2, gain = 0.44, delay = 0,
+  voice = VOICES.player,
+}) {
+  if (muted || !ensure()) return;
+  const v = voice || VOICES.player;
+  const t0 = ctx.currentTime + delay;
+  const plan = voxPlan(word, dur);
+  const jitter = rnd(v.jitter[0], v.jitter[1]);
+  const f0 = pitch * v.pitchScale * jitter;
+  const peak = gain * VOX_MAKEUP;
+  // The pitch contour belongs to the line, not to any one segment of it: a word
+  // broken by a stop picks the bend up where the closure interrupted it.
+  const knee = dur * 0.8;
+  const pitchAt = (x) => Math.max(40, f0 * Math.pow(bend, Math.min(1, x / knee)));
+
+  // A little vibrato is most of what separates a voice from a buzzer. One LFO
+  // for the whole line however many pieces it is made of.
+  let lfoAmt = null;
+  if (plan.some((seg) => seg.kind === 'run')) {
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = v.vibRate;
+    lfoAmt = ctx.createGain();
+    lfoAmt.gain.value = f0 * v.vibDepth;
+    lfo.connect(lfoAmt);
+    lfo.start(t0);
+    lfo.stop(t0 + dur + 0.03);
   }
 
-  osc.start(t0);
-  osc.stop(t0 + dur + 0.03);
-  lfo.start(t0);
-  lfo.stop(t0 + dur + 0.03);
+  plan.forEach((seg, index) => {
+    const s = t0 + seg.at;
+    const e = s + seg.dur;
+    if (seg.kind === 'silence') return;      // the point of it is that nothing runs
+    if (seg.kind !== 'run') {
+      const isBurst = seg.kind === 'burst';
+      voxNoise(
+        s, seg.dur, seg.band,
+        gain * seg.gain * v.hiss * (isBurst ? VOX_CLICK : VOX_HISS),
+        isBurst ? 0.0015 : Math.min(0.012, seg.dur * 0.2),
+        isBurst ? 0.25 : 0.7,
+      );
+      return;
+    }
+
+    const osc = ctx.createOscillator();
+    osc.type = v.wave;
+    osc.frequency.setValueAtTime(pitchAt(seg.at), s);
+    const rampTo = Math.min(seg.at + seg.dur, knee);
+    if (rampTo > seg.at) osc.frequency.exponentialRampToValueAtTime(pitchAt(rampTo), t0 + rampTo);
+    if (lfoAmt) lfoAmt.connect(osc.frequency);
+
+    /*
+     * Both ends of a run are decided by what is next to it, not by the clock.
+     *
+     * A run that opens a word fades in over 30 ms, which is what a mouth
+     * starting to make a sound does. A run that follows a consonant does not:
+     * the mouth is already open and the consonant *is* the onset, so it takes
+     * 8 ms. That is not a detail — a 30 ms fade after a stop burst smears the
+     * one edge the burst exists to provide, and it is measurable: with the slow
+     * attack, the closure detector in verify.mjs could not tell a plosive from a
+     * vowel coming up slowly, and passed a build with the silence deleted.
+     *
+     * At the other end, the last run of a word dies away over its final 40%,
+     * which is what a word ending does. A run followed by anything else is cut
+     * short instead: before a plosive that cut *is* the closure, and a voice
+     * ringing on into the silence would take the consonant away with it.
+     */
+    const last = index === plan.length - 1;
+    const attack = Math.min(index === 0 ? 0.03 : 0.008, seg.dur * 0.25);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, s);
+    env.gain.exponentialRampToValueAtTime(peak, s + attack);
+    if (last) {
+      env.gain.setValueAtTime(peak, Math.max(s + attack, s + seg.dur * 0.6));
+      env.gain.exponentialRampToValueAtTime(0.0001, e);
+    } else {
+      const rel = Math.min(0.022, seg.dur * 0.35);
+      env.gain.setValueAtTime(peak, Math.max(s + attack, e - rel));
+      env.gain.linearRampToValueAtTime(0.0001, e);
+    }
+    env.connect(sfxBus);
+
+    // Two formants, each sliding through this run's targets in turn. The band
+    // levels slide with them, because that is where a nasal lives: same filters,
+    // low first formant, next to nothing left above it.
+    for (let band = 0; band < 2; band++) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = v.q[band];
+      const level = ctx.createGain();
+      seg.targets.forEach((tg, i) => {
+        const hz = tg.f[band] * jitter * v.formant;
+        const amp = band === 0 ? tg.lo : tg.hi;
+        if (i === 0) {
+          filter.frequency.setValueAtTime(hz, s);
+          level.gain.setValueAtTime(amp, s);
+        } else {
+          filter.frequency.linearRampToValueAtTime(hz, t0 + tg.at);
+          level.gain.linearRampToValueAtTime(amp, t0 + tg.at);
+        }
+      });
+      osc.connect(filter).connect(level).connect(env);
+    }
+
+    osc.start(s);
+    osc.stop(e + 0.03);
+  });
 }
 
 /** Says something roughly `chance` of the time, so it never gets tiresome. */
@@ -389,7 +683,9 @@ const SFX = {
     tone({ from: 240, to: 660, dur: 0.22, gain: 0.22, hold: 0.3, detune: 12 });
     farty({ dur: 0.16, base: 120, gain: 0.14, wobble: 30, wet: 0.3 });
     // Only now and then: a grunt on every single jump would be unbearable.
-    maybeVox(0.18, { word: 'u', dur: 0.16, pitch: 300, bend: 0.8, gain: 0.26 });
+    // "HUP" — the breath in front of it and the stop behind it are what make it
+    // an effort rather than a vowel.
+    maybeVox(0.18, { word: 'hup', dur: 0.2, pitch: 300, bend: 0.8, gain: 0.26 });
   },
   fart: () => farty({ dur: 0.3, base: 150, gain: 0.32, wobble: 24 }),
   bigfart: () => farty({ dur: 0.46, base: 92, gain: 0.38, wobble: 17, wet: 0.8 }),
@@ -449,35 +745,66 @@ const SFX = {
   powerup: () => {
     [523, 659, 784, 1047, 1319].forEach((f, i) =>
       tone({ from: f, dur: 0.11, gain: 0.18, delay: i * 0.055, hold: 0.5, detune: 8 }));
-    vox({ word: 'iea', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.38, delay: 0.18 });
+    // "NAM" — the mouth is full, so the line is a nasal at both ends.
+    vox({ word: 'nam', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.44, delay: 0.18 });
   },
-  /* These three were defined and never called from anywhere. A sound nobody
-   * triggers is not a sound. See scenes/cards.js and entities/player.js. */
-  yeah: () => vox({ word: 'iea', dur: 0.4, pitch: 255, bend: 1.35, gain: 0.42 }),
-  oof: () => vox({ word: 'ou', dur: 0.3, pitch: 240, bend: 0.6, gain: 0.40 }),
+  /*
+   * The game is Finnish and now it can say so. Every one of these was a vowel
+   * glide before, which is why they all sounded like the same person going
+   * "oooaaa" at different speeds — the words below are what tells them apart,
+   * not the pitch. Spelling is phonetic: Finnish `j` is a glide out of an `i`,
+   * so "JES" is 'ies' and "JIPPII" is 'ipii'.
+   *
+   * The `gain` numbers differ between these lines by more than a factor of two,
+   * and that is a measurement rather than carelessness. `gain` never meant what
+   * it said (see VOX_MAKEUP) and it means less than ever now: a word's peak
+   * lands wherever its formant sweep happens to cross a harmonic, and a
+   * five-target word samples more positions than a two-target one, so it wins
+   * the maximum. Left at one number the lines came out between 0.31 and 0.81 —
+   * eight decibels apart, which is one shouting and one mumbling. Measured on
+   * the sfx bus, against a coin at 0.32 and the death sound at 0.57:
+   *
+   *   JES 0.56   AUTS 0.56   NO 0.47 / NIIN 0.50   NAM 0.56
+   *   JIPPII 0.53   OHHOH 0.55   HIENOA 0.54
+   *
+   * HIENOA needed 0.28 to get there and NO needed 0.62. HUPS (0.40) and HUP
+   * (0.36) are under the rest deliberately: one is a layer inside the powerdown
+   * jingle and the other is a grunt on one jump in five.
+   *
+   * `oof` is still called from nowhere. It stays because it is the one line the
+   * game is missing a place for rather than a word — see the report.
+   */
+  yeah: () => vox({ word: 'ies', dur: 0.4, pitch: 255, bend: 1.35, gain: 0.37 }),   // JES
+  oof: () => vox({ word: 'auts', dur: 0.34, pitch: 240, bend: 0.6, gain: 0.39 }),   // AUTS
   letsgo: () => {
-    vox({ word: 'eo', dur: 0.22, pitch: 250, bend: 1.1, gain: 0.40 });
-    vox({ word: 'ou', dur: 0.26, pitch: 300, bend: 1.3, gain: 0.40, delay: 0.24 });
+    vox({ word: 'no', dur: 0.22, pitch: 250, bend: 1.1, gain: 0.62 });              // NO
+    vox({ word: 'nii', dur: 0.3, pitch: 300, bend: 1.3, gain: 0.62, delay: 0.24 }); // NIIN
   },
   powerdown: () => {
     [784, 587, 440, 330].forEach((f, i) =>
       tone({ type: 'square', from: f, dur: 0.13, gain: 0.18, delay: i * 0.06 }));
     farty({ dur: 0.3, base: 110, gain: 0.16, wobble: 14, delay: 0.1, wet: 0.4 });
-    maybeVox(0.5, { word: 'ou', dur: 0.28, pitch: 245, bend: 0.65, gain: 0.34, delay: 0.05 });
+    // "HUPS" — an oops, not a scream: the power is gone, the player is not.
+    maybeVox(0.5, { word: 'hups', dur: 0.34, pitch: 245, bend: 0.65, gain: 0.34, delay: 0.05 });
   },
   oneup: () => {
     [659, 784, 1047, 1319].forEach((f, i) =>
       tone({ type: 'triangle', from: f, dur: 0.13, gain: 0.2, delay: i * 0.08, detune: 6 }));
-    vox({ word: 'uo', dur: 0.42, pitch: 280, bend: 1.5, gain: 0.40, delay: 0.24 });
+    // "JIPPII" — the stop in the middle is what makes it two syllables.
+    vox({ word: 'ipii', dur: 0.46, pitch: 280, bend: 1.5, gain: 0.38, delay: 0.24 });
   },
   die: () => {
-    vox({ word: 'ou', dur: 0.5, pitch: 260, bend: 0.45, gain: 0.42 });
+    // "OHHOH", falling. The `h` breaks the moan in two, which is the difference
+    // between a person and a siren.
+    vox({ word: 'ohoo', dur: 0.5, pitch: 260, bend: 0.45, gain: 0.41 });
     tone({ from: 440, to: 700, dur: 0.14, gain: 0.22, hold: 0.4 });
     tone({ from: 700, to: 90, dur: 0.75, gain: 0.24, delay: 0.16, hold: 0.2, vibrato: 12 });
     farty({ dur: 0.6, base: 130, gain: 0.24, wobble: 11, delay: 0.16, wet: 0.9, vary: 0.4 });
   },
   clear: () => {
-    vox({ word: 'iea', dur: 0.45, pitch: 260, bend: 1.4, gain: 0.42 });
+    // "HIENOA" — six phonemes over the jingle's first half, which is as long a
+    // line as this synth stays intelligible for.
+    vox({ word: 'hienoa', dur: 0.55, pitch: 260, bend: 1.4, gain: 0.28 });
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) =>
       tone({ from: f, dur: 0.17, gain: 0.2, delay: i * 0.12, detune: 8 }));
     [1, 3, 5].forEach((i) => hatAt2(i * 0.12));
