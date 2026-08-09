@@ -304,11 +304,29 @@ jälkeen ja paremmin tiedoin.
   tallennetulla (8/13/6) että mitatulla (6/9/4) budjetilla, ja rikkeitä on
   molemmilla nolla. Yksikään kuilu ei siis ole liian leveä.
 
-  Seuraus on silti konkreettinen: **kohdan 3 (d) peruste on väärä.** Se sanoo
-  että kuilut on mitoitettu kuudelle ruudulle vaikka juoksuhyppy kantaa 12,5 —
-  kantama on 9,7. Kohta on jäljellä olevan listan ainoa, joten se voi hyvinkin
-  olla tarpeeton. **Päätä tämä ennen kuin budjettitiedosto generoidaan uusiksi**,
-  koska maailma 5 on generoitu vanhoilla luvuilla.
+  Seurauksena **kohta 3 (d) peruttiin** 9.8.2026: sen peruste oli tämä väärä
+  luku. Se osa on siis hoidettu.
+
+  **Jäljellä oleva päätös: korjataanko itse tiedosto?** Se ei ole ilmainen, ja
+  hinta on nyt mitattu eikä arvattu. `difficulty.mjs` pisteyttää kuiluriskin
+  suhteessa budjettiin (`(span / gapTiles) ** 2`), joten oikea budjetti tekee
+  kuiluista suhteessa vaikeampia ja nostaa kaikkia lukuja. Ajettuna arvoilla
+  6/9/4:
+
+  - koko pelin käyrä nousee yhä joka maailmassa, mutta epätasaisesti:
+    w3→w4 kutistuu +4,0:aan ja w4→w5 kasvaa +39,5:een
+  - **maailma 3 ei enää nouse kokonaisuutena**: 3-1 204 → 3-2 133 → 3-3 174,
+    eli avauskenttä on maailman vaikein
+
+  Tuo viimeinen on oikeaa tietoa jota vanhentunut tiedosto piilotti, ei uusi
+  vika: 3-1:n kuilut ovat suhteessa oikeaan hyppyyn leveämmät kuin luultiin.
+  Mutta se on **maailman 3 muotoa koskeva kysymys**, ei kirjanpitoa, joten
+  tiedostoa ei korjattu ohimennen. Kolme vaihtoehtoa: korjaa tiedosto ja hyväksy
+  että mittari valittaa maailmasta 3 kunnes sen muoto korjataan; korjaa tiedosto
+  ja korjaa maailma 3 samalla; tai jätä molemmat ja pidä tämä kirjaus.
+  **Muista myös että maailma 5 on generoitu vanhoilla luvuilla** — sen kentät
+  läpäisevät validaattorin myös uusilla, mutta seuraava generointiajo tuottaisi
+  erilaisia kenttiä.
 
   Ansa jonka tämä paljasti: **`measure-jump.mjs` kirjoittaa
   `jump-budget.json`in sivuvaikutuksena**, eli pelkkä mittaaminen muuttaa sitä
@@ -461,13 +479,24 @@ bugi on tehtaan pääntila: isoimmalla voimatasolla siellä on kohtia joihin ei
 mahdu. **Korjaa se ensin.**
 
 Järjestys: (a) tehtaan pääntila ✔, (b) tehostuspalikka jokaisen kentän alkuun ✔,
-(c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille — **kesken**.
+(c) tyhjät laattapolut ✔, (d) kuilujen levennys uudelle budjetille —
+**peruttu 9.8.2026, ks. alla. Koko kohta 3 on siis valmis.**
 
 Kohdat a–c on tehty ja **validaattori on puhdas kaikille 21 kentälle** — tästä
 eteenpäin sääntörikkeen ilmestyminen on regressio, joten `verify.mjs`:n voi
-kytkeä kaatamaan ajon myös käsintehdyistä kentistä. Jäljellä on
-vain tasapainotus: kuilut on mitoitettu vanhalle budjetille (6 ruutua), kun
-juoksuhyppy kantaa nyt 12,5. Se ei riko mitään, mutta tekee kentistä helppoja.
+kytkeä kaatamaan ajon myös käsintehdyistä kentistä.
+
+**Miksi (d) peruttiin.** Se perustui lauseeseen "kuilut on mitoitettu vanhalle
+budjetille (6 ruutua), kun juoksuhyppy kantaa nyt 12,5". **Juoksuhyppy kantaa
+9,7 ruutua.** Luku 12,5 tuli `tools/jump-budget.json`ista, joka on ollut väärässä
+siitä commitista asti joka sen kirjoitti — vakiot eivät ole muuttuneet sen
+jälkeen, ja niistä laskettuna hypyn nousu on ~72 px eikä tiedoston lupaama 121.
+
+Kentät eivät siis ole liian helppoja sillä perusteella jonka tämä kohta esitti,
+eikä 21 kentän kuilujen levennys ole tasapainotusta vaan tuntemattoman suuruinen
+muutos tuntemattomaan suuntaan. **Jos kentät joskus tuntuvat helpoilta, se
+korjataan pelaamalla ja mittaamalla eikä laskutoimituksella joka on jo kerran
+osoittautunut vääräksi.**
 
 ### 4. Uudet ruututyypit: murenevat lavat ja kytkimet
 
