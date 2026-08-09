@@ -1,5 +1,6 @@
 import {
-  WORLDS, findNode, startNode, linkPoints, routeByLink, branchAt, nodePips, PIPS, REWARDS,
+  WORLDS, findNode, startNode, linkPoints, linkCurve, routeByLink, branchAt, nodePips,
+  PIPS, REWARDS, TILE,
 } from '../data/worlds.js';
 import { drawText } from '../gfx/font.js';
 import { drawItem, drawPlayer } from '../gfx/sprites.js';
@@ -8,7 +9,6 @@ import { hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
 import { secretTally } from '../core/secrets.js';
 
-const TILE = 16;
 const MAP_Y = 14;
 const MAP_H = 144;
 const PANEL_Y = MAP_Y + MAP_H;
@@ -30,9 +30,9 @@ const HOUSE_ITEMS = ['shroom', 'flower', 'leaf', 'soup'];
  * routes out in words. A player who cannot tell the green path from the red one
  * still counts three bars against five.
  */
-const TIER_COLORS = ['#8890b0', '#6ad04a', '#c8e048', '#ffd048', '#f09030', '#e05038'];
+export const TIER_COLORS = ['#8890b0', '#6ad04a', '#c8e048', '#ffd048', '#f09030', '#e05038'];
 const TIER_SHADE = ['#3a3a50', '#2f7a24', '#7a8420', '#c07c20', '#8a4c14', '#7a2418'];
-const PIP_OFF = '#3a3a52';
+export const PIP_OFF = '#3a3a52';
 
 /*
  * The secret mark, two states and four colours: gold while something is still
@@ -44,6 +44,45 @@ const PIP_OFF = '#3a3a52';
  */
 const SECRET_LEFT = ['#c07c20', '#ffd048'];   // [on white plaque, on dark]
 const SECRET_DONE = ['#2f7a24', '#8fe04a'];
+
+/*
+ * THE LEVEL STAMP, AND WHAT IT COSTS.
+ *
+ * Three things share one node: the level number, the difficulty bar and the
+ * secrets mark. Inside a 16x16 cell they had nothing between them — measured,
+ * every gap was 0 px: the mark's right edge touched the number's left column,
+ * the plaque's bottom border touched the bar's shadow, and the bar's five pips
+ * were one pixel apart. That is what "crammed" was, and no rearrangement inside
+ * 16x16 fixes it, because 3 + 5 pixels of content and 2 px of air on each side
+ * of each gap does not fit in 16 with the borders on.
+ *
+ * So the stamp leaves the tile. What that costs, measured on the 320x240 buffer
+ * rather than guessed:
+ *
+ *   - the plaque is 16x13 and starts 2 px ABOVE the cell; the bar is 20x5 and
+ *     ends 2 px BELOW it and 2 px past each side. Bounding box 20x21 = 420 px²,
+ *     up from 256, which is 0.55% of the buffer per node.
+ *   - the two closest nodes on any map are two tiles apart (32 px, w2-3 and
+ *     w2-m), so two stamps side by side leave 12 px of map between them, down
+ *     from 16. The closest vertical pair is three tiles (48 px) and leaves 27.
+ *   - the closest a path comes to a node it does not touch is 28 px from the
+ *     centre; the stamp reaches 10 px sideways and 11 up, the path's dot 3, so
+ *     14 px of map still separates them.
+ *   - the lowest level node sits on row 7, whose bar ends at y=143. The panel
+ *     starts at 158, so nothing hangs into it.
+ *
+ * `verify.mjs` measures all four of those on the shipped maps and on the drawn
+ * pixels, so the day somebody moves a node two tiles closer, the gate says so
+ * instead of the map quietly growing shut.
+ */
+const PLAQUE_W = 16;
+const PLAQUE_H = 13;
+const PLAQUE_TOP = -2;                        // relative to the top of the cell
+const PIP_W = 2;
+const PIP_PITCH = 4;                          // 2 px of pip, 2 px of air
+const PIP_BAR_W = PIPS * PIP_PITCH - (PIP_PITCH - PIP_W);
+const PIP_PAD = 1;                            // the dark rim the bar carries
+const PIP_TOP = 14;                           // 2 clear rows under the plaque
 
 export class WorldMapScene {
   constructor(game) {
@@ -135,16 +174,24 @@ export class WorldMapScene {
     for (const link of this.linksFrom(this.node.id)) {
       const pts = linkPoints(this.world, link);
       const forward = link.a === this.node.id;
-      const path = forward ? pts : [...pts].reverse();
-      const dx = Math.sign(path[1].tx - path[0].tx);
-      const dy = Math.sign(path[1].ty - path[0].ty);
+      /* Which way the arrow key has to point is read from the TILE waypoints,
+       * not from the bent curve. A bend makes the first step of a road slightly
+       * diagonal, and asking `Math.sign` about that would turn "right" into
+       * "right and a bit down" and stop matching any key. The road leans; where
+       * it goes does not. */
+      const head = forward ? pts : [...pts].reverse();
+      const dx = Math.sign(head[1].tx - head[0].tx);
+      const dy = Math.sign(head[1].ty - head[0].ty);
       if (dx !== wanted[0] || dy !== wanted[1]) continue;
       if (!this.isLinkOpen(link)) {
         Sfx.play('bump');
         this.showMessage('POLKU ON SULJETTU');
         return;
       }
-      this.walk = { path, index: 0 };
+      /* The pawn walks the drawn curve, vertex by vertex — the same list of
+       * points `drawLinks` steps along. One geometry, two readers. */
+      const curve = linkCurve(this.world, link);
+      this.walk = { path: forward ? curve : [...curve].reverse(), index: 0 };
       this.mode = 'walk';
       this.targetNode = findNode(this.world, forward ? link.b : link.a);
       Sfx.play('cursor');
@@ -154,14 +201,12 @@ export class WorldMapScene {
 
   updateWalk() {
     const next = this.walk.path[this.walk.index + 1];
-    const tx = next.tx * TILE + 8;
-    const ty = next.ty * TILE + 8;
-    const dx = tx - this.pos.x;
-    const dy = ty - this.pos.y;
+    const dx = next.x - this.pos.x;
+    const dy = next.y - this.pos.y;
     const dist = Math.hypot(dx, dy);
     if (dist <= WALK_SPEED) {
-      this.pos.x = tx;
-      this.pos.y = ty;
+      this.pos.x = next.x;
+      this.pos.y = next.y;
       this.walk.index++;
       if (this.walk.index >= this.walk.path.length - 1) {
         this.node = this.targetNode;
@@ -456,13 +501,19 @@ export class WorldMapScene {
    * advances the cursor anyway, so a text pip could pass every width test and
    * still render as nothing. `*` was the other candidate and it is spoken for:
    * on the high-score table it means "save state used".
+   *
+   * The pitch used to be 3 — two pixels of pip and one of air — and at that
+   * spacing five pips read as one striped block rather than five things you can
+   * count, which is the whole job. It is 4 now: the same 2 px pip with 2 px of
+   * air, 18 px of bar instead of 14. `x, y` is the top-left of the pips
+   * themselves; the dark rim is drawn one pixel outside them.
    */
   drawPips(ctx, x, y, n) {
     ctx.fillStyle = 'rgba(16,14,20,0.85)';
-    ctx.fillRect(x - 1, y - 1, PIPS * 3, 5);
+    ctx.fillRect(x - PIP_PAD, y - PIP_PAD, PIP_BAR_W + PIP_PAD * 2, 3 + PIP_PAD * 2);
     for (let i = 0; i < PIPS; i++) {
       ctx.fillStyle = i < n ? TIER_COLORS[n] : PIP_OFF;
-      ctx.fillRect(x + i * 3, y, 2, 3);
+      ctx.fillRect(x + i * PIP_PITCH, y, PIP_W, 3);
     }
   }
 
@@ -482,10 +533,13 @@ export class WorldMapScene {
    * wrong one). The exact count is spelled out in words in the panel instead,
    * the same two-channel split the branch already uses.
    *
-   * It sits in the plaque's top-left corner, x+3..x+5. That is not decoration:
-   * the label glyph starts at x+6 and the plaque border is x+2, so this is the
-   * only 3x3 hole in the cell that the difficulty bar (y+11 down) and the level
-   * number do not already own.
+   * It sits in the plaque's left gutter, and that gutter is why the plaque now
+   * fills the whole tile width. The mark is 3 px, the number is 5, and each of
+   * them wants 2 px of air on both sides: 2 + 3 + 2 + 5 + 2 = 14 of interior,
+   * which needs a 16 px plaque once the border is on. In the old 12 px plaque
+   * the mark's last column and the number's first were neighbours — the reader
+   * saw one four-pixel-wide smudge, and a signal you cannot separate from the
+   * one next to it is the DESIGN.md 8 mistake made in pixels instead of sound.
    */
   drawSecretMark(ctx, x, y, tally, dark) {
     if (!tally || tally.total === 0) return;
@@ -506,22 +560,29 @@ export class WorldMapScene {
     ctx.fillRect(cx - 1, cy - 1, 2, 2);
   }
 
-  /** Point `d` tiles along a link's polyline from its `a` end. */
-  static pointAlong(pts, d) {
-    let left = d * TILE;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const ax = pts[i].tx * TILE + 8;
-      const ay = pts[i].ty * TILE + 8;
-      const bx = pts[i + 1].tx * TILE + 8;
-      const by = pts[i + 1].ty * TILE + 8;
-      const len = Math.hypot(bx - ax, by - ay);
-      if (left <= len || i === pts.length - 2) {
+  /** Total length of a pixel polyline. */
+  static polyLength(line) {
+    let total = 0;
+    for (let i = 0; i < line.length - 1; i++) {
+      total += Math.hypot(line[i + 1].x - line[i].x, line[i + 1].y - line[i].y);
+    }
+    return total;
+  }
+
+  /** Point `d` PIXELS along a polyline from its first end. */
+  static pointAlong(line, d) {
+    let left = d;
+    for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i];
+      const b = line[i + 1];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (left <= len || i === line.length - 2) {
         const t = len ? Math.min(1, left / len) : 0;
-        return { x: Math.round(ax + (bx - ax) * t), y: Math.round(ay + (by - ay) * t) };
+        return { x: Math.round(a.x + (b.x - a.x) * t), y: Math.round(a.y + (b.y - a.y) * t) };
       }
       left -= len;
     }
-    return { x: pts[0].tx * TILE + 8, y: pts[0].ty * TILE + 8 };
+    return { x: line[0].x, y: line[0].y };
   }
 
   drawLinks(ctx) {
@@ -530,31 +591,37 @@ export class WorldMapScene {
       const route = this.routeLinks.get(link);
       const lit = route ? TIER_COLORS[route.pips] : '#ffd048';
       const shade = route ? TIER_SHADE[route.pips] : '#c07c20';
-      const pts = linkPoints(this.world, link);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const ax = pts[i].tx * TILE + 8;
-        const ay = MAP_Y + pts[i].ty * TILE + 8;
-        const bx = pts[i + 1].tx * TILE + 8;
-        const by = MAP_Y + pts[i + 1].ty * TILE + 8;
-        const steps = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) / 8));
-        for (let s = 1; s < steps; s++) {
-          const x = Math.round(ax + ((bx - ax) * s) / steps);
-          const y = Math.round(ay + ((by - ay) * s) / steps);
-          /* Outline first, then the dot.
-           *
-           * Without it the ice world was unreadable: the open path is #f8e0a0
-           * and the ice terrain is #cfe6ff, whose luminances are 225 and 227.
-           * Two levels out of 255 is not a colour difference, it is the same
-           * colour. Picking a different gold would only move the problem to
-           * whichever theme it collided with next, so the dot carries its own
-           * dark edge and stops depending on what is behind it. */
-          ctx.fillStyle = 'rgba(24,20,16,0.72)';
-          ctx.fillRect(x - 3, y - 3, 6, 6);
-          ctx.fillStyle = open ? lit : '#6a6a86';
-          ctx.fillRect(x - 2, y - 2, 4, 4);
-          ctx.fillStyle = open ? shade : '#3a3a50';
-          ctx.fillRect(x - 2, y + 1, 4, 1);
-        }
+      /*
+       * Dots spaced along the WHOLE road rather than restarted at every corner.
+       *
+       * The bend subdivides each straight run into thirds, and the old loop
+       * counted its steps per segment: a third of a two-tile hop is eleven
+       * pixels, `round(11/8)` is 1, and a loop that runs from 1 to below 1
+       * draws nothing at all. Measuring the road once and stepping along it by
+       * arc length also spaces the dots evenly through the curve, which is the
+       * thing that makes a bend read as a road and not as a dotted corner.
+       */
+      const line = linkCurve(this.world, link);
+      const total = WorldMapScene.polyLength(line);
+      const steps = Math.max(2, Math.round(total / 8));
+      for (let s = 1; s < steps; s++) {
+        const at = WorldMapScene.pointAlong(line, (total * s) / steps);
+        const x = at.x;
+        const y = MAP_Y + at.y;
+        /* Outline first, then the dot.
+         *
+         * Without it the ice world was unreadable: the open path is #f8e0a0
+         * and the ice terrain is #cfe6ff, whose luminances are 225 and 227.
+         * Two levels out of 255 is not a colour difference, it is the same
+         * colour. Picking a different gold would only move the problem to
+         * whichever theme it collided with next, so the dot carries its own
+         * dark edge and stops depending on what is behind it. */
+        ctx.fillStyle = 'rgba(24,20,16,0.72)';
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+        ctx.fillStyle = open ? lit : '#6a6a86';
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+        ctx.fillStyle = open ? shade : '#3a3a50';
+        ctx.fillRect(x - 2, y + 1, 4, 1);
       }
     }
 
@@ -563,9 +630,9 @@ export class WorldMapScene {
      * a choice, it is a surprise — ROADMAP condition 2. */
     for (const route of new Set(this.routeLinks.values())) {
       if (!route.reward || !route.links[0]) continue;
-      const pts = linkPoints(this.world, route.links[0]);
-      const line = route.links[0].b === route.via[0] ? pts : [...pts].reverse();
-      const at = WorldMapScene.pointAlong(line, 1.5);
+      const curve = linkCurve(this.world, route.links[0]);
+      const line = route.links[0].b === route.via[0] ? curve : [...curve].reverse();
+      const at = WorldMapScene.pointAlong(line, 1.5 * TILE);
       this.drawRewardMark(ctx, at.x, MAP_Y + at.y);
     }
   }
@@ -575,11 +642,13 @@ export class WorldMapScene {
       const x = node.tx * TILE;
       const y = MAP_Y + node.ty * TILE;
       const cleared = this.isCleared(node.id);
-      /* Levels and fortresses were drawn two pixels lower and two taller. They
-       * lost those pixels to the difficulty bar, which lives inside the same
-       * 16 px cell rather than spilling onto the tile below — nodes sit as
-       * close as three tiles apart and a bar that overflowed would land on the
-       * neighbouring terrain, or on another node's bar. */
+      /* The bar used to be squeezed inside the same 16 px cell as the plaque,
+       * on the grounds that a bar which overflowed would land on neighbouring
+       * terrain or on another node's bar. That was the right worry and the
+       * wrong conclusion: it was never measured, and measuring it says the
+       * closest two nodes on any map are 32 px apart, so a 20 px stamp still
+       * leaves 12 px of map between them. See the layout note at the top of the
+       * file for the rest of the bill. */
       const pips = nodePips(node);
       const secrets = this.secretsAt(node);
       switch (node.type) {
@@ -596,14 +665,18 @@ export class WorldMapScene {
           ctx.fillRect(x + 1, y + 1, 3, 2);
           ctx.fillRect(x + 7, y + 0, 3, 3);
           ctx.fillRect(x + 12, y + 1, 3, 2);
+          /* The gate lost a pixel off its left jamb so the secrets mark could
+           * have the same 2 px of air the level plaque gives it. A five-wide
+           * door with the mark beside it left one pixel between them, and the
+           * two read as a single blot on the wall. */
           ctx.fillStyle = '#301818';
-          ctx.fillRect(x + 6, y + 6, 5, 5);
+          ctx.fillRect(x + 7, y + 6, 4, 5);
           if (cleared) {
             ctx.fillStyle = '#8fe04a';
-            ctx.fillRect(x + 6, y + 8, 5, 2);
+            ctx.fillRect(x + 7, y + 8, 4, 2);
           }
-          this.drawSecretMark(ctx, x, y + 3, secrets, true);
-          this.drawPips(ctx, x + 1, y + 12, pips);
+          this.drawSecretMark(ctx, x - 1, y + 3, secrets, true);
+          this.drawPips(ctx, x - 1, y + PIP_TOP, pips);
           break;
         case 'house':
           ctx.fillStyle = cleared ? '#9a6a6a' : '#e04040';
@@ -617,19 +690,24 @@ export class WorldMapScene {
           ctx.fillRect(x + 6, y + 11, 4, 4);
           break;
         default: {
+          /* Plaque, mark, number, bar — top to bottom, and every seam between
+           * them is two pixels wide. The interior runs x+1..x+14 and y-1..y+9;
+           * the mark takes x+3..x+5, the 5x7 number x+8..x+12, and both keep
+           * two rows of air above and below inside the border. */
+          const py = y + PLAQUE_TOP;
           ctx.fillStyle = cleared ? '#404060' : '#f8f8f8';
-          ctx.fillRect(x + 2, y + 1, 12, 10);
+          ctx.fillRect(x, py, PLAQUE_W, PLAQUE_H);
           ctx.fillStyle = '#202038';
-          ctx.fillRect(x + 2, y + 1, 12, 1);
-          ctx.fillRect(x + 2, y + 10, 12, 1);
-          ctx.fillRect(x + 2, y + 1, 1, 10);
-          ctx.fillRect(x + 13, y + 1, 1, 10);
+          ctx.fillRect(x, py, PLAQUE_W, 1);
+          ctx.fillRect(x, py + PLAQUE_H - 1, PLAQUE_W, 1);
+          ctx.fillRect(x, py, 1, PLAQUE_H);
+          ctx.fillRect(x + PLAQUE_W - 1, py, 1, PLAQUE_H);
           const label = node.level ? node.level.split('-')[1] : '?';
-          drawText(ctx, label, x + 8, y + 3, {
+          drawText(ctx, label, x + 10, y + 1, {
             color: cleared ? '#8fe04a' : '#202038', align: 'center',
           });
-          this.drawSecretMark(ctx, x, y + 2, secrets, cleared);
-          this.drawPips(ctx, x + 1, y + 12, pips);
+          this.drawSecretMark(ctx, x, y + 1, secrets, cleared);
+          this.drawPips(ctx, x - 1, y + PIP_TOP, pips);
           break;
         }
       }
@@ -769,13 +847,17 @@ export class WorldMapScene {
   drawRouteBoard(ctx, branch) {
     drawText(ctx, 'HAARA - VALITSE REITTI', 10, PANEL_Y + 32, { color: '#8890b0' });
     const order = [...branch.routes].sort((a, b) => a.score - b.score);
+    /* The columns moved right with the bar: 18 px of pips instead of 14 means
+     * the prize mark and its label have to start four pixels later, or the mark
+     * lands on the fifth pip. 'MURTAVA VOIMA' is 77 px wide, so from 152 it
+     * still finishes at 229 with ninety pixels of panel to spare. */
     order.forEach((route, i) => {
       const y = PANEL_Y + 44 + i * 12;
       drawText(ctx, route.name, 14, y, { color: TIER_COLORS[route.pips] });
-      this.drawPips(ctx, 120, y + 2, route.pips);
+      this.drawPips(ctx, 118, y + 2, route.pips);
       const prize = route.reward ? (REWARDS[route.reward] || {}).label : 'EI PALKINTOA';
-      drawText(ctx, prize, 148, y, { color: route.reward ? '#ffd048' : '#5a5a76' });
-      if (route.reward) this.drawRewardMark(ctx, 140, y + 3);
+      drawText(ctx, prize, 152, y, { color: route.reward ? '#ffd048' : '#5a5a76' });
+      if (route.reward) this.drawRewardMark(ctx, 144, y + 3);
     });
   }
 

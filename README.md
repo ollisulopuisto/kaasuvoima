@@ -416,6 +416,17 @@ antaa välipisteitä, jolloin siitä tulee kulmikas:
 
 Polku on kuljettavissa, kun jompikumpi pää on selvitetty.
 
+Piirtoon polku saa loivan mutkan (`linkCurve`), joka lasketaan solmujen
+tunnusten tiivisteestä — ei `Math.random()`ista, koska kartan pitää näyttää joka
+framella ja joka latauksella samalta. Sama käyrä ohjaa myös kävelevää nappulaa,
+joten kuva ja liike eivät voi erota toisistaan.
+
+**Maastoon ei saa istuttaa mitä tahansa mihin tahansa.** Seitsemän merkkiä
+(`T P M C R " E`) nousevat maasta ylös, eivätkä ne saa seisoa polun ruudussa
+eivätkä sen neljässä sivunaapurissa (`clearZone`). `worldProblems` hylkää
+kartan joka rikkoo tämän, ja `tools/verify.mjs` mittaa lisäksi piirretyistä
+pikseleistä paljonko polun ja lähimmän kalusteen väliin jää tyhjää.
+
 ### Tilatallennus
 
 `src/core/savestate.js` ottaa tilannevedoksen koko pelistä: kenttäruudukko,

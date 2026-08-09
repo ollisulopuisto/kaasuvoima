@@ -38,7 +38,10 @@ kaksoisovet · voittoruutu hernekeitolla · sirppikuu.
 esittelytila · teemakohtaiset seisonta-animaatiot kentissä ja kartalla · oma
 kuvakieli tiilelle, `?`-lohkolle ja putkelle · valojärjestelmä, jossa maailma
 kantaa omat valonsa · kosketusohjaus kolmella mallilla · jakoruutu
-(`navigator.share`, ei palvelinta) ja tulos jakolinkissä.
+(`navigator.share`, ei palvelinta) ja tulos jakolinkissä · kartan luettavuus
+mitattuna: kalusto ei seiso polulla eikä sen vieressä (sääntö 8
+`worldProblems`issa), kenttälaatan jokainen sauma on 2 px, ja polut mutkittelevat
+tunnisteesta johdetun käyrän mukaan jota myös nappula kävelee (v26.08.09.30).
 
 **Portit ja työkalut:** playable.mjs · difficulty.mjs, joka kirjoittaa
 `src/data/difficulty.js`:n vain lipun takana ja jonka vanhentumisen `verify.mjs`

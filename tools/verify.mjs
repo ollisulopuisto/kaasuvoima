@@ -596,6 +596,404 @@ const report = await page.evaluate(async () => {
       `alas ${low}, sieltä ${toFort}, oikealle ${high}`);
   }
 
+  /* ------------- kartan luettavuus: polku, kalusto ja vaikeuslaatta -------- */
+  /*
+   * Kolme valitusta, yksi kuva. Omistaja pelasi kartan läpi ja sanoi kolme
+   * asiaa: puut seisovat polun päällä, kentän numerolaatta on ahdettu täyteen,
+   * ja linkit on vedetty viivaimella. Ne ovat sama kuva ja siksi sama testi.
+   *
+   * Kaikki kolme mitataan pikseleistä eikä katsota silmällä, koska "näyttää
+   * ahtaalta" ei ole luku jonka voi rikkoa vahingossa uudestaan. Jokainen alla
+   * oleva väite nähtiin punaisena ennen kuin mitään korjattiin, ja rivikommentit
+   * kertovat mitä se mittasi silloin.
+   */
+  {
+    const worlds = await import('/src/data/worlds.js');
+    const { WorldMapScene, TIER_COLORS, PIP_OFF } = await import('/src/scenes/worldmap.js');
+    const cv = document.createElement('canvas');
+    cv.width = 320;
+    cv.height = 240;
+    const g = cv.getContext('2d');
+
+    /*
+     * Se kalusto joka nousee maasta ylös ja siksi tukkii polun. Lista on tässä
+     * testissä käsin kirjoitettuna eikä luettuna `worlds.js`:stä tarkoituksella:
+     * jos sääntö ja sen tarkistus lukevat saman muuttujan, merkin poistaminen
+     * listalta korjaa molemmat ja testi lakkaa olemasta testi. Luvut ovat
+     * `drawTerrain`in omista suorakulmioista, ruudun yläreunasta laskien:
+     *   T puu     y+1..y+14   P mänty  y+1..y+14   M vuori  y+3..y+15
+     *   C kaktus  y+3..y+14   R kivi   y+8..y+13   " pensas y+6..y+13
+     *   E koneisto y+1..y+14
+     * Polun pisteen oma muste on y+5..y+10 ruudun sisällä, joten jokainen näistä
+     * osuu siihen suoraan jos se seisoo samassa ruudussa.
+     */
+    const TALL = 'TPMCR"E';
+    const bare = new RegExp(`[${TALL}]`, 'g');
+
+    const rgbaOf = (paint) => {
+      g.clearRect(0, 0, 320, 240);
+      paint(g);
+      return g.getImageData(0, 0, 320, 240).data;
+    };
+    const inkOf = (paint) => {
+      const d = rgbaOf(paint);
+      const m = new Uint8Array(320 * 240);
+      for (let i = 0; i < m.length; i++) if (d[i * 4 + 3] > 8) m[i] = 1;
+      return m;
+    };
+    const hueOf = (d, hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const gg = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const m = new Uint8Array(320 * 240);
+      for (let i = 0; i < m.length; i++) {
+        if (d[i * 4] === r && d[i * 4 + 1] === gg && d[i * 4 + 2] === b && d[i * 4 + 3] > 200) m[i] = 1;
+      }
+      return m;
+    };
+    const count = (m) => { let n = 0; for (let i = 0; i < m.length; i++) n += m[i]; return n; };
+
+    /* Chebyshev-etäisyysmuunnos kahdella pyyhkäisyllä. Chebyshev eikä euklidinen
+     * siksi, että kysymys on "montako tyhjää pikseliä väliin jää" — vinottain
+     * naapuri on yhtä lähellä kuin suoraan sivulla oleva, kun molemmat peittyvät
+     * saman kokoisen pisteen alle. */
+    const distFrom = (m) => {
+      const d = new Int32Array(320 * 240).fill(1 << 20);
+      for (let i = 0; i < d.length; i++) if (m[i]) d[i] = 0;
+      for (let y = 0; y < 240; y++) {
+        for (let x = 0; x < 320; x++) {
+          const i = y * 320 + x;
+          let v = d[i];
+          if (x > 0) v = Math.min(v, d[i - 1] + 1);
+          if (y > 0) v = Math.min(v, d[i - 320] + 1);
+          if (x > 0 && y > 0) v = Math.min(v, d[i - 321] + 1);
+          if (x < 319 && y > 0) v = Math.min(v, d[i - 319] + 1);
+          d[i] = v;
+        }
+      }
+      for (let y = 239; y >= 0; y--) {
+        for (let x = 319; x >= 0; x--) {
+          const i = y * 320 + x;
+          let v = d[i];
+          if (x < 319) v = Math.min(v, d[i + 1] + 1);
+          if (y < 239) v = Math.min(v, d[i + 320] + 1);
+          if (x < 319 && y < 239) v = Math.min(v, d[i + 321] + 1);
+          if (x > 0 && y < 239) v = Math.min(v, d[i + 319] + 1);
+          d[i] = v;
+        }
+      }
+      return d;
+    };
+    /** Tyhjiä pikseleitä kahden piirroksen väliin: 0 = koskettavat, -1 = päällekkäin. */
+    const clearance = (a, b) => {
+      const d = distFrom(a);
+      let best = 1 << 20;
+      for (let i = 0; i < b.length; i++) if (b[i] && d[i] < best) best = d[i];
+      return best - 1;
+    };
+
+    const mapOf = (wi) => {
+      reset();
+      game.state.world = wi;
+      game.state.node = WORLDS[wi].nodes[0].id;
+      game.state.cleared = Object.fromEntries(WORLDS[wi].nodes.map((n) => [n.id, true]));
+      const m = new WorldMapScene(game);
+      m.tick = 30;
+      return m;
+    };
+
+    /* --- 1. kalusto ei seiso polulla eikä sen vieressä --- */
+
+    /* Sama polun geometria kuin `worldProblems`illa, mutta laskettuna tässä
+     * uudelleen: sääntö ja sen todiste eivät saa jakaa samaa koodia. */
+    const zoneOf = (w) => {
+      const path = new Set(w.nodes.map((n) => `${n.tx},${n.ty}`));
+      for (const l of w.links) {
+        const pts = worlds.linkPoints(w, l);
+        for (let i = 0; i < pts.length - 1; i++) {
+          let { tx, ty } = pts[i];
+          const dx = Math.sign(pts[i + 1].tx - tx);
+          const dy = Math.sign(pts[i + 1].ty - ty);
+          path.add(`${tx},${ty}`);
+          while (tx !== pts[i + 1].tx || ty !== pts[i + 1].ty) {
+            if (tx !== pts[i + 1].tx) tx += dx;
+            if (ty !== pts[i + 1].ty) ty += dy;
+            path.add(`${tx},${ty}`);
+          }
+        }
+      }
+      const zone = new Set(path);
+      for (const k of path) {
+        const [tx, ty] = k.split(',').map(Number);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) zone.add(`${tx + dx},${ty + dy}`);
+      }
+      return zone;
+    };
+
+    const planted = [];
+    for (const w of WORLDS) {
+      const zone = zoneOf(w);
+      for (let ty = 0; ty < w.terrain.length; ty++) {
+        for (let tx = 0; tx < w.terrain[ty].length; tx++) {
+          if (TALL.includes(w.terrain[ty][tx]) && zone.has(`${tx},${ty}`)) {
+            planted.push(`${w.id} ${w.terrain[ty][tx]}@${tx},${ty}`);
+          }
+        }
+      }
+    }
+    expect('yksikään puu, kivi tai koneisto ei seiso polulla eikä sen vieressä',
+      planted.length === 0, planted.length ? `${planted.length}: ${planted.slice(0, 6).join(' ')}` : '5 maailmaa');
+
+    /* Ja sama pikseleinä: piirretään maasto kahdesti, kerran oikeana ja kerran
+     * ilman korkeaa kalustoa, ja erotus ON kaluston muste. Sitten mitataan
+     * paljonko tyhjää jää polun ja lähimmän kalusteen väliin. */
+    let worstScenery = { d: 1 << 20, id: '?' };
+    for (let wi = 0; wi < WORLDS.length; wi++) {
+      const m = mapOf(wi);
+      const w = m.world;
+      const full = rgbaOf((c) => m.drawTerrain(c));
+      m.world = { ...w, terrain: w.terrain.map((r) => r.replace(bare, '.')) };
+      const flat = rgbaOf((c) => m.drawTerrain(c));
+      m.world = w;
+      const scenery = new Uint8Array(320 * 240);
+      for (let i = 0; i < scenery.length; i++) {
+        if (full[i * 4] !== flat[i * 4] || full[i * 4 + 1] !== flat[i * 4 + 1]
+          || full[i * 4 + 2] !== flat[i * 4 + 2]) scenery[i] = 1;
+      }
+      const path = inkOf((c) => m.drawLinks(c));
+      const d = count(scenery) ? clearance(path, scenery) : 1 << 20;
+      if (d < worstScenery.d) worstScenery = { d, id: w.id, px: count(scenery) };
+    }
+    expect('polun ja lähimmän kaluston väliin jää tyhjää joka maailmassa',
+      worstScenery.d >= 4, `tiukin ${worstScenery.id}: ${worstScenery.d} px`);
+
+    /*
+     * Ja tässä se vastaesimerkki jonka takia sääntö raivaa myös naapuriruudut.
+     * Kartta jossa vain polun omat ruudut ovat tyhjiä ja vuorijono seisoo rivin
+     * ylä- ja alapuolella on täsmälleen se mitä heikompi sääntö sallisi.
+     * Mitataan paljonko tilaa siihen jää — jos luku on sama kuin oikeilla
+     * kartoilla, naapuriruutujen raivaaminen ei osta mitään ja sen voi perua.
+     */
+    const strip = {
+      id: 'wS',
+      name: 'KAISTA',
+      theme: 'grass',
+      terrain: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        .map((r) => (r === 3 || r === 5 ? 'M'.repeat(20) : '.'.repeat(20))),
+      nodes: [
+        { id: 'p', tx: 2, ty: 4, type: 'start', name: 'A' },
+        { id: 'q', tx: 14, ty: 4, type: 'level', level: '1-1', name: 'B' },
+      ],
+      links: [{ a: 'p', b: 'q' }],
+    };
+    const ms = mapOf(0);
+    const keepW = ms.world;
+    const keepR = ms.routeLinks;
+    ms.routeLinks = new Map();
+    ms.world = strip;
+    const stripFull = rgbaOf((c) => ms.drawTerrain(c));
+    ms.world = { ...strip, terrain: strip.terrain.map((r) => r.replace(bare, '.')) };
+    const stripFlat = rgbaOf((c) => ms.drawTerrain(c));
+    ms.world = strip;
+    const stripPath = inkOf((c) => ms.drawLinks(c));
+    ms.world = keepW;
+    ms.routeLinks = keepR;
+    const stripScenery = new Uint8Array(320 * 240);
+    for (let i = 0; i < stripScenery.length; i++) {
+      if (stripFull[i * 4] !== stripFlat[i * 4] || stripFull[i * 4 + 1] !== stripFlat[i * 4 + 1]
+        || stripFull[i * 4 + 2] !== stripFlat[i * 4 + 2]) stripScenery[i] = 1;
+    }
+    const weak = clearance(stripPath, stripScenery);
+    expect('pelkkien polkuruutujen raivaaminen ei olisi riittänyt',
+      weak < worstScenery.d - 2,
+      `vain polkuruudut ${weak} px, polkuruudut ja naapurit ${worstScenery.d} px`);
+
+    /* Ja säännön pitää olla mahdoton rikkoa, ei vain rikkomatta jätetty. */
+    const mkT = (terrain) => ({
+      id: 'wT',
+      name: 'TESTI',
+      theme: 'grass',
+      terrain: terrain.map((r) => r.padEnd(6, '.')),
+      nodes: [
+        { id: 's', tx: 0, ty: 1, type: 'start', name: 'ALKU' },
+        { id: 'a', tx: 2, ty: 1, type: 'level', level: '1-1', name: 'A' },
+        { id: 'f', tx: 4, ty: 1, type: 'fortress', level: '1-F', name: 'F' },
+      ],
+      links: [{ a: 's', b: 'a' }, { a: 'a', b: 'f' }],
+    });
+    const clean = mkT(['......', '......', '......', '...T..']);
+    const onPath = mkT(['......', '.T....', '......', '......']);
+    const beside = mkT(['...T..', '......', '......', '......']);
+    const sceneryCases = [
+      ['puhdas kartta', clean, false],
+      ['puu polulla', onPath, true],
+      ['puu polun vieressä', beside, true],
+    ];
+    const sceneryMissed = sceneryCases.filter(([, world, shouldFail]) =>
+      worlds.worldProblems(world).some((p) => p.includes('polun')) !== shouldFail);
+    expect('polulle istutettua puuta ei voi committoida',
+      sceneryMissed.length === 0,
+      sceneryMissed.map(([n]) => n).join(', ') || `${sceneryCases.length} tapausta`);
+
+    /* --- 2. laatan sisällä on väljyyttä --- */
+
+    /*
+     * Numero, salaisuusmerkki ja vaikeuspalkki kilpailevat samasta ruudusta.
+     * Mitataan ne erikseen väristä: selvitetyllä solmulla numero on #8fe04a,
+     * löytymätön salaisuus #ffd048, laatan reunus #202038 ja palkin oma tausta
+     * (16,14,20). Neljä eri väriä, joten jokainen osa saa oman maskin.
+     */
+    const plaqueNode = WORLDS[0].nodes.find((n) => n.level === '1-2');
+    const mp = mapOf(0);
+    mp.game.state.secrets = { '1-2': [] };      // viisi salaisuutta, yhtään ei löytynyt
+    const w1 = mp.world;
+    mp.world = { ...w1, nodes: [plaqueNode] };
+    const plaque = rgbaOf((c) => mp.drawNodes(c));
+    mp.world = w1;
+    const gNum = hueOf(plaque, '#8fe04a');
+    const gMark = hueOf(plaque, '#ffd048');
+    const gEdge = hueOf(plaque, '#202038');
+    /* Palkki on kolmea eri väriä: läpikuultava tausta, sammunut pykälä ja
+     * palanut pykälä sen tason värissä. Ne ovat sama esine, joten sama maski. */
+    const litPip = TIER_COLORS[worlds.nodePips(plaqueNode)];
+    const gOff = hueOf(plaque, PIP_OFF);
+    const gLit = hueOf(plaque, litPip);
+    const gBar = new Uint8Array(320 * 240);
+    for (let i = 0; i < gBar.length; i++) {
+      const a = plaque[i * 4 + 3];
+      if (gOff[i] || gLit[i] || (a > 100 && a < 250)) gBar[i] = 1;
+    }
+    const drawn = count(gNum) && count(gMark) && count(gEdge) && count(gBar);
+    const gaps = {
+      numMark: clearance(gNum, gMark),
+      numEdge: clearance(gNum, gEdge),
+      markEdge: clearance(gMark, gEdge),
+      edgeBar: clearance(gEdge, gBar),
+    };
+    expect('laatan numero, salaisuusmerkki ja vaikeuspalkki eivät hengitä toistensa niskaan',
+      !!drawn && Math.min(...Object.values(gaps)) >= 2,
+      `numero-merkki ${gaps.numMark}, numero-reunus ${gaps.numEdge}, `
+      + `merkki-reunus ${gaps.markEdge}, reunus-palkki ${gaps.edgeBar} px`);
+
+    /* Väljyys maksaa tilaa, ja se hinta mitataan: kahden vierekkäisen solmun
+     * piirrosten väliin pitää jäädä tyhjää, tai laatta on kasvanut naapurinsa
+     * päälle. Tiukin pari kartalla on kaksi ruutua eli 32 px erillään. */
+    let worstNodes = { d: 1 << 20 };
+    let worstLinkNode = { d: 1 << 20 };
+    let worstLinks = { d: 1 << 20 };
+    for (let wi = 0; wi < WORLDS.length; wi++) {
+      const m = mapOf(wi);
+      const w = m.world;
+      const keep = m.routeLinks;
+      const nodeInk = w.nodes.map((n) => {
+        m.world = { ...w, nodes: [n] };
+        const ink = inkOf((c) => m.drawNodes(c));
+        m.world = w;
+        return ink;
+      });
+      const linkInk = w.links.map((l) => {
+        m.world = { ...w, links: [l] };
+        m.routeLinks = new Map();
+        const ink = inkOf((c) => m.drawLinks(c));
+        m.world = w;
+        m.routeLinks = keep;
+        return ink;
+      });
+      for (let i = 0; i < w.nodes.length; i++) {
+        for (let j = i + 1; j < w.nodes.length; j++) {
+          const d = clearance(nodeInk[i], nodeInk[j]);
+          if (d < worstNodes.d) worstNodes = { d, id: `${w.nodes[i].id}/${w.nodes[j].id}` };
+        }
+        for (let k = 0; k < w.links.length; k++) {
+          const l = w.links[k];
+          if (l.a === w.nodes[i].id || l.b === w.nodes[i].id) continue;
+          const d = clearance(nodeInk[i], linkInk[k]);
+          if (d < worstLinkNode.d) worstLinkNode = { d, id: `${w.nodes[i].id}/${l.a}-${l.b}` };
+        }
+      }
+      for (let i = 0; i < w.links.length; i++) {
+        for (let j = i + 1; j < w.links.length; j++) {
+          const A = w.links[i];
+          const B = w.links[j];
+          if (A.a === B.a || A.a === B.b || A.b === B.a || A.b === B.b) continue;
+          const d = clearance(linkInk[i], linkInk[j]);
+          if (d < worstLinks.d) worstLinks = { d, id: `${A.a}-${A.b} / ${B.a}-${B.b}` };
+        }
+      }
+    }
+    expect('kaksi solmua ei kasva kiinni toisiinsa',
+      worstNodes.d >= 8, `tiukin ${worstNodes.id}: ${worstNodes.d} px`);
+    expect('polku ei kulje sellaisen solmun läpi johon se ei liity',
+      worstLinkNode.d >= 8, `tiukin ${worstLinkNode.id}: ${worstLinkNode.d} px`);
+    expect('kaksi linkkiä joilla ei ole yhteistä solmua eivät kosketa',
+      worstLinks.d >= 8, `tiukin ${worstLinks.id}: ${worstLinks.d} px`);
+
+    /* --- 3. polut mutkittelevat, ja pelinappula kulkee samaa mutkaa --- */
+
+    /*
+     * Mutkan pitää olla datassa eikä piirtokoodissa, koska kaksi eri paikkaa
+     * jotka laskevat "saman" mutkan eri kaavalla on juuri se ero jota DESIGN.md
+     * 8 tarkoittaa: kuva ja liike kertoisivat eri tarinaa. Siksi tässä kysytään
+     * käyrä `worlds.js`:ltä ja verrataan siihen sekä piirrosta että kävelyä.
+     * Jos käyrää ei ole olemassa, tämä lukee suoran — ja mutkan mitta on 0.
+     */
+    const curveOf = (w, link) => (worlds.linkCurve
+      ? worlds.linkCurve(w, link)
+      : worlds.linkPoints(w, link).map((p) => ({ x: p.tx * 16 + 8, y: p.ty * 16 + 8 })));
+    const segDist = (p, a, b) => {
+      const vx = b.x - a.x;
+      const vy = b.y - a.y;
+      const L2 = vx * vx + vy * vy;
+      const t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2)) : 0;
+      return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+    };
+    const polyDist = (p, line) => {
+      let best = 1e9;
+      for (let i = 0; i < line.length - 1; i++) best = Math.min(best, segDist(p, line[i], line[i + 1]));
+      return best;
+    };
+
+    let bendMin = 1e9;
+    let bendMax = 0;
+    let offCurve = 0;
+    for (const w of WORLDS) {
+      for (const link of w.links) {
+        const straight = worlds.linkPoints(w, link)
+          .map((p) => ({ x: p.tx * 16 + 8, y: p.ty * 16 + 8 }));
+        const curve = curveOf(w, link);
+        let deep = 0;
+        for (const p of curve) deep = Math.max(deep, polyDist(p, straight));
+        bendMin = Math.min(bendMin, deep);
+        bendMax = Math.max(bendMax, deep);
+        /* Kävelijä kulkee tismalleen sitä samaa murtoviivaa. */
+        reset();
+        game.state.world = WORLDS.indexOf(w);
+        game.state.node = link.a;
+        game.state.cleared = Object.fromEntries(w.nodes.map((n) => [n.id, true]));
+        const m = new WorldMapScene(game);
+        const pts = worlds.linkPoints(w, link);
+        const dx = Math.sign(pts[1].tx - pts[0].tx);
+        const dy = Math.sign(pts[1].ty - pts[0].ty);
+        m.mode = 'idle';
+        m.tryMove(dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
+        if (m.mode === 'walk' && m.targetNode && m.targetNode.id === link.b) {
+          for (let f = 0; f < 4000 && m.mode === 'walk'; f++) {
+            offCurve = Math.max(offCurve, polyDist(m.pos, curve));
+            m.update({
+              pressed: blank(), held: blank(), released: blank(), consume() {},
+            });
+          }
+        }
+      }
+    }
+    expect('jokainen linkki mutkittelee, mutta pysyy omassa ruudussaan',
+      bendMin >= 2 && bendMax <= 4,
+      `pienin mutka ${bendMin.toFixed(1)} px, suurin ${bendMax.toFixed(1)} px `
+      + `(ruudun keskeltä reunaan 8, pisteen puolikas 3)`);
+    expect('kävelijä kulkee sitä mutkaa joka on piirretty',
+      offCurve <= 0.5, `suurin poikkeama piirretystä käyrästä ${offCurve.toFixed(3)} px`);
+  }
+
   /* Standing still on solid ground must read as grounded on EVERY frame. If it
    * flickers, jumps silently vanish: the press lands on a frame where the game
    * thinks the player is in mid-air. */
