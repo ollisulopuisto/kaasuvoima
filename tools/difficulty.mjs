@@ -52,7 +52,7 @@ const FLOOR = 13;
  *   - anything that survives being hit costs more, because clearing it is two
  *     actions under pressure instead of one
  */
-const ENEMY_COST = {
+export const ENEMY_COST = {
   g: 1.0,   // walker: the unit
   k: 1.3,   // shell: stomping it leaves a shell that comes back at you
   f: 1.6,   // flyer: hops, and a stomp turns it into a walker — two hits
@@ -80,6 +80,19 @@ const ENEMY_COST = {
              * it follows you" against "two hits and a crossfire, but it stays
              * put". Added with the enemy rather than after it, because a
              * mini-boss worth zero is the exact bug the spiky walker had. */
+  U: 2.1,   /* kurnuttaja: the pit leaper. Priced above the two other unstompable
+             * ones — the plant at 1.1 and the heartburn jet at 1.5 — and below
+             * the flyer-plus-shell tier, and the reason is *where* it is rather
+             * than what it does. The plant and the jet stand on floor you can
+             * back away along; this one owns the air over a hole, which is the
+             * one place the player has already spent their options. Mistiming
+             * the plant costs a power level, mistiming this one costs the jump
+             * and therefore the life. Against that, its cycle is a metronome
+             * with a 84-frame telegraph and it never leaves its column, which
+             * is why it is not priced with the sun. Added with the enemy and
+             * not after it: the spiky walker shipped at 0 and every level it
+             * was in measured easier than it played — see the gate in
+             * verify.mjs that now refuses a marker with no price. */
   O: 0.0,   // moon: harmless, it is a trampoline with a power-up in it
   b: 5.0,   /* boss: one entity, but it is the level. The real spread between
              * bosses is bossVariant's move set, which is code and not grid, so

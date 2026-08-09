@@ -20,7 +20,7 @@ export {
   drawWalker, drawShell, drawFlyer, drawPlant, drawStinkCloud, drawCorkGuy,
   drawAngrySun, drawSunTrail, SUN_TRAIL_LIFE, breath, BREATH_PERIOD,
   drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
-  drawBeanBaron, drawBeanBomb,
+  drawBeanBaron, drawBeanBomb, drawKurnuttaja, drawCroak,
 } from './sprites/enemies.js';
 export { drawBoss } from './sprites/boss.js';
 export {

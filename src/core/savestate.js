@@ -1,7 +1,7 @@
 import { Player } from '../entities/player.js';
 import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
-  Moon, SpikeGuy, BeanBaron, BeanBomb,
+  Moon, SpikeGuy, BeanBaron, BeanBomb, Kurnuttaja,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
@@ -15,6 +15,11 @@ import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effe
 const REGISTRY = {
   Player, Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn,
   Shockwave, Boss, AngrySun, Moon, SpikeGuy, BeanBaron, BeanBomb, Item, FartBall,
+  /* The pit leaper's whole promise is that its cycle is learnable, and a
+   * quicksave that reloaded it into a different beat would break that promise
+   * in the one moment the player is standing on the rim counting. Its phase and
+   * timer are plain own properties, so listing the class here is all it takes. */
+  Kurnuttaja,
   /* A beanstalk caught halfway up is state and not scenery: the tiles it has
    * already written are in the saved grid, and the ones it has not are only in
    * this entity's own list. Leaving it out would restore a level with half a

@@ -7,6 +7,164 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.37 — kurnuttaja, ja 90 framea ennen kuin hyppy on sidottu
+
+Uusi vihollinen, **KURNUTTAJA**: se asuu kuilun pohjalla ja loikkaa sieltä
+ylös. Nimi on `kurnuttaa` (sammakon rekisteri sopii loikkijalle) yhden
+kirjaimen päässä `kurnia`sta, joka on se ääni jonka vatsa päästää alhaalta —
+samaa yhdyssanaperhettä kuin ummetuskorkki ja närästysliekki. Nimi on neljässä
+paikassa eikä useammassa (luokka `Kurnuttaja`, `REGISTRY`, `ENEMY_CHARS.U`,
+`drawKurnuttaja`), jos omistaja haluaa vaihtaa sen.
+
+### Ongelma on koko työ, eikä se ole "tehdään sammakko"
+
+**Kuilu on tähän asti ollut binäärinen: joko ylität sen tai kuolet.** Olento
+kuilussa tekee vaaralliseksi *ilman kuilun yllä* — juuri sen paikan jossa
+pelaajalla on vähiten ohjausta, kesken hyppyä ja sitoutuneena, pelkkä vauhti
+jäljellä. Huolimattomasti tehtynä tämä muuttaa hypyn jonka pelaaja itse valitsi
+kuolemaksi jota hän ei voinut välttää, eli se on epäreiluuden generaattori.
+Siksi tästä ei riitä väitteeksi "vihollinen on olemassa", ja siksi
+`verify.mjs`:ään tuli yhdeksän mittausta eikä yhtä.
+
+**1. Varoitus ehtii ennen sitoutumista, ja se on todistus eikä toive.**
+Varoitus kestää `KURN_WARN` = 84 framea, ja luku ei ole makuasia: se on mitattu
+`tools/jump-budget.json`ia vasten. Pisin hyppy jonka voimatason 0 pelaaja voi
+olla ilmassa on **69 framea** (`P-speed, held`). Jos varoitus on vähintään yhtä
+pitkä kuin lento, niin jokainen loikka joka voi osua lentävään pelaajaan **oli
+jo alkanut kuulua ennen kuin hän lähti maasta**: varoitus alkaa framella t,
+loikka framella t+W, pelaaja lähtee framella u ja laskeutuu u+A:lla; osuma
+edellyttää t+W < u+A eli t < u + (A−W), ja kun W ≥ A niin t < u. Mitattu
+kokonaisviive kuvan alusta siihen framen jolla ruumis voi ensimmäisen kerran
+satuttaa: **90 framea**, pelivaraa 21. Juoksuvauhdilla (2,5 px/frame) se on
+225 px eli **14 ruutua lähestymistä** kuudelle ruudulle kuilua.
+
+Pieruhyppy (113 framea) on rajattu mittauksen ulkopuolelle tarkoituksella: se on
+pelin ainoa hyppy jonka voi muuttaa kesken kaiken, eli se ei ole sitoutuminen
+samalla tavalla — ja DESIGN.md kohta 5 sanoo muutenkin että lupaus mitataan
+voimatasolta 0.
+
+**2. Sykli on deterministinen.** Ei `Math.random()`ia missään kohtaa: `54 + 84 +
+loikka = 176 framea`, joka kierros. Sama peruste kuin pomon piikkisyklillä —
+kuilun yllä oleva vaara on opeteltava, ja pikatallennuksen pitää palata samaan
+tahtiin. Mitattu: kuusi peräkkäistä kierrosta 176/176/176/176/176, kaksi samalla
+framella herännyttä oliota framen tarkkuudella samassa tahdissa, ja pikalataus
+kesken kurnutuksen jatkaa täsmälleen samalta framelta (70 → 70).
+
+**3. Loikka pysyy omassa sarakkeessaan.** `x` ei muutu koskaan eikä `vx`
+asetu. Vaara on siis *täsmälleen* kuilun yllä oleva ilma, ja reunalla
+seisominen on aina turvallista — mikä on se asia joka tekee odottamisesta
+oikean vastauksen eikä arvauksen. Mitattu: 0 px sivuliikettä, 40 px nousua
+reunan yli, ja reunalla kaksi kokonaista kierrosta seissyt pelaaja ehjä.
+
+### Tapposäännöt, ja kolme rajaa jotka piti vetää
+
+**Tallaus ei käy.** Kuilun yllä olevan olennon päälle laskeutuminen tarkoittaa
+kuilun ylle laskeutumista: peli tarjoaisi vastauksen joka tappaa vastaajan.
+"Odota" on jo pelin opettama laillinen vastaus — närästyssuihkuun ei voi hypätä
+lainkaan. Kaikki muu puree kuten putkikasviin: pierupallo, häntä ja liukuva
+kuori. Kuplaa se ei ota, samasta syystä kuin kasvi ei: se on pultattu koloonsa,
+ja kuplassa leijuva kurnuttaja jättäisi kuilun vaarattomaksi lopun kenttää.
+
+**Se ei ole piikikäs, ja se on tietoinen ero.** Piikit tarkoittavat "tallaus on
+kiinni" ja ne piirretään kärkinä; tämä on kiinni siksi että se roikkuu kolon
+päällä, mikä on tieto maastosta eikä eläimestä. Piikikkyys olisi ollut toinen
+merkitys samalle kuvalle.
+
+**Maahanisku (v26.08.09.31): geometria vastaa, ei lippu.** Iskuaalto juoksee
+lattiaa pitkin ja lattia loppuu kuilun reunaan — eikä sitä tarvinnut kirjoittaa
+mihinkään. Mitattu: iskun säde voimatasolla 0 on **22 px**, ja matka reunalta
+kuuden ruudun kuilun keskelle on **48 px**. Isku ei siis yletä sinne edes
+täydeltä korkeudelta, ja kuiluun sukeltaminen on jo valmiiksi kuolema. Vastaus
+on siis "ei mitään", ja se seuraa mitoista eikä erikoistapauksesta.
+
+**Supertähti kantaa sen yli.** Tähti suojaa kentän asukeilta ja nimenomaan ei
+kentältä itseltään: kuilu, laava ja kello ovat sen ulkopuolella. Kurnuttaja on
+*asukki* kuilun yllä, joten se on tähden puolella rajaa — ja kuilu sen alla ei
+ole. Sama testi mittaa molemmat: tähti tappaa olennon kosketuksesta, ja sama
+tähti antaa kuilun tappaa pelaajan.
+
+### Kuva ja ääni yhdessä, ja kumpikaan ei ole vanha merkki
+
+Ruumis on kolon pohjalla näkymättömissä (lepokorkeus on kaksi ruutua reunan
+alla, eli 15-rivisen kaistan alapuolella), joten **varoitus ei voi olla
+olennossa**. Se on kuplapatsas joka nousee kolosta ilmaan: kalpea sinivihreä,
+kolme eroa peliin jo kuuluviin varoituksiin. **Paikka** — närästyksen
+varoitushiillos on lattialla ja auringon hehku on auringossa; tämä tapahtuu
+kolon päällä, ainoassa kohdassa kuvaa jossa lattiaa ei ole. **Väri** — hiillos
+on tulta, pelaajan oma kaasu on keltavihreää; tämä on kumpikaan. **Rytmi** —
+hiillos välkkyy kahden värin väliä kolmen framen välein, mikä lukee sanana
+"päällä"; tämä on nouseva patsas joka kiihtyy ja yltää korkeammalle mitä
+lähempänä loikka on, eli se lukee sanana "kohta" ja kertoo *kuinka* kohta.
+
+Kaksi uutta ääntä. **`kurnutus`** on ääni jolla on pituutta, samasta syystä kuin
+`sprout`illa: se kuvaa asiaa joka kestää. Mutta se ei ole `sprout` eikä `dive`,
+ja ero on rytmissä eikä sointivärissä — nuo kaksi ovat yksi yhtenäinen liu'utus
+(toinen ylös, toinen alas), tämä on **kiihtyvä pulssijono**, seitsemän lyhyttä
+kurahdusta joiden väli kutistuu 0,20 sekunnista 0,09:ään. Mikään muu tällä
+väylällä ei ole jono jonka tiheys muuttuu. **`loikka`** on 0,12 sekuntia märkää
+läiskähdystä ja nopeaa nousua, ja se on lyhyt juuri siksi että edellinen oli
+pitkä: korva erottaa hetken jolloin odottaminen loppuu vain jos jälkimmäinen
+ääni on sen muotoinen mitä edellinen ei ole.
+
+### Mihin kuiluihin, ja miksi ei kaikkiin
+
+**Kaksi**, ja se on koko lista: `2-1` (chunk 7) ja `3-3` (chunk 18). Vaara joka
+on jokaisessa kolossa on maastoa, ja maasto ei ole vaara — tyhjän kuilun
+kohtaaminen heti asutun jälkeen on se mikä tekee asutusta merkittävän. Maailman
+1 paljaat kuilut jäävät tyhjiksi tarkoituksella: kuilu saa tarkoittaa kuilua
+yhden maailman ajan, ja 2-1 on ensimmäinen kenttä sen jälkeen.
+
+`pit_croak` on ruutu ruudulta `pit_s`: viisi lattiasaraketta, kuusi tyhjää,
+viisi lattiaa. Identtisyys on tässä se päätös. Pelaaja on ylittänyt juuri sen
+kolon 1-1:stä asti, joten ainoa uusi luettava on se mikä siinä asuu — eri
+levyinen kuilu olisi pyytänyt lukemaan maastonkin uusiksi samalla hetkellä.
+Kapeampaa (viisi ruutua) kokeiltiin ja se **hylättiin mittauksen takia**:
+`difficulty.mjs` luki 2-1:n silloin *helpompana hirviön kanssa kuin ilman*
+(115,7 → 111,0), koska ruutu pois kuilusta on pisteinä enemmän kuin vihollinen
+on. Vaara joka mittautuu alennuksena on täsmälleen se vika jolla piikkiukko
+lähti tuotantoon.
+
+2-1:ssä putkikasvi on naapurichunkissa, ja se on päätös eikä sattuma. Ne ovat
+pelin ainoat tallaamattomat ennakoivat viholliset, ja kohdan 8 oikea huoli on
+kaksi merkkiä jotka opettavat yhden lukutavan — joten ne pannaan samaan ruutuun
+jossa *ero* näkyy: kasvi kurkottaa kannesta jonka ohi kävellään maata pitkin ja
+väistää kun tulet lähelle, kurnuttaja tulee ylös kolosta jonka yllä on pakko
+olla ilmassa eikä välitä siitä missä seisot. Vierekkäin ne ovat vastakohta;
+ruudun päässä toisistaan ne olisivat toisto.
+
+**3-3:ssä `pit_l` vaihtui `pit_croak`iin ja vaihtoi paikkaa `plat_float`in
+kanssa**, ja jälkimmäinen löytyi työkalulla eikä katsomalla. `pit_l`in paikalla
+edellinen chunk on `brick_wall`: neljän ruudun pino jonka yli mennään täydellä
+16 framen hypyllä ja jolta tullaan alas vauhti käytettynä. `pit_l` selvisi siitä
+astinkivensä turvin, paljas kolo ei — `tools/playable.mjs` hukkui siihen
+voimatasolla 0, ja kenttä jota pienin koko ei läpäise on rikki eikä vaikea
+(DESIGN.md kohta 5). Kuilun leventäminen tai kaventaminen olisi ollut väärä
+vipu: vika oli *lähestymisessä*. Kentän pituus ja chunkit ovat ennallaan.
+
+### Vaikeusmittari näkee sen, ja nyt se ei voi olla näkemättä seuraavaakaan
+
+`ENEMY_COST.U = 2.1`, lisättynä vihollisen mukana eikä jälkikäteen. Hinta on
+kahden muun tallaamattoman yläpuolella (putkikasvi 1,1, närästyssuihku 1,5) ja
+sen syy on *missä* se on eikä mitä se tekee: kasvi ja suihku seisovat lattialla
+jota pitkin voi perääntyä, tämä omistaa kolon yllä olevan ilman eli sen paikan
+jossa pelaajan vaihtoehdot on jo käytetty. Kasvin väärin ajoittaminen maksaa
+voimatason, tämän väärin ajoittaminen maksaa hypyn ja siten hengen. Sitä vastaan
+sykli on metronomi 84 framen ennakolla eikä se poistu sarakkeestaan, mikä on syy
+sille ettei se ole auringon hinnassa.
+
+Ja koska sama vika on nyt tehty kahdesti (piikkiukko lähti nollalla,
+papuparooni melkein), se ei ole huolimattomuutta vaan puuttuva tarkistus:
+`verify.mjs` lukee `ENEMY_CHARS`in merkit lähdetekstistä ja **vaatii jokaiselle
+hinnan** `ENEMY_COST`-taulusta. 13 merkkiä, 13 hintaa.
+
+Mitattu vaikutus: **2-1 115,7 → 119,7** (pelkkä vihollinen, kuilu ennallaan) ja
+**3-3 174,3 → 186,5** (josta suurin osa on menetetty astinkivi — mittari ei osaa
+erottaa "eri kuilua" "vaikeammasta kuilusta"). Maailmojen käyrä nousee edelleen
+joka maailmassa (w2 147,3 → 148,3, w3 172,3 → 175,4) ja jokaisen maailman muoto
+on ennallaan: tasan yksi notko. `node tools/difficulty.mjs --write` ajettu.
+
+---
+
 ## v26.08.09.36 — kaasukehä, ja se mikä pilvessä kannattaa
 
 Maailma 7, **KAASUKEHÄ**: pilvikerroksen päällä, neljä kenttää, oma teema, oma

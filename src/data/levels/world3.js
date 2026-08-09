@@ -102,13 +102,44 @@ export const WORLD3_LEVELS = {
    * down. The chunk's own run-off already covers letting go (measured: rest at
    * column 262, run-off ends at 264); this is the belt for the braces.
    */
+  /*
+   * KURNUTTAJA, TOINEN JA VIIMEINEN KOKO PELISSÄ.
+   *
+   * `pit_l` becomes `pit_croak`, and it swaps places with `plat_float` so that
+   * the occupied hole comes *after* a flat chunk instead of directly after the
+   * brick wall. 2-1 introduces the creature in the one place a bare pit already
+   * stood; this is the second and last one in the game, because a hazard that
+   * turns up in every hole stops being a hazard and becomes terrain — and
+   * terrain is something a player looks at once.
+   *
+   * Why 3-3 and not 3-1 or 3-2: this is world 3's last level and its measured
+   * peak, and the other two already carry the world's own new ideas (3-1 the
+   * star, 3-2 the hidden bands and the switch). 3-1's long comment above also
+   * explains why that level was deliberately *softened*, which settles it.
+   *
+   * THE REORDER IS THE INTERESTING PART, and it was found by the tools rather
+   * than by looking. Left where `pit_l` was, the chunk before this one is
+   * `brick_wall`: a four-tile stack you clear with a full sixteen-frame hold
+   * and come down off with the run spent. `pit_l` survived that because it
+   * carries a stepping stone; a bare hole did not, and `tools/playable.mjs`
+   * drowned in it at power level 0 — a level the smallest size cannot pass is
+   * broken rather than hard (DESIGN.md §5). Widening or narrowing the hole was
+   * the wrong lever, because the fault was the *approach*: what this chunk
+   * needs is ground to build speed on, and `plat_float` is sixteen tiles of
+   * exactly that. Both chunks are still here and the level is the same length.
+   *
+   * Measured after: 174.3 -> 186.5, and the world's shape is unchanged at
+   * 162 -> 133 -> 187, still one dip. Most of that rise is the lost stepping
+   * stone rather than the creature — `tools/difficulty.mjs` prices a plank over
+   * a pit and cannot tell "a different pit" from "a harder one".
+   */
   '3-3': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'lava_gap', 'walkers', 'plat_steps',
       'shell', 'lava_wide', 'clouds', 'cork_gap', 'heartburn_pair', 'pipe_plant',
-      'lava_gap', 'sky_run', 'corks', 'ice_crumble', 'brick_wall', 'pit_l',
-      'plat_float', 'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',
+      'lava_gap', 'sky_run', 'corks', 'ice_crumble', 'brick_wall', 'plat_float',
+      'pit_croak', 'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
   '3-F': {

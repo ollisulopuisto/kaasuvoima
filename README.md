@@ -172,6 +172,13 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
   lävitse. Sitä ei voi tömäyttää; kolme pierupalloa tai häntäiskua sammuttaa sen.
 * **Putkikasvi** nousee putkesta. Se ei nouse jos seisot putken päällä, ja se voi
   satuttaa vasta kun siitä on vähintään puoli ruutua näkyvissä.
+* **Kurnuttaja** asuu kuilun pohjalla ja loikkaa sieltä suoraan ylös. Sitä ei voi
+  tallata — päälle laskeutuminen tarkoittaisi kuilun ylle laskeutumista — mutta
+  pierupallo, häntäisku ja liukuva kuori kaatavat sen, ja supertähti kantaa sen
+  yli. Se varoittaa ensin: kolosta nousee kuplapatsas ja kuuluu kiihtyvä
+  kurnutus **puolitoista sekuntia** ennen loikkaa, mikä on pidempään kuin pisin
+  hyppy on ilmassa — eli varoitus ehtii aina ennen kuin lähdet maasta. Loikka
+  pysyy oman kuilunsa sarakkeessa, joten reunalla seisominen on turvallista.
 
 ## Maailmat
 
@@ -403,7 +410,9 @@ Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko, `!`
 tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
 `N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset ja vaarat: `g`
 mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
-ummetuskorkki, `A` vihainen aurinko, `H` närästys, `b` pomo. Aloituspaikka on `1`.
+ummetuskorkki, `x` piikkiukko, `A` vihainen aurinko, `H` närästys, `U`
+kurnuttaja (kuilun ensimmäiselle lattiariville, tyhjään sarakkeeseen), `O` kuu,
+`P` papuparooni, `b` pomo. Aloituspaikka on `1`.
 
 Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 

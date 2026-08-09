@@ -67,11 +67,42 @@ export const WORLD2_LEVELS = {
    * seconds, which in the one level that hands out the star is the last place
    * anybody should be learning it wrong.
    */
+  /*
+   * KURNUTTAJA TULEE TÄHÄN, JA VAIN TÄHÄN KOKO MAAILMASSA.
+   *
+   * Chunk 7 was `pit_s` and is now `pit_croak`, which is the same six-tile hole
+   * with something living at the bottom of it. Three reasons this pit and not
+   * another:
+   *
+   *   - **World 1 has to keep its promise first.** Every bare pit in world 1
+   *     stays empty on purpose. A pit means "a pit" for a whole world, and 2-1
+   *     is the first level after that world ends — the earliest place where
+   *     "the hole you already know how to cross" is a thing the player owns
+   *     well enough to have it taken away.
+   *   - **A hazard in every hole is terrain, and terrain is not a hazard.** So
+   *     there is one in the level and one more in the whole rest of the game
+   *     (3-3), and the other three pits in this very level — `pit_l`,
+   *     `pit_plat` and their stepping stones — are left exactly as they were.
+   *     Meeting an empty pit right after an occupied one is what makes the
+   *     occupied one mean anything.
+   *   - **It is a swap, not an addition.** Same chunk count, same floor, same
+   *     gap width, so the level's shape does not move and the measured
+   *     difference is the creature and nothing else: 115.7 -> 119.5.
+   *
+   * The pipe plant next door (chunk 6) is deliberate rather than an accident of
+   * the playlist. The two are the game's only unstompable telegraphed enemies,
+   * and DESIGN.md §8's real worry is two signals teaching one reading — so they
+   * are put in the same screen where the *difference* is visible: the plant
+   * leans out of a lid you walk past on the ground and ducks when you come
+   * near, the kurnuttaja comes up out of a hole you have to be in the air over
+   * and does not care where you are standing. Read side by side they are a
+   * contrast; a screen apart they would have been a repeat.
+   */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
     chunks: [
       'start', 'flat', 'power', 'walkers', 'sun', 'corks',
-      'pipe_plant', 'pit_s', 'heartburn', 'dune_sink', 'shell', 'plat_steps',
+      'pipe_plant', 'pit_croak', 'heartburn', 'dune_sink', 'shell', 'plat_steps',
       'pit_l', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],

@@ -1075,6 +1075,382 @@ const report = await page.evaluate(async () => {
     expect('juoksuhiekan testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
+  /* ------------------------------ KURNUTTAJA ---------------------------- */
+  /*
+   * KUILUSTA LOIKKAAVA — ja se mitä siitä pitää todistaa.
+   *
+   * Kuilu on tähän asti ollut binäärinen: joko ylität sen tai kuolet. Kun
+   * kuiluun pannaan olento, vaaralliseksi muuttuu **ilma kuilun yllä** — juuri
+   * se paikka jossa pelaajalla on vähiten ohjausta, kesken hyppyä ja sidottuna,
+   * pelkkä vauhti jäljellä. Huolimattomasti tehtynä se muuttaa hypyn, jonka
+   * pelaaja itse valitsi, kuolemaksi jota hän ei voinut välttää. Siksi
+   * "vihollinen on olemassa" ei todista tästä mitään, ja alla mitataan viisi
+   * asiaa jotka voivat mennä pieleen:
+   *
+   *   1. varoitus ehtii ennen kuin hyppy on sidottu
+   *   2. sykli on deterministinen — myös pikatallennuksen yli
+   *   3. loikka pysyy omassa sarakkeessaan, eli maassa seisova on turvassa
+   *   4. tapposäännöt: ei tallausta, mutta pierupallo ja tähti purevat
+   *   5. maahanisku ei yletä kuiluun, eikä kuiluun sukeltaminen ole vastaus
+   *
+   * Koko lohko on try/catchissa samasta syystä kuin maahanisku-lohko: puuttuva
+   * vienti kaataisi dynaamisen importin ja veisi mukanaan kaiken tämän
+   * jälkeisen, jolloin punaisesta ei näkisi mitään.
+   */
+  try {
+    const { Kurnuttaja, KURN_WAIT, KURN_WARN } = await import('/src/entities/enemies.js');
+    const budget = await (await fetch('/tools/jump-budget.json')).json();
+
+    /** Yksi kurnuttaja tyhjiössä: oma kenttä, ei muita vihollisia häiritsemässä. */
+    const lone = (power = { type: null, level: 0 }, lipY = 208) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const k = new Kurnuttaja(s, 40 * 16, lipY);
+      k.active = true;
+      k.alwaysActive = true;
+      s.entities.push(k);
+      return { s, k };
+    };
+
+    /**
+     * Yhden syklin muoto frameina: milloin varoitus alkaa, milloin ruumis voi
+     * satuttaa, milloin loikka on ohi. Luetaan olion omasta tilasta eikä
+     * vakioista, koska juuri vakion ja käytöksen ero on se mikä rapautuu.
+     */
+    const cycle = (k, frames = 1200) => {
+      const out = [];
+      let warnAt = -1;
+      let hurtAt = -1;
+      for (let f = 0; f < frames; f++) {
+        const wasWarn = k.warning > 0;
+        const wasHurt = !k.harmless;
+        k.update();
+        if (!wasWarn && k.warning > 0) warnAt = f;
+        if (!wasHurt && !k.harmless) hurtAt = f;
+        if (wasHurt && k.harmless && warnAt >= 0 && hurtAt >= 0) {
+          out.push({ warnAt, hurtAt, doneAt: f, lead: hurtAt - warnAt });
+          warnAt = -1;
+          hurtAt = -1;
+        }
+      }
+      return out;
+    };
+
+    /*
+     * 1. VAROITUS ENNEN SITOUTUMISTA, MITATTUNA LENNON PITUUTTA VASTAAN.
+     *
+     * Väite on tämä: jos varoitus kestää vähintään yhtä kauan kuin pisin
+     * voimatason 0 hyppy on ilmassa, niin **jokainen loikka joka voi osua
+     * lentävään pelaajaan oli varoitettu ennen kuin hän lähti maasta**. Todistus
+     * on kolme riviä: varoitus alkaa framella t, loikka framella t+W, pelaaja
+     * lähtee framella u ja laskeutuu framella u+A. Osuma edellyttää t+W < u+A,
+     * eli t < u + (A-W); jos W >= A, niin t < u.
+     *
+     * A luetaan mitatusta hyppybudjetista (`tools/measure-jump.mjs`) eikä
+     * arvata. Pieruhypyn tapaus jätetään ulos tarkoituksella: se on pelin ainoa
+     * hyppy jonka voi *muuttaa kesken kaiken*, eli se ei ole sitoutuminen samalla
+     * tavalla — ja DESIGN.md kohta 5 sanoo muutenkin että tehostus avaa
+     * paikkoja, ei kenttää, joten lupaus mitataan voimatasolta 0.
+     */
+    {
+      const power0 = budget.cases.filter((c) => !/fart|pieru/i.test(c.label));
+      const airborne = Math.max(...power0.map((c) => c.frames));
+      const longest = power0.find((c) => c.frames === airborne);
+      const { k } = lone();
+      const laps = cycle(k);
+      const leads = laps.map((l) => l.lead);
+      const minLead = leads.length ? Math.min(...leads) : -1;
+      expect('kurnuttajan varoitus kestää pidempään kuin pisin voimatason 0 hyppy on ilmassa',
+        laps.length >= 3 && minLead >= airborne,
+        `varoitus ${minLead} framea (vakio ${KURN_WARN}), pisin hyppy ilmassa ${airborne}`
+        + ` framea ("${longest ? longest.label : '?'}"), pelivara ${minLead - airborne}`
+        + ` framea; juoksuvauhdilla 2,5 px/frame varoitus on ${Math.round(minLead * 2.5)} px`
+        + ` eli ${(minLead * 2.5 / 16).toFixed(1)} ruutua lähestymistä`);
+    }
+
+    /*
+     * 2. SYKLI ON DETERMINISTINEN. Pomon piikkisykli on, ja tiekartta nimeää sen
+     *    hyveeksi. Kaksi oliota jotka heräsivät samalla framella ovat framen
+     *    tarkkuudella samassa tahdissa, ja peräkkäiset kierrokset ovat yhtä
+     *    pitkiä — jälkimmäinen on se joka kaatuisi jos syklissä olisi
+     *    `Math.random()`.
+     */
+    {
+      const a = lone();
+      const b = lone();
+      const one = cycle(a.k);
+      const two = cycle(b.k);
+      const same = JSON.stringify(one) === JSON.stringify(two);
+      const lengths = one.slice(1).map((l, i) => l.warnAt - one[i].warnAt);
+      const steady = lengths.length > 0 && lengths.every((v) => v === lengths[0]);
+      expect('kurnuttajan sykli on deterministinen ja joka kierros yhtä pitkä',
+        same && steady,
+        `${one.length} kierrosta, pituudet ${lengths.join('/')} framea`
+        + ` (odotus ${KURN_WAIT} + varoitus ${KURN_WARN} + loikka)`
+        + `, kaksi oliota samassa tahdissa: ${same}`);
+    }
+
+    /* 3. Ja pikatallennus palaa samaan rytmiin. `savestate.js` sarjallistaa
+     *    entiteetin omat kentät, joten tämä kaatuu jos luokka puuttuu
+     *    REGISTRYstä — silloin kurnuttaja katoaa tallennuksesta kokonaan. */
+    {
+      const { s, k } = lone();
+      game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-1');
+      while (k.phase !== 'warn') k.update();
+      for (let f = 0; f < 20; f++) k.update();
+      const before = { phase: k.phase, timer: k.timer, y: Math.round(k.y) };
+      const snap = captureState(game);
+      restoreState(game, JSON.parse(JSON.stringify(snap)));
+      const r = game.scene;
+      const back = r.entities.find((e) => e.constructor.name === 'Kurnuttaja');
+      const after = back
+        ? { phase: back.phase, timer: back.timer, y: Math.round(back.y) } : null;
+      let mine = -1;
+      let theirs = -1;
+      for (let f = 0; f < 400; f++) {
+        if (mine < 0 && !k.harmless) mine = f;
+        if (after && theirs < 0 && !back.harmless) theirs = f;
+        k.update();
+        if (back) back.update();
+      }
+      expect('pikatallennus palauttaa kurnuttajan samaan kohtaan sykliä',
+        !!after && JSON.stringify(before) === JSON.stringify(after) && mine === theirs && mine > 0,
+        `ennen ${JSON.stringify(before)}, jälkeen ${JSON.stringify(after)}`
+        + `, loikka ${mine} vs ${theirs} framen päästä`);
+    }
+
+    /*
+     * 4. LOIKKA PYSYY OMASSA SARAKKEESSAAN.
+     *
+     * Tämä on se sääntö joka tekee tästä ajoitustehtävän eikä ansan: vaara on
+     * täsmälleen kuilun yllä oleva ilma, eikä koskaan sen reunalla oleva maa.
+     * Mitataan molemmat päät — että x ei liiku lainkaan, ja että reunalla
+     * seisova pelaaja selviää kahdesta kokonaisesta kierroksesta ehjin nahoin.
+     */
+    {
+      const { s, k } = lone();
+      const x0 = k.x;
+      let drift = 0;
+      let top = k.y;
+      for (let f = 0; f < 600; f++) {
+        k.update();
+        drift = Math.max(drift, Math.abs(k.x - x0));
+        top = Math.min(top, k.y);
+      }
+      const rise = Math.round(k.lipY - top);
+
+      const stage = lone();
+      const p = stage.s.player;
+      const i = mkInput();
+      for (let f = 0; f < 4; f++) { stage.s.update(i); i.pressed = blank(); }
+      // Pelaaja seisomaan täsmälleen kuilun reunalle, olennon viereen.
+      stage.k.x = p.cx + 48 - 8;
+      stage.k.lipY = p.y + p.h;
+      stage.k.restY = stage.k.lipY + 32;
+      stage.k.y = stage.k.restY;
+      const level0 = p.powerLevel;
+      for (let f = 0; f < 600; f++) { stage.s.update(i); i.pressed = blank(); }
+      expect('loikka pysyy kuilun sarakkeessa: reunalla seisova ei voi jäädä alle',
+        drift === 0 && rise > 32 && !p.dying && p.powerLevel === level0,
+        `x liikkui ${drift} px, loikka nousi ${rise} px reunan yli`
+        + `, reunalla seisonut voimataso ${level0}->${p.powerLevel}`);
+    }
+
+    /*
+     * 5. TAPPOSÄÄNNÖT.
+     *
+     * Tallaus ei käy, ja syy on se että kuilun yllä olevaan olentoon
+     * laskeutuminen tarkoittaa kuilun ylle laskeutumista: peli tarjoaisi
+     * vastauksen joka tappaa vastaajan. "Odota" on jo pelin opettama laillinen
+     * vastaus (närästyssuihkuun ei voi hypätä lainkaan). Kaikki muu puree kuten
+     * putkikasviin: pierupallo, häntä ja liukuva kuori.
+     */
+    {
+      const { s, k } = lone({ type: 'shroom', level: 1 });
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 4; f++) { s.update(i); i.pressed = blank(); }
+      k.lipY = p.y + p.h;
+      k.restY = k.lipY + 32;
+      k.phase = 'leap';
+      k.y = k.lipY - 24;
+      k.vy = -2;
+      k.x = p.cx - 8;
+      const level0 = p.powerLevel;
+      p.y = k.y - p.h - 2;
+      p.vy = 4;
+      p.onGround = false;
+      for (let f = 0; f < 4 && !p.dying; f++) s.update(i);
+      const stompedIt = k.remove || k.dying;
+
+      const shot = lone();
+      shot.k.phase = 'leap';
+      shot.k.y = shot.k.lipY - 24;
+      shot.k.hitByProjectile(1);
+
+      expect('kurnuttajaa ei voi tallata, mutta pierupallo kaataa sen',
+        k.stompable === false && !stompedIt && p.powerLevel === level0 - 1
+        && (shot.k.dying || shot.k.remove),
+        `tallattava ${k.stompable}, tallaus tappoi ${stompedIt}`
+        + `, pelaajan voimataso ${level0}->${p.powerLevel}`
+        + `, pierupallo tappoi ${shot.k.dying || shot.k.remove}`);
+    }
+
+    /*
+     * 6. SUPERTÄHTI. Se suojaa kentän asukeilta ja nimenomaan ei kentältä
+     *    itseltään — kuilu, laava ja kello ovat sen ulkopuolella. Kurnuttaja on
+     *    asukki kuilun yllä, joten se on tähden puolella rajaa; kuilu sen alla
+     *    ei ole, ja tämä mittaa molemmat samassa testissä.
+     */
+    {
+      const { s, k } = lone();
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 4; f++) { s.update(i); i.pressed = blank(); }
+      p.collect('star');
+      k.lipY = p.y + p.h;
+      k.restY = k.lipY + 32;
+      k.phase = 'leap';
+      k.y = k.lipY - 20;
+      k.vy = -2;
+      k.x = p.cx - 8;
+      const level0 = p.powerLevel;
+      s.collisions();
+      const killed = k.dying || k.remove;
+      const unhurt = !p.dying && p.powerLevel === level0;
+
+      // ...ja sama tähti ei kanna kuilun yli. Syy luetaan siitä mitä kohtaus
+      // kirjaa, koska pelkkä "kuoli" ei erottaisi kuilua vihollisesta.
+      let cause = '';
+      s.onPlayerDied = (why) => { cause = why; };
+      p.y = s.heightPx + 40;
+      s.playerTiles();
+      expect('supertähti kantaa kurnuttajan yli mutta ei kuilun yli',
+        killed && unhurt && p.dying && cause === 'pit',
+        `tähti tappoi olennon ${killed}, pelaaja ehjä ${unhurt}`
+        + `, kuiluun pudonnut kuoli syystä "${cause}"`);
+    }
+
+    /*
+     * 7. MAAHANISKU (v26.08.09.31), ja vastaus tulee geometriasta eikä lipusta.
+     *
+     * Iskuaalto juoksee lattiaa pitkin, ja lattia loppuu kuilun reunaan. Se ei
+     * ole erikoistapaus koodissa vaan mitattava luku: iskun säde voimatasolla 0
+     * vastaan matka reunalta kuilun keskelle. Kurnuttaja EI ole piikikäs — jos
+     * se olisi, "piikit" lakkaisi tarkoittamasta piikkejä — vaan isku ei
+     * yksinkertaisesti ulotu sinne. Ja kuiluun sukeltaminen on jo kuolema.
+     */
+    {
+      const half = (budget.gapTiles * 16) / 2;
+      const { s } = lone();
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const standY = p.y;
+      p.y = standY - 90;
+      p.vy = 0;
+      p.onGround = false;
+      i.held.down = true;
+      i.pressed.jump = true;
+      i.held.jump = true;
+      s.update(i);
+      i.pressed = blank();
+      i.held.jump = false;
+      i.held.down = false;
+      let f = 1;
+      while (f < 400 && !s.lastPound) { s.update(i); f++; }
+      const lp = s.lastPound;
+      const probe = new Kurnuttaja(s, 0, 208);
+      expect('maahanisku ei yletä kuilun keskelle, eikä kurnuttaja ole piikikäs',
+        !!lp && lp.reach < half && probe.spiky === false,
+        `iskun säde ${lp ? lp.reach : '-'} px voimatasolla ${p.powerLevel}`
+        + `, matka reunalta ${budget.gapTiles} ruudun kuilun keskelle ${half} px`
+        + `, piikikäs ${probe.spiky}`);
+    }
+
+    /*
+     * 8. KUVA JA ÄÄNI SAMASSA TAHDISSA (DESIGN.md kohta 8), ja kumpikaan ei saa
+     *    olla vanha merkki. Varoituksella on oma äänensä ja loikalla omansa, ja
+     *    kumpikin soi samalla framella kuin sen kuva alkaa.
+     */
+    {
+      const { s, k } = lone();
+      const { Sfx } = await import('/src/core/audio.js');
+      const realPlay = Sfx.play;
+      const heard = [];
+      Sfx.play = function spy(name) { heard.push({ name, f: s.tick }); };
+      let warnFrame = -1;
+      let leapFrame = -1;
+      let warnHeard = null;
+      let leapHeard = null;
+      try {
+        for (let f = 0; f < 600; f++) {
+          const before = heard.length;
+          k.update();
+          const fresh = heard.slice(before).map((h) => h.name);
+          if (warnFrame < 0 && k.warning > 0) { warnFrame = f; warnHeard = fresh; }
+          if (leapFrame < 0 && k.phase === 'leap') { leapFrame = f; leapHeard = fresh; }
+        }
+      } finally {
+        Sfx.play = realPlay;
+      }
+      const OLD = ['jump', 'bigjump', 'fart', 'squeak', 'pop', 'kick', 'spikes', 'boss',
+        'stomp', 'slam', 'dive', 'sprout', 'bump', 'timewarn', 'pipe', 'cork'];
+      const warnSound = warnHeard && warnHeard[0];
+      const leapSound = leapHeard && leapHeard[0];
+      expect('varoituksella ja loikalla on omat äänensä, samalla framella kuin kuva',
+        warnHeard && warnHeard.length === 1 && leapHeard && leapHeard.length === 1
+        && !OLD.includes(warnSound) && !OLD.includes(leapSound) && warnSound !== leapSound
+        && Sfx.has(warnSound) && Sfx.has(leapSound),
+        `varoitus framella ${warnFrame} soitti "${warnSound}"`
+        + `, loikka framella ${leapFrame} soitti "${leapSound}"`);
+    }
+
+    /*
+     * 9. MIHIN KUILUIHIN SE PANNAAN. Ei jokaiseen: vaara joka on jokaisessa
+     *    kolossa on maastoa, ja maasto ei ole vaara. Sääntö on että kurnuttaja
+     *    asuu kuilussa jonka pelaaja jo osaa ylittää — mitatun hyppybudjetin
+     *    sisällä ja ilman astinkiveä — ja kentässä on niitä enintään yksi.
+     */
+    {
+      const { getLevel, levelIds } = await import('/src/data/levels.js');
+      const homes = [];
+      const bad = [];
+      for (const id of levelIds()) {
+        const rows = getLevel(id).rows;
+        for (let y = 0; y < rows.length; y++) {
+          for (let x = 0; x < rows[y].length; x++) {
+            if (rows[y][x] !== 'U') continue;
+            // Kuinka leveä kuilu sen ympärillä on, ja onko se koko kuilu.
+            const solid = (c) => '#XB?!*uN[]{}%()S'.includes(c);
+            let from = x;
+            let to = x;
+            while (from > 0 && !solid(rows[y][from - 1])) from--;
+            while (to < rows[y].length - 1 && !solid(rows[y][to + 1])) to++;
+            homes.push({ id, x, span: to - from + 1 });
+          }
+        }
+      }
+      const perLevel = {};
+      for (const h of homes) perLevel[h.id] = (perLevel[h.id] || 0) + 1;
+      for (const h of homes) {
+        if (h.span > budget.gapTiles) bad.push(`${h.id} @${h.x}: kuilu ${h.span} ruutua > ${budget.gapTiles}`);
+      }
+      for (const [id, n] of Object.entries(perLevel)) {
+        if (n > 1) bad.push(`${id}: ${n} kurnuttajaa samassa kentässä`);
+      }
+      expect('kurnuttaja asuu vain hyppybudjettiin mahtuvassa kuilussa, yksi per kenttä',
+        homes.length >= 2 && bad.length === 0,
+        bad.length ? bad.join('; ')
+          : `${homes.length} kpl: ${homes.map((h) => `${h.id} sarake ${h.x} kuilu ${h.span}`).join(', ')}`);
+    }
+  } catch (e) {
+    expect('kurnuttaja-testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* A piranha hidden inside its pipe must not hurt anybody. Its box collapses
    * to zero height while it is down, but a zero-height box still straddles the
    * player's, so standing on the pipe mouth used to be lethal. */
@@ -6415,6 +6791,8 @@ const report = await page.evaluate(async () => {
       '112,16,16', '216,168,96', '156,106,40', '138,90,42', '92,58,22',
       '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
       '106,68,36',
+      // kurnuttaja: suo-turkoosi, joka ei ole kenenkään muun väri tässä pelissä
+      '30,90,76', '52,140,110', '108,200,160', '18,60,52',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -6491,6 +6869,11 @@ const report = await page.evaluate(async () => {
         paint: (ox, t, f) => sprites.drawStinkCloud(g, ox, OY, t, f, true) },
       { n: 'bean baron', box: [0, 0, 18, 26], ...none,
         paint: (ox, t, f) => sprites.drawBeanBaron(g, ox, OY, Math.floor(t / 7), f, 0, false) },
+      /* Kurnuttaja. Silmät ovat laatikon katto ja jalat sen lattia, ja hengitys
+       * liikkuu niiden välissä — sama rakenne kuin kävelijällä, ja samasta
+       * syystä: se on ainoa tapa täyttää laatikko jokaisella framella. */
+      { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8, ...none,
+        paint: (ox, t, f) => sprites.drawKurnuttaja(g, ox, OY, t, f) },
     ];
 
     // One line per distinct fault, not one per frame: 176 frames of the same
@@ -9118,6 +9501,15 @@ const report = await page.evaluate(async () => {
         sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
         check(`boss ${v} spiny`);
       }
+      // Kurnuttajan varoituskupla on läpikuultava, eli se koskee globalAlphaan.
+      if (sprites.drawKurnuttaja) {
+        sprites.drawKurnuttaja(g, 20, 40, 12, -1);
+        check('kurnuttaja');
+        for (const t of [0.01, 0.5, 1]) {
+          sprites.drawCroak(g, 20, 56, t, 12);
+          check(`kurnutus ${t}`);
+        }
+      }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));
     }
@@ -9818,6 +10210,39 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
  * for the same reason — the numbers are read by something that cannot recompute
  * them, so somebody else has to.
  */
+/*
+ * JOKAISELLA VIHOLLISMERKILLÄ ON HINTA VAIKEUSMITTARISSA.
+ *
+ * Piikkiukko lähti tuotantoon pisteillä **0**: se puuttui `ENEMY_COST`-taulusta
+ * kokonaan, joten jokainen kenttä jossa niitä oli mittautui helpommaksi kuin
+ * mitä se pelattuna oli — ja mittari on nykyään portti (maailman käyrän muoto),
+ * eli väärä luku ei enää ole vain väärä raportti. Sama vika tehtiin melkein
+ * uudestaan papuparoonin kanssa, ja se on merkki siitä että kyse ei ole
+ * huolimattomuudesta vaan puuttuvasta tarkistuksesta.
+ *
+ * Merkit luetaan `ENEMY_CHARS`in lähdetekstistä eikä moduulista, koska tämä
+ * puoli ajaa Nodessa eikä selaimessa — sama tekniikka kuin äänien nimien
+ * tarkistuksessa yllä.
+ */
+{
+  const { ENEMY_COST } = await import('./difficulty.mjs');
+  const text = await readFile(join(ROOT, 'src/entities/enemies.js'), 'utf8');
+  const table = /export const ENEMY_CHARS = \{([\s\S]*?)\n\};/.exec(text);
+  const marks = table ? [...table[1].matchAll(/^\s{2}(\w):/gm)].map((m) => m[1]) : [];
+  const priceless = marks.filter((ch) => ENEMY_COST[ch] === undefined);
+  report.checks.push({
+    name: 'jokaisella vihollismerkillä on hinta vaikeusmittarissa',
+    ok: marks.length > 0 && priceless.length === 0,
+    detail: priceless.length
+      ? `hinnaton merkki: ${priceless.join(' ')} — lisää ENEMY_COST-tauluun`
+      : `${marks.length} merkkiä: ${marks.join(' ')}`,
+  });
+  if (marks.length === 0) report.failures.push('ENEMY_CHARS-taulua ei löytynyt lähdetekstistä');
+  if (priceless.length) {
+    report.failures.push(...priceless.map((ch) => `'${ch}' puuttuu ENEMY_COST-taulusta`));
+  }
+}
+
 {
   const { difficultyTable, compareTable } = await import('./difficulty.mjs');
   const { DIFFICULTY } = await import('../src/data/difficulty.js');

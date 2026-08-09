@@ -312,6 +312,123 @@ export function drawCorkGuy(ctx, x, y, frame, facing) {
   outlined(ctx, (g) => corkGuyBody(g, x, y, frame, facing, breath(frame, x, y)));
 }
 
+/* ------------------------------ kurnuttaja ------------------------------ */
+
+/**
+ * KURNUTTAJA — the thing that lives at the bottom of a chasm and springs out of
+ * it. Its name is on it in exactly four places: this function, the class in
+ * entities/enemies.js, the `REGISTRY` entry in core/savestate.js, and the
+ * `ENEMY_CHARS` line that spawns it. Renaming it is those four edits and
+ * nothing else — the game never prints the name anywhere.
+ *
+ * Two decisions the drawing makes, and both are about the *hole* rather than
+ * about the creature:
+ *
+ *   - **The eyes are on top of the head, and they are the top of the box.** A
+ *     frog's eyes are where they are because a frog looks up out of water; this
+ *     one looks up out of a pit, at the player standing on the rim. It is the
+ *     one part of the silhouette that arrives first when it comes up, so it is
+ *     the part that has to say what this is.
+ *   - **Turquoise, which nothing else in this game is.** The walker is brown,
+ *     the shell green, the spiky one purple-grey, the cork tan, the plant red.
+ *     A new species that borrowed one of those would be read as a variant of it
+ *     from across a screen, which is the one distance that matters here — you
+ *     are meant to recognise an occupied pit before you are standing on its rim.
+ *
+ * The breath is the walker's: eyes nailed to the top of the box, feet nailed to
+ * the bottom, and the body drawn up between them. That is not a style choice —
+ * it is the only shape that keeps art on all four edges of a 16x16 box in every
+ * frame of the cycle, which is what `verify.mjs` measures.
+ */
+function kurnuttajaBody(ctx, x, y, frame, facing, lift = 0) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const b = lift;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    // The two eye turrets, and they do not move: they are the box's ceiling.
+    ctx.fillStyle = '#1e5a4c';
+    ctx.fillRect(bx, py, 6, 5);
+    ctx.fillRect(bx + 10, py, 6, 5);
+    // The body, which is the part that breathes.
+    ctx.fillRect(bx, py + 4 - b, 16, 9);
+    ctx.fillStyle = '#348c6e';
+    ctx.fillRect(bx + 1, py + 5 - b, 14, 6);
+    // A throat sac, pale and low, so the belly is the brightest thing on it and
+    // the eye is dragged to the bottom of the sprite where the mouth is.
+    ctx.fillStyle = '#6cc8a0';
+    ctx.fillRect(bx + 3, py + 8 - b, 10, 4);
+    ctx.fillStyle = '#123c34';
+    ctx.fillRect(bx + 3, py + 7 - b, 10, 2);
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 1, py + 1, 4, 3);
+    ctx.fillRect(bx + 11, py + 1, 4, 3);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 2, py + 2, 2, 2);
+    ctx.fillRect(bx + 12, py + 2, 2, 2);
+    /* The hind legs, and they only paddle. A leaper's legs *want* to kick out
+     * at take-off, and that was tried and thrown away: a silhouette that grows
+     * on the frame it starts moving is a silhouette that stops agreeing with
+     * the box it hurts you with, exactly once, at the worst possible moment. */
+    ctx.fillStyle = '#1e5a4c';
+    const swap = Math.floor(frame / 8) % 2 === 0;
+    ctx.fillRect(bx + (swap ? 0 : 1), py + 12 - b, 6, 4 + b);
+    ctx.fillRect(bx + (swap ? 10 : 9), py + 12 - b, 6, 4 + b);
+  });
+}
+
+export function drawKurnuttaja(ctx, x, y, frame, facing) {
+  outlined(ctx, (g) => kurnuttajaBody(g, x, y, frame, facing, breath(frame, x, y)));
+}
+
+/** How many bubbles are in the air over the hole at once. */
+const CROAK_BUBBLES = 5;
+
+/**
+ * KURNUTUS — the warning, and it is drawn in the air above the pit rather than
+ * on the creature, because the creature is at the bottom of the hole where a
+ * running player cannot see it.
+ *
+ * `t` is 0..1 through the wind-up and `lipY` is the floor line the pit is cut
+ * into, so the bubbles start exactly where the ground stops and climb from
+ * there. Three deliberate differences from the two warnings this game already
+ * owns (DESIGN.md §8 — a new signal that looks like an old one teaches the
+ * player to read the wrong thing):
+ *
+ *   - **place.** The heartburn jet's warning ember sits *on* the floor and the
+ *     sun's swell gathers *on* the sun. This happens over a hole, in the one
+ *     part of the picture that has no floor in it at all.
+ *   - **colour.** The ember is fire, orange over red. The gas the player's own
+ *     jumps leak is yellow-green (`C.gas`). This is a pale blue-green, which is
+ *     neither, and it is the creature's own colour lightened rather than a new
+ *     one to learn.
+ *   - **rhythm.** The ember flickers between two colours every three frames —
+ *     a flicker, which reads as "on". This is a rising column whose bubbles get
+ *     faster and reach higher as the leap approaches, so it reads as "soon" and
+ *     says *how* soon. That is the difference the whole design rests on.
+ */
+export function drawCroak(ctx, x, lipY, t, tick) {
+  if (t <= 0) return;
+  const alpha = ctx.globalAlpha;
+  const cx = Math.round(x) + 8;
+  const base = Math.round(lipY);
+  // How far up the column reaches, and how fast one bubble travels it. The rate
+  // is squared so the last third of the warning is visibly hurrying: a linear
+  // ramp reads as a decoration that happens to be there, not as a countdown.
+  const reach = 6 + Math.round(26 * t);
+  const rate = 0.05 + 0.11 * t * t;
+  for (let i = 0; i < CROAK_BUBBLES; i++) {
+    const u = ((tick * rate) + i / CROAK_BUBBLES) % 1;
+    const r = Math.max(1, 3 - Math.round(u * 2));
+    const sway = Math.round(Math.sin((tick + i * 9) / 7) * 3 * u);
+    ctx.globalAlpha = (0.25 + 0.55 * (1 - u)) * (0.35 + 0.65 * t);
+    ctx.fillStyle = '#5cc8a0';
+    ctx.fillRect(cx + sway - r, base - Math.round(u * reach) - r, r * 2, r * 2);
+    ctx.fillStyle = '#d8fff0';
+    ctx.fillRect(cx + sway - r, base - Math.round(u * reach) - r, r, 1);
+  }
+  ctx.globalAlpha = alpha;
+}
+
 /**
  * How long one ember of the sun's wake burns, in frames. It lives here rather
  * than with the entity because how long a spark stays lit is a question about

@@ -4,7 +4,7 @@ import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
-  SUN_TRAIL_LIFE,
+  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
 } from '../gfx/sprites.js';
 import { TILE, T } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
@@ -610,6 +610,175 @@ export class Plant extends Enemy {
       drawPlant(ctx, this.x, this.y, this.tick);
     }
     ctx.restore();
+  }
+}
+
+/*
+ * KURNUTTAJA — THE THING IN THE CHASM, AND WHY IT IS NOT A SECOND PLANT.
+ *
+ * `Plant` is this game's creature-in-a-hole and that role is taken. The plant
+ * is the thing that makes a **pipe** dangerous: it is bolted to a lid you walk
+ * past on the ground, it rises slowly and in full view, and the answer is to
+ * keep walking at the right moment. The kurnuttaja is the thing that makes a
+ * **pit** dangerous, which is a different question with a different answer,
+ * because a pit is not somewhere you walk past — it is somewhere you jump.
+ *
+ * And that is exactly what makes it the riskiest enemy in the game to get
+ * wrong. A pit has been binary until now: you clear it or you die. Putting
+ * something in one makes the *air above it* dangerous, and the air above a pit
+ * is the one place a player has no control left — mid-jump, committed, with
+ * nothing but momentum. Done carelessly this turns a jump the player chose into
+ * a death they could not avoid.
+ *
+ * Four decisions carry the whole thing:
+ *
+ *  1. **The warning outlasts the flight.** `KURN_WARN` is not a number that
+ *     felt right; it is measured against `tools/jump-budget.json`. The longest
+ *     jump a power-0 player can be in the air for is 69 frames (P-speed, held),
+ *     and the wind-up is longer than that. The consequence is a proof rather
+ *     than a hope: if the warning lasts at least as long as the flight, then a
+ *     leap that can reach a player in the air *began being announced before
+ *     that player left the ground*. `verify.mjs` re-derives both numbers.
+ *
+ *  2. **The cycle is deterministic.** No `Math.random()` anywhere in it, for
+ *     the same reason the boss's spike cycle has none: a hazard over a pit has
+ *     to be learnable, and a quicksave has to reload into the same rhythm.
+ *     Every field below is an own property, so `savestate.js` carries it.
+ *
+ *  3. **The leap is vertical.** `x` never changes and `vx` is never set. The
+ *     danger is therefore *exactly* the column of air above the hole, and
+ *     standing on the rim is always safe — which is what makes waiting a real
+ *     answer rather than a guess.
+ *
+ *  4. **It cannot be stomped.** Landing on something on its way up out of a pit
+ *     means landing over the pit, so a stomp would be an answer that kills the
+ *     answerer. The game already teaches that "wait" is legitimate — the
+ *     heartburn jet cannot be stomped at all — and everything else still works:
+ *     a fart ball, a tail whack and a sliding shell all kill it, exactly as
+ *     they do the plant.
+ *
+ * It is deliberately **not** `spiky`. Spines mean "the stomp is closed" and
+ * they are drawn as points; this one is closed because it hangs over a hole,
+ * which is a fact about the terrain and not about the animal. Making it spiky
+ * would have been a second meaning for the same picture.
+ */
+/** How long it sits quiet at the bottom, in frames. */
+export const KURN_WAIT = 54;
+/**
+ * And how long it croaks before it goes. Longer than the 69 frames the longest
+ * power-0 jump spends in the air — see decision 1 above. The margin is small on
+ * purpose: a warning much longer than the flight stops being a countdown and
+ * becomes background noise.
+ */
+export const KURN_WARN = 84;
+/**
+ * The leap itself. -7.8 against 0.4 of gravity is a 76 px rise off a rest
+ * position two tiles under the rim, which puts the body 28 px clear of the
+ * floor line at the top — high enough to be in the way of a jump rather than
+ * something you sail over without noticing, and low enough that it is gone
+ * again in 39 frames.
+ */
+const KURN_LIFT = -7.8;
+const KURN_GRAVITY = 0.4;
+/**
+ * How much of it has to be over the rim before it counts as out.
+ *
+ * The same argument as `Plant.HIDDEN_OFFSET`: a four-pixel sliver at the edge
+ * of a hole is technically visible and practically not, and dying to it feels
+ * like the game cheated. Below this it is drawn and harmless, which is also the
+ * last beat of the telegraph — you watch it come up before it can touch you.
+ */
+export const KURN_RIM = 4;
+
+export class Kurnuttaja extends Enemy {
+  /** `lipY` is the y of the floor line the pit is cut into. */
+  constructor(level, x, lipY) {
+    super(level, x, lipY + 32, 16, 16);
+    this.lipY = lipY;
+    /* Two tiles under the rim, which for a 15-row band is exactly the bottom of
+     * the world: at rest the whole body is below anything the camera can show,
+     * so "hidden" is a fact about the picture and not a flag. */
+    this.restY = lipY + 32;
+    this.stompable = false;
+    this.score = 400;
+    this.phase = 'wait';
+    this.timer = KURN_WAIT;
+  }
+
+  /* A bubble would carry it up out of its own hole and leave the pit harmless
+   * for the rest of the level, and its box, its rest height and its whole state
+   * machine are measured from the rim. Same refusal as the plant's, same
+   * reason. */
+  get bubbleable() { return false; }
+
+  /**
+   * 0..1 through the croak, for the drawing — one number, the way the sun reads
+   * its whole wind-up off `windUp`. It is already above zero on the frame the
+   * sound plays, so the two halves of the warning start together rather than a
+   * frame apart (DESIGN.md §8).
+   */
+  get warning() {
+    if (this.phase !== 'warn') return 0;
+    return Math.max(0, Math.min(1, (KURN_WARN + 1 - this.timer) / KURN_WARN));
+  }
+
+  /** True once enough of it is over the rim to be worth being afraid of. */
+  get exposed() { return this.y <= this.lipY - KURN_RIM; }
+
+  get harmless() { return !this.exposed; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+
+    // It watches you. Nothing about the leap depends on this — the cycle is a
+    // clock — but a thing in a hole that never turns its head is scenery.
+    const player = this.level.player;
+    if (player) this.facing = player.cx < this.cx ? -1 : 1;
+
+    if (this.phase === 'wait') {
+      this.y = this.restY;
+      this.vy = 0;
+      if (--this.timer <= 0) {
+        this.phase = 'warn';
+        this.timer = KURN_WARN;
+        Sfx.play('kurnutus');
+      }
+      return;
+    }
+    if (this.phase === 'warn') {
+      this.y = this.restY;
+      if (--this.timer <= 0) {
+        this.phase = 'leap';
+        this.vy = KURN_LIFT;
+        Sfx.play('loikka');
+      }
+      return;
+    }
+
+    /* The leap. Integrated here rather than through `applyGravity`/`moveY`
+     * because it must not collide with anything: the rest position is under the
+     * floor of the world, and a body that solved tiles on the way past would
+     * stop dead on the first one it met. */
+    this.vy += KURN_GRAVITY;
+    this.y += this.vy;
+    if (this.vy > 0 && this.y >= this.restY) {
+      this.y = this.restY;
+      this.vy = 0;
+      this.phase = 'wait';
+      this.timer = KURN_WAIT;
+    }
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawKurnuttaja(ctx, this.x, this.y, this.tick, this.facing));
+      return;
+    }
+    // The croak is drawn whether or not the body is, because the body is at the
+    // bottom of a hole and the croak is the only half of it anybody can see.
+    drawCroak(ctx, this.x, this.lipY, this.warning, this.tick);
+    if (this.phase === 'leap') this.drawSprite(ctx, (g) => drawKurnuttaja(g, this.x, this.y, this.tick, this.facing));
   }
 }
 
@@ -1848,4 +2017,10 @@ export const ENEMY_CHARS = {
    * "enemies inside walls" check in verify.mjs — which looks at the tile under
    * the sprite's feet — is asking about the tile the level author meant. */
   P: (level, tx, ty) => new BeanBaron(level, tx * TILE - 1, (ty + 1) * TILE - 26),
+  /* The kurnuttaja's marker is the pit's own rim: it goes in the first floor
+   * row of the chunk, in a column where that row is empty, and the top of that
+   * row is the line the creature measures everything from. Written that way so
+   * the chunk reads as what it is — a hole with something at the bottom of it —
+   * rather than as an enemy floating in a gap. */
+  U: (level, tx, ty) => new Kurnuttaja(level, tx * TILE, ty * TILE),
 };
