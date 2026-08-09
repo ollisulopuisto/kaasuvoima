@@ -12,14 +12,15 @@ ennen pushia on `node tools/verify.mjs`.
 
 ## Tila 9.8.2026
 
-Kaikki alla oleva on tuotannossa ja testattu: **6 maailmaa, 26 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **7 maailmaa, 30 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
 
 **Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
 kuopalle/laavalle/kellolle) · kytkinruudut · murenevat lavat · murtava tehostus
-PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · pavunvarsi ja
+PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · **juoksuhiekka**
+aavikossa, kahdessa kentässä viidestä (v26.08.09.35) · pavunvarsi ja
 warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuuksia **59 kpl 21
 kentässä**, mitattuna `secretKeys`illä eikä muistista: 30 ladattua tiiltä, 7
 tähtilohkoa, 4 kytkintä ja 8 sisäänkäyntiä piilokaistalle (tässä luki pitkään
@@ -35,7 +36,13 @@ notko per maailma · nyrkkeilijäpomo · jäätikkö laavan tilalle jäämaailma
 kaksoisovet · voittoruutu hernekeitolla · sirppikuu · **maailma 6 LUULAAKSO**
 (v26.08.09.33): oma teema, oma tausta, yksitoista luupalikkaa, kentät 6-1…6-F,
 karttaruudukko ja luurankopomo, jonka jokainen osuma hajottaa ja joka on
-`VOICES`-taulun ensimmäinen puhuja pelaajan jälkeen.
+`VOICES`-taulun ensimmäinen puhuja pelaajan jälkeen · **maailma 7 KAASUKEHÄ**
+(v26.08.09.36): oma teema, oma tausta, kaksitoista pilvipalikkaa, kentät
+7-1…7-F, kartta ja sääherra (`bossVariant: 5`), joka nousee ilmaan jokaisesta
+osumasta. Maailman kaksi sääntöä ovat portissa eivätkä kommentissa: **mikään ei
+seiso maassa** (0 ruutua vastaan luun 44) ja **ohut pilvi ei ole koskaan tyhjän
+päällä** (0 vastaan muun pelin 73), ja lattia on mitattu bonushuonetta vasten
+(maata 89–97 % vastaan `sky_garden`in 0 %).
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
 esittelytila · teemakohtaiset seisonta-animaatiot kentissä ja kartalla · oma
@@ -50,7 +57,12 @@ tunnisteesta johdetun käyrän mukaan jota myös nappula kävelee (v26.08.09.30)
 `src/data/difficulty.js`:n vain lipun takana ja jonka vanhentumisen `verify.mjs`
 huomaa johtamalla luvut uudelleen · **käyrän muoto on portti eikä tuloste**
 (v26.08.09.33): jokaisen maailman on noustava ja notkahdettava tasan kerran, ja
-`verify.mjs` tarkistaa sen · kaistavalidointi, joka kattaa kaikki kolme
+`verify.mjs` tarkistaa sen · **käyrä nousee myös maailmasta maailmaan**
+(v26.08.09.36), mikä on eri väite kuin edellinen: muototesti katsoo yhtä
+maailmaa kerrallaan, joten uusi maailma voisi olla sisäisesti moitteeton ja
+silti edellistä helpompi · **maareitin lupaus on portti käsintehdyissä
+maailmoissa 6 ja 7** (v26.08.09.36), ei enää vain raportti ·
+kaistavalidointi, joka kattaa kaikki kolme
 kaistaa ja siis myös bonushuoneet (v26.08.09.11) · hyppybudjetin
 toistettavuustesti · debug-warp (näppäin 4, kaataa pistetaulun) ·
 salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
@@ -105,7 +117,28 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    saapumisesta ja kuolemaportti pitää sen poissa kuoppaan putoamisesta, ja
    kumpikin on todistettu erikseen punaisella ettei toinen esitä toista.
    *Yö Autiovuorella* odottaa yhä viimeistä linnaketta.
-7. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
+7. ✔ **Pilvimaailma ja sääherra** — tehty (v26.08.09.36). Maailma 7
+   KAASUKEHÄ: `THEMES.cloud`, `bg: 'clouds'`, `chunks/cloud.js`, kentät
+   7-1…7-F, kartta ja `bossVariant: 5`. Musiikki on **omaa sävellystä**, ei
+   `source`-kenttää — vapautuneesta sävelmistöstä ei löytynyt teosta joka olisi
+   ollut *tämä paikka* niin kuin *Danse macabre* oli luulaakso, ja aihevalinta
+   on ainoa peruste jolla lainaaminen on tässä pelissä tehty. Neljä asiaa jäi
+   kirjatuksi muitakin maailmoja varten:
+   **Lattia päätetään ennen palikoita.** Pilvistä tehty maailma on kuoppa koko
+   pituudeltaan ellei joku päätä toisin; päätös on "oman painonsa tiivistämä
+   pilvi on maata", eli lattia on tavallista `#`:ää ja koko muu tiedosto
+   seuraa siitä.
+   **Puoliläpäisevä lava kelpaa maailman aineeksi vasta kun sen ansa on
+   poistettu rakenteesta.** Sääntö on että jokaisen `-`:n alla on kiinteää
+   pilveä (mitattu 0 vastaan muun pelin 73), ja sen hinta on että yksikään
+   lauta ei ylitä kuoppaa — mikä nostaa vaikeutta, koska sillattu kuoppa ei
+   tuota lainkaan kuiluriskiä.
+   **"Ei ole bonushuone" on mitattavissa.** Maaosuus ja lautaosuus, samalla
+   koodilla `sky_garden`ista: 89–97 % / 9–10 % vastaan 0 % / 100 %.
+   **Vaikeus on ostettava kahdesti.** Ensimmäinen mitoitus antoi w7 261,5 eli
+   maailmaa 6 helpomman, ja korjaus oli vihollistiheys ja reikien määrä — ei
+   leveämmät kuopat, koska ne rikkoisivat läpäisylupauksen.
+8. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
    löytynyt, **ei koskaan missä** (v26.08.09.17);
    ✔ kolikkojonot osoittavat (v26.08.09.29) — ja osoittavat vain sitä yhtä
@@ -172,6 +205,37 @@ olisi ollut kuusi teemaa kertaa neljä ruutua eli 24 piirtofunktiota, ja
 vastineeksi olisi saanut riskin: pelaaja oppii maailmassa 1 miltä rikottava
 lohko näyttää, ja jokainen uusi siluetti on uusi opettelu. Vaihtelu materiaalissa
 oli aina oikea puolisko — ja se on jo tehty.
+
+### ✔ Tehty (v26.08.09.35): juoksuhiekka, ja miksi se ei ole joka kentässä
+
+**Tehty.** Omistajan pyyntö oli kaksiosainen — *"aavikkokentissä voisi olla
+juoksuhiekkaa. Ei kaikissa, mutta joissakin"* — ja jälkimmäinen puolisko on
+suunnittelua eikä aikataulua: uhka joka on joka kentässä on maastoa, ja maasto
+ei ole uhka. Aavikon viidestä kentästä kaksi sai hiekkaa: **2-1 opettaa** (yhden
+ruudun kuoppa jossa kukaan ei voi hukkua) ja **2-3 testaa** (kahden ruudun
+kuoppa joka hukuttaa voimatasot 0–2). 2-2, 2-N ja 2-M jäivät tarkoituksella
+ilman, syyt kenttien omissa kommenteissa.
+
+Käytös ratkesi omistajan lauseella *"vetää hitaasti alas, mutta reagoimiseen jää
+useita sekunteja"*, ja se on nyt mitattu väite: **182 framea (3,03 s)** pienimmällä
+keholla ensimmäisestä kosketuksesta kuolemaan, jos ei tee mitään. Hukkuminen on
+geometriaa eikä ajastinta — koko keho pinnan alle — mikä on syy siihen että
+matala kuoppa on todistettavasti turvallinen eikä vain lempeä.
+
+Neljä kohtaa jotka olisivat menneet pieleen hiljaa:
+
+1. **`SOLID` ei ole oikea vastaus, eikä `DEADLY` myöskään.** Hiekka on omassa
+   joukossaan (`SINK`), koska se on läpäistävää astinta: kiinteänä sen *pinta*
+   olisi mennyt lattiaprofiiliin ja pohjaton lammikko olisi mennyt läpi
+   tavallisena maana. Oma sääntö (`checkQuicksand`) vaatii pohjan ja reunan.
+2. **Vaikeusmittari näkee sen.** Sama virhe jonka piikkikävelijä teki samana
+   aamuna. 2-1 115,7 → 117,4 ja 2-3 156,1 → 159,3; maailman muoto ei muuttunut.
+3. **Maahanisku hautaa.** Syöksy hiekkaan peruu iskun ja aallon ja jättää
+   jälkeensä 20 framea nopeaa uppoamista: varoajasta katoaa **47 %**. Matalassa
+   kuopassa sekään ei tapa, koska pohja on pohja.
+4. **Tähti ei kanna yli.** Hiekka liittyi listaan *kuoppa, laava, kello* eikä
+   listaan *viholliset, piikit*: se ei ole huoneessa oleva asia joka lyö, se on
+   huone.
 
 ### ✔ Tehty (v26.08.09.31): maahanisku (ground pound)
 
@@ -260,6 +324,14 @@ kenttää, linnake, karttaruudukko ja pomo. Se on tehtävissä, mutta kohdan 1
 suositus — käsin vain ensimmäinen ja viimeinen kenttä — näyttää sen jälkeen
 oikeammalta eikä vähemmän oikealta.
 
+**Pilvimaailma (v26.08.09.36) on toinen mittapiste, ja se maksoi saman.**
+Kaksitoista palikkaa, kolme kenttää, linnake, kartta, pomo ja oma sävellys.
+Kaksi mittausta kannattaa säilyttää: **hinta ei laskenut toisella kerralla**
+(sama työ, sama määrä osia), ja **kaksi maailmaa peräkkäin käsin nosti
+vaikeuskäyrää +8,0 ja +14,9**, eli käsityö ei automaattisesti tuota isoa
+askelta. Kolme jäljellä olevaa maailmaa samalla tavalla on siis noin kolme
+kertaa tämä työ, ja kohdan 1 suositus on yhä lukematta ratkaisematta.
+
 **Tilanne muuttui 9.8.2026: neljästä esteestä kaksi on poissa ja yksi halpeni.**
 Kohta 3 (vaikeuskäyrän mittari) on tehty — muototarkistus lukee nyt tasoja eikä
 jonoa, koska haarautuva kartta vaati saman. Kohta 4:n edellyttämät palaset ovat
@@ -268,7 +340,8 @@ maailmalle on nyt oikeasti jotain laitettavaksi. Ja kohta 1 halpeni, koska
 generaattori osaa nyt koko ruutusanaston (`%`, `S`, `*`, salaisuudet) eikä enää
 tuota mekaniikattomia kenttiä.
 
-**Jäljellä on siis kaksi:** paljonko tehdään käsin, ja kaksi puuttuvaa teemaa.
+**Jäljellä on siis yksi:** paljonko tehdään käsin. Teemat ovat kasassa
+(v26.08.09.36, ks. kohta 2 alla), ja kahdeksas maailma on viimeinen linnake.
 
 Alkuperäiset neljä, tila merkittynä:
 
@@ -280,12 +353,27 @@ Alkuperäiset neljä, tila merkittynä:
    tehdään. Päätös jota tämä vaatii: **mikä osuus tehdään käsin.** Suositus:
    maailman ensimmäinen ja viimeinen kenttä käsin, väli generoiden ja käsin
    viimeistellen — käsi opettaa ja päättää, generaattori täyttää.
-2. **Seitsemän teemaa ei vielä riitä kahdeksalle maailmalle.** Nyt: ruoho,
-   aavikko, yö, jää, tehdas, linnake ja **luu** (v26.08.09.33). Yksi maailma
-   tarvitsee siis vielä oman teemansa, ja teema on paletti + taustat + palikat
-   + musiikki, ei pelkkä väri — luumaailma tehtiin juuri tuon listan mukaan, ja
-   sen neljä osaa ovat `THEMES.bone`, `bg: 'bones'`, `chunks/bone.js` ja
-   `TRACKS.bone`.
+2. ✔ **Teemalista on täynnä** (v26.08.09.36). Kahdeksan teemaa kahdeksalle
+   maailmalle: ruoho, aavikko, yö, jää, tehdas, luu (v26.08.09.33), **pilvi**
+   (v26.08.09.36) ja linnake. Omistaja valitsi viimeisen teeman 9.8.2026, ja se
+   on **pilvet**; maailma 7 on KAASUKEHÄ ja se on tehty samalla listalla kuin
+   luulaakso — teema on paletti + taustat + palikat + musiikki, ei pelkkä väri
+   — eli `THEMES.cloud`, `bg: 'clouds'`, `chunks/cloud.js` ja `TRACKS.cloud`.
+
+   **Maailma 8 on viimeinen linnake, ja se ei tarvitse uutta teemaa.** Linnake
+   on ollut teemana `THEMES.fortress` alusta asti, sitä on käytetty jokaisen
+   maailman viimeisessä kentässä, ja viimeinen maailma on se paikka jossa siitä
+   tulee koko maailma eikä yhden kentän huone. Sen musiikki on jo varattu:
+   *Yö Autiovuorella* (Mussorgski 1867, Rimski-Korsakovin sovitus 1886) odottaa
+   [DESIGN.md](DESIGN.md):n kohdan 1 b taulukossa merkinnällä "tulossa", ja se
+   on ainoa rivi siinä taulukossa jota mikään raita ei vielä käytä.
+
+   Kaksi asiaa jäi kirjatuksi maailmaa 8 varten. **Kahden säveltäjän rivi on
+   kaksi tarkistusta eikä yksi** — sovitus on oma teoksensa omine
+   suoja-aikoineen, ja portti vaatii molempien nimet sekä DESIGN.md:hen että
+   muutoslokiin. Ja **linnaketeeman tiilen ja maan ero on 7,9 %**, eli toiseksi
+   huonoin koko pelissä heti yön jälkeen; maailma joka on kokonaan linnaketta
+   joutuu tekemään sille jotain, ja se on eri työ kuin uuden paletin keksiminen.
 3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
    väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja se on yhä
    päättämättä. Mittarin puoli on sen sijaan tehty: `difficulty.mjs`:n
@@ -741,7 +829,15 @@ kenttiä joita luetaan joka framessa.
 - Rytmitilastojen louhinta vaatii ulkoisen korpuksen (`VGLC_DIR`), jota ei
   säilytetä repossa. Aja generaattori aina `VGLC_DIR` asetettuna, jotta
   samankaltaisuustarkistus on päällä.
-- **Uusi ruutumerkki on kolme paikkaa eikä yksi.** `TILE_INFO`in lisäksi se pitää
+- **Uusi ruutumerkki on neljä paikkaa eikä yksi.** `TILE_INFO`in lisäksi se pitää
   lisätä `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai
   validaattori lukee esimerkiksi murenevan lavan kuiluna ja generoi mahdottomia
-  kenttiä.
+  kenttiä. **Neljäs on `tools/difficulty.mjs`** (v26.08.09.35): ruutu jota
+  mittari ei tunne maksaa nolla, jolloin jokainen sen sisältävä kenttä mitataan
+  helpommaksi kuin se on — ja koska maailman käyrän muoto on nyt portti
+  `verify.mjs`:ssä, väärä luku ei ole vain väärä raportti. Piikkikävelijä teki
+  tämän virheen ja juoksuhiekka olisi tehnyt sen perässä.
+  Ja kaikki neljä eivät ole sama päätös: ruutu voi olla jotain muuta kuin
+  kiinteä tai ilma. Juoksuhiekka ei ole kummassakaan joukossa vaan omassaan
+  (`SINK`), koska se on **läpäistävää astinta** — perustelu on kirjoitettu auki
+  `rules.js`:ään sen joukon viereen.

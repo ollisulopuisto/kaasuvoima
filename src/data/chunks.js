@@ -24,6 +24,7 @@ import { DESERT_CHUNKS } from './chunks/desert.js';
 import { ICE_CHUNKS } from './chunks/ice.js';
 import { FACTORY_CHUNKS } from './chunks/factory.js';
 import { BONE_CHUNKS } from './chunks/bone.js';
+import { CLOUD_CHUNKS } from './chunks/cloud.js';
 import { FORTRESS_CHUNKS } from './chunks/fortress.js';
 import { SECRET_CHUNKS } from './chunks/secrets.js';
 
@@ -36,6 +37,7 @@ export const CHUNKS = {
   ...ICE_CHUNKS,
   ...FACTORY_CHUNKS,
   ...BONE_CHUNKS,
+  ...CLOUD_CHUNKS,
   ...FORTRESS_CHUNKS,
   ...SECRET_CHUNKS,
 };

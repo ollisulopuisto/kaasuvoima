@@ -94,6 +94,35 @@ const ENEMY_COST = {
  */
 const LETHAL_TILE = { '^': 1.0, W: 1.5 };  // lava has no ledge to land on; spikes do
 
+/*
+ * JUOKSUHIEKKA, priced by DEPTH rather than by presence, because depth is what
+ * decides whether the tile can kill at all.
+ *
+ * The rule in the engine is geometric: you drown when the whole body is under
+ * the surface, so a pool shallower than the smallest body (16 px, one tile)
+ * cannot drown anybody however long you stand in one. A one-tile pool costs you
+ * a struggle, the clock, and whatever was chasing you; two tiles or more can
+ * end the life. Two numbers, and the split is where the physics puts it.
+ *
+ * Where they sit on the scale is the same argument the enemy table makes. Deep
+ * sand is below lava's 1.5 because lava is instant and this gives you about
+ * three seconds; it is above the spike bed's 1.0 because a spike bed is one
+ * jump and one power level, while a pool has to be climbed out of, and the
+ * ordinary jump — the answer to everything else in this game — does not work
+ * inside one. Shallow sand at 0.5 is the tax without the risk.
+ *
+ * Counted per column like every other lethal tile, so a wide pool costs more
+ * than a narrow one and a deep one does not cost double for being spelled with
+ * two rows.
+ *
+ * It is deliberately NOT folded into `lethalCol` below, and that is worth
+ * saying out loud: doing so would make a pool count a second time as a gap to
+ * be jumped, and the whole point of the tile is that it is not a gap. The price
+ * is in `hazards` and nowhere else.
+ */
+const QUICKSAND_COST = { shallow: 0.5, deep: 1.2 };
+const QUICKSAND = '~';
+
 const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
 
 /**
@@ -138,14 +167,17 @@ function measure(rows) {
   let hazardCost = 0;
   for (let x = 0; x < w; x++) {
     let worst = 0;
+    let sand = 0;
     for (let y = 0; y < ROWS; y++) {
       const ch = at(x, y);
       if (ENEMY_COST[ch] !== undefined) {
         enemyCost += ENEMY_COST[ch];
         enemies[ch] = (enemies[ch] || 0) + 1;
       }
+      if (ch === QUICKSAND) sand++;
       worst = Math.max(worst, LETHAL_TILE[ch] || 0);
     }
+    if (sand) worst = Math.max(worst, sand > 1 ? QUICKSAND_COST.deep : QUICKSAND_COST.shallow);
     hazardCost += worst;
   }
 
@@ -303,6 +335,20 @@ for (const world of playOrder) {
       id, world: world.id, fortress, ...m, ...score(m.metrics),
     });
   }
+}
+
+/**
+ * The same measurement, applied to rows that are not a level in the game.
+ *
+ * It exists for one job and the job is worth stating: a hazard the meter cannot
+ * see scores zero, every level containing it is measured as easier than it
+ * plays, and nothing anywhere says so — that is exactly what happened to the
+ * spiky walker. `verify.mjs` builds two identical fixtures that differ by one
+ * tile and asserts the number moves, which is a test of the *table above*
+ * rather than of any level, and there is no other way to write it.
+ */
+export function scoreRows(rows) {
+  return score(measure(rows).metrics).total;
 }
 
 /** The one number per level that leaves this tool. One decimal, and no more:

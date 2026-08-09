@@ -20,6 +20,7 @@ export const T = {
   PIPE_BR: '}',
   SPIKE: '^',
   LAVA: 'W',
+  QUICKSAND: '~',
   CRUMBLE: '%',
   SWITCH: 'S',
   GOAL: 'F',
@@ -63,6 +64,29 @@ export const TILE_INFO = {
   [T.COIN]: { coin: true },
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
+  /*
+   * JUOKSUHIEKKA. Not solid, not semi-solid, and pointedly **not** `hazard`.
+   *
+   * All three of those are decisions and each one is the answer to a question
+   * somebody will ask again:
+   *
+   *   - not solid, because you go *into* it. A solid quicksand tile would be a
+   *     patch of floor with a scary picture on it, and every rule in the game
+   *     that asks "does a body fit here" would answer about a wall that is not
+   *     there. Standing on it is exactly what the tile refuses to let you do.
+   *   - not semi-solid either. A plank is something you land on from above and
+   *     pass through from below; sand is the other way round entirely — you
+   *     sink through it downwards and you have to climb out.
+   *   - not `hazard`, because `hazard` in this file means "touching it hurts",
+   *     which is spikes and lava. Quicksand does not hurt on contact at all: it
+   *     takes seconds, it is escapable the whole time, and what kills is going
+   *     under rather than touching. Marking it a hazard would have handed it to
+   *     `LevelScene.playerTiles`, which knows only how to deal damage.
+   *
+   * So it carries its own flag and `Player` owns the behaviour — see
+   * `quicksandSurface` there, which is the only reader of this line.
+   */
+  [T.QUICKSAND]: { quicksand: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
    * door" — in `playerTiles` and in the edge test that shapes the drawing; it
@@ -168,6 +192,37 @@ export const THEMES = {
     pipe: '#4a8a78', pipeDark: '#1e4a40', pipeLight: '#7cc0a8',
     hill: '#2a2a40', hillDark: '#1a1a2c',
     cloud: '#3c3a52',
+  },
+  /**
+   * KAASUKEHÄ — maailma 7, pilvikerroksen päällä.
+   *
+   * Tämä teema on se jonka pitäisi kaatua omaan kontrastiporttiinsa: valkoista
+   * valkoisella on koko maailman lähtökohta, ja jos tiili sulautuu maahan, se
+   * ei näytä bugilta vaan siltä että palikoita ei ole. Yön pari (`#7a5a30` ja
+   * `#6a5030`, mitattuna 0,4 %) on todiste siitä että näin käy vahingossa.
+   *
+   * Vastaus on ettei kumpikaan ole valkoinen samasta syystä: **maa on
+   * auringon puolelta valaistua pohjapilveä ja tiili on ukkospilveä.** Kaksi
+   * eri pilveä, ei saman pilven kaksi sävyä, ja `verify.mjs` mittaa eron.
+   *
+   * Messinkinen putki on saman päätöksen kolmas kohta. Ruohon vihreä tai jään
+   * turkoosi olisi tässä paletissa haalea, ja valkoinen putki valkoista pilveä
+   * vasten ei ole putki vaan aukko — messinki on ainoa lämmin väri koko
+   * teemassa ja siksi ainoa asia jonka silmä löytää heti.
+   *
+   * Taivas on tummempi ylhäällä kuin alhaalla, päinvastoin kuin ruoholla ja
+   * aavikolla. Se on korkeuden ainoa ilmainen merkki: ilmakehä ohenee ylöspäin,
+   * ja pilvikerroksen päällä horisontti on kirkkaampi kuin zeniitti.
+   */
+  cloud: {
+    surface: 'cloud',
+    sky: ['#2a5cc0', '#bcdcf8'],
+    ground: '#dfe8f8', groundDark: '#9aa8c8', groundTop: '#ffffff', groundTopDark: '#c2d0ea',
+    brick: '#7c86ac', brickDark: '#4e5678', brickLight: '#a8b2d4',
+    hard: '#eef4ff', hardDark: '#98a4c0', hardLight: '#ffffff',
+    pipe: '#d0a850', pipeDark: '#8a6c20', pipeLight: '#f0d488',
+    hill: '#b8c6e4', hillDark: '#8e9cc0',
+    cloud: '#ffffff',
   },
   fortress: {
     surface: 'stone',
@@ -278,6 +333,30 @@ function surfaceCap(ctx, x, y, th, tx, ty) {
       }
       break;
 
+    /*
+     * Pilven harja. Sama idea kuin ruohon korrella, jään puikolla ja luun
+     * sirpaleella — yksi asia ruudun ulkopuolella, jottei reuna ole
+     * viivotinsuora — mutta se on **pyöreä ja leveä** eikä terävä ja kapea.
+     * Kuhmu ylöspäin, ei piikkiä: pilven yläreuna on ainoa reuna tässä pelissä
+     * jonka pitää lukea pehmeänä, ja terävä yksityiskohta samassa paikassa
+     * lukisi rakeena eli vaarana. Muotoa tämä ei muuta, koska muoto on yhä
+     * 16x16 laatta.
+     */
+    case 'cloud':
+      ctx.fillStyle = th.groundTop;
+      ctx.fillRect(x, y, TILE, 5);
+      ctx.fillStyle = th.hardLight;
+      ctx.fillRect(x, y, TILE, 2);
+      ctx.fillStyle = th.groundTopDark;
+      ctx.fillRect(x, y + 5, TILE, 1);
+      if (n > 0.55) {
+        const bx = x + 1 + Math.floor(n * 8);
+        ctx.fillStyle = th.hardLight;
+        ctx.fillRect(bx, y - 2, 5, 2);
+        ctx.fillRect(bx + 1, y - 3, 3, 1);
+      }
+      break;
+
     default:                                 // stone
       ctx.fillStyle = th.groundTop;
       ctx.fillRect(x, y, TILE, 4);
@@ -341,6 +420,35 @@ function drawGround(ctx, x, y, th, openAbove, tx, ty) {
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(x + 2, y + 9, 1, 4);
     ctx.fillRect(x + 13, y + 7, 1, 5);
+  } else if (th.surface === 'cloud') {
+    /*
+     * Tiivistynyttä pilveä, ja koko kuvion tehtävä on sanoa **mihin suuntaan
+     * tämä on painunut kasaan**: kaaret ovat vaakaan ja alareuna hajoaa.
+     *
+     * Se on maailman koko fiktio yhdessä laatassa. Pilvi on maata siksi että
+     * oma paino on pakannut sen, joten yläpinta on kiinteä ja alapinta on
+     * hilseilevä — pisteet harvenevat ylhäältä alas, eli laatta on sitä
+     * vähemmän ainetta mitä kauempana sen kannesta ollaan. Ainoa maapinta
+     * pelissä jonka kuvio on epäsymmetrinen pystysuunnassa: hiekan kerrokset
+     * ja kiven saumat näyttävät samalta kummin päin tahansa, tämä ei.
+     */
+    const n = hashNoise(tx, ty);
+    ctx.fillStyle = th.groundDark;
+    for (let i = 0; i < 3; i++) {
+      const an = hashNoise(tx * 3 + i, ty * 7);
+      ctx.fillRect(x + 1 + Math.floor(an * 5), y + 7 + i * 3, 5 + Math.floor(an * 5), 1);
+    }
+    // The underside frays: a scatter that thins upward, so the bottom row of
+    // the tile is the loosest and the top of the tile is the packed part.
+    for (let i = 0; i < 7; i++) {
+      const fn = hashNoise(tx * 11 + i, ty * 5 + i * 3);
+      const py = y + 8 + Math.floor(fn * 8);
+      if (fn * 8 < (py - y - 8) * 0.6) continue;
+      ctx.fillRect(x + Math.floor(hashNoise(i, tx + ty) * 15), py, 1, 1);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x + 2, y + 6, 6, 1);
+    if (n > 0.6) ctx.fillRect(x + 9, y + 9, 4, 1);
   } else if (th.surface === 'stone') {
     ctx.fillStyle = th.groundDark;
     const off = (tx + ty) % 2 ? 0 : 8;
@@ -887,6 +995,103 @@ function drawLava(ctx, x, y, tick, tx) {
 }
 
 /**
+ * JUOKSUHIEKKA, and nearly every stroke in it is "not the thing it could be
+ * mistaken for".
+ *
+ * It has three neighbours in the eye and it has to lose to none of them:
+ *
+ *   - **the desert ground it is dug into.** Sand is lit from above and gets
+ *     *lighter* towards its cap (`surfaceCap`'s `groundTop`, plus wind
+ *     ripples). This gets *darker* towards its rim and has no cap at all, which
+ *     is what makes a pool read as a hole in the floor rather than as a patch
+ *     of floor. Measured in `verify.mjs`: the separation has to beat the
+ *     desert's own ground/brick pair, which is one of the weakest in the game.
+ *   - **lava, and the ice world's crevasse.** Both of those are a *crest*: one
+ *     bright line running the width of the tile, offset by a sine, travelling
+ *     sideways. A crest is therefore the one shape this may not have. Instead
+ *     it churns — two small rings turning in opposite directions, which goes
+ *     nowhere and reads as something being stirred from underneath.
+ *   - **a pit.** A pit is empty air with the backdrop showing through it and no
+ *     movement at all; this is opaque, textured and never still.
+ *
+ * Fixed colours rather than themed, for the same reason the prize block has
+ * them: a themed quicksand would by definition be painted in the palette of the
+ * ground it is hiding in, which is precisely the mistake. It only occurs in the
+ * desert today, and that is where it must not blend.
+ *
+ * The body stays drawn **on top** of the sand rather than under it, because
+ * `drawTiles` runs before the entities and it is left that way on purpose. A
+ * player who has gone under is the one moment the hazard is a clock counting
+ * down, and hiding him behind the tile would take away the only reading of how
+ * far there is to climb — "mikä voi satuttaa, sen pitää näkyä", applied to the
+ * thing being hurt. The grains thrown up from the surface are what says he is
+ * beneath it; the picture of being buried is the rim above his head.
+ *
+ * `surface` is true for the top tile of a pool and comes from the neighbour the
+ * caller already has in hand — the same trick as the grass on a ground tile.
+ * Only the surface churns and only the surface throws grains; the rows under it
+ * are dead weight, which is what gives a two-tile pool a visible depth.
+ */
+const QS = {
+  body: '#5c4620',
+  deep: '#3a2c14',
+  mid: '#77592a',
+  sheen: '#94733c',
+  grain: '#c6a868',
+  rim: '#2a2010',
+};
+
+function drawQuicksand(ctx, x, y, tick, tx, surface) {
+  ctx.fillStyle = QS.body;
+  ctx.fillRect(x, y, TILE, TILE);
+  ctx.fillStyle = QS.deep;
+  ctx.fillRect(x, y + 9, TILE, 7);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x, y + 13, TILE, 3);
+
+  const n = hashNoise(tx, 7);
+
+  // The churn. Two rings, opposite directions, different periods, so a row of
+  // pool tiles is never the same stamp repeated and never drifts one way.
+  for (let r = 0; r < 2; r++) {
+    const dir = r === 0 ? 1 : -1;
+    const phase = (tick / (46 + r * 19) + n * 6.28 + r * 2.1) * dir;
+    const cx = x + 8 + Math.round(Math.cos(phase) * (4 - r));
+    const cy = y + 7 + Math.round(Math.sin(phase) * (3 - r));
+    ctx.fillStyle = r === 0 ? QS.mid : QS.sheen;
+    ctx.fillRect(cx - 3 + r, cy, 6 - r * 2, 1);
+    ctx.fillRect(cx - 2 + r, cy - 1, 4 - r * 2, 1);
+  }
+
+  if (!surface) {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(x, y, TILE, 1);
+    return;
+  }
+
+  // The rim is a dark seam and not a highlight. Ordinary sand has the highlight;
+  // borrowing it here would put the two tiles a pixel apart at running speed.
+  ctx.fillStyle = QS.rim;
+  ctx.fillRect(x, y, TILE, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x, y, TILE, 1);
+
+  /* Grains lifted and sucked back, on their own clock per column. They never
+   * leave the tile: sand does not splash, and a particle crossing the rim would
+   * be the spray that says "liquid". */
+  const period = 96 + Math.floor(n * 60);
+  const age = (tick + Math.floor(n * period)) % period;
+  if (age < 34) {
+    const t = age / 34;
+    const gx = x + 3 + Math.floor(hashNoise(tx, 3) * 10);
+    const gy = y + 6 - Math.round(Math.sin(t * Math.PI) * 4);
+    ctx.fillStyle = QS.grain;
+    ctx.fillRect(gx, gy, 1, 1);
+    if (t > 0.3 && t < 0.8) ctx.fillRect(gx + 2, gy + 1, 1, 1);
+  }
+}
+
+/**
  * One tile of a door. Doors are built several tiles wide and tall, and each
  * tile draws only its own slice — `edges` says which sides are the outside of
  * the door, so the stone surround, the hinges and the centre seam land on the
@@ -1182,6 +1387,10 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
       if (themeName === 'ice') drawCrevasse(ctx, x, y, tick, tx);
       else drawLava(ctx, x, y, tick, tx);
       break;
+    /* Only the top tile of a pool churns; the ones under it are the depth. The
+     * neighbour is already in hand for exactly this class of question — see the
+     * pipe mouths and the grass above. */
+    case T.QUICKSAND: drawQuicksand(ctx, x, y, tick, tx, above !== T.QUICKSAND); break;
     // Passed through as a number: `drawDoor` swings, it does not toggle.
     case T.DOOR: drawDoor(ctx, x, y, th, tick, opts.doorOpen, opts.doorEdges); break;
     default: break;

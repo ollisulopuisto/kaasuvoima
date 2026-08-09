@@ -156,6 +156,34 @@ const BEAN_BLOCK_OVER_FLOOR = 4;
  * death a way out.
  */
 const DEADLY = new Set(['W']);
+/*
+ * JUOKSUHIEKKA, and it is deliberately a third category rather than a member of
+ * either of the two above. Getting this wrong is the trap ROADMAP names, so the
+ * reasoning belongs next to the set and not in a commit message.
+ *
+ * **Not `SOLID`.** `SOLID` is what a body cannot pass through, and it is what
+ * every rule in this file measures against: the floor profile, headroom, wall
+ * height, the warp landing box, the flood fill. Sand is passable — you go into
+ * it, you sink through it, you climb out of it — so calling it solid would make
+ * the validator claim a ceiling where there is none, and, much worse, would put
+ * the *surface* of a pool into the floor profile. A pool painted over a
+ * bottomless column would then read as ordinary ground and pass silently, which
+ * is the single most expensive way this could be got wrong.
+ *
+ * **Not `DEADLY` either.** `DEADLY` exists to stop the flood fill travelling
+ * through the lava lid that `assembleTall` puts over a bottomless column, i.e.
+ * to stop "falling to your death" being reported as a way out of a room. You
+ * genuinely can travel through quicksand — slowly, and you have seconds to do
+ * it — so treating it as a wall for the flood fill would invent a trap, which
+ * that fill is explicitly built never to do.
+ *
+ * So it is its own set, with its own rule (`checkQuicksand`) and one line in
+ * `checkGaps`. **Kept character for character identical with the copy in
+ * `tools/gen-levels.mjs`**, the same way `SOLID` is, and `verify.mjs` compares
+ * the two lines as strings — a copy nobody checks is a copy that has already
+ * drifted.
+ */
+const SINK = new Set(['~']);
 
 /* -------------------------------- bands ---------------------------------- */
 
@@ -257,12 +285,93 @@ function checkVines(rows, w, problems) {
   }
 }
 
+/**
+ * Universal. What a quicksand pool has to be, in the two ways a grid can say it.
+ *
+ * The hazard is a clock and not a touch: you sink slowly and you have seconds
+ * to get out (see the constants in `entities/player.js`). That is what makes
+ * *placement* the whole design problem rather than a detail — with a window to
+ * react, the sand in the open is a scare and the sand at the bottom of a shaft
+ * is a death sentence, and the difference between the two is geometry this file
+ * can read.
+ *
+ * So, two rules, and each one is a way the tile stops being what it claims:
+ *
+ *   - **a pool has a bottom.** Sand painted over a bottomless column is a pit
+ *     wearing a costume: nothing stops the sinking, the several seconds are
+ *     spent falling out of the level, and the promise the tile makes is a lie.
+ *     It is also the exact shape that `checkGaps` would otherwise have blessed
+ *     — which is why this is reported here by name rather than left to come out
+ *     as a gap of three, or, if `~` had been put in `SOLID`, as nothing at all.
+ *   - **a pool has a rim.** Escaping is rising to the surface and stepping out
+ *     sideways, so there has to be somewhere to step. Measured against the same
+ *     jump budget everything else here uses: a flank whose floor is more than
+ *     `wall` tiles above the sand's surface is a wall, and a pool between two
+ *     walls is a hole you are given several seconds to fail to leave. One
+ *     usable side is enough — you can always wade back the way you came.
+ *
+ * What this cannot say, stated rather than left to be found: it does not know
+ * how *deep* a pool has to be before it can drown anybody (that is the body's
+ * height against the pool's, and it is asserted in `verify.mjs` against the
+ * engine), and it does not know whether the rim is somewhere you would want to
+ * land. Grid geometry, as everywhere else in this file.
+ */
+function checkQuicksand(band, w, reach, problems, where) {
+  const at = reader(band, w);
+  const cols = [];
+  for (let x = 0; x < w; x++) {
+    let top = -1;
+    let bottom = -1;
+    for (let y = 0; y < band.length; y++) {
+      if (!SINK.has(at(x, y))) continue;
+      if (top < 0) top = y;
+      bottom = y;
+    }
+    cols.push(top < 0 ? null : { top, bottom });
+  }
+  if (!cols.some(Boolean)) return;
+
+  for (let x = 0; x < w; x++) {
+    if (!cols[x]) continue;
+    const under = at(x, cols[x].bottom + 1);
+    if (!SOLID.has(under)) {
+      problems.push(`quicksand at column ${x}${where} ends at row ${cols[x].bottom}`
+        + ` over "${under}" instead of a floor: that is a pit with sand painted on it`);
+    }
+  }
+
+  const floor = floorProfile(at, w);
+  for (let x = 0; x < w; x++) {
+    if (!cols[x] || (x > 0 && cols[x - 1])) continue;
+    let end = x;
+    while (end + 1 < w && cols[end + 1]) end++;
+    let surface = cols[x].top;
+    for (let c = x; c <= end; c++) surface = Math.min(surface, cols[c].top);
+    const sides = [x - 1, end + 1].filter((s) => s >= 0 && s < w);
+    const usable = sides.some((s) => floor[s] !== null && floor[s] >= surface - reach.wall);
+    if (!usable) {
+      problems.push(`quicksand at columns ${x}-${end}${where} has no rim within`
+        + ` ${reach.wall} tiles of its surface at row ${surface}: nothing to climb out onto`);
+    }
+  }
+}
+
 /** Route-only. Every bottomless run fits the measured jump or has a stone. */
 function checkGaps(at, band, from, to, reach, problems, where) {
   let gap = 0;
   for (let x = from; x <= to; x++) {
+    /* Neither lava nor quicksand is a bottomless run, and they are excluded for
+     * two different reasons that happen to want the same line. Lava is a lid
+     * the engine puts on a pit — the column is death, but it is not a jump you
+     * are being asked to clear. Quicksand is the opposite: it is footing of a
+     * kind, you rise to its surface and wade, so a pool wider than the jump
+     * budget is a slog and not an impossibility, and demanding a stepping stone
+     * over one would be the validator inventing a requirement. What quicksand
+     * *does* have to satisfy is `checkQuicksand` below — it needs a bottom and
+     * a rim — and that is the check this exemption is paid for by. */
     const bottomless = ![FLOOR, FLOOR + 1].some((y) => SOLID.has(at(x, y)))
-      && at(x, FLOOR) !== 'W';
+      && at(x, FLOOR) !== 'W'
+      && ![FLOOR, FLOOR + 1].some((y) => SINK.has(at(x, y)));
     if (bottomless) { gap++; continue; }
     if (gap > reach.gap) {
       const start = x - gap;
@@ -647,10 +756,12 @@ export function validateLevel(rows, budget) {
   /* Universal, whole grid: a beanstalk is a beanstalk in any band. */
   checkVines(rows, w, problems);
 
-  /* Universal, per band: headroom over the ground of whatever band it is. */
+  /* Universal, per band: headroom over the ground of whatever band it is, and
+   * what a quicksand pool has to be wherever one is dug. */
   for (let b = 0; b < bands.length; b++) {
     const at = reader(bands[b], w);
     checkHeadroom(at, floorProfile(at, w), 0, w - 1, problems, where(b));
+    checkQuicksand(bands[b], w, reach, problems, where(b));
   }
 
   /* Route-only: everything that means "get from the start to the flag". */

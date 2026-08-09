@@ -13,6 +13,7 @@ import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
+import { GRAVITY } from '../level/physics.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 
 export const VIEW_W = 320;
@@ -94,12 +95,22 @@ const CAM_STAND = 26;         // the body height that framing assumes
  * reads as the level moving; the same step over a few frames reads as the view
  * following you.
  *
- * 0.25 closes a 16 px step to under a pixel in about thirteen frames, and in a
- * sustained fall at TERMINAL it settles at a lag of 4 / 0.25 = 16 px — one
- * tile, against the ~90 px of window below the player, so the ground you are
- * falling towards is never off the bottom of the screen. Past CAM_SNAP the
- * view is not lagging, it is somewhere else entirely — a respawn, a warp, a
- * pit — and those cut rather than glide.
+ * 0.25 closes a 16 px step to under a pixel in about thirteen frames. It used
+ * to settle a full 4 / 0.25 = 16 px behind a sustained fall at TERMINAL, and
+ * that lag is what `CAM_FALL_LEAD` now cancels — see there; the sentence that
+ * used to stand here called the lag harmless because the ground you are
+ * falling towards stayed on screen, which was true and was not the problem.
+ *
+ * `CAM_SNAP` is for the view being somewhere else entirely rather than behind
+ * — a respawn, a warp, a pit — and those cut rather than glide. **Measured: no
+ * fall reaches it.** Walking or jumping off every ledge four to eight tiles
+ * high in 1-1, 2-1, 2-3, 4-1, 5-1 and 1-2, the widest the view was ever from
+ * where it wanted to be is 14.5 px, against the 48 here. Landing *on* a raised
+ * platform is a different story and is a real cut: in 2-1 the desert floor
+ * frames at the bottom of the level's 80 px of travel and a four-tile platform
+ * frames at 30, so the anchor's step on touchdown is 50 px and this line cuts
+ * all 50 in one frame. That is the rising axis and it is not what the owner
+ * reported, so it is recorded here and left alone rather than fixed blind.
  */
 const CAM_V_EASE = 0.25;
 const CAM_SNAP = 48;
@@ -113,8 +124,9 @@ const CAM_SNAP = 48;
  * ground stays on screen; landing, standing, climbing and falling all move the
  * anchor at once, because those are the moments where the player really is
  * somewhere else. Falling in particular has to follow promptly — you must see
- * what you are falling towards — and it does, because the anchor tracks any
- * downward move on the frame it happens.
+ * what you are falling towards — and it does, because the anchor tracks the
+ * fall on the frame it happens, aimed a little ahead of the feet rather than
+ * at them (`CAM_FALL_LEAD`).
  *
  * Why hysteresis and not a smaller `CAM_EYE`: the complaint is about the
  * letterboxed desert (2-1, 2-3), where the window is 160 rows instead of 208
@@ -191,6 +203,70 @@ const CAM_TOP_MARGIN = 16;
  * after.
  */
 const CAM_TOP_LEAD = 3;
+
+/*
+ * ...and the same trick going the other way, which is the half that was left.
+ *
+ * The owner, after the rise was fixed: "vertical camera movement when falling
+ * down from a platform that is above the ground is **still** janky."
+ *
+ * THE ANCHOR USED TO BE THE FEET, AND THE FEET ARE NOT A SETTLED LINE. During
+ * a fall they descend at up to TERMINAL while the ease closes only a quarter
+ * of the gap per frame, and an exponential ease chasing a target that moves at
+ * v settles exactly `(1 - 0.25) / 0.25 = 3v` behind it. So the view ran 12 px
+ * in debt the whole way down — and, because the feet stop dead on contact and
+ * the view does not, **it paid that debt off after the player had landed.**
+ * Measured, walking or jumping off a real ledge: the view kept moving for 10
+ * frames and 6.97 px after touchdown in 4-1, 9 frames and 4.30 px in 2-3, 9
+ * and 4.12 in 2-1. That is inertia, and `updateCamera` below says in as many
+ * words that inertia is the thing that makes a platformer seasick.
+ *
+ * The ordinary 15-row levels hid it: 1-1 measured 2 frames and 0.71 px, not
+ * because the camera behaved but because a 208-row window leaves only 32 px of
+ * vertical travel and the level's own limit pinned the target — and paid the
+ * debt — before the feet arrived. The owner said "a platform that is above the
+ * ground" for a reason: that is the case where the anchor moves by the whole
+ * height of the platform and the debt is real.
+ *
+ * **The fix is the mirror of CAM_TOP_LEAD: aim where the feet are going, not
+ * where they are.** The lead is `vy * 3`, three frames again and for exactly
+ * the same arithmetic — three frames of lead cancel a three-frame lag — so
+ * during a steady fall the view sits level with the feet instead of 12 px
+ * above them.
+ *
+ * **And it is capped at the drop that is actually left underneath.** This is
+ * the part that makes it a landing rather than a lead: `dropBelow()` looks at
+ * the tiles under the feet, so when the floor comes within the lead the anchor
+ * stops at the line the feet will stop at and waits there. The view is then
+ * easing at its final value for the last frames of the fall and arrives with
+ * the player instead of behind him: 2.94 px over 7 frames in the worst case
+ * (4-1), against 6.97 over 10; 1.81 over 6 in 2-3 against 4.30 over 9; and in
+ * 1-1 it stops within a frame, 0.36 px.
+ *
+ * A fall into a pit answers nothing and needs to: with no floor in reach the
+ * cap is infinite, the lead stays `vy * 3`, and the fall is followed the way
+ * any fall is until the level's own limit stops the view.
+ *
+ * **The lead may only grow as fast as gravity could grow it**, and that rate
+ * limit is the whole reason `camLead` is remembered from frame to frame. A
+ * lead multiplies a velocity, so anything that changes the fall speed in one
+ * step moves the target by three times that step — the same trap CAM_TOP_LEAD
+ * documents for the fart jump, and here it is the ground pound, which goes
+ * from a dead hang to 7.5 px/frame between two frames. Ungoverned, the view's
+ * own speed then changed by **6.79 px between two frames** at the start of a
+ * dive where the old code changed it by 1.87 — a snap by the owner's own
+ * definition, a big number on one frame. Governed it is 1.75, which is under
+ * what the code it replaces did. An ordinary fall is untouched because a
+ * falling body's speed grows by exactly GRAVITY per frame and the limit never
+ * binds. The same limit covers the other way a floor can vanish in one frame:
+ * a crumbling plank, or sliding off the edge of the thing you were about to
+ * land on.
+ *
+ * The dive pays for that safety in lead and therefore in debt: 8.47 px over 11
+ * frames after a pound in 2-3, against 11.51 over 12 before. Better, not gone,
+ * and the number is asserted at what it is.
+ */
+const CAM_FALL_LEAD = 3;
 
 /*
  * Cinemascope, for the levels that ask for it (`letterbox: true`).
@@ -439,6 +515,8 @@ export class LevelScene {
     this.camLook = 0;
     /** The feet line the framing hangs from — see CAM_TOP_MARGIN. */
     this.camAnchor = 0;
+    /** How far ahead of the feet that line is aimed — see CAM_FALL_LEAD. */
+    this.camLead = 0;
     this.tick = 0;
     this.time = this.def.time;
     this.timeSub = 0;
@@ -1529,6 +1607,16 @@ export class LevelScene {
    * where it was. Landing on a platform above the old line is `onGround` on the
    * frame the feet touch, and `CAM_V_EASE` then glides the view up to it.
    *
+   * While falling the line is not the feet but where the feet are **going**:
+   * three frames ahead of them, or the floor they are about to stop on,
+   * whichever comes first. See `CAM_FALL_LEAD` for why both halves of that are
+   * needed and why the lead is rate-limited.
+   *
+   * The lead is only ever allowed to push the anchor *down*, which the
+   * comparison below already guarantees: as the floor comes up the cap shrinks
+   * the lead, and a shrinking lead simply leaves the anchor parked on the
+   * landing line rather than dragging the view back up.
+   *
    * Dying and travelling both freeze it: in both the body is going somewhere
    * the view has no business following.
    */
@@ -1536,7 +1624,41 @@ export class LevelScene {
     const p = this.player;
     if (p.dying || p.transit) return;
     const feet = p.y + p.h;
-    if (feet > this.camAnchor || p.onGround || p.climbing) this.camAnchor = feet;
+    const falling = !p.onGround && !p.climbing && p.vy > 0;
+    const wanted = falling ? Math.min(p.vy * CAM_FALL_LEAD, this.dropBelow(p)) : 0;
+    this.camLead = falling
+      ? Math.min(wanted, this.camLead + GRAVITY * CAM_FALL_LEAD) : 0;
+    const target = feet + this.camLead;
+    if (target > this.camAnchor || p.onGround || p.climbing) this.camAnchor = target;
+  }
+
+  /**
+   * Free pixels under the feet before the first thing they could land on.
+   *
+   * The same rule `moveY` lands by, so the answer is the line the feet will
+   * actually stop at and not an approximation of it: the first row holding a
+   * solid or a plank, anywhere across the width of the body. Planks count
+   * because this is only ever asked while falling, which is the direction they
+   * are solid from.
+   *
+   * Four rows is not a guess about level design, it is all the question can
+   * ever need: the longest lead is the ground pound's 7.5 * 3 = 22.5 px, and
+   * four rows reach at least 33 px below the feet however they are aligned.
+   * `Infinity` for a pit is the honest answer and the caller's `Math.min`
+   * takes it — nothing is coming, so nothing caps the lead.
+   */
+  dropBelow(p) {
+    const feet = p.y + p.h;
+    const from = Math.floor(feet / TILE);
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    for (let ty = from; ty <= from + 3; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const ch = this.tileAt(tx, ty);
+        if (isSolid(ch) || isSemi(ch)) return Math.max(0, ty * TILE - feet);
+      }
+    }
+    return Infinity;
   }
 
   updateCamera() {
@@ -1631,6 +1753,7 @@ export class LevelScene {
     // A cut is the one moment the held line is simply wrong: wherever the body
     // has been put, that is where it has settled.
     this.camAnchor = this.player.y + this.player.h;
+    this.camLead = 0;
     this.camLook = 0;
     this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
     this.cam.y = this.cameraY();

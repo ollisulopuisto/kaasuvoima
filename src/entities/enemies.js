@@ -1186,7 +1186,9 @@ const DUST_REACH = 14;
 
 /**
  * Fortress boss. `variant` picks the move set:
- *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates.
+ *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates,
+ *   4 the skeleton that comes apart, 5 the weather lord who answers a hit by
+ *   taking off.
  */
 export class Boss extends Enemy {
   constructor(level, x, y, variant = 0) {
@@ -1432,6 +1434,28 @@ export class Boss extends Enemy {
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
       this.level.shake(3);
+      this.speed += 0.2;
+    } else if (this.variant === 5) {
+      /*
+       * SÄÄHERRA NOUSEE.
+       *
+       * Osuma ei kiihdytä häntä juuri lainkaan; se lähettää hänet ylös. Se on
+       * sama kysymys kuin luurangolla — mitä pomo *vastaa* osumaan — mutta
+       * vastaus tulee tämän maailman aiheesta: sää väistää ylöspäin, ja
+       * ilmakehän herra ei pakene sivulle vaan omaan elementtiinsä.
+       *
+       * Ja tämä on halpa juuri siksi että koneisto on jo olemassa. `jumpTimer`
+       * on hänen oma hyppykellonsa, ja sen nollaaminen tarkoittaa että hän
+       * hyppää seuraavalla framella; variantti >= 1 heittää alastulosta
+       * iskuaallot, koska pudotus on nopeampi kuin 3,5. Yksi rivi tuottaa siis
+       * ketjun — osuma, nousu, alastulo, kaksi aaltoa — eikä `REGISTRY`
+       * (savestate.js) muutu, koska mitään uutta entiteettiä ei synny.
+       *
+       * Nopeus nousee 0,2:lla eikä 0,35:llä samasta syystä kuin luurangolla:
+       * nousu on se kiihdytys, ja kaksi kiihdytystä yhdestä osumasta on yksi
+       * liikaa.
+       */
+      this.jumpTimer = 1;
       this.speed += 0.2;
     } else {
       this.speed += 0.35;

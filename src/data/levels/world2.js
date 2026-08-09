@@ -41,12 +41,37 @@ export const WORLD2_LEVELS = {
    * lava, the star covers enemies and spikes and pointedly not the level
    * itself, and a power-up that reads as invulnerability standing next to the
    * one hazard it does not cover teaches the lesson backwards.
+   *
+   * JUOKSUHIEKKA ALKAA TÄSTÄ, ja tämä kenttä on se joka opettaa sen.
+   *
+   * `dune_sink` at chunk 9 replaces the `coins` chunk and carries the same four
+   * coins, so the level is the same length, the same floor and the same reward
+   * — only what is under the coins is new. It is one tile deep with sand under
+   * it, which is not a soft first draft but the whole point: the smallest body
+   * is exactly one tile tall, so nobody can be pulled under it at any power
+   * level, doing anything, including diving into it head first. Measured in
+   * `verify.mjs` rather than promised.
+   *
+   * The first one has to be survivable and the level has to teach before it
+   * tests, and here the teaching is a specific thing the player cannot guess:
+   * the jump button stops being a jump inside sand. Finding that out costs a
+   * few seconds off the clock in 2-1 and nothing else. The two-tile pool that
+   * can actually drown you is in 2-3, which is later on the map and on the
+   * other branch — so nobody meets the lethal one first.
+   *
+   * And the star is why it is worth saying where the sand sits in that promise.
+   * The star covers enemies and spikes and pointedly not the level itself — a
+   * pit, lava, the clock. **Quicksand joins that second list**, deliberately: it
+   * is not a thing in the room that hits you, it is the room. A star that
+   * carried you across sand would also make the hazard invisible for twelve
+   * seconds, which in the one level that hands out the star is the last place
+   * anybody should be learning it wrong.
    */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
     chunks: [
       'start', 'flat', 'power', 'walkers', 'sun', 'corks',
-      'pipe_plant', 'pit_s', 'heartburn', 'coins', 'shell', 'plat_steps',
+      'pipe_plant', 'pit_s', 'heartburn', 'dune_sink', 'shell', 'plat_steps',
       'pit_l', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
@@ -153,13 +178,45 @@ export const WORLD2_LEVELS = {
    * the level is still 352 columns and its difficulty score did not move at
    * all. That is the right trade for a reward: a switch you can ignore should
    * not make the walk to the flag longer for the people who ignore it.
+   *
+   * JA TÄSSÄ HIEKKA TESTAA. `dune_sink_deep` at chunk 16 takes the place of the
+   * second `walkers` patch and keeps both of its walkers, so the enemy count,
+   * the length and the floor are all what they were and the only new thing in
+   * the level is two tiles of sand.
+   *
+   * This level and not 2-2, 2-N or 2-M, and each of those is a decision:
+   *
+   *   - **2-3**, because a player arrives here already reading the floor. It is
+   *     the lava level, so "the ground can kill" is a sentence this level has
+   *     been saying for fourteen chunks — and quicksand is the second reading of
+   *     it, which is the interesting one. Lava is instant and unrecoverable and
+   *     the answer is never to touch it; sand gives you three seconds and the
+   *     answer is to do something about it. Two hazards that look nothing alike
+   *     and behave nothing alike, teaching opposite responses, in the level
+   *     built to be read carefully. The pool sits after the last lava and
+   *     before the final power block, so it is not a second lava trench in a
+   *     row and it is not the last thing before the flag.
+   *   - **not 2-2.** That level's one job is the hidden areas, and it is the
+   *     only level in the world that hides anything. A new hazard in its route
+   *     band would be a second thing to notice in the one place where noticing
+   *     is the mechanic.
+   *   - **not 2-N.** The night palette's brick and ground measure 0.4 % apart —
+   *     the weakest pair in the game and a known open problem — so it is the
+   *     one level where a tile that has to be recognised by *colour* must not
+   *     make its debut. 2-N already owns the mechanic that answers that
+   *     problem: the crumbling boardwalk announces itself by moving.
+   *   - **not 2-M.** Its walk exists to hand out a power-up and give the arena a
+   *     horizon, and the file says why: padding it makes losing the fight more
+   *     expensive to retry. A hazard in the run-up to a fight you are meant to
+   *     want to retry is the same mistake spelled differently.
+   *   - **not 2-F.** A fortress has stone floors and no sand in it.
    */
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
       'start', 'power', 'walkers', 'lava_gap', 'walker',
       'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'dune_switch',
-      'soup_stop', 'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'walkers', 'power',
+      'soup_stop', 'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'dune_sink_deep', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },

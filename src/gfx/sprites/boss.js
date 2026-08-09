@@ -184,6 +184,28 @@ function bossRank(r, bx, py, variant) {
     r(bx + 13, py + 26, 6, 6, gold);
     r(bx + 15, py + 27, 1, 3, goldDark);            // minuuttiviisari, ylös
     r(bx + 15, py + 28, 2, 1, goldDark);            // tuntiviisari, lyhyt
+    return;
+  }
+  if (variant === 5) {
+    /*
+     * Ilmapuntari, ja sen neula osoittaa myrskyyn.
+     *
+     * Sääherran arvomerkki on mittari, ei ase — koko hahmon vitsi on että
+     * ilmakehä kuuluu jollekulle, ja omistamisen merkki on se että sen tilan
+     * saa lukea. Se noudattaa saman säännön kuin jokainen muu arvomerkki tässä
+     * tiedostossa: pyöreä, silmien alapuolella, eikä mitään pään yläpuolella.
+     *
+     * Neula vasemmalle alas, koska mittarissa se on se pää jossa lukee
+     * "myrsky". Sitä ei ole kirjoitettu mihinkään eikä tarvitse olla: viisari
+     * joka on kaukana pystystä on jokaisessa mittarissa se jonka takia
+     * ihmiset katsovat mittaria.
+     */
+    r(bx + 11, py + 22, 10, 10, goldDark);          // kehys
+    r(bx + 12, py + 23, 8, 8, '#e8eef8');           // kellotaulu
+    r(bx + 13, py + 24, 6, 1, gold);
+    r(bx + 15, py + 27, 2, 2, goldDark);            // akseli
+    r(bx + 13, py + 28, 2, 1, goldDark);            // neula alas vasemmalle
+    r(bx + 14, py + 29, 1, 1, goldDark);
   }
 }
 
@@ -229,7 +251,7 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
   const px = Math.round(x);
   const py = Math.round(y);
   /*
-   * Viisi väriä, ja viides on luuvalkoinen.
+   * Kuusi väriä, ja kaksi viimeistä ovat luuvalkoinen ja myrskynsininen.
    *
    * `% 4` oli tässä ennen ja se olisi antanut varianttille 4 nyrkkeilijän
    * violetin — eli uusi pomo olisi näyttänyt maailman 1 pomolta ilman että
@@ -239,9 +261,17 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
    * Luurangon tumma sävy on **kylmä harmaa eikä ruskea**: luu vanhenee
    * kellertäväksi, mutta ruudulla ruskea varjo vaalean päällä lukee likaisena
    * puuna. Sama valinta kuin `THEMES.bone`issa, ja samasta syystä.
+   *
+   * Sääherra (5) on **tumma eikä vaalea**, vaikka hänen maailmansa on
+   * valkoinen, ja se on tarkoitus kahdesti: hänen areenansa on linnakehuone
+   * eikä pilvi, ja kruunu on kullanvärinen. Vaalea pomo kultaisella kruunulla
+   * on pomo jonka kruunua ei näe — ja kruunu on se yksi asia jonka pelaajan on
+   * luettava, koska se kertoo milloin häneen ei saa koskea. Väri on siis
+   * luettavuuspäätös eikä makuasia, ja se on sama päätös kuin maailman
+   * paletissa toisin päin.
    */
-  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc'];
-  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88'];
+  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc', '#3a4472'];
+  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88', '#1e2444'];
   const flashing = hurt && Math.floor(frame / 2) % 2 === 1;
   const body = flashing ? '#e07070' : bodyColors[variant % bodyColors.length];
   const dark = flashing ? body : darkColors[variant % darkColors.length];

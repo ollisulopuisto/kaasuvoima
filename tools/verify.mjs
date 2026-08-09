@@ -729,6 +729,352 @@ const report = await page.evaluate(async () => {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
+  /* ------------------------------ juoksuhiekka -------------------------- */
+  /*
+   * JUOKSUHIEKKA, ja se mitä siitä voi mennä rikki.
+   *
+   * Omistajan päätös 9.8.2026: "hiekka vetää hitaasti alas, mutta reagoimiseen
+   * jää useita sekunteja". Se on **mitattava väite** eikä tunnelma, joten koko
+   * lohko on rakennettu numeroiden ympärille: montako framea ensimmäisestä
+   * kosketuksesta kuolemaan pienimmällä keholla, montako framea ulospääsy
+   * maksaa voimatasolla 0, ja paljonko maahanisku syö varoajasta.
+   *
+   * "Juoksuhiekka on olemassa" ei todista mitään. Nämä ovat ne väitteet jotka
+   * voi rikkoa yhdellä vakion muutoksella eikä huomata pelatessa:
+   *
+   *   - varoaika lyhenee tai katoaa (uhkasta tulee ansa)
+   *   - matalasta kuopasta tulee tappava (ensimmäinen kohtaaminen ei enää opeta)
+   *   - jostain kuopasta ei pääse ulos pienimmällä koolla (DESIGN.md kohta 5)
+   *   - tähti alkaa kantaa hiekan yli (lupaus muuttuu vahingossa)
+   *   - maahanisku ei tee hiekassa mitään (kaksi samana päivänä tullutta
+   *     mekaniikkaa jotka eivät tiedä toisistaan)
+   *
+   * Koko lohko on try/catchissa samasta syystä kuin maahaniskun lohko: ensi
+   * ajolla vienti puuttuu, ja kaatuva importti veisi mukanaan kaikki tämän
+   * jälkeiset tarkistukset.
+   */
+  try {
+    const { T } = await import('/src/gfx/tiles.js');
+    const {
+      QUICKSAND_GRACE, QUICKSAND_SINK, QUICKSAND_PLUNGE_FRAMES, QUICKSAND_WADE, MAX_WALK,
+    } = await import('/src/entities/player.js');
+    const { PLAYER_SIZES: SIZES } = await import('/src/gfx/sprites.js');
+
+    /**
+     * Kentän juoksuhiekkalammikot, vierekkäiset sarakkeet yhtenä. `top` on
+     * pinta ja `bottom` alin hiekkarivi — syvyys on se luku josta koko
+     * hukkumisväite riippuu, joten se luetaan kentästä eikä muisteta.
+     */
+    const poolsOf = (s) => {
+      const cols = [];
+      for (let tx = 0; tx < s.w; tx++) {
+        let top = -1; let bottom = -1;
+        for (let ty = 0; ty < s.h; ty++) {
+          if (s.rawTileAt(tx, ty) !== T.QUICKSAND) continue;
+          if (top < 0) top = ty;
+          bottom = ty;
+        }
+        cols.push(top < 0 ? null : { top, bottom });
+      }
+      const pools = [];
+      let run = null;
+      for (let tx = 0; tx <= s.w; tx++) {
+        const c = tx < s.w ? cols[tx] : null;
+        if (c) {
+          if (!run) run = { tx0: tx, tx1: tx, ...c };
+          else {
+            run.tx1 = tx;
+            run.top = Math.min(run.top, c.top);
+            run.bottom = Math.max(run.bottom, c.bottom);
+          }
+        } else if (run) { pools.push(run); run = null; }
+      }
+      return pools;
+    };
+
+    /** Kaikki kentät joissa on hiekkaa, lammikoineen. */
+    const sandLevels = [];
+    for (const id of levelIds()) {
+      reset();
+      const s = new LevelScene(game, id);
+      const pools = poolsOf(s);
+      if (pools.length) sandLevels.push({ id, pools });
+    }
+
+    /** Pelaaja lammikon keskelle, jalat täsmälleen pinnalla. */
+    const dropInto = (s, pool) => {
+      const p = s.player;
+      p.x = Math.round(((pool.tx0 + pool.tx1 + 1) / 2) * 16 - p.w / 2);
+      p.y = pool.top * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = false;
+      p.sunk = 0;
+      s.centerCamera();
+    };
+
+    /** Kenttä pystyyn ilman vihollisia ja ilman kelloa. */
+    const sandScene = (id, power = { type: null, level: 0 }) => {
+      reset(power);
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+
+    /**
+     * Framet ensimmäisestä hiekkakosketuksesta kuolemaan, tai null jos ei kuole.
+     * `press` saa painaa hyppyä; oletuksena pelaaja ei tee mitään, mikä on se
+     * tapaus jota omistajan lause koskee.
+     */
+    const untilDeath = (s, i, cap = 900) => {
+      let contact = -1;
+      for (let f = 0; f < cap; f++) {
+        s.update(i);
+        i.pressed = blank();
+        if (contact < 0 && s.player.inQuicksand) contact = f;
+        if (s.player.dying) return contact < 0 ? f : f - contact;
+      }
+      return null;
+    };
+
+    const deepest = sandLevels
+      .flatMap((l) => l.pools.map((p) => ({ id: l.id, pool: p })))
+      .sort((a, b) => (b.pool.bottom - b.pool.top) - (a.pool.bottom - a.pool.top))[0];
+    const shallowest = sandLevels
+      .flatMap((l) => l.pools.map((p) => ({ id: l.id, pool: p })))
+      .sort((a, b) => (a.pool.bottom - a.pool.top) - (b.pool.bottom - b.pool.top))[0];
+
+    expect('aavikossa on juoksuhiekkaa, mutta ei joka kentässä',
+      sandLevels.length >= 2 && sandLevels.length < levelIds().length,
+      `${sandLevels.length}/${levelIds().length} kenttää: `
+      + sandLevels.map((l) => `${l.id} ${l.pools.length} kpl`).join(', '));
+
+    /* 1. "Useita sekunteja" numeroina. Pienin keho uppoaa ensimmäisenä, joten
+     *    se on pahin tapaus, ja mittaus alkaa ensimmäisestä kosketuksesta. */
+    {
+      const s = sandScene(deepest.id);
+      const i = mkInput();
+      dropInto(s, deepest.pool);
+      const frames = untilDeath(s, i);
+      expect('syvä hiekka tappaa vasta useiden sekuntien kuluttua, ei heti',
+        frames !== null && frames >= 150 && frames <= 250,
+        frames === null
+          ? `${deepest.id} ${(deepest.pool.bottom - deepest.pool.top + 1)} ruutua syvä: ei tappanut`
+          : `${deepest.id}, keho ${SIZES[0].h} px, kuoppa `
+            + `${(deepest.pool.bottom - deepest.pool.top + 1) * 16} px: ${frames} framea `
+            + `(${(frames / 60).toFixed(2)} s), vajoamisnopeus ${QUICKSAND_SINK} px/frame, `
+            + `varoaika ${QUICKSAND_GRACE} framea`);
+    }
+
+    /* 2. Ensimmäinen kohtaaminen ei saa tappaa. Matala kuoppa on pohjaa myöten
+     *    matalampi kuin pienin keho, joten pää ei mene alle — ja se on
+     *    geometriaa eikä ajastin, joten se pitää mitata eikä luvata. */
+    {
+      const s = sandScene(shallowest.id);
+      const i = mkInput();
+      dropInto(s, shallowest.pool);
+      const frames = untilDeath(s, i, 900);
+      const p = s.player;
+      expect('matala kuoppa opettaa eikä tapa: pää ei mene pinnan alle',
+        frames === null && !p.dying,
+        `${shallowest.id}, kuoppa ${(shallowest.pool.bottom - shallowest.pool.top + 1) * 16} px, `
+        + `keho ${SIZES[0].h} px: 900 framea, uppoama ${p.sunk} framea, `
+        + `pää ${Math.round(shallowest.pool.top * 16 - p.y)} px pinnan yläpuolella`);
+    }
+
+    /* 3. DESIGN.md kohta 5 kuopittain. Ei abstraktisti vaan jokaisesta
+     *    lammikosta erikseen: hiekka jonka reunalle ei pääse on ansa, ja
+     *    varoaika tekee sijoittelusta koko työn. */
+    {
+      const stuck = [];
+      let worst = 0;
+      for (const { id, pools } of sandLevels) {
+        for (const pool of pools) {
+          const s = sandScene(id);
+          const i = mkInput();
+          dropInto(s, pool);
+          /* From the FLOOR of the pool and not from the rim. Falling in is the
+           * easy case — a kick on the first frame barely enters — and the case
+           * that matters is the one the several seconds are spent reaching:
+           * standing on the bottom with the whole depth to climb. */
+          s.player.y = (pool.bottom + 1) * 16 - s.player.h;
+          let out = -1;
+          for (let f = 0; f < 600 && out < 0; f++) {
+            const p = s.player;
+            // Rimpuilu on hyppynapin hakkaamista, ja mitään muuta bottikaan ei
+            // osaa: oikealle ja hyppy.
+            i.held.right = true;
+            i.held.jump = f % 4 < 2;
+            i.pressed.jump = f % 4 === 0;
+            s.update(i);
+            i.pressed = blank();
+            if (p.dying) break;
+            if (!p.inQuicksand && p.onGround && p.y + p.h <= pool.top * 16 + 1) out = f;
+          }
+          if (out < 0) stuck.push(`${id} ${pool.tx0}-${pool.tx1}`);
+          else worst = Math.max(worst, out);
+        }
+      }
+      expect('jokaisesta hiekkakuopasta pääsee ulos voimatasolla 0',
+        stuck.length === 0,
+        stuck.length ? `jumissa: ${stuck.join(', ')}`
+          : `${sandLevels.reduce((n, l) => n + l.pools.length, 0)} kuoppaa, hitain `
+            + `${worst} framea (${(worst / 60).toFixed(2)} s)`);
+      /* 3 b. Ja mitä se maksaa kellossa. Kello tikittää 24 framen välein, joten
+       *      hitain ulospääsy on tämän verran aikayksiköitä — hinta on tarkoitus,
+       *      mutta se ei saa olla merkittävä osa kentän kellosta. */
+      const worstUnits = Math.ceil(worst / 24);
+      const clocks = sandLevels.map((l) => {
+        reset();
+        return new LevelScene(game, l.id).time;
+      });
+      const tightest = Math.min(...clocks);
+      expect('rimpuilu maksaa kelloa mutta ei kenttää',
+        worstUnits < tightest * 0.05,
+        `hitain ulospääsy ${worstUnits} aikayksikköä, tiukin kello ${tightest} `
+        + `(${((worstUnits / tightest) * 100).toFixed(1)} %)`);
+    }
+
+    /* 4. Kaksi samana päivänä tullutta mekaniikkaa. Maahanisku ajaa alaspäin
+     *    kovaa, joten hiekassa sen pitää haudata syvemmälle — ja siitä seuraa
+     *    että se syö varoajan. Mitataan molemmat samasta kuopasta. */
+    {
+      const plain = (() => {
+        const s = sandScene(deepest.id);
+        const i = mkInput();
+        dropInto(s, deepest.pool);
+        return untilDeath(s, i);
+      })();
+      const s = sandScene(deepest.id);
+      const i = mkInput();
+      dropInto(s, deepest.pool);
+      s.player.y = deepest.pool.top * 16 - s.player.h - 40;   // tilaa syöksylle
+      i.held.down = true;
+      i.pressed.jump = true;
+      i.held.jump = true;
+      s.update(i);
+      i.pressed = blank();
+      i.held.jump = false;
+      const dived = untilDeath(s, i);
+      expect('maahanisku hiekkaan hautaa syvemmälle ja syö varoajan',
+        plain !== null && dived !== null && dived < plain * 0.8 && !s.lastPound,
+        `pudotus ${plain} framea, maahanisku ${dived} framea `
+        + `(${Math.round((1 - dived / plain) * 100)} % pois), painallusaalto: `
+        + `${s.lastPound ? 'tuli' : 'ei tullut'}, syöksyn lisäuppoama `
+        + `${QUICKSAND_PLUNGE_FRAMES} framea`);
+    }
+
+    /* 5. …ja matalassa kuopassa senkään ei pidä tappaa. Sama sääntö kuin
+     *    kohdassa 2: ensimmäinen kohtaaminen opettaa, se ei rankaise. */
+    {
+      const s = sandScene(shallowest.id);
+      const i = mkInput();
+      dropInto(s, shallowest.pool);
+      s.player.y = shallowest.pool.top * 16 - s.player.h - 40;
+      i.held.down = true;
+      i.pressed.jump = true;
+      i.held.jump = true;
+      s.update(i);
+      i.pressed = blank();
+      i.held.jump = false;
+      const frames = untilDeath(s, i, 600);
+      expect('maahanisku matalaan kuoppaan ei tapa',
+        frames === null && !s.player.dying,
+        `${shallowest.id}: 600 framea, uppoama ${s.player.sunk} framea`);
+    }
+
+    /* 6. Tähden lupaus, tarkalleen sellaisena kuin se on kirjattu: se suojaa
+     *    vihollisilta ja piikeiltä, ei kentältä itseltään. Hiekka on kenttä. */
+    {
+      const s = sandScene(deepest.id);
+      const i = mkInput();
+      dropInto(s, deepest.pool);
+      s.player.collect('star');
+      const frames = untilDeath(s, i);
+      expect('supertähti ei kanna juoksuhiekan yli',
+        frames !== null,
+        frames === null ? 'tähdellä ei kuollut lainkaan'
+          : `tähti päällä ${s.player.star} framea jäljellä, kuoli ${frames} framessa`);
+    }
+
+    /* 7. Isompi keho pitää päänsä pinnalla. Tämä ei ole armo vaan geometria,
+     *    ja se on kirjattava numerona: kuoppa on matalampi kuin keho. */
+    {
+      const depth = (deepest.pool.bottom - deepest.pool.top + 1) * 16;
+      const drowns = [];
+      for (let lvl = 0; lvl <= 5; lvl++) {
+        const s = sandScene(deepest.id, { type: 'shroom', level: lvl });
+        const i = mkInput();
+        dropInto(s, deepest.pool);
+        if (untilDeath(s, i) !== null) drowns.push(lvl);
+      }
+      const tall = SIZES.map((z, n) => (z.h >= depth ? n : -1)).filter((n) => n >= 0);
+      expect('hiekka ei hukuta kehoa joka on kuoppaa pidempi',
+        drowns.length > 0 && !drowns.some((n) => tall.includes(n)),
+        `kuoppa ${depth} px, kehot ${SIZES.map((z) => z.h).join('/')} px — `
+        + `hukkuvat voimatasot ${drowns.join(',') || 'ei yksikään'}`);
+    }
+
+    /* 8. Hiekka on hidas, ja se mitataan kuljettuna matkana eikä pelkkänä
+     *    nopeuslukuna: seinään puskeva pelaaja näyttää hitaalta myös silloin
+     *    kun hiekka ei hidasta mitään. Siksi lähtö on lammikon vasemmasta
+     *    reunasta, jotta 40 framen matka mahtuu lammikkoon. */
+    {
+      const s = sandScene(deepest.id);
+      const i = mkInput();
+      dropInto(s, deepest.pool);
+      s.player.x = deepest.pool.tx0 * 16;
+      for (let f = 0; f < 20; f++) { s.update(i); i.pressed = blank(); }
+      const from = s.player.x;
+      i.held.right = true;
+      i.held.run = true;
+      for (let f = 0; f < 40; f++) { s.update(i); i.pressed = blank(); }
+      const inSand = Math.abs(s.player.vx);
+      const sandRun = s.player.x - from;
+      const s2 = sandScene(deepest.id);
+      const i2 = mkInput();
+      const from2 = s2.player.x;
+      i2.held.right = true;
+      i2.held.run = true;
+      for (let f = 0; f < 40; f++) { s2.update(i2); i2.pressed = blank(); }
+      const onSand = Math.abs(s2.player.vx);
+      const groundRun = s2.player.x - from2;
+      /* Väite on sidottu olemassa olevaan vakioon eikä valittuun suhdelukuun:
+       * kahlauskaton pitää olla alle puolet kävelykatosta, eli hiekassa
+       * liikkuminen on hitaampaa kuin hitain tapa liikkua maalla. Kuljettu
+       * matka on mukana siksi, ettei katto jäisi pelkäksi luvuksi jota kukaan
+       * ei koskaan saavuta. */
+      expect('hiekassa kahlataan, päällä juostaan',
+        inSand > 0.1 && inSand <= QUICKSAND_WADE + 0.01
+        && QUICKSAND_WADE < MAX_WALK / 2 && sandRun < groundRun,
+        `hiekassa ${inSand.toFixed(2)} px/frame ja ${Math.round(sandRun)} px 40 framessa, `
+        + `maalla ${onSand.toFixed(2)} px/frame ja ${Math.round(groundRun)} px; `
+        + `kahlauskatto ${QUICKSAND_WADE} vastaan kävelykatto ${MAX_WALK}`);
+    }
+
+    /* 9. Pikatallennus keskellä uppoamista. `savestate.js` sarjallistaa jokaisen
+     *    oman kentän, joten tämä on ilmaista — mutta juuri siksi se on myös se
+     *    joka rikkoutuu hiljaa, jos uppoaminen joskus siirretään kohtaukseen. */
+    {
+      const s = sandScene(deepest.id);
+      const i = mkInput();
+      dropInto(s, deepest.pool);
+      for (let f = 0; f < 140; f++) { s.update(i); i.pressed = blank(); }
+      const before = { sunk: s.player.sunk, y: Math.round(s.player.y) };
+      const snap = captureState(game);
+      restoreState(game, snap);
+      const p2 = game.scene.player;
+      expect('pikatallennus kesken uppoamisen palaa kesken uppoamista',
+        before.sunk > 0 && p2.sunk === before.sunk && Math.round(p2.y) === before.y,
+        `ennen uppoama ${before.sunk} framea y=${before.y}, `
+        + `jälkeen ${p2.sunk} framea y=${Math.round(p2.y)}`);
+    }
+  } catch (e) {
+    expect('juoksuhiekan testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* A piranha hidden inside its pipe must not hurt anybody. Its box collapses
    * to zero height while it is down, but a zero-height box still straddles the
    * player's, so standing on the pipe mouth used to be lethal. */
@@ -2016,10 +2362,35 @@ const report = await page.evaluate(async () => {
       bad.length === 0,
       shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa`)
         .join(', '));
+
+    /*
+     * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
+     * yllä oleva. Muototesti katsoo yhtä maailmaa kerrallaan, joten uusi
+     * maailma voisi olla sisäisesti moitteeton ja silti helpompi kuin
+     * edellinen — pelaajan kannalta juuri se on se vika joka tuntuu.
+     * `difficulty.mjs` on tulostanut tämän rivin pitkään ("Käyrä nousee joka
+     * maailmassa"), ja tulostus ei ole portti.
+     *
+     * Luku on maailman tasojen keskiarvo linnake mukaan lukien, sama kuin
+     * työkalussa. Askelten koot vaihtelevat rajusti (+8,0 maailmaan 6, +66,8
+     * maailmaan 5) eikä sitä yritetä tasoittaa: askelen koko on toimituksellinen
+     * päätös, sen etumerkki ei ole.
+     */
+    const means = WORLDS.map((w) => {
+      const tiers = tiersOf(w);
+      const sum = tiers.reduce((s, t) => s + tierScore(w, t, DIFFICULTY), 0);
+      return { id: w.id, mean: sum / (tiers.length || 1) };
+    });
+    const falls = means.filter((m, i) => i > 0 && m.mean <= means[i - 1].mean);
+    expect('vaikeus nousee maailmasta maailmaan',
+      falls.length === 0,
+      means.map((m, i) => `${m.id} ${m.mean.toFixed(1)}`
+        + (i ? ` (${m.mean > means[i - 1].mean ? '+' : ''}${(m.mean - means[i - 1].mean).toFixed(1)})` : ''))
+        .join(', '));
   }
 
   /*
-   * 3. LUUMAAILMAN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
+   * 3. UUSIEN KÄSINTEHTYJEN MAAILMOJEN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
    *
    * DESIGN.md kohta 5 sanoo sen näin: tehostus avaa paikkoja, ei kenttää.
    * `tools/playable.mjs` mittaa juuri tätä koko pelistä, mutta se on raportti
@@ -2027,15 +2398,24 @@ const report = await page.evaluate(async () => {
    * liittyä siihen listaan huomaamatta, joten sen kolme numeroitua kenttää ja
    * linnake ajetaan täällä ja tulos on kaatava.
    *
+   * **Maailmat 6 ja 7 samassa silmukassa, ja se on väite eikä säästö.** Lupaus
+   * koskee koko peliä, mutta portiksi se voidaan nostaa vain siellä missä
+   * lähtötaso on puhdas: maailmoissa 1–5 on kolme tunnettua nimeä (4-3, ja
+   * 2-1 / 3-F / 5-F tuplahypyllä), ja niiden korjaaminen on eri työ kuin uuden
+   * maailman tekeminen. Käsintehdyt maailmat luulaaksosta eteenpäin eivät saa
+   * kasvattaa tuota listaa, ja tässä se on ajettavassa muodossa.
+   *
    * Botti on sama tyhmä botti: juoksee oikealle ja hyppää. Viholliset ja
    * vaarat poistetaan, koska kysymys on maastosta — vihollisen alle jääminen on
    * eri testi ja se on jo olemassa. Tehostuksia ei anneta yhtään: voimataso 0
-   * on se koko jolle lupaus on annettu.
+   * on se koko jolle lupaus on annettu. Se on samalla toinen puoli maahaniskun
+   * lupauksesta: botti ei osaa maahaniskua eikä sitä pyydetä siltä, joten
+   * kenttä joka vaatisi sitä jäisi tähän kiinni.
    */
   {
-    const bone = levelIds().filter((id) => id.startsWith('6-'));
+    const handmade = levelIds().filter((id) => /^[67]-/.test(id));
     const rows = [];
-    for (const id of bone) {
+    for (const id of handmade) {
       reset({ type: null, level: 0 });
       let finished = null;
       game.finishLevel = (r) => { finished = r; };
@@ -2093,11 +2473,261 @@ const report = await page.evaluate(async () => {
       });
     }
     const stuck = rows.filter((r) => !r.cleared);
-    expect('luumaailman jokainen kenttä on läpäistävissä voimatasolla 0',
-      rows.length === 4 && stuck.length === 0,
+    expect('luulaakson ja pilvimaailman jokainen kenttä on läpäistävissä voimatasolla 0',
+      rows.length === 8 && stuck.length === 0,
       rows.length
-        ? `${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
-        : 'ei 6-kenttiä lainkaan');
+        ? `${rows.length} kenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+        : 'ei 6- eikä 7-kenttiä lainkaan');
+  }
+
+  /* ----------------------------- pilvimaailma ---------------------------- */
+  /*
+   * Maailma 7, KAASUKEHÄ, ja kaksi ongelmaa jotka se on olemassa ratkaistakseen.
+   * Molemmat ovat sellaisia joihin maailma voi vastata väärin *ja silti näyttää
+   * valmiilta*, joten molemmat mitataan tässä eikä perustella kommentissa.
+   *
+   * ONGELMA 1: PELISSÄ ON JO TAIVAS. Jokaisen korkean kentän yllä on
+   * taivaskaista, ja `sky_garden` on jo paikka joka on tehty lavoista ilmassa.
+   * Jos kokonainen pilvimaailma lukee samalta, se ei ole uusi maailma vaan
+   * venytetty bonushuone — ja pahempaa, se halventaa salaisuuden jonka
+   * löydettäväksi tekeminen oli oikeaa työtä. Ero on tehty **lattiasta** ja se
+   * on siksi mitattavissa: bonushuoneessa ei ole lattiaa lainkaan, ja kaikki
+   * mille siellä voi astua on lautaa. Testi 3 laskee molemmat luvut molemmista.
+   *
+   * ONGELMA 2: PILVISTÄ TEHTY MAAILMA ON KUOPPA KOKO PITUUDELTAAN. Vastaus on
+   * kirjoitettu palikoihin ja tarkistetaan testeissä 1 ja 2: **tiivistynyt
+   * pilvi on maata**, eli lattia on tavallista `#`:ää, ja **ohut pilvi (`-`) ei
+   * ole koskaan tyhjän päällä**. Jälkimmäinen on se puolisko joka ostaa
+   * puoliläpäisevän lavan tähän maailmaan ilman sen omaa ansaa — alas
+   * painaminen vahingossa ei voi pudottaa tyhjään, koska tässä maailmassa
+   * lavan alla on aina pilveä.
+   */
+  {
+    const { CLOUD_CHUNKS } = await import('/src/data/chunks/cloud.js');
+    const { BONE_CHUNKS } = await import('/src/data/chunks/bone.js');
+    const { CHUNKS } = await import('/src/data/chunks.js');
+
+    /*
+     * 1. EI JALKOJA, ja se on luumaailman ehdon peilikuva.
+     *
+     * `chunks/bone.js` perustelee itsensä yhdellä lauseella: luu seisoo, eli
+     * jokainen `X` ja `#` lattian yläpuolella nojaa johonkin suoraan allaan,
+     * koska luuranko on määritelmän mukaan asia joka kannattaa itsensä. Pilvi
+     * on määritelmän mukaan asia joka **ei** kannata itseään, joten sääntö
+     * kulkee tässä täsmälleen toisin päin:
+     *
+     *   **mikään ei seiso maassa — kaikki pystysuunta leijuu.**
+     *
+     * Ei kukkuloita, ei portaita, ei hautakiviä: lattian yläpuolella ei ole
+     * yhtään `#`:ää eikä `X`:ää. Se maksaa saman kuin luumaailman sääntö maksoi
+     * — koko `steps_up`/`ledge`-sanasto on poissa käytöstä, ja korkeus on
+     * ostettava laudalla ja lohkolla — ja se on juuri se hinta jonka takia
+     * sääntö kannattaa kirjoittaa: se pakottaa maailman siluetin erilaiseksi
+     * kuin yhdenkään edellisen.
+     *
+     * Luumaailma mitataan tässä vastapariksi eikä kohteliaisuudesta: jos
+     * molemmat luvut olisivat nollia, sääntö ei erottaisi mitään.
+     */
+    const STANDS = '#X';
+    const legsIn = (chunks) => {
+      const out = [];
+      for (const [name, chunk] of Object.entries(chunks)) {
+        for (let y = 0; y < 13; y++) {
+          for (let x = 0; x < chunk.w; x++) {
+            if (STANDS.includes(chunk.rows[y][x])) out.push(`${name} ${x},${y}`);
+          }
+        }
+      }
+      return out;
+    };
+    const cloudLegs = legsIn(CLOUD_CHUNKS);
+    const boneLegs = legsIn(BONE_CHUNKS);
+    expect('pilvimaailmassa mikään ei seiso maassa, luumaailmassa kaikki seisoo',
+      cloudLegs.length === 0 && boneLegs.length > 0,
+      `${Object.keys(CLOUD_CHUNKS).length} pilvipalikkaa, maasta nousevia ruutuja `
+      + `${cloudLegs.length} — luussa ${boneLegs.length}`
+      + (cloudLegs.length ? `: ${cloudLegs.slice(0, 5).join(' ')}` : ''));
+
+    /*
+     * 2. OHUT PILVI EI OLE KOSKAAN TYHJÄN PÄÄLLÄ.
+     *
+     * Puoliläpäisevä lava on ollut pelissä alusta asti ja siinä on yksi ansa,
+     * joka on aina ollut siedettävä siksi että lavoja on ollut vähän: alas
+     * painaminen pudottaa lävitse, ja jos lavan alla ei ole mitään, se pudottaa
+     * kuoppaan. Maailma jonka koko pystysuunta on lautaa moninkertaistaa sen
+     * ansan — joten tässä maailmassa jokaisen `-`:n alla on samassa sarakkeessa
+     * kiinteää pilveä.
+     *
+     * Sääntö on ehdoton eikä ohje, ja sillä on hintansa: **tässä maailmassa
+     * yksikään lauta ei ylitä kuoppaa.** Jokainen reikä pilvessä hypätään.
+     * Muualla pelissä lauta kuopan yllä on tavallinen ja hyvä ratkaisu
+     * (`pit_l`, `sky_run`, `bone_ribs`, `sky_garden`), ja alla oleva luku
+     * mittaa juuri ne — jos se olisi nolla, sääntö ei kieltäisi mitään.
+     */
+    const hanging = (chunks) => {
+      let count = 0;
+      const where = [];
+      for (const [name, chunk] of Object.entries(chunks)) {
+        for (let y = 0; y < 15; y++) {
+          for (let x = 0; x < chunk.w; x++) {
+            if (chunk.rows[y][x] !== '-') continue;
+            let held = false;
+            for (let below = y + 1; below < 15; below++) {
+              if (STANDS.includes(chunk.rows[below][x])) { held = true; break; }
+            }
+            if (!held) { count++; if (where.length < 5) where.push(`${name} ${x},${y}`); }
+          }
+        }
+      }
+      return { count, where };
+    };
+    const cloudHang = hanging(CLOUD_CHUNKS);
+    const elsewhere = hanging(Object.fromEntries(
+      Object.entries(CHUNKS).filter(([name]) => !name.startsWith('cloud_'))));
+    expect('pilvimaailmassa yksikään ohut pilvi ei leiju tyhjän päällä',
+      cloudHang.count === 0 && elsewhere.count > 0,
+      `pilvimaailma ${cloudHang.count}, muu peli ${elsewhere.count}`
+      + (cloudHang.count ? `: ${cloudHang.where.join(' ')}` : ` (esim. ${elsewhere.where.join(' ')})`));
+  }
+
+  /*
+   * 3. TÄMÄ EI OLE VENYTETTY BONUSHUONE, JA SE ON MITATTU.
+   *
+   * Kaksi lukua per kenttä, ja ne ovat kaksi eri kysymystä:
+   *
+   *   **maaosuus** — kuinka monessa sarakkeessa on kiinteää lattiaa. Se on
+   *   vastaus kysymykseen "onko täällä lattia": paikassa on lattia, huoneessa
+   *   ei ole.
+   *   **lautaosuus astuttavasta** — kuinka suuri osa kaikesta mille voi astua
+   *   on ohutta pilveä. Se on vastaus kysymykseen "mistä täällä kuljetaan":
+   *   bonushuoneessa vastaus on sata prosenttia, koska siellä ei ole muuta.
+   *
+   * `sky_garden` mitataan samoilla riveillä ja se antaa 0 % ja 100 %. Jos
+   * pilvimaailman luvut lähestyvät noita, maailma on muuttunut siksi
+   * bonushuoneeksi jota se ei saa olla, ja se näkyy tässä ennen kuin se näkyy
+   * kenessäkään pelaajassa.
+   *
+   * Linnake 7-F jätetään pois tarkoituksella: se on jaettu `fort_*`-käytävä
+   * niin kuin joka maailman linnake, ja sen lattiassa on laavaa. Väite koskee
+   * niitä kolmea kenttää jotka ovat tämän maailman omia.
+   */
+  {
+    const { getLevel } = await import('/src/data/levels.js');
+    const { CHUNKS } = await import('/src/data/chunks.js');
+    const SOLIDF = '#X';
+    const shares = (rows, floorRow) => {
+      const w = rows[0].length;
+      let ground = 0;
+      let planks = 0;
+      let groundTiles = 0;
+      for (let x = 0; x < w; x++) {
+        const solid = SOLIDF.includes(rows[floorRow][x]) || SOLIDF.includes(rows[floorRow + 1][x]);
+        if (solid) ground++;
+        for (let y = 0; y < rows.length; y++) {
+          if (rows[y][x] === '-') planks++;
+          else if (SOLIDF.includes(rows[y][x])) groundTiles++;
+        }
+      }
+      const footing = planks + groundTiles;
+      return {
+        ground: (ground / w) * 100,
+        plank: footing ? (planks / footing) * 100 : 100,
+        w,
+      };
+    };
+    const levels = ['7-1', '7-2', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 13) }));
+    const garden = shares(CHUNKS.sky_garden.rows, 13);
+    const worstGround = levels.reduce((m, l) => Math.min(m, l.ground), 100);
+    const worstPlank = levels.reduce((m, l) => Math.max(m, l.plank), 0);
+    expect('pilvimaailmassa on lattia, bonushuoneessa ei — mitattuna molemmat',
+      levels.length === 3 && worstGround >= 80 && worstPlank <= 25
+      && garden.ground === 0 && garden.plank === 100,
+      `${levels.map((l) => `${l.id} maata ${l.ground.toFixed(0)} % / lautaa `
+        + `${l.plank.toFixed(0)} % (${l.w} saraketta)`).join(', ')}`
+      + ` — sky_garden maata ${garden.ground.toFixed(0)} % / lautaa ${garden.plank.toFixed(0)} %`);
+  }
+
+  /*
+   * 4. MAAHANISKULLA ON TÄSSÄ MAAILMASSA TILAA, MUTTEI VALTAA.
+   *
+   * Maahanisku (v26.08.09.31) normalisoi voimansa kentän omaa kattoa vasten,
+   * joten se on sitä kovempi mitä korkeammalta se aloitetaan — ja kerroksittain
+   * ladottu pilvimaailma on ainoa paikka pelissä jossa korkeutta on tarjolla
+   * ilman että sitä pitää erikseen rakentaa. Väite on kaksiosainen ja
+   * molemmat puolet mitataan:
+   *
+   *   - **alasimelta pudotettuna isku tappaa.** Maailman ylin lauta on
+   *     `cloud_anvil`in kansi, ja siltä alkava sukellus ylittää
+   *     POUND_KILL_AT-rajan (0,5) mitattuna eikä laskettuna.
+   *   - **lattialta hypättynä se ei tapa.** Sama liike tavallisen seisonnasta
+   *     tehdyn hypyn huipulta jää rajan alle, eli korkeus on se mikä ostaa
+   *     tappavuuden — ei tehostus eikä tämä maailma.
+   *
+   * Ja kolmas puoli on jo tarkistettu muualla: kohdan 3 botti ei osaa
+   * maahaniskua lainkaan ja läpäisee silti jokaisen 7-kentän voimatasolla 0,
+   * eli liike avaa paikkoja eikä kenttää (DESIGN.md kohta 5).
+   */
+  {
+    const { getLevel } = await import('/src/data/levels.js');
+    /* Ylin lauta koko maailmassa, ja siitä se sarake jonka vierestä pääsee
+     * putoamaan lattiaan asti — sukellus jonka jalat ovat jo kannen päällä ei
+     * mittaa mitään, koska se laskeutuu sille kannelle. */
+    let top = null;
+    for (const id of ['7-1', '7-2', '7-3']) {
+      const rows = getLevel(id).rows;
+      for (let y = 0; y < 13 && (!top || y < top.y); y++) {
+        for (let x = 0; x < rows[y].length - 1; x++) {
+          if (rows[y][x] !== '-' || rows[y][x + 1] === '-') continue;
+          let clear = true;
+          for (let d = y; d <= 12; d++) if (rows[d][x + 1] !== ' ') clear = false;
+          if (!clear || rows[13][x + 1] !== '#') continue;
+          top = { id, x: x + 1, y };
+          break;
+        }
+      }
+    }
+    const dive = (id, place) => {
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const i = mkInput();
+      const step = (held = {}, pressed = {}) => {
+        i.held = { ...blank(), ...held };
+        i.pressed = { ...blank(), ...pressed };
+        s.update(i);
+      };
+      place(s.player, step);
+      step({ down: true, jump: true }, { down: true, jump: true });
+      for (let f = 0; f < 240 && !s.lastPound; f++) step({ down: true });
+      return s.lastPound;
+    };
+    const fromDeck = top && dive(top.id, (p) => {
+      p.x = top.x * 16 + 1;
+      p.y = top.y * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = false;
+    });
+    const fromFloor = top && dive(top.id, (p, step) => {
+      p.x = top.x * 16 + 1;
+      p.y = 12 * 16 - p.h;
+      for (let f = 0; f < 20; f++) step();
+      step({ jump: true }, { jump: true });
+      for (let f = 0; f < 60 && p.vy < 0; f++) step({ jump: true });
+    });
+    /* Rivi 5 on `cloud_anvil`in kansi, ja se on osa väitettä eikä sen kuvaus:
+     * maailma jonka ylin lauta valuisi alaspäin lakkaisi olemasta se paikka
+     * jossa liikkeellä on tilaa, ja tekisi sen huomaamatta. */
+    expect('pilvimaailman ylimmältä laudalta maahanisku tappaa, lattiahypystä ei',
+      !!fromDeck && !!fromFloor && top.y <= 5 && fromDeck.kills && !fromFloor.kills,
+      top
+        ? `ylin lauta ${top.id} rivi ${top.y}: voima ${fromDeck ? fromDeck.strength.toFixed(2) : '—'}`
+        + ` (${fromDeck && fromDeck.kills ? 'tappaa' : 'ei tapa'}), lattiahypystä `
+        + `${fromFloor ? fromFloor.strength.toFixed(2) : '—'}`
+        + ` (${fromFloor && fromFloor.kills ? 'tappaa' : 'ei tapa'})`
+        : 'yhtään lautaa ei löytynyt maailmasta 7');
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -4018,7 +4648,7 @@ const report = await page.evaluate(async () => {
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
-    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F'];
+    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F', '7-F'];
 
     const arena = (power) => {
       reset(power);
@@ -4283,6 +4913,50 @@ const report = await page.evaluate(async () => {
         `naurua ${laughs.length}, kruunu pois ${doffs} kertaa, päähän ${donned}, vaiheet `
         + `${[...new Set(laughs.map((e) => e.phase))].join('/') || '-'}, `
         + `sävelkorkeus ${VOICES.luuranko ? VOICES.luuranko.pitchScale : 'ei ääntä'}`);
+    }
+
+    /* ------------------------------ sääherra ----------------------------- */
+    /*
+     * SÄÄHERRA, 7-F, `bossVariant: 5`, ja hän vastaa osumaan **nousemalla**.
+     *
+     * Kysymys on sama kuin luurangolla — mitä pomo tekee kun häneen osuu — ja
+     * vastaus tulee tämän maailman aiheesta: sää väistää ylöspäin. Muut pomot
+     * kiihtyvät, mikä on luku jonka pelaaja tuntee kolmen sekunnin päästä;
+     * tämä lähtee ilmaan samalla framella ja tulee alas iskuaaltojen kanssa,
+     * koska variantti >= 1 heittää ne kovasta laskeutumisesta. Yksi rivi
+     * (`jumpTimer = 1`) tuottaa siis koko ketjun eikä `REGISTRY` muutu.
+     *
+     * Mitataan vertailuna eikä yksin: molempien pomojen oma hyppykello
+     * asetetaan kauas, jotta ilmaan nouseminen ei voi olla sattumaa, ja
+     * luuranko ajetaan samalla mitalla. Ilman vertailua testi menisi läpi
+     * pelkästä siitä että pomot hyppivät muutenkin.
+     */
+    {
+      const liftOff = (id) => {
+        reset();
+        const s = new LevelScene(game, id);
+        game.setScene(s);
+        const b = s.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 60; f++) s.update(idle);   // anna hänen laskeutua
+        b.spikePhase = 'open';
+        b.spikeTimer = 1e6;
+        b.invuln = 0;
+        b.jumpTimer = 9999;                            // oma kello pois pelistä
+        b.chargeTimer = 9999;
+        b.stomp();
+        for (let f = 0; f < 40; f++) {
+          s.update(idle);
+          if (!b.onGround) return { at: f, variant: b.variant };
+        }
+        return { at: -1, variant: b.variant };
+      };
+      const storm = liftOff('7-F');
+      const skeleton = liftOff('6-F');
+      expect('sääherra nousee ilmaan osumasta, luuranko ei',
+        storm.variant === 5 && storm.at >= 0 && storm.at <= 3 && skeleton.at < 0,
+        `sääherra (variantti ${storm.variant}) ilmassa framella ${storm.at}, `
+        + `luuranko (variantti ${skeleton.variant}) framella ${skeleton.at} — 40 framen ikkuna`);
     }
 
     /* ------------------------ jättiläisen kannet ------------------------ */
@@ -7331,6 +8005,160 @@ const report = await page.evaluate(async () => {
         rows.map((r) => `${r.id} ${r.below.toFixed(0)}px alla / ${r.lag.toFixed(0)}px jäljessä`).join(' '));
     }
 
+    /*
+     * Red before green (DESIGN.md §7) for the owner's third camera report:
+     * "vertical camera movement when falling down from a platform that is
+     * above the ground is still janky". The rise was fixed by anticipating
+     * (CAM_TOP_LEAD); this is the same axis falling, and it was still wrong.
+     *
+     * **The complaint stated as a number: how long does the camera keep moving
+     * after the player has stopped?** Feet stop dead on contact. An exponential
+     * ease chasing a target that moves at v settles a constant (1-e)/e = 3v
+     * behind it, so at TERMINAL the view was 12 px in debt at the moment of
+     * touchdown and paid it off afterwards, gliding on while the body it was
+     * following stood still. That is inertia, and the comment on `updateCamera`
+     * says in as many words that inertia is what makes a platformer seasick —
+     * the horizontal axis goes to real lengths to avoid it and the vertical
+     * axis had it.
+     *
+     * Measured before, walking or jumping off a real ledge in a real level:
+     * 6.97 px over 10 frames (4-1), 4.30 px over 9 (2-3), 4.12 px over 9 (2-1).
+     * The ordinary 15-row levels hid it — 0.71 px over 2 frames in 1-1 — not
+     * because the camera was well behaved but because those levels only have
+     * 32 px of vertical travel and the level's own limit paid the debt off
+     * mid-fall. It is the letterboxed and banded levels, where the camera has
+     * room, that show what the mechanism actually does.
+     *
+     * The fixture is a real ledge and not a teleport: the deepest edge in the
+     * level with four to eight tiles of air and a floor under it, walked off
+     * and jumped off. Both, because they are different: walking off starts the
+     * camera and the body from rest together, while jumping off means the body
+     * is already at TERMINAL by the time it passes the line it left.
+     *
+     * `CAM_SNAP` was measured too and it is **not** part of this: over every
+     * fall here the biggest gap between the view and where it wants to be is
+     * 14.5 px against a threshold of 48, so no real fall has ever reached the
+     * cut. (Landing *on* a raised platform does — see the note in level.js.)
+     */
+    {
+      /** The deepest walk-off edge in the level with a floor under it. */
+      const ledge = (s, minDrop, maxDrop) => {
+        let best = null;
+        for (let tx = 4; tx < s.w - 8; tx++) {
+          for (let ty = 2; ty < s.h - 3; ty++) {
+            if (!s.solidAt(tx, ty)) continue;
+            if (s.solidAt(tx, ty - 1) || s.solidAt(tx, ty - 2) || s.solidAt(tx, ty - 3)) continue;
+            if (s.solidAt(tx + 1, ty) || s.solidAt(tx + 1, ty - 1)) continue;
+            let d = 1;
+            while (ty + d < s.h && !s.solidAt(tx + 1, ty + d) && !s.solidAt(tx + 2, ty + d)) d++;
+            if (ty + d >= s.h || d < minDrop || d > maxDrop) continue;
+            if (!best || d > best.drop) best = { tx, ty, drop: d };
+          }
+        }
+        return best;
+      };
+
+      const fall = (id, mode) => {
+        reset();
+        const s = new LevelScene(game, id);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const spot = ledge(s, 4, 8);
+        if (!spot) return null;
+        const p = s.player;
+        p.x = spot.tx * TILE + 2;
+        p.y = spot.ty * TILE - p.h;
+        p.vx = 0;
+        p.vy = 0;
+        p.onGround = true;
+        s.centerCamera();
+        const input = mkInput();
+        for (let f = 0; f < 40; f++) s.update(input);   // let the view settle
+        let left = -1;
+        let landed = -1;
+        let after = 0;
+        let tail = 0;
+        let rise = 0;
+        let below = Infinity;
+        let pounded = false;
+        for (let f = 0; f < 240; f++) {
+          input.held = blank();
+          input.pressed = blank();
+          input.held.right = true;
+          if (mode === 'jump' && f === 0) input.pressed.jump = true;
+          if (mode === 'jump' && f < 14) input.held.jump = true;
+          if (mode === 'pound' && left >= 0 && !p.onGround && !pounded && f > left + 2) {
+            input.held.down = true;
+            input.pressed.jump = true;
+            input.held.jump = true;
+            pounded = true;
+          } else if (mode === 'pound' && pounded && !p.onGround) input.held.down = true;
+          const wasGround = p.onGround;
+          const camBefore = s.cam.y;
+          s.update(input);
+          const d = s.cam.y - camBefore;
+          if (left < 0 && wasGround && !p.onGround) left = f;
+          if (left >= 0) {
+            rise = Math.max(rise, -d);
+            below = Math.min(below, s.cam.y + s.viewH - (p.y + p.h));
+          }
+          if (left >= 0 && landed < 0 && p.onGround) landed = f;
+          if (landed >= 0 && f > landed) {
+            if (Math.abs(d) > 0.1) after = f - landed;
+            tail += Math.abs(d);
+          }
+          if (landed >= 0 && f > landed + 45) break;
+        }
+        return {
+          id, mode, drop: spot.drop, after, tail, rise, below, landed,
+          pounded: mode !== 'pound' || pounded,
+        };
+      };
+
+      const ids = ['1-1', '2-1', '2-3', '4-1', '5-1', '1-2'];
+      const rows = [];
+      for (const mode of ['walk', 'jump']) for (const id of ids) {
+        const r = fall(id, mode);
+        if (r) rows.push(r);
+      }
+      const say = (r) => `${r.id} ${r.mode} ${r.tail.toFixed(2)} px / ${r.after} framea`;
+
+      /* 3.5 px is the ceiling for the same reason 2.5 is the ceiling on the
+       * rising side: it is under the 6.97 px the debt produced and over the
+       * 2.94 px the anticipation leaves, so it is the inertia that cannot come
+       * back rather than the whole mechanism being frozen. */
+      expect('a view that has fallen stops when the player stops',
+        rows.length >= 10 && rows.every((r) => r.tail < 3.5 && r.after <= 8),
+        rows.map(say).join(', '));
+
+      /* And the anticipation must be bought out of itself, not out of the two
+       * things that were already right: the view still may not creep upward
+       * during a fall, and what you are falling towards still may not leave
+       * the bottom of the window. */
+      expect('anticipating the fall costs neither the ground below nor the hold',
+        rows.every((r) => r.rise < 0.01 && r.below > 24),
+        rows.map((r) => `${r.id} ${r.mode} ylös ${r.rise.toFixed(2)} px, `
+          + `alla ${r.below.toFixed(0)} px`).join(', '));
+
+      /*
+       * The ground pound gets its own line and its own number, and the number
+       * is bigger on purpose. The dive is 7.5 px/frame — 1.9x TERMINAL — and
+       * it starts from a dead hang, so its own lag is 22.5 px rather than 12.
+       * The lead may only grow as fast as gravity could grow it, which is what
+       * stops the dive's standing start from jerking the view (that costs the
+       * dive most of its lead), so this improves rather than disappears:
+       * 11.51 px over 12 frames before, 8.47 over 11 after, worst case 2-3.
+       */
+      const pounds = [];
+      for (const id of ids) {
+        const r = fall(id, 'pound');
+        if (r) pounds.push(r);
+      }
+      expect('a ground pound is not followed down by the view it landed under',
+        pounds.length >= 5 && pounds.every((r) => r.pounded && r.tail < 9.5),
+        pounds.map(say).join(', '));
+    }
+
     /* ---------------------------- vihainen aurinko ---------------------- */
     /*
      * The sun is the one enemy that positions itself against the camera, which
@@ -7981,6 +8809,60 @@ const report = await page.evaluate(async () => {
     Music.stop();
   }
 
+  /*
+   * KAASUKEHÄ, ELI SE ETTÄ LYYDINEN ON DATASSA EIKÄ TUNNELMASSA.
+   *
+   * Maailman 7 raita on **tätä peliä varten sävelletty** — ei `source`-kenttää,
+   * eikä sitä kysytä miltään, koska DESIGN.md kohdan 1 b sääntö koskee
+   * lainattua eikä kaikkea. Vapautuneesta sävelmistöstä ei löytynyt teosta joka
+   * olisi ollut *tämä paikka* samalla tavalla kuin Danse macabre oli
+   * luulaakso, ja aihevalinta on ainoa peruste jolla lainaaminen on tässä
+   * pelissä tehty.
+   *
+   * Sävellyksen yksi ajatus on kirjoitettavissa numeroina, joten se
+   * tarkistetaan: raita on **D-lyydisessä**. Lyydinen on duuriasteikko jonka
+   * neljäs sävel on korotettu, ja juuri se yksi sävel on syy valita se tänne:
+   * korotettu kvartti poistaa vetovoiman subdominanttiin, eli harmonia ei
+   * koskaan kallistu alaspäin. Se on kirjaimellisesti sen soundi ettei mikään
+   * laskeudu — mikä on tämän maailman koko aihe.
+   *
+   * Kaksi lukua, ja molemmat rikkoutuvat yhdestä nuotista:
+   *   - **alennettua kvarttia (G) ei ole kertaakaan.** Yksi G ja moodi on
+   *     jälleen tavallinen duuri, eikä kukaan osaisi etsiä sitä yhtä säveltä.
+   *   - **korotettu kvartti (G#) soi useasti.** Lyydinen jossa ei koskaan soi
+   *     sen oma sävel on lyydinen vain paperilla.
+   */
+  {
+    Sfx.resume();
+    Music.play('cloud');
+    const track = Music._track;
+    /* D on -7 puolisävelaskelta A:sta, joten sävelluokka lasketaan siitä. */
+    const pcOf = (semi) => (((semi + 7) % 12) + 12) % 12;
+    const LYDIAN = [0, 2, 4, 6, 7, 9, 11];
+    const counts = new Array(12).fill(0);
+    const collect = (notes) => {
+      for (const [semi] of notes || []) {
+        if (semi === null || semi === undefined) continue;
+        for (const s of Array.isArray(semi) ? semi : [semi]) counts[pcOf(s)]++;
+      }
+    };
+    for (const name of ['lead', 'harm', 'bass']) {
+      const voice = (track || {})[name];
+      if (!voice) continue;
+      collect(voice.notes);
+      for (const phrase of voice.phrases || []) collect(phrase);
+    }
+    const outside = counts
+      .map((n, pc) => ({ pc, n }))
+      .filter((x) => x.n && !LYDIAN.includes(x.pc));
+    expect('pilviraita on D-lyydinen: korotettu kvartti soi, alennettua ei ole',
+      outside.length === 0 && counts[6] >= 8 && counts[5] === 0,
+      `G# ${counts[6]} kertaa, G ${counts[5]} kertaa, asteikon ulkopuolella `
+      + `${outside.map((x) => `pc${x.pc}×${x.n}`).join(' ') || 'ei mitään'}`
+      + ` — säveliä yhteensä ${counts.reduce((a, b) => a + b, 0)}`);
+    Music.stop();
+  }
+
   /* ------------------------------ rendering ---------------------------- */
   {
     const { drawBackdrop } = await import('/src/gfx/backdrop.js');
@@ -7998,7 +8880,7 @@ const report = await page.evaluate(async () => {
     };
     const badBg = [];
     for (const theme of Object.keys(THEMES)) {
-      for (const bg of ['hills', 'dunes', 'peaks', 'bones', 'factory', 'none']) {
+      for (const bg of ['hills', 'dunes', 'peaks', 'bones', 'clouds', 'factory', 'none']) {
         try {
           const near = shot(bg, theme, 0, 24);
           const far = shot(bg, theme, 640, 24);
@@ -8087,6 +8969,51 @@ const report = await page.evaluate(async () => {
         !!bone && bone.gap > best.gap,
         `${gaps.map((x) => `${x.theme} ${x.gap.toFixed(1)} %`).join(', ')}`
         + ` — muista paras ${best.theme}, huonoin ${worst.theme}`);
+
+      /*
+       * Ja juoksuhiekan pitää erottua siitä maasta johon se on kaivettu.
+       *
+       * Kynnys ei ole makuasia vaan sama mitta yhtä askelta tiukempana: aavikon
+       * oma maa/tiili-pari on 8,6 %, ja se on pelin heikoimpia — tiedossa oleva
+       * ongelma, ei tavoite. Uhka jota ei tunnista ensi silmäyksellä on juuri se
+       * laji jota tässä pelissä ei saa olla (sama sääntö kuin piikkien
+       * varoitusraidalla), joten hiekan ja maan eron on oltava suurempi kuin
+       * tuon parin. Toinen puolisko on ettei se saa lukea laavana: kaksi
+       * samanlaista signaalia opettaa väärän lukutavan.
+       */
+      const sandGap = gapOf('desert');
+      const quick = meanOf(T.QUICKSAND, 'desert');
+      const ground = meanOf(T.GROUND, 'desert');
+      const lava = meanOf(T.LAVA, 'desert');
+      const sep = (a, b) => (!a || !b ? 0
+        : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
+      const vsGround = sep(quick, ground);
+      const vsLava = sep(quick, lava);
+      expect('juoksuhiekka erottuu aavikon maasta selvemmin kuin maa erottuu tiilestä',
+        !!quick && vsGround > sandGap && vsLava > sandGap,
+        `hiekka vs maa ${vsGround.toFixed(1)} %, hiekka vs laava ${vsLava.toFixed(1)} %, `
+        + `aavikon maa vs tiili ${sandGap.toFixed(1)} %`);
+
+      /*
+       * Ja pilviteema on juuri se teema joka tämän testin kuuluisi kaataa.
+       *
+       * Valkoista valkoisella on koko maailman lähtökohta, ja se on samalla se
+       * tapa jolla teema epäonnistuisi hiljaa: rikottava lohko sulaisi maahan
+       * kuten yössä (0,4 %), eikä kukaan huomaisi ennen kuin joku juoksisi
+       * kentän läpi ja ihmettelisi minne palikat katosivat. Siksi tässä
+       * maailmassa maa ja tiili ovat **kaksi eri pilveä**: pohjapilvi on
+       * auringon puolelta valaistua, tiili on ukkospilveä. Kynnys 25 % on
+       * korkeampi kuin yhdelläkään ennen luumaailmaa toimitetulla teemalla,
+       * eli se ei mene läpi vahingossa — ja luumaailman oma väite yllä pitää
+       * huolen ylärajasta, koska se vaatii olevansa koko pelin selvin pari.
+       */
+      const cloud = gaps.find((x) => x.theme === 'cloud');
+      expect('pilvimaailman tiili erottuu maasta vaikka molemmat ovat pilveä',
+        !!cloud && cloud.gap >= 25,
+        cloud ? `pilvi ${cloud.gap.toFixed(1)} %, kynnys 25 % — jää ${
+          (gaps.find((x) => x.theme === 'ice') || {}).gap.toFixed(1)} %, yö ${
+          (gaps.find((x) => x.theme === 'night') || {}).gap.toFixed(1)} %`
+          : 'ei pilviteemaa lainkaan');
     }
 
     /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
@@ -8931,6 +9858,178 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     && compareTable(dropped, measured).length === 1
     && compareTable(extra, measured).length === 1)) {
     report.failures.push('vaikeustaulun vertailu ei huomaa vanhentumista');
+  }
+}
+
+/*
+ * JUOKSUHIEKKA KOLMESSA PAIKASSA, JA MITÄ VÄÄRÄ LUKUTAPA MAKSAA.
+ *
+ * ROADMAP kirjaa ansan: uusi ruutumerkki on kolme paikkaa eikä yksi. `TILE_INFO`
+ * kertoo mitä merkki *on*, `src/data/rules.js` mitä validaattori siitä ajattelee
+ * ja `tools/gen-levels.mjs` mitä generaattori siitä ajattelee — ja kaksi
+ * jälkimmäistä ovat kopioita, koska validaattori ei saa importoida generaattoria
+ * eikä toisin päin. Kopio on halvempi kuin sidos vain niin kauan kuin joku
+ * tarkistaa että kopiot ovat samat, ja tämä on se tarkistus.
+ *
+ * Väärä lukutapa ei kaada mitään, se vain valehtelee. Hiekka kuiluna hylkäisi
+ * kelvollisia kenttiä ja pakottaisi astinkiven paikkaan jossa sellaista ei
+ * tarvita; hiekka tavallisena maana siunaisi lammikon jolla ei ole pohjaa, eli
+ * pohjattoman kuilun jonka päälle on maalattu hiekkaa. Molemmat testataan
+ * rikkinäisellä koekentällä, koska sääntö jota on koeteltu vain toimivalla
+ * sisällöllä ei ole koeteltu millään.
+ */
+{
+  const { validateLevel } = await import('../src/data/rules.js');
+  const { scoreRows } = await import('./difficulty.mjs');
+  const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+
+  /* Yksi koekenttä, 32 saraketta: tasamaata, keskellä yhden ruudun korkuinen
+   * hiekkatörmä ja siihen kaivettu kahden ruudun syvyinen lammikko. Sama pohja
+   * joka vialle, yksi vika kerrallaan. */
+  const fixture = (over = {}) => {
+    const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+    const put = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
+    put(9, '      !');
+    put(12, '  1             XXX~~~XXXX  F   ');
+    put(13, '################XXX~~~XXXX######');
+    put(14, '################################');
+    for (const [y, s] of Object.entries(over)) put(Number(y), s);
+    return rows;
+  };
+
+  const clean = validateLevel(fixture(), budget);
+  const sandProblems = (list) => list.filter((p) => /hiekk|quicksand/i.test(p));
+
+  report.checks.push({
+    name: 'kelvollinen hiekkalammikko ei ole validaattorille ongelma',
+    ok: clean.length === 0,
+    detail: clean.length ? clean.join('; ') : '32 saraketta, 3 ruutua hiekkaa, ei huomautuksia',
+  });
+  if (clean.length) report.failures.push(...clean.map((p) => `hiekkakoekenttä: ${p}`));
+
+  /* Pohjaton lammikko: hiekka maalattu kuilun päälle. Tämä on se tapaus jossa
+   * "hiekka on tavallista maata" menisi hiljaa läpi. */
+  const noFloor = validateLevel(fixture({
+    13: '################XXX~~~XXXX######',
+    14: '###################   ##########',
+  }), budget);
+  report.checks.push({
+    name: 'pohjaton hiekkalammikko raportoidaan, ei siunata maana',
+    ok: sandProblems(noFloor).length > 0,
+    detail: sandProblems(noFloor)[0] || `ei huomautusta hiekasta (${noFloor.join('; ') || 'ei mitään'})`,
+  });
+  if (!sandProblems(noFloor).length) {
+    report.failures.push('validaattori ei huomaa hiekkaa pohjattoman kuilun päällä');
+  }
+
+  /* Yhdeksän saraketta hiekkaa on leveämpi kuin hyppybudjetti kantaa — ja silti
+   * ei kuilu, koska hiekasta noustaan pintaan ja kahlataan yli. Jos tämä alkaa
+   * raportoida "gap of 9", validaattori on alkanut lukea hiekkaa kuiluna. */
+  const wide = validateLevel(fixture({
+    12: '  1          XXX~~~~~~~~~XXX F  ',
+    13: '#############XXX~~~~~~~~~XXX####',
+  }), budget);
+  report.checks.push({
+    name: 'leveä hiekkalammikko ei ole kuilu',
+    ok: !wide.some((p) => p.startsWith('gap of')),
+    detail: wide.some((p) => p.startsWith('gap of'))
+      ? wide.filter((p) => p.startsWith('gap of')).join('; ')
+      : `9 saraketta hiekkaa, hyppybudjetti ${budget.gapTiles} — ei kuiluhuomautusta`,
+  });
+  if (wide.some((p) => p.startsWith('gap of'))) {
+    report.failures.push('validaattori lukee hiekkalammikon kuiluna');
+  }
+
+  /* Ja kuoppa jonka reunalle ei nousta. Varoaika tekee sijoittelusta koko työn:
+   * hiekka aukealla on säikähdys, hiekka kaivossa on ansa. */
+  const walled = validateLevel(fixture({
+    7: '                XXX   XXXX      ',
+    8: '                XXX   XXXX      ',
+    9: '      !         XXX   XXXX      ',
+    10: '                XXX   XXXX      ',
+    11: '                XXX   XXXX      ',
+    12: '  1             XXX~~~XXXX  F   ',
+  }), budget);
+  report.checks.push({
+    name: 'hiekkakuoppa jonka reunalle ei nousta raportoidaan',
+    ok: sandProblems(walled).some((p) => /reuna|rim/i.test(p)),
+    detail: sandProblems(walled)[0] || 'ei huomautusta seinien sisään kaivetusta kuopasta',
+  });
+  if (!sandProblems(walled).some((p) => /reuna|rim/i.test(p))) {
+    report.failures.push('validaattori ei huomaa hiekkakuoppaa josta ei pääse ulos');
+  }
+
+  /* Sama virhe jonka piikkikävelijä teki tänä aamuna: uhka jota mittari ei näe.
+   * Kaksi identtistä kenttää, toisessa hiekkaa — jos luku ei nouse, maailman 2
+   * käyrä on väärä ja `verify.mjs`:n muototarkistus mittaa väärää kenttää. */
+  const withSand = scoreRows(fixture());
+  const withoutSand = scoreRows(fixture({
+    12: '  1             XXXXXXXXXX  F   ',
+    13: '################XXXXXXXXXX######',
+  }));
+  report.checks.push({
+    name: 'vaikeusmittari näkee juoksuhiekan',
+    ok: withSand > withoutSand + 0.5,
+    detail: `sama kenttä hiekalla ${withSand.toFixed(1)}, ilman ${withoutSand.toFixed(1)} `
+      + `(+${(withSand - withoutSand).toFixed(1)})`,
+  });
+  if (!(withSand > withoutSand + 0.5)) {
+    report.failures.push('vaikeusmittari pisteyttää juoksuhiekan nollaksi');
+  }
+
+  /* Kolme paikkaa, ja kaksi niistä on tarkoituksellisia kopioita. Verrataan
+   * merkkijonoina: se on ainoa tapa huomata että toinen kopio jäi päivittämättä. */
+  const src = {
+    tiles: await readFile(join(ROOT, 'src/gfx/tiles.js'), 'utf8'),
+    rules: await readFile(join(ROOT, 'src/data/rules.js'), 'utf8'),
+    gen: await readFile(join(ROOT, 'tools/gen-levels.mjs'), 'utf8'),
+    diff: await readFile(join(ROOT, 'tools/difficulty.mjs'), 'utf8'),
+  };
+  const sinkLine = /const SINK = new Set\(\[[^\]]*\]\);/;
+  const inRules = (src.rules.match(sinkLine) || [])[0];
+  const inGen = (src.gen.match(sinkLine) || [])[0];
+  const places = [
+    ['src/gfx/tiles.js', /QUICKSAND: '~'/.test(src.tiles) && /\[T\.QUICKSAND\]:/.test(src.tiles)],
+    ['src/data/rules.js', !!inRules && inRules.includes("'~'")],
+    ['tools/gen-levels.mjs', !!inGen && inGen === inRules],
+    ['tools/difficulty.mjs', /QUICKSAND_COST|'~'/.test(src.diff)],
+  ];
+  const missing = places.filter(([, ok]) => !ok).map(([f]) => f);
+  report.checks.push({
+    name: 'uusi ruutumerkki on kaikissa paikoissa joissa sen pitää olla',
+    ok: missing.length === 0,
+    detail: missing.length ? `puuttuu: ${missing.join(', ')}`
+      : `${places.length} paikkaa, rules.js ja gen-levels.mjs sanasanaisesti samat`,
+  });
+  if (missing.length) report.failures.push(...missing.map((f) => `~ puuttuu tiedostosta ${f}`));
+
+  /*
+   * DESIGN.md kohta 8: kuva ja ääni yhdessä, eikä kumpikaan saa lukea väärin.
+   * Äänen väärä lukutapa on laava tai vesi, ja ne molemmat ovat pyyhkäisyjä —
+   * yksi suodin joka liukuu. Hiekka on rakeita: monta lyhyttä purskausta
+   * peräkkäin. Sitä ei voi mitata korvalla testissä, mutta rakenteen voi lukea,
+   * ja rakenne on juuri se päätös joka muuten kumoutuisi hiljaa.
+   */
+  const audio = await readFile(join(ROOT, 'src/core/audio.js'), 'utf8');
+  const body = (name) => {
+    const at = audio.indexOf(`\n  ${name}: () => {`);
+    if (at < 0) return '';
+    return audio.slice(at, audio.indexOf('\n  },', at));
+  };
+  const sink = body('upota');
+  // Rakeita voi olla kirjoitettuna joko peräkkäisinä kutsuina tai silmukkana;
+  // väite koskee niiden lukumäärää, ei kirjoitusasua.
+  const loop = sink.match(/i < (\d+); i\+\+/);
+  const grains = Math.max((sink.match(/noise\(/g) || []).length,
+    loop && sink.includes('noise(') ? Number(loop[1]) : 0);
+  report.checks.push({
+    name: 'hiekan ääni on rakeita eikä pyyhkäisy, eikä se ole märkä',
+    ok: grains >= 4 && !sink.includes('farty('),
+    detail: sink ? `${grains} rakeista purskausta, farty: ${sink.includes('farty(') ? 'on' : 'ei'}`
+      : 'ääntä upota ei ole',
+  });
+  if (!(grains >= 4 && !sink.includes('farty('))) {
+    report.failures.push('juoksuhiekan ääni ei erotu laavasta ja vedestä rakenteeltaan');
   }
 }
 

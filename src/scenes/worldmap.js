@@ -347,9 +347,11 @@ export class WorldMapScene {
     const sway = (tx, ty, amount) =>
       Math.round(Math.sin(this.tick / 24 + tx * 0.8 + ty * 0.5) * amount);
     const base = th === 'desert' ? '#e8c070' : th === 'ice' ? '#cfe6ff'
-      : th === 'factory' ? '#4a4460' : th === 'bone' ? '#5a5c50' : '#4cb04c';
+      : th === 'factory' ? '#4a4460' : th === 'bone' ? '#5a5c50'
+        : th === 'cloud' ? '#e6eefc' : '#4cb04c';
     const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
-      : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038' : '#348a34';
+      : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038'
+        : th === 'cloud' ? '#b6c6e4' : '#348a34';
     ctx.fillStyle = base;
     ctx.fillRect(0, MAP_Y, 320, MAP_H);
 
@@ -510,6 +512,63 @@ export class WorldMapScene {
             ctx.fillStyle = '#8e8878';
             ctx.fillRect(x + 4, y + 10, 8, 1);
             ctx.fillRect(x + 6, y + 13 + nod, 4, 1);
+            break;
+          }
+          case 'c': {
+            // Pilvipintaa. Tasainen merkki, eli se kuuluu tien alle: pyöreitä
+            // kuhmuja ja niiden alle sinertävä varjo, ei mitään joka nousisi
+            // ruudun keskiriveille missä polun piste on.
+            const n = hashNoise(tx * 7, ty * 3);
+            if (n > 0.62) {
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(x + 3, y + 10, 8, 3);
+              ctx.fillRect(x + 5, y + 9, 4, 1);
+              ctx.fillStyle = '#c2d0ea';
+              ctx.fillRect(x + 3, y + 13, 8, 1);
+            } else if (n < 0.22) {
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(x + 8, y + 12, 5, 2);
+            }
+            break;
+          }
+          case 'i': {
+            /* Repeämä pilvessä, ja kartan puolisko siitä väitteestä jonka
+             * kentät tekevät lattiallaan: tämä maailma on jonkin *päällä*.
+             * Aukosta näkyy peltoa ja metsää liian kaukaa erottuakseen
+             * miksikään — jos siitä tunnistaisi pellon, se olisi maisema; kun
+             * siitä ei tunnista mitään, se on korkeus. Tasainen merkki, joten
+             * se ei ole `TALL_TERRAIN`issa eikä tarvitse tilaa tien vierestä. */
+            ctx.fillStyle = '#5c7a4c';
+            ctx.fillRect(x + 3, y + 7, 10, 7);
+            ctx.fillStyle = '#7a6a44';
+            ctx.fillRect(x + 4, y + 9, 4, 2);
+            ctx.fillRect(x + 9, y + 11, 3, 2);
+            ctx.fillStyle = '#46603c';
+            ctx.fillRect(x + 3, y + 13, 10, 1);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 1, y + 6, 13, 2);
+            ctx.fillRect(x + 2, y + 14, 12, 2);
+            break;
+          }
+          case 'U': {
+            /* Ukkospää. Piirretään y+1..y+13, eli se osuu polun pisteen
+             * musteeseen (y+5..y+10) kuten puu ja kallo — siksi se on
+             * `TALL_TERRAIN`issa. Pohja on leveä, laki on alasin, ja alin
+             * kerros on tummin: ukkospilvi on ainoa pilvi jonka silmä lukee
+             * uhkana, ja se lukee sen pohjan väristä. */
+            const drift = Math.round(Math.sin(this.tick / 40 + tx * 0.7) * 1);
+            ctx.fillStyle = '#f4f8ff';
+            ctx.fillRect(x + 2 + drift, y + 1, 12, 3);
+            ctx.fillStyle = '#c8d4ec';
+            ctx.fillRect(x + 4 + drift, y + 4, 8, 4);
+            ctx.fillStyle = '#8e9cc0';
+            ctx.fillRect(x + 3, y + 8, 10, 4);
+            ctx.fillStyle = '#5c6890';
+            ctx.fillRect(x + 4, y + 12, 8, 1);
+            if (Math.floor(this.tick / 9 + tx * 3) % 24 === 0) {
+              ctx.fillStyle = '#fff4a0';
+              ctx.fillRect(x + 7, y + 12, 1, 3);
+            }
             break;
           }
           case '"': {
