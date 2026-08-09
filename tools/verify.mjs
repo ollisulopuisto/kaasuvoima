@@ -7632,6 +7632,132 @@ const report = await page.evaluate(async () => {
       same.length === 0, same.slice(0, 4).join('; '));
   }
 
+  /* ------------------------ hahmon oma ulkonäkö ------------------------- */
+  /*
+   * Two measurements that stand for a decision rather than for a bug: the hero
+   * is this game's own character and not the genre's most-copied costume. Both
+   * are shape and colour, not naming, because a sprite cannot be checked by
+   * asking it what it is called.
+   *
+   *  1. **The head is a head, not a peaked cap.** A brim is the one thing on a
+   *     platform hero that is wider than the skull it sits on, and the old
+   *     drawing made it exactly as wide as the whole character: 12 px of brim
+   *     across a 14 px body, 10 across a 12 px one, with the crown only 9 and 8.
+   *     The rule is therefore about *width*, not about colour — a red cap
+   *     repainted green is still a cap. The head, measured on the rows just
+   *     below the top of the box, has to be at least four pixels narrower than
+   *     the body: room for a skull and hair, no room for a brim.
+   *
+   *     The top row of the box is left out of the measurement on purpose. That
+   *     is where the kaasulehti's fronds sit, and they are a named exception in
+   *     the audit above for the same reason they are one here: they are not the
+   *     head, they are what the power-up put on it.
+   *
+   *  2. **The five power looks are five looks.** `POWER_LOOKS` used to change
+   *     the cap and nothing else between "no power" and the first mushroom, so
+   *     two of the five tiers were the same drawing with a hat repainted —
+   *     about a quarter of the body. A tier a player cannot name at a glance is
+   *     not a tier, and at 12x16 a quarter of the body is a detail. Measured as
+   *     the share of the character's own pixels that actually change between
+   *     every pair of tiers, at the smallest size and the largest, since those
+   *     are the two that could disagree.
+   *
+   * Both numbers are reported so that a future palette can be argued with in
+   * numbers: they are the floor, not the target.
+   */
+  {
+    const sprites = await import('/src/gfx/sprites.js');
+    const { PLAYER_SIZES, drawPlayer } = sprites;
+    const W = 80; const H = 80; const OX = 26; const OY = 14;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const TYPES = [null, 'shroom', 'flower', 'leaf', 'pop'];
+    /* Artwork is told apart from its own outline the same way the audit above
+     * does it: the outline only ever reaches full alpha where all four offsets
+     * stack, and there it lands on 16,16,23 — one blue short of C.ink. */
+    const shot = (type, level) => {
+      g.clearRect(0, 0, W, H);
+      drawPlayer(g, OX, OY, {
+        type, level, facing: 1, frame: 0, state: 'idle', running: false,
+        ducking: false, theme: 'grass', tick: 0, idle: 0, wag: 0,
+      });
+      const d = g.getImageData(0, 0, W, H).data;
+      const art = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) {
+        const q = i * 4;
+        if (d[q + 3] !== 255) continue;
+        if (d[q] === 16 && d[q + 1] === 16 && d[q + 2] === 23) continue;
+        art[i] = 1;
+      }
+      return { art, d };
+    };
+
+    const heads = [];
+    for (const level of [0, 1]) {
+      const box = PLAYER_SIZES[level];
+      let widest = 0;
+      for (const type of TYPES) {
+        const { art } = shot(type, level);
+        for (let row = 1; row <= 5; row++) {
+          let lo = -1; let hi = -1;
+          /* Only the box and the one pixel of shoulder it has always been
+           * allowed on each side. Anything further out is not the head: the
+           * kaasulehti's hose swings back eleven pixels and crosses these rows
+           * on its way up, and it would otherwise be measured as a hat. What
+           * leaves the box is the audit above's question, not this one's. */
+          for (let x = Math.max(0, OX - 1); x <= OX + box.w; x++) {
+            if (!art[(OY + row) * W + x]) continue;
+            if (lo < 0) lo = x;
+            hi = x;
+          }
+          if (hi >= 0) widest = Math.max(widest, hi - lo + 1);
+        }
+      }
+      heads.push({ level, widest, allow: box.w - 4 });
+    }
+    expect('the hero has a head and not a peaked cap',
+      heads.every((h) => h.widest <= h.allow),
+      heads.map((h) => `taso ${h.level}: pää ${h.widest}px, laatikko `
+        + `${PLAYER_SIZES[h.level].w}px, sallittu ${h.allow}px`).join(', '));
+
+    /* Every pair of tiers, both ends of the size range. The denominator is the
+     * character's own pixels rather than the canvas, so the number means "how
+     * much of him changed" and does not quietly improve when he grows. */
+    const shares = [];
+    for (const level of [0, 5]) {
+      const shots = TYPES.map((t) => shot(t, level));
+      let worst = 100;
+      let pair = '';
+      for (let a = 0; a < TYPES.length; a++) {
+        for (let b = a + 1; b < TYPES.length; b++) {
+          let own = 0;
+          let changed = 0;
+          for (let i = 0; i < W * H; i++) {
+            if (!shots[a].art[i] && !shots[b].art[i]) continue;
+            own++;
+            const q = i * 4;
+            for (let k = 0; k < 3; k++) {
+              if (shots[a].d[q + k] !== shots[b].d[q + k]) { changed++; break; }
+            }
+          }
+          const share = Math.round((changed / own) * 100);
+          if (share < worst) {
+            worst = share;
+            pair = `${TYPES[a] || 'none'}/${TYPES[b] || 'none'}`;
+          }
+        }
+      }
+      shares.push({ level, worst, pair });
+    }
+    expect('the five power looks are five looks and not one with a hat repainted',
+      shares.every((s) => s.worst >= 45),
+      shares.map((s) => `taso ${s.level}: lähimmät ${s.pair} ${s.worst}%`).join(', ')
+      + ', vaadittu 45%');
+  }
+
   /* ------------------ vihollisten laatikot ja hengitys ------------------- */
   /*
    * The audit above, pointed at the things that walk at him. Same method —
