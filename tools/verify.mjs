@@ -3013,12 +3013,18 @@ const report = await page.evaluate(async () => {
    * liittyä siihen listaan huomaamatta, joten sen kolme numeroitua kenttää ja
    * linnake ajetaan täällä ja tulos on kaatava.
    *
-   * **Maailmat 6 ja 7 samassa silmukassa, ja se on väite eikä säästö.** Lupaus
-   * koskee koko peliä, mutta portiksi se voidaan nostaa vain siellä missä
-   * lähtötaso on puhdas: maailmoissa 1–5 on kolme tunnettua nimeä (4-3, ja
-   * 2-1 / 3-F / 5-F tuplahypyllä), ja niiden korjaaminen on eri työ kuin uuden
-   * maailman tekeminen. Käsintehdyt maailmat luulaaksosta eteenpäin eivät saa
-   * kasvattaa tuota listaa, ja tässä se on ajettavassa muodossa.
+   * **Maailmat 6, 7 ja 8 samassa silmukassa, ja se on väite eikä säästö.**
+   * Lupaus koskee koko peliä, mutta portiksi se voidaan nostaa vain siellä
+   * missä lähtötaso on puhdas: maailmoissa 1–5 on kolme tunnettua nimeä (4-3,
+   * ja 2-1 / 3-F / 5-F tuplahypyllä), ja niiden korjaaminen on eri työ kuin
+   * uuden maailman tekeminen. Käsintehdyt maailmat luulaaksosta eteenpäin
+   * eivät saa kasvattaa tuota listaa, ja tässä se on ajettavassa muodossa.
+   *
+   * Ovi avataan **kentän omasta `boss`-lipusta** eikä tunnisteen viimeisestä
+   * kirjaimesta. Se oli sama asia niin kauan kuin pomoja oli vain
+   * linnakkeissa; viimeisessä linnakkeessa jokainen kenttä päättyy oveen, ja
+   * nimestä päättelevä testi olisi raportoinut kuusi kenttää umpikujina
+   * mittaamatta niiden maastosta mitään.
    *
    * Botti on sama tyhmä botti: juoksee oikealle ja hyppää. Viholliset ja
    * vaarat poistetaan, koska kysymys on maastosta — vihollisen alle jääminen on
@@ -3028,7 +3034,7 @@ const report = await page.evaluate(async () => {
    * kenttä joka vaatisi sitä jäisi tähän kiinni.
    */
   {
-    const handmade = levelIds().filter((id) => /^[67]-/.test(id));
+    const handmade = levelIds().filter((id) => /^[678]-/.test(id));
     const rows = [];
     for (const id of handmade) {
       reset({ type: null, level: 0 });
@@ -3037,7 +3043,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, id);
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
-      if (/F$/.test(id)) s.bossDefeated = true;   // ovi on maali; tappelu on eri testi
+      if (s.def.boss) s.bossDefeated = true;      // ovi on maali; tappelu on eri testi
       s.time = 9999;
       const i = mkInput();
       let prevJump = false;
@@ -3088,11 +3094,11 @@ const report = await page.evaluate(async () => {
       });
     }
     const stuck = rows.filter((r) => !r.cleared);
-    expect('luulaakson ja pilvimaailman jokainen kenttä on läpäistävissä voimatasolla 0',
-      rows.length === 8 && stuck.length === 0,
+    expect('käsintehtyjen maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0',
+      rows.length === 14 && stuck.length === 0,
       rows.length
         ? `${rows.length} kenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
-        : 'ei 6- eikä 7-kenttiä lainkaan');
+        : 'ei 6-, 7- eikä 8-kenttiä lainkaan');
   }
 
   /* ----------------------------- pilvimaailma ---------------------------- */
@@ -3343,6 +3349,295 @@ const report = await page.evaluate(async () => {
         + `${fromFloor ? fromFloor.strength.toFixed(2) : '—'}`
         + ` (${fromFloor && fromFloor.kills ? 'tappaa' : 'ei tapa'})`
         : 'yhtään lautaa ei löytynyt maailmasta 7');
+  }
+
+  /* --------------------------- viimeinen linnake -------------------------- */
+  /*
+   * MAAILMA 8, VIIMEINEN LINNAKE, ja se yksi väite jonka takia se on olemassa:
+   * **finaali on eri muotoinen kuin maailma jonka perässä on linnake.**
+   *
+   * Tämä on eri testijoukko kuin luulaakson ja pilvimaailman omat, ja se on
+   * eri asiasta. Maailmoilla 6 ja 7 oli uusi teema, ja niiden mittaukset
+   * kysyivät onko teema oikeasti oma (lattia, siluetti, palikoiden ehdot).
+   * Maailmalla 8 ei ole uutta teemaa eikä saa olla — teemalista on täysi
+   * (ROADMAP 9.8.2026) — joten sen ero on **rakenteessa**, ja rakenne on
+   * mitattavissa täsmälleen samalla ankaruudella.
+   *
+   * Kuusi mittausta, ja jokainen on sellainen jonka maailma voi rikkoa *ja
+   * silti näyttää valmiilta*:
+   *
+   *   1  muoto     kuusi askelta neljän sijaan
+   *   2  katto     ei ulkopuolta: joka sarakkeen yllä on kiveä
+   *   3  ovi       ei yhtään lippua, kuusi ovea
+   *   4  pomot     jokainen pelin pomo, eikä yksikään kahdesti
+   *   5  tiili     tiili ei kosketa kiveä, koska paletti ei erota niitä
+   *   6  vauhti    jokaisen kuilun edessä on täysi vauhdinotto
+   *
+   * Nollatestinä on aina muu peli. Jos maailma 8 on ainoa jossa luku on se mikä
+   * se on, väite erottaa jotain; jos kaikki maailmat antavat saman luvun, väite
+   * ei sano mitään ja testi on koriste.
+   */
+  {
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const { tiersOf } = await import('/src/data/worlds.js');
+    const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
+
+    const ids = levelIds();
+    const inWorld = (n) => ids.filter((id) => id.startsWith(`${n}-`));
+    const w8 = inWorld(8);
+    const FLOOR = 13;
+    const STONE = '#X';
+    /* Sama kaistasääntö kuin `rules.js`:llä ja vaikeusmittarilla: reitti on se
+     * viisitoista riviä joilla pelaaja aloittaa. Ilman tätä korkean kentän
+     * ylimmät rivit olisivat taivaskaistan omia, ja "katto" mitattaisiin
+     * bonushuoneen katosta. Maailmassa 8 ei ole yhtään korkeaa kenttää, joten
+     * tämä koskee pelkästään vertailulukua — ja vertailuluku on tässä koko
+     * väitteen toinen puolisko. */
+    const routeOf = (id) => {
+      const rows = getLevel(id).rows;
+      if (rows.length <= 15) return rows;
+      const start = rows.findIndex((row) => row.includes('1'));
+      const top = Math.floor(Math.max(start, 0) / 15) * 15;
+      return rows.slice(top, top + 15);
+    };
+
+    /*
+     * 1. KUUSI ASKELTA, EI NELJÄ.
+     *
+     * Kenttien lukumäärä ei kelpaisi väitteeksi: maailmassa 2 on kuusi kenttää
+     * ja se on silti tavallisen muotoinen, koska kaksi niistä on saman haaran
+     * kaksi vaihtoehtoa. Askel eli `tiersOf`in taso on se mitä pelaaja kävelee,
+     * ja siinä mitassa jokainen tähänastinen maailma on **neljä** — kolme
+     * kenttää ja linnake — myös se jossa on haara.
+     */
+    const steps = WORLDS.map((w) => ({ id: w.id, n: tiersOf(w).length }));
+    const last = steps[steps.length - 1];
+    const rest = steps.slice(0, -1);
+    expect('viimeinen maailma on kuusi askelta, muut neljä',
+      steps.length === 8 && last.id === 'w8' && last.n === 6
+      && rest.every((s) => s.n === 4),
+      steps.map((s) => `${s.id} ${s.n}`).join(', '));
+
+    /*
+     * 2. EI ULKOPUOLTA.
+     *
+     * Luumaailman ehto oli "taivas on auki", pilvimaailman "mikään ei seiso
+     * maassa". Viimeisen linnakkeen ehto on se kolmas, ja se on molempien
+     * vastakohta: **kaikkien yllä on kiveä.** Jokaisessa sarakkeessa,
+     * jokaisessa kentässä, ensimmäisestä ruudusta viimeiseen.
+     *
+     * Se on myös syy siihen miksi maailmalla on oma `keep_start`: pelin
+     * jokainen linnake alkaa jaetulla `start`-palikalla, jonka kaksi ylintä
+     * riviä ovat tyhjiä, eli jokaisen linnakkeen ensimmäiset kuusitoista
+     * saraketta ovat tähän asti olleet taivasta katon sijaan. Yhden kentän
+     * huoneessa sitä ei huomaa; maailmassa joka väittää olevansa sisätila se on
+     * reikä väitteen läpi.
+     *
+     * Muu peli mitataan samalla koodilla, koska ilman sitä tämä luku olisi vain
+     * sata prosenttia jostakin — ja vertailuluku sanoo tässä jotain mitä ei
+     * osannut odottaa: **tehdas on 57 %.** Maailma 4 on sisätila kolmessa
+     * kentässä neljästä, eli "katto" ei yksin erota mitään. Väite on siksi
+     * sata vastaan viisikymmentäseitsemän eikä sata vastaan nolla: maailma 8
+     * on ainoa jossa ei ole yhtään saraketta taivasta, ja lähin kilpailija on
+     * kahden kentän päässä siitä.
+     */
+    const roofShare = (id) => {
+      const rows = routeOf(id);
+      const w = rows[0].length;
+      let roofed = 0;
+      for (let x = 0; x < w; x++) {
+        if (STONE.includes(rows[0][x]) || STONE.includes(rows[1][x])) roofed++;
+      }
+      return (roofed / w) * 100;
+    };
+    const roofOf = (n) => {
+      const levels = inWorld(n);
+      const tot = levels.reduce((s, id) => s + getLevel(id).rows[0].length, 0);
+      const roofed = levels.reduce((s, id) => s + (roofShare(id) / 100)
+        * getLevel(id).rows[0].length, 0);
+      return (roofed / tot) * 100;
+    };
+    const roofs = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ n, share: roofOf(n) }));
+    const w8roof = roofs[7];
+    const runnerUp = roofs.slice(0, 7).reduce((m, r) => (r.share > m.share ? r : m), roofs[0]);
+    const openest = w8.map((id) => ({ id, share: roofShare(id) }))
+      .sort((a, b) => a.share - b.share)[0] || { id: '—', share: 0 };
+    expect('viimeisessä linnakkeessa ei ole ulkopuolta: joka sarakkeen yllä on kiveä',
+      w8.length > 0 && w8roof.share === 100 && openest.share === 100
+      && runnerUp.share <= 60,
+      roofs.map((r) => `w${r.n} ${r.share.toFixed(0)} %`).join(', ')
+      + ` — avoimin 8-kenttä ${openest.id} ${openest.share.toFixed(0)} %,`
+      + ` seuraavaksi suljetuin maailma w${runnerUp.n} ${runnerUp.share.toFixed(0)} %`);
+
+    /*
+     * 3. EI LIPPUA, VAAN OVI.
+     *
+     * Lippu on se merkki jolla tämä peli sanoo "kenttä loppui"; ovi on se jolla
+     * se sanoo "pomo kaatui". Jokaisessa maailmassa on tähän asti ollut kolme
+     * lippua ja yksi ovi, ja se järjestys *on* se kaava jonka finaalin pitää
+     * rikkoa: viimeisessä linnakkeessa ei ole yhtään lippua, koska siellä ei
+     * ole yhtään huonetta josta pääsee ulos kävelemällä.
+     */
+    const flagsIn = (id) => getLevel(id).rows
+      .reduce((s, row) => s + [...row].filter((ch) => ch === T.GOAL).length, 0);
+    const worldFlags = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
+      n,
+      flags: inWorld(n).reduce((s, id) => s + flagsIn(id), 0),
+      doors: inWorld(n).filter((id) => getLevel(id).boss).length,
+    }));
+    const w8flags = worldFlags[7];
+    expect('viimeisessä maailmassa ei ole yhtään lippua vaan kuusi ovea',
+      !!w8flags && w8flags.flags === 0 && w8flags.doors === 6
+      && worldFlags.slice(0, 7).every((r) => r.flags >= 3 && r.doors === 1),
+      worldFlags.map((r) => `w${r.n} ${r.flags} lippua / ${r.doors} ovea`).join(', '));
+
+    /*
+     * 4. JOKAINEN POMO, EIKÄ YKSIKÄÄN KAHDESTI.
+     *
+     * `bossVariant` on ainoa kohta jossa pomot oikeasti eroavat toisistaan —
+     * osumat, nopeus ja liikesarja tulevat siitä — ja peli on kuluttanut kuusi
+     * varianttia seitsemään linnakkeeseen (kolmonen kahdesti). Finaali kerää ne
+     * kaikki, kerran kunkin.
+     *
+     * Toinen puolisko on se joka pitää tämän rehellisenä: **yksikään toinen
+     * maailma ei sisällä kahta eri pomoa.** Ilman sitä lukua "kuusi varianttia"
+     * olisi kuvaus eikä ero.
+     */
+    const variantsIn = (n) => new Set(inWorld(n).filter((id) => getLevel(id).boss)
+      .map((id) => getLevel(id).bossVariant));
+    const allVariants = new Set(ids.filter((id) => getLevel(id).boss)
+      .map((id) => getLevel(id).bossVariant));
+    const w8v = variantsIn(8);
+    const others = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ n, v: variantsIn(n) }));
+    expect('viimeisessä linnakkeessa on jokainen pelin pomo, kerran kukin',
+      w8v.size === allVariants.size && [...allVariants].every((v) => w8v.has(v))
+      && inWorld(8).filter((id) => getLevel(id).boss).length === w8v.size
+      && others.every((o) => o.v.size <= 1),
+      `w8 ${[...w8v].sort().join(' ')} (${w8v.size} kpl), koko peli `
+      + `${[...allVariants].sort().join(' ')} — muissa maailmoissa `
+      + others.map((o) => `w${o.n} ${o.v.size}`).join(', '));
+
+    /*
+     * 5. TIILI EI KOSKETA KIVEÄ.
+     *
+     * Tämä on se velka jonka ROADMAP kirjasi maailmaa 8 varten: linnaketeeman
+     * tiilen ja maan ero on koko pelin toiseksi huonoin heti yön jälkeen, ja
+     * maailma joka on kokonaan linnaketta joutuu tekemään sille jotain. Uusi
+     * paletti ei ole vaihtoehto — teemalista on täysi ja `THEMES.fortress` on
+     * seitsemän maailman viimeisen kentän ulkonäkö, eli sen muuttaminen
+     * muuttaisi valmiita kenttiä.
+     *
+     * Jäljelle jää rakenne, ja vastaus on rakenteellinen: **tässä maailmassa
+     * tiili ei koskaan kosketa kiveä.** Kun kaksi lähes samanväristä ruutua
+     * eivät ole vierekkäin, silmän ei tarvitse erottaa niitä toisistaan — ero
+     * luetaan siitä että tiili leijuu ja kivi ei. Hinta on todellinen ja se on
+     * se joka tekee tästä säännön: `brick_wall`in kaltainen lattialta nouseva
+     * tiilipino on tässä maailmassa kielletty rakenne.
+     *
+     * Kontrasti mitataan tässä eikä muisteta, ja muu peli mitataan
+     * kosketuksista samalla koodilla — jos sielläkin olisi nolla, sääntö ei
+     * kieltäisi mitään.
+     */
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const g8 = canvas.getContext('2d');
+    const meanTile = (ch, theme) => {
+      g8.clearRect(0, 0, 64, 64);
+      drawTile(g8, ch, 0, 16, theme, 3, 5, 0, ' ', {});
+      const d = g8.getImageData(0, 16, 16, 16).data;
+      let r = 0; let gg = 0; let b = 0; let n = 0;
+      for (let q = 0; q < d.length; q += 4) {
+        if (d[q + 3] < 8) continue;
+        r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+      }
+      return n ? [r / n, gg / n, b / n] : null;
+    };
+    const contrast = (theme) => {
+      const a = meanTile(T.GROUND, theme);
+      const b = meanTile(T.BRICK, theme);
+      if (!a || !b) return 0;
+      return ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255)
+        * 100;
+    };
+    const touches = (levels) => {
+      let n = 0;
+      const where = [];
+      for (const id of levels) {
+        const rows = getLevel(id).rows;
+        for (let y = 0; y < rows.length; y++) {
+          for (let x = 0; x < rows[y].length; x++) {
+            if (rows[y][x] !== T.BRICK) continue;
+            const near = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+              .some(([dx, dy]) => STONE.includes((rows[y + dy] || '')[x + dx] || ' '));
+            if (near) { n++; if (where.length < 4) where.push(`${id} ${x},${y}`); }
+          }
+        }
+      }
+      return { n, where };
+    };
+    const w8touch = touches(w8);
+    const gameTouch = touches(ids.filter((id) => !id.startsWith('8-')));
+    const fortGap = contrast('fortress');
+    const worstGap = Object.keys(THEMES)
+      .map((th) => ({ th, gap: contrast(th) })).sort((a, b) => a.gap - b.gap);
+    expect('viimeisessä linnakkeessa tiili ei kosketa kiveä, koska paletti ei erota niitä',
+      w8.length > 0 && w8touch.n === 0 && gameTouch.n > 0 && fortGap < 10,
+      `linnaketeema ${fortGap.toFixed(1)} % (huonoin ${worstGap[0].th} `
+      + `${worstGap[0].gap.toFixed(1)} %, toiseksi huonoin ${worstGap[1].th} `
+      + `${worstGap[1].gap.toFixed(1)} %) — kosketuksia maailmassa 8 ${w8touch.n}, `
+      + `muualla ${gameTouch.n}${gameTouch.where.length ? ` (esim. ${gameTouch.where.join(' ')})` : ''}`
+      + `${w8touch.where.length ? `: ${w8touch.where.join(' ')}` : ''}`);
+
+    /*
+     * 6. JOKAISEN KUILUN EDESSÄ ON TÄYSI VAUHDINOTTO.
+     *
+     * Luulaakso mittasi tämän ja kirjoitti sen kommenttiin: seisova hyppy
+     * kantaa **0 px** sivusuunnassa, joten laskeutuminen on täsmälleen niin
+     * hyvä kuin se vauhdinotto jonka se jättää. Maailma jonka jokainen kenttä
+     * on käytävä ja jonka jokainen kuilu on laavaa on juuri se paikka jossa
+     * tuo asia lakkaa olemasta ohje ja alkaa olla kentän rikkova virhe: jaettu
+     * `fort_gap` tuo mukanaan vain neljä saraketta lattiaa, joten kaksi
+     * peräkkäistä palikkaa voi tuottaa laavan jonka eteen ei ehdi kiihtyä.
+     *
+     * Sääntö on siis mitta eikä maku: **yhdenkään kuilun edessä ei ole alle
+     * yhdeksää saraketta yhtenäistä lattiaa.** Yhdeksän on `keep_hole`in oma
+     * profiili, sama jota pilvimaailma käyttää, ja se on tässä koko maailman
+     * sävellyssääntö — se sanelee palikkajärjestyksen kaikissa kuudessa
+     * kentässä.
+     *
+     * `%` eli murenevaa lavaa ei lasketa kuiluksi: se on jalansijaa siihen
+     * asti kunnes sille astuu, ja sen oma vaikeus on eri kysymys.
+     */
+    const runUps = (levels) => {
+      const out = [];
+      for (const id of levels) {
+        const rows = routeOf(id);
+        const w = rows[0].length;
+        const footing = [];
+        for (let x = 0; x < w; x++) {
+          footing.push([FLOOR, FLOOR + 1].some((y) => STONE.includes(rows[y][x])
+            || rows[y][x] === T.CRUMBLE));
+        }
+        let run = 0;
+        for (let x = 0; x < w; x++) {
+          if (footing[x]) { run++; continue; }
+          if (x && footing[x - 1] === false) continue;   // sama kuilu, jo kirjattu
+          out.push({ id, x, run });
+          run = 0;
+        }
+      }
+      return out;
+    };
+    const w8runs = runUps(w8);
+    const worstRun = w8runs.reduce((m, r) => (r.run < m.run ? r : m), { id: '—', run: 99 });
+    const elsewhereRun = runUps(ids.filter((id) => !id.startsWith('8-')))
+      .reduce((m, r) => (r.run < m.run ? r : m), { id: '—', run: 99 });
+    expect('viimeisessä linnakkeessa jokaisen kuilun edessä on yhdeksän saraketta lattiaa',
+      w8runs.length > 0 && worstRun.run >= 9 && elsewhereRun.run < 9,
+      `${w8runs.length} kuilua, ahtain ${worstRun.id} sarakkeessa ${worstRun.x} `
+      + `(${worstRun.run} saraketta vauhtia) — muun pelin ahtain ${elsewhereRun.id} `
+      + `${elsewhereRun.run}`);
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -9688,6 +9983,94 @@ const report = await page.evaluate(async () => {
     Music.stop();
   }
 
+  /*
+   * YÖ AUTIOVUORELLA, ELI SE ETTÄ AAMU ON DATASSA EIKÄ SELITYKSESSÄ.
+   *
+   * Viimeisen linnakkeen raita on Modest Mussorgskin *Yö Autiovuorella* (1867)
+   * Nikolai Rimski-Korsakovin sovituksena (1886), ja DESIGN.md kohta 1 b
+   * sanoo millä ehdoilla: sävelet käsin `TRACKS`-tauluun, ei äänitettä eikä
+   * nuottilaitosta, ja lähde nimetään. Nimeäminen tarkistetaan ajon lopussa
+   * molemmista dokumenteista — ja **molemmat tekijät**, koska sovitus on oma
+   * teoksensa omine suoja-aikoineen. Täällä tarkistetaan se mikä on
+   * tarkistettavissa itse sävelistä.
+   *
+   * Teoksen koko dramaturgia on yksi käänne: **yö on mollissa, aamu on
+   * duurissa.** Kellon lyötyä pahat väistyvät ja loppu on sama sävellaji
+   * suurena. Se on kirjoitettavissa numeroina, ja se on juuri sen lajin väite
+   * joka rikkoutuu yhdestä nuotista huomaamatta:
+   *
+   *   - **yön fraasit eivät sisällä duuriterssiä kertaakaan.** Yksi F# yössä ja
+   *     käänteestä tulee koriste, koska duuri oli jo käynyt.
+   *   - **aamun fraasi ei sisällä molliterssiä kertaakaan**, ja sisältää
+   *     duuriterssin. Muuten aamu on vain hiljaisempi yö.
+   *
+   * Ja kello: aamufraasi alkaa toistuvilla lyönneillä samaa säveltä, kuten
+   * luulaakson keskiyö. Ero on tarkoituksellinen ja se on suunta — luulaakson
+   * kaksitoista lyöntiä *aloittavat* tanssin, tämän raidan lyönnit *lopettavat*
+   * yön.
+   */
+  {
+    Sfx.resume();
+    Music.play('autiovuori');
+    const track = Music._track;
+    /* D on -7 puolisävelaskelta A:sta, sama laskutapa kuin pilviraidalla. */
+    const pcOf = (semi) => (((semi + 7) % 12) + 12) % 12;
+    const MINOR_THIRD = 3;
+    const MAJOR_THIRD = 4;
+    const phrases = ((track || {}).lead || {}).phrases || [];
+    const countIn = (phrase, pc) => {
+      let n = 0;
+      for (const [semi] of phrase || []) {
+        if (semi === null || semi === undefined) continue;
+        for (const s of Array.isArray(semi) ? semi : [semi]) if (pcOf(s) === pc) n++;
+      }
+      return n;
+    };
+    const night = phrases.slice(0, -1);
+    const dawn = phrases[phrases.length - 1] || [];
+    const nightMajor = night.reduce((s, p) => s + countIn(p, MAJOR_THIRD), 0);
+    const nightMinor = night.reduce((s, p) => s + countIn(p, MINOR_THIRD), 0);
+    const dawnMajor = countIn(dawn, MAJOR_THIRD);
+    const dawnMinor = countIn(dawn, MINOR_THIRD);
+    /* Kello: pisin sarja samaa säveltä aamufraasin alussa. */
+    let toll = 0;
+    for (const [semi] of dawn) {
+      if (semi !== null && semi === (dawn[0] || [])[0]) toll++;
+      else break;
+    }
+    expect('autiovuoren yö on mollissa ja sen aamu duurissa',
+      phrases.length >= 3 && nightMinor > 0 && nightMajor === 0
+      && dawnMajor > 0 && dawnMinor === 0,
+      `yössä molliterssi ${nightMinor}, duuriterssi ${nightMajor} `
+      + `(${night.length} fraasia); aamussa duuriterssi ${dawnMajor}, `
+      + `molliterssi ${dawnMinor}`);
+    expect('aamun fraasi alkaa kellonlyönneillä',
+      toll >= 4, `${toll} lyöntiä, aamufraasissa ${dawn.length} nuottia`);
+
+    /*
+     * Ja se puolisko ilman jota käänne ei kuuluisi: **säestyksessä ei ole
+     * terssiä.**
+     *
+     * Sekvensseri vaihtaa fraasia joka kierroksella mutta soittaa saman
+     * `harm`in läpi koko raidan. Mollisointu aamun alla rikkoisi käänteen
+     * täsmälleen sillä nuotilla jolla se tehdään, eikä sitä kuulisi
+     * rikkinäisenä vaan latteana. Paljas kvintti kantaa molemmat, ja se on
+     * tarkistettavissa: ei yhtään F:ää eikä F#:ää.
+     */
+    const harmThirds = ((track || {}).harm || {}).notes || [];
+    let thirds = 0;
+    for (const [semi] of harmThirds) {
+      if (semi === null || semi === undefined) continue;
+      for (const s of Array.isArray(semi) ? semi : [semi]) {
+        if (pcOf(s) === MINOR_THIRD || pcOf(s) === MAJOR_THIRD) thirds++;
+      }
+    }
+    expect('autiovuoren säestyksessä ei ole terssiä, joten sama sointu kantaa yön ja aamun',
+      harmThirds.length > 0 && thirds === 0,
+      `${harmThirds.length} sointua, terssejä ${thirds}`);
+    Music.stop();
+  }
+
   /* ------------------------------ rendering ---------------------------- */
   {
     const { drawBackdrop } = await import('/src/gfx/backdrop.js');
@@ -10857,9 +11240,25 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 {
   const design = await readFile(join(ROOT, 'DESIGN.md'), 'utf8');
   const changelog = await readFile(join(ROOT, 'CHANGELOG.md'), 'utf8');
+  /*
+   * Luetaan **jokainen** `source`in kenttä eikä kahta nimettyä, ja se ero on
+   * maailman 8 maksama oppi.
+   *
+   * *Yö Autiovuorella* tunnetaan lähes yksinomaan Rimski-Korsakovin
+   * sovituksena, ja **sovitus on oma teoksensa omine suoja-aikoineen** — juuri
+   * se on se kohta jossa "tämähän on vanhaa musiikkia" menee useimmiten
+   * pieleen. Kun portti luki vain `composer`in ja `work`in, raita saattoi
+   * kantaa `arranger`-kentän jota mikään ei tarkistanut: kenttä olisi ollut
+   * koodissa, nimi olisi voinut puuttua molemmista dokumenteista, eikä mikään
+   * olisi sanonut mitään. Portti joka kattaa osan tapauksista on huonompi kuin
+   * puuttuva portti, koska se näyttää kattavan kaikki — sama havainto kuin
+   * `cave`n kanssa, ja se on nyt tehty kahdesti.
+   */
   const unnamed = [];
   for (const [track, source] of Object.entries(report.trackSources || {})) {
-    for (const part of [source.composer, source.work]) {
+    const parts = Object.values(source).filter((v) => typeof v === 'string' && v.trim());
+    if (!parts.length) unnamed.push(`${track}: lähde on tyhjä`);
+    for (const part of parts) {
       if (!design.includes(part)) unnamed.push(`${track}: "${part}" puuttuu DESIGN.md:stä`);
       if (!changelog.includes(part)) unnamed.push(`${track}: "${part}" puuttuu CHANGELOG.md:stä`);
     }

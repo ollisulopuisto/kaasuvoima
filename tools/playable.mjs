@@ -115,7 +115,12 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
     game.scene = scene;
     // Enemies and hazards are somebody else's test. What is left is terrain.
     scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
-    const boss = /F$/.test(id);
+    /* Read off the level's own flag rather than off the last letter of its id.
+     * Those were the same thing for as long as bosses only lived in
+     * fortresses; in world 8 every level ends in a door, and a tool that
+     * guessed from the name would have reported six dead ends without
+     * measuring one tile of their terrain. */
+    const boss = !!scene.def.boss;
     if (boss) scene.bossDefeated = true;      // the door is the exit; the fight is not the point
     scene.time = 9999;
 

@@ -12,7 +12,7 @@ ennen pushia on `node tools/verify.mjs`.
 
 ## Tila 9.8.2026
 
-Kaikki alla oleva on tuotannossa ja testattu: **7 maailmaa, 30 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 36 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
 
@@ -42,7 +42,16 @@ karttaruudukko ja luurankopomo, jonka jokainen osuma hajottaa ja joka on
 osumasta. Maailman kaksi sääntöä ovat portissa eivätkä kommentissa: **mikään ei
 seiso maassa** (0 ruutua vastaan luun 44) ja **ohut pilvi ei ole koskaan tyhjän
 päällä** (0 vastaan muun pelin 73), ja lattia on mitattu bonushuonetta vasten
-(maata 89–97 % vastaan `sky_garden`in 0 %).
+(maata 89–97 % vastaan `sky_garden`in 0 %) · **maailma 8 VIIMEINEN LINNAKE**
+(v26.08.09.38): ei uutta teemaa vaan uusi *muoto* — kuusi kenttää, kuusi
+tappelua, ei yhtään lippua, `chunks/keep.js`, kentät 8-1…8-F ja kartta jolla on
+kuusi solmua. Neljä väitettä portissa: **kuusi askelta** (`tiersOf`, muut
+neljä), **kattoa 100 %** sarakkeista (lähin kilpailija tehdas 57 %), **0
+lippua / 6 ovea** (muualla 3/1) ja **jokainen pelin pomovariantti kerran**
+(muissa maailmoissa yksi). Lisäksi kaksi rakennesääntöä: **tiili ei kosketa
+kiveä** (0 kosketusta vastaan muun pelin 14, koska linnaketeeman tiili ja maa
+ovat 7,9 % päässä toisistaan) ja **jokaisen kuilun edessä on yhdeksän saraketta
+lattiaa** (ahtain 15 vastaan muun pelin 1).
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
 esittelytila · teemakohtaiset seisonta-animaatiot kentissä ja kartalla · oma
@@ -138,7 +147,32 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    **Vaikeus on ostettava kahdesti.** Ensimmäinen mitoitus antoi w7 261,5 eli
    maailmaa 6 helpomman, ja korjaus oli vihollistiheys ja reikien määrä — ei
    leveämmät kuopat, koska ne rikkoisivat läpäisylupauksen.
-8. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
+8. ✔ **Viimeinen linnake** — tehty (v26.08.09.38). Maailma 8: `THEMES.fortress`
+   (ei uutta teemaa, koska lista on täysi), `bg: 'none'`, `chunks/keep.js`,
+   kentät 8-1…8-F ja kuuden solmun kartta. Musiikki on Mussorgskin *Yö
+   Autiovuorella* Rimski-Korsakovin sovituksena, eli DESIGN.md kohdan 1 b
+   taulukon viimeinen rivi on nyt käytössä eikä "tulossa". Neljä asiaa jäi
+   kirjatuksi:
+   **Ilman uutta teemaa ero on tehtävä muodossa, ja muoto on mitattavissa.**
+   Kaava oli seitsemän kertaa kolme kenttää ja linnake; tässä linnake on koko
+   maailma, kuusi kenttää ja kuusi tappelua, ja kaikki neljä väitettä ovat
+   portissa lukuineen (askelia 6 vs 4, kattoa 100 % vs 57 %, lippuja 0 vs 3,
+   pomovariantteja 6 vs 1). "Maailma 8 on olemassa" ei olisi todistanut mitään.
+   **Vanha velka maksettiin rakenteella eikä paletilla.** Linnaketeeman tiilen
+   ja maan ero on 7,9 % (mitattu uudelleen, yhä toiseksi huonoin), ja koska
+   paletin muuttaminen muuttaisi seitsemän valmiin kentän ulkonäön, vastaus on
+   ettei tiili ja kivi ole tässä maailmassa koskaan vierekkäin — 0 kosketusta
+   vastaan muun pelin 14.
+   **Sääntö joka lukee lattiaa ei lue reittiä.** Vauhdinottosääntö (9 saraketta
+   ennen jokaista kuilua) päästi läpi kentän jossa botti kuoli sarakkeessa 105,
+   koska edellinen palikka oli porras: lattia oli ehjä eikä kukaan kävellyt
+   sillä. Korjaus oli palikkajärjestys, ja vajaus on kirjattu — seuraava kenttä
+   joka nostaa pelaajan maasta juuri ennen kuilua kaatuu samalla tavalla.
+   **Portti joka lukee kaksi kenttää kolmesta ei ole portti.** Lainatun
+   sävelmän nimeämistarkistus luki `composer`in ja `work`in; sovittaja olisi
+   voinut jäädä nimeämättä. Nyt se lukee jokaisen `source`-kentän. Sama vika oli
+   `cave`ssa kerran jo, eli kahdesti tehtynä se ei ole huolimattomuutta.
+9. **Salaisuuksien löydettävyys** — kolmesta osasta kaksi tehty:
    ✔ kartta kertoo *että* kentässä on salaisuuksia ja montako niistä on
    löytynyt, **ei koskaan missä** (v26.08.09.17);
    ✔ kolikkojonot osoittavat (v26.08.09.29) — ja osoittavat vain sitä yhtä
@@ -313,9 +347,13 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on 6 maailmaa ja 26 kenttää. Tavoite on 64, eli **yhä yli kaksinkertainen
-määrä sisältöä** — ja se on se luku josta tämän kohdan suunnittelu pitää
-aloittaa, koska kaikki muu seuraa siitä.
+Nyt on **8 maailmaa ja 36 kenttää**, eli maailmat ovat kasassa ja kenttiä
+puuttuu 28. Tavoite on 64. Se on eri tilanne kuin se jossa tämä kohta
+kirjoitettiin (6 maailmaa, 26 kenttää), ja ero kannattaa lukea tarkkaan:
+**maailmojen tekeminen ei ollut se kallis puoli, ja se on nyt tehty.**
+Jäljellä oleva työ on kenttiä olemassa oleviin maailmoihin, mikä on täsmälleen
+se työ jota varten generaattori on olemassa — ja se tekee kohdan 1 päätöksestä
+helpomman eikä vaikeamman.
 
 **Luumaailma (v26.08.09.33) on ensimmäinen mittapiste tälle kohdalle**, ja sen
 hinta kannattaa lukea ennen kuin seuraavia luvataan: yksi maailma käsin on
@@ -332,6 +370,17 @@ vaikeuskäyrää +8,0 ja +14,9**, eli käsityö ei automaattisesti tuota isoa
 askelta. Kolme jäljellä olevaa maailmaa samalla tavalla on siis noin kolme
 kertaa tämä työ, ja kohdan 1 suositus on yhä lukematta ratkaisematta.
 
+**Viimeinen linnake (v26.08.09.38) on kolmas mittapiste, ja se maksoi
+vähemmän — koska se ei ostanut teemaa.** Yhdeksän palikkaa, kuusi kenttää,
+kartta, ei uutta pomoa ja lainattu sävelmä. Kaksi mittausta säilytettäväksi:
+**teema on se kallis puoli**, ei kenttien määrä — kuusi kenttää valmiilla
+paletilla ja valmiilla pomoilla oli halvempi urakka kuin kolme kenttää uudella
+teemalla — ja **maailma jonka ero on muodossa on yhtä mitattavissa kuin
+maailma jonka ero on paletissa**, kunhan väitteet kirjoitetaan lukuina
+(askelia 6 vs 4, kattoa 100 % vs 57 %, lippuja 0 vs 3, pomoja 6 vs 1).
+Vaikeuskäyrä nousi +21,8, eli enemmän kuin kummallakaan käsintehdyllä
+teemamaailmalla (+8,0 ja +14,9).
+
 **Tilanne muuttui 9.8.2026: neljästä esteestä kaksi on poissa ja yksi halpeni.**
 Kohta 3 (vaikeuskäyrän mittari) on tehty — muototarkistus lukee nyt tasoja eikä
 jonoa, koska haarautuva kartta vaati saman. Kohta 4:n edellyttämät palaset ovat
@@ -341,7 +390,11 @@ generaattori osaa nyt koko ruutusanaston (`%`, `S`, `*`, salaisuudet) eikä enä
 tuota mekaniikattomia kenttiä.
 
 **Jäljellä on siis yksi:** paljonko tehdään käsin. Teemat ovat kasassa
-(v26.08.09.36, ks. kohta 2 alla), ja kahdeksas maailma on viimeinen linnake.
+(v26.08.09.36) ja kahdeksas maailma on tehty (v26.08.09.38), joten tämä kohta
+ei enää koske maailmoja lainkaan — se koskee sitä, miten kahdeksasta neljän
+kentän maailmasta tulee kahdeksan kahdeksan kentän maailmaa. Maailma 8 on
+samalla ensimmäinen todiste siitä että maailman ei tarvitse olla neljä kenttää:
+se on kuusi, eikä mikään moottorissa vastustanut sitä.
 
 Alkuperäiset neljä, tila merkittynä:
 
@@ -360,32 +413,38 @@ Alkuperäiset neljä, tila merkittynä:
    luulaakso — teema on paletti + taustat + palikat + musiikki, ei pelkkä väri
    — eli `THEMES.cloud`, `bg: 'clouds'`, `chunks/cloud.js` ja `TRACKS.cloud`.
 
-   **Maailma 8 on viimeinen linnake, ja se ei tarvitse uutta teemaa.** Linnake
-   on ollut teemana `THEMES.fortress` alusta asti, sitä on käytetty jokaisen
-   maailman viimeisessä kentässä, ja viimeinen maailma on se paikka jossa siitä
-   tulee koko maailma eikä yhden kentän huone. Sen musiikki on jo varattu:
-   *Yö Autiovuorella* (Mussorgski 1867, Rimski-Korsakovin sovitus 1886) odottaa
-   [DESIGN.md](DESIGN.md):n kohdan 1 b taulukossa merkinnällä "tulossa", ja se
-   on ainoa rivi siinä taulukossa jota mikään raita ei vielä käytä.
+   ✔ **Maailma 8 on viimeinen linnake, eikä se tarvinnut uutta teemaa** — tehty
+   (v26.08.09.38). Linnake on ollut teemana `THEMES.fortress` alusta asti, ja
+   viimeinen maailma on se paikka jossa siitä tuli koko maailma eikä yhden
+   kentän huone. Musiikki on *Yö Autiovuorella* (Mussorgski 1867,
+   Rimski-Korsakovin sovitus 1886), eli [DESIGN.md](DESIGN.md):n kohdan 1 b
+   taulukossa ei ole enää yhtään "tulossa"-riviä.
 
-   Kaksi asiaa jäi kirjatuksi maailmaa 8 varten. **Kahden säveltäjän rivi on
-   kaksi tarkistusta eikä yksi** — sovitus on oma teoksensa omine
-   suoja-aikoineen, ja portti vaatii molempien nimet sekä DESIGN.md:hen että
-   muutoslokiin. Ja **linnaketeeman tiilen ja maan ero on 7,9 %**, eli toiseksi
-   huonoin koko pelissä heti yön jälkeen; maailma joka on kokonaan linnaketta
-   joutuu tekemään sille jotain, ja se on eri työ kuin uuden paletin keksiminen.
+   Molemmat tänne kirjatut varoitukset osuivat, ja molemmat maksettiin.
+   **Kahden säveltäjän rivi oli kaksi tarkistusta eikä yksi**, ja portti luki
+   niistä vain toisen: se vaati `composer`in ja `work`in, joten sovittaja olisi
+   voinut jäädä nimeämättä ilman että mikään sanoo mitään. Portti lukee nyt
+   jokaisen `source`-kentän. Ja **linnaketeeman tiilen ja maan 7,9 %** ratkesi
+   rakenteella eikä paletilla: tiili ja kivi eivät ole maailmassa 8 koskaan
+   vierekkäin (0 kosketusta vastaan muun pelin 14), koska kahta lähes
+   samanväristä ruutua ei tarvitse erottaa toisistaan jos ne eivät kosketa.
 3. **Vaikeuskäyrä on viritetty viidelle maailmalle.** Kahdeksan porrasta samaan
    väliin tarkoittaa loivempaa nousua tai korkeampaa kattoa, ja se on yhä
    päättämättä. Mittarin puoli on sen sijaan tehty: `difficulty.mjs`:n
    muototarkistus lukee nyt tasoja eikä jonoa (v26.08.09.13), koska haarautuva
    kartta vaati saman uudelleenkirjoituksen. Ennuste piti paikkansa — kaksi
    kohtaa, yksi työ.
-4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä.** Nykyinen kaava on
-   kolme kenttää ja linnake. Kahdeksan ei ole "sama kaksi kertaa" vaan tila
-   välipomolle, haaralle ja hengähdyskentälle — ja **ne kolme ovat nyt
-   rakennettavissa kenttädatana**, koska minipomo ja haarautuva kartta ovat
-   tuotannossa. Tämä kohta on siis se joka antaa niille tilan, ei kilpaile
-   niiden kanssa. Jäljellä on muodon päättäminen.
+4. **Kahdeksan kenttää maailmassa on eri muoto kuin neljä**, ja muoto on nyt
+   kerran murrettu: maailma 8 on **kuusi** kenttää (v26.08.09.38), ja
+   `tiersOf`, kartta, vaikeusmittari ja tallennus veivät sen ilman yhtä riviä
+   muutosta. Se poistaa tästä kohdasta epävarmimman osan — kysymys ei ole enää
+   "kestääkö moottori", vaan mitä niihin kenttiin laitetaan.
+   Maailmasta 8 kannattaa lainata kaksi asiaa eikä sen sisältöä: **jokainen
+   ylimääräinen kenttä tarvitsee oman kysymyksensä** (siellä ne ovat kuusi eri
+   pomoa, muualla ne olisivat jotain muuta), ja **hengähdyskenttä putoaa
+   syvemmälle kuin luulisi** — 8-2 on 39 % maailmansa keskiarvosta, kun
+   luulaakson notko oli 56 %, koska kuilut ovat 39 % mittarin painosta ja
+   niiden poistaminen vie sen kaiken kerralla.
 
 ### Salainen alue maailmaan 5
 
