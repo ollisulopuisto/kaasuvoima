@@ -82,6 +82,38 @@ ja validoitu**: pelaaja näkee sen tulevan, areena palautuu jos pomo kaatuu, ja
 mikään järjestely ei saa tehdä ovea saavuttamattomaksi. Ilman noita kolmea se on
 epäreiluuden generaattori.
 
+
+### Päätetty: haarautuva kartta, eriarvoiset haarat
+
+Omistajan päätös 9.8.2026: **haarat ovat eriarvoisia ja vaikeudesta palkitaan.**
+Ei siis makuvalintaa samalla vaikeudella, vaan helpompi ja vaikeampi reitti,
+joista vaikeampi antaa jotain jota helpommalta ei saa.
+
+Neljä ehtoa, joita ilman tästä tulee ansa eikä valinta:
+
+1. **Vaikeus pitää näkyä kartalla ennen sitoutumista.** Pelaaja ei voi valita
+   vaikeampaa reittiä jos hän saa tietää sen vasta kuoltuaan siihen. Meillä on
+   `tools/difficulty.mjs`, joka antaa jokaiselle kentälle luvun — kartta voi
+   näyttää sen tähtinä tai värinä, ja se on **mitattu eikä käsin arvattu**.
+2. **Palkinnon pitää olla tiedossa etukäteen.** "Vaikeampi reitti antaa jotain"
+   ei riitä; sen pitää lukea kartalla. Muuten kukaan ei valitse sitä toista
+   kertaa.
+3. **Helpon reitin pitää viedä läpi peliin.** Vaikeampi reitti saa antaa
+   voimaa, oikoteitä ja sisältöä, mutta se ei saa olla ainoa tie loppuun.
+   Sama lupaus kuin tehostuksilla: ne avaavat paikkoja, eivät kenttää.
+4. **Palkinnon pitää olla sellainen jota ei saa muualta.** Lisäelämä on
+   laimea. Murtava tehostus, tähtilohko tai oma kenttä on palkinto.
+
+**Seuraus vaikeuskäyrälle, joka pitää hoitaa samalla:** käyrä on nyt viritetty
+jonoon 1→2→3→4→5. Haarautuminen muuttaa sen **tasoiksi**: taso 1 → kaksi tai
+kolme saman tason haaraa → taso 2. `difficulty.mjs`:n muototarkistus pitää
+kirjoittaa uusiksi tarkistamaan tasot eikä jonoa, tai se alkaa valittaa
+oikeasta kartasta.
+
+Rakenne on jo lähellä: kartta on solmuja ja linkkejä, ja `isLinkOpen` päättää
+polun avoimuuden. Lukitut polut ja oikoreitit ovat pääosin dataa. Kallista on
+vain vaikeuden näyttäminen kartalla ja käyrän mittarin muuttaminen.
+
 ### Avoimet kysymykset
 
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
