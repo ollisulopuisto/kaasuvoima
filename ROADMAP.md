@@ -29,7 +29,8 @@ voittoruutu hernekeitolla · sirppikuu.
 
 **Esitys:** kuvaputki varjomaskilla ja vaakavuodolla · kenttäkohtainen tunnelma ·
 kosketusohjaus kahdella mallilla · esittelytila · teemakohtaiset
-seisonta-animaatiot kentissä ja kartalla.
+seisonta-animaatiot kentissä ja kartalla · oma kuvakieli tiilelle, `?`-lohkolle
+ja putkelle · valojärjestelmä, jossa maailma kantaa omat valonsa.
 
 **Työkalut:** playable.mjs · difficulty.mjs · debug-warp (näppäin 4, kaataa
 pistetaulun) · salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva
@@ -139,9 +140,11 @@ Kolme asiaa jotka kannattaa päättää ennen kuin tätä aloitetaan:
    kertaa neljä ruutua on 24 piirtofunktiota ylläpidettäväksi. Halvempi malli
    on yksi funktio joka ottaa muotoparametrit teemataulusta — sama tapa jolla
    `THEMES` hoitaa jo värit.
-3. **Odota kunnes uusi kuvakieli on paikallaan.** Tiili, `?`-lohko, putki ja
-   rikkoutuminen ovat juuri nyt uudistettavina. Teemakohtaiset muodot
-   kannattaa rakentaa sen päälle eikä sen rinnalle, tai työ tehdään kahdesti.
+3. ✔ **Odota kunnes uusi kuvakieli on paikallaan.** Tiili, `?`-lohko, putki ja
+   rikkoutuminen on uudistettu (v26.08.09.7), joten tämä ehto on täytetty ja
+   teemakohtaiset muodot rakennetaan sen päälle. **Tämä oli ainoa este, eli
+   kohta on nyt aloitettavissa** — jäljellä ovat vain ehdot 1 ja 2, jotka ovat
+   tekotapaa koskevia eivätkä esteitä.
 
 
 ### Jonossa: maahanisku (ground pound)
@@ -193,6 +196,10 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
   bugi, mutta se on nyt kirjattu.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
+- **Yön paletissa tiili ja maa ovat lähes sama ruskea** (27,8 / 34 %, heikoin
+  pari kaikista kuudesta teemasta). Uusi kuvakieli paransi eron joka teemassa,
+  mutta tämä jäljelle jäänyt on **paletti eikä muoto**, joten se ei korjaannu
+  teemakohtaisilla muodoilla vaan `night.brick`in ja `night.ground`in väreillä.
 
 ## Seuraavaksi
 
@@ -347,11 +354,12 @@ astuu, tärisee ja halkeaa 52 framea, putoaa, kasvaa takaisin 220 framen jälkee
 Takaisinkasvu ei ole koristetta: ilman sitä kuolema puolivälissä jättäisi kentän
 mahdottomaksi loppuyritykseksi. Käytössä 4-1:n `fac_crumble`-palikassa.
 
-**Kytkinruudut** (P-switch-tyyliin): **älä kirjoita ruudukkoa uusiksi.** Puhtaampi
-tapa on käännöstaulu `tileAt()`:ssa: kun kytkin on päällä, tietyt merkit
-luetaan toisina (esim. tiili ↔ kolikko). Silloin ruudukko pysyy muuttumattomana,
-tilatallennus tarvitsee vain yhden totuusarvon, eikä kytkimen loppuminen voi
-jättää kenttää rikkinäiseen välitilaan.
+**Kytkinruudut** (P-switch-tyyliin) ✔ **tehty** (v26.08.09.2) juuri niin kuin
+tähän kirjattiin: ruudukkoa ei kirjoiteta uusiksi, vaan `tileAt()`:ssa on
+käännöstaulu — kun kytkin on päällä, tietyt merkit luetaan toisina (tiili ↔
+kolikko). Ruudukko pysyy muuttumattomana, tilatallennus tarvitsee vain yhden
+totuusarvon, eikä kytkimen loppuminen voi jättää kenttää rikkinäiseen
+välitilaan. Käytössä 3-2:n `switch_wall`-palikassa.
 
 **Ylläpitokustannus, joka on syytä tietää etukäteen:** uusi merkki pitää lisätä
 myös `src/data/rules.js`:n `SOLID`-joukkoon ja generaattorin sanastoon, tai

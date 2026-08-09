@@ -7,6 +7,72 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.7 — uusi kuvakieli vuorovaikutteisille ruuduille, ja valojärjestelmä
+
+Kaksi muutosta jotka koskevat sitä miltä peli näyttää, eivät sitä miten se
+toimii. Kumpikin oli tehty koodiin ennen kuin ne olivat tässä; tämä merkintä
+on jälkikäteen kirjoitettu, ja se on juuri se laji velkaa jota tämä tiedosto
+on olemassa estämään.
+
+### Tiili, `?`-lohko ja putki omalla kuvakielellään
+
+Ne olivat viimeiset kohdat joissa peli lainasi muotokieltä eikä pelkkää
+lajityyppiä.
+
+**Tiilestä naulattu laudoitus:** pystysuorat laudat, poikkirima ja
+naulankannat. Pystysyy on luettavuuden kannalta se ratkaiseva valinta — pelin
+jokainen muu kiinteä pinta kulkee vaakasuunnassa, joten pelkkä syyn suunta
+erottaa rikottavan kiinteästä täydessä vauhdissa. Maa ja kova maa saumautuvat
+toisiinsa, tiili on kehystetty: kehystetty laatikko lukee esineenä seinällä
+eikä lisää seinää.
+
+**`?`-lohkosta paineastia mittarilla.** Kysymysmerkki on poissa kokonaan, ja se
+on tarkoituksellista: symboli on aina jonkun toisen symboli, kun taas näkyvästi
+paineen alla oleva säiliö sanoo "tässä on jotain" ilman symbolia. Vilkkuva
+mittari on se "lyö minua" — mikään muu pelissä ei vilku. Käytetty lohko on sama
+astia sisäänpäin painettuna: kupera-kirkas-vilkkuva vastaan
+kovera-tumma-kuollut.
+
+**Putkesta peltinen hormi:** taitetut tasopinnat, niitattu sauma, laippa joka
+istuu tasan eikä ulkone. Kaksi versiota heitettiin pois matkalla; hieno
+poimutus mittasi hyvin mutta luki ikkunaluukkuna, eikä luukkuun mennä sisään.
+
+**Rikkoutuminen:** neljä identtistä neliötä korvattu kahdellatoista vaihtelevalla
+sirpaleella, omat painovoimat ja pyörimisnopeudet. Ensimmäinen versio oli kaunis
+ja putosi 144 pikselistä 53:een framea kohti — juuri se virhe jota vastaan
+varoitettiin. Nyt 145, mutta kahtenatoista muotona neljän sijaan.
+
+Mitattuna: tiilen ero maahan parani kaikissa kuudessa teemassa. Heikoin pari on
+yhä yö (27,8 / 34 %) ja **se on paletti eikä muoto** — `night.brick` ja
+`night.ground` ovat lähes sama ruskea. Se jää auki tähän kirjattuna.
+
+### Valojärjestelmä: maailma kantaa omia valojaan
+
+Valokeila oli yksi lamppu pelaajassa kiinni. Nyt valoja on kahdeksan, joista
+yksi on pelaajan lamppu ja seitsemän maailman omia. Pierupallo valaisee maata
+jota pitkin se pomppii, joten pimeään voi ampua ja seurata omaa kaasuaan
+nähdäkseen mitä siellä on.
+
+Valonlähdevihollinen on närästys, ja valinta on se kiinnostava laji: **se mikä
+näyttää lattian on se mikä tappaa sen päällä seistessä.** Liekin valo seuraa
+täsmälleen sen omia vaiheita, joten se ei ole toinen opeteltava signaali liekin
+päälle. 2-N sai yhden liekin toisen dyynipalikan tilalle — sama leveys ja sama
+maasto, joten `playable` on tavulleen ennallaan.
+
+Pelaajan lamppu **ei** ole yksi niistä seitsemästä: seitsemän palloa ilmassa ei
+saa voida äänestää ulos sitä valoa jonka varassa kävellään.
+
+Valot yhdistyvät kertomalla sen minkä kukin jättää pimeäksi, ei maksimilla. Niin
+valo käyttäytyy, ja se on ainoa yhdistely jonka Canvas 2D toistaa tarkalleen —
+pelkkä lamppu tuottaa pikselilleen saman kuvan kuin ennen.
+
+Mitattuna: vaaran luettavuus keilojen ulkopuolella 35,5 luminanssia, sama kuin
+ennen muutosta, ja sama myös kun kaikki seitsemän paikkaa on käytetty muualla.
+Rakenteellisesti se ei voi taantua, koska valot vain kertovat kohti ykköstä.
+Framebudjetti 1,33 ms kahdeksalla valolla, katto 2,5.
+
+---
+
 ## v26.08.09.6 — kuplaloukku, esittelytila, kaksoisovi ja jäätikkö
 
 Iso erä. Kaksi näistä teki alaagentti.
