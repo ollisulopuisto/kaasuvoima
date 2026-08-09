@@ -104,6 +104,59 @@ const CAM_SNAP = 48;
 const CAM_TOP_MARGIN = 16;
 
 /*
+ * ...and how much warning the view gets before it has to.
+ *
+ * The margin above was applied as a hard clamp **after** the ease, and the
+ * owner saw exactly what that is: "when the character is actually high enough
+ * for the camera to move, it moves suddenly. It just snaps higher instead of
+ * animating." A clamp cannot animate. The frame the head crossed 16 px the view
+ * was pinned to `p.y - CAM_TOP_MARGIN` and tracked it exactly from then on, so
+ * the camera's speed went from nothing to the body's own rise speed between two
+ * frames — measured, **2.92 px on one frame** in 2-1 at power level 3, on a
+ * frame where the body itself lifted 2.93. A view that matches the body's speed
+ * from a standstill is a cut with extra steps.
+ *
+ * The answer is not to ease the limit — an eased limit lags, and that lag is
+ * the measured 2.6 px of head poking out of the letterbox band that put the
+ * clamp there in the first place. **The answer is to start before the limit is
+ * reached.** So the limit is aimed at where the head *will be* in
+ * `CAM_TOP_LEAD` frames rather than where it is, and the ease has that long to
+ * get up to speed. Worst single frame after: **1.95 px**, reached over several
+ * frames instead of on the first one, and the clamp below now moves the view
+ * 0.00 px because it is never the thing that arrives first.
+ *
+ * Three frames, and the number is the ease's own rather than a taste:
+ * `CAM_V_EASE` of 0.25 chasing a target that moves at v settles exactly
+ * `(1 - 0.25) / 0.25 = 3v` behind it, so three frames of lead cancel the lag
+ * and the view arrives at the limit instead of chasing it. **Longer leads are
+ * worse**, which is not obvious and is the reason this paragraph exists: the
+ * lead multiplies a velocity, and a fart jump changes that velocity in a single
+ * step, so every extra frame of lead makes the target's own jump on that frame
+ * bigger. Worst single-frame rise at leads of 3, 4, 5, 6 and 8 frames: 1.95,
+ * 2.21, 2.49, 2.68, 2.88 px. Three is both the cancellation and the minimum.
+ *
+ * It is spent only while rising. Falling and standing aim at the head itself,
+ * which is what they always did.
+ *
+ * What this does *not* do is start following ordinary jumps, and that is the
+ * point of leading by a speed rather than by a distance: at the top of an arc
+ * the speed is nothing, so the lead is nothing and the settled framing is the
+ * old framing to the pixel — `cameraY()` for a standing body is unchanged, and
+ * asserted so.
+ *
+ * The one ordinary jump this is visible on is worth stating rather than
+ * rounding away. A running jump in 2-1 at power level 3 tops out with the head
+ * **16.4 px** clear of the frame — 0.4 px from forcing the old clamp — so the
+ * anticipation does engage for a frame or two near the apex, and the view
+ * drifts a total of **0.93 px over an 85 px jump**, 0.27 of it on its busiest
+ * frame. That is a jump which was always going to move the camera, moved
+ * smoothly instead of in one step. At power level 0 the same jump has 20.4 px
+ * of headroom and the view still does not move at all: 0.00 px, before and
+ * after.
+ */
+const CAM_TOP_LEAD = 3;
+
+/*
  * Cinemascope, for the levels that ask for it (`letterbox: true`).
  *
  * The bars are a **crop, not a mask**. Widescreen is a narrower window on the
@@ -1170,12 +1223,19 @@ export class LevelScene {
       this.cam.y += fall * CAM_V_EASE;
     }
 
-    /* And the headroom is a limit, not a destination. Easing towards it is
-     * still lagging behind it, and a limit you arrive at four frames late is
-     * not one — measured, the apex poked 2.6 px out of the top of the
-     * letterbox band while the view was on its way to where it should already
-     * have been. So the ease does its work and then this has the last word.
-     * It only ever moves the view up, and only as far as the band allows. */
+    /* And the headroom is a limit, not a destination: the ease does its work
+     * and then this has the last word. It only ever moves the view up, and
+     * only as far as the band allows.
+     *
+     * **It is a safety net and no longer a mechanism.** It used to be the
+     * thing that moved the camera at all — the ease was still on its way and
+     * this arrived, which is the snap the owner reported. `CAM_TOP_LEAD` gives
+     * the ease its warning, so by the time the head is 16 px from the frame
+     * the view is already there and this line finds nothing to do: measured
+     * over fart jumps in 2-1, 2-3 and 1-1, it moves the camera 0.00 px. It
+     * stays because "already there" is a measurement and not a proof, and the
+     * head touching the top of the frame is not a thing to find out about in
+     * the wild. */
     if (!p.dying && !p.transit) {
       this.cam.y = this.clampCamY(Math.min(this.cam.y, p.y - CAM_TOP_MARGIN));
     }
@@ -1198,7 +1258,11 @@ export class LevelScene {
      * must not leave the top of the window. Frozen bodies get the line alone —
      * a dying player flies upwards and a travelling one is not in the room. */
     const rest = this.camAnchor - this.viewH * CAM_EYE - CAM_STAND;
-    const target = p.dying || p.transit ? rest : Math.min(rest, p.y - CAM_TOP_MARGIN);
+    /* The head, or where it is heading. A rise is aimed three frames ahead so
+     * the ease is already up to speed by the time the margin matters; anything
+     * else is aimed at the body itself. See CAM_TOP_LEAD. */
+    const head = p.vy < 0 ? p.y + p.vy * CAM_TOP_LEAD : p.y;
+    const target = p.dying || p.transit ? rest : Math.min(rest, head - CAM_TOP_MARGIN);
     // The view holds still while you die: following the body down would pan it
     // straight through whatever is under the pit you just fell into.
     if (p.dying && this.def.bands) return this.cam.y;

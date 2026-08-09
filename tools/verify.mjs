@@ -5291,10 +5291,110 @@ const report = await page.evaluate(async () => {
         rows.map((r) => `${r.id} taso ${r.level}: ${r.seen}/${r.air} framea`).join(', '));
       /* And the mechanism, not just its effect: the view may rise a little near
        * the apex to keep the head in frame (CAM_TOP_MARGIN), and it must never
-       * ride the arc. A jump lifts the body ~5 px on its fastest frame. */
+       * ride the arc. A jump lifts the body ~5 px on its fastest frame.
+       *
+       * The 2-1 power-3 row reads 0.27 rather than 0.00 since `CAM_TOP_LEAD`,
+       * and that is the anticipation zone rather than a regression: that jump
+       * tops out 16.4 px from the top of the letterbox band, 0.4 px short of
+       * forcing the old hard clamp, so it was always going to move the view —
+       * it now moves it 0.93 px over the whole 85 px arc instead of stepping.
+       * The power-0 row has 20.4 px of headroom and stays at 0.00. */
       expect('the view does not ride a jump upward',
         rows.every((r) => r.rise < 2),
         rows.map((r) => `${r.id} ${r.rise.toFixed(2)} px/frame`).join(', '));
+    }
+
+    /*
+     * Red before green (DESIGN.md §7) for the owner's second camera report:
+     * "now it's better that it doesn't move when we jump, but then when the
+     * character is actually high enough for the camera to move, it moves
+     * suddenly. It just snaps higher instead of animating."
+     *
+     * The hold and the downward follow were both right and both stay; what was
+     * wrong was the moment the hold ends. `CAM_TOP_MARGIN` was a hard clamp
+     * applied after the ease, so the frame the head crossed it the view was
+     * pinned to `p.y - 16` and tracked it exactly — nought to the body's own
+     * rise speed between two frames.
+     *
+     * **A snap is a big number on one frame; an animation is a small number on
+     * many.** So the measurement is the largest single-frame upward move of the
+     * view over a run of jumps. Before `CAM_TOP_LEAD`: **2.92 px**, on a frame
+     * where the body lifted 2.93 — the view matching the body's speed from a
+     * standstill. After: **1.95 px**, and reached over several frames.
+     *
+     * Two things about the fixture, both of which decide what is being
+     * measured:
+     *
+     *   - **only jumps that start from a settled view count.** Landing on a
+     *     ledge moves the anchor, and the view then glides up to it at
+     *     `CAM_V_EASE` — 8.7 px on its first frame, by design, because that is
+     *     the *downward* follow working. Jumping again mid-glide and blaming
+     *     the number on the top margin measures the wrong thing entirely; it
+     *     was 6.70 px before the filter and had nothing to do with the report.
+     *   - **fart jumps**, because nothing else reaches the zone. A running
+     *     jump rises 85 px and tops out with the head still 16 px clear of the
+     *     frame even in a letterboxed level, so it never asks the camera for
+     *     anything — which is why the two power-0 and running-jump rows below
+     *     are 0.00 px and must stay 0.00 px.
+     */
+    {
+      const rows = [];
+      for (const [id, power] of [['2-3', { type: 'leaf', level: 5 }],
+        ['2-1', { type: 'leaf', level: 5 }], ['2-1', { type: 'leaf', level: 3 }],
+        ['1-1', { type: 'leaf', level: 5 }], ['2-1', { type: null, level: 0 }],
+        ['2-1', { type: 'shroom', level: 3 }]]) {
+        reset(power);
+        const s = new LevelScene(game, id);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const input = mkInput();
+        let rise = 0;
+        let air = 0;
+        let seen = 0;
+        let head = Infinity;
+        let takeoff = null;
+        let counted = false;
+        for (let f = 0; f < 1800; f++) {
+          input.held = blank();
+          input.pressed = blank();
+          input.held.right = true;
+          input.held.run = true;
+          const phase = f % 60;
+          if (phase === 40 && s.player.onGround) { input.pressed.jump = true; input.held.jump = true; }
+          else if (phase > 40 && phase < 74) input.held.jump = true;
+          // The second press, in mid-air: the fart jump.
+          if (phase === 48) { input.pressed.jump = true; input.held.jump = true; }
+          const wasGround = s.player.onGround;
+          const camBefore = s.cam.y;
+          const settled = Math.abs(s.cam.y - s.cameraY()) < 0.5;
+          s.update(input);
+          const p = s.player;
+          if (p.dying) break;
+          if (wasGround && !p.onGround) { takeoff = p.y + p.h; counted = settled; }
+          if (!p.onGround && takeoff !== null && counted) {
+            air++;
+            if (takeoff < s.cam.y + s.viewH) seen++;
+            rise = Math.max(rise, camBefore - s.cam.y);
+            head = Math.min(head, p.y - s.cam.y);
+          }
+          if (p.onGround) takeoff = null;
+        }
+        rows.push({ id, level: power.level, air, seen, rise, head });
+      }
+      /* 2.5 and not 2.92: the ceiling is under the number the snap produced and
+       * over the number the ease produces, so it is the snap that cannot come
+       * back rather than the whole mechanism being frozen. */
+      expect('a view that has to rise animates instead of snapping',
+        rows.every((r) => r.air > 200 && r.rise < 2.5),
+        rows.map((r) => `${r.id} taso ${r.level}: ${r.rise.toFixed(2)} px/frame`).join(', '));
+      /* And the warning must buy the smoothness out of itself, not out of the
+       * two things that were already right: the head still may not touch the
+       * top of the frame — nor even reach the margin, which is how you can tell
+       * the clamp is no longer the thing doing the work — and the ground under
+       * a jump still may not leave the bottom of it. */
+      expect('anticipating the rise costs neither the headroom nor the ground',
+        rows.every((r) => r.head > 16 && r.seen === r.air),
+        rows.map((r) => `${r.id}: pää ${r.head.toFixed(2)} px, maa ${r.seen}/${r.air}`).join(', '));
     }
 
     /* `applySize()` pins the bottom of the body and changes its height, so
