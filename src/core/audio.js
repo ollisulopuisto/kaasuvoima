@@ -816,6 +816,63 @@ const SFX = {
     noise({ dur: 0.16, from: 520, to: 70, q: 0.9, gain: 0.3, attack: 0.004 });
     farty({ dur: 0.2, base: 70, gain: 0.22, wobble: 9, wet: 0.7, delay: 0.02 });
   },
+  kurnutus: () => {
+    /*
+     * KURNUTTAJAN VAROITUS, ja se on ääni jolla on pituus — samasta syystä kuin
+     * `sprout`illa.
+     *
+     * `sprout` on ainoa palikkaääni jolla on mittaa, koska pavunvarsi kasvaa
+     * puolitoista sekuntia ja pelaajan pitää tietää että se on yhä käynnissä
+     * jossain ruudun yläpuolella. Tässä on sama muoto ja eri asia: kuilun
+     * pohjalta kuuluva kurnutus kestää 84 framea (`KURN_WARN`) ja koko sen ajan
+     * se tarkoittaa "vielä ei, mutta pian". Lyhyt haukahdus olisi sanonut "nyt"
+     * hetkellä jolloin mitään ei vielä tapahdu, ja se on juuri se valhe jota
+     * varoitus ei saa kertoa.
+     *
+     * Mutta se ei ole `sprout` eikä `dive`, ja ero on **rytmissä eikä
+     * sointivärissä**. Molemmat noista ovat yksi yhtenäinen liu'utus — toinen
+     * ylös, toinen alas. Tämä on **kiihtyvä pulssijono**: seitsemän lyhyttä
+     * kurahdusta joiden väli kutistuu 0,20 sekunnista 0,09:ään, eli ääni kertoo
+     * paitsi että jotain tulee, myös *kuinka pian*. Mikään muu tällä väylällä ei
+     * ole jono jonka tiheys muuttuu, ja juuri se on se piirre jonka korva
+     * poimii melun seasta ilman että sitä tarvitsee opetella.
+     *
+     * Matala ja märkä, koska se tulee kolosta: perussävel putoaa 150 hertsistä
+     * 96:een jonon mittaan, mikä on syvemmällä kuin `spikes` (140 -> 720,
+     * nouseva) ja tukkoisempi kuin `boss` (yksi pitkä pieru). Sama sana kuin
+     * pelin nimessä: kurnuttaa on kurnia, ja kurnia on vatsa.
+     */
+    let at = 0;
+    for (let i = 0; i < 7; i++) {
+      const f = 150 - i * 9;
+      tone({
+        type: 'triangle', from: f, to: f * 0.72, dur: 0.075, gain: 0.17,
+        delay: at, hold: 0.35, curve: 'lin',
+      });
+      farty({ dur: 0.09, base: f * 1.35, gain: 0.1, wobble: 34, wet: 0.85, delay: at, vary: 0.2 });
+      at += 0.20 - i * 0.018;
+    }
+    // A gulp of water under the whole run, so the pulses read as one animal
+    // rather than as seven separate taps.
+    noise({ dur: 1.25, from: 210, to: 90, q: 5, gain: 0.09, attack: 0.4 });
+  },
+  loikka: () => {
+    /*
+     * JA SE LÄHTEE. Varoitus kesti 1,4 sekuntia; tämä kestää 0,12, ja se on
+     * pariskunnan koko idea — korva erottaa hetken jolloin odottaminen loppuu
+     * vain jos jälkimmäinen ääni on sen muotoinen mitä edellinen ei ole.
+     *
+     * Se ei saa kuulostaa hypyltä (`jump`, siniliu'utus 300 -> 760) eikä
+     * piikeiltä (`spikes`, saha 140 -> 720 puolen sekunnin mitassa). Tämä
+     * lähtee 170:stä ja on 900:ssa kahdeksassa sadasosassa, eli se on sama
+     * suunta mutta nelinkertainen kiire, ja sen alla on märkä läiskähdys jota
+     * kummassakaan noista ei ole: se on se ääni jonka kuilun pohja päästää kun
+     * jokin irtoaa siitä.
+     */
+    farty({ dur: 0.1, base: 250, gain: 0.26, wobble: 48, wet: 0.95, vary: 0.3 });
+    tone({ type: 'square', from: 170, to: 900, dur: 0.08, gain: 0.2, hold: 0.2, curve: 'lin' });
+    noise({ dur: 0.14, from: 320, to: 2400, q: 2.2, gain: 0.15, attack: 0.012 });
+  },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
   spikes: () => {
     // Bone sliding out of a back. Rising, so it reads as a warning rather than

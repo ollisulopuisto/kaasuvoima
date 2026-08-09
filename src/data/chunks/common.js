@@ -129,6 +129,44 @@ export const COMMON_CHUNKS = {
     13: '##     ##     #',
     14: '##     ##     #',
   }),
+  /**
+   * KUILU JOSSA ASUU JOKU.
+   *
+   * Tile for tile this is `pit_s` — five floor columns, six of nothing, five
+   * more — and keeping it identical is the whole idea. The player has been
+   * crossing that exact hole since 1-1, so the only thing they have to read
+   * anew is the thing living in it. A different width would have asked them to
+   * re-read the terrain at the same moment, and somebody who dies could not
+   * tell which of the two questions killed them.
+   *
+   * It also keeps `tools/difficulty.mjs` honest, which is not a side benefit
+   * but the reason this width survived a rewrite. A narrower hole was tried
+   * (five tiles, on a "one question at a time" argument) and the meter then read
+   * 2-1 as **easier with a monster in it than without** — 115.7 down to 111.0,
+   * because a tile off the gap is worth more to the score than the enemy is.
+   * A hazard that measures as a discount is exactly the failure the spiky walker
+   * shipped with. At six the difference is the creature and nothing else:
+   * 115.7 -> 119.7.
+   *
+   * The one thing the six-tile version cost was real and is worth recording: it
+   * would not clear at power level 0 where it was first put in 3-3, because the
+   * approach there was a four-tile brick wall you come off with the run spent.
+   * `tools/playable.mjs` found it, and the fix was the level's chunk order
+   * rather than this chunk — see levels/world3.js.
+   *
+   * The marker sits on the first floor row (13) near the middle of the gap,
+   * because that row's top edge is the rim — the line the creature measures its
+   * rest height, its hitbox and its bubbles from. The cell itself is empty
+   * ground, so `rules.js` still reads a plain six-tile gap, which is what it is.
+   *
+   * No coins over it. A coin arc is this game's way of drawing a jump, and
+   * drawing the arc here would be pointing the player *into* the one column of
+   * air that is sometimes occupied.
+   */
+  pit_croak: ck(16, {
+    13: '#####  U   #####',
+    14: '#####      #####',
+  }),
 
   /* ------------------------------- stairs ------------------------------ */
   steps_up: ck(16, {
