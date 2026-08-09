@@ -2524,14 +2524,23 @@ const report = await page.evaluate(async () => {
       s.centerCamera();
       const thrown = new Set();
       let strayed = 0;
+      /* Sampled every frame, not once at the end. A baron hops, so `onGround`
+       * at one arbitrary instant says only which phase of the hop the loop
+       * stopped in — this assertion passed and failed on the same simulation
+       * depending on where it landed. What the fight actually promises is that
+       * it never *falls off*, and that is a property of every frame. */
+      let sank = 0;
       const idle = mkInput();
       for (let f = 0; f < 1200; f++) {
         p.invuln = 20;                       // this is about them, not about him
         s.update(idle);
         for (const e of s.entities) if (e instanceof E.BeanBomb) thrown.add(e.id);
-        for (const b of barons) strayed = Math.max(strayed, Math.abs(b.x - b.homeX));
+        for (const b of barons) {
+          strayed = Math.max(strayed, Math.abs(b.x - b.homeX));
+          sank = Math.max(sank, b.y + b.h);
+        }
       }
-      const onPlinth = barons.every((b) => b.onGround && b.y + b.h <= 11 * 16 + 1);
+      const onPlinth = sank <= 11 * 16 + 1;
       expect('paroonit heittelevät ja pysyvät jalustoillaan',
         thrown.size >= 4 && strayed <= 32 && onPlinth,
         `${thrown.size} pommia, poikkeama ${Math.round(strayed)} px, jalustalla ${onPlinth}`);

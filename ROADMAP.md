@@ -50,9 +50,15 @@ generaattori.
 2. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
 3. **Kiipeilyanimaatio** — hahmo selin, ote varresta.
 4. **Spritejen animaatiokierrosten tarkistus** kaikilla viidellä voimatasolla.
-5. **Murtava tehostus** — tiilet rikki sivusta juosten.
-6. **Minipomotaistelut kartalle** — kaksi "vasaraveljeä" aavikkoon, palkintona
-   murtava tehostus. Ainoa lähde sille.
+5. ✔ **Murtava tehostus** — PAUKKUPAPU, neljäs voimatyyppi (v26.08.09.14).
+   Rikkoo tiilen ja **vain** tiilen; `X` ja `#` jätettiin koskemattomiksi koska
+   `rules.js` lukee juuri ne lattiaprofiilina jota vasten reittisäännöt
+   mitataan. Vanha voimatason 4 sivuisku poistettiin, koska kaksi lähdettä ei
+   ole yksi lähde.
+6. ✔ **Minipomotaistelut kartalle** — PAPUPAROONIT kentässä 2-M, laavatien
+   varrella (v26.08.09.14). **Nimi ei ole "vasaraveljet"**: se on suora käännös
+   toisen sarjan vihollisesta, ja DESIGN.md kohta 1 kieltää sen. Jäljellä:
+   muiden maailmojen minipomot, jos niitä halutaan.
 7. **Luumaailma** ja luurankopomo tehtaan jälkeen.
 8. **Salaisuuksien löydettävyys**: karttaan "salaisuudet 0/1" (kertoo *että*,
    ei *missä*), demo näyttää tempun, kolikkojonot osoittavat.

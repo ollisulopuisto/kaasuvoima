@@ -7,6 +7,53 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.14 — murtava tehostus, ja papuparoonit jotka sen pitävät
+
+Haaran palkinto ja sen ainoa lähde, samassa erässä koska ne ovat sama asia.
+
+**PAUKKUPAPU** on neljäs voimatyyppi: sillä tiili hajoaa sivusta juosten. Nimet
+ovat omia ja se on sääntö eikä maku — roadmapin *"vasaraveljet"* on suora
+käännös toisen sarjan vihollisesta, ja DESIGN.md kohta 1 kieltää sen missä
+tahansa muodossa. Vartijat ovat **PAPUPAROONEJA**, pieruprinssin veronkantajia
+dyyneillä, jolloin fiktio itse selittää miksi juuri he pitävät papua.
+
+**Mitä se rikkoo, ja tärkeämpää: mitä ei.** Tiili kyllä — se on ainoa ruutu jota
+peli on koskaan kohdellut pehmeänä. Ei `?`/`!`/`*` (astiat maksavat ylöspäin,
+sivulta puhkaisu tuhoaa sisällön), ei `X` eikä `#` (**`rules.js` lukee juuri ne
+lattiaprofiilina jota vasten jokainen reittisääntö mitataan** — murrettava maa
+avaisi reiän jota mikään tarkistus ei näkisi), ei `%` (sen sopimus on ajastin ja
+se kasvaa takaisin), ei `S` (kentässä on täsmälleen yksi nappi), eikä
+salaisuutta kätkevä tiili — sen palkinto kuuluu sille joka lyö alta, kuten
+kuorenkin kohdalla jo on.
+
+**Vanha voimatason 4 sivuisku poistettiin**, ei jätetty rinnalle: kaksi ovea
+olisi antanut hernekeittolautasen jakaa paroonien palkintoa, ja "ainoa lähde"
+on sääntö tai ei mitään.
+
+**Taistelu:** kaksi paroonia jalustoillaan, yhdeksän saraketta hiekkaa välissä,
+2 osumapistettä kummallakin, tallattavissa pienimmälläkin koolla. Ne heittävät
+kaarevan papupommin puolen sekunnin ennakkovaroituksella; pommia ei voi tuhota,
+se väistetään. **Viimeisenä seisova pudottaa pavun**, ja "viimeinen" katsotaan
+elävästä sisaruksesta eikä tappolaskurista — muuten kesken taistelun ladattu
+tilatallennus jättäisi palkinnon kenellekään kuulumattomaksi.
+
+### Kaksi agenttia oli eri mieltä, ja mittari ratkaisi
+
+Taistelun tekijä halusi ripustaa kentän `2-N`:n taakse, koska yökenttä on
+"vaikeampi tie". Mitattuna hiekkatie on 124 ja laavatie 156, ja palkinnon on
+oltava mitatusti vaikeammalla reitillä tai `worldProblems` hylkää kartan. Kenttä
+meni siis laavatielle. **Tämä on juuri se syy miksi vaikeus mitataan eikä
+muisteta.**
+
+### Portin oma bugi, joka löytyi vasta yhdistämisessä
+
+Testi "paroonit pysyvät jalustoillaan" katsoi `onGround`ia **yhdellä framella**
+1200:n jälkeen. Parooni pomppii, joten se kertoi vain mihin hypyn vaiheeseen
+silmukka sattui pysähtymään: sama simulaatio meni läpi tekijän koneella ja kaatui
+yhdistettynä, identtisillä muilla luvuilla. Nyt mitataan alin kohta **joka
+framelta** — se on se mitä taistelu oikeasti lupaa (ei putoa jalustaltaan), ja
+se on totta tai epätotta riippumatta siitä milloin katsotaan.
+
 ## v26.08.09.13 — haarautuva kartta, ja vaikeus näkyy ennen valintaa
 
 `2-N` oli solmu johon pääsi mutta josta ei päässyt pois. Nyt maailma 2 haarautuu
