@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.12 — generaattori oppi uudet merkit, maailma 5 arvottiin uusiksi
+
+Maailma 5 oli ainoa jossa aamun mekaniikat eivät näkyneet, koska generaattori ei
+tiennyt merkkien olemassaolosta.
+
+**Kaksi neljästä merkistä on paikkoja, kaksi ei — ja koko muutos lepää tuon
+jaon päällä.** `%` ja `S` ovat set piecejä palettivalinnassa; `*` ja
+salaisuustiilet ovat jälkikäsittelyä valmiille ruudukolle.
+
+**Murenevan lavan leveyskatto on se kohta joka olisi mennyt hiljaa väärin:**
+`%` on `rules.js`:lle kiinteä, joten mureneva kansi **vaimentaa
+kuilutarkistuksen**. Ilman kattoa palikka voisi salakuljettaa ylittämättömän
+kuilun sellaisen lattian taakse jota ei kohta ole. Katto on tavallisen hypyn
+budjetti, eli kenttä kestää sen että mekaniikka pettää sinut.
+
+Kytkimen tiilet **leijuvat eivätkä seiso maassa**: kytkin saa vain vähentää
+kiinteyttä, joten mikään kuljettava ei saa riippua siitä. Tähti ei ole uusi
+palikka vaan **ylennys** — `?` merkitään tähdeksi, koska `TILE_INFO` piirtää ne
+samanlaisina tarkoituksella. Salaisuus taataan pidentämällä yhtä olemassa
+olevaa tiilijonoa yhdellä ruudulla, mikä pysyy louhitun jonopituusjakauman
+sisällä eikä keksi uutta tiiliriviä.
+
+**Se paljasti oikean aukon:** korvatuissa kentissä 5-1:ssä ja 5-2:ssa oli
+**nolla salaisuutta**.
+
+### Siemen valittiin mittaamalla, ei ensimmäisestä heitosta
+
+56 siementä. Jokainen mitattiin neljästä asiasta, ja kolmas on se joka
+karsi eniten: **notkon syvyys suhteessa naapuripiikkiin** — 0,6 prosentin notko
+on pyöristysvirhe eikä hengähdys. 21 läpäisi muototarkistuksen, ja niistä
+`playable.mjs`:n rima oli se jonka korvatut kentät täyttivät: kaikki kolme läpi
+voimatasolla 0, 100 %. Kuusi läpäisi molemmat.
+
+Valittu 44444, muodon perusteella: 215 → 185 → 279, sama muoto kuin maailmalla 4
+(188 → 141 → 226) — kova avaus, oikea hengähdys, piikki viimeisenä. Generaattorin
+oletussiemen on nyt sama, joten paljas ajo toistaa sen mikä on tuotannossa.
+
+**Hinta sanottuna ääneen:** w4→w5 kasvaa +39,5:stä +67,2:een. Viimeinen porras on
+siis näkyvästi jyrkempi kuin muut, ja se on tietoinen vaihtokauppa maailman
+sisäisestä muodosta.
+
+Samankaltaisuustarkistus oli **päällä jokaisella kandidaatilla** (korpus kloonattu
+repon ulkopuolelle, DESIGN.md kohta 3), osumia 0. Generaattorin oma `SOLID`-kopio
+korjattiin vastaamaan `rules.js`:ää — puuttuva merkki olisi verrannut väärää
+ruudukkoa korpukseen.
+
+Salaisuustiilien todennäköisyydet ovat kahdessa paikassa (`LevelScene` ei lataudu
+selaimen ulkopuolella). Sitä ei peitelty: `verify.mjs` kysyy nyt **moottorin
+omalta `brickSecret`iltä** kätkeekö kenttä jotain, joten jos luvut karkaavat
+toisistaan portti kaatuu sen sijaan että maailma hiljaa tyhjenisi.
+
 ## v26.08.09.11 — kaikki kolme kaistaa validoidaan
 
 `rules.js` tarkisti vain sen kaistan jossa aloitusmerkki on, joten **jokainen
