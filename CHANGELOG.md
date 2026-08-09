@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.2 — kytkinruudut
+
+Painikelohko (`S`) kentässä 3-2. Osuma siihen muuttaa kentän **tiilet kolikoiksi
+kymmeneksi sekunniksi**, ja HUD laskee aikaa. Viimeisen kahden ja puolen sekunnin
+ajan tiilet välkkyvät kolikoiden ja tiilien välillä, joten loppu ei tule
+yllätyksenä.
+
+### Ruudukkoa ei kirjoiteta uusiksi
+Kytkin on **yksi luku**, ei muunneltu kartta: `tileAt()` kääntää merkin lennossa
+kun ajastin käy. Siksi vanheneva kytkin ei voi jättää kenttää rikkinäiseen
+välitilaan, tilatallennus tarvitsee yhden kentän eikä toista kopiota ruudukosta,
+ja `rawTileAt()` kertoo yhä mitä kartassa oikeasti lukee.
+
+**Käännös menee vain yhteen suuntaan: tiili → kolikko.** Kaksisuuntainen vaihto
+on se klassinen temppu, mutta se voi muuttaa ruudun jossa pelaaja seisoo
+seinäksi, ja ajastimen sinetöimäksi joutuminen kiinteään kiveen ei ole pulma.
+Nyt jokainen tila jonka kytkin tuottaa on **vähemmän** kiinteä kuin lähtötila.
+
+### Kytkin avaa palkinnon, ei reittiä
+Ensimmäinen versio oli tiiliseinä jonka läpi pääsi vain kytkimellä. Se kaatui
+heti validaattoriin, ja aivan oikein: se rikkoo saman lupauksen kuin pakollinen
+tehostus. Sen lisäksi **kumpikaan koneemme ei osaa mallintaa painiketta** —
+validaattori näkee raa'an ruudukon ja botti osaa juosta ja hypätä — joten portti
+olisi tarkoittanut valehtelua molemmille. Nyt tiililautta on katossa: sen ali
+kävelee huomaamatta, ja kytkin muuttaa sen kolikkosateeksi johon ehtii hypätä.
+
+### Ansaa ei ole, mutta ei siitä syystä kuin luulin
+Kirjoitin `updateSwitch`iin vartijan joka kieltäytyy päättämästä ajastinta jos
+pelaaja on palautuvan ruudun sisällä. Testi paljasti että tilanne on
+saavuttamaton: **tiili joka luetaan kolikkona kerätään heti kosketuksesta**, mikä
+tyhjentää sen solun ruudukosta pysyvästi — mitään ei ole palaamassa. Vartija jäi
+paikalleen tulevien, ei-kerättävien käännösten varalta, mutta testi väittää nyt
+sitä ominaisuutta joka pelaajaa oikeasti suojaa.
+
+### Testit
+Kuusi uutta: kytkin ja tiilet löytyvät kentästä, käynnissä oleva kytkin muuttaa
+tiilen kolikoksi **ruudukkoa muuttamatta**, ajastin loppuu ja tiilet palaavat,
+kytketty tiili kerätään pois, lohkon osuma käynnistää kytkimen ja kuluttaa
+lohkon, ja tilatallennus muistaa käynnissä olevan kytkimen.
+
+---
+
 ## v26.08.09.1 — pavunvarret ja piilotetut alueet
 
 Kenttä 1-2 on nyt **45 riviä korkea**: taivaskaista pilvien yllä, tavallinen

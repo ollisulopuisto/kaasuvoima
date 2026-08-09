@@ -1,5 +1,5 @@
 import { getLevel } from '../data/levels.js';
-import { TILE, T, info, isSolid, isSemi, drawTile, THEMES } from '../gfx/tiles.js';
+import { TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP } from '../gfx/tiles.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
@@ -39,6 +39,12 @@ const CRUMBLE_FRAMES = 52;
 /** And how long the hole stays before the tile comes back. */
 const CRUMBLE_REGROW = 220;
 
+/* How long a switch runs. Ten seconds is enough to cross a room and get back,
+ * and short enough that it is a window rather than a new normal. */
+const SWITCH_FRAMES = 600;
+/** It starts flashing this long before it ends, so the end is never a surprise. */
+const SWITCH_WARN = 150;
+
 export class LevelScene {
   constructor(game, levelId) {
     this.game = game;
@@ -58,6 +64,11 @@ export class LevelScene {
      * which is deliberate — the save-state code already knows how to store a
      * per-tile timer map, so this costs one line there instead of a design. */
     this.crumbles = new Map();
+    /* A switch is one number, not a rewritten grid — see `tileAt`. That is what
+     * makes it impossible for an expiring switch to leave the level in a broken
+     * half-state, and what makes the save state need one field instead of a
+     * second copy of the map. */
+    this.switchTimer = 0;
     this.cam = { x: 0, y: 0 };
     this.camLook = 0;
     this.tick = 0;
@@ -123,6 +134,14 @@ export class LevelScene {
   tileAt(tx, ty) {
     if (tx < 0 || tx >= this.w) return T.HARD;   // solid level edges
     if (ty < 0 || ty >= this.h) return T.EMPTY;
+    const ch = this.grid[ty][tx];
+    if (this.switchTimer > 0) return SWITCH_MAP[ch] || ch;
+    return ch;
+  }
+
+  /** The character actually stored, ignoring any running switch. */
+  rawTileAt(tx, ty) {
+    if (tx < 0 || tx >= this.w || ty < 0 || ty >= this.h) return T.EMPTY;
     return this.grid[ty][tx];
   }
 
@@ -412,6 +431,12 @@ export class LevelScene {
       return;
     }
 
+    if (meta.switch) {
+      this.setTile(tx, ty, T.USED);
+      this.startSwitch();
+      return;
+    }
+
     if (ch === T.NOTE) {
       player.vy = -6.2;
       player.onGround = false;
@@ -476,6 +501,7 @@ export class LevelScene {
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
+    this.updateSwitch();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
   }
 
@@ -569,6 +595,46 @@ export class LevelScene {
       }
       this.crumbles.set(key, next);
     }
+  }
+
+  startSwitch() {
+    this.switchTimer = SWITCH_FRAMES;
+    this.shake(2);
+    Sfx.play('powerup');
+    this.addScorePop(this.player.cx, this.player.y - 12, 'TIILET KOLIKOIKSI');
+  }
+
+  /**
+   * Runs the switch down. The only tricky part is the last frame: a brick that
+   * comes back while the player is standing inside it would seal them in solid
+   * rock, which is a bug wearing a puzzle's clothes. So the timer simply
+   * refuses to reach zero until they are clear — bounded, invisible when it is
+   * not needed, and it makes the trap impossible rather than unlikely.
+   */
+  updateSwitch() {
+    if (this.switchTimer <= 0) return;
+    if (this.switchTimer > 1) {
+      this.switchTimer--;
+      return;
+    }
+    if (this.playerInsideReturningTile()) return;
+    this.switchTimer = 0;
+    Sfx.play('bump');
+  }
+
+  playerInsideReturningTile() {
+    const p = this.player;
+    if (p.dying) return false;
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    const y0 = Math.floor(p.y / TILE);
+    const y1 = Math.floor((p.y + p.h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (isSolid(this.rawTileAt(tx, ty))) return true;
+      }
+    }
+    return false;
   }
 
   /** 0→1 while a crumbling tile is counting down, for the drawing code. */
@@ -862,13 +928,23 @@ export class LevelScene {
 
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        const ch = this.grid[ty][tx];
+        /* Draw what the tile currently *is*, switch and all — otherwise the
+         * bricks you can walk through would still look like bricks. Near the
+         * end the two flicker against each other, which is how a player is
+         * told to get off them without being told anything. */
+        const warning = this.switchTimer > 0 && this.switchTimer < SWITCH_WARN
+          && Math.floor(this.tick / 6) % 2 === 0;
+        const ch = warning ? this.rawTileAt(tx, ty) : this.tileAt(tx, ty);
         if (ch === ' ') continue;
         const bump = this.bumps.get(`${tx},${ty}`);
         const offset = bump === undefined ? 0 : Math.round(Math.sin((bump / 10) * Math.PI) * -6);
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,
           this.tileAt(tx, ty - 1),
-          { doorOpen: this.bossDefeated, crumble: this.crumbleProgress(tx, ty) });
+          {
+            doorOpen: this.bossDefeated,
+            crumble: this.crumbleProgress(tx, ty),
+            switchOn: this.switchTimer > 0,
+          });
       }
     }
   }
@@ -951,7 +1027,14 @@ export class LevelScene {
     drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
       color: '#ffffff', align: 'right',
     });
-    if (this.player.corked > 0) {
+    if (this.switchTimer > 0) {
+      const secs = Math.ceil(this.switchTimer / 60);
+      drawText(ctx, `KYTKIN ${secs}`, VIEW_W - 6, y + 17, {
+        color: this.switchTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2
+          ? '#ff8040' : '#8fd0ff',
+        align: 'right',
+      });
+    } else if (this.player.corked > 0) {
       const secs = Math.ceil(this.player.corked / 60);
       drawText(ctx, `UMMETUS ${secs}`, VIEW_W - 6, y + 17, {
         color: Math.floor(this.tick / 6) % 2 ? '#ff8040' : '#c85820', align: 'right',

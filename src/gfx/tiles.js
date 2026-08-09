@@ -20,6 +20,7 @@ export const T = {
   SPIKE: '^',
   LAVA: 'W',
   CRUMBLE: '%',
+  SWITCH: 'S',
   GOAL: 'F',
   DOOR: 'D',
   NOTE: 'N',
@@ -54,12 +55,24 @@ export const TILE_INFO = {
   /* Solid until you stand on it. The timer lives on the scene, not here —
    * `TILE_INFO` describes what a character *is*, never what it is doing. */
   [T.CRUMBLE]: { ...S, crumble: true },
+  [T.SWITCH]: { ...S, bumpable: true, switch: true },
   [T.COIN]: { coin: true },
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
   [T.GOAL]: { goal: true },
   [T.DOOR]: { door: true },
 };
+
+/**
+ * What a character reads as while a switch is running.
+ *
+ * One direction only, and that is a decision rather than an omission: bricks
+ * become coins, coins do not become bricks. A two-way swap is the classic
+ * trick, but it can turn the tile a player is standing in into a wall, and
+ * being sealed inside solid rock by a timer is not a puzzle. Everything here
+ * only ever makes the level *less* solid, so no state it produces can trap you.
+ */
+export const SWITCH_MAP = { [T.BRICK]: T.COIN };
 
 export const info = (ch) => TILE_INFO[ch] || {};
 export const isSolid = (ch) => !!info(ch).solid;
@@ -613,6 +626,23 @@ function drawCrumble(ctx, x, y, th, tx, ty, progress) {
   }
 }
 
+/** The switch block itself: a big button that stays pressed once it is hit. */
+function drawSwitch(ctx, x, y, th, tick, pressed) {
+  const drop = pressed ? 4 : 0;
+  ctx.fillStyle = th.brickDark;
+  ctx.fillRect(x, y + 10, TILE, 6);
+  ctx.fillStyle = pressed ? '#5a6a8c' : '#7080b0';
+  ctx.fillRect(x + 1, y + 4 + drop, TILE - 2, 10 - drop);
+  ctx.fillStyle = pressed ? '#8090b8' : '#b0c0e8';
+  ctx.fillRect(x + 1, y + 4 + drop, TILE - 2, 2);
+  if (!pressed) {
+    // A pulse, because a block you are supposed to hit has to ask for it.
+    const lit = Math.floor(tick / 8) % 2 === 0;
+    ctx.fillStyle = lit ? '#ffd048' : '#c08020';
+    ctx.fillRect(x + 6, y + 7, 4, 4);
+  }
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
@@ -632,6 +662,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
+    case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA: drawLava(ctx, x, y, tick, tx); break;

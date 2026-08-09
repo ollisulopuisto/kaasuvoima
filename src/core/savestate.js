@@ -71,6 +71,7 @@ export function captureState(game) {
         wonCard: scene.wonCard,
         bumps: [...scene.bumps.entries()],
         crumbles: [...scene.crumbles.entries()],
+        switchTimer: scene.switchTimer,
       },
     };
   }
@@ -116,6 +117,7 @@ export function restoreState(game, snap) {
   scene.bumps = new Map(data.bumps);
   // Older snapshots predate crumbling platforms; an absent list is not an error.
   scene.crumbles = new Map(data.crumbles || []);
+  scene.switchTimer = data.switchTimer || 0;
   game.setScene(scene);
   return true;
 }

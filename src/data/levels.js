@@ -110,7 +110,7 @@ const LEVEL_DEFS = {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
-      'coins', 'brick_wall', 'cloud_run', 'pit_bridge', 'shell', 'plat_float',
+      'coins', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell', 'plat_float',
       'spikes', 'flyer', 'pit_plat', 'bricks', 'pipe_pair', 'walkers',
       'ledge', 'power', 'run_up', 'goal', 'goal_end',
     ],

@@ -37,7 +37,7 @@ joita botti ei osaa käyttää. Loput ovat todennäköisesti samaa lajia, mutta 
 ei ole tarkistettu ruutu ruudulta. **Älä muuta kenttädataa botin raportin
 perusteella katsomatta karttaa.**
 
-Kytkinruudut (kohta 4) ovat yhä tekemättä.
+Kytkinruudut on tehty (v26.08.09.2, kenttä 3-2).
 
 ## Seuraavaksi
 

@@ -817,6 +817,92 @@ const report = await page.evaluate(async () => {
       `cam.y ${Math.round(worst)}`);
   }
 
+  /* ----------------------------- kytkinruudut --------------------------- */
+  {
+    const { T } = await import('/src/gfx/tiles.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '3-2');
+    game.setScene(s);
+    const i = mkInput();
+
+    let button = null;
+    let brick = null;
+    for (let ty = 0; ty < s.h && !button; ty++) {
+      for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.SWITCH) { button = { tx, ty }; break; }
+    }
+    for (let ty = 0; ty < s.h && !brick; ty++) {
+      for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.BRICK) { brick = { tx, ty }; break; }
+    }
+    expect('3-2 has a switch block and bricks for it to change', !!button && !!brick,
+      `${button ? `${button.tx},${button.ty}` : 'ei kytkintä'} / ${brick ? 'tiiliä' : 'ei tiiliä'}`);
+
+    if (button && brick) {
+      const solidBefore = s.solidAt(brick.tx, brick.ty);
+      s.startSwitch();
+      const asCoin = s.tileAt(brick.tx, brick.ty) === T.COIN;
+      const passable = !s.solidAt(brick.tx, brick.ty);
+      // The stored grid must not have changed — that is the whole design.
+      const gridUntouched = s.grid[brick.ty][brick.tx] === T.BRICK;
+      expect('a running switch turns bricks into coins without rewriting the grid',
+        solidBefore && asCoin && passable && gridUntouched,
+        `kiinteä ${solidBefore}, kolikko ${asCoin}, ruudukko ${s.grid[brick.ty][brick.tx]}`);
+
+      // Park the player somewhere harmless and let it run out.
+      s.player.x = s.spawn.x;
+      s.player.y = s.spawn.y - s.player.h;
+      s.player.vy = 0;
+      for (let f = 0; f < 40 && s.switchTimer > 0; f++) s.update(i);
+      s.switchTimer = 3;
+      for (let f = 0; f < 12; f++) s.update(i);
+      expect('a switch runs out and the bricks come back',
+        s.switchTimer === 0 && s.solidAt(brick.tx, brick.ty), `ajastin ${s.switchTimer}`);
+
+      /* The one way this design could hurt someone is being inside a brick when
+       * it comes back. It turns out that cannot happen, and not for the reason
+       * the guard in `updateSwitch` assumes: a brick reading as a coin is
+       * *collected* the moment the player touches it, which empties that cell
+       * of the stored grid for good. There is nothing left to return. The guard
+       * stays as defence for any future mapping that is not collectable, but
+       * this is the property that actually protects the player, so this is the
+       * one worth asserting. */
+      s.startSwitch();
+      s.player.x = brick.tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = brick.ty * 16;
+      s.player.vy = 0;
+      s.update(i);
+      const collected = s.grid[brick.ty][brick.tx] === T.EMPTY;
+      s.switchTimer = 2;
+      for (let f = 0; f < 20; f++) {
+        s.player.x = brick.tx * 16 + (16 - s.player.w) / 2;
+        s.player.y = brick.ty * 16;
+        s.player.vy = 0;
+        s.update(i);
+      }
+      expect('a switched brick is collected, so nothing can come back on top of you',
+        collected && s.switchTimer === 0 && !s.solidAt(brick.tx, brick.ty)
+        && !s.player.dying,
+        `kerätty ${collected}, ajastin ${s.switchTimer}, `
+        + `kiinteä ${s.solidAt(brick.tx, brick.ty)}`);
+
+      // Bumping the block is what starts it, and it only works once.
+      const s2 = new LevelScene(game, '3-2');
+      game.setScene(s2);
+      s2.bumpTile(button.tx, button.ty, s2.player);
+      const started = s2.switchTimer > 0;
+      const spent = s2.grid[button.ty][button.tx] === T.USED;
+      expect('hitting the block starts the switch and spends the block',
+        started && spent, `ajastin ${s2.switchTimer}, ruutu ${s2.grid[button.ty][button.tx]}`);
+
+      // And a save state has to carry it, or a reload silently changes the level.
+      game.pendingNode = WORLDS[2].nodes.find((n) => n.level === '3-2') || game.pendingNode;
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      s2.switchTimer = 0;
+      restoreState(game, snap);
+      expect('a save state remembers a running switch',
+        game.scene.switchTimer > 0, `${game.scene.switchTimer}`);
+    }
+  }
+
   /* -------------------------- murenevat lavat -------------------------- */
   {
     const { T } = await import('/src/gfx/tiles.js');

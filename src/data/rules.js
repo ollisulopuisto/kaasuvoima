@@ -23,7 +23,7 @@ const HEAD = 3;
  * out would make the validator read every catwalk as a bottomless pit and
  * reject perfectly good levels.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}', '%', '(', ')']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 

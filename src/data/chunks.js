@@ -218,6 +218,29 @@ export const CHUNKS = {
     14: ' XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   }),
 
+  /**
+   * The switch and its payoff in one screen: hit the button, the slab of bricks
+   * overhead turns into a raft of coins, and you have ten seconds to jump into
+   * it before they turn back.
+   *
+   * **The switch opens a reward, never the route.** You can walk straight
+   * under this and finish the level having ignored it entirely. Gating the way
+   * forward behind a timed button breaks exactly the promise a mandatory
+   * power-up would break — and neither the validator nor the bot can model a
+   * button, so a gate here would also mean lying to both of them.
+   *
+   * The floor is `#` and never `B`: a switch that dissolves the ground you are
+   * standing on is a different and much meaner idea.
+   */
+  switch_wall: ck(20, {
+    5: '        BBBBBBBB',
+    6: '        BBBBBBBB',
+    7: '        BBBBBBBB',
+    9: '  o  S',
+    13: '####################',
+    14: '####################',
+  }),
+
   /* ----------------------------- platforms ----------------------------- */
   plat_hi: ck(16, {
     5: '     o o',
