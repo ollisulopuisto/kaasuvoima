@@ -3,7 +3,7 @@ import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
   Moon, SpikeGuy, BeanBaron, BeanBomb,
 } from '../entities/enemies.js';
-import { Item, FartBall } from '../entities/items.js';
+import { Item, FartBall, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 
 /**
@@ -15,6 +15,11 @@ import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 const REGISTRY = {
   Player, Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn,
   Shockwave, Boss, AngrySun, Moon, SpikeGuy, BeanBaron, BeanBomb, Item, FartBall,
+  /* A beanstalk caught halfway up is state and not scenery: the tiles it has
+   * already written are in the saved grid, and the ones it has not are only in
+   * this entity's own list. Leaving it out would restore a level with half a
+   * vine in it and nothing left to finish the job. */
+  Beanstalk,
   Puff, ScorePop, BrickPiece, CoinPop,
 };
 

@@ -7,7 +7,7 @@ import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
-import { Item } from '../entities/items.js';
+import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop } from '../entities/effects.js';
 import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
@@ -252,6 +252,17 @@ const SWITCH_FRAMES = 600;
 /** It starts flashing this long before it ends, so the end is never a surprise. */
 const SWITCH_WARN = 150;
 
+/**
+ * How far above its floor a beanstalk's bean block hangs, in tiles.
+ *
+ * Four is the bump row: three clear rows over the floor, which is exactly the
+ * tallest body (`RULE_CONSTANTS.HEAD`), so every size can stand under it and
+ * every size can put its head into it. It is exported because `rules.js` keeps
+ * its own copy — the validator may not import a scene — and `verify.mjs`
+ * asserts that the two agree, the same arrangement the secret-brick rates have.
+ */
+export const BEAN_BLOCK_OVER_FLOOR = 4;
+
 /** The star's HUD readout cycles the same colours the player does. */
 const STAR_HUD_COLORS = ['#fff070', '#ffffff', '#8fe04a', '#78c0ff'];
 
@@ -333,6 +344,7 @@ export class LevelScene {
     this.telemetryDone = false;
 
     this.scanGrid();
+    this.plantVines();
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
     this.centerCamera();
@@ -354,6 +366,64 @@ export class LevelScene {
           this.goal = { tx, ty, x: tx * TILE, y: ty * TILE + TILE - GOAL_HEIGHT };
           this.grid[ty][tx] = ' ';
         }
+      }
+    }
+  }
+
+  /**
+   * Takes every planted beanstalk back out of the grid and leaves the block
+   * that grows it in the vine's place.
+   *
+   * The level data draws the vine whole — see `chunks/secrets.js` — and that is
+   * the level `src/data/rules.js` validates, because a validator handed a grid
+   * with no vine in it would quietly stop proving that the sky band can be
+   * reached. So the grown level is the written one and the ungrown one is
+   * derived here, rather than the other way round: one source of truth, and the
+   * thing the gate checks is the thing the player ends up standing on.
+   *
+   * **A vine is planted when it stands on something.** The tile under its
+   * lowest one has to be solid; then the whole run comes out of the grid and a
+   * `?` goes into the cell `BEAN_BLOCK_OVER_FLOOR` rows over that floor, which
+   * is the bump row and is inside the vine's own column. A vine that ends in
+   * mid-air is left exactly where it is drawn — nothing in the game is built
+   * that way, and this is the difference between deriving a level and quietly
+   * deleting somebody's tiles. `rules.js` asks the same question from the other
+   * side and reports a seam-crossing vine that is not rooted.
+   *
+   * **The vine has to reach the floor and not stop at the block**, and that is
+   * a measurement rather than a preference. You take hold of a beanstalk by
+   * standing at the bottom of it and pressing up; with the vine starting at the
+   * bump row instead — the first thing tried, because a stalk growing out of
+   * the top of the block is the obvious picture — the block itself is in the
+   * way of the jump, and no power level below 3 could get onto the vine at all.
+   * So the block sits *in* the stalk rather than under it, and the growth
+   * writes a vine tile straight over the spent block on its way past.
+   *
+   * The map is rebuilt from the level data by every constructor, which is why
+   * it is not in `savestate.js`: a restored snapshot overwrites `grid` with the
+   * grid it saved, and this is derived from data that cannot have changed. A
+   * vine caught half-grown comes back half-grown because those tiles are in the
+   * saved grid and the `Beanstalk` entity carries its own progress.
+   */
+  plantVines() {
+    /** block key "tx,ty" → the run it owns, bottom tile first. */
+    this.beanstalks = new Map();
+    for (let tx = 0; tx < this.w; tx++) {
+      for (let ty = 0; ty < this.h; ty++) {
+        if (this.grid[ty][tx] !== T.VINE) continue;
+        let foot = ty;
+        while (foot + 1 < this.h && this.grid[foot + 1][tx] === T.VINE) foot++;
+        const by = foot + 1 - BEAN_BLOCK_OVER_FLOOR;
+        if (foot + 1 < this.h && isSolid(this.grid[foot + 1][tx]) && by >= ty) {
+          const tiles = [];
+          for (let y = foot; y >= ty; y--) {
+            tiles.push({ tx, ty: y });
+            this.grid[y][tx] = T.EMPTY;
+          }
+          this.grid[by][tx] = T.QCOIN;
+          this.beanstalks.set(`${tx},${by}`, tiles);
+        }
+        ty = foot;
       }
     }
   }
@@ -880,7 +950,16 @@ export class LevelScene {
     if (meta.question) {
       this.setTile(tx, ty, T.USED);
       found();
-      if (ch === T.QCOIN) {
+      const seed = this.beanstalks.get(key);
+      if (seed) {
+        /* The bean, and the reason this branch is inside `meta.question` rather
+         * than in front of it: the block is spent on the way past, so a second
+         * hit — or a quickload onto a block that has already been hit — reads
+         * as the used block it is and cannot grow a second vine out of it. */
+        this.beanstalks.delete(key);
+        this.add(new Beanstalk(this, tx, ty, seed));
+        Sfx.play('sprout');
+      } else if (ch === T.QCOIN) {
         this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
         this.addCoin(tx * TILE + 8, ty * TILE);
       } else {

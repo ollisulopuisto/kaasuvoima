@@ -143,6 +143,74 @@ export function drawItem(ctx, kind, x, y, tick, opts) {
   }
 }
 
+/**
+ * The bean on its way down, and the growing tip of the stalk afterwards.
+ *
+ * It is emphatically **not** the paukkupapu (`drawItem('pop')`), and the
+ * difference is the whole reason it is a sprite of its own rather than that one
+ * reused. The paukkupapu is a squat brown shell with a glowing seam and it is a
+ * power-up you pick up; this is a pale green seed that plants itself and then
+ * climbs, and it cannot be touched at any point. Two things that come out of a
+ * `?` block and look alike teach the player one wrong lesson each — DESIGN.md
+ * §8.
+ *
+ * `bare` is the falling half: just the seed, tumbling, with nothing under it
+ * yet. Once it lands the same sprite grows a shoot and the seed rides the tip
+ * of it, so the thing the player followed down is the thing they follow back
+ * up. The greens are the vine's own (`drawVine` in gfx/tiles.js), because in
+ * one more frame this is a vine.
+ */
+export function drawSprout(ctx, x, y, tick, bare = false) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+
+  if (bare) {
+    // tumbling, so the seed leans a different way every few frames
+    const lean = Math.floor(tick / 4) % 2;
+    ctx.fillStyle = '#4c7a1c';
+    ctx.fillRect(px + 5, py + 5, 6, 7);
+    ctx.fillStyle = '#8fc03a';
+    ctx.fillRect(px + 6, py + 5, 4, 6);
+    ctx.fillStyle = '#c8e04a';
+    ctx.fillRect(px + 6 + lean, py + 6, 2, 3);
+    ctx.fillStyle = '#f4ffd0';
+    ctx.fillRect(px + 7 + lean, py + 6, 1, 1);
+    return;
+  }
+
+  const curl = Math.round(Math.sin(tick / 5) * 2);
+
+  // the stem, still short — it fills the bottom of the tile and no more
+  ctx.fillStyle = '#1c6b1f';
+  ctx.fillRect(px + 5, py + 6, 6, 10);
+  ctx.fillStyle = '#3ea23a';
+  ctx.fillRect(px + 6, py + 5, 4, 11);
+  ctx.fillStyle = '#8fe04a';
+  ctx.fillRect(px + 6, py + 6, 1, 10);
+
+  // the tip, curling over the top of what is not there yet
+  ctx.fillStyle = '#3ea23a';
+  ctx.fillRect(px + 6, py + 2, 4, 4);
+  ctx.fillRect(px + 8, py + 1, 3 + curl, 2);
+  ctx.fillStyle = '#8fe04a';
+  ctx.fillRect(px + 7, py + 3, 2, 2);
+  ctx.fillRect(px + 9, py + 1, 1 + Math.max(0, curl), 1);
+
+  // two young leaves, one either side, opening as the tip turns
+  ctx.fillStyle = '#3ea23a';
+  ctx.fillRect(px + 1 + curl, py + 8, 5, 3);
+  ctx.fillRect(px + 10 - curl, py + 11, 5, 3);
+  ctx.fillStyle = '#8fe04a';
+  ctx.fillRect(px + 2 + curl, py + 8, 3, 1);
+  ctx.fillRect(px + 11 - curl, py + 11, 3, 1);
+
+  // and the seed itself, riding along until the stalk is done with it
+  ctx.fillStyle = '#c8e04a';
+  ctx.fillRect(px + 10, py + 6, 3, 4);
+  ctx.fillStyle = '#f4ffd0';
+  ctx.fillRect(px + 11, py + 7, 1, 2);
+}
+
 /** @param {object} [opts] { tint, glow } */
 export function drawFart(ctx, x, y, tick, opts) {
   const px = Math.round(x);

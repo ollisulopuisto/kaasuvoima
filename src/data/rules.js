@@ -77,6 +77,29 @@
  *     it does still prove is that the vine reaches — it has to cross the seam
  *     in one unbroken column — and that it is wide enough to climb.
  *   - **Nothing here proves a room is fun, or that the coins are gettable.**
+ *
+ * ## The one place this reads a level the player never sees
+ *
+ * A beanstalk is not standing in the level when it loads: a `?` block on its
+ * bump row grows it. The rows below are still the **grown** level — the vine is
+ * written whole in `chunks/secrets.js` and lifted out of the live grid by
+ * `LevelScene.plantVines` — and that is deliberate, because a validator handed
+ * the ungrown grid would find no vine, no seam crossing, and would therefore
+ * stop proving that the sky band can be reached at all. It would not fail; it
+ * would go quiet, which is worse.
+ *
+ * The price of reading the grown level is that the growing has to be
+ * guaranteed rather than assumed, and that is what `checkBeanBlocks` is for.
+ * With it, the two halves of the claim are both checked: the vine reaches
+ * (`vineCrossings`, `checkVines`) and the vine happens (`checkBeanBlocks`).
+ *
+ * What is **not** checked, said plainly rather than left to be discovered: the
+ * bean block itself is a solid tile that only exists at run time, so no rule
+ * here has looked at it. It is bounded rather than trusted — it stands in a
+ * cell the level data says is vine, and `checkVines` has already proved that
+ * cell and both its neighbours are clear of rock at the tallest size, which is
+ * a stronger statement than anything the headroom rule would have made about a
+ * lone floating block.
  */
 
 const ROWS = 15;
@@ -113,6 +136,19 @@ const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 /* The two halves of a warp pipe's mouth. `{}` below them is ordinary pipe. */
 const WARP = new Set(['(', ')']);
 const VINE = 'v';
+/**
+ * How far above its floor the engine hangs a beanstalk's bean block, in tiles.
+ *
+ * **This is a copy of `BEAN_BLOCK_OVER_FLOOR` in `src/scenes/level.js`**, in the
+ * same idiom as the two copies of the secret-brick rates: the validator may not
+ * import a scene, the engine may not import the validator, and one number in
+ * two files is cheaper than an import that ties them together. `verify.mjs`
+ * asserts that the two copies agree, which is the part that makes it safe.
+ *
+ * Four is the bump row — three clear rows over the floor, so the tallest body
+ * stands under it and every body can put its head into it.
+ */
+const BEAN_BLOCK_OVER_FLOOR = 4;
 /*
  * Not solid, and not somewhere you travel through either. Lava is what
  * `assembleTall` lids a bottomless column with, so treating it as air would
@@ -340,6 +376,71 @@ function vineCrossings(rows, w, bandCount) {
     }
   }
   return seams;
+}
+
+/**
+ * Bonus-only, and the one rule here that exists because the level the player
+ * plays is not the level this file reads.
+ *
+ * Everything else in this module measures the grid as written. A beanstalk is
+ * written whole — that is what lets `vineCrossings` say a hidden band has a way
+ * in — but the engine lifts it out at build time and puts a `?` block on its
+ * bump row instead (`LevelScene.plantVines`). Hit the block, the bean falls to
+ * the floor, the stalk grows back up. So the proof that the sky band can be
+ * reached now has a second half, and this is it: **the stalk will actually
+ * grow, and the thing that grows is climbable from the ground.**
+ *
+ * Three questions, and each is the part of it a grid can answer:
+ *
+ *   - **is the vine rooted?** The tile under its lowest one has to be something
+ *     you can stand on. That is where the bean lands and where the stalk starts,
+ *     and it is also what makes the grown vine grabbable at all — you take hold
+ *     of a beanstalk by standing at the bottom of it and pressing up. Measured:
+ *     with the vine lifted to the bump row instead, **no power level below 3
+ *     can reach it** and the secret becomes unreachable for the size the level
+ *     promises to work at.
+ *   - **is there room for the block?** It hangs `BEAN_BLOCK_OVER_FLOOR` tiles
+ *     over that floor, in the vine's own column, so the vine has to be at least
+ *     that tall — otherwise the engine would be putting a block where no vine
+ *     was, in a cell nothing has checked.
+ *   - **can that height be hit?** The smallest body standing on the floor has
+ *     its head one row up, so the block is `BEAN_BLOCK_OVER_FLOOR - 1` rows
+ *     over it, against a budget of `wall` rows of rise. Three against four
+ *     today. It is a constant either side, which is exactly why it is checked
+ *     here rather than remembered: the budget is measured and it can move.
+ *
+ * Asked of vines that cross a seam and no others. A vine that goes nowhere
+ * proves nothing about a hidden band, and the engine leaves an unrooted one
+ * exactly where it is drawn — so the two agree about which vines are planted.
+ */
+function checkBeanBlocks(rows, w, seams, reach, problems) {
+  const done = new Set();
+  for (const s of seams) {
+    if (done.has(s.x)) continue;
+    done.add(s.x);
+    let foot = (s.upper + 1) * ROWS;
+    let top = foot;
+    while (foot + 1 < rows.length && rows[foot + 1][s.x] === VINE) foot++;
+    while (top > 0 && rows[top - 1][s.x] === VINE) top--;
+
+    const under = foot + 1 < rows.length ? rows[foot + 1][s.x] : ' ';
+    if (!SOLID.has(under)) {
+      problems.push(`beanstalk at column ${s.x} ends at row ${foot} over "${under}"`
+        + ' instead of standing on the floor');
+      continue;
+    }
+    const by = foot + 1 - BEAN_BLOCK_OVER_FLOOR;
+    if (by < top) {
+      problems.push(`beanstalk at column ${s.x} is ${foot - top + 1} tiles tall,`
+        + ` too short to hang a bean block ${BEAN_BLOCK_OVER_FLOOR} over its floor`);
+      continue;
+    }
+    const rise = BEAN_BLOCK_OVER_FLOOR - 1;
+    if (rise > reach.wall) {
+      problems.push(`the bean block at ${s.x},${by} is ${rise} tiles over a standing`
+        + ` head and the jump budget carries ${reach.wall}`);
+    }
+  }
 }
 
 /**
@@ -587,6 +688,7 @@ export function validateLevel(rows, budget) {
   if (bands.length > 1) {
     const mouths = warpMouths(rows, w);
     const seams = vineCrossings(rows, w, bands.length);
+    checkBeanBlocks(rows, w, seams, reach, problems);
     for (let b = 0; b < bands.length; b++) {
       if (b === routeIndex || !hasContent(bands[b])) continue;
       checkBonusBand(rows, w, bands[b], b, routeIndex, mouths, seams, reach, problems, bandName(b));
@@ -596,4 +698,4 @@ export function validateLevel(rows, budget) {
   return problems;
 }
 
-export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD };
+export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR };

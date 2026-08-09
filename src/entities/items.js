@@ -1,7 +1,7 @@
 import { Entity } from './entity.js';
 import { moveX, moveY, applyGravity } from '../level/physics.js';
-import { drawItem, drawFart, TINTS, GLOWS } from '../gfx/sprites.js';
-import { TILE } from '../gfx/tiles.js';
+import { drawItem, drawFart, drawSprout, TINTS, GLOWS } from '../gfx/sprites.js';
+import { TILE, T } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 
 const EMERGE_FRAMES = 26;
@@ -99,6 +99,91 @@ export class Item extends Entity {
 
   draw(ctx) {
     drawItem(ctx, this.itemKind, this.x, this.y, this.tick);
+  }
+}
+
+/**
+ * How fast the bean falls out of the block, and how long a tile of stalk takes.
+ *
+ * The fall is its own number rather than the engine's gravity because the bean
+ * is not in the world while it drops: it comes out of the **underside** of the
+ * block, and a block is solid, so anything that collided would land on the one
+ * thing it just came out of. Four pixels a frame crosses the four tiles to the
+ * floor in sixteen frames — a drop you can follow with your eye, which is the
+ * whole job, since the point of it is to say *where* the stalk is about to
+ * start.
+ *
+ * Four frames a tile is the one number here with a feel in it. The shipped
+ * beanstalk is twenty-two tiles, so the growing itself takes about a second and
+ * a half — long enough to read as growing rather than as a level redrawing
+ * itself, short enough that the player who hit the block is still standing
+ * there when the top of it arrives.
+ */
+const BEAN_FALL = 4;
+const GROW_FRAMES = 4;
+
+/**
+ * The bean, and then the beanstalk it turns into.
+ *
+ * The tiles it writes were taken out of the grid by `LevelScene.plantVines`, so
+ * this does not decide where the vine goes — it only decides *when*, and it
+ * hands back exactly the run the level data drew and `src/data/rules.js`
+ * validated, bottom tile first. The last of those tiles is the cell the spent
+ * block is sitting in: the stalk grows through the block it came out of, which
+ * is what lets the finished vine run unbroken from the floor to the sky.
+ *
+ * The sprout rides the row above the newest tile, so the picture always shows
+ * where the next one is about to be.
+ *
+ * It is an entity and not a timer on the scene for two reasons: the bean and
+ * the growing tip are things you can see, so they belong where the drawing is,
+ * and `savestate.js` already serialises every own property of every entity — so
+ * a quicksave halfway up comes back halfway up with no new field anywhere.
+ */
+export class Beanstalk extends Entity {
+  /** @param {{tx:number, ty:number}[]} tiles the run, bottom tile first */
+  constructor(level, tx, ty, tiles) {
+    super(level, tx * TILE, ty * TILE, TILE, TILE);
+    this.kind = 'prop';
+    /* The vine crosses a whole band, so most of it grows off the top of the
+     * screen. A tip that went to sleep when the camera lost it would leave the
+     * level half a beanstalk. */
+    this.alwaysActive = true;
+    this.active = true;
+    this.noclip = true;
+    this.tiles = tiles;
+    this.grown = 0;
+    this.timer = 0;
+    /** Where the bean is headed: the row the stalk starts in. */
+    this.landY = tiles[0].ty * TILE;
+    this.falling = true;
+  }
+
+  update() {
+    this.tick++;
+
+    if (this.falling) {
+      // Out of the bottom of the block, which is the one thing here that no
+      // other `?` block does — every other payout rises out of the top. Two
+      // events that look alike teach one wrong lesson each (DESIGN.md §8).
+      this.y = Math.min(this.landY, this.y + BEAN_FALL);
+      if (this.y >= this.landY) this.falling = false;
+      return;
+    }
+
+    if (++this.timer < GROW_FRAMES) return;
+    this.timer = 0;
+    const tile = this.tiles[this.grown++];
+    this.level.setTile(tile.tx, tile.ty, T.VINE);
+    if (this.grown >= this.tiles.length) {
+      this.remove = true;
+      return;
+    }
+    this.y = (tile.ty - 1) * TILE;
+  }
+
+  draw(ctx) {
+    drawSprout(ctx, this.x, this.y, this.tick, this.falling);
   }
 }
 

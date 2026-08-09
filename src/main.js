@@ -385,8 +385,14 @@ class Game {
         else if (ch === 'B' && scene.brickSecret && scene.brickSecret(tx, ty)) count.brick++;
       }
     }
-    // A vine is many tiles and one secret; the same for a crumbling catwalk.
-    count.vine = count.vine ? 1 : 0;
+    /* A vine is many tiles and one secret; the same for a crumbling catwalk.
+     *
+     * And a beanstalk that has not been grown yet is not missing, it is waiting
+     * in `beanstalks` (see `LevelScene.plantVines`) — the whole level is one
+     * block away from having it. Counting only the tiles in the grid would make
+     * this overlay say a level has no vine right up until the moment the player
+     * finds the thing the overlay exists to help them find. */
+    count.vine = (count.vine || (scene.beanstalks ? scene.beanstalks.size : 0)) ? 1 : 0;
     count.bands = scene.def && scene.def.bands ? 1 : 0;
     return count;
   }

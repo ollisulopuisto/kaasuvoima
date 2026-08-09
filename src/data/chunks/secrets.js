@@ -12,7 +12,30 @@ import { ck, withVine, G } from './common.js';
 
 export const SECRET_CHUNKS = {
   /* --------------------- salaisuudet: varsi ja putki -------------------- */
-  /** Grows from the floor all the way through the band and into the sky one. */
+  /**
+   * The beanstalk, drawn here in the state it **ends up in**: rooted in the
+   * floor and running all the way through the band and into the sky one.
+   *
+   * The player never sees it like this to begin with. `LevelScene.plantVines`
+   * lifts the whole vine out of the live grid when the level is built and puts
+   * an ordinary-looking `?` block on the bump row of the vine's own column; the
+   * block drops a bean, the bean falls to the floor, and the stalk grows back
+   * up a tile at a time — through the spent block, which is where it came from.
+   *
+   * **The vine is written here anyway, and that is the point.** The level data
+   * is the grown level, `src/data/rules.js` validates the grown level, and the
+   * engine derives the ungrown one from it. Handing the validator the ungrown
+   * grid instead would mean it finds no vine, no seam crossing, and quietly
+   * stops proving that the sky band can be reached at all — it would not fail,
+   * it would go silent, which is worse. So there is one source of truth and the
+   * gate still checks the thing the player ends up standing on.
+   *
+   * The block is not in this map because the vine is: the two want the same
+   * cell, and the vine is the one that has to be here for the validator. Where
+   * the block goes is therefore a rule and not a placement — the bump row of
+   * the vine's own column — and `checkBeanBlocks` in rules.js holds the engine
+   * to it, so this cannot quietly become a beanstalk nobody can start.
+   */
   beanstalk: ck(16, withVine({ 9: '   o     o   o', 13: G, 14: G }, 6, 0, 12)),
   /** An ordinary-looking pipe. Press down on it and it is not one. */
   warp_pipe: ck(16, {

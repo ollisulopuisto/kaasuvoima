@@ -996,6 +996,72 @@ const report = await page.evaluate(async () => {
       sealedIn.slice(0, 3).join(' / ') || 'ei yhtään');
     expect('the same tall fixture without the faults passes',
       sound.length === 0, sound.slice(0, 3).join(' / '));
+
+    /*
+     * And red before green for the thing the growing beanstalk added to the
+     * argument.
+     *
+     * The validator reads the level data, and the level data is the GROWN
+     * level — the vine is in it from floor to sky, which is what makes
+     * `vineCrossings` able to say the sky band is reachable. The player is
+     * handed the ungrown one, with a `?` on the vine's bump row instead. That
+     * is only honest while the growing is guaranteed, so the guarantee is
+     * checked rather than assumed: the vine stands on a floor (which is where
+     * the bean lands, and also the only place a player can take hold of the
+     * finished stalk), it is tall enough for the block to hang in it, and that
+     * height is one a jump can reach.
+     *
+     * Three faults, one at a time, and the same fixture with none of them has
+     * to come back silent — otherwise this proves nothing about the rule and
+     * only that some level somewhere is unusual.
+     */
+    const vineFixture = ({ endsAt = 27, pit = false, pillar = false } = {}) => {
+      const W = 32;
+      const g = Array.from({ length: 45 }, () => ' '.repeat(W));
+      const put = (y, x, s) => { g[y] = g[y].slice(0, x) + s + g[y].slice(x + s.length); };
+
+      // Route band: flat ground, a start, an early power-up, a flag.
+      put(28, 0, '#'.repeat(W)); put(29, 0, '#'.repeat(W));
+      put(27, 2, '1');
+      put(24, 5, '!');
+      put(27, 28, 'F');
+      /* The vine, from the floor up through the seam into the sky band. A
+       * pillar raises the floor under it so the run is only three tiles long
+       * on this side of the seam — too short to hang a block in. */
+      const top = pillar ? 14 : 6;
+      if (pillar) for (let y = 17; y <= 29; y++) put(y, 16, 'X');
+      for (let y = top; y <= endsAt; y++) put(y, 16, 'v');
+      /* A pit right under the vine, lidded with lava the way `assembleTall`
+       * lids one: the stalk has nothing to stand in and the bean nowhere to
+       * land. */
+      if (pit) { put(28, 15, '   '); put(29, 15, '   '); put(30, 15, 'WWW'); }
+
+      // The sky garden the vine arrives in, shaped like the shipped one: the
+      // vine runs three rows past the planks so you step off sideways, the
+      // planks start in the column beside it so nothing solid is ever next to
+      // the vine, and the open bottom edge is how you get home.
+      put(9, 17, '--------');
+      put(8, 18, 'ooo');
+      put(6, 19, '!');
+      return g;
+    };
+
+    const grown = validateLevel(vineFixture(), budget);
+    const hanging = validateLevel(vineFixture({ endsAt: 24 }), budget);
+    const overPit = validateLevel(vineFixture({ pit: true }), budget);
+    const stumpy = validateLevel(vineFixture({ endsAt: 16, pillar: true }), budget);
+
+    expect('a beanstalk that stops in mid-air instead of reaching the floor is reported',
+      hanging.some((p) => p.includes('instead of standing on the floor')),
+      hanging.slice(0, 3).join(' / ') || 'ei yhtään');
+    expect('a beanstalk rooted over a pit is reported',
+      overPit.some((p) => p.includes('instead of standing on the floor')),
+      overPit.slice(0, 3).join(' / ') || 'ei yhtään');
+    expect('a beanstalk too short to hang a bean block in is reported',
+      stumpy.some((p) => p.includes('too short to hang a bean block')),
+      stumpy.slice(0, 3).join(' / ') || 'ei yhtään');
+    expect('the same beanstalk fixture with none of the faults passes',
+      grown.length === 0, grown.slice(0, 3).join(' / '));
   }
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
@@ -1731,6 +1797,142 @@ const report = await page.evaluate(async () => {
     tele.clearTelemetry();
   }
 
+  /* ------------------------- pavun istuttaminen ------------------------- */
+  /*
+   * Red before green (DESIGN.md §7) for the beanstalk that grows instead of
+   * standing there.
+   *
+   * The whole point of the change is a gap between two pictures of the same
+   * level: `getLevel('1-2').rows` is the GROWN level — that is what
+   * `src/data/rules.js` validates and what proves the sky band can be reached —
+   * and `LevelScene.grid` starts out as the UNGROWN one. So the assertions are
+   * a comparison between those two, tile for tile, rather than a count somebody
+   * typed in: the level data stays the single source of truth for where the
+   * vine goes, and this is the test that the two ever agree.
+   *
+   * Nothing below names a column or a row: the vine's own position is read out
+   * of the level data and the block's position is derived from it the way the
+   * rule says it is, so this keeps testing the mechanic if the chunk moves.
+   */
+  {
+    const { getLevel } = await import('/src/data/levels.js');
+    const { Sfx } = await import('/src/core/audio.js');
+    const { BEAN_BLOCK_OVER_FLOOR } = await import('/src/scenes/level.js');
+    const { RULE_CONSTANTS } = await import('/src/data/rules.js');
+    reset();
+    const bean = new LevelScene(game, '1-2');
+    bean.time = 9999;
+    game.scene = bean;
+    const def = getLevel('1-2').rows;
+
+    /* Where the block hangs is one number kept in two files — the validator may
+     * not import a scene and the engine may not import the validator — so the
+     * two copies are asserted against each other, exactly as the secret-brick
+     * rates are. A drift here would let the gate bless a block the engine puts
+     * somewhere else. */
+    expect('the engine and the validator agree where a bean block hangs',
+      BEAN_BLOCK_OVER_FLOOR === RULE_CONSTANTS.BEAN_BLOCK_OVER_FLOOR,
+      `moottori ${BEAN_BLOCK_OVER_FLOOR}, säännöt ${RULE_CONSTANTS.BEAN_BLOCK_OVER_FLOOR}`);
+
+    const wanted = [];
+    for (let ty = 0; ty < def.length; ty++) {
+      for (let tx = 0; tx < def[ty].length; tx++) if (def[ty][tx] === 'v') wanted.push([tx, ty]);
+    }
+    const foot = wanted.reduce((a, b) => (b[1] > a[1] ? b : a), wanted[0] || [0, 0]);
+    const blockAt = [foot[0], foot[1] + 1 - BEAN_BLOCK_OVER_FLOOR];
+    const liveVines = () => wanted.filter(([tx, ty]) => bean.rawTileAt(tx, ty) === 'v').length;
+
+    expect('a beanstalk is not standing there when the level loads',
+      wanted.length > 0 && liveVines() === 0
+      && bean.rawTileAt(blockAt[0], blockAt[1]) === '?',
+      `kentässä ${wanted.length} varsiruutua, ruudukossa ${liveVines()}, `
+      + `lohko "${bean.rawTileAt(blockAt[0], blockAt[1])}" kohdassa `
+      + `${blockAt[0]},${blockAt[1]} (jalka rivillä ${foot[1]})`);
+
+    /* The sound comes with the picture (DESIGN.md §8), and it has to be its
+     * own: the three payouts a block already has are a coin, a power-up and a
+     * dead thud, and a fourth event wearing one of those is a fourth event the
+     * player mis-reads. */
+    const heard = [];
+    const realPlay = Sfx.play;
+    Sfx.play = function spy(name) { heard.push(name); return realPlay.call(this, name); };
+    bean.bumpTile(blockAt[0], blockAt[1], bean.player);
+    Sfx.play = realPlay;
+
+    const grew = [];
+    for (let f = 0; f < 400; f++) {
+      bean.update(mkInput());
+      if (f === 20 || f === 40 || f === 60) grew.push(liveVines());
+    }
+    const missing = wanted.filter(([tx, ty]) => bean.rawTileAt(tx, ty) !== 'v');
+
+    expect('hitting the block grows exactly the beanstalk the rules validated',
+      missing.length === 0 && liveVines() === wanted.length,
+      `${liveVines()}/${wanted.length} ruutua, puuttuu ${missing.length}`
+      + (missing.length ? ` (esim. ${missing[0]})` : ''));
+
+    /* A tile at a time, not a vine that appears. Measured at three moments
+     * rather than asserted as a constant, because the speed is a feel decision
+     * and this test is about the growing. */
+    expect('the vine grows a tile at a time rather than appearing',
+      grew[0] > 0 && grew[0] < grew[1] && grew[1] < grew[2] && grew[2] < wanted.length,
+      `20/40/60 framea: ${grew.join(' -> ')} / ${wanted.length}`);
+
+    expect('the bean has a sound of its own and does not borrow another',
+      heard.length === 1 && heard[0] === 'sprout' && Sfx.has('sprout'),
+      `soi [${heard.join(', ')}]`);
+
+    /* And it grows from the floor up: the tile the bean landed in is there long
+     * before the one that crosses into the sky band. The spent block is one of
+     * the tiles that gets written — the stalk grows through the block it came
+     * out of — which is what lets a finished vine be climbed from the ground. */
+    const order = new LevelScene(game, '1-2');
+    order.time = 9999;
+    game.scene = order;
+    order.bumpTile(blockAt[0], blockAt[1], order.player);
+    for (let f = 0; f < 24; f++) order.update(mkInput());
+    const low = order.rawTileAt(foot[0], foot[1]) === 'v';
+    const high = order.rawTileAt(wanted[0][0], wanted[0][1]) === 'v';
+    expect('the beanstalk grows upward from the floor, not downward from the sky',
+      low && !high,
+      `24 framen jälkeen jalka ${low ? 'on' : 'ei ole'} (rivi ${foot[1]}), `
+      + `latva ${high ? 'on' : 'ei ole'} (rivi ${wanted[0][1]})`);
+    for (let f = 0; f < 400; f++) order.update(mkInput());
+    expect('the grown stalk runs unbroken from the floor through the spent block',
+      order.rawTileAt(blockAt[0], blockAt[1]) === 'v'
+      && order.rawTileAt(foot[0], foot[1]) === 'v',
+      `lohkon paikalla "${order.rawTileAt(blockAt[0], blockAt[1])}", `
+      + `jalassa "${order.rawTileAt(foot[0], foot[1])}"`);
+
+    /* A quicksave taken while the stalk is halfway up has to come back halfway
+     * up and finish, which is the whole reason `Beanstalk` is in the REGISTRY
+     * (DESIGN.md §6): the tiles it has already written are in the saved grid,
+     * and the ones it has not written are nowhere but in the entity. Without
+     * the entry the snapshot would restore a level with half a beanstalk in it
+     * and nothing left alive to finish the job. */
+    {
+      reset();
+      const half = new LevelScene(game, '1-2');
+      half.entities = half.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      half.time = 9999;
+      game.setScene(half);
+      half.bumpTile(blockAt[0], blockAt[1], half.player);
+      for (let f = 0; f < 40; f++) half.update(mkInput());
+      const partway = wanted.filter(([tx, ty]) => half.rawTileAt(tx, ty) === 'v').length;
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      const kinds = snap.level.entities.map((d) => d.t);
+      restoreState(game, snap);
+      const back = game.scene;
+      for (let f = 0; f < 400; f++) back.update(mkInput());
+      const done = wanted.filter(([tx, ty]) => back.rawTileAt(tx, ty) === 'v').length;
+      expect('a beanstalk caught half-grown survives a save state — REGISTRY',
+        kinds.includes('Beanstalk') && partway > 0 && partway < wanted.length
+        && done === wanted.length,
+        `tallennettaessa ${partway}/${wanted.length}, latauksen jälkeen `
+        + `${done}/${wanted.length}, oliot [${kinds.join(' ')}]`);
+    }
+  }
+
   /* --------------------- pavunvarsi ja piilotettu alue ------------------ */
   {
     const mk = (power) => {
@@ -1756,24 +1958,46 @@ const report = await page.evaluate(async () => {
         s.update(i);
       }
     };
+    /* A jump, held. The press has to be a press and not a hold — the engine
+     * jumps off `pressed.jump` — which is the whole reason this is not `hold`
+     * with 'jump' in the list. */
+    const leap = (s, i, frames) => {
+      for (let f = 0; f < frames; f++) {
+        i.held = blank();
+        i.held.jump = true;
+        i.pressed = blank();
+        if (f === 0) i.pressed.jump = true;
+        s.update(i);
+      }
+    };
 
     /* Both ends of the size range. The widest body is three tiles across while
      * it hangs off a vine, so anything solid beside the vine is a ceiling only
-     * the big player hits — exactly the sort of thing that ships unnoticed. */
+     * the big player hits — exactly the sort of thing that ships unnoticed.
+     *
+     * And it starts from the block now, because that is the level: standing on
+     * the floor under the bump row, a jump, the bean, and only then a vine. The
+     * two halves of the trip are deliberately the same test — a beanstalk that
+     * grows and cannot be climbed, or one that can be climbed at only some
+     * sizes, is the same failure to the player either way. */
     for (const power of [{ type: null, level: 0 }, { type: 'leaf', level: 5 }]) {
       const s = mk(power);
       const i = mkInput();
       put(s, 150, 28);
+      leap(s, i, 40);
+      const planted = s.rawTileAt(150, 24) !== '?';
+      hold(s, i, [], 140);
       hold(s, i, ['up'], 360);
       const up = s.player.y + s.player.h < 15 * 16;
       hold(s, i, ['right'], 60);
       const onPlatform = s.player.onGround && Math.round(s.player.y + s.player.h) === 9 * 16;
       const coins = game.state.coins;
       hold(s, i, ['right'], 180);          // walk off the edge and fall home
-      expect(`the beanstalk goes up and lets power ${power.level} back down`,
-        up && onPlatform && game.state.coins > coins && s.player.onGround
+      expect(`power ${power.level} plants the bean, climbs it and gets back down`,
+        planted && up && onPlatform && game.state.coins > coins && s.player.onGround
         && !s.player.dying && s.player.y + s.player.h > 27 * 16,
-        `taivaassa ${up}, lavalla ${onPlatform}, jalat ${Math.round(s.player.y + s.player.h)}`);
+        `lohko ${planted}, taivaassa ${up}, lavalla ${onPlatform}, `
+        + `jalat ${Math.round(s.player.y + s.player.h)}`);
 
       // Down the pipe, and — the part that matters — back out of it. A bonus
       // area you cannot leave is a trap, not a bonus.
@@ -3420,10 +3644,16 @@ const report = await page.evaluate(async () => {
     const tall = new LevelScene(game, '1-2');
     const c = game.levelSecrets(tall);
     const plain = game.levelSecrets(new LevelScene(game, '1-1'));
-    expect('the debug overlay counts the secrets in the level',
+    /* The scene is fresh, so its beanstalk has not been grown yet and there is
+     * not one vine tile in the grid. It still has to count as a vine: this
+     * overlay exists to say what a level is hiding while somebody tests it, and
+     * a count that only appears once the tester has already found the thing is
+     * a count that helps nobody. */
+    expect('the debug overlay counts the secrets in the level, grown or not',
       c.vine === 1 && c.warp > 0 && c.bands === 1
       && plain.vine === 0 && plain.warp === 0 && plain.bands === 0,
-      `1-2: varsi ${c.vine} putki ${c.warp} kaistat ${c.bands}`
+      `1-2: varsi ${c.vine} (ruudukossa ${tall.beanstalks.size} istuttamatta) `
+      + `putki ${c.warp} kaistat ${c.bands}`
       + ` / 1-1: varsi ${plain.vine} putki ${plain.warp}`);
     /* Counted across the whole game rather than one level: there are only 186
      * bricks in all of it, and the first version of this feature hid about five
@@ -4172,6 +4402,21 @@ const report = await page.evaluate(async () => {
     let vine = null;
     for (const id of levelIds()) {
       const sc = new LevelScene(game, id);
+      /* No beanstalk is in the grid until its block has been hit, so a test
+       * about climbing one has to plant it first. The entities are stepped on
+       * their own rather than through `scene.update`, so nothing else in the
+       * level — enemies, the clock, the player falling off something — moves
+       * while this is only trying to make a vine exist. */
+      for (const key of [...sc.beanstalks.keys()]) {
+        const [bx, by] = key.split(',').map(Number);
+        sc.bumpTile(bx, by, sc.player);
+      }
+      for (let f = 0; f < 400; f++) {
+        const growing = sc.entities.filter((e) => e.kind === 'prop');
+        if (!growing.length) break;
+        for (const e of growing) e.update();
+        sc.entities = sc.entities.filter((e) => !e.remove);
+      }
       for (let ty = 1; ty < sc.h && !vine; ty++) {
         for (let tx = 0; tx < sc.w; tx++) {
           if (sc.rawTileAt(tx, ty) === T.VINE && sc.rawTileAt(tx, ty + 1) === T.VINE) {
@@ -6157,6 +6402,11 @@ const report = await page.evaluate(async () => {
       for (const kind of ['shroom', 'flower', 'leaf', 'soup', 'star', 'pop']) {
         sprites.drawItem(g, kind, 20, 20, 30);
         check(`item ${kind}`);
+      }
+      // Both halves of the bean: falling, and once it is a stalk.
+      for (const bare of [true, false]) {
+        sprites.drawSprout(g, 20, 20, 30, bare);
+        check(`sprout ${bare ? 'bare' : 'grown'}`);
       }
       const { TINTS } = sprites;
       for (const level of [0, 1, 3, 5]) {

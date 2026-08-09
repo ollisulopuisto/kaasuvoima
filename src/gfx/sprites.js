@@ -24,7 +24,7 @@ export {
 } from './sprites/enemies.js';
 export { drawBoss } from './sprites/boss.js';
 export {
-  drawItem, drawFart, drawGasPuff, drawGoal, drawBrickShard, CARD_ICONS,
+  drawItem, drawFart, drawSprout, drawGasPuff, drawGoal, drawBrickShard, CARD_ICONS,
 } from './sprites/items.js';
 export {
   C as SPRITE_COLORS, TINTS, STAR_TINTS, GLOWS, recolored,

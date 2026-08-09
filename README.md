@@ -233,8 +233,13 @@ maan alla suljettu luolahuone. Kumpaankaan ei tarvita kohtausvaihtoja — sama
 ruudukko, korkeampi kenttä, ja kamera pysyy siinä kaistassa jossa pelaajan jalat
 ovat.
 
-- **Pavunvarsi** (`v`) sarakkeessa 150: pidä ylös pohjassa kiivetäksesi. Hyppy
-  irrottaa. Takaisin pääsee kävelemällä lavan reunan yli.
+- **Pavunvarsi** (`v`) sarakkeessa 150: sitä ei ole siellä ennen kuin sen
+  tavallisen näköinen `?`-lohko lyödään. Lohko pudottaa pavun, papu putoaa
+  lattialle ja varsi kasvaa siitä ruutu kerrallaan taivaaseen. Sitten: pidä ylös
+  pohjassa kiivetäksesi, hyppy irrottaa, ja takaisin pääsee kävelemällä lavan
+  reunan yli. Kenttädatassa varsi on piirretty kokonaan — se on *kasvanut*
+  kenttä, ja `src/data/rules.js` tarkistaa juuri sen, koska muuten mikään ei
+  enää todistaisi että taivaskaistalle pääsee.
 - **Lämpöputki** (`(` `)`) sarakkeessa 229: paina alas seistessäsi sen päällä.
   Luolan poistumisputkesta pääsee ylös painamalla ylös.
 

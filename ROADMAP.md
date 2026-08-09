@@ -47,9 +47,14 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 
 ### Seuraava työ, tässä järjestyksessä
 
-1. **Pavunvarsi kasvamaan `?`-lohkosta.** Nyt se on pysyvästi näkyvissä.
-   Tekotapa on kirjattu jo silloin kun kaistat tehtiin: lohko pudottaa pavun, ja
-   pavusta kasvaa varsi ruutu kerrallaan ylöspäin (`setTile` animoituna).
+1. ✔ **Pavunvarsi kasvaa `?`-lohkosta** — tehty (v26.08.09.25). Lohko pudottaa
+   pavun, papu putoaa lattialle ja varsi kasvaa siitä ruutu kerrallaan
+   taivaskaistalle. Kaksi asiaa jäi kirjatuksi muitakin muutoksia varten:
+   **validointi ratkaistiin ensin** — kenttädata on kasvanut kenttä ja moottori
+   johtaa siitä kasvamattoman, jotta `rules.js` yhä todistaa saumanylityksen ja
+   uusi `checkBeanBlocks` todistaa että kasvaminen tapahtuu — ja lohko istuu
+   varren *sisällä* eikä sen alla, koska mitattuna varsi joka alkaa vasta
+   bumppiriviltä on saavuttamaton voimatasoilla 0 ja 1.
 2. ✔ **Kiipeilyanimaatio** — tehty (v26.08.09.22). `state()` palauttaa nyt
    `'climb'`, ja se kahden framen sykli jota köydelle jo laskettiin on vihdoin
    käytössä.
