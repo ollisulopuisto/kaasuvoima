@@ -600,71 +600,13 @@ kenttiä joita luetaan joka framessa.
 
 ## Avoimet kysymykset
 
-- **Putken suunta on korjattu moottoriin mutta ei kenttiin.** `tryWarp` vaatii
-  nyt katosta roikkuvan putken ylöspäin matkustamiseen, mutta maailmojen 1–4
-  salahuoneiden ulostuloputket seisovat lattialla. Siksi päällä on
-  `WARP_COMPAT.upFromFloor`, jota kokeillaan vasta kattotestin jälkeen — ilman
-  sitä pelaaja jäisi lukkoon bonushuoneeseen.
-
-  **Jäljellä oleva työ on kenttädataa**, ja se on lueteltu `level.js`:n
-  `WARP_COMPAT`-kommentissa ruututarkkuudella: `cave_room` (1-2 **ja** 3-2,
-  yksi muokkaus riittää), `tomb_cave` (2-2), `fac_cellar` (4-2), ja `fac_duct`
-  joka pitää jakaa kahdeksi — lattiakanava alas, kattokanava ylös. `fac_loft`
-  ei muutu, koska sieltä poistutaan alaspäin.
-
-  Kaksi seurausta jotka pitää tehdä samalla: `rules.js`:n `warpMouths` siunaa
-  yhä lattiaputken ulostuloksi kumpaankin suuntaan, ja `drawTile` piirtää
-  putken suun aina ylöspäin, joten kattoputki näyttää väärältä kunnes se
-  hoidetaan. **Lipun saa pois vasta kun kaikki kolme on tehty**, ja portti
-  todistaa tiukan säännön jo nyt lippu pois kytkettynä.
+- ✔ **Putken suunta korjattu kenttiin asti 9.8.2026** (v26.08.09.23).
+  `WARP_COMPAT` on poistettu; kaikki suut ovat rivillä 9, koska kolme tyhjää
+  riviä lattian yllä on ainoa korkeus jota jokainen kuudesta koosta voi käyttää.
+  `rules.js` osaa nyt suunnan ja kattoputki piirtyy oikein päin. Viisi
+  bonushuonetta × kuusi kokoa todistettu ajamalla.
 
 
-- `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
-  tuplahypyn. **4-3 on tarkistettu käsin eikä ole rikki** — kuilun yli mennään
-  kelluvia lavoja pitkin, joita botti ei osaa käyttää. Muita ei ole tarkistettu.
-- ✔ **5-F:n vaikeuspisteet: päätetty 9.8.2026 jättää.** Se on pelin viimeinen
-  taistelu ja uusinta jo kertaalleen kaadetusta pomosta, joten piikki lopussa on
-  tarkoitus eikä vika. Luku jää kirjatuksi mittaustulokseksi. Muistettavaa jos
-  tähän palataan: mittari ei näe pomon liikesarjaa lainkaan (jokainen pomo on
-  5,0), joten osa luvusta mittaa kaivantoja eikä taistelua.
-- ✔ **Jättiläispomo — korjattu 9.8.2026, ja päätöksen peruste oli väärä.**
-  Päätös oli "kannet ovat vastaus, ongelma on opastus". Mittaus kumosi sen:
-  **kansille ei päässyt voimatasolla 0 lainkaan.** Rivi 6 on 112 px lattiasta,
-  paras hyppy kantaa 85, eikä välissä ollut mitään. Kannet eivät siis olleet
-  vastaus jota ei huomata, ne olivat lavastetta — ja *siksi* ne luettiin
-  lavasteeksi.
-
-  **Ja taistelu oli oikeasti läpäisemätön.** Osumat 1–3 lähtevät lattialta
-  seisovalla hypyllä, mutta osuma 4 vaatii 80 px ja osuma 5 — se joka päättää
-  taistelun — 96 px. Roadmapin oma "kahden osuman jälkeen" oli siis yhden osuman
-  liian aikaisin, mutta johtopäätös oli liian lievä eikä liian ankara.
-
-  Korjaus pysyi omistajan rajauksen sisällä: kokoa ei rajattu eikä kansia
-  laskettu. Kansille tehtiin **portaat** (askellava rivillä 9, 64 px lattiasta
-  ja 48 px kannelle — kaksi tavallista seisovaa hyppyä), ja kolikkokaari
-  osoittaa reitin. Askel on rivillä 9 eikä 10 mitatusta syystä: pomon oma hyppy
-  nostaa jalat y=161:een, ja rivin 10 lava olisi y=160 — hän laskeutuisi
-  pelaajan portaille. Marginaali on 17 px ja sillä on oma testinsä.
-
-  Kasvu osoittaa kansia: se pudottaa **pölyä kansilavoista**, eri paikassa, eri
-  suuntaan ja eri värillä kuin iskuaalto tai auringon ennakkovaroitus.
-
-  Sivuvaikutus joka on tarkoitettu: skaalasta 2,5 ylöspäin pomon osumalaatikko
-  yltää askellavan yli, eli **turvallinen maa nousee sitä mukaa kun hän kasvaa.**
-  Se on koko opetus.
-
-  **`difficulty.mjs` sanoo että kentät vaikeutuivat** (4-F 192,6→202,1,
-  5-F 337,4→345,5). Se laskee uudet kolikot ja lavat eikä näe taistelusta
-  mitään — luku nousi samalla kun taistelu helpottui. Älä lue sitä tuomiona.
-
-- ✔ **Kävelijän osumalaatikko: päätetty 9.8.2026 kasvattaa piirros laatikkoon.**
-  `Walker` on 16×16 mutta piirtyy `+1..+15` leveänä ja `+3..+16` korkeana, eli
-  pään yllä on 3 px vyöhyke joka satuttaa näkymättä — vastoin DESIGN.md kohdan 7
-  lupausta. Korjataan **piirrosta suurentamalla eikä laatikkoa kutistamalla**:
-  laatikko on nyt anteliaampi kuin miltä näyttää, joten kutistaminen tekisi
-  tallauksesta tiukempaa kaikkialla missä kävelijöitä on — ja kävelijä on se
-  olio jonka muunnelmia kaikki muut ovat. Piirroksen kasvattaminen täyttää
-  saman lupauksen muuttamatta yhtäkään törmäystä.
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
 - **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan**, kaikki samaa muotoa:

@@ -6,15 +6,7 @@ import { drawItem, drawPlayer } from '../gfx/sprites.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
-import { secretTally, watchSecrets } from '../core/secrets.js';
-import { LevelScene } from './level.js';
-
-/* Where finds get recorded, until level.js can say it itself.
- *
- * The map is what needs the numbers, so the map is what turns the recorder on;
- * `main.js` imports this file at startup, so it is on before any level exists.
- * See `watchSecrets` for why it is a wrapper and what replaces it. */
-watchSecrets(LevelScene);
+import { secretTally } from '../core/secrets.js';
 
 const TILE = 16;
 const MAP_Y = 14;

@@ -229,20 +229,27 @@ export const DESERT_CHUNKS = {
    * — clear by construction, not by inspection, and it cannot be broken later
    * by somebody editing the chunk next door.
    *
-   * The entry lands in the left half and the exit stands in the right, so the
+   * The entry lands in the left half and the exit hangs in the right, so the
    * room is crossed rather than looked at. Nothing solid sits in rows 8-11 of
    * the arrival columns: that is the box the falling player occupies, and rock
    * in it would make the pipe refuse from above instead.
+   *
+   * **The exit hangs from the ceiling rather than standing on the sand**, and
+   * the two rows it had are the two rows it has — turned upside down. You leave
+   * this room upwards, and `tryWarp` asks that the mouth you enter faces the
+   * way you are going. Row 9 is the mouth for the reason `cave_room` gives:
+   * three empty rows over the floor is the one height that clears the tallest
+   * body and stays within reach of the smallest.
    */
   tomb_cave: ck(16, {
     5: 'XXXXXXXXXXXXXXXX',
-    6: 'X              X',
-    7: 'X  ?B!B?       X',
-    8: 'X              X',
-    9: 'X   oooooo     X',
+    6: 'X          {}  X',
+    7: 'X  ?B!B?   {}  X',
+    8: 'X          {}  X',
+    9: 'X   oooooo ()  X',
     10: 'X   oooooo     X',
-    11: 'X          ()  X',
-    12: 'X          {}  X',
+    11: 'X              X',
+    12: 'X              X',
     13: 'XXXXXXXXXXXXXXXX',
     14: 'XXXXXXXXXXXXXXXX',
   }),

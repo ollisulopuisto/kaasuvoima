@@ -46,19 +46,21 @@ export const WORLD4_LEVELS = {
    * the secret in the peak would mean hiding it where nobody has attention to
    * spare.
    *
-   * Two ducts, the same chunk twice, 112 columns apart. The first goes down
-   * into `fac_cellar` and the second up into `fac_loft`; pressing the other
-   * direction on either does nothing at all, because the band it would arrive
-   * in has no floor under it and `tryWarp` refuses. Neither is on the way to
-   * the flag: the ground route through this level is exactly the route it was,
-   * one chunk longer.
+   * Two ducts, 112 columns apart, and **two different chunks** because they go
+   * different ways: `fac_duct_down` stands on the floor at column 128 and drops
+   * into `fac_cellar`, `fac_duct_up` hangs out of the roof at column 240 and
+   * climbs into `fac_loft`. It was one chunk used twice while a warp could be
+   * entered from either end of it; now the direction you travel has to match
+   * the mouth you enter, so the picture and the journey have to agree. Neither
+   * is on the way to the flag: the ground route through this level is exactly
+   * the route it was, one chunk longer.
    */
   '4-2': {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_belt', 'heartburn_pair', 'fac_shaft',
-      'corks', 'fac_press', 'fac_duct', 'fac_gap', 'soup_stop', 'fac_vents',
-      'fac_belt', 'clouds', 'fac_shaft', 'fac_duct', 'heartburn', 'steps_down',
+      'corks', 'fac_press', 'fac_duct_down', 'fac_gap', 'soup_stop', 'fac_vents',
+      'fac_belt', 'clouds', 'fac_shaft', 'fac_duct_up', 'heartburn', 'steps_down',
       'run_up', 'goal', 'goal_end',
     ],
     sky: [[240, 'fac_loft']],

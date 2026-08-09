@@ -567,9 +567,34 @@ function ductShaft(ctx, x, y, off, h, th, left, bandAt) {
   for (const rx of left ? [4, 11] : [4, 12]) ctx.fillRect(x + rx, y + bandAt + 1, 1, 1);
 }
 
-function drawPipe(ctx, x, y, ch, th) {
+/**
+ * One tile of pipe. `hanging` turns the mouth over.
+ *
+ * A pipe you climb into upwards has to look like one, or the rule `tryWarp`
+ * enforces — travel the way the mouth faces — is invisible and reads as the
+ * warp being broken. The mouth is drawn once and mirrored about the tile's
+ * middle, rather than written out twice: the collar, the throat and the shaft
+ * under it are the same object seen from the other end, and two copies would
+ * drift the first time one of them was touched.
+ *
+ * A vertical mirror and not a rotation, so the left-hand tile of a mouth stays
+ * the left-hand tile — the lap seam and the bolt spacing are what make the two
+ * halves join, and rotating would swap them.
+ */
+function drawPipe(ctx, x, y, ch, th, hanging = false) {
   const top = ch === T.PIPE_TL || ch === T.PIPE_TR;
   const left = ch === T.PIPE_TL || ch === T.PIPE_BL;
+  /* Only the mouth turns over. A length of shaft is the same object either way
+   * up — the joint band is one per tile whichever end it is measured from — so
+   * flipping it would change every pipe in the game to no visible end. */
+  if (hanging && top) {
+    ctx.save();
+    ctx.translate(x, y + TILE);
+    ctx.scale(1, -1);
+    drawPipe(ctx, 0, 0, ch, th);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = th.pipe;
   ctx.fillRect(x, y, TILE, TILE);
 
@@ -652,8 +677,19 @@ function drawVine(ctx, x, y, tx, ty, tick) {
  * A warp pipe looks like a pipe, because finding out that it is not is the
  * whole point. The only tell is a slow shine in the throat: enough to notice
  * if you are looking at it, not enough to announce itself.
+ *
+ * The shine is inside the flip with the throat it belongs to, which is the
+ * reason this is one transform around both and not two mouths and two shines.
  */
-function drawWarpPipe(ctx, x, y, ch, th, tick) {
+function drawWarpPipe(ctx, x, y, ch, th, tick, hanging) {
+  if (hanging) {
+    ctx.save();
+    ctx.translate(x, y + TILE);
+    ctx.scale(1, -1);
+    drawWarpPipe(ctx, 0, 0, ch, th, tick, false);
+    ctx.restore();
+    return;
+  }
   drawPipe(ctx, x, y, ch === T.WARP_L ? T.PIPE_TL : T.PIPE_TR, th);
   const pulse = 0.1 + 0.12 * Math.sin(tick / 20);
   ctx.fillStyle = `rgba(255,255,255,${pulse})`;
@@ -1039,12 +1075,19 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.QSTAR: drawQuestion(ctx, x, y, tick); break;
     case T.USED: drawUsed(ctx, x, y, th); break;
     case T.NOTE: drawNote(ctx, x, y, tick, false); break;
+    /* Which way up a mouth goes is a question about the tile above it, and the
+     * tile above it is already in hand: `above` is passed for the ground tile's
+     * grass and answers this too. A mouth with pipe over it is the bottom end
+     * of something hanging from a ceiling, so it faces down; a mouth with air
+     * over it is standing on the floor and faces up. Same trick as `doorEdges`
+     * — a picture that depends on a neighbour is settled by the caller, which
+     * is the only one holding the grid. */
     case T.PIPE_TL:
     case T.PIPE_TR:
     case T.PIPE_BL:
-    case T.PIPE_BR: drawPipe(ctx, x, y, ch, th); break;
+    case T.PIPE_BR: drawPipe(ctx, x, y, ch, th, info(above).pipe); break;
     case T.WARP_L:
-    case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick); break;
+    case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick, info(above).pipe); break;
     case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;

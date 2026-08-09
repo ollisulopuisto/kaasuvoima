@@ -120,26 +120,59 @@ export const FACTORY_CHUNKS = {
    * foliage in it. A duct is what a factory has instead, and the warp pipe is
    * already exactly that tile: solid, enterable, and it goes to another band.
    *
-   * **The same chunk is used for both directions on purpose.** One of them
-   * goes down into the cellar and one goes up into the loft, and nothing on
-   * either says which — pressing the other way simply does nothing, because
-   * `tryWarp` refuses a band with no footing under the arrival. A pipe that
-   * announced its direction would be a door.
+   * **There are two of these, and which way each one goes is written on it.**
+   * There used to be one chunk used twice, and the argument for that was that
+   * nothing on either said which way it went — pressing the wrong way simply
+   * did nothing. That argument is spent: `tryWarp` now asks that the direction
+   * you travel matches the mouth you enter, so a duct going up has to hang from
+   * the roof and a duct going down has to stand on the floor. The honest
+   * replacement for the old idea is that **a duct in the ceiling and a duct in
+   * the floor are already two different things to look at** — the player learns
+   * to read them instead of learning that pipes are ambiguous, and that is the
+   * better lesson anyway.
    *
-   * The three coins on the bump row are the whole hint. They are worth having
-   * on their own, so following them costs nothing if there turns out to be
-   * nothing; that is the difference between a hint and a sign.
+   * The three coins on the bump row are the whole hint, in both. They are worth
+   * having on their own, so following them costs nothing if there turns out to
+   * be nothing; that is the difference between a hint and a sign.
    *
    * Columns 11-14 are kept clear from the ceiling down: that is where both
-   * rooms put their exit pipe, and the tallest power level has to arrive there
+   * rooms put their exit, and the tallest power level has to arrive there
    * standing up. See `fac_cellar`.
    */
-  fac_duct: ck(16, {
+  fac_duct_down: ck(16, {
     0: G,
     1: G,
     9: '  o o o',
     11: '     ()',
     12: '     {}',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * The same duct, the other way up: it comes down out of the roof and stops
+   * with its mouth over the floor, which is what you stand under and press up.
+   *
+   * Row 9 is the mouth and it is not a taste. The lower lip has to be within a
+   * body-height of the floor at row 13 and still clear the head of the tallest
+   * power level (21x43 px — three tile rows), so three empty rows under it is
+   * the one height every size can use. See `WARP_UP_REACH` in
+   * `src/scenes/level.js`, and `cave_room`, which is measured the same way.
+   *
+   * The coins move right rather than disappear: the hint is the same hint, and
+   * putting them under the mouth would have made them a sign pointing at it.
+   */
+  fac_duct_up: ck(16, {
+    0: G,
+    1: G,
+    2: '     {}',
+    3: '     {}',
+    4: '     {}',
+    5: '     {}',
+    6: '     {}',
+    7: '     {}',
+    8: '     {}',
+    9: '     ()  o o o',
     13: G,
     14: G,
   }),
@@ -156,26 +189,31 @@ export const FACTORY_CHUNKS = {
    *   - you arrive at columns 4-7 (the duct's pipe is at its columns 5-6, and
    *     a warp keeps your x), so rows 8-10 are empty there — the blocks start
    *     at column 8
-   *   - you leave from the pipe at columns 12-13, standing on it in rows 8-10,
-   *     so row 9 is empty from column 11 rightwards too
+   *   - you leave from the mouth at columns 12-13, standing on the floor under
+   *     it in rows 10-12, so those three rows are empty from column 11
+   *     rightwards too
    *   - the ceiling is at row 5 and the floor at 13, so standing on the blocks
    *     at row 9 leaves rows 6-8 free
    *
-   * The exit pipe is one tile shorter than the duct that brought you here.
-   * That is not a decoration: the difference of one row is what puts your feet
-   * just above the factory floor instead of inside it, and `fac_duct` keeps
-   * the surface above it clear so the warp is never refused. A bonus room you
-   * cannot leave is a trap, not a bonus.
+   * **The way out hangs from the ceiling and is pressed up on from the floor.**
+   * It used to stand on the floor and be pressed up on from on top of it, which
+   * is entering a pipe through its capped end; `tryWarp` asks for the mouth to
+   * face the way you are going. Row 9 is where it stops because three empty
+   * rows are what the tallest power level needs to stand under it — the same
+   * measurement `cave_room` and `fac_duct_up` are built to.
+   *
+   * `fac_duct_down` keeps the surface above these columns clear so the warp is
+   * never refused. A bonus room you cannot leave is a trap, not a bonus.
    */
   fac_cellar: ck(16, {
     5: 'XXXXXXXXXXXXXXXX',
-    6: 'X              X',
-    7: 'X              X',
-    8: 'X              X',
-    9: 'X       ???    X',
+    6: 'X           {} X',
+    7: 'X           {} X',
+    8: 'X           {} X',
+    9: 'X       ??? () X',
     10: 'X              X',
     11: 'X  ooooo       X',
-    12: 'X  ooooo    () X',
+    12: 'X  ooooo       X',
     13: '################',
     14: '################',
   }),
@@ -200,6 +238,12 @@ export const FACTORY_CHUNKS = {
    *
    * Same measurements as `fac_cellar`, for the same reason — arrival at
    * columns 4-7, departure from 12-13, ceiling at 5 and floor at 13.
+   *
+   * **Its exit did not have to move**, and that is worth saying out loud in the
+   * round that moved the other three. The loft is the band *above* the route,
+   * so leaving it is a journey downwards, and a pipe you stand on and press
+   * down through is already the mouth facing the way you are going. The rule
+   * that turned three exits upside down leaves this one exactly as it was.
    */
   fac_loft: ck(16, {
     5: 'XXXXXXXXXXXXXXXX',
@@ -212,22 +256,5 @@ export const FACTORY_CHUNKS = {
     12: 'X           () X',
     13: '################',
     14: '################',
-  }),
-
-  /** Roomy arena with landing platforms: the giant needs headroom. */
-  boss_arena_big: ck(48, {
-    0: G + G + G,
-    1: G + G + G,
-    2: 'XX                                            XX',
-    3: 'XX                                            XX',
-    5: '         o o                      o o',
-    6: '        -----                    -----',
-    7: '         o o                      o o',
-    9: '                     b',
-    10: '                                            DD',
-    11: '                                            DD',
-    12: '                                            DD',
-    13: G + G + G,
-    14: G + G + G,
   }),
 };

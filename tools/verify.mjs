@@ -958,8 +958,12 @@ const report = await page.evaluate(async () => {
       put(27, 2, '1');
       put(24, 8, '!');
       put(27, 60, 'F');
-      put(27, 20, '()');   // down into the cave room
-      put(27, 40, '()');   // up into the sky loft
+      put(27, 20, '()');   // down into the cave room: a pipe you stand on
+      /* Up into the sky loft, and therefore a pipe that hangs. Row 24 is the
+       * mouth because it leaves the three clear rows the tallest body needs
+       * between it and the ground at row 28 — see `WARP_UP_REACH`. */
+      put(24, 40, '()');
+      for (let y = 18; y < 24; y++) put(y, 40, '{}');
       // The fault: two tiles of ground on the surface right over the cave
       // room's exit, so the warp back up has nowhere to put a 21x43 body.
       if (ledgeOverCaveExit) { put(26, 23, '####'); put(27, 23, '####'); }
@@ -971,10 +975,12 @@ const report = await page.evaluate(async () => {
       put(9, 42, '!');
       put(12, 46, '()');   // the way back down
 
-      // Cave room under the pipe at column 20.
+      // Cave room under the pipe at column 20. The way back up hangs from its
+      // ceiling, three clear rows over the floor at row 43.
       room(30, 5, 14, 14, 'X');
       put(39, 18, '!');
-      put(42, 24, '()');   // the way back up
+      for (let y = 36; y < 39; y++) put(y, 24, '{}');
+      put(39, 24, '()');   // the way back up
       return g;
     };
 
@@ -1777,7 +1783,10 @@ const report = await page.evaluate(async () => {
       // drop to the cave floor at the end of it.
       hold(c, i, ['down'], 90);
       const inCave = c.player.y > 30 * 16 && c.player.onGround && !c.player.dying;
-      put(c, 250, 42);
+      /* Standing on the room's floor under the exit, not on top of a pipe: the
+       * way out hangs from the ceiling now, and you leave the way you came —
+       * facing the mouth you are about to travel through. */
+      put(c, 250, 43);
       hold(c, i, [], 3);
       c.player.warpLock = 0;
       hold(c, i, ['up'], 90);
@@ -1825,30 +1834,31 @@ const report = await page.evaluate(async () => {
   /* ------------------- putken suunta ja putkessa kulkeminen -------------- */
   /*
    * Red before green (DESIGN.md §7) for the rule that the direction you travel
-   * has to match the mouth you enter.
+   * has to match the mouth you enter — and for the content that now obeys it.
    *
-   * The fixture is a real level with two pipes pasted into it, because the
-   * shipped content has no ceiling pipe at all yet — every upward warp in the
-   * game is still drawn standing on the floor, which is exactly why
-   * `WARP_COMPAT.upFromFloor` is still on. Both halves of the rule are proved
-   * with the compatibility off: a ceiling pipe goes up, and a floor pipe does
-   * not, whatever is pressed.
+   * The fixture used to be two pipes pasted into a level, because no shipped
+   * chunk had a ceiling pipe: every upward warp in the game stood on the floor,
+   * which is what `WARP_COMPAT.upFromFloor` existed to keep working. The rooms
+   * carry their own ceilings now, so the rule is proved against them directly.
+   *
+   * **Every hidden room, in and out, at all six body sizes.** That is the only
+   * evidence that matters here. A room you can enter and not leave is the trap
+   * `secrets.js` exists to prevent, and the body that gets stuck is the tallest
+   * (21x43 px) — which is also the one that arrives last, because every one of
+   * these rooms holds a power-up.
    */
   {
-    const levelMod = await import('/src/scenes/level.js');
-    /* Named rather than destructured, and asserted: on an engine without the
-     * switch this file has to report that by name instead of dying on it. */
-    expect('the engine exposes the upward-warp compatibility switch',
-      !!levelMod.WARP_COMPAT, 'WARP_COMPAT puuttuu src/scenes/level.js:stä');
-    const WARP_COMPAT = levelMod.WARP_COMPAT || { upFromFloor: true };
-    const mk = (power) => {
+    const mk = (power, id = '1-2') => {
       reset(power);
-      const s = new LevelScene(game, '1-2');
+      const s = new LevelScene(game, id);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
       game.scene = s;
       return s;
     };
+    /* `ty` is always the row the **feet** stand on — on a floor pipe's mouth,
+     * or on the floor under a ceiling pipe's. That is one sentence for both
+     * directions: stand where the pipe is and press the way it points. */
     const put = (s, tx, ty) => {
       s.player.x = tx * 16 + (16 - s.player.w) / 2;
       s.player.y = ty * 16 - s.player.h;
@@ -1867,59 +1877,79 @@ const report = await page.evaluate(async () => {
       }
     };
     const i = mkInput();
+    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (15 * 16));
 
-    /* A ceiling pipe over the cave room's floor, at the columns the room keeps
-     * clear for its exit. Rows 40-41 hang from nothing in particular — what
-     * matters to `tryWarp` is that the mouth is the *lowest* tile of the pipe
-     * and that it is above the player's head. */
-    const ceiling = (s, tx, ty) => {
-      s.grid[ty][tx] = '('; s.grid[ty][tx + 1] = ')';
-      s.grid[ty - 1][tx] = '{'; s.grid[ty - 1][tx + 1] = '}';
-    };
+    /* The five hidden rooms in the game, and the two journeys each one owes
+     * the player. `into` is the band the way in arrives in: 0 is the sky, 2 is
+     * the cave, and coming back always means band 1. */
+    const ROOMS = [
+      { room: 'cave_room (1-2)', id: '1-2', in: [229, 26, 'down'], out: [250, 43, 'up'], into: 2 },
+      { room: 'tomb_cave (2-2)', id: '2-2', in: [229, 26, 'down'], out: [235, 43, 'up'], into: 2 },
+      { room: 'cave_room (3-2)', id: '3-2', in: [233, 26, 'down'], out: [254, 43, 'up'], into: 2 },
+      { room: 'fac_cellar (4-2)', id: '4-2', in: [133, 26, 'down'], out: [140, 43, 'up'], into: 2 },
+      { room: 'fac_loft (4-2)', id: '4-2', in: [245, 28, 'up'], out: [252, 12, 'down'], into: 0 },
+    ];
 
-    const was = WARP_COMPAT.upFromFloor;
-    try {
-      WARP_COMPAT.upFromFloor = false;
-
-      // 1. A pipe hanging from the ceiling, entered upward from under it.
-      const up = mk({ type: null, level: 0 });
-      ceiling(up, 249, 41);          // mouth bottom edge exactly at the head
-      put(up, 249, 43);                       // standing on the cave room floor
-      const fromY = up.player.y;
-      hold(up, i, ['up'], 60);
-      expect('pressing up enters a pipe that hangs from the ceiling',
-        up.player.y < 30 * 16 && Math.abs(up.player.y - (fromY - 15 * 16)) < 1
-        && !up.player.dying && !up.player.transit,
-        `${Math.round(fromY)} -> ${Math.round(up.player.y)}`);
-
-      // 2. …and the same press on a pipe standing on the floor does nothing.
-      const floor = mk({ type: null, level: 0 });
-      put(floor, 250, 42);                    // on top of the cave room's exit
-      const stayY = floor.player.y;
-      hold(floor, i, ['up'], 60);
-      expect('pressing up on a pipe standing on the floor is not a way in',
-        Math.abs(floor.player.y - stayY) < 1 && !floor.player.transit,
-        `${Math.round(stayY)} -> ${Math.round(floor.player.y)}`);
-
-      // 3. Down through a floor pipe still works, or the rule ate both cases.
-      const down = mk({ type: null, level: 0 });
-      put(down, 229, 26);
-      hold(down, i, ['down'], 60);
-      expect('pressing down on a pipe you are standing on still goes down',
-        down.player.y > 30 * 16 && !down.player.dying,
-        `y ${Math.round(down.player.y)}`);
-    } finally {
-      WARP_COMPAT.upFromFloor = was;
+    for (const r of ROOMS) {
+      const bad = [];
+      for (let level = 0; level <= 5; level++) {
+        const power = level === 0 ? { type: null, level: 0 } : { type: 'shroom', level };
+        const into = mk(power, r.id);
+        put(into, r.in[0], r.in[1]);
+        hold(into, i, [r.in[2]], 120);
+        hold(into, i, [], 30);
+        if (!(bandOf(into) === r.into && into.player.onGround && !into.player.dying)) {
+          bad.push(`koko ${level} ei päässyt sisään (kaista ${bandOf(into)})`);
+        }
+        const back = mk(power, r.id);
+        put(back, r.out[0], r.out[1]);
+        hold(back, i, [], 3);
+        back.player.warpLock = 0;
+        hold(back, i, [r.out[2]], 120);
+        hold(back, i, [], 30);
+        if (!(bandOf(back) === 1 && back.player.onGround && !back.player.dying
+          && back.state === 'play')) {
+          bad.push(`koko ${level} ei päässyt ulos (kaista ${bandOf(back)})`);
+        }
+      }
+      expect(`${r.room} is enterable and leavable at all six sizes`,
+        bad.length === 0, bad.join(', ') || 'kuusi kokoa sisään ja ulos');
     }
 
-    /* And the state of the migration, asserted rather than remembered. While
-     * this is on, the five upward warps in `src/data/` still work; the moment
-     * it goes off, they must already have grown ceilings or the player is
-     * sealed in a bonus room. The list, with the change each one needs, is on
-     * `WARP_COMPAT` in src/scenes/level.js. */
-    expect('the temporary upward-warp compatibility is still on, and says so',
-      WARP_COMPAT.upFromFloor === true,
-      'jos tämä on pois, cave_room / tomb_cave / fac_cellar / fac_duct on korjattava ensin');
+    /*
+     * And the rule itself, stated as a refusal, because the room tests above
+     * would still pass if `tryWarp` went back to reading one tile in both
+     * directions.
+     *
+     * The pipe is pasted in rather than borrowed: no floor pipe in the shipped
+     * game has a legal band above it any more, and a refusal that could be
+     * blamed on the landing proves nothing about the direction. This one has a
+     * landing — clear surface at columns 252-253 with the route's own ground
+     * under it — and is refused anyway, because it is a pipe you are standing
+     * on top of and the top of a pipe is capped.
+     */
+    const floorPipe = mk({ type: null, level: 0 });
+    floorPipe.grid[42][252] = '(';
+    floorPipe.grid[42][253] = ')';
+    put(floorPipe, 252, 42);
+    const stayY = floorPipe.player.y;
+    hold(floorPipe, i, ['up'], 60);
+    expect('pressing up on a pipe standing on the floor is not a way in',
+      Math.abs(floorPipe.player.y - stayY) < 1 && !floorPipe.player.transit,
+      `${Math.round(stayY)} -> ${Math.round(floorPipe.player.y)}`);
+
+    /* …and the same pipe pressed downwards is refused too, for the other half
+     * of the reason: below it is the bottom of the level. Nothing about the
+     * fixture is a warp that happens to be broken. */
+    const noBand = mk({ type: null, level: 0 });
+    noBand.grid[42][252] = '(';
+    noBand.grid[42][253] = ')';
+    put(noBand, 252, 42);
+    const downY = noBand.player.y;
+    hold(noBand, i, ['down'], 60);
+    expect('a warp with no band under it stays put',
+      Math.abs(noBand.player.y - downY) < 1 && !noBand.player.transit,
+      `${Math.round(downY)} -> ${Math.round(noBand.player.y)}`);
 
     /* ----------------------- putkessa kulkeminen ----------------------- */
     /*
@@ -5261,10 +5291,110 @@ const report = await page.evaluate(async () => {
         rows.map((r) => `${r.id} taso ${r.level}: ${r.seen}/${r.air} framea`).join(', '));
       /* And the mechanism, not just its effect: the view may rise a little near
        * the apex to keep the head in frame (CAM_TOP_MARGIN), and it must never
-       * ride the arc. A jump lifts the body ~5 px on its fastest frame. */
+       * ride the arc. A jump lifts the body ~5 px on its fastest frame.
+       *
+       * The 2-1 power-3 row reads 0.27 rather than 0.00 since `CAM_TOP_LEAD`,
+       * and that is the anticipation zone rather than a regression: that jump
+       * tops out 16.4 px from the top of the letterbox band, 0.4 px short of
+       * forcing the old hard clamp, so it was always going to move the view —
+       * it now moves it 0.93 px over the whole 85 px arc instead of stepping.
+       * The power-0 row has 20.4 px of headroom and stays at 0.00. */
       expect('the view does not ride a jump upward',
         rows.every((r) => r.rise < 2),
         rows.map((r) => `${r.id} ${r.rise.toFixed(2)} px/frame`).join(', '));
+    }
+
+    /*
+     * Red before green (DESIGN.md §7) for the owner's second camera report:
+     * "now it's better that it doesn't move when we jump, but then when the
+     * character is actually high enough for the camera to move, it moves
+     * suddenly. It just snaps higher instead of animating."
+     *
+     * The hold and the downward follow were both right and both stay; what was
+     * wrong was the moment the hold ends. `CAM_TOP_MARGIN` was a hard clamp
+     * applied after the ease, so the frame the head crossed it the view was
+     * pinned to `p.y - 16` and tracked it exactly — nought to the body's own
+     * rise speed between two frames.
+     *
+     * **A snap is a big number on one frame; an animation is a small number on
+     * many.** So the measurement is the largest single-frame upward move of the
+     * view over a run of jumps. Before `CAM_TOP_LEAD`: **2.92 px**, on a frame
+     * where the body lifted 2.93 — the view matching the body's speed from a
+     * standstill. After: **1.95 px**, and reached over several frames.
+     *
+     * Two things about the fixture, both of which decide what is being
+     * measured:
+     *
+     *   - **only jumps that start from a settled view count.** Landing on a
+     *     ledge moves the anchor, and the view then glides up to it at
+     *     `CAM_V_EASE` — 8.7 px on its first frame, by design, because that is
+     *     the *downward* follow working. Jumping again mid-glide and blaming
+     *     the number on the top margin measures the wrong thing entirely; it
+     *     was 6.70 px before the filter and had nothing to do with the report.
+     *   - **fart jumps**, because nothing else reaches the zone. A running
+     *     jump rises 85 px and tops out with the head still 16 px clear of the
+     *     frame even in a letterboxed level, so it never asks the camera for
+     *     anything — which is why the two power-0 and running-jump rows below
+     *     are 0.00 px and must stay 0.00 px.
+     */
+    {
+      const rows = [];
+      for (const [id, power] of [['2-3', { type: 'leaf', level: 5 }],
+        ['2-1', { type: 'leaf', level: 5 }], ['2-1', { type: 'leaf', level: 3 }],
+        ['1-1', { type: 'leaf', level: 5 }], ['2-1', { type: null, level: 0 }],
+        ['2-1', { type: 'shroom', level: 3 }]]) {
+        reset(power);
+        const s = new LevelScene(game, id);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const input = mkInput();
+        let rise = 0;
+        let air = 0;
+        let seen = 0;
+        let head = Infinity;
+        let takeoff = null;
+        let counted = false;
+        for (let f = 0; f < 1800; f++) {
+          input.held = blank();
+          input.pressed = blank();
+          input.held.right = true;
+          input.held.run = true;
+          const phase = f % 60;
+          if (phase === 40 && s.player.onGround) { input.pressed.jump = true; input.held.jump = true; }
+          else if (phase > 40 && phase < 74) input.held.jump = true;
+          // The second press, in mid-air: the fart jump.
+          if (phase === 48) { input.pressed.jump = true; input.held.jump = true; }
+          const wasGround = s.player.onGround;
+          const camBefore = s.cam.y;
+          const settled = Math.abs(s.cam.y - s.cameraY()) < 0.5;
+          s.update(input);
+          const p = s.player;
+          if (p.dying) break;
+          if (wasGround && !p.onGround) { takeoff = p.y + p.h; counted = settled; }
+          if (!p.onGround && takeoff !== null && counted) {
+            air++;
+            if (takeoff < s.cam.y + s.viewH) seen++;
+            rise = Math.max(rise, camBefore - s.cam.y);
+            head = Math.min(head, p.y - s.cam.y);
+          }
+          if (p.onGround) takeoff = null;
+        }
+        rows.push({ id, level: power.level, air, seen, rise, head });
+      }
+      /* 2.5 and not 2.92: the ceiling is under the number the snap produced and
+       * over the number the ease produces, so it is the snap that cannot come
+       * back rather than the whole mechanism being frozen. */
+      expect('a view that has to rise animates instead of snapping',
+        rows.every((r) => r.air > 200 && r.rise < 2.5),
+        rows.map((r) => `${r.id} taso ${r.level}: ${r.rise.toFixed(2)} px/frame`).join(', '));
+      /* And the warning must buy the smoothness out of itself, not out of the
+       * two things that were already right: the head still may not touch the
+       * top of the frame — nor even reach the margin, which is how you can tell
+       * the clamp is no longer the thing doing the work — and the ground under
+       * a jump still may not leave the bottom of it. */
+      expect('anticipating the rise costs neither the headroom nor the ground',
+        rows.every((r) => r.head > 16 && r.seen === r.air),
+        rows.map((r) => `${r.id}: pää ${r.head.toFixed(2)} px, maa ${r.seen}/${r.air}`).join(', '));
     }
 
     /* `applySize()` pins the bottom of the body and changes its height, so
@@ -5944,6 +6074,36 @@ const report = await page.evaluate(async () => {
       }
     }
     expect('every tile type draws in every theme', badTile.length === 0, badTile.join(' '));
+
+    /* A pipe that goes up has to look like it goes up, or the rule `tryWarp`
+     * enforces is invisible and the warp reads as broken. The tile knows from
+     * the neighbour it is already handed: pipe overhead means this mouth is the
+     * bottom end of something hanging, so it is drawn mirrored. Asserted as the
+     * mirror rather than as "different", because "different" would also pass if
+     * the two were merely two shades of the same wrong picture. */
+    {
+      const px = (d, x, y) => (d[(y * 320 + x) * 4] << 16) | (d[(y * 320 + x) * 4 + 1] << 8)
+        | d[(y * 320 + x) * 4 + 2];
+      const tile = (above) => {
+        g.clearRect(0, 0, 320, 208);
+        drawTile(g, '(', 0, 0, 'factory', 3, 5, 0, above, {});
+        drawTile(g, ')', 16, 0, 'factory', 4, 5, 0, above, {});
+        return g.getImageData(0, 0, 320, 208).data;
+      };
+      const floor = tile(' ');
+      const ceiling = tile('{');
+      let mirrored = 0;
+      let same = 0;
+      for (let x = 0; x < 32; x++) {
+        for (let y = 0; y < 16; y++) {
+          if (px(floor, x, y) === px(ceiling, x, 15 - y)) mirrored++;
+          if (px(floor, x, y) === px(ceiling, x, y)) same++;
+        }
+      }
+      expect('a pipe hanging from the ceiling is drawn the other way up',
+        mirrored === 512 && same < 512,
+        `peilattuja ${mirrored}/512, samoja ${same}/512`);
+    }
 
     /* Sprites now tint and glow, and glowing means switching the composite mode
      * mid-draw. One that is not switched back corrupts every tile drawn after

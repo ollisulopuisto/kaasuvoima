@@ -1,5 +1,5 @@
 import { getLevel } from '../data/levels.js';
-import { T, TILE } from '../gfx/tiles.js';
+import { T } from '../gfx/tiles.js';
 import { hashNoise } from './utils.js';
 
 /**
@@ -42,13 +42,32 @@ import { hashNoise } from './utils.js';
  *   - **Ordinary `?` blocks.** Nothing about them is hidden.
  *
  * A count the player cannot reconcile with what they found is worse than no
- * count at all, so the payout is also what makes one FOUND — see `watchSecrets`.
+ * count at all, so the payout is also what makes one FOUND.
+ *
+ *
+ * WHEN A SECRET BECOMES FOUND: when the game gives you the thing it was hiding.
+ *
+ * One rule, and it is the same rule in all four cases, because a counter the
+ * player cannot predict is a counter that lies:
+ *
+ *   - a block (star, switch, hidden brick) is found the moment it turns into a
+ *     spent block and pops what it held. Not when you see it, not when you
+ *     stand under it — when something comes out.
+ *   - a hidden area is found the moment your feet are in it. Not when you touch
+ *     the vine, which you can do by walking past it, and not when you clear the
+ *     level: you are standing in the secret place with the camera on it.
+ *
+ * Both live in `src/scenes/level.js` — `bumpTile` and `noteBand` — and call
+ * `noteSecret` below. They used to live here, in a `watchSecrets` function that
+ * monkey-patched `LevelScene.prototype`, because level.js belonged to somebody
+ * else in the round that built this. It does not any more, so the patch is
+ * gone; this module is data and rules again, and imports no scene.
  */
 
 /*
  * Copied from `LevelScene.brickSecret`, and copied on purpose: this module must
- * not import a scene (see `watchSecrets`), and the rates are two numbers rather
- * than a shared unit. `tools/verify.mjs` asserts that the two copies agree,
+ * not import a scene, and the rates are two numbers rather than a shared unit.
+ * `tools/verify.mjs` asserts that the two copies agree,
  * brick for brick, across all 21 levels — the same trick that keeps
  * `gen-levels.mjs`'s third copy safe.
  */
@@ -64,7 +83,9 @@ export function brickHides(tx, ty) {
 /** Keys are stable strings, so a save survives everything but a level rewrite. */
 export const SKY = 'sky';
 export const CAVE = 'cave';
-const tileKey = (ch, tx, ty) => `${ch}${tx},${ty}`;
+/* Exported so `LevelScene` can name a find with the same string this file
+ * counts: one spelling of a key, in the module that owns the counting. */
+export const tileKey = (ch, tx, ty) => `${ch}${tx},${ty}`;
 
 const keyCache = new Map();
 
@@ -146,54 +167,4 @@ export function noteSecret(state, levelId, key) {
   if (list.includes(key)) return false;
   list.push(key);
   return true;
-}
-
-const WATCHED = Symbol('sfb3.secrets.watched');
-
-/**
- * WHEN A SECRET BECOMES FOUND: when the game gives you the thing it was hiding.
- *
- * One rule, and it is the same rule in all four cases, because a counter the
- * player cannot predict is a counter that lies:
- *
- *   - a block (star, switch, hidden brick) is found the moment it turns into a
- *     spent block and pops what it held. Not when you see it, not when you
- *     stand under it — when something comes out.
- *   - a hidden area is found the moment your feet are in it. Not when you touch
- *     the vine, which you can do by walking past it, and not when you clear the
- *     level: you are standing in the secret place with the camera on it.
- *
- * WHY THIS IS A WRAPPER AND NOT THREE LINES IN `level.js`: because level.js was
- * not mine to edit in the round that built this. The end state is that
- * `bumpTile` and `tryWarp` call `noteSecret` themselves and this function goes
- * away. That is also why this module must never import `LevelScene` — the class
- * is handed in, so that the day level.js imports *this* there is no cycle to
- * untangle.
- */
-export function watchSecrets(LevelScene) {
-  const proto = LevelScene.prototype;
-  if (proto[WATCHED]) return;
-  proto[WATCHED] = true;
-
-  const bumpTile = proto.bumpTile;
-  proto.bumpTile = function watchedBumpTile(tx, ty, player) {
-    const row = this.grid[ty];
-    const before = row ? row[tx] : null;
-    bumpTile.call(this, tx, ty, player);
-    // The raw grid, not `tileAt`: a running switch reads bricks as coins.
-    if (before && before !== T.USED && row[tx] === T.USED) {
-      noteSecret(this.game.state, this.id, tileKey(before, tx, ty));
-    }
-  };
-
-  const update = proto.update;
-  proto.update = function watchedUpdate(input) {
-    update.call(this, input);
-    const bands = this.def.bands;
-    if (!bands || !this.player) return;
-    // Feet, not head: bumping your head into the sky band is not arriving.
-    const band = Math.floor((this.player.y + this.player.h - 1) / (bands.rows * TILE));
-    if (band <= 0) noteSecret(this.game.state, this.id, SKY);
-    else if (band >= 2) noteSecret(this.game.state, this.id, CAVE);
-  };
 }
