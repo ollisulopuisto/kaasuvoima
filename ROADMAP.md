@@ -533,6 +533,25 @@ pelinsä, vaan sitä joka saa linkin.
 
 ## Avoimet kysymykset
 
+- **Putken suunta on korjattu moottoriin mutta ei kenttiin.** `tryWarp` vaatii
+  nyt katosta roikkuvan putken ylöspäin matkustamiseen, mutta maailmojen 1–4
+  salahuoneiden ulostuloputket seisovat lattialla. Siksi päällä on
+  `WARP_COMPAT.upFromFloor`, jota kokeillaan vasta kattotestin jälkeen — ilman
+  sitä pelaaja jäisi lukkoon bonushuoneeseen.
+
+  **Jäljellä oleva työ on kenttädataa**, ja se on lueteltu `level.js`:n
+  `WARP_COMPAT`-kommentissa ruututarkkuudella: `cave_room` (1-2 **ja** 3-2,
+  yksi muokkaus riittää), `tomb_cave` (2-2), `fac_cellar` (4-2), ja `fac_duct`
+  joka pitää jakaa kahdeksi — lattiakanava alas, kattokanava ylös. `fac_loft`
+  ei muutu, koska sieltä poistutaan alaspäin.
+
+  Kaksi seurausta jotka pitää tehdä samalla: `rules.js`:n `warpMouths` siunaa
+  yhä lattiaputken ulostuloksi kumpaankin suuntaan, ja `drawTile` piirtää
+  putken suun aina ylöspäin, joten kattoputki näyttää väärältä kunnes se
+  hoidetaan. **Lipun saa pois vasta kun kaikki kolme on tehty**, ja portti
+  todistaa tiukan säännön jo nyt lippu pois kytkettynä.
+
+
 - `playable.mjs`: 4-3 ei mene läpi botilla, ja 2-1, 3-F sekä 5-F vaativat
   tuplahypyn. **4-3 on tarkistettu käsin eikä ole rikki** — kuilun yli mennään
   kelluvia lavoja pitkin, joita botti ei osaa käyttää. Muita ei ole tarkistettu.

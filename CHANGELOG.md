@@ -7,6 +7,103 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.09.19 — putken suunta, putkessa kulkeminen, kameran pito ja linnan ovi
+
+Neljä omistajan raportoimaa vikaa, jotka osuivat samoihin kahteen tiedostoon.
+
+### Ylös mennään katosta roikkuvasta putkesta
+
+`tryWarp` tutki **jalkojen alla olevan ruudun molempiin suuntiin**, joten
+ylöspäin matkustaminen tapahtui seisomalla putken päällä ja painamalla ylös.
+Sääntö on nyt se jonka lajityyppi on aina käyttänyt: **matkan suunnan pitää
+vastata sitä suuta josta mennään sisään.**
+
+**Muutos ei kuitenkaan ole vielä valmis, ja se on sanottu ääneen koodissa.**
+Maailmojen 1–4 salahuoneiden ulostuloputket seisovat lattialla ja niistä
+mennään ylös. Tiukka sääntö tekisi niistä käyttökelvottomia — eli **sulkisi
+pelaajan bonushuoneeseen**, mikä on täsmälleen se ansa jota vastaan `secrets.js`
+varoittaa. Siksi mukana on `WARP_COMPAT.upFromFloor`, jota kokeillaan **vasta**
+kattotestin epäonnistuttua, ja portti sekä väittää lipun olevan päällä että
+todistaa tiukan säännön molemmat puolet lippu pois kytkettynä.
+
+Jäljellä oleva työ on kenttädataa: `cave_room` (1-2 ja 3-2 — yksi muokkaus
+korjaa molemmat), `tomb_cave` (2-2), `fac_cellar` (4-2) ja `fac_duct`, joka
+pitää jakaa kahdeksi. `fac_loft` ei muutu, koska sieltä poistuminen on
+alaspäin. Lisäksi `rules.js` on yhä vanhaa mieltä warpin suunnasta, eikä sitä
+voi korjata ennen kenttiä ilman että portti kaatuu.
+
+### Putkessa kulkeminen näkyy
+
+Ennen: `p.y += shift`, eli teleportti. Nyt `Player.transit` — 14 framea sisään,
+5 pidossa, 13 ulos. Sama mekanismi hoitaa myös linnan oven, koska molemmat ovat
+"pelaaja katoaa hetkeksi johonkin".
+
+`warpLock` luettiin ja jätettiin rauhaan: se estää pohjassa olevaa nappia
+kimmottamasta takaisin heti, eikä se koskaan ollut ohjauslukko.
+
+**Pikatallennus kesken matkan tallennetaan, ei kielletä.** Tila on tavallisia
+lukuja `Player`in omina kenttinä, ja `savestate.js` tallentaa jokaisen olion
+jokaisen oman kentän — joten kuva palautuu pidossa ilman riviäkään
+tallennuskoodia. Kieltäminen olisi tarkoittanut näppäintä joka ei tee mitään
+puoleen sekuntiin, ja se on bugiraportti.
+
+Bugi joka syntyi ja jäi kiinni matkalla: `beginTransit` otti `controllable`n
+pois eikä mikään antanut sitä takaisin. Nyt palautetaan **muistettu** arvo eikä
+`true`.
+
+### Kamera ei nouse hypyn mukana
+
+Pystytavoite riippuu nyt `camAnchor`ista — siitä viimeisestä kohdasta johon
+pelaaja **asettui**. Ankkuri liikkuu alaspäin heti (putoamisen kohde pitää
+nähdä), maahan tullessa ja köydellä. **Hyppy ei ole mikään niistä.**
+
+| maalilaatta näkyvissä koko hypyn ajan | ennen | jälkeen |
+| --- | --- | --- |
+| 2-1, voimataso 0 | 58,4 % | **100 %** |
+| 2-1, voimataso 3 | 58,8 % | **100 %** |
+| 1-1, voimataso 3 | 100 % | 100 % |
+
+Kameran nousu hypyn aikana 2-1:ssä: 3,11 px/frame → **0,00**. Kuvasuhteeseen ei
+koskettu eikä `CAM_EYE`:hen koskettu, kuten pitikin — vika oli joka kentässä,
+laajakuva vain poisti siitä 22 pikselin pelivaran.
+
+Ainoa ohitus on 16 pikselin yläreunus, ja se on **kova raja easen jälkeen** eikä
+tavoite: eased raja on yhä viive, ja mitattuna huippu työntyi 2,6 px ulos
+laajakuvakaistasta sillä välin kun kuva oli matkalla.
+
+Viisi olemassa olevaa kameratestiä pysyi voimassa sellaisenaan, kolme parani
+mitattavasti.
+
+### Linnan ovi aukeaa ja siitä mennään sisään
+
+**Korjaus aiempaan diagnoosiin:** `open`-parametri *oli* käytössä — vilkkuva
+kahva ja himmeä hehku. Se mikä ei liikkunut olivat **ovilehdet**, ja se oli
+oikea vika. Nyt `open` on luku 0…1: lehdet kääntyvät kumpikin omalle
+saranalleen, rako aukeaa keskeltä ja levenee, ja takana on tumma aukko jonka
+alimmalla ruudulla on valaistu kynnys.
+
+`bossDefeated` on nyt **se tikki jolloin pomo kaatui** eikä `true`. Se ja `tick`
+ovat molemmat jo tilatallennuksessa, joten aukeaminen selviää pikalatauksesta
+ilman uutta kenttää — ja vanha tallennus jossa lukee `true` luetaan "aukesi
+kauan sitten", mikä on oikein.
+
+**Läpäisyjingle odottaa kuvaa eikä toisin päin.** Palkinto on kentän
+läpäisemisestä, läpäiseminen on ovesta meneminen, ja jingle soitettuna pelaajan
+vielä kävellessä sanoo että kenttä on ohi samalla kun kuva sanoo ettei ole.
+Hinta on 19 framea. Matka päättyy tilaan `'gone'` eikä tyhjään, koska
+`completeLevel` asettaa `autoWalk`in — muuten pelaaja ilmestyisi takaisin ja
+kävelisi ulos ovesta johon juuri meni.
+
+**Kuollut `door`-lippu otettiin käyttöön** eikä poistettu: se on juuri se
+kysymys jota kysytään, joten sitä kysytään nyt sen sijaan että `ch === T.DOOR`
+kirjoitettaisiin joka paikassa erikseen.
+
+### `playable.mjs`
+
+Yksi luku muuttui: neljä linnaketta raportoivat `ETENI 98%` eikä `100%`. Se on
+oven korjaus eikä regressio — botti käveli ennen oven **ohi** läpäisyjakson
+aikana ja pysähtyy nyt siihen. Kaikki neljä ovat yhä `LÄPI`.
+
 ## v26.08.09.18 — spritejen animaatiokierrokset läpikäytynä, ja aurinko joka näkyy
 
 Kaksi työtä, jotka molemmat alkoivat "tarkistetaan tämä" ja päättyivät
