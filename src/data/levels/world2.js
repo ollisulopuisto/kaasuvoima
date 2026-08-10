@@ -29,7 +29,83 @@
  * *optional* mechanics named above. Enemy species are not mechanics in that
  * sense and there is no world in which they are one per level; what they have
  * to obey is the one-screen rule, and `tools/verify.mjs` now asserts it.
+ *
+ * **Ja 10.8.2026 se sääntö puri tähän maailmaan.** `tools/curriculum.mjs` sai
+ * rivin kurnuttajalle — laji oli ollut mittarin ulkopuolella siitä asti kun se
+ * tuli peliin — ja 2-1 oli koko pelin ainoa kenttä joka esitteli **neljä**
+ * uutta asiaa, kolme niistä saman ruudun sisällä. Mitattu ennen: putkikasvi
+ * 101, kurnuttaja 119 (18 päässä), närästysliekki 134 (15 päässä). Sen jälkeen
+ * närästysliekki opetetaan 2-2:ssa ja tämän maailman ensiesittelyt ovat:
+ *
+ *   2-1  aurinko 71, putkikasvi 101, kurnuttaja 197
+ *   2-2  ruskea pilvi 146, närästysliekki 194, nuottipalikka 309
+ *
+ * Se on kolme kenttää kohti, ja tiukin pari koko maailmassa on 2-1:n aurinko ja
+ * kasvi 30 saraketta erillään — puolitoista ruutua. Perustelut ovat kenttien
+ * omissa kommenteissa.
  */
+
+import { CHUNKS } from '../chunks.js';
+import { ck, CHUNK_ROWS } from '../chunks/common.js';
+
+/**
+ * TÄMÄN TIEDOSTON OMA PALIKKA, JA MIKSI SELLAINEN ON OLEMASSA.
+ *
+ * `pit_croak` (chunks/common.js) panee kurnuttajan merkin kuilun **keskelle**,
+ * sarakkeeseen 7 kuudentoista levyisessä palikassa jonka kuilu on sarakkeet
+ * 5–10. Se luki pitkään hyvältä — "keskellä kuoppaa" on se mitä silmä palikasta
+ * lukee — mutta mitattuna se on kaksi saraketta liian pitkällä:
+ *
+ *   jarrutusmatka voimatasolla 0 on 56 px eli 4 laattaa (PHYSICS.md,
+ *   `tools/measure-braking.mjs`), ja ikkuna [merkki−4, merkki−1] on silloin
+ *   sarakkeet 3–6 — joista **5 ja 6 ovat jo ilmaa**.
+ *
+ * Eli pelaaja joka näkee olion ja päästää napista irti oikealla hetkellä ei
+ * silti ehdi pysähtyä ennen kuin maa loppuu. Se ei ole vaikeus vaan virhe, ja
+ * `tools/curriculum.mjs`:n POHJA sanoo sen numerona.
+ *
+ * Korjaus on siirtää **merkki**, ei kuilua: kuilu on yhä kuusi laattaa, palikka
+ * on yhä sarake sarakkeelta `pit_s`, ja se on koko `pit_croak`in idea (sama
+ * reikä, uusi asukas). Merkki on nyt kuilun **etureunassa**, jolloin ikkuna
+ * 1–4 on kokonaan maata — neljä laattaa, tasan jarrutusmatka.
+ *
+ * Ja tämä on parempi paikka myös pelinä eikä vain mittarina. Kurnuttajan oma
+ * kommentti (`src/entities/enemies.js`) sanoo että kuilun yllä oleva ilma on
+ * se paikka jossa pelaajalla ei ole enää mitään hallintaa — ja loikka on
+ * pystysuora, eli vaara on **täsmälleen yksi sarake**. Kuilun keskellä se
+ * sarake osuu hypyn lakipisteeseen, jossa mitään ei voi enää tehdä; etureunassa
+ * se osuu ponnistukseen, joka on vielä pelaajan omissa käsissä. Reunalla
+ * seisominen on turvallista kummassakin tapauksessa.
+ *
+ * **Miksi palikka on täällä eikä chunks/common.js:ssä.** Se kuuluisi sinne, ja
+ * sinne se pitää viedä: sama vika on `pit_croak`issa yhä, ja 3-3 käyttää sitä
+ * (mittari ei näe sitä, koska mittari mittaa vain ensiesittelyn). Ehdotettu
+ * muutos on täsmälleen nämä kaksi riviä `pit_croak`in tilalle. Kun se on tehty,
+ * tämä palikka ja `assembleLocal` poistetaan ja 2-1 palaa tavalliseksi
+ * soittolistaksi — se on koko tämän kohdan elinkaari.
+ */
+const LOCAL_CHUNKS = {
+  pit_croak_rim: ck(16, {
+    13: '#####U     #####',
+    14: '#####      #####',
+  }),
+};
+
+/**
+ * `assemble()` (chunks.js) mutta omat palikat nimetään ensin. Kuusi riviä
+ * kopiota siksi, että vaihtoehto olisi ollut antaa kentälle valmis ruudukko
+ * käsin — ja silloin 2-1 lakkaisi olemasta luettava soittolista, joka on koko
+ * tapa jolla tämän pelin kentät on kirjoitettu.
+ */
+function assembleLocal(names) {
+  const rows = Array.from({ length: CHUNK_ROWS }, () => '');
+  for (const name of names) {
+    const chunk = LOCAL_CHUNKS[name] || CHUNKS[name];
+    if (!chunk) throw new Error(`unknown chunk: ${name}`);
+    for (let y = 0; y < CHUNK_ROWS; y++) rows[y] += chunk.rows[y];
+  }
+  return rows;
+}
 
 export const WORLD2_LEVELS = {
   /*
@@ -58,9 +134,12 @@ export const WORLD2_LEVELS = {
    *
    * JUOKSUHIEKKA ALKAA TÄSTÄ, ja tämä kenttä on se joka opettaa sen.
    *
-   * `dune_sink` at chunk 9 replaces the `coins` chunk and carries the same four
-   * coins, so the level is the same length, the same floor and the same reward
-   * — only what is under the coins is new. It is one tile deep with sand under
+   * `dune_sink` replaces the `coins` chunk and carries the same four coins, so
+   * the level is the same length, the same floor and the same reward — only
+   * what is under the coins is new. (Se `coins` on 10.8.2026 alkaen takaisin
+   * kentässä chunk 8:ssa, `heartburn`in tilalla, eli kolikkorivejä on kaksi
+   * eikä yksi. Perustelu on kurnuttajan kommentissa alempana.) It is one tile
+   * deep with sand under
    * it, which is not a soft first draft but the whole point: the smallest body
    * is exactly one tile tall, so nobody can be pulled under it at any power
    * level, doing anything, including diving into it head first. Measured in
@@ -84,9 +163,8 @@ export const WORLD2_LEVELS = {
   /*
    * KURNUTTAJA TULEE TÄHÄN, JA VAIN TÄHÄN KOKO MAAILMASSA.
    *
-   * Chunk 7 was `pit_s` and is now `pit_croak`, which is the same six-tile hole
-   * with something living at the bottom of it. Three reasons this pit and not
-   * another:
+   * Chunk 12 is `pit_croak_rim`, which is the same six-tile hole with something
+   * living at the bottom of it. Three reasons this pit and not another:
    *
    *   - **World 1 has to keep its promise first.** Every bare pit in world 1
    *     stays empty on purpose. A pit means "a pit" for a whole world, and 2-1
@@ -95,28 +173,87 @@ export const WORLD2_LEVELS = {
    *     well enough to have it taken away.
    *   - **A hazard in every hole is terrain, and terrain is not a hazard.** So
    *     there is one in the level and one more in the whole rest of the game
-   *     (3-3), and the other three pits in this very level — `pit_l`,
-   *     `pit_plat` and their stepping stones — are left exactly as they were.
-   *     Meeting an empty pit right after an occupied one is what makes the
-   *     occupied one mean anything.
+   *     (3-3), and the other two pits in this very level — `pit_l` and
+   *     `pit_plat` with their stepping stones — are still empty and still
+   *     carry their planks. Meeting an empty pit right after an occupied one is
+   *     what makes the occupied one mean anything, and the order the level now
+   *     reads in is planks first: `pit_l` at 112 you cross by stepping on
+   *     something, this one at 192 you cross with nothing under you, and
+   *     `pit_plat` at 256 is planks again.
    *   - **It is a swap, not an addition.** Same chunk count, same floor, same
    *     gap width, so the level's shape does not move and the measured
    *     difference is the creature and nothing else: 115.7 -> 119.5.
    *
-   * The pipe plant next door (chunk 6) is deliberate rather than an accident of
-   * the playlist. The two are the game's only unstompable telegraphed enemies,
-   * and DESIGN.md §8's real worry is two signals teaching one reading — so they
-   * are put in the same screen where the *difference* is visible: the plant
-   * leans out of a lid you walk past on the ground and ducks when you come
-   * near, the kurnuttaja comes up out of a hole you have to be in the air over
-   * and does not care where you are standing. Read side by side they are a
-   * contrast; a screen apart they would have been a repeat.
+   * PUTKIKASVIN JA KURNUTTAJAN VIERUSTOVERUUS: MITÄ USKOTTIIN, MITÄ MITATTIIN,
+   * MIKÄ MUUTTUI. Tässä luki 9.8.2026 asti argumentti sille että kasvin (chunk
+   * 6, sarake 101) ja kurnuttajan **pitää** olla samalla ruudulla: ne ovat pelin
+   * ainoat tallaamattomat viholliset jotka varoittavat ennen iskuaan, ja
+   * DESIGN.md kohta 8 pelkää kahta signaalia jotka opettavat yhden lukutavan —
+   * joten ne pantiin vierekkäin, jotta *ero* näkyisi. Kasvi nousee kannesta jonka
+   * ohi kävellään maata pitkin ja vetäytyy kun tullaan lähelle; kurnuttaja nousee
+   * kuilusta jonka yli ollaan ilmassa eikä välitä siitä missä kukaan seisoo.
+   * Vierekkäin luettuna ne olisivat vastakohta, ruudun päässä toisinto.
    *
-   * That pipe plant is now also the **first** one in the game, because 1-2 gave
-   * up the one it had. It is a better first plant than 1-2's was: there it sat
-   * fifteen columns from the beanstalk and had to share the screen with it,
-   * here it has thirty columns of clear ground behind it and the angry sun is
-   * long past. Nothing had to be added — the chunk was already here.
+   * Se argumentti on nyt kumottu, ja kumoaja on mittaus eikä makuasia. Kun
+   * `tools/curriculum.mjs` sai rivin kurnuttajalle 10.8.2026, tämä kenttä oli
+   * koko pelin ainoa joka esitteli neljä uutta asiaa — kasvi 101, kurnuttaja
+   * 119, närästysliekki 134 — eli kaksi paria yhden ruudun (20 laattaa) sisällä
+   * 18 ja 15 sarakkeen etäisyydellä. Vastakkain oli siis "kahden vihollisen ero
+   * näkyy parhaiten vierekkäin" ja "yhdellä ruudulla opetetaan yksi asia", ja
+   * omistaja ratkaisi sen jälkimmäisen hyväksi: sääntö on ehdoton eikä siihen
+   * kirjoiteta poikkeusta, koska poikkeuksellinen sääntö on mitattavissa vain
+   * poikkeuksen kohdalla.
+   *
+   * Ja argumentti oli myös heikompi kuin miltä se näytti. Se väitti että
+   * vertailun pitää tapahtua *yhtä aikaa*, mutta pelaaja ei lue kahta
+   * vihollista rinnakkain kuin taulukosta — hän kohtaa ensimmäisen, kuolee tai
+   * ei kuole siihen, ja kohtaa toisen. Vertailu tapahtuu muistissa, ja
+   * muistiin mahtuu 96 saraketta yhtä hyvin kuin 18. Se mitä ero vaatii, on
+   * että molemmat ehtii lukea; sitä nimenomaan yhden asian ruutu antaa.
+   *
+   * Kasvi ei liikkunut mihinkään: se on yhä chunk 6 sarakkeessa 101, ja se on
+   * yhä pelin **ensimmäinen**, koska 1-2 luopui omastaan. Se on parempi
+   * ensimmäinen kasvi kuin 1-2:n oli: siellä se seisoi viidentoista sarakkeen
+   * päässä pavunvarresta ja joutui jakamaan ruudun sen kanssa, täällä sillä on
+   * kolmekymmentä saraketta puhdasta maata takanaan ja vihainen aurinko on jo
+   * kaukana. Liikkui kurnuttaja, ja liikkui 80 saraketta.
+   *
+   * MITEN KENTTÄ MUUTTUI, PALIKKA PALIKALTA. Yksi vaihto ja yksi
+   * paikanvaihdos, ei yhtään lisäystä: kenttä on yhä 23 palikkaa ja 368
+   * saraketta, ja jokainen sen palikka paitsi `heartburn` on yhä siinä.
+   *
+   *   chunk 7 ja 12  `pit_croak` ja `pit_l` vaihtoivat paikkaa. Kurnuttaja on
+   *            nyt sarakkeessa 197, 96 saraketta kasvista, ja astinkivellinen
+   *            kuilu on siinä missä miehitetty oli. Tämän siirron ehdotti
+   *            `tools/curriculum.mjs`:n oma kommentti silloin kun se vielä
+   *            kirjasi tämän riidaksi ("swapping `pit_croak` with `pit_l` puts
+   *            the creature at 197 and clears the rule"), ja se on kaikista
+   *            vaihtoehdoista se joka ei siirrä mitään muuta: aurinko, kasvi,
+   *            hiekka ja kuori jäävät sarakkeilleen.
+   *   chunk 8  `heartburn` -> `coins`. Sama tasainen lattia kuin liekillä oli,
+   *            eli hiekan vauhdinotto (21 saraketta) ei muuttunut — ja se on
+   *            mitattu eikä oletettu, koska `tools/playable.mjs` kaatuu
+   *            hiekkaan jos vauhtia ei ole: hiekassa hyppy ei ole hyppy. Palikka
+   *            on juuri se `coins` jonka `dune_sink` aikanaan syrjäytti, eli
+   *            kenttä sai takaisin oman kolikkorivinsä.
+   *
+   * Ja `pit_croak` on nyt `pit_croak_rim`, eli sama kuilu jossa merkki on kuilun
+   * etureunassa eikä keskellä. Se on POHJAn korjaus eikä kosmetiikkaa, ja koko
+   * perustelu on palikan omassa kommentissa tämän tiedoston alussa: mitattu
+   * jarrutusikkuna 193–196 on nyt kokonaan maata, ennen se oli kaksi saraketta
+   * ilman päällä.
+   *
+   * NÄRÄSTYSLIEKKI MUUTTI 2-2:EEN, ja se on tämän korjauksen hinta sanottuna
+   * ääneen. Kenttä ei saa esitellä yli kolmea uutta asiaa (`verify.mjs`), ja
+   * aurinko, kasvi ja kurnuttaja ovat jo kolme — aurinko siksi että sitä ei ole
+   * missään muualla koko pelissä, kasvi siksi että 1-2 juuri luovutti sen
+   * tänne, kurnuttaja siksi että tämä on ensimmäinen kenttä maailman 1 lupauksen
+   * jälkeen. Liekki oli neljäs ja ainoa jonka siirto ei maksa mitään: se
+   * esiintyy kuudessa muussa kentässä, ja niistä ensimmäinen — 2-2 — tulee
+   * heti tämän jälkeen **molemmilla reiteillä**, joten kukaan ei kohtaa sitä
+   * myöhemmin kuin ennenkään paitsi yhden kentän verran. Se on ainoa
+   * ensiesittely tässä korjauksessa joka vaihtoi kenttää, ja se vaihtoi
+   * kentän eikä haaraa.
    *
    * Chunk 1 is `pipe_short` and not `flat`, and it costs nothing: the chunk it
    * replaced was sixteen columns of empty ground. What it buys is one more
@@ -127,12 +264,15 @@ export const WORLD2_LEVELS = {
    */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
-    chunks: [
+    /* `rows` eikä `chunks`, koska chunk 12 on tämän tiedoston oma palikka —
+     * `assembleLocal` on tiedoston alussa ja kertoo miksi. Lista luetaan
+     * muuten kuten kaikkien muidenkin kenttien. */
+    rows: assembleLocal([
       'start', 'pipe_short', 'power', 'walkers', 'sun', 'corks',
-      'pipe_plant', 'pit_croak', 'heartburn', 'dune_sink', 'shell', 'plat_steps',
-      'pit_l', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
+      'pipe_plant', 'pit_l', 'coins', 'dune_sink', 'shell', 'plat_steps',
+      'pit_croak_rim', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
-    ],
+    ]),
   },
   /*
    * World 2's hidden level, and the only one in the world. The beanstalk at
@@ -188,6 +328,26 @@ export const WORLD2_LEVELS = {
    * wide margin. The cloud arriving on the screen right after the beanstalk is
    * not a problem the one-screen rule sees, because the beanstalk is not new
    * here; it is the same vine the player climbed in 1-2.
+   *
+   * **JA 10.8.2026 ALKAEN MYÖS NÄRÄSTYSLIEKKI**, samalla tavalla: `heartburn_pair`
+   * chunk 12:ssa oli tässä soittolistassa jo, ja 2-1 vain lakkasi tulemasta
+   * ensin (perustelu on 2-1:n kommentissa — se kenttä esitteli neljä uutta
+   * asiaa ja raja on kolme). Kenttä ei siis saanut riviäkään uutta sisältöä,
+   * eikä sen vaikeuslukema liikkunut: 126.4 ennen ja jälkeen.
+   *
+   * Kolme ensiesittelyä on tämän kentän ja koko pelin maksimi, ja ne ovat
+   * sarakkeissa 146, 194 ja 309 — lähimmät kaksi 48 saraketta erillään eli
+   * kaksi ja puoli ruutua. Liekki on niistä keskimmäinen ja se seisoo tasaisella
+   * maalla: `tools/curriculum.mjs` mittaa ensiesittelyn POHJAn, SEURAn ja
+   * YKSINin, ja liekki läpäisee kaikki kolme.
+   *
+   * Kaksi liekkiä samassa palikassa (`heartburn_pair`, sarakkeet 194 ja 203) on
+   * ensiesittelyksi kelvollinen eikä huolimattomuus, ja sen sanoo mittari eikä
+   * maku: SEURA laskee toisen kappaleen samaa lajia yhdeksi oppitunniksi, koska
+   * se on yksi asia opittavaksi eikä kaksi. Pari on tässä myös se mitä liekistä
+   * on opittavaa — se on ajoitus eikä este — ja `Heartburn`in oma laskuri
+   * käynnistyy satunnaisesta arvosta, joten kaksi liekkiä ei käy tahdissa: pelkkä
+   * rytmin opettelu ei riitä, on katsottava kumpaa odottaa.
    */
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'level',
@@ -214,9 +374,13 @@ export const WORLD2_LEVELS = {
    * The `heartburn` before the spike bridge is there for its *light*: a flame
    * is the brightest thing in the level and the only one that shows you ground
    * you are not standing on, so waiting one out buys you a look at what comes
-   * next. It is the same chunk 2-1 and 2-2 already taught in daylight, and both
-   * of them come before this one on the map — the flame is a tool here, never
-   * the first lesson. Same sixteen columns and the same flat floor as the
+   * next. It is the same species 2-2 already taught in daylight, and 2-2 comes
+   * before this one on both routes — the flame is a tool here, never the first
+   * lesson. (Se luki tässä pitkään muodossa "2-1 ja 2-2 opettivat sen", ja se
+   * piti paikkansa 10.8.2026 asti: silloin liekki lähti 2-1:stä, koska se kenttä
+   * esitteli neljä uutta asiaa ja raja on kolme. Väite ei silti heikentynyt,
+   * koska se lepää järjestyksellä eikä lukumäärällä — ja 2-2 on yhä ennen tätä
+   * kenttää molemmilla reiteillä.) Same sixteen columns and the same flat floor as the
    * `dune_night` it replaced, so the route through the level is unchanged.
    *
    * The crumbling boardwalk took the place of the `coins` chunk, and it is the
