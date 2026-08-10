@@ -219,8 +219,16 @@ node tools/gen-levels.mjs --world w3               # ...vain yhden maailman
 node tools/gen-levels.mjs --telemetry loki.json    # ...ja säätää niitä pelidatan mukaan
 node tools/originality.mjs   # vertaa committoidut kentät korpukseen (vaatii VGLC_DIR)
 node tools/difficulty.mjs    # vaikeuskäyrä; --write päivittää src/data/difficulty.js
+node tools/curriculum.mjs    # opetusjärjestys: missä mikäkin asia kohdataan ensi kertaa
+node tools/variety.mjs       # vaihtelu: sanooko maailma saman asian kahdesti (--raw lisää palikkatoiston)
 node tools/make-card.mjs     # päivittää linkkien esikatselukuvan card.png
 ```
+
+Kaksi viimeksi mainittua ovat **mittareita eivätkä portteja** — `verify.mjs` ei
+lue niiden tuomiota, ja niiden luvut ovat vertailevia (peli itseensä nähden)
+eivätkä absoluuttisia kuten vaikeusmittarin. Ne vastaavat kahteen eri
+kysymykseen samasta datasta: curriculum kysyy *milloin* asia opetetaan, variety
+*kuinka monesti se sanotaan uudelleen*.
 
 **Generoi ennen kuin kytket kartalle.** `gen-levels.mjs` lataa vaikeusmittarin,
 joka kävelee koko pelin, joten se kaatuu jos `src/data/worlds.js`:ssä on solmu

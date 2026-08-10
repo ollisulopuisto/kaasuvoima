@@ -7,6 +7,121 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.49 — vaihtelumittari: uusi muoto, ei uusi mekaniikka
+
+Uusi `tools/variety.mjs` vastaa kysymykseen jota kentien generointi synnytti:
+**onko maailma kahdeksassa kentässä pidempi vai vain venytetty.** Se ei ole
+portti vaan mittari; `tools/verify.mjs` ei lue sitä.
+
+### Miksi tämä ei ole `curriculum.mjs`:n jatke
+
+Kaksi eri kysymystä samasta datasta. Curriculum kysyy **missä jokin asia
+kohdataan ensi kertaa** — hetki. Vaihtelu kysyy **kuinka usein sama asia
+sanotaan uudelleen** — jakauma. Curriculum on lisäksi nykyään portin
+kantava osa (`verify.mjs` tuo sen YKSIN-tarkistusta varten), eikä siihen
+kannata kasata toista, suurempaa mittausta.
+
+Sanasto ei silti ole kahdennettu: `CURRICULUM_USES` on uusi vienti, joten
+repossa on tasan yksi määritelmä sille mikä on "ominaisuus". Kaksi
+määritelmää antaisi mittareiden olla eri mieltä siitä mitä peli sisältää.
+
+### Mitä mitataan, ja miksi juuri sitä
+
+**Kenttä ansaitsee paikkansa näyttämällä järjestyksen jota maailma ei ole
+näyttänyt — ei mekaniikkaa jota se ei ole näyttänyt.**
+
+Kaksi akselia, rinnakkain eikä koskaan yhteen laskettuna:
+
+- **SANASTO** — montako eri ominaisuutta maailma kenttiin panee. Tulostetaan,
+  ei pisteytetä. Kapea sanasto on se miltä identiteetti näyttää ulkoapäin, ja
+  maailma 1:n sanastoa kavennettiin tarkoituksella.
+- **UUTUUS** — kuinka suuri osa kentän kahdeksan sarakkeen ikkunoista on
+  sellaisia joita sama maailma ei ole aiemmin näyttänyt. Vain tämä tuottaa
+  huomautuksia.
+
+Ikkuna on tuotu `originality.mjs`:stä eikä kirjoitettu uudelleen, joten repolla
+on yksi käsitys siitä mikä on "pala kenttää". Aakkosto on karkeampi kuin
+ruudukko (kaikki kova maasto yhdeksi kirjaimeksi; lämpöputki taittuu tavalliseksi
+putkeksi, koska `secrets.js` rakentaa koko löydettävyytensä sille että ne
+näyttävät samalta) mutta hienompi kuin alkuperäistarkistuksen, koska jokainen
+vihollislaji pitää oman kirjaimensa: piikkiäijä siellä missä oli kävelijä on
+eri huone.
+
+### ANSAN KOE — mittari koettelee itseään joka ajolla
+
+Vaara on ilmeinen: mittari joka palkitsee "uutta" opettaa ahtamaan mekaniikkoja.
+Siksi työkalu ajaa joka kerta kokeen pelin **vähiten uudella kentällä** (6-3),
+jossa houkutus olisi suurin, ja tulostaa tuloksen:
+
+| 6-3 | uutuus |
+|---|---|
+| sellaisenaan | 11.73 % |
+| + laji jota kentässä jo on (`r`), sarake 122 | 16.17 % (+4.44) |
+| + laji jota siinä ei ole koskaan ollut (`p`), sama sarake | 16.17 % (+4.44) |
+| palikkalista käännettynä keskeltä — 0 uutta mekaniikkaa, 0 uutta laattaa | 23.17 % (+11.44) |
+
+**Uusi laji ostaa tutun lajin yli 0.00.** Mittari ei näe mikä laji ruudussa on,
+vain että ruutu ei näytä samalta. Uudelleenjärjestäminen ostaa **2.6×** sen mitä
+vihollisen lisääminen ostaa. Gradientti osoittaa järjestykseen eikä ahtamiseen,
+ja se oli koko ehto sille että luvun saa julkaista.
+
+Ja toisin päin, itse puusta johdettuna: **w5 ja w4 toistavat edeltäjänsä
+ominaisuusjoukkoa yhtä paljon (53 % / 57 %), mutta uutuus on 85 % ja 39 %** —
+46 %-yksikköä eroa. Pelkkä ominaisuuspäällekkäisyys, eli se ilmeinen mittari,
+olisi rangaissut yhtenäistä maailmaa siitä että se pitää sanastonsa kasassa.
+
+### Vastaus siihen mitä kysyttiin
+
+**Maailma 1 kahdeksassa kentässä on rytmiä, ei täytettä** — mutta viimeinen
+päivämäärä on tiedossa.
+
+- w1:n uutuus **53.1 %**, mediaanimaailman yläpuolella (48.8 %)
+- kahdeksan kentän maailmat **52.0 %**, neljän kentän **40.2 %** — täyttäminen
+  on tässä puussa **nostanut** vaihtelua 11.8 %-yksikköä
+- neljä lisättyä kenttää tuovat 72.8 / 67.9 / 45.0 / 40.7 % uutta — jokainen
+  yli w6:n ja w7:n **käsintehtyjen** kenttien (11.7–27.5 %)
+- lasku on silti todellinen, noin −11 %-yksikköä kenttää kohden. **Kahdeksan on
+  suunnilleen se kohta jossa tämän generaattorin ideat loppuvat**: yhdeksäs ja
+  kymmenes olisivat lähellä nollaa.
+- ja jos täytesyytös osuu w1:ssä johonkin, se osuu **1-3:een (29.7 %)**, joka on
+  käsintehty.
+
+### Löydetty, ei korjattu: linnakkeet ovat se yksitoikkoisuus
+
+6-F, 7-F ja 8-F tuovat **0.0 %** koko pelille uutta, 3-F tuo 3.0 %. Puolet pelin
+linnakkeista on saman seitsemän palikan permutaatioita, ja `fort_gap` esiintyy
+**28 kertaa seitsemässä maailmassa**. Tämä on toistoa paikassa jota kukaan ei
+katsonut, ja se on suurempi kuin mikään minkä kenttien täyttäminen aiheutti.
+
+Samoin: **w6 ja w7 neljässä kentässä (19.6 % ja 18.0 %) ovat yksitoikkoisempia
+kuin w1 kahdeksassa (53.1 %)**. Niiden pidentäminen ei ole se mikä niitä
+satuttaisi.
+
+### Kurnuttaja taulukkoon, ja riita joka nyt on luku
+
+`ENEMY_NAMES` sai rivin `U: 'kurnuttaja'`, mitattuja ominaisuuksia 26 → 27.
+Rivi kantaa kaksi lippua, ja molemmat ovat rehellisyyden takia:
+
+- **`hazard: true`** — merkki on *määritelty* olemaan lattiattomassa sarakkeessa,
+  joten POHJA omalle sarakkeelle lukisi määritelmän takaisin. Nyt mitataan vain
+  lähestyminen — ja **se hajoaa oikeasta syystä**: `pit_croak` on kuuden levyinen
+  kuoppa sarakkeissa 117–122, olento 119:ssä, joten jarrutusikkunan [115, 118]
+  kaksi viimeistä saraketta ovat jo ilman päällä, mitattua voimatason 0
+  jarrutusmatkaa (4 laattaa) vasten.
+- **`disputed: '2-1'`** — ensikohtaaminen on 2-1 sarake 119; putkikasvi on
+  101:ssä (18 päässä) ja närästyssuihku 134:ssä (15 päässä), molemmat YKSIN:n
+  yhden ruudun sisällä. Rivin kanssa **2-1 esittelee neljä uutta asiaa** ja on
+  pelin ainoa kenttä yli kolmen rajan.
+
+Riitaa ei ratkaistu, se **nimettiin**: portin lukemat viennit
+(`CURRICULUM_ROWS`, `CURRICULUM_INTRO`, `FIRST_IN_LEVEL`) jättävät riitaisan
+ominaisuuden ulos, `CURRICULUM_ROWS_ALL` kantaa kaiken, ja työkalu tulostaa
+**RIITA**-osion jossa molemmat törmäykset ovat etäisyyksineen. Portti on siis
+vihreä eikä valehtele: se sanoo mitä se jättää lukematta. Kolmas tila — riita
+joka on olemassa mutta josta mikään luku ei kerro — on poissa.
+
+---
+
 ## v26.08.10.48 — alkuperäistarkistus luki nolla tiedostoa ja tulosti puhtaan paperin
 
 `tools/originality.mjs` on se tiedosto joka vastaa kysymykseen "onko se mitä
