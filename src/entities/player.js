@@ -240,6 +240,11 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
+    /* Onko täyden mittarin etu voimassa juuri nyt — ja tämä on kenttä eikä
+     * johdannainen, koska se on **edellisen framen** vastaus: merkki syntyy
+     * reunasta eikä tilasta. Tavallinen oma ominaisuus, joten `savestate.js`
+     * kantaa sen mukanaan eikä pikalataus soita merkkiä uudestaan. */
+    this.pBoost = false;
     this.idle = 0;
     this.jumpBuffer = 0;
     this.flying = 0;
@@ -576,6 +581,28 @@ export class Player extends Entity {
       this.flying--;
       // Flight ends on landing or when the gauge runs dry.
       if (this.onGround || this.pMeter <= 0) this.flying = 0;
+    }
+
+    /* --------------------------- vauhdin reuna ------------------------ */
+    /*
+     * Kaksi asiaa muuttuu oikeasti kun mittari täyttyy — nopeuskatto MAX_RUN
+     * -> MAX_P ja kaasulehdellä hypystä tulee lento — ja kumpikin oli tähän
+     * asti asia jonka sai selville kokeilemalla. Reuna luetaan vasta täältä
+     * eikä mittarin päivityksestä, ja **`flying` on osa etua eikä sen
+     * jälkiä**: nousu tyhjentää mittaria heti, joten pelkkä `pFull`-reuna
+     * olisi huutanut "meni" täsmälleen sillä framella jolla etu otettiin
+     * käyttöön. Sama merkki kuuluu siis vasta kun lento loppuu, mikä on myös
+     * se hetki jolla peli lakkaa kannattelemasta.
+     *
+     * Kuva ja ääni ovat yhdessä kohtauksen päässä (`LevelScene.onSpeedFull`),
+     * koska DESIGN.md kohta 8 vaatii ne yhdessä ja vierekkäin kirjoitettu
+     * pari ei unohdu puoliksi.
+     */
+    const boost = this.pFull || this.flying > 0;
+    if (boost !== this.pBoost) {
+      this.pBoost = boost;
+      if (boost) this.level.onSpeedFull();
+      else this.level.onSpeedSpent();
     }
 
     /* ------------------------------- gravity -------------------------- */
@@ -1042,6 +1069,13 @@ export class Player extends Entity {
         const maxed = this.power.level >= MAX_POWER_LEVEL && this.power.type === itemKind;
         if (maxed) {
           this.level.storeReserve(itemKind);
+          /* Oma äänensä, ja perustelu on `SFX.reserve`in kommentissa: täydellä
+           * tasolla poimittu tehostus ei muuta kehossa mitään, joten `powerup`
+           * sanoi "kasvoit" hetkellä jolla mikään ei kasvanut. Kuva on jo
+           * olemassa — lokero on HUDissa juuri tätä varten — eikä sitä ole
+           * kahta. Vaihtohaara alla saa yhä `powerup`in, koska siinä keho
+           * oikeasti muuttuu ja lokerointi on sivutuote. */
+          Sfx.play('reserve');
         } else {
           // Swapping to a different power banks the one you were wearing.
           // Losing a tail just because you walked into a mushroom is the kind
@@ -1054,8 +1088,8 @@ export class Player extends Entity {
           this.applySize();
           this.frozen = 18;
           this.corked = 0;
+          Sfx.play('powerup');
         }
-        Sfx.play('powerup');
         this.level.awardScore(1000, this.cx, this.y);
         break;
       }

@@ -1025,6 +1025,90 @@ const SFX = {
   edella: () => tone({ from: 760, to: 1140, dur: 0.07, gain: 0.12, hold: 0.3 }),
   jaljessa: () => tone({ type: 'triangle', from: 600, to: 360, dur: 0.1, gain: 0.13, hold: 0.3 }),
   pipe: () => tone({ type: 'sawtooth', from: 400, to: 80, dur: 0.36, gain: 0.18, vibrato: 8 }),
+  pipeout: () => {
+    /*
+     * PUTKESTA ULOS, ja tämä on korjaus eikä lisäys.
+     *
+     * Sisäänmenolla on oma äänensä — `pipe` yllä, saha 400 -> 80 — ja
+     * ulostulo soitti `door`ia, samaa ääntä jolla linnakkeen ovi aukeaa ja
+     * jolla siitä kävellään sisään. Yksi merkki kolmelle eri asialle on
+     * täsmälleen se väärin lukemaan opettava merkki jota DESIGN.md kohta 8
+     * varoo, ja se oli tässä vielä väärin päin: putken kaksi päätä ovat pari,
+     * ovi on jotain muuta. Kohtauksen oma kommentti lupasi jo että "menoon
+     * kuuluu laskeva pyyhkäisy ja tuloon nouseva" — lupaus piti paikkansa vain
+     * puoliksi, koska nouseva pyyhkäisy oli lainattu ovelta.
+     *
+     * Sama saha toisin päin ja hiukan lyhyempi, ja edessä lyhyt purskaus jota
+     * `pipe`ssä ei ole: se on se ääni jonka putki päästää kun jokin tulee siitä
+     * ulos. Purskaus erottaa tämän myös ovesta, joka on pitkä ja pehmeästi
+     * avautuva kohina ilman kärkeä.
+     */
+    noise({ dur: 0.1, from: 300, to: 1400, q: 2, gain: 0.12, attack: 0.008 });
+    tone({ type: 'sawtooth', from: 80, to: 400, dur: 0.3, gain: 0.18, vibrato: 8 });
+  },
+  pfull: () => {
+    /*
+     * TÄYSI VAUHTIMITTARI, ja se on tämän pelin ensimmäinen sointu.
+     *
+     * Hyvien uutisten hylly on täynnä: `coin`, `powerup`, `oneup`, `soup` ja
+     * `select` ovat kaikki **nousevia jonoja erillisiä sävelkorkeuksia**, ja
+     * kuudes sellainen olisi juuri se toinen samannäköinen merkki jonka
+     * DESIGN.md kohta 8 kieltää. Ero ei siis voi olla melodiassa — se hylly on
+     * käytetty loppuun — vaan sen pitää olla **rakenteessa**. Tämä on koko
+     * väylän ainoa ääni jossa kaksi säveltä soi *yhtä aikaa* ja jää soimaan:
+     * kvintti (D6 + A6) on intervalli eikä kulku. Korva erottaa soinnun
+     * jonosta opettelematta, samalla tavalla kuin `kurnutus` erottuu
+     * tiheydellään eikä sointivärillään.
+     *
+     * Alla lyhyt nouseva kohina: paine on noussut kattoon, ja se on sitä
+     * kaasua josta koko peli kertoo. Se kestää 0,12 s eli on ohi ennen kuin
+     * sointu ehtii puoliväliin — säestys, ei toinen tapahtuma.
+     */
+    tone({ type: 'sine', from: 1175, dur: 0.42, gain: 0.15, hold: 0.55, attack: 0.008 });
+    tone({ type: 'sine', from: 1760, dur: 0.42, gain: 0.11, hold: 0.5, attack: 0.012, detune: 6 });
+    noise({ dur: 0.12, from: 500, to: 2200, q: 2.5, gain: 0.1, attack: 0.02 });
+  },
+  pspent: () => {
+    /*
+     * ...JA SE MENEE. Sama sointu ja päinvastainen suunta, mikä on tämän
+     * tiedoston vakiintunut tapa tehdä parista pari: `sprout` nousee ja `dive`
+     * laskee, `kurnutus` odottaa ja `loikka` lähtee. Kvintti on sama, joten
+     * korva tietää mistä mittarista on kyse; se liukuu alas kokosävelen ja
+     * sammuu kolmanneksessa ajassa, joten korva tietää kummasta suunnasta.
+     *
+     * **Tarkoituksella hiljaisempi kuin `pfull`, eikä se ole huolimattomuutta.**
+     * Tämä soi joka kerta kun juoksunappi irtoaa eli monta kertaa kentässä,
+     * kun taas mittarin täyttyminen on saavutus. Merkki joka soi usein ja
+     * kovaa lakkaa olemasta merkki ja alkaa olla melua, ja melu peittää ne
+     * merkit jotka olivat täällä ensin.
+     */
+    tone({ type: 'sine', from: 1175, to: 1047, dur: 0.26, gain: 0.1, hold: 0.35, curve: 'lin' });
+    tone({ type: 'sine', from: 1760, to: 1568, dur: 0.26, gain: 0.07, hold: 0.3, curve: 'lin' });
+  },
+  reserve: () => {
+    /*
+     * VARALOKERO TÄYTTYI, eikä se ole sama asia kuin tehostuksen saaminen.
+     *
+     * Täydellä voimatasolla poimittu tehostus ei muuta kehossa mitään: se
+     * liukuu HUDin lokeroon odottamaan. Siitä huolimatta soi `powerup`, eli
+     * peli sanoi "kasvoit" sillä hetkellä jolla mikään ei kasvanut. Merkki
+     * joka valehtelee on pahempi kuin merkki jota ei ole, koska sen oppii
+     * uskomaan.
+     *
+     * Kuva on jo olemassa eikä siihen kosketa: lokero on HUDissa juuri tätä
+     * varten ja esine ilmestyy siihen. Puuttui ääni, ja sen pitää olla
+     * mekaaninen eikä palkitseva — kaksi lyhyttä kopsahdusta, salpa joka
+     * napsahtaa kiinni. Ei `pop` (kupla), ei `bump` (pää palikkaan) eikä
+     * `cork` (tulppa sisään): matalampi kuin ensimmäinen, kaksiosainen siinä
+     * missä toinen on yksi kolahdus, ja kuiva siinä missä kolmas on märkä.
+     */
+    tone({ type: 'triangle', from: 520, to: 300, dur: 0.05, gain: 0.22, hold: 0.2, curve: 'lin' });
+    tone({
+      type: 'triangle', from: 300, to: 190, dur: 0.07, gain: 0.2,
+      delay: 0.055, hold: 0.25, curve: 'lin',
+    });
+    noise({ dur: 0.04, from: 4200, to: 2000, q: 1.2, gain: 0.1, type: 'highpass', attack: 0.003 });
+  },
   /**
    * Luurangon nauru, ja sen kaksi puoliskoa.
    *

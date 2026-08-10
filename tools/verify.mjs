@@ -5493,6 +5493,321 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ---------------- tilanvaihdos joka ei kuulunut eikä näkynyt ----------- */
+  /*
+   * DESIGN.md kohta 8, molemmat puolet: **kuva ja ääni yhdessä**, ja **kaksi
+   * samaa sanovaa merkkiä opettaa lukemaan väärää**. Tämä lohko mittaa neljä
+   * tilanvaihdosta joista jokainen muuttaa jotain minkä pelaaja sai tähän asti
+   * selville kokeilemalla.
+   *
+   * Punainen ennen vihreää on tässä se hyödyllinen puoli. Jokainen alla oleva
+   * väite kaatui ennen muutosta, ja **se kaatuminen on koko todiste siitä että
+   * merkkiä ei ollut**: "mittari täyttyi framella 87, ääni '-', 0 px ruudusta
+   * muuttui" on mittaus hiljaisuudesta, ei mielipide siitä että jotain pitäisi
+   * ehkä lisätä.
+   *
+   * Kuva mitataan **pelialueesta eikä HUDista** (0…VIEW_H), ja se on väitteen
+   * ydin eikä tekninen yksityiskohta: mittari vilkkuu HUDissa jo nyt, ja
+   * HUD-palkki on 320x240-ruudun alalaidassa siinä missä pelaajan silmä on
+   * kentässä. Merkki jonka näkee vain katsomalla muualle kuin siihen mitä
+   * pelaa ei ole merkki.
+   */
+  {
+    const { Sfx } = await import('/src/core/audio.js');
+
+    /* Äänet jotka tarkoittavat jo jotain muuta. Uusi merkki ei saa olla
+     * mikään näistä — ei siksi että uutuus olisi arvo sinänsä, vaan siksi
+     * että lainattu ääni tarkoittaa sen jälkeen kahta asiaa. */
+    const TAKEN = ['jump', 'bigjump', 'fart', 'bigfart', 'squeak', 'flight', 'coin',
+      'stomp', 'land', 'bump', 'brick', 'burst', 'sprout', 'dive', 'slam', 'kurnutus',
+      'loikka', 'kick', 'spikes', 'pop', 'upota', 'kahlaa', 'cork', 'soup', 'powerup',
+      'yeah', 'oof', 'letsgo', 'powerdown', 'oneup', 'die', 'clear', 'cursor', 'select',
+      'luuranko', 'boss', 'card', 'timewarn', 'door'];
+
+    const mk = (power, id = '1-1') => {
+      reset(power);
+      const s = new LevelScene(game, id);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      game.setScene(s);
+      return s;
+    };
+    const put = (s, tx, ty) => {
+      s.player.x = tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = ty * 16 - s.player.h;
+      s.player.vy = 0;
+      s.player.onGround = true;
+      s.player.warpLock = 0;
+      s.centerCamera();
+    };
+    /* Kuuntelija joka ei soita läpi: nämä väitteet koskevat sitä *mitä* peli
+     * pyytää soittamaan ja millä framella, ja oikeasti soitetut äänet jäisivät
+     * soimaan tämän tiedoston myöhempien tasomittausten päälle. */
+    const listen = () => {
+      const real = Sfx.play;
+      const heard = [];
+      Sfx.play = function tap(name) { heard.push(name); };
+      return { heard, off() { Sfx.play = real; } };
+    };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const g = canvas.getContext('2d');
+    const PLAY_PX = 320 * 208;
+    /** Pelialue pikseleinä, HUD rajattuna pois. */
+    const paint = (s) => {
+      g.clearRect(0, 0, 320, 240);
+      s.draw(g);
+      return g.getImageData(0, 0, 320, 208).data;
+    };
+    const differing = (a, b) => {
+      let n = 0;
+      for (let p = 0; p < a.length; p += 4) {
+        if (a[p] !== b[p] || a[p + 1] !== b[p + 1] || a[p + 2] !== b[p + 2]) n++;
+      }
+      return n;
+    };
+    /* Kolme viidesosaa pelialueesta. Raja on tarkoituksella karkea: kyse ei ole
+     * siitä osuiko efekti tiettyyn pikseliin vaan siitä muuttuiko ruutu niin
+     * paljon että sen huomaa katsomatta HUDiin. Pelkkä juokseva hahmo ja
+     * vierivä tausta liikuttavat tässä kentässä alle kymmenesosaa. */
+    const MOST = Math.round(PLAY_PX * 0.6);
+
+    /*
+     * 1. MITTARI TÄYTTYY. Kaksi asiaa muuttuu oikeasti — nopeuskatto 2,5 ->
+     *    3,5 px/frame ja kaasulehdellä hypystä tulee lento — ja kumpikin oli
+     *    tähän asti asia jonka sai tietää kokeilemalla.
+     */
+    let fullSound = null;
+    let spentSound = null;
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      const i = mkInput();
+      const tap = listen();
+      let fullAt = -1;
+      let atFull = [];
+      let before = null;
+      let after = null;
+      try {
+        for (let f = 0; f < 300 && fullAt < 0; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          before = paint(s);
+          const n = tap.heard.length;
+          s.update(i);
+          if (s.player.pFull) { fullAt = f; atFull = tap.heard.slice(n); }
+        }
+        after = paint(s);
+      } finally { tap.off(); }
+      fullSound = atFull[0] || null;
+      const changed = before && after ? differing(before, after) : 0;
+      expect('täyttynyt vauhtimittari kuuluu ja näkyy pelialueella',
+        fullAt >= 0 && atFull.length === 1 && Sfx.has(fullSound)
+        && !TAKEN.includes(fullSound) && changed > MOST,
+        `täyttyi framella ${fullAt}, ääni "${atFull.join('+') || '-'}", `
+        + `${changed}/${PLAY_PX} px pelialueesta muuttui (vaadittu ${MOST})`);
+    }
+
+    /*
+     * 2. JA TYHJENEE, mikä on sama tapahtuma takaperin ja tarvitsee merkin
+     *    kipeämmin: nopeuskatto putoaa takaisin ja lentäminen lakkaa olemasta
+     *    mahdollista. Eri ääni kuin täyttyminen, tai pari ei ole pari vaan
+     *    kaksi samaa merkkiä.
+     */
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      const i = mkInput();
+      const tap = listen();
+      let spentAt = -1;
+      let atSpent = [];
+      let before = null;
+      let after = null;
+      try {
+        /* Täyteen, ja sitten kaksikymmentä framea täydellä vauhdilla lisää:
+         * täyttymisen oma merkki on ohi ennen kuin tyhjenemisen merkkiä
+         * mitataan, joten `before` on tavallinen ruutu eikä edellinen efekti. */
+        for (let f = 0; f < 320; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          s.update(i);
+          if (s.player.pFull && f > 20 && !s.speedPulse) break;
+        }
+        for (let f = 0; f < 300 && spentAt < 0; f++) {
+          i.held = blank(); i.pressed = blank();
+          before = paint(s);
+          const n = tap.heard.length;
+          s.update(i);
+          if (!s.player.pFull) { spentAt = f; atSpent = tap.heard.slice(n); }
+        }
+        after = paint(s);
+      } finally { tap.off(); }
+      [spentSound] = atSpent;
+      const changed = before && after ? differing(before, after) : 0;
+      expect('tyhjentynyt vauhtimittari kuuluu, ja eri äänellä kuin täyttynyt',
+        spentAt >= 0 && atSpent.length === 1 && Sfx.has(spentSound)
+        && !TAKEN.includes(spentSound) && spentSound !== fullSound && changed > MOST,
+        `tyhjeni framella ${spentAt}, ääni "${atSpent.join('+') || '-'}" `
+        + `(täyttyminen "${fullSound || '-'}"), ${changed}/${PLAY_PX} px muuttui`);
+    }
+
+    /*
+     * 3. JA SE SAMA MERKKI LENNOSSA, joka on koko asian pahin tapaus.
+     *
+     * Kaasulehdellä täysi mittari on lentolupa, ja lento kuluttaa mittarin.
+     * Kaksi asiaa on todistettava yhdessä eikä kumpaakaan yksin:
+     *
+     *   - **Nousu ei saa laukaista "meni"-merkkiä.** Mittari alkaa tyhjentyä
+     *     samalla framella jolla siivet aukeavat, joten pelkkä `pFull`-reuna
+     *     olisi huutanut menetystä juuri silloin kun etu otettiin käyttöön.
+     *   - **Mittarin loppuminen ilmassa saa sen.** Se on se hetki jolla peli
+     *     lakkaa kannattelemasta, eikä siitä ollut mitään merkkiä.
+     */
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      /* Tasainen koerata, sama temppu kuin hyppybudjetin mittauksessa: lento
+       * kestää satakuusikymmentäkahdeksan framea ja kantaa pelaajan halki
+       * puolen kentän, joten 1-1:n oma maasto olisi tässä satunnaismuuttuja
+       * eikä mitattava asia. Mittarin käyttäytyminen ei ole kentän ominaisuus. */
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      const i = mkInput();
+      const tap = listen();
+      let flewAt = -1;
+      let endAt = -1;
+      let endHeard = [];
+      let endedInAir = false;
+      let spentDuringFlight = 0;
+      try {
+        for (let f = 0; f < 40; f++) { i.held = blank(); i.pressed = blank(); s.update(i); }
+        for (let f = 0; f < 300 && !s.player.pFull; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          s.update(i);
+        }
+        for (let f = 0; f < 900 && endAt < 0; f++) {
+          i.held = blank(); i.pressed = blank();
+          /* Vauhti pidetään päällä kunnes siivet ovat auki. Mittari tyhjenee
+           * maassa heti kun juoksunappi irtoaa, ja lentolupa *on* täysi
+           * mittari — ilmassa mittari jäätyy, joten nousun ikkuna on juuri se
+           * hyppy joka lähtee täydellä vauhdilla. */
+          if (flewAt < 0) { i.held.right = true; i.held.run = true; }
+          // Pohjahyppy ensin, sitten siiveniskut: lento alkaa vasta ilmassa.
+          if (f === 0 || (flewAt >= 0 && (f - flewAt) % 8 === 0) || (flewAt < 0 && f === 6)) {
+            i.pressed.jump = true; i.held.jump = true;
+          }
+          const wasFlying = s.player.flying;
+          const n = tap.heard.length;
+          s.update(i);
+          const fresh = tap.heard.slice(n);
+          if (flewAt < 0 && s.player.flying > 0) flewAt = f;
+          if (flewAt >= 0 && wasFlying > 0 && s.player.flying === 0) {
+            endAt = f;
+            endHeard = fresh;
+            endedInAir = !s.player.onGround;
+          } else if (flewAt >= 0) {
+            spentDuringFlight += fresh.filter((x) => x === spentSound).length;
+          }
+        }
+      } finally { tap.off(); }
+      /* Sama ääni kuin maassa mitattu, ei uusi: maassa hiipuva mittari ja
+       * ilmassa loppuva lento ovat sama tilanvaihdos — etu meni — ja kaksi
+       * merkkiä samalle asialle on juuri kohdan 8 virhe. */
+      expect('lennon loppuminen ilmassa sanotaan, eikä nousu sano sitä',
+        flewAt >= 0 && endAt > flewAt + 100 && endedInAir
+        && !!spentSound && endHeard.includes(spentSound) && spentDuringFlight === 0,
+        `nousu framella ${flewAt}, lento loppui framella ${endAt} `
+        + `(ilmassa ${endedInAir}), ääni "${endHeard.join('+') || '-'}", `
+        + `merkki lennon aikana ${spentDuringFlight} kertaa`);
+    }
+
+    /*
+     * 4. PUTKESTA ULOS. Kuva on ollut olemassa koko ajan — keho nousee
+     *    mahasta, kamera leikkaa ja neljä kaasupilveä jää jalkojen alle — ja
+     *    ääni oli lainattu: `door`, sama jolla linnakkeen ovi aukeaa ja jolla
+     *    siitä kävellään sisään. Yksi ääni kolmelle asialle on se merkki jonka
+     *    pelaaja oppii lukemaan väärin.
+     */
+    {
+      const s = mk({ type: 'shroom', level: 1 }, '1-2');
+      put(s, 229, 26);
+      const i = mkInput();
+      const tap = listen();
+      let inSound = null;
+      let outSound = null;
+      let puffs = 0;
+      try {
+        for (let f = 0; f < 200 && !outSound; f++) {
+          i.held = blank(); i.held.down = f < 4; i.pressed = blank();
+          const was = s.player.transit ? s.player.transit.phase : null;
+          const n = tap.heard.length;
+          s.update(i);
+          const now = s.player.transit ? s.player.transit.phase : null;
+          const fresh = tap.heard.slice(n);
+          if (!inSound && !was && now) [inSound] = fresh;
+          if (was === 'hold' && now === 'out') {
+            [outSound] = fresh;
+            puffs = s.entities.filter((e) => e.constructor.name === 'Puff').length;
+          }
+        }
+      } finally { tap.off(); }
+      expect('putkesta ulos on oma äänensä eikä oven laina',
+        inSound === 'pipe' && !!outSound && outSound !== 'door'
+        && outSound !== inSound && Sfx.has(outSound) && puffs >= 4,
+        `sisään "${inSound || '-'}", ulos "${outSound || '-'}", `
+        + `kaasupilviä ${puffs}`);
+    }
+
+    /*
+     * 5. VARALOKERO. Täydellä voimatasolla poimittu tehostus ei muuta kehossa
+     *    mitään — se menee lokeroon — ja silti soi `powerup`. Peli sanoi
+     *    "kasvoit" hetkellä jolla mikään ei kasvanut, mikä on pahempi kuin
+     *    hiljaisuus: valheellisen merkin oppii uskomaan.
+     *
+     *    Kuvaa ei lisätä eikä tarvitse: lokero on HUDissa juuri tätä varten ja
+     *    esine ilmestyy siihen. Se mitataan tässä nimenomaan siksi, että
+     *    todiste "kuva on jo olemassa" on se perustelu jolla toinen kuva
+     *    jätetään lisäämättä.
+     */
+    {
+      const tap = listen();
+      let maxed = [];
+      let grew = [];
+      let stored = null;
+      try {
+        const s = mk({ type: 'shroom', level: 5 });
+        s.player.collect('shroom');
+        stored = game.state.reserve;
+        maxed = tap.heard.slice();
+        tap.heard.length = 0;
+        const s2 = mk({ type: 'shroom', level: 1 });
+        s2.player.collect('shroom');
+        grew = tap.heard.slice();
+      } finally { tap.off(); }
+
+      const s3 = mk({ type: 'shroom', level: 5 });
+      const box = () => {
+        g.clearRect(0, 0, 320, 240);
+        s3.draw(g);
+        return g.getImageData(6, 208 + 6, 20, 20).data;
+      };
+      game.state.reserve = null;
+      const emptyBox = box();
+      game.state.reserve = 'shroom';
+      const fullBox = box();
+      const boxPx = differing(emptyBox, fullBox);
+
+      expect('varalokeron täyttyminen on oma tapahtumansa, ei tehostuksen ääni',
+        stored === 'shroom' && maxed.length === 1 && grew.length === 1
+        && grew[0] === 'powerup' && maxed[0] !== grew[0] && Sfx.has(maxed[0])
+        && !TAKEN.includes(maxed[0]) && boxPx > 40,
+        `lokeroon "${maxed.join('+') || '-'}", kasvuun "${grew.join('+') || '-'}", `
+        + `lokeron kuva muuttui ${boxPx}/400 px`);
+    }
+  }
+
   /* ------------- luolakaistan musiikki: paikka, ei tapahtuma ------------- */
   /*
    * Punainen ennen vihreää (DESIGN.md kohta 7) sille päätökselle joka piti
@@ -11347,6 +11662,92 @@ const report = await page.evaluate(async () => {
       });
       an.disconnect();
     }
+  }
+
+  /*
+   * UUDET MERKIT VÄYLÄLLÄ, mitattuna eikä muistettuna.
+   *
+   * Uusi ääni on regressio kahdella tavalla joita kumpaakaan ei näe koodista:
+   * se voi jäädä pohjakohinaan (merkki jota ei kuule ei ole merkki) tai se voi
+   * nousta niin kovaksi että se peittää ne merkit jotka olivat täällä ensin.
+   * Kolikko mitataan samassa ajossa vertailukohdaksi, koska tämän tiedoston
+   * muut äänimittaukset on kalibroitu siihen (kolikko 0,32) ja muistiin
+   * kirjattu vertailuluku vanhenee ensimmäisessä miksausmuutoksessa.
+   *
+   * Väylä odotetaan hiljaiseksi ennen jokaista mittausta samalla ikkunalla
+   * jolla mitataan — sama sääntö ja sama syy kuin puhutun rivin kohdalla
+   * ylempänä: kiinteä odotus on arvaus edellisen äänen hännän pituudesta, ja
+   * arvaava portti on kolikonheitto.
+   */
+  {
+    // Esittelydemo käynnistyy kahdenkymmenen sekunnin jouten olosta ja soittaa
+    // hyppyjä tälle samalle väylälle. Kello nollataan tästä.
+    game.toTitle();
+    const { Ambience } = await import('/src/core/audio.js');
+    const tap = audioTap();
+    const measured = tap && tap.ctx.state === 'running';
+    const peaks = {};
+    let floorAfter = 0;
+    if (measured) {
+      Music.stop();
+      Ambience.stop();
+      const an = tap.ctx.createAnalyser();
+      /*
+       * 372 ms yhtäjaksoista aaltoa, eikä 46 ms, ja se on mittausvirhe joka
+       * tuotettiin tahallaan ennen kuin se korjattiin. `reserve` on kaksi
+       * kopsahdusta 95 millisekunnissa, ja 2048 näytteen ikkunalla se mittasi
+       * **0,000** — eli portti olisi julistanut äänettömäksi äänen jonka
+       * samat kaiuttimet soittavat. Sama ikkuna mittasi 0,228 heti kun se
+       * levennettiin. Lyhyt ääni ei mahdu ikkunoiden väliin kun ikkuna on
+       * pidempi kuin ääni; sama syy kuin konsonanttilohkon 32768:lla.
+       */
+      an.fftSize = 16384;
+      tap.bus.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const peakFor = async (ms) => {
+        let peak = 0;
+        const t0 = performance.now();
+        while (performance.now() - t0 < ms) {
+          an.getFloatTimeDomainData(buf);
+          for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+          await new Promise((r) => setTimeout(r, 8));
+        }
+        return peak;
+      };
+      const settle = async () => {
+        let calm = 0;
+        let level = 1;
+        const t0 = performance.now();
+        while (calm < 2 && performance.now() - t0 < 4000) {
+          level = await peakFor(200);
+          calm = level > 0.02 ? 0 : calm + 1;
+        }
+        return level;
+      };
+      for (const name of ['pfull', 'pspent', 'pipeout', 'reserve', 'pipe', 'coin', 'powerup']) {
+        await settle();
+        Sfx.play(name);
+        peaks[name] = await peakFor(600);
+      }
+      floorAfter = await settle();
+      an.disconnect();
+    }
+    const n = (name) => (peaks[name] === undefined ? 0 : peaks[name]);
+    const shown = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
+    expect('uudet merkit kuuluvat, eivät huuda, eivätkä jätä väylää soimaan',
+      !measured || (
+        // Kuuluu kolikon luokassa, ei yli pelin kovimman palkinnon.
+        n('pfull') > 0.2 && n('pfull') <= n('powerup')
+        // Soi joka kerta kun juoksunappi irtoaa, joten se on tarkoituksella
+        // selvästi täyttymistä hiljaisempi. Merkki joka soi usein ja kovaa on
+        // melua, ja melu peittää ne merkit jotka olivat täällä ensin.
+        && n('pspent') > 0.08 && n('pspent') < n('pfull') * 0.7
+        // Putken kaksi päätä ovat pari, joten ne mitataan pariksi.
+        && n('pipeout') > n('pipe') * 0.6 && n('pipeout') < n('pipe') * 1.6
+        && n('reserve') > 0.12 && n('reserve') < n('powerup')
+        // Eikä yksikään niistä jätä väylää soimaan.
+        && floorAfter < 0.02),
+      measured ? `${shown}, tausta jäljessä ${floorAfter.toFixed(3)}` : 'ei mitattu');
   }
 
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
