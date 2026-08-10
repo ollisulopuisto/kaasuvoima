@@ -184,6 +184,26 @@ korkeammalle mitä täydempi mittari on.
 Se on Sonicin idea — nopeus on pääsylippu ylemmälle reitille — ilman
 fysiikkaremonttia. Ja se antaa mittarille kolmannen käyttötavan.
 
+### I. KAIVAUTUMINEN — pystykenttä joka menee alas (odottaa pystytukea)
+Pystykenttä rakennetaan nyt pilvimaailmaa varten, ja siellä suunta on ylös:
+lava lavalta, putoaminen ei tapa. **Sama kamera osaa saman tempun ylösalaisin.**
+Luumaailmaan kenttä jossa lähdetään pinnalta ja kaivaudutaan alas.
+
+Miksi tämä on eri kenttä eikä sama peilattuna:
+- **Ylöspäin virhe maksaa etenemisen, alaspäin se maksaa vain nopeutta.**
+  Pilvikentässä pudotus vie takaisin edelliselle sivulle; kaivauduttaessa
+  pudotus vie *eteenpäin*, väärään paikkaan. Rangaistus pitää siis rakentaa
+  maastoon (piikkipohjat, umpikujat) eikä putoamiseen.
+- **Sivutus lukee toisin päin.** Ylöspäin mentäessä kamera näyttää minne olet
+  menossa; alaspäin se näyttää minne olet putoamassa, mikä on sama tieto mutta
+  kiireellisempänä. Se on syy tehdä tämä *jälkeen* pilvikentän, ei sen sijasta.
+- **Luumaailmalla on jo sanasto tähän:** murenevat lavat ja kuilut. Alaspäin
+  murenee lava on portaali eikä ansa.
+
+**Riippuvuus, ei arvio:** tämä ei maksa mitään uutta kameratyötä jos pystytuki
+tehdään suuntaneutraalisti — ja juuri siksi se kannattaa kirjata nyt, kun
+pystytukea vasta rakennetaan.
+
 ---
 
 ## Kaksi jotka pitää hylätä, ja miksi
