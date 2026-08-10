@@ -388,7 +388,11 @@ const WORLD_DEFS = [
       { id: 'w6-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
       { id: 'w6-1', tx: 3, ty: 4, type: 'level', level: '6-1', name: 'HAUTAUSMAA' },
       { id: 'w6-2', tx: 5, ty: 6, type: 'level', level: '6-2', name: 'KUUN ALLA' },
-      { id: 'w6-3', tx: 7, ty: 4, type: 'level', level: '6-3', name: 'LUUTANSSI' },
+      /* Solmu ei liikkunut, vain se mihin se osoittaa: `6-3` oli mitattuna
+       * pelin vähiten uusi kenttä (`tools/variety.mjs`, uutuus 11,7 %), ja
+       * `6-K` on sen paikalla. Kulmapisteet, väljyys ja kaluston raivattu
+       * vyöhyke ovat siksi tavulleen ennallaan. */
+      { id: 'w6-3', tx: 7, ty: 4, type: 'level', level: '6-K', name: 'KAIVAUTUMINEN' },
       { id: 'w6-h', tx: 7, ty: 1, type: 'house', name: 'HERNETALO' },
       { id: 'w6-4', tx: 9, ty: 6, type: 'level', level: '6-4', name: 'KYLKILUUT' },
       { id: 'w6-5', tx: 11, ty: 4, type: 'level', level: '6-5', name: 'HAUTAHOLVI' },
@@ -441,7 +445,10 @@ const WORLD_DEFS = [
       { id: 'w7-s', tx: 1, ty: 3, type: 'start', name: 'ALKU' },
       { id: 'w7-1', tx: 3, ty: 5, type: 'level', level: '7-1', name: 'NOUSUVIRTAUS' },
       { id: 'w7-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
-      { id: 'w7-2', tx: 5, ty: 3, type: 'level', level: '7-2', name: 'MATALAPAINE' },
+      /* Sama siirto kuin `w6-3`:ssa ja samasta syystä: `7-2` oli maailman
+       * vähiten uusi kenttä (uutuus 17,6 %), ja `7-T` on sen paikalla. Solmu,
+       * kulmapisteet ja kaluston vyöhyke ennallaan. */
+      { id: 'w7-2', tx: 5, ty: 3, type: 'level', level: '7-T', name: 'TERMIIKKI' },
       { id: 'w7-3', tx: 7, ty: 5, type: 'level', level: '7-3', name: 'ALASIN' },
       { id: 'w7-4', tx: 9, ty: 3, type: 'level', level: '7-4', name: 'SUMUVERHO' },
       { id: 'w7-5', tx: 11, ty: 5, type: 'level', level: '7-5', name: 'KORKEAPAINE' },
