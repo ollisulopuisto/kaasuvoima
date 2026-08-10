@@ -7,6 +7,243 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.51 — kuusitoista kenttää neljään maailmaan: 4, 5, 6 ja 7 kahdeksaan
+
+Peli on nyt **8 maailmaa ja 60 kenttää** (oli 44). Maailmat 4, 5, 6 ja 7 ovat
+kahdeksan kentän mittaisia sen muodon mukaan joka päätettiin v26.08.09.46:ssa —
+`W-1`…`W-7` ja `W-F`, seitsemän askelta, kaksi hengähdystä — eikä muotoa
+johdettu uudestaan. Jäljellä ovat maailmat **2** (haara) ja **8** (pomo joka
+kentässä), ja ne ovat eri työ eri ehdoilla, kuten edellinen merkintä sanoi.
+
+Ja alkuperäisyystarkistus **ajettiin**: korpus saapui, ja kaikki 27 generoitua
+kenttää — myös maailmojen 1, 3 ja 5 vanhat yksitoista — kantavat nyt merkinnän
+`origin: 'checked'`, 481 korpustiedostoa, **0 osumaa**.
+
+### Se mikä oli päätetty, ja se mikä oli laskettava
+
+Muoto oli päätetty. Käyrä ei ollut, ja se oli tämän työn koko sisältö:
+**maailman keskiarvon on noustava maailmasta maailmaan**, ja nämä neljä
+maailmaa ovat kaikki keskellä ketjua — puristettuna sekä alta että päältä.
+Maailmoilla 1 ja 3 oli tilaa yhteen suuntaan; näillä ei kumpaankaan.
+
+Ja muoto puristi lisää. Neljässä maailmassa neljästä kävi näin:
+
+> Ensimmäinen notko on käsintehty (`4-2`, `5-2`, `6-2`, `7-2`), ja käsintehty
+> huippu sen perässä (`4-3`, `5-3`, `6-3`, `7-3`) on **korkeampi kuin mihin
+> generoitu kenttä tällä sanastolla yltää**. Siitä seuraa että toinen notko on
+> pakko olla neljäs kenttä, ja että loput kolme askelta ovat kaikki nousua.
+
+Kolme on pelin pisin sallittu nousuputki (portti: *"ei yli kolmen nousun
+putkea"*), joten muoto ei ollut valinta vaan ainoa ratkaisu: `W-4` on
+hengähdys, `W-5`…`W-7` on täysi kolmen askelen kiipeäminen maailman omaan
+huippuun. Se on sama muoto neljä kertaa, ja se on mittauksen seuraus eikä
+kaava.
+
+### Käyrä, ennen ja jälkeen
+
+| maailma | muoto ennen | muoto nyt | keskiarvo |
+| --- | --- | --- | --- |
+| w4 | 188 → 141 → 227 | 188 → 141 → 227 → **168 → 181 → 197 → 215** | 189,4 → **189,8** |
+| w5 | 215 → 185 → 279 | 215 → 185 → 279 → **201 → 226 → 245 → 303** | 256,2 → **250,0** |
+| w6 | 243 → 148 → 272 | 243 → 148 → 272 → **216 → 233 → 256 → 282** | 264,2 → **255,4** |
+| w7 | 253 → 180 → 279 | 253 → 180 → 279 → **234 → 240 → 272 → 273** | 279,2 → **266,9** |
+
+Maailmojen ketju: `111,3 · 148,7 · 171,8 · 189,8 · 250,0 · 255,4 · 266,9 ·
+301,0`, eli nouseva joka askeleella. Tiukin askel on **w5 → w6, +5,4**, ja se
+on tämän muutoksen hinta sanottuna ääneen: se oli +8,0 ennen.
+
+**Kolme maailmaa neljästä laski, ja se on tulos eikä vahinko** — sama ilmiö
+jonka maailma 1 kirjasi v26.08.09.46:ssa, samasta syystä ja isompana. Generoitu
+kenttä ei tällä sanastolla yllä käsintehdyn huipun tasolle: mitattu katto on
+tehtaassa **215**, luussa **285** ja pilvessä **275**, kun samojen maailmojen
+käsintehdyt huiput ovat 227, 272 ja 279 ja linnakkeet 202, 395 ja 405. Neljä
+uutta kenttää maailman keskitasolla vetävät keskiarvoa alas kun maailman
+vanhat neljä sisältävät sen huipun ja sen linnakkeen. **Nämä ovat pidempiä
+maailmoja eivätkä kovempia**, ja koska ne laskivat eri verran, käyrän loppupää
+on nyt loivempi kuin se oli. Se on mitattavissa oleva seuraus siitä että
+sisältö tehdään generaattorilla, ja se lukee tässä eikä kenenkään muistissa.
+
+Tavoitteet osuivat: kuudestatoista kentästä **kolmetoista on neljän pisteen**
+sisällä tavoitteestaan ja yksitoista kahden, ja pahin ero on `7-5` **9,7** —
+pilven sanasto ei yllä sinne mihin tähdättiin, ja `aim` jätettiin siihen mihin
+se suunniteltiin sen sijaan että se olisi siirretty sinne mihin osuttiin.
+
+### Punainen ennen vihreää — mitä kukin punainen sanoi
+
+**1. `maailmat 1 ja 3–7 ovat kahdeksan kentän mittaisia`** — uusi portti.
+Punainen: `w1 8, w3 8, w4 4, w5 4, w6 4, w7 4 — vajaana 4`.
+
+Vanha väite (*"kahdeksan kentän maailmassa on kaksi hengähdystä"*) oli
+ehdollinen: *jos* maailmassa on kahdeksan kenttää, siinä on kaksi notkoa. Se ei
+sanonut mitään siitä kuinka moni maailma on siinä mitassa, eli maailman olisi
+voinut jättää neljään ikuisiksi ajoiksi. Lista on **nimiä eikä lukua**, koska
+`>= 6` ei erottaisi "maailma 4 on täytetty" ja "maailma 2 on täytetty kahdesti"
+-tapauksia toisistaan — ja koska maailmat 2 ja 8 ovat tarkoituksella poissa
+kunnes ne tehdään.
+
+**2. `generoitu kenttä ei kata rivejä 0–1`** — uusi portti, ja se sai kiinni
+juuri sen mitä edellinen merkintä varoitti tulevan.
+
+`ceilingPass(c, 3)` maalasi `X`:n riville 3 **ja jokaiselle riville sen
+yläpuolella**, eli riveille 0 ja 1 — täsmälleen ne kaksi joilta maailman 8
+väite *"joka sarakkeen yllä on kiveä"* mitataan. Generaattorin oma kommentti
+sanoi jo oikean säännön — *"tehtaan kansi roikkuu rivillä 2 ja alempana"* —
+mutta koodi teki toisin eikä mikään mitannut kumpaa. Punainen, neljä
+generoitua tehdaskenttää kirjoitettuna:
+
+| portti | punainen |
+| --- | --- |
+| generoitu kenttä ei kata rivejä 0–1 | 4-4, 4-5, 4-6, 4-7 **100 % kukin**, w4 **79,4 %** |
+| viimeisessä linnakkeessa ei ole ulkopuolta | `seuraavaksi suljetuin maailma w4 79 %` (raja 60) |
+
+Kansi on nyt **rivit 2–3**: kaksi riviä paksu, sama kuin linnakkeen, kaksi riviä
+alempana. Vihreä: kaikki kuusi generoitua tehdaskenttää (4-4…4-7, 5-5, 5-7)
+mittaavat **0 %**, ja maailma 4 laski **56,6 %:sta 27,1 %:iin**. Finaalin väite
+siis *vahvistui*: lähin kilpailija on kaukana kuin se on koskaan ollut. Katto
+itsessään ei kadonnut mihinkään — `ruleFactoryCeiling` vaatii yhä katteen
+jokaisen sarakkeen yllä riveiltä 0–5, ja se pitää; muuttui vain se korkeus
+jolla kansi roikkuu.
+
+**3. `maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0`** — vanha
+portti, joka kaatui oikeasta työstä. Punainen: `22 kenttää` kun ehto oli
+`rows.length === 14`. Neljätoista oli maailmojen 6, 7 ja 8 yhteinen kenttämäärä
+sinä päivänä jona se kirjoitettiin, ja jokainen 22:sta meni läpi. Luku
+johdetaan nyt kentistä (`rows.length === handmade.length`) ja lattia on
+erikseen (`>= 22`), joten maailman 8 puuttuvat neljä nostavat sitä eivätkä
+kaada sitä. Otsikosta lähti sana **"käsintehtyjen"**: maailmoissa 6 ja 7 on nyt
+kahdeksan generoitua kenttää, ja juuri niille tätä porttia eniten tarvitaan —
+käsi katsoo kentän, generaattori ei katso mitään.
+
+**4. `generoitu kenttä kantaa sen mitä sen alkuperästä on mitattu`** — vanha
+portti, joka oli **väärin päin**, ja se paljastui vasta kun tarkistus
+ensimmäisen kerran oikeasti ajettiin. Ks. oma lukunsa alempana.
+
+### Neljä säätöä generaattoriin, ja jokainen on mittauksen seuraus
+
+**`ceilingPass` sai yläreunan.** Yllä.
+
+**`platforms` sai kattorajan (`maxPlatform`), ja luulaakso käyttää sitä.** Tämän
+palikan ylin muste ei ole sen lauta vaan **kolikko kaksi riviä sen yläpuolella**,
+eikä millään muulla palikalla ole tuota muotoa. Luussa taivas on auki viisi
+riviä kuun takia, seitsemän korkea lauta istuu rivillä 6 ja sen kolikko rivillä
+4 — eli suoraan kuun läpi. Mitattuna: **10 siementä 80:stä** rakensi
+sääntöjen mukaisen `6-4`:n, ja "kuu ei näy" oli yksi kolmesta syystä. Raja
+kiristetään **vasta arvonnan jälkeen**, joten teema joka ei sitä laske arpoo
+saman luvun kuin ennen — maailmat 1, 3 ja 5 eivät liiku tästä lainkaan.
+
+**Haun leveys on rivin luku eikä vakio (`SEARCH = 240`).** Kahdeksan
+kymmentä siementä ei ole kahdeksankymmentä ehdokasta: sääntöjä rikkova siemen
+heitetään pois ennen pisteytystä, ja luussa niin kävi useimmille. Se ei näkynyt
+virheenä vaan vaihteluvälinä — `6-4`:n siemenjoukko ylsi 325:een ja `6-7`:n
+214:ään **samoilla nupeilla**, mikä on siemenjoukon puhetta eikä kentän
+suunnittelua. Oletus pysyy 80:ssä ja juuri se on koko pointti: maailmat 1 ja 3
+toimitettiin kahdeksankymmenen haulla, ja leveämpi haku kirjoittaisi kahdeksan
+mitattua kenttää uusiksi murto-osan takia. Sama peruste kuin maailman 5
+siemenkaavalla — **haku on osa sitä miten kenttä on tehty, joten valmis kenttä
+pitää sen haun jolla se tehtiin.**
+
+**Pilven painot kirjoitettiin uusiksi sen oman maailman mukaan.** Ne olivat
+niityn painot mahdottomat palikat poistettuina, mikä on oikea tapa *aloittaa*
+teema ja väärä tapa jättää se. Mitattuna: `7-1`, `7-2` ja `7-3` kantavat
+**17 kuoppaa 1008 sarakkeella — yksi joka 59:s — eikä yhtäkään ole sillattu**,
+mikä on maailman oma lause lukuna. Vanha painotus tuotti siitä noin kolmasosan.
+`gap` ja `stinkGap` ovat nyt 12 osaketta 33:sta (oli 7/26) ja `crumbleWalk` 2 →
+3. Tämä on toimituksellista ja saa olla: DESIGN.md kohta 3 sanoo että korpus
+päättää **milloin** haaste tulee eikä koskaan **mikä**, joten palikkavalikoima
+on juuri se puolisko joka kirjoitetaan käsin — tässä tämän maailman omia
+käsintehtyjä kenttiä vasten, mikä on lähde jonka omistamme.
+
+### Maailmakohtaiset luvut
+
+Jokainen tiheys on **sen maailman oma mitattu vihollismerkkien tiheys**, ja
+jokainen `maxGap` on sen maailman oma levein hyppy — ei makua kummassakaan:
+
+| maailma | tiheys (mitattu) | pyydetty | maxGap | miksi |
+| --- | --- | --- | --- | --- |
+| w4 tehdas | 6,8 / 7,1 / 8,4 / 6,8 | 7,0…8,4 | 5 | kuusi on budjetin oma reuna ja kuuluu linnakkeille |
+| w5 jälkipyykki | 9,8 / 9,0 / 10,6 | 9,0…10,6 | 6, jäällä 5 | jäällä ei ehdi pysähtyä (maailman 3 mittaus) |
+| w6 luu | 9,8 / 8,3 / 8,7 | 8,4…9,8 | **5** | maailman jokainen kuilu on **tasan viisi**: kolme kenttää, 18 kuilua, ei poikkeusta |
+| w7 pilvi | 9,5 / 10,1 / 9,4 | 9,4…10,1 | 5 | kuilut ovat neljä tai viisi, ei kertaakaan kuutta |
+
+`minIntro` on 32 saraketta lattiaa ennen ensimmäistä haastetta, paitsi jäällä
+48 — molemmat maailmojen 1 ja 3 mittaamia lukuja. `intensity` nousee maailman
+sisällä (1,05 → 1,7) ja se on se nuppi jolla kolmen askelen nousu tehdään:
+tehdas on tuotantolinja, ja tuotantolinjalla on vähemmän joutomaata kuin
+niityllä.
+
+**Maailma 5 on jälkipyykki, ja sen teemat ovat vain niitä joita pelaaja on jo
+nähnyt.** Kolme ensimmäistä kantavat ruohon, aavikon ja jään; toinen kaari
+täydentää setin (yö on aavikon toinen puoli, tehdas on maailma 4) ja kiipeää
+takaisin niiden kahden läpi joilla on kovin sanasto. Luu ja pilvi loistavat
+poissaolollaan: ne ovat maailmoissa 6 ja 7 eli tästä eteenpäin, ja bonusmaailma
+joka näyttää tulevan on juonipaljastus. Nimet ovat pesun vaiheita, koska
+maailman nimi on JÄLKIPYYKKI.
+
+### Kartat: neljä uutta, ja yksikään ei leventynyt
+
+Vieritys tuli (v26.08.09.43) ja `mapWidthPx` lukee leveyden datasta, joten
+näiden ruudukoiden olisi saanut olla 26 saraketta. Ne ovat 20, ja syy on
+mitattu kummastakin suunnasta:
+
+- **Kahdeksan solmua mahtuu kahteenkymmeneen.** Maailmat 1 ja 3 tekivät sen, ja
+  tiukin solmupari koko pelissä on yhä `w2-3`/`w2-m` **12 pikselillä** eli sama
+  väljyys joka on ollut tuotannossa alusta asti.
+- **Leventäminen maksaisi yhden porteista.** *"Kapea kartta ei vieri
+  pikseliäkään"* nojaa siihen että jokainen laivattu kartta on tasan näkymän
+  levyinen, ja juuri se väite todistaa että vieritys tuli sisään muuttamatta
+  yhtään olemassa olevaa karttaa. Sen vaihtaminen koristeeseen olisi mitatun
+  väitteen vaihtamista mittaamattomaan haluun.
+- **Leveä polku ei jää senkään takia ajamatta.** `verify.mjs`:n oma 30
+  sarakkeen koemaailma kävelee sen läpi joka ajolla, kamera, kulmat ja leimat
+  mukaan lukien.
+
+Kaikki neljä tietä kutovat kahden rivin väliä ja jokainen peräkkäinen pari on
+tasan kaksi ruutua, kuten maailmoissa 1 ja 3. Erot ovat tarkoituksellisia ja
+halpoja: tehtaan pomo asuu **ylhäällä** (rivi 2) eikä laaksossa, jälkipyykin
+hernetalo roikkuu **tien alapuolella** rannassa — koko pelin ainoa — ja
+luulaakson linnake on alimmalla rivillä, koska laakson pohja on se paikka johon
+mennään. Kalusto istutettiin säännön 8 mukaan kuten maailmoissa 6–8: polun
+raivattu vyöhyke otettiin ensin pois ja loput istutettiin siihen mikä jäi.
+**w4 20/20, w5 28/28, w6 20/20, w7 25/25 — nolla hylättyä.**
+
+### `origin`-portti oli väärin päin, ja se selvisi vasta kun tarkistus ajettiin
+
+Korpus saapui, `tools/originality.mjs` korjattiin lukemaan alihakemistot
+(v26.08.10.48), ja kaikki 27 generoitua kenttää generoitiin `VGLC_DIR`
+asetettuna. Mitattu: **481 korpustiedostoa, 0 osumaa**, ja maailmojen 1, 3 ja 5
+yksitoista vanhaa kenttää tulivat ulos **tavu tavulta samoina** — vain
+`origin`-rivi vaihtui, 11 riviä 11:stä, nolla muuta muutosta. Siemenpolku on siis
+niin deterministinen kuin sen väitettiin olevan.
+
+Ja sitten ajo ilman korpusta muuttui punaiseksi: **27 kenttää, 27 kaatavaa
+riviä**, tekstinä *"merkintä 'checked' ilman korpusta — tarkistusta ei ole
+tehty"*. Yksikään niistä ei ollut valhe.
+
+Portti oli väärin päin. `origin` on **tallenne siitä mitä generointiajossa
+tapahtui**, ei väite siitä ajosta joka lukee sen, ja ehto `origin !== 'not
+checked'` → kaadu teki repostä punaisen jokaiselle jolla ei ole korpusta —
+eli se **rankaisi työn tekemisestä** ja kumosi DESIGN.md kohdan 3 oman lauseen
+*"repo saa olla vihreä ilman korpusta"* samalla hetkellä.
+
+Ilman korpusta portti mittaa nyt sen minkä voi mitata — **jokainen kenttä
+kantaa merkinnän ja merkintä on toinen kahdesta tunnetusta sanasta** — eikä
+sitä mitä ei voi: onko merkintä ansaittu. Korpuksen kanssa mikään ei muuttunut:
+jokainen ikkuna verrataan, osuma kaataa, ja `not checked` kaataa ympäristössä
+jossa tarkistus olisi ollut mahdollinen. Sääntö on siis yhä kaksipuolinen,
+mutta oikein päin, ja DESIGN.md kohta 3 sanoo sen nyt näin.
+
+### Mitä ei tehty
+
+- **Maailmat 2 ja 8** ovat ennallaan neljässä ja kuudessa kentässä. Maailmassa
+  2 on haara ja maailmassa 8 pomo joka kentässä; kumpikin on eri työ eri
+  ehdoilla, ja generaattorissa ei ole yhä areenapalikkaa.
+- **`tools/curriculum.mjs`:n oma maailma 5 -osio** listaa yhä `5-1 5-2 5-3`
+  nimeltä eikä tunne uusia kenttiä. Se on raportin rivi eikä portti, ja portti
+  (*"kahta ensiesittelyä ei ole saman 20 laatan ruudun sisällä"*) mittaa koko
+  pelin ja on vihreä: **26 ensiesittelyä, YKSIN hylkää 0**, sama kuin ennen.
+  Kuusitoista uutta kenttää eivät esittele mitään, koska peli esittelee
+  viimeisen uuden asiansa kentässä `3-3`.
+
 ## v26.08.10.50 — maailmoissa 1 ja 3 ei päässyt ensimmäistä kenttää pidemmälle
 
 Omistajan pelitesti: *"I just did a playtest where I completed the first world

@@ -52,6 +52,12 @@
  * carries 0 px sideways.
  */
 
+import { GENERATED_LEVELS } from '../generated.js';
+
+/** Which of the generated levels belong to this world — the file holds them all. */
+const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
+  .filter(([id]) => id.startsWith('7-')));
+
 export const WORLD7_LEVELS = {
   /*
    * The world opens on `cloud_bank`, which is the grammar with nothing at
@@ -137,6 +143,8 @@ export const WORLD7_LEVELS = {
    * `boss` track until the fight ends, so this line only decides what comes
    * back afterwards, and after the weather lord falls the weather should.
    */
+  /* `7-4`…`7-7`, generated; the spread's position is the play order. */
+  ...generated,
   '7-F': {
     theme: 'cloud', bg: 'none', music: 'cloud', boss: true, bossVariant: 5,
     chunks: [

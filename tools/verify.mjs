@@ -3444,6 +3444,33 @@ const report = await page.evaluate(async () => {
       + `(${eight.map((s) => `${s.id} ${s.seq.length} askelta, ${s.dips} notkoa`).join('; ') || '—'})`);
 
     /*
+     * JA KUKA ON JO SIINÄ MITASSA — nimeltä, eikä lukumääränä.
+     *
+     * Yllä oleva väite on ehdollinen: *jos* maailmassa on kahdeksan kenttää,
+     * siinä on kaksi hengähdystä. Se on oikea muoto sille väitteelle, mutta se
+     * ei sano mitään siitä kuinka moni maailma on siinä mitassa — eli maailman
+     * voisi jättää neljään kenttään ikuisiksi ajoiksi eikä mikään sanoisi
+     * mitään. ROADMAP sanoo, mutta ROADMAP ei ole portti.
+     *
+     * Lista on nimiä eikä lukua kahdesta syystä. Ensinnäkin `>= 6` menisi läpi
+     * millä tahansa kuudella maailmalla, eli se ei erottaisi "maailma 4 on
+     * täytetty" ja "maailma 2 on täytetty kahdesti" -tapauksia toisistaan.
+     * Toiseksi **maailmat 2 ja 8 ovat tarkoituksella poissa**: maailmassa 2 on
+     * haara ja maailmassa 8 pomo joka kentässä, eli kummankin kahdeksan kenttää
+     * on eri työ eri ehdoilla (ks. v26.08.09.46), ja portti joka vaatii niitä
+     * nyt olisi punainen työstä jota ei ole vielä tehty. Kun ne valmistuvat,
+     * niiden tunnukset lisätään tähän listaan — se on yhden rivin muutos ja se
+     * on tarkoitus.
+     */
+    const EIGHT_DONE = ['w1', 'w3', 'w4', 'w5', 'w6', 'w7'];
+    const shortOf = (id) => (shapes.find((s) => s.id === id) || { levels: 0 }).levels;
+    const short = EIGHT_DONE.filter((id) => shortOf(id) !== 8);
+    expect('maailmat 1 ja 3–7 ovat kahdeksan kentän mittaisia',
+      short.length === 0,
+      EIGHT_DONE.map((id) => `${id} ${shortOf(id)}`).join(', ')
+      + ` — vajaana ${short.length}`);
+
+    /*
      * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
      * yllä oleva. Muototesti katsoo yhtä maailmaa kerrallaan, joten uusi
      * maailma voisi olla sisäisesti moitteeton ja silti helpompi kuin
@@ -3470,7 +3497,15 @@ const report = await page.evaluate(async () => {
   }
 
   /*
-   * 3. UUSIEN KÄSINTEHTYJEN MAAILMOJEN MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
+   * 3. MAAILMOJEN 6–8 MAAREITTI AUKEAA PIENIMMÄLLÄ KOOLLA.
+   *
+   * **Otsikossa luki "uusien käsintehtyjen maailmojen", ja se sana on nyt
+   * poissa.** Maailmat 6 ja 7 ovat kahdeksan kentän mittaisia ja niiden kentät
+   * 6-4…6-7 ja 7-4…7-7 ovat generoituja, joten "käsintehty" ei enää kuvaa tätä
+   * joukkoa. Väite ei silti muuttunut vaan **vahvistui**: se koskee edelleen
+   * jokaista kenttää joka näissä kolmessa maailmassa on, ja niitä on nyt 22
+   * eikä 14. Generoitu kenttä on juuri se tapaus jota tämä portti eniten
+   * tarvitaan — käsi katsoo kentän, generaattori ei katso mitään.
    *
    * DESIGN.md kohta 5 sanoo sen näin: tehostus avaa paikkoja, ei kenttää.
    * `tools/playable.mjs` mittaa juuri tätä koko pelistä, mutta se on raportti
@@ -3559,8 +3594,22 @@ const report = await page.evaluate(async () => {
       });
     }
     const stuck = rows.filter((r) => !r.cleared);
-    expect('käsintehtyjen maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0',
-      rows.length === 14 && stuck.length === 0,
+    /*
+     * Luku johdetaan kentistä eikä kirjoiteta käsin, ja lattia on erikseen.
+     *
+     * Tässä luki `rows.length === 14`, joka oli maailmojen 6, 7 ja 8 yhteinen
+     * kenttämäärä sinä päivänä kun se kirjoitettiin (4 + 4 + 6). Se kaatui
+     * ensimmäisenä päivänä jona joku teki sitä työtä jota ROADMAP pyytää —
+     * mitattuna **22 kenttää, odotettiin 14** — eikä yhdellekään kentälle
+     * tapahtunut mitään. Portti joka kaatuu oikeasta työstä sammutetaan.
+     *
+     * Ehto on siksi kaksiosainen: **jokainen löydetty kenttä ajettiin** (eli
+     * silmukka ei pudottanut yhtään hiljaa) ja **niitä on vähintään se määrä
+     * mikä pelissä tänään on**. Jälkimmäinen on lattia eikä yhtäsuuruus, joten
+     * maailman 8 neljä puuttuvaa kenttää nostavat sitä eivätkä kaada tätä.
+     */
+    expect('maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0',
+      rows.length === handmade.length && rows.length >= 22 && stuck.length === 0,
       rows.length
         ? `${rows.length} kenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
         : 'ei 6-, 7- eikä 8-kenttiä lainkaan');
@@ -3953,6 +4002,46 @@ const report = await page.evaluate(async () => {
       roofs.map((r) => `w${r.n} ${r.share.toFixed(0)} %`).join(', ')
       + ` — avoimin 8-kenttä ${openest.id} ${openest.share.toFixed(0)} %,`
       + ` seuraavaksi suljetuin maailma w${runnerUp.n} ${runnerUp.share.toFixed(0)} %`);
+
+    /*
+     * 2 b. JA SE MIKÄ SEN VÄITTEEN VOI RIKKOA ILMAN ETTÄ MAAILMA 8 MUUTTUU:
+     * **GENEROITU TEHDASKENTTÄ.**
+     *
+     * Yllä oleva portti on `runnerUp.share <= 60`, ja lähin kilpailija on
+     * maailma 4 (mitattuna 56,6 %). Se on neljän kentän päässä katosta ja
+     * neljä uutta kenttää on tulossa. Generaattorin `ceilingPass(c, 3)` maalasi
+     * `X`:n riville 3 **ja jokaiselle riville sen yläpuolella**, eli myös
+     * riveille 0 ja 1 — täsmälleen ne kaksi riviä joilta tämä osuus mitataan.
+     * Neljä sellaista kenttää nostaa maailman 4 osuuden kohti sataa, ja
+     * finaalin väite lakkaa erottamasta mitään ilman että maailmaan 8 on
+     * koskettu.
+     *
+     * Generaattorin oma kommentti sanoi jo oikean säännön — *"tehtaan kansi
+     * roikkuu rivillä 2 ja alempana: sisätila jonka koneiston näkee"* — mutta
+     * koodi teki toisin, eikä mikään mitannut kumpaa se teki. Tässä se
+     * mitataan: **yksikään generoitu kenttä joka ei ole linnake ei kata
+     * rivejä 0–1.** Linnake on nimetty poikkeus eikä aukko, koska sen oma ehto
+     * (`ruleKeepRoof`) vaatii täsmälleen päinvastaista.
+     *
+     * Väite on generoiduista kentistä eikä maailmasta 4, ja se on tahallista:
+     * sama kansi tulisi maailman 5 tehdaskenttään ja maailman 8 kenttiin
+     * samalla rivillä koodia, joten portti joka katsoo vain maailmaa 4
+     * huomaisi vian vasta siinä maailmassa jossa se sattui ensin näkymään.
+     */
+    const { GENERATED_LEVELS } = await import('/src/data/generated.js');
+    const genRoofed = Object.entries(GENERATED_LEVELS)
+      .filter(([, def]) => def.theme !== 'fortress')
+      .map(([id]) => ({ id, share: roofShare(id) }))
+      .filter((r) => r.share > 0);
+    const genFactory = Object.entries(GENERATED_LEVELS)
+      .filter(([, def]) => def.theme === 'factory').map(([id]) => id);
+    expect('generoitu kenttä ei kata rivejä 0–1, eli tehdas ei nosta maailman 4 katto-osuutta',
+      genRoofed.length === 0,
+      `${Object.keys(GENERATED_LEVELS).length} generoitua kenttää, niistä `
+      + `${genFactory.length} tehdaskenttää (${genFactory.join(' ') || '—'}); `
+      + `katettuja ${genRoofed.length}`
+      + (genRoofed.length ? `: ${genRoofed.map((r) => `${r.id} ${r.share.toFixed(0)} %`).join(', ')}` : '')
+      + ` — w4 ${roofOf(4).toFixed(1)} %`);
 
     /*
      * 3. EI LIPPUA, VAAN OVI.
@@ -12522,11 +12611,41 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
       }
       detail = `${levels.length} kenttää, ${files} korpustiedostoa, ${hits} osumaa`;
     } else {
-      const lying = levels.filter(([, def]) => def.origin !== 'not checked');
-      problems.push(...lying.map(([id, def]) => `${id}: merkintä "${def.origin}" ilman korpusta `
-        + '— tarkistusta ei ole tehty, joten se ei saa lukea tehdyksi'));
-      detail = `${levels.length} kenttää, kaikki merkitty "not checked" — `
-        + 'VGLC_DIR asettamatta, aja: VGLC_DIR=… node tools/originality.mjs';
+      /*
+       * ILMAN KORPUSTA MERKINTÄ LUETAAN, EI KIISTETÄ — ja tämä puolisko oli
+       * väärin päin siihen asti kunnes tarkistus ensimmäisen kerran oikeasti
+       * ajettiin.
+       *
+       * Tässä luki `def.origin !== 'not checked'` → kaatuu, perusteluna
+       * *"tarkistusta ei ole tehty, joten se ei saa lukea tehdyksi"*. Se lause
+       * on epätosi: `origin` on **tallenne siitä mitä generointiajossa
+       * tapahtui**, ei väite tästä ajosta. Kun korpus 10.8.2026 saapui ja
+       * kaikki 27 generoitua kenttää generoitiin `VGLC_DIR` asetettuna, tämä
+       * ehto teki repostä punaisen jokaiselle joka **ei** omista korpusta —
+       * mitattuna 27 kenttää, 27 kaatavaa riviä, eikä yksikään niistä ollut
+       * valhe. Portti siis rankaisi työn tekemisestä, ja DESIGN.md kohdan 3 oma
+       * lause *"repo saa olla vihreä ilman korpusta"* lakkasi olemasta totta
+       * samalla hetkellä.
+       *
+       * Se mitä tämä haara *voi* mitata, se mittaa yhä: **jokainen kenttä
+       * kantaa merkinnän, ja merkintä on toinen niistä kahdesta sanasta.**
+       * Puuttuva tai tuntematon `origin` on kenttä jonka alkuperästä tiedosto
+       * ei sano mitään, ja se on tarkistettavissa ilman korpusta. Sen sijaan
+       * "onko tämä `checked` ansaittu" ei ole — ja portti joka ei voi mitata
+       * väitettään ei saa esittää sitä.
+       *
+       * Sääntö kokonaisuudessaan on siis yhä kaksipuolinen, mutta oikein päin:
+       * korpuksen kanssa jokainen ikkuna verrataan ja `not checked` kaataa;
+       * ilman korpusta luetaan mitä tallenne sanoo ja tulostetaan se.
+       */
+      const WORDS = ['checked', 'not checked'];
+      const mute = levels.filter(([, def]) => !WORDS.includes(def.origin));
+      problems.push(...mute.map(([id, def]) => `${id}: alkuperämerkintä `
+        + `${def.origin === undefined ? 'puuttuu' : `"${def.origin}"`} — pitää olla `
+        + `"${WORDS.join('" tai "')}", generaattorin kirjoittamana`));
+      const tally = WORDS.map((w) => `${levels.filter(([, d]) => d.origin === w).length} "${w}"`);
+      detail = `${levels.length} kenttää: ${tally.join(', ')} — VGLC_DIR asettamatta, `
+        + 'tarkistusta ei voi tehdä täällä: VGLC_DIR=… node tools/originality.mjs';
     }
   } catch (err) {
     problems.push(`alkuperäisyystarkistus ei päässyt ajoon: ${err && err.message}`);

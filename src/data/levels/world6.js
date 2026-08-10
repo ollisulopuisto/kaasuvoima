@@ -41,6 +41,12 @@
  * so is this, and it is the cheapest kind of difficulty for a player to read.
  */
 
+import { GENERATED_LEVELS } from '../generated.js';
+
+/** Which of the generated levels belong to this world — the file holds them all. */
+const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
+  .filter(([id]) => id.startsWith('6-')));
+
 export const WORLD6_LEVELS = {
   /*
    * The world opens on `bone_stones` rather than on the flag-side vocabulary,
@@ -131,6 +137,8 @@ export const WORLD6_LEVELS = {
    * scores the maximum. Four of them are most of why this is the hardest level
    * in the game at 395,4.
    */
+  /* `6-4`…`6-7`, generated; the spread's position is the play order. */
+  ...generated,
   '6-F': {
     theme: 'bone', bg: 'none', music: 'bone', boss: true, bossVariant: 4,
     chunks: [

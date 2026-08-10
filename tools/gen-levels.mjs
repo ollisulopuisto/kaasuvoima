@@ -444,7 +444,21 @@ const PIECES = {
     let topHeight = 0;
     let topX = x;
     for (let i = 0; i < count; i++) {
-      const height = Math.max(3, range(4, 7) - ctx.ease);
+      /*
+       * THE CLAMP IS AFTER THE DRAW AND NOT INSIDE IT, and that is the whole
+       * reason worlds 1, 3 and 5 do not move: `range` consumes the same two
+       * numbers from the stream whatever the cap is, so a world that does not
+       * lower `maxPlatform` builds exactly the level it built before.
+       *
+       * Why a cap at all: this piece's topmost ink is not its plank but the
+       * coin two rows above it, and no other piece has that shape — `blockRow`
+       * is capped by `maxBlockHeight` and stops there. In the bone world that
+       * difference is a rule violation: the sky is open **five rows** for the
+       * moon and the stars, a seven-high plank sits at row 6, and its coin
+       * lands on row 4. Measured before this line: **10 of 80 seeds valid** in
+       * 6-4, and "kuu ei näy" was one of the three reasons.
+       */
+      const height = Math.max(3, Math.min(ctx.maxPlatform, range(4, 7) - ctx.ease));
       for (let j = 0; j < 3; j++) c.set(x + 2 + i * 5 + j, FLOOR - height, '-');
       if (rnd() < 0.6) c.set(x + 3 + i * 5, FLOOR - height - 2, 'o');
       if (height >= topHeight) { topHeight = height; topX = x + 3 + i * 5; }
@@ -740,11 +754,34 @@ const THEME_FIXTURES = {
   keepFlag: () => ({ clean: roof(flat(), 0), broken: poke(roof(flat(), 0), 5, 8, 'F') }),
 };
 
-/** Writes a ceiling of `X` across the whole level at `y`, plus the row under it. */
-function ceilingPass(c, y) {
+/**
+ * Writes a lid of `X` across the whole level, from row `top` down to row `y`.
+ *
+ * `top` IS THE HALF THAT WAS MISSING, AND IT COST A STRUCTURAL CLAIM.
+ *
+ * This used to fill every row from 0 down to `y`, which is a reasonable thing
+ * for a lid to do and the wrong thing for this game's lid to do. `ruleFactoryCeiling`
+ * right below explains at length why the factory's roof is measured over rows
+ * 0..5 rather than 0..1: world 8's own claim — *"joka sarakkeen yllä on
+ * kiveä"* — is measured on rows 0 and 1, and its nearest rival is the factory
+ * at 56.6 %. Roof a generated factory level at row 0 and world 4 climbs toward
+ * 100, and the finale stops distinguishing anything.
+ *
+ * The comment said the lid hangs "at row 2 and below". The code hung it from
+ * row 0, and nothing measured which of the two was true. Measured now: four
+ * generated factory levels at **100 % roofed each**, world 4 at **79.4 %**
+ * against its committed 56.6, and the world-8 gate (`runnerUp.share <= 60`)
+ * red. `verify.mjs` holds it from this side too, so the two halves of the
+ * argument cannot drift apart again.
+ *
+ * So the factory's lid is rows 2..3 — two rows thick, exactly the keep's own
+ * thickness, hanging two rows lower. An interior whose machinery you can see
+ * over, which is what world 4 already looks like: its hand-made levels are
+ * roofed over about half their columns and open over the rest.
+ */
+function ceilingPass(c, y, top = 0) {
   for (let x = 0; x < c.width; x++) {
-    c.set(x, y, 'X');
-    for (let up = 0; up < y; up++) c.set(x, up, 'X');
+    for (let row = top; row <= y; row++) c.set(x, row, 'X');
   }
 }
 
@@ -816,8 +853,10 @@ export const THEME_RULES = {
     },
     /* The lid, and why it is not taller: `blockRow` floats as high as row 4 and
      * the tallest body needs three rows, so a ceiling at row 3 is the lowest one
-     * that never lands on a block row or on the player's head. */
-    shape: (c) => ceilingPass(c, 3),
+     * that never lands on a block row or on the player's head. And why it does
+     * not reach row 0: see `ceilingPass` — rows 0 and 1 are the two the finale's
+     * roof claim is measured on, and this world is its nearest rival. */
+    shape: (c) => ceilingPass(c, 3, 2),
     maxBlockHeight: 7,
     rules: [ruleFactoryCeiling],
     fixtures: [THEME_FIXTURES.factory],
@@ -836,6 +875,10 @@ export const THEME_RULES = {
       coins: 2, stinkGap: 2, corkGate: 2, crumbleWalk: 3, switchWall: 2,
     },
     maxBlockHeight: 7,
+    /* Five, and the two rows between it and `maxBlockHeight` are the coin a
+     * plank carries: at seven the coin lands on row 4, i.e. through the moon.
+     * Measured: with the plank uncapped only 10 of 80 seeds built a legal 6-4. */
+    maxPlatform: 5,
     rules: [ruleBoneSky, ruleBoneStands],
     fixtures: [THEME_FIXTURES.bone, THEME_FIXTURES.boneStands],
   },
@@ -847,9 +890,30 @@ export const THEME_RULES = {
   cloud: {
     bg: 'clouds',
     enemies: ['g', 'k', 'f', 'r'],
+    /*
+     * THE HOLE IS THE THEME, AND THE WEIGHTING NOW SAYS SO.
+     *
+     * These numbers were the meadow's with the impossible pieces struck out,
+     * which is the right way to *start* a theme and the wrong way to leave one.
+     * Measured against what world 7 actually is: `7-1`, `7-2` and `7-3` carry
+     * **17 holes across 1008 columns — one every 59 — and not one of them is
+     * bridged**, which is the world's own sentence written as a number. The old
+     * weighting produced about a third of that, because `gap` and `stinkGap`
+     * were 7 shares out of 26.
+     *
+     * They are now 12 out of 33, and nothing else moved. That is editorial and
+     * it is allowed to be: DESIGN.md kohta 3 says the corpus decides WHEN a
+     * challenge arrives and never WHICH, so which pieces a world is made of is
+     * exactly the half that has to be written here by hand — against this
+     * world's own hand-made levels, which is a source we own.
+     *
+     * `crumbleWalk` goes 2 → 3 for the same reason from the other side: a world
+     * where nothing stands on the ground has only two kinds of floor, the cloud
+     * you land on and the cloud that leaves.
+     */
     weights: {
-      gap: 4, enemies: 5, blockRow: 4, platforms: 3, coins: 2, notes: 2,
-      stinkGap: 3, crumbleWalk: 2, switchWall: 2, spikes: 1,
+      gap: 8, enemies: 5, blockRow: 3, platforms: 3, coins: 2, notes: 2,
+      stinkGap: 4, crumbleWalk: 3, switchWall: 2, spikes: 1,
     },
     maxBlockHeight: 7,
     rules: [ruleCloudNoLegs, ruleCloudHeld],
@@ -1087,6 +1151,13 @@ function buildLevel({
      */
     maxHazard: maxGap === null ? 7 : Math.min(maxGap, REACH.gap) - 1,
     maxBlockHeight: pal.maxBlockHeight || 9,
+    /*
+     * How high a floating plank may sit. Seven is `platforms`' own top and the
+     * default, so declaring nothing keeps the level the generator already
+     * built; a theme lowers it only when its own rule needs the room above the
+     * plank rather than the plank itself. See the clamp inside `platforms`.
+     */
+    maxPlatform: pal.maxPlatform || 7,
   };
   const trace = [];
   let x = 0;
@@ -1368,12 +1439,16 @@ function validate(id, rows, built, theme) {
  * the table now spans worlds, because the answer to "how do 36 levels become 64"
  * is this table growing rather than eight generators appearing.
  *
- * Each row is four editorial numbers and nothing else:
+ * Each row is editorial numbers and nothing else:
  *
  *   `width`          how long the level is
  *   `enemiesPer100`  the world's own measured density (see `buildLevel`)
  *   `maxGap`         the widest jump this world asks for, in tiles
+ *   `minIntro`       floor before the first challenge, in columns
+ *   `intensity`      how tight the calm between challenges is
+ *   `drop`/`species` what this world deliberately leaves out (subtractive)
  *   `aim`            what `tools/difficulty.mjs` should measure afterwards
+ *   `attempts`       how many seeds the search may look at (see `ATTEMPTS`)
  *
  * `aim` is the one that needs defending, because "generate until the number
  * comes out right" is a short walk from tuning the number instead of the level.
@@ -1524,14 +1599,215 @@ const WORLD3 = [
   { id: '3-7', world: 'w3', theme: 'ice', width: 340, enemiesPer100: 3.9, maxGap: 5, aim: 198, minIntro: 48 },
 ];
 
-/** World 5's three, unchanged: same seed, same knob, same levels. */
+/*
+ * KOLMESATAA SIEMENTÄ KAHDEKSANKYMMENEN SIJAAN, ja se on mittaus eikä into.
+ *
+ * Kaikki neljä maailmaa alla hakevat `SEARCH` siemenellä. Perustelu on
+ * `ATTEMPTS`in kommentissa kokonaisuudessaan; tässä on se luku joka sen
+ * aiheutti: luumaailmassa **10 siementä 80:stä** rakensi säännöt läpäisevän
+ * kentän, eli kahdeksankymmenen haku oli kymmenen kentän haku. Jokainen
+ * ehdokas on yhä kenttä joka on läpäissyt kaikki säännöt, joten leveämpi haku
+ * ei voi ostaa lukua huonommalla kentällä — se voi vain löytää useamman
+ * kelvollisen kentän joista valita.
+ */
+const SEARCH = 240;
+
+/*
+ * MAAILMA 4, PIERUTEHDAS — ja pelin ahtain laatikko käyrällä.
+ *
+ * Maailman 4 ylä- ja alapuolella on **+17,5 ja +66,8**: se on kiinni maailmassa
+ * 3 (171,8) alhaalta ja maailmassa 5 (256,2) ylhäältä, eli neljä uutta kenttää
+ * eivät saa nostaa keskiarvoa yli maailman 5:n eivätkä päästää sitä maailman 3
+ * alle. Maailmoissa 1 ja 3 oli tilaa yhteen suuntaan; täällä ei kumpaankaan.
+ *
+ *   density   4-1…4-F kantavat 6,8 / 7,1 / 8,4 / 6,8 vihollismerkkiä sadalla
+ *             sarakkeella. Rivit alla pyytävät 7,0…8,4, eli maailman omalta
+ *             väliltä eivätkä sen yli.
+ *   maxGap    viisi ruutua mitatusta kuudesta. Kuusi on hyppybudjetin oma
+ *             reuna ja se kuuluu linnakkeille; tehtaan lattia on tavallista
+ *             maata, mutta `tools/playable.mjs` mittaa kulun voimatasolla 0 ja
+ *             maailman 3 historia sanoo mitä budjetin reunaan asettuminen
+ *             maksaa.
+ *   minIntro  32 saraketta, sama kuin maailmassa 1: tehtaan lattia on
+ *             kitkaltaan tavallinen, joten jään 48:aa ei tarvita, mutta
+ *             louhittu 15 riittää vain siihen että botti kuolee ensimmäiseen
+ *             kuoppaan.
+ *   aim       188 → 141 → 227 → **175 → 195 → 215 → 240**. Muoto on: käsintehty
+ *             notko 4-2:ssa, käsintehty huippu 4-3:ssa, sitten toinen
+ *             hengähdys ja kolmen askelen nousu maailman omaan huippuun. Kolme
+ *             on pelin pisin sallittu nousuputki, eli tämä maailma käyttää sen
+ *             loppuun eikä yli.
+ *
+ * **Katto on rivillä 2 eikä rivillä 0, ja se on maailman 8 väitteen ehto.**
+ * Finaalin väite "joka sarakkeen yllä on kiveä" mitataan riveiltä 0–1, ja sen
+ * lähin kilpailija on tämä maailma 56,6 %:lla. Generoitu tehdaskenttä joka
+ * kattaisi rivin 0 nostaisi maailman 4 osuuden kohti sataa ja veisi finaalilta
+ * sen eron — ei siksi että maailma 8 muuttui vaan siksi että joku täytti
+ * maailman 4. Ks. `ceilingPass` ja sen portti `verify.mjs`:ssä.
+ */
+const WORLD4 = [
+  {
+    id: '4-4', world: 'w4', theme: 'factory', music: 'factory', width: 320,
+    enemiesPer100: 7.0, maxGap: 5, aim: 168, minIntro: 32, intensity: 1.05, attempts: SEARCH,
+  },
+  {
+    id: '4-5', world: 'w4', theme: 'factory', music: 'factory', width: 340,
+    enemiesPer100: 7.6, maxGap: 5, aim: 181, minIntro: 32, intensity: 1.30, attempts: SEARCH,
+  },
+  {
+    id: '4-6', world: 'w4', theme: 'factory', music: 'factory', width: 300,
+    enemiesPer100: 8.0, maxGap: 5, aim: 197, minIntro: 32, intensity: 1.35, attempts: SEARCH,
+  },
+  {
+    id: '4-7', world: 'w4', theme: 'factory', music: 'factory', width: 350,
+    enemiesPer100: 8.4, maxGap: 5, aim: 212, minIntro: 32, intensity: 1.55, attempts: SEARCH,
+  },
+];
+
+/*
+ * MAAILMA 5, JÄLKIPYYKKI — ja ainoa maailma jonka vanhat kentät eivät saa
+ * liikkua tuumaakaan.
+ *
+ * Kolme ensimmäistä riviä alla ovat entisellään: sama siemenen laskukaava, sama
+ * `intensity`, samat kentät tavu tavulta. Ne ovat pelin ainoat generoidut kentät
+ * joihin muutosloki ja ROADMAP viittaavat nimeltä, ja uusi generointiajo arpoisi
+ * maailman uusiksi ilman että kukaan on sitä pyytänyt. Uusilla riveillä on `aim`,
+ * ja `seedFor` lisää maailman numeron summaan **vain** silloin kun rivillä on
+ * `aim` — eli vanha polku kulkee entistä reittiä eikä uusi koske siihen.
+ *
+ * **Teemat ovat ne jotka pelaaja on jo nähnyt, eikä yhtään enempää.** Maailma 5
+ * on jälkipyykki: se on maailmojen 1–4 uusintaotto, ja sen kolme ensimmäistä
+ * kenttää kantavat ruohon, aavikon ja jään. Toinen kaari täydentää setin —
+ * **yö** on aavikon toinen puoli (`2-N`) ja **tehdas** on maailma 4 — ja
+ * kiipeää sitten takaisin niiden kahden läpi joilla on maailman kovin sanasto:
+ * jään liukas lattia ja tehtaan murenevat lavat. Luu ja pilvi loistavat
+ * poissaolollaan ja se on päätös eikä unohdus: ne ovat maailmoissa 6 ja 7, eli
+ * tästä eteenpäin, ja bonusmaailma joka näyttää tulevan on juonipaljastus.
+ *
+ *   density   5-1…5-3 kantavat 9,8 / 9,0 / 10,6 merkkiä sadalla sarakkeella.
+ *             Uudet rivit pyytävät 9,0…10,6, eli maailman omalta väliltä.
+ *   maxGap    kuusi ruutua — mitattu budjetti kokonaan — paitsi jäällä viisi,
+ *             mikä on maailman 3 oma mitattu luku ja sama syy: jäällä ei ehdi
+ *             pysähtyä. Vanhat kolme eivät nimeä `maxGap`ia lainkaan, joten ne
+ *             pitävät vanhan sillatun yhdeksän ruudun kuilunsa.
+ *   minIntro  32 tavallisella lattialla, 48 jäällä.
+ *   aim       215 → 185 → 279 → **200 → 235 → 260 → 275**. Muoto: käsintehty
+ *             notko 5-2:ssa, generoitu huippu 5-3:ssa, hengähdys 5-4:ssä ja
+ *             kolmen askelen nousu. Kolmen askelen nousu on pelin pisin
+ *             sallittu, ja kaksi notkoa on kahdeksan kentän maailman muoto —
+ *             eli tässä maailmassa muoto on **pakotettu** eikä valittu:
+ *             ensimmäinen notko on jo 5-2:ssa ja 5-3:n 279 on korkeampi kuin
+ *             mihin generoitu kenttä tällä sanastolla yltää, joten toisen
+ *             notkon paikka on 5-4 ja loput on nousua.
+ */
 const WORLD5 = [
   { id: '5-1', world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3 },
   { id: '5-2', world: 'w5', theme: 'desert', width: 230, intensity: 1.0 },
   { id: '5-3', world: 'w5', theme: 'ice', width: 240, intensity: 1.35 },
+  {
+    id: '5-4', world: 'w5', theme: 'night', width: 260,
+    enemiesPer100: 9.0, maxGap: 6, aim: 200, minIntro: 32, intensity: 1.15, attempts: SEARCH,
+  },
+  {
+    id: '5-5', world: 'w5', theme: 'factory', music: 'factory', width: 250,
+    enemiesPer100: 9.6, maxGap: 6, aim: 228, minIntro: 32, intensity: 1.35, attempts: SEARCH,
+  },
+  {
+    id: '5-6', world: 'w5', theme: 'ice', width: 240,
+    enemiesPer100: 10.2, maxGap: 5, aim: 245, minIntro: 48, intensity: 1.45, attempts: SEARCH,
+  },
+  {
+    id: '5-7', world: 'w5', theme: 'factory', music: 'factory', width: 265,
+    enemiesPer100: 10.6, maxGap: 6, aim: 300, minIntro: 32, intensity: 1.55, attempts: SEARCH,
+  },
 ];
 
-const PLAN = [...WORLD1, ...WORLD3, ...WORLD5];
+/*
+ * MAAILMA 6, LUULAAKSO — ja maailma jonka oma sanasto on jo kirjoitettu
+ * ruudukkoon eikä palikoihin.
+ *
+ * Luun kaksi ehtoa (`ruleBoneSky`, `ruleBoneStands`) tekevät tästä maailmasta
+ * generaattorin ahtaimman: taivas on auki **viisi riviä** kuun ja tähtien takia,
+ * eikä mikään roiku ilmassa. Sanastosta putoaa siksi `highReward` (sen palkinto
+ * istuu rivillä 4, eli suoraan kuun läpi) ja teemalla ei ole laavaa, torvia
+ * eikä nuottipalikoita. Se on vähemmän tavaraa kuin tehtaalla, ja luku näkyy:
+ * ilman tehtaan laavaa ja putkia tämän maailman kentät nojaavat kuiluun,
+ * piikkipetiin ja murenevaan lavaan.
+ *
+ *   density   6-1…6-3 kantavat 9,8 / 8,3 / 8,7 merkkiä sadalla sarakkeella.
+ *             Uudet rivit pyytävät 8,4…9,8, eli maailman omalta väliltä.
+ *   maxGap    **viisi, ja se on maailman oma mitattu luku eikä valinta**:
+ *             6-1:n, 6-2:n ja 6-3:n jokainen kuilu on tasan viisi ruutua
+ *             leveä — kolme kenttää, kahdeksantoista kuilua, ei yhtään
+ *             poikkeusta. Käsi päätti tämän maailman hypyn jo kerran.
+ *   minIntro  32. Luun lattia on kitkaltaan tavallista maata.
+ *   aim       243 → 148 → 272 → **215 → 245 → 272 → 296**. Muoto on sama
+ *             pakotettu kuin maailmoissa 4 ja 5: ensimmäinen notko on
+ *             käsintehty (6-2), käsintehty huippu 6-3 on korkeampi kuin mihin
+ *             ensimmäinen generoitu kenttä yltää, joten toinen notko osuu
+ *             6-4:ään ja loput kolme askelta ovat nousua — täsmälleen se kolme
+ *             joka on pelin pisin sallittu.
+ */
+const WORLD6 = [
+  {
+    id: '6-4', world: 'w6', theme: 'bone', music: 'bone', width: 300,
+    enemiesPer100: 8.4, maxGap: 5, aim: 215, minIntro: 32, intensity: 1.2, attempts: SEARCH,
+  },
+  {
+    id: '6-5', world: 'w6', theme: 'bone', music: 'bone', width: 330,
+    enemiesPer100: 9.0, maxGap: 5, aim: 232, minIntro: 32, intensity: 1.45, attempts: SEARCH,
+  },
+  {
+    id: '6-6', world: 'w6', theme: 'bone', music: 'bone', width: 310,
+    enemiesPer100: 9.4, maxGap: 5, aim: 262, minIntro: 32, intensity: 1.62, attempts: SEARCH,
+  },
+  {
+    id: '6-7', world: 'w6', theme: 'bone', music: 'bone', width: 350,
+    enemiesPer100: 9.8, maxGap: 5, aim: 282, minIntro: 32, intensity: 1.7, attempts: SEARCH,
+  },
+];
+
+/*
+ * MAAILMA 7, KAASUKEHÄ — ja se maailma jossa jokainen kuoppa on pohjaton.
+ *
+ * Pilven kaksi ehtoa ovat luun peilikuva: **mikään ei seiso maassa** ja
+ * **yksikään ohut pilvi ei ole tyhjän päällä**. Ensimmäinen vie portaat
+ * (`stairs` on `X`-pyramidi), toinen vie kaiken mikä silloittaa kuopan laudalla
+ * — eli torviportin ja laavan. Jäljelle jää maailma jonka koko sanasto on
+ * hyppy, murtuva kansi ja se mitä lentää vastaan, ja maailman 7 oma lause
+ * sanoo sen jo: **jokainen kuoppa hypätään eikä yhtäkään silloiteta.**
+ *
+ *   density   7-1…7-3 kantavat 9,5 / 10,1 / 9,4 merkkiä sadalla sarakkeella —
+ *             pelin tasaisin kolmikko. Uudet rivit pyytävät 9,4…10,1.
+ *   maxGap    viisi. Sama mittaus kuin luussa: 7-1:n ja 7-3:n kuilut ovat
+ *             neljä tai viisi ruutua, ei kertaakaan kuutta.
+ *   minIntro  32.
+ *   aim       253 → 180 → 279 → **230 → 262 → 288 → 310**. Sama pakotettu muoto
+ *             kolmatta kertaa, ja huippu 310 on maailman oma: se on maailman 8
+ *             keskiarvon (301,0) yläpuolella yhtenä kenttänä mutta maailman
+ *             keskiarvo jää sen alle, mikä on juuri se ero jonka finaalin pitää
+ *             pitää — viimeinen maailma ei ole yksi kova kenttä vaan kuusi.
+ */
+const WORLD7 = [
+  {
+    id: '7-4', world: 'w7', theme: 'cloud', music: 'cloud', width: 300,
+    enemiesPer100: 9.4, maxGap: 5, aim: 230, minIntro: 32, intensity: 1.2, attempts: SEARCH,
+  },
+  {
+    id: '7-5', world: 'w7', theme: 'cloud', music: 'cloud', width: 330,
+    enemiesPer100: 9.6, maxGap: 5, aim: 250, minIntro: 32, intensity: 1.35, attempts: SEARCH,
+  },
+  {
+    id: '7-6', world: 'w7', theme: 'cloud', music: 'cloud', width: 320,
+    enemiesPer100: 9.8, maxGap: 5, aim: 265, minIntro: 32, intensity: 1.6, attempts: SEARCH,
+  },
+  {
+    id: '7-7', world: 'w7', theme: 'cloud', music: 'cloud', width: 350,
+    enemiesPer100: 10.1, maxGap: 5, aim: 273, minIntro: 32, intensity: 1.75, attempts: SEARCH,
+  },
+];
+
+const PLAN = [...WORLD1, ...WORLD3, ...WORLD4, ...WORLD5, ...WORLD6, ...WORLD7];
 
 if (IS_MAIN) {
   /*
@@ -1575,6 +1851,24 @@ if (IS_MAIN) {
    * questions and they are answered in this order: a level that breaks a rule is
    * not a candidate at any score, and among the candidates the closest to the
    * aim wins. So the loop never trades a rule for a number.
+   *
+   * HOW MANY IS A NUMBER ON THE ROW AND NOT A CONSTANT, and the reason is a
+   * measurement rather than a preference.
+   *
+   * Eighty seeds is not eighty candidates. Every seed that breaks a rule is
+   * thrown away before it is scored, and in the tightest theme most of them do:
+   * measured in the bone world, **10 of 80** built a legal `6-4` and 7 of 80 a
+   * legal `6-5`. A search over seven or ten levels is not a search, and it
+   * shows as a range rather than as an error — `6-4`'s pool topped out at 325
+   * and `6-7`'s at 214 with identical knobs, which is the seed pool talking and
+   * not the level design.
+   *
+   * The default stays 80 and that is the whole point of making it a row. Worlds
+   * 1 and 3 shipped their eight levels off an 80-seed search; widening it would
+   * find a seed a fraction closer to an aim they already hit within 1.8 points,
+   * and rewrite eight measured, committed levels for that fraction. Same
+   * argument as world 5's seed formula: the search is part of how a level was
+   * made, so a level that is already made keeps the search it was made with.
    */
   const ATTEMPTS = 80;
 
@@ -1601,7 +1895,8 @@ if (IS_MAIN) {
   for (const spec of plan) {
     let best = null;
     const seen = [];
-    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    const attempts = spec.attempts || ATTEMPTS;
+    for (let attempt = 0; attempt < attempts; attempt++) {
       const seed = seedFor(spec, attempt);
       rnd = mulberry32(seed);
       const build = {
@@ -1637,7 +1932,7 @@ if (IS_MAIN) {
       if (spec.aim === undefined) break;      // world 5: first valid seed, as before
     }
     if (!best) {
-      failures.push(`${spec.id}: ${ATTEMPTS} siementä, yksikään ei kelvannut `
+      failures.push(`${spec.id}: ${attempts} siementä, yksikään ei kelvannut `
         + `(esim. ${seen[0] || 'ei syytä'})`);
       continue;
     }
