@@ -7,6 +7,137 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.60 — kaksi pystykenttää kentiksi, ja neljä velkaa mitattavaksi
+
+### Pystykentät: 6-3 → 6-K KAIVAUTUMINEN, 7-2 → 7-T TERMIIKKI
+
+Pystytuki tehtiin aamulla eikä yksikään kenttä käyttänyt sitä. Nyt kaksi
+käyttää — ja ne **korvaavat** kentän eivätkä lisää sitä, koska kahdeksan kentän
+muoto on portti. Paikat valittiin `variety.mjs`:llä eikä mukavuudella:
+
+- **6-3 oli koko pelin vähiten uusi kenttä** (11,7 % omalle maailmalleen,
+  84,6 % muodoistaan jaettuna 6-1:n kanssa) — niin selvästi, että
+  `variety.mjs` käyttää sitä oman ansakokeensa fikstuurina.
+- **7-2 oli w7:n vähiten uusi** (17,6 %). 7-3 oli toinen 18,4 %:lla, ja ero on
+  ohut, joten toinen mittaus ratkaisi: 7-3:n `cloud_anvil` on se ylin lauta
+  josta portti mittaa maahaniskun tappavuuden. Sen purkaminen purkaisi
+  mittauksen.
+
+**Miten lasku eroaa noususta, ja missä maastossa.**
+
+| | 7-T (ylös) | 6-K (alas) |
+| --- | --- | --- |
+| mitä virhe maksaa | sivun jolla olit | kantaa **eteenpäin**, väärään paikkaan |
+| tappavia rivejä | **0** | **7** |
+| rankaiseva maasto | ei mitään — putoaminen on rangaistus | piikkilattiat, neljän rivin terassit joilta takaisin nouseminen vaatii **juoksuvauhdin** |
+| murenevat lavat | ei yhtään | kaksi — alaspäin ne ovat **ovia**, joille astutaan tahallaan |
+
+Kolme väitettä joita `validateLevel` ei tee: **ei ansoja** (vahva
+yhteys — jokaiselta saavutettavalta lavalta maali on yhä saavutettavissa,
+6-K 12/12, 7-T 16/16), **umpikujasääntö on käytössä oikeassa sisällössä**
+(6-K 3, 7-T 2 maksettua umpikujaa), ja **rangaistuksen jako mitattuna**
+(0 vastaan 7 tappavaa riviä).
+
+7-T:n muoto oli itsekin punainen: ensimmäisessä versiossa lavat olivat
+pakattua pilveä reunasta reunaan, ja `playable.mjs` sanoi **JUMISSA, 2 %
+kiivetty** — kiipeilijä hyppää kohteensa alta ja `#`:n alapinta pysäytti hypyn
+16 pikseliin.
+
+### Neljä velkaa, ja ensimmäinen kääntyi toisin päin kuin odotettiin
+
+**4-3: botti oli väärässä, ei kenttä. Kenttä ei liikkunut yhtä laattaa.**
+
+Botti luki maaston siltä riviltä jolla se **seisoi**. 4-3:ssa se laskeutuu
+kahden laatan pilarille sarakkeessa 220, ja sieltä katsottuna rivi 11 on tyhjä
+niin pitkälle kuin skannaus ulottuu — eli **askel alas ehjälle lattialle luki
+14 laatan kuiluksi**. Se ponnisti täydellä pidolla, lensi viiden laatan
+vauhdinottokaistan yli ja putosi siihen oikeaan yhdeksän laatan kuiluun jota
+sen olisi pitänyt mitata.
+
+Korjaus lukee maaston siltä riviltä jolle botti on **astumassa**, ja kolme muuta
+mitattua korjausta putosi mukana validoinnista: askeleen alas on tapahduttava
+**ilman** läpi (juoksuhiekka ei ole lattiaa, 2-3), tappava este maksaa laatan
+enemmän kuin saman levyinen kuoppa (8-2), eikä laskeutumisframella ponnisteta
+(8-2). Ja neljäs: **askelkivi** — kuilun sisällä olevalle lankulle tähtääminen,
+joka on tasan se "puuttuva liike" jonka työkalun oma varaus nimesi.
+
+Se liike oli jo **saneellut sisältöä**: `generator.js`:n `softGap` kaventaa
+jokaista maailmaa joka nimeää `maxGap`in, ja `corkGate`n lankku poistettiin
+kokonaan — molemmat siksi ettei botti osannut lankkua.
+
+**Tulos: kaikki 60 kenttää läpäistävissä voimatasolla 0**, mukaan lukien
+**2-1**, joka oli myös rikki (`VAATII TUPLAHYPYN`, sarake 264) eikä ollut
+kirjattuna mihinkään. Väitteessä ei ole poikkeuslistaa.
+
+**Kuolleita palikoita kaksi, ei seitsemää.** Kenttädatasta laskettuna vain
+`fort_blocks` ja `fort_trench` ovat käyttämättä; maailma 8 asettaa yhä muut
+viisi. Merkintä v26.08.10.55 väitti kaikkia seitsemää kuolleiksi, ja se on
+**tosi `x-F`-linnakkeista mutta epätosi pelistä**. Uusi väite nimeää neljä
+jäljelle jäävää orpoa yksitellen, joten viides punastuttaa heti.
+
+**Kontrasti:** piikkiukko 3,3 → **11,9 %**, papuparooni 3,3 → **11,6 %**,
+ummetuskorkki 7,2 → **10,8 %**, ruskea pilvi 7,4 → **10,0 %** (kynnys 8,6 %).
+Mikään muu ei repaantunut: korkkiukko sai omat värinsä koska `C.cork` on
+**pelaajan** korkki, ja se on kohdan 1 c mukaan **muodon** korjaus — litteästä
+neliöstä kartioksi. Väri oli silti välttämätön piikkiukolle: mitattuna
+täysin musta runko yltää yökamaraa vasten vain **8,9 %:iin**, koska luupiikit
+ovat neljännes laatikosta ja pitävät keskiarvon harmaana.
+
+**`oneup` poistettiin.** Sille ei ollut paikkaa: tehostuslohkosta arvottu
+lisäelämä on lohko joka ei antanut tehostusta (§5), ja salainen tiili on oikea
+**muoto** muttei oikea **määrä** — 186 tiiltä, kalibroituna 23 kolikkotiileen
+ja **kuuteen** tehostustiileen. Ratkaiseva tosiasia: **mikään 60 kentässä ei
+ole koskaan tuottanut sitä.** `Sfx.play('oneup')` jää (100 kolikkoa, korttien
+maksu).
+
+---
+
+## v26.08.10.61 — tähti suojaa vaaralta joka osuu, ja 4 ohittaa kentän
+
+### Tähti ei suojannut närästysliekiltä, ja koodi oli kahta mieltä itsensä kanssa
+
+Omistaja kuoli 4-1:ssä liekkiin tähti päällä. Syy oli epäjohdonmukaisuus eikä
+päätös: **lattian piikki on aina lukenut tähteä** (`T.SPIKE && !(p.star > 0)`),
+mutta `kind === 'hazard'` -haara ei lukenut sitä lainkaan. Tähti suojasi siis
+piikiltä lattiassa muttei liekiltä joka nousee samasta lattiasta.
+
+Kaksi kommenttia samassa tiedostossa väitti eri asiaa, ja **toinen oli koodia
+vasten väärässä**: yksi sanoi "the star covers spikes too", toinen luetteli
+piikin ja närästyksen suojaamattomien joukkoon.
+
+Raja jonka tähti vetää ei ole *vihollinen vastaan kenttä* vaan **isku vastaan
+paikka**: kuoppa, laava ja kello ovat paikkoja joihin pelaaja menee eivätkä ole
+suojattuja; piikki, närästysliekki ja papupommi osuvat pelaajaan, ja ne ovat.
+
+```
+punainen  närästysliekki ilman 2->1, tähdellä 2->1, papupommi ilman 2->1, tähdellä 2->1
+vihreä    närästysliekki ilman 2->1, tähdellä 2->2, papupommi ilman 2->1, tähdellä 2->2
+```
+
+Molemmat vaaraoliot mitataan, ei vain se jonka omistaja löysi.
+
+### `4` ohittaa kentän, kartalla yhä maailman
+
+Omistaja kysyi ohitusnäppäintä, ja syy oli tarkka: **maailmawarppi ei riitä
+testaamiseen.** Se vie maailman *alkusolmuun*, ja siitä eteenpäin `isLinkOpen`
+vaatii että jompikumpi pää on selvitetty — eli kenttään 4-3 pääsemiseksi piti
+pelata 4-1 ja 4-2 läpi, mikä on mahdotonta juuri silloin kun ohitettava kenttä
+on se joka on rikki.
+
+Sama näppäin, konteksti päättää: numerorivi on täynnä, eikä kaksi näppäintä
+joista toinen ohittaa kentän ja toinen maailman ole kahden muistamisen arvoinen.
+**Ohitus kulkee `finishLevel`in läpi** eikä oikoteitä sen ohi, joten seuraava
+polku aukeaa samalla koodilla jolla maali sen avaisi — oikotie olisi toinen tapa
+läpäistä kenttä, ja kaksi tapaa eroaa aina lopulta.
+
+Kaksi vanhaa väitettä kaatui tästä ja **molemmat oli oikeassa kaatua**: ne
+rakentavat kentän suoraan ja tarkoittivat maailmawarppia. Ne sanovat nyt
+kohteensa ääneen. Punaisesta löytyi myös ehto `pendingNode`: kenttä voi olla
+ruudulla ilman karttasolmua (päivän yritys, portin rakentamat kentät), eikä
+sellaista voi merkitä selvitetyksi.
+
+---
+
 ## v26.08.10.58 — maailma 8 kahdeksaan: seitsemän uusintaa ja PIERUKUNINGAS
 
 Omistajan muotoilu kuukausi sitten: *"shouldn't we have 7 bosses in worlds 1-7,
