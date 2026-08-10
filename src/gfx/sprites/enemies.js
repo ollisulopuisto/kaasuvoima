@@ -442,7 +442,9 @@ function stinkBody(ctx, x, y, frame, facing, angry) {
       ctx.fillRect(bx + 6, py + 4, 4, 1);
       ctx.fillRect(bx + 12, py + 4, 4, 1);
     }
-    ctx.fillStyle = 'rgba(120,80,40,0.45)';
+    /* Vana seuraa runkoa: ruskea jälki uuden kellertävän pilven perässä olisi
+     * kaksi eri kaasua. */
+    ctx.fillStyle = 'rgba(150,136,20,0.45)';
     ctx.fillRect(bx + 2, py + 12, 16, 2 + puff);
   });
 }
@@ -465,20 +467,31 @@ function corkGuyBody(ctx, x, y, frame, facing, lift = 0) {
   const py = Math.round(y);
   const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
-    ctx.fillStyle = C.corkDark;
-    ctx.fillRect(bx + 2, py + 2 - b, 12, 12);
+    /* Kumitulppa: kapea kaula, leveä kanta. Kartio on se puoli muodosta joka
+     * sanoo "tämä työnnetään johonkin", ja se on nyt siluetissa eikä värissä —
+     * vanha piirros oli tasapaksu laatikko, eli korkki vain nimeltään. */
+    ctx.fillStyle = C.bungShade;
+    ctx.fillRect(bx + 1, py + 8 - b, 14, 6 + b);
+    ctx.fillRect(bx + 3, py + 4 - b, 10, 5);
+    ctx.fillStyle = C.bungDark;
+    ctx.fillRect(bx + 2, py + 8 - b, 12, 5);
+    ctx.fillRect(bx + 4, py + 4 - b, 8, 5);
+    ctx.fillStyle = C.bung;
+    ctx.fillRect(bx + 3, py + 9 - b, 10, 3);
+    ctx.fillRect(bx + 5, py + 5 - b, 6, 4);
+    /* Korkki päälaella, `cork`in värinen: se on se osa jonka nimi on, ja se on
+     * myös se osa jonka olento ampuu. */
     ctx.fillStyle = C.cork;
-    ctx.fillRect(bx + 3, py + 3 - b, 10, 10);
+    ctx.fillRect(bx + 5, py + 1 - b, 6, 3);
     ctx.fillStyle = C.corkDark;
-    ctx.fillRect(bx + 3, py + 6 - b, 10, 1);
-    ctx.fillRect(bx + 3, py + 10 - b, 10, 1);
+    ctx.fillRect(bx + 5, py + 3 - b, 6, 1);
     ctx.fillStyle = C.white;
-    ctx.fillRect(bx + 4, py + 7 - b, 3, 3);
-    ctx.fillRect(bx + 9, py + 7 - b, 3, 3);
+    ctx.fillRect(bx + 4, py + 9 - b, 3, 3);
+    ctx.fillRect(bx + 9, py + 9 - b, 3, 3);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(bx + 5, py + 8 - b, 2, 2);
-    ctx.fillRect(bx + 10, py + 8 - b, 2, 2);
-    ctx.fillStyle = '#7a4c18';
+    ctx.fillRect(bx + 5, py + 10 - b, 2, 2);
+    ctx.fillRect(bx + 10, py + 10 - b, 2, 2);
+    ctx.fillStyle = C.bungShade;
     ctx.fillRect(bx + 4, py + 14 - b, 3, 2 + b);
     ctx.fillRect(bx + 9, py + 14 - b, 3, 2 + b);
   });
@@ -883,9 +896,9 @@ function spikeGuyBody(ctx, x, y, frame, facing, lift = 0) {
   // breathing upwards from the old rest height would have reached further.
   const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
-    ctx.fillStyle = '#3c3450';
+    ctx.fillStyle = C.spikeDark;
     ctx.fillRect(bx + 1, py + 6 - b, 14, 8 + b);
-    ctx.fillStyle = '#584c74';
+    ctx.fillStyle = C.spike;
     ctx.fillRect(bx + 2, py + 7 - b, 12, 5);
     ctx.fillStyle = C.white;
     ctx.fillRect(bx + 3, py + 9 - b, 4, 4);
@@ -897,7 +910,7 @@ function spikeGuyBody(ctx, x, y, frame, facing, lift = 0) {
     // one is a character you are meant to walk around.
     ctx.fillRect(bx + 3, py + 8 - b, 4, 1);
     ctx.fillRect(bx + 9, py + 8 - b, 4, 1);
-    ctx.fillStyle = '#2a2438';
+    ctx.fillStyle = C.spikeShade;
     const swap = frame % 2 === 0;
     ctx.fillRect(bx + (swap ? 1 : 3), py + 13, 5, 3);
     ctx.fillRect(bx + (swap ? 10 : 8), py + 13, 5, 3);
@@ -950,9 +963,23 @@ function baronBody(ctx, x, y, frame, facing, lift, hurt) {
   const px = Math.round(x);
   const py = Math.round(y);
   const bob = Math.floor(frame / 2) % 2;
-  const skin = hurt ? '#f8e0c0' : '#c8a058';
-  const coat = hurt ? '#f0c8a0' : '#6a3c58';
-  const coatDark = hurt ? '#c89870' : '#3c2032';
+  /* Iho on pelin oma `C.skin` eikä hiekansävy: vanha `#c8a058` oli autiomaan
+   * maata (`#d8a048`) neljän yksikön päässä, eli paroonin kasvot katosivat
+   * siihen dyyniin jolla hän seisoo. */
+  const skin = hurt ? '#f8e0c0' : C.skin;
+  /*
+   * Takki on paroonin massa — kaksi kolmasosaa koko ruudusta — joten se on myös
+   * se väri jonka mitta lukee. Vanha `#6a3c58` oli mitattuna **3,3 %** yön maata
+   * (`#6a5030`) vasten, eli täsmälleen sama luku: sama punainen kanava, ja
+   * pelin toiseksi huonoin vihollinen taustaansa vasten. Se ei ollut pieni
+   * asia siinä kentässä jossa hän esiintyy — papuparoonit seisovat jalustoilla
+   * autiomaan yössä, ja niiden heitto pitää lukea ennen kuin papu on ilmassa.
+   *
+   * Sama sukuun jäävä väri kylläisempänä: paroonin luumu on yhä luumu, mutta
+   * nyt se on väri eikä ruskean sävy.
+   */
+  const coat = hurt ? '#f0c8a0' : '#9c1060';
+  const coatDark = hurt ? '#c89870' : '#580834';
   flip(ctx, px, 18, facing < 0, (bx) => {
     // legs, short and planted wide
     ctx.fillStyle = coatDark;
@@ -979,11 +1006,12 @@ function baronBody(ctx, x, y, frame, facing, lift, hurt) {
     // moustache, because the face has to have one thing that is his
     ctx.fillStyle = coatDark;
     ctx.fillRect(bx + 5, py + 9, 8, 2);
-    // the hat: flat brim, low crown
-    ctx.fillStyle = '#4a2c18';
+    /* Hattu seuraa takkia samasta syystä: se on ruudun toiseksi suurin ala,
+     * ja ruskea hattu ruskean maan päällä oli puolet siitä mittausvirheestä. */
+    ctx.fillStyle = '#3c0824';
     ctx.fillRect(bx, py + 3, 18, 2);
     ctx.fillRect(bx + 4, py, 10, 3);
-    ctx.fillStyle = '#6a4424';
+    ctx.fillStyle = '#6c1044';
     ctx.fillRect(bx + 5, py + 1, 8, 1);
     // the arm, and the bean it is winding up
     if (lift > 0) {

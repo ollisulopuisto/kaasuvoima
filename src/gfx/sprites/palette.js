@@ -27,10 +27,72 @@ export const C = {
   purple: '#a04ca0',
   purpleDark: '#6a2c6a',
   gold: '#ffd048',
-  poop: '#8a5a2a',
-  poopDark: '#5c3a16',
+  /*
+   * PIIKKIUKON OMA VIOLETTI, ja se on omansa kahdesta syystä.
+   *
+   * Ensimmäinen on mitattu: piikkiukko oli 3,3 % tehtaan maata vasten
+   * (kynnys 8,6 %), koska sen vanha `#584c74` ja tehtaan maa `#6a6478` ovat
+   * sama harmaanvioletti. Toinen on se miksi tämä on uusi rivi eikä `purple`n
+   * korjaus: `C.purple` on pelaajan kukkapuvun väri (`player.js`), ja jaettu
+   * paletti tarkoittaa että yhden vihollisen korjaus maalaisi pelaajan.
+   *
+   * Kylläisyys eikä tummuus, ja sekin on mitattu. Piikit ovat luunvaaleat ja
+   * ne ovat neljännes koko ruudusta, joten pelkkä runko mustaksi jättää
+   * keskiarvon harmaaksi: **täysin mustallakin rungolla** mitta jää yön maata
+   * vasten 8,9 prosenttiin eli kynnyksen alle. Kylläinen väri pääsee sinne
+   * mihin tummuus ei — ja kylläinen violetti on sitä paitsi se mitä myrkyllinen
+   * esittää itsestään joka toisessa pelissä, eli se lukee ilman opettelua.
+   */
+  spike: '#f028c8',
+  spikeDark: '#a80c90',
+  spikeShade: '#78046c',
+  /*
+   * RUSKEA PILVI, ja se on yhä ruskea — mutta rikin ruskea eikä maan.
+   *
+   * Vanha `#8a5a2a` mitattiin **7,4 %** ruohon maata vasten ja 5,2 % yön maata
+   * vasten, kynnyksen 8,6 % alta: se oli kirjaimellisesti sama ruskea kuin se
+   * lattia jonka yllä se leijuu. Nimeen ei koskettu, koska vika ei ollut
+   * nimessä — ruskeita sävyjä on enemmän kuin yksi, ja okra on niistä se joka
+   * ei ole yhdenkään maan sävy. Mitattuna huonoin teema on nyt aavikko
+   * **10,0 %**, eli samaa luokkaa kuin kolmen muun korjatun.
+   *
+   * Miksi juuri okra eikä tummempi ruskea: pilvellä on valkoiset silmät, jotka
+   * ovat kymmenesosa ruudusta ja nostavat keskiarvoa. Tummalla rungolla
+   * keskiarvo jää yön ja ruohon maiden väliin — mitattuna 9,4 % parhaimmillaan
+   * — eli ylös on mentävä, ei alas.
+   *
+   * Nämä kaksi riviä eivät maalaa muuta: `poop` ja `poopDark` ovat koko pelissä
+   * vain ruskean pilven omat.
+   */
+  poop: '#b4a410',
+  poopDark: '#6c6004',
   cork: '#d8a860',
   corkDark: '#9c6a28',
+  /*
+   * UMMETUSKORKIN RUNKO, ja tässä on kaksi päätöstä eikä yksi.
+   *
+   * **Miksi väri ei ole `cork`.** Ummetuskorkki mitattiin 7,2 % autiomaan maata
+   * vasten, ja syy on suoraan luettavissa: `cork` on `#d8a860` ja aavikon maa
+   * `#d8a048` — sama punainen kanava, kahdeksan yksikköä vihreää erotusta.
+   * `cork`ia ei silti siirretty, koska se on jaettu: sillä on maalattu
+   * pelaajaan jäävä korkki (`drawCork`) ja kaasuletkun messinkikärki
+   * (`player.js`). Yhden vihollisen korjaus olisi maalannut pelaajan.
+   *
+   * **Miksi runko saa olla eri väri kuin korkki.** Ummetuskorkki *ampuu*
+   * korkkeja; se ei ole tehty korkista sen enempää kuin tykki on tehty
+   * kuulasta. Korkki on yhä kuvassa — se on olennon päälaki, `cork`in värinen —
+   * ja runko on se kumitulppa jossa se istuu. Muoto kantaa nimen, väri kantaa
+   * näkyvyyden, ja se on DESIGN.md kohdan 1 c oma järjestys.
+   *
+   * Sininen siksi että se on ainoa vapaa sävy: kävelijä on suolenpunainen,
+   * kuori vihreä, piikkiukko violetti, papuparooni luumu, nielu tummanpunainen,
+   * kurnuttaja turkoosi ja liekki oranssi. Ja mitattuna se on myös kaukana
+   * jokaisesta kahdeksasta maasta — maat ovat lämpimiä ja vaaleita, kylläinen
+   * sininen ei ole kumpaakaan.
+   */
+  bung: '#3060c8',
+  bungDark: '#1c3878',
+  bungShade: '#101c48',
   flame: '#f87818',
 };
 

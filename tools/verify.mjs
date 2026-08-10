@@ -8770,12 +8770,24 @@ const report = await page.evaluate(async () => {
      * they only reach full alpha where they land on the stacked outline, and a
      * puff of gas behind an enemy is not part of its body. */
     const ART = new Set([
-      '122,76,24', '248,248,248', '16,16,24',
-      '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
+      '248,248,248', '16,16,24',
+      '200,200,216', '90,80,64',
       '232,224,200', '168,152,120', '216,168,96', '156,106,40',
-      '138,90,42', '92,58,22',
-      '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
-      '106,68,36',
+      '255,208,72',
+      /* Neljä lajia, jotka menivät kontrastikynnyksen alle ja maalattiin
+       * uudestaan 10.8.2026. Vanhat sävyt lähtivät tästä listasta samalla,
+       * koska "jokainen väri jolla vihollisen runko on maalattu" on väite ja
+       * väri jota mikään ei enää maalaa tekee siitä epätoden — ja koska juuri
+       * tämä lista on se joka päättää mikä on ruumista ja mikä ei.
+       *
+       * piikkiukko: kylläinen violetti harmaanvioletin tilalle */
+      '240,40,200', '168,12,144', '120,4,108',
+      // ruskea pilvi: kellertävä myrkkyruskea maanruskean tilalle
+      '180,164,16', '108,96,4',
+      // ummetuskorkki: kumitulpan runko, ja korkki yhä sen päälaella
+      '48,96,200', '28,56,120', '16,28,72',
+      // papuparooni: luumu ruskean tilalle, hattu mukana
+      '156,16,96', '88,8,52', '60,8,36', '108,16,68', '240,184,144',
       // kurnuttaja: suo-turkoosi, joka ei ole kenenkään muun väri tässä pelissä
       '30,90,76', '52,140,110', '108,200,160', '18,60,52',
       // pöhö: suolenvärinen kaasupussi, joka korvasi ruskean kävelijän
@@ -9203,7 +9215,10 @@ const report = await page.evaluate(async () => {
   {
     const sprites = await import('/src/gfx/sprites.js');
     const { THEMES } = await import('/src/gfx/tiles.js');
-    const KINDS = ['shroom', 'oneup', 'flower', 'leaf', 'soup', 'pop', 'star'];
+    /* Kuusi eikä seitsemän: `oneup` poistettiin 10.8.2026, koska mikään pelissä
+     * ei koskaan tuottanut sitä (ks. src/gfx/sprites/items.js). Portin
+     * mittaamat esineet ovat ne jotka pelaaja voi saada. */
+    const KINDS = ['shroom', 'flower', 'leaf', 'soup', 'pop', 'star'];
     const BOX = 16;
     const W = 48; const H = 48; const OX = 16; const OY = 16;
     const PERIOD = sprites.BREATH_PERIOD;
@@ -9330,7 +9345,9 @@ const report = await page.evaluate(async () => {
      * The old pickups had eight pairs under that line and the worst of them
      * was the flower and the leaf at 29.7 %. The pair this was written for was
      * the mushroom and the 1-up: one drawing, two hues, 35.9 % apart, and the
-     * difference between one more hit and one more life.
+     * difference between one more hit and one more life. (The 1-up itself is
+     * gone since 10.8.2026 — nothing in the game ever spawned it — but the
+     * threshold it bought stays, because it is what keeps the next pair honest.)
      */
     const APART = 40;
     const pairs = [];
@@ -15140,6 +15157,262 @@ const report = await page.evaluate(async () => {
   report.failures.push(...pp.failures);
 }
 
+
+/* ---- velat: 4-3, kuolleet palikat, kontrasti, oneup ---- */
+/*
+ * Neljä velkaa, yksi lohko, ja jokainen niistä on tässä samasta syystä: ne
+ * kaikki olivat asioita jotka **joku muisti** eivätkä asioita joita mikään
+ * mittasi. 4-3:n läpäisemättömyys asui muutoslokin "tiedossa olevissa
+ * rajoituksissa", kuolleet palikat "jäi tekemättä" -listalla, neljän
+ * vihollisen kontrasti portin *mittaamatta*-rivillä ja varapallo pelkkänä
+ * hiljaisuutena. Muistiinpano kestää täsmälleen niin kauan kuin sen kirjoittaja.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  /* --- 1. jokainen kenttä on läpäistävissä voimatasolla 0 --- */
+  /*
+   * DESIGN.md kohta 5 lupaa että maareitti aukeaa pienimmällä koolla ilman
+   * yhtään tehostusta. `tools/playable.mjs` on kysynyt sitä pitkään ja
+   * vastannut siihen raporttina, ei porttina — se ei kaadu, koska sen botti
+   * on heuristiikka ja "huono botti kaataa hyvän kentän" on väärin päin.
+   *
+   * Mutta raportti jonka kukaan ei ole velvollinen lukemaan on muistiinpano, ja
+   * juuri niin kävi: 4-3 seisoi tuolla raportilla **rikkinäisenä niin kauan
+   * että siitä tuli rivi muutoslokin rajoituslistalla**. Ja koska kukaan ei
+   * lukenut listaa loppuun, 2-1 oli sen rinnalla saman lupauksen rikkojana
+   * ilman että sitä oli koskaan mainittu missään.
+   *
+   * Ero raporttiin on se että tämä ei kysy botilta mielipidettä kentästä vaan
+   * kentältä mielipidettä botista: **kaikki kuusikymmentä tai punainen.**
+   * Poikkeuslistaa ei ole, koska sellaista ei tarvita — ja jos sellainen
+   * joskus tarvitaan, se kirjoitetaan tähän nimeltä ja perusteluineen eikä
+   * muutoslokiin.
+   */
+  {
+    const rows = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { isSolid } = await import('/src/gfx/tiles.js');
+      const { levelIds } = await import('/src/data/levels.js');
+      const { runGround } = await import('/tools/level-bot.js');
+      const { isClimb } = await import('/tools/climb-bot.js');
+      const game = window.sfb3;
+      const out = [];
+      const keepFinish = game.finishLevel;
+      for (const id of levelIds()) {
+        game.state = {
+          lives: 9, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+        };
+        let finished = null;
+        game.finishLevel = (r) => { finished = r; };
+        const scene = new LevelScene(game, id);
+        game.scene = scene;
+        /* Viholliset ja vaarat pois: tämä väite koskee maastoa. Ne kuolemat on
+         * mitattu muualla ja ne ovat tunnettua kohinaa. */
+        scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        if (scene.def.boss) scene.bossDefeated = true;
+        scene.time = 9999;
+        /* Pystykentät kiipeävät eivätkä juokse; niillä on oma todisteensa
+         * `climb-bot.js`:ssä ja `playable.mjs`:ssä. Peliin ei kuulu vielä
+         * yhtään, joten tämä haara on varaus eikä poikkeus. */
+        if (isClimb(scene.def)) { out.push({ id, cleared: true, reach: 100, vertical: true }); continue; }
+        const r = runGround(scene, isSolid, 7000, () => finished);
+        out.push({ id, cleared: r.cleared, reach: r.reach, at: r.death ? r.death.tx : r.stuckAt });
+      }
+      game.finishLevel = keepFinish;
+      return out;
+    });
+    const stuck = rows.filter((r) => !r.cleared);
+    expect('jokainen kenttä on läpäistävissä voimatasolla 0',
+      stuck.length === 0,
+      stuck.length
+        ? `${stuck.length}/${rows.length} jäi: ${stuck.map((r) => `${r.id} ${r.reach} % (sarake ${r.at})`).join(', ')}`
+        : `${rows.length} kenttää, matalin eteneminen ${Math.min(...rows.map((r) => r.reach))} %`);
+  }
+
+  /* --- 2. palikkataulussa ei ole palikkaa jota mikään kenttä ei aseta --- */
+  /*
+   * Sama peruste jolla `bone_twin` poistettiin, nyt mittana: palikka jota
+   * kukaan ei saa asettaa on huonompi kuin ei palikkaa, koska se lupaa
+   * sanaston jota ei ole. Kysymys on puhtaasti datasta — kaikki soittolistat
+   * ja kaikki kaistat vastaan koko `CHUNKS` — eikä sitä siksi tarvitse
+   * muistaa.
+   *
+   * **Nimetty poikkeus, neljä kappaletta.** `chunks/fortresses.js`:n
+   * `pyre_ledge`, `crypt_ossuary`, `crypt_stair` ja `spire_squall` ovat samaa
+   * velkaa, mutta se tiedosto on toisen työn alla juuri nyt eikä tämä muutos
+   * saa koskea siihen. Ne lukevat tässä yksitellen eivätkä kuviona, joten
+   * viides orpo palikka punastaa tämän välittömästi — ja kun neljä poistuu,
+   * tämä lista poistuu niiden mukana.
+   */
+  {
+    const { CHUNKS } = await import(join(ROOT, 'src/data/chunks.js'));
+    const worlds = await Promise.all([1, 2, 3, 4, 5, 6, 7, 8]
+      .map((n) => import(join(ROOT, `src/data/levels/world${n}.js`))));
+    const defs = Object.assign({}, ...worlds.map((m) => Object.values(m)[0]));
+    const used = new Set();
+    for (const def of Object.values(defs)) {
+      for (const n of def.chunks || []) used.add(n);
+      for (const band of ['sky', 'cave']) for (const [, n] of def[band] || []) used.add(n);
+    }
+    /* Poikkeus kantaa tiedostonsa nimen, koska juuri se on sen ainoa peruste. */
+    const OWED = ['pyre_ledge', 'crypt_ossuary', 'crypt_stair', 'spire_squall'];
+    const dead = Object.keys(CHUNKS).filter((n) => !used.has(n));
+    const extra = dead.filter((n) => !OWED.includes(n));
+    expect('yksikään palikka ei ole sellainen jota mikään kenttä ei aseta',
+      extra.length === 0,
+      `${Object.keys(CHUNKS).length} palikkaa, ${used.size} käytössä, `
+      + `${dead.length} orpoa${extra.length ? `: ${extra.join(', ')}` : ''}`
+      + ` (kirjattu velka chunks/fortresses.js: ${OWED.filter((n) => dead.includes(n)).join(', ') || '—'})`);
+  }
+
+  /* --- 3. neljä vihollista, jotka olivat kontrastikynnyksen alla --- */
+  /*
+   * Portilla on ollut tämä mitta pitkään, mutta se **portitti kolme lajia ja
+   * mittasi loput**: kolme uudelleenpiirrettyä kaadetaan, muut tulostetaan
+   * rivillä "mittaamatta portissa". Se rivi sanoi 10.8.2026 aamulla
+   * piikkiukko 3,3 %, papuparooni 3,3 %, ummetuskorkki 7,2 %, ruskea pilvi
+   * 7,4 % — kynnys 8,6 % — eli neljä asiaa jotka voivat tappaa pelaajan
+   * seisoivat maassa jota vasten niitä ei erota.
+   *
+   * Ne on maalattu uudestaan, ja tämä on se väite joka pitää maalin paikallaan.
+   * Sama kaava kuin vieressä ja tarkoituksella: keskimääräinen kanavaero
+   * 255:stä, ääriviiva pois laskuista, ja kynnys luettuna aavikon omasta
+   * maa/tiili-parista eikä kirjoitettuna käsin — "vähintään yhtä erillään kuin
+   * se huonoin pari jonka kanssa peli jo elää" pysyy totena kun paletti
+   * liikkuu.
+   */
+  {
+    const rows = await page.evaluate(async () => {
+      const sprites = await import('/src/gfx/sprites.js');
+      const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
+      const W = 96; const H = 64; const OX = 32; const OY = 16;
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      /* Vain nämä neljä, ja jokainen värinsä kanssa: läpikuultavat vanat ja
+       * varjot eivät ole ruumista (sama raja kuin viereisellä portilla). */
+      const ART = new Set([
+        '248,248,248',
+        // piikkiukko: runko + luupiikit, jotka ovat jaettua sanastoa
+        '240,40,200', '168,12,144', '120,4,108',
+        '232,224,200', '168,152,120', '90,80,64',
+        // ruskea pilvi
+        '180,164,16', '108,96,4',
+        // ummetuskorkki: kumitulppa ja se korkki jonka se ampuu
+        '48,96,200', '28,56,120', '16,28,72', '216,168,96', '156,106,40',
+        // papuparooni
+        '156,16,96', '88,8,52', '60,8,36', '108,16,68', '240,184,144', '255,208,72',
+      ]);
+      const subjects = [
+        { n: 'piikkiukko', paint: () => sprites.drawSpikeGuy(g, OX, OY, 0, 1) },
+        { n: 'ruskea pilvi', paint: () => sprites.drawStinkCloud(g, OX, OY, 0, 1, true) },
+        { n: 'ummetuskorkki', paint: () => sprites.drawCorkGuy(g, OX, OY, 0, 1) },
+        { n: 'papuparooni', paint: () => sprites.drawBeanBaron(g, OX, OY, 0, 1, 0, false) },
+      ];
+      /* Kuinka monta pikseliä viimeinen mittaus luki. Tämä on ulkona siksi että
+       * `ART`-lista voi mennä hiljaa vanhaksi: väri jota lista ei tunne ei
+       * kaada mitään, se vain katoaa otoksesta. Luku tulostuu jokaisesta
+       * lajista, joten kutistunut otos näkyy ennen kuin se ehtii valehdella. */
+      let seen = 0;
+      const mean = (paint, art) => {
+        g.clearRect(0, 0, W, H);
+        paint();
+        const d = g.getImageData(0, 0, W, H).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let i = 0; i < W * H; i++) {
+          const q = i * 4;
+          if (d[q + 3] !== 255) continue;
+          const key = `${d[q]},${d[q + 1]},${d[q + 2]}`;
+          if (art && !art.has(key)) continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        seen = n;
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const tile = (ch, theme) => mean(() => drawTile(g, ch, 0, 0, theme, 3, 5, 0, ' ', {}), null);
+      const sep = (a, b) => (!a || !b ? 0
+        : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
+      const floor = sep(tile(T.GROUND, 'desert'), tile(T.BRICK, 'desert'));
+      const grounds = Object.keys(THEMES).map((th) => [th, tile(T.GROUND, th)]);
+      return {
+        floor,
+        rows: subjects.map((s) => {
+          const m = mean(s.paint, ART);
+          const px = seen;
+          let worst = { th: '?', v: 1e9 };
+          for (const [th, ground] of grounds) {
+            const v = sep(m, ground);
+            if (v < worst.v) worst = { th, v };
+          }
+          return { n: s.n, px, ...worst };
+        }),
+      };
+    });
+    const sunk = rows.rows.filter((r) => r.v < rows.floor);
+    expect('neljä huonoiten näkyvää vihollista erottuvat nyt jokaisen teeman maasta',
+      sunk.length === 0,
+      `kynnys ${rows.floor.toFixed(1)} % = aavikon maa vs tiili; `
+      + rows.rows.map((r) => `${r.n} ${r.v.toFixed(1)} % (${r.th}, ${r.px} px)`).join(', '));
+  }
+
+  /* --- 4. piirretty poimittava on sellainen jonka peli osaa antaa --- */
+  /*
+   * Varapallo oli piirretty, poimittava, äänekäs ja mitattu neljällä akselilla,
+   * eikä yksikään ruutu, lohko, vihollinen tai generaattori tuottanut sitä
+   * koskaan. Se on omanlaisensa kuollut koodi: ei haara jota ei ajeta vaan
+   * **ominaisuus jota teeskennellään**, ja se on huonompi kuin puuttuva
+   * ominaisuus, koska se lukee valmiilta jokaiselle joka avaa tiedoston.
+   *
+   * Väite on tarkoituksella yleinen eikä varapallon nimi: jokainen kuva jonka
+   * `drawItem` maalaa on kuva esineestä jonka joku voi saada. Tuottaja on
+   * lähdekoodissa `new Item(...)`, `rollPowerup`in `return` tai maalitangon
+   * `completeLevel(...)` — kolme paikkaa, ja kolme on koko lista. `Sfx.play`ta
+   * ei lasketa, ja juuri se ero on tässä se joka merkitsee: `Sfx.play('oneup')`
+   * elää yhä sadan kolikon ja korttipotin äänenä, eikä ääni ole esine.
+   */
+  {
+    const CANDIDATES = ['shroom', 'flower', 'leaf', 'soup', 'pop', 'star', 'oneup'];
+    const drawable = await page.evaluate(async (kinds) => {
+      const sprites = await import('/src/gfx/sprites.js');
+      const cv = document.createElement('canvas');
+      cv.width = 48; cv.height = 48;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const out = [];
+      for (const k of kinds) {
+        g.clearRect(0, 0, 48, 48);
+        sprites.drawItem(g, k, 16, 16, 0);
+        const d = g.getImageData(0, 0, 48, 48).data;
+        let n = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+        if (n > 0) out.push(k);
+      }
+      return out;
+    }, CANDIDATES);
+    const SOURCES = ['src/scenes/level.js', 'src/entities/enemies.js'];
+    const text = (await Promise.all(SOURCES.map((f) => readFile(join(ROOT, f), 'utf8')))).join('\n');
+    const spawnLines = text.split('\n').filter((l) => l.includes('new Item(')
+      || /\breturn '/.test(l) || l.includes('completeLevel('));
+    const spawned = new Set(CANDIDATES.filter((k) => spawnLines.some((l) => l.includes(`'${k}'`))));
+    const ghosts = drawable.filter((k) => !spawned.has(k));
+    expect('jokainen piirretty poimittava on sellainen jonka peli osaa antaa',
+      ghosts.length === 0,
+      `piirrettyjä ${drawable.length} (${drawable.join(' ')}), `
+      + `tuotettuja ${spawned.size} (${[...spawned].join(' ')})`
+      + (ghosts.length ? ` — kuvia ilman lähdettä: ${ghosts.join(', ')}` : ''));
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- velat: loppu ---- */
+
 await browser.close();
 server.close();
 
@@ -16151,6 +16424,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     });
   }
 }
+
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);

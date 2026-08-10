@@ -1115,9 +1115,6 @@ export class Player extends Entity {
         this.level.awardScore(1000, this.cx, this.y);
         break;
       }
-      case 'oneup':
-        this.level.gainLife(this.cx, this.y);
-        break;
       default:
         break;
     }

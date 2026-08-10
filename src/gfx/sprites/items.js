@@ -112,22 +112,40 @@ const SAC = [
 ];
 const SAC_CORE = erode(SAC);
 
-/**
- * VARAPALLO, the spare life: a knotted balloon full of the same gas as
- * everything else here.
+/*
+ * VARAPALLO — poistettu 10.8.2026, ja se kannattaa lukea ennen kuin sitä
+ * piirretään takaisin.
  *
- * It used to be the pierusieni painted green, which is the oldest shortcut in
- * this kind of artwork and the one that fails hardest — an extra life and an
- * extra hit are not remotely the same event, and at 16 px on a moving screen
- * the hue is the first thing to go. A balloon is a bag of gas you are keeping
- * in reserve, which is what a spare life is, and it is top-heavy with a tail
- * where every other pickup here is bottom-heavy or centred.
+ * Tässä oli solmittu ilmapallo: oma muotonsa, oma kuvionsa, oma perustelunsa.
+ * Se ei ollut huono piirros. Se oli piirros esineelle **jota mikään pelissä ei
+ * koskaan tuottanut** — ei yksikään kentän ruutu, ei yksikään lohko, ei
+ * yksikään vihollinen, ei generaattori. `Item`illa oli sille liikemalli,
+ * `Player`illa poimintahaara, portilla neljä mittausta ja tällä tiedostolla
+ * kuva; ainoa mitä puuttui oli se että pelaaja olisi voinut nähdä sen.
+ *
+ * Poisto eikä koti, ja perustelu on se että kotia ei ollut mistä ottaa:
+ *
+ *   - **Tehostuslohkoon se ei sovi.** DESIGN.md kohta 5 lupaa perustehostuksen
+ *     lähelle jokaisen kentän alkua. Lohko joka arpoo lisäelämän on lohko joka
+ *     ei antanut tehostusta — rangaistus palkinnon muodossa.
+ *   - **Salatiileen se sopisi muodoltaan mutta ei määrältään.** `brickSecret`
+ *     on paikan funktio, eli salaisuus jonka voi opetella ja näyttää
+ *     kaverille — oikea muoto löydettävälle palkinnolle. Mutta koko pelissä on
+ *     186 tiiltä, ja luvut on kalibroitu niin että niistä 23 on kolikkotiiltä
+ *     ja **6** tehostustiiltä. Tehostustiiltä harvinaisempi varapallo on yksi
+ *     tai kaksi kappaletta kuudessakymmenessä kentässä; yleisempi ohittaisi
+ *     tehostustiilen, mikä on väärin päin.
+ *   - **Kolmatta lähdettä ei kaivattu.** Lisäelämän saa jo sadasta kolikosta ja
+ *     maalitangon kolmesta kortista. Molemmat ovat *kertymiä*, molemmat on
+ *     viritetty, eikä kukaan ollut päättänyt mitä kolmas tekisi elämätaloudelle.
+ *     ROADMAP.md sanoo saman asian omin sanoin haarautuvien reittien kohdalla:
+ *     "lisäelämä on laimea".
+ *
+ * Sama peruste jolla `bone_twin` ja `fort_blocks` lähtivät: **palikka jota
+ * kukaan ei saa asettaa on huonompi kuin ei palikkaa.** Ääni (`Sfx.oneup`) jäi,
+ * koska se soi yhä sadan kolikon ja korttipotin kohdalla; kuva ja poimittava
+ * esine lähtivät, koska ne eivät soineet kenellekään.
  */
-const BALLOON = [
-  [5, 6], [3, 10], [1, 14], [0, 16], [0, 16], [0, 16],
-  [1, 14], [2, 12], [3, 10], [5, 6], [6, 4],
-];
-const BALLOON_CORE = erode(BALLOON);
 
 /**
  * PAUKKUPAPU. The bean, kept — it was already this game's own shape and the
@@ -258,45 +276,6 @@ export function drawItem(ctx, kind, x, y, tick, opts) {
     const jet = 0.3 + 0.3 * Math.sin(tick / 6);
     ctx.fillStyle = `rgba(168,224,74,${jet})`;
     ctx.fillRect(px + 6, py - 2 - Math.floor(jet * 4), 4, 3);
-    return;
-  }
-
-  if (kind === 'oneup') {
-    ctx.fillStyle = '#0c2810';
-    ctx.fillRect(px + 5, py, 6, 2);
-
-    const t = py + 1 - b;
-    ctx.fillStyle = '#0c2810';
-    paintRows(ctx, px, t, BALLOON);
-    ctx.fillStyle = '#40c840';
-    paintRows(ctx, px, t, BALLOON_CORE);
-    // The shine, big on purpose: it is the only pale mass on the sprite and it
-    // is what keeps a green balloon off a green hill.
-    ctx.fillStyle = '#b8f078';
-    ctx.fillRect(px + 4, t + 2, 4, 1);
-    ctx.fillRect(px + 3, t + 3, 3, 1);
-    ctx.fillRect(px + 2, t + 4, 3, 1);
-    ctx.fillRect(px + 2, t + 5, 2, 1);
-    ctx.fillRect(px + 3, t + 6, 2, 1);
-    ctx.fillStyle = '#f4ffd0';
-    ctx.fillRect(px + 4, t + 2, 2, 1);
-    ctx.fillRect(px + 3, t + 3, 2, 1);
-
-    // Neck, knot and the tail of string. The neck stretches, the knot and the
-    // string are nailed, so the balloon can bob without leaving the box. The
-    // knot is the widest thing below the body on purpose: a balloon without one
-    // is a leaf, and at this size the knot is the whole difference.
-    ctx.fillStyle = '#0c2810';
-    ctx.fillRect(px + 6, t + 9, 4, 3 + b);
-    ctx.fillRect(px + 5, py + 12, 6, 2);
-    ctx.fillStyle = '#40c840';
-    ctx.fillRect(px + 7, t + 9, 2, 2 + b);
-    ctx.fillRect(px + 6, py + 12, 4, 1);
-    ctx.fillStyle = '#b8f078';
-    ctx.fillRect(px + 6, py + 12, 2, 1);
-    ctx.fillStyle = '#2e8c2e';
-    ctx.fillRect(px + 9, py + 14, 3, 1);
-    ctx.fillRect(px + 11, py + 15, 5, 1);
     return;
   }
 

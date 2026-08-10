@@ -12,10 +12,49 @@
  * ajaa moottoria, ja moottori on sivulla.
  *
  * Mitä tämä botti **ei** osaa, sanottuna ääneen koska se on tuloksen tulkinta:
- * se ei osaa hypätä kelluvalta lavalta toiselle, kyykistyä, mennä putkeen,
- * potkaista kuorta eikä odottaa liikkuvaa. Sen "EI LÄPI" on siksi syy avata
- * kenttä eikä tuomio siitä.
+ * se ei osaa kyykistyä, mennä putkeen, potkaista kuorta eikä odottaa liikkuvaa.
+ * Sen "EI LÄPI" on siksi syy avata kenttä eikä tuomio siitä.
+ *
+ * ## Astinkivi, ja miksi se on nyt tässä eikä puuttuvien listalla
+ *
+ * Tuolla listalla luki 10.8.2026 asti myös *"ei osaa hypätä kelluvalta lavalta
+ * toiselle"*, ja se lause maksoi enemmän kuin miltä näytti. DESIGN.md kohta 5
+ * lupaa että maareitti aukeaa pienimmällä koolla, ja sallii kuilulle **kaksi**
+ * vaihtoehtoa: se mahtuu mitattuun juoksuhyppybudjettiin *tai siinä on
+ * astinkivi*. Botti tunsi vain ensimmäisen. Seuraus ei jäänyt raporttiin: kun
+ * botti ei osaa lankkua, lankullinen kuilu näyttää läpäisemättömältä, ja
+ * korjaus tehtiin kenttiin — `generator.js`:n `softGap` kaventaa maailmoja
+ * joissa on nimetty `maxGap`, ja `corkGate`in lankku poistettiin kokonaan
+ * ("a stepping stone the bot cannot use is worse than no stepping stone").
+ * Botin puolikas sanasto oli siis alkanut määrätä sisältöä. 4-3 oli viimeinen
+ * käsintehty kenttä joka piti kiinni koko lupauksesta, ja se oli siksi ainoa
+ * kenttä koko pelissä jonka läpäistävyyttä ei ollut todistettu.
+ *
+ * Nyt botti osaa etsiä kuilun sisältä ruudun jolle jalka mahtuu, ja tähtää
+ * siihen suljetulla silmukalla samaan tapaan kuin `tools/climb-bot.js`:
+ * hyppyä pidetään kunnes jalat ovat astinkiven pinnan yllä **ja** runko sen
+ * sarakkeen kohdalla. Pelkkä korkeus päästäisi irti liian aikaisin ja kaari
+ * toisi alas lankun kylkeen — ja lankku on puolikiinteä (`isSemi`), eli
+ * kyljestä mennään läpi.
+ *
+ * ## Askelma alas ei ole kuilu
+ *
+ * Ja tämä oli se toinen puoli, se joka teki 4-3:sta läpäisemättömän. Maasto
+ * luettiin siltä riviltä jolla botti **seisoo**. Korokkeen päällä se rivi on
+ * tyhjä niin pitkälle kuin silmä kantaa, vaikka alla olisi ehjä lattia, joten
+ * botti luki askelman alas pohjattomana kuiluna ja hyppäsi täydellä pidolla —
+ * 4-3:ssa kahden ruudun pilarilta sarakkeessa 220, viiden ruudun
+ * vauhdinottosuoran yli, suoraan siihen kuiluun jonka se olisi pitänyt mitata.
+ * `walkY` on nyt se rivi jolla kohta kävellään, ja kaikki maastoa koskevat
+ * kysymykset esitetään siltä.
+ *
+ * Näiden kahden jälkeen **jokainen kentän 60:stä on läpäistävissä voimatasolla
+ * 0** — ei vain 4-3 vaan myös 2-1, joka oli ollut kaiken aikaa samalla listalla
+ * ("tuplahypyllä läpi mutta ei ilman") ja jonka kuilu sarakkeessa 259 on
+ * kymmenen ruutua leveä ja lankullinen, eli täsmälleen sama muoto.
  */
+import { JUMP_BUDGET } from '../src/data/pacing.js';
+import { info, isSemi } from '../src/gfx/tiles.js';
 
 export const blankInput = () => ({
   left: false, right: false, up: false, down: false, jump: false, run: false,
@@ -41,9 +80,12 @@ export function runGround(scene, isSolid, frames, finished) {
   const input = makeInput();
   let prevJump = false;
   let hold = 0;
+  /** Astinkivi jota kohti ollaan hyppäämässä, tai null. */
+  let aim = null;
   let maxX = scene.player.x;
   let stuckAt = null;
   let stuckFor = 0;
+  let onGroundFor = 0;
   let death = null;
 
   for (let f = 0; f < frames && !finished(); f++) {
@@ -52,7 +94,57 @@ export function runGround(scene, isSolid, frames, finished) {
     const aheadX = Math.floor((p.x + p.w + 6) / 16);
     const solid = (tx, ty) => isSolid(scene.tileAt(tx, ty));
     const lethal = (tx, ty) => '^W'.includes(scene.tileAt(tx, ty));
+    /* Jalansija on kiinteä ruutu **tai lankku**. Lankku on puolikiinteä: sen
+     * päälle laskeudutaan ja alta mennään läpi, eli se on jalansija täsmälleen
+     * siinä suunnassa jossa botti sitä tarvitsee. */
+    const stand = (tx, ty) => {
+      const ch = scene.tileAt(tx, ty);
+      return isSolid(ch) || isSemi(ch);
+    };
+    /**
+     * Mille riville jalka laskeutuisi sarakkeessa `tx`, jos siitä käveltäisiin
+     * suoraan eteenpäin — tai null jos sarake ei ole askelma vaan kuilu.
+     *
+     * Kaksi rajaa, ja molemmat ovat mitattuja eivätkä makuasioita:
+     *
+     *   - **Alaspäin katsotaan `wallTiles` riviä**, eli täsmälleen niin
+     *       syvälle kuin mitattu hyppy nostaa takaisin. Syvempi pudotus ei ole
+     *       askelma vaan päätös, eikä sitä kuljeta huomaamatta. Sama raja
+     *       pitää kolmikaistaiset kentät (1-2, 2-2, 3-2, 4-2) erossa toisistaan:
+     *       kaista on 15 riviä, joten alempi kaista ei näy tästä.
+     *   - **Askelman läpi on astuttava ilmaa.** Laavaoja jonka rivi 14 on `W`
+     *       on kuilu eikä askelma, ja juoksuhiekan alla oleva lattia ei ole
+     *       lattia lainkaan: hiekka ei ole kiinteä eikä tappava vaan omassa
+     *       joukossaan (`SINK`, ks. `rules.js`), joten pelkkää kiinteyttä
+     *       katsova haku putoaa sen läpi ja lukee upottavan kuopan askelmaksi.
+     *       Mitattuna se oli 2-3:n sarake 263: kaksi ruutua hiekkaa kahden
+     *       kivilohkon välissä, alla ehjä lattia, ja botti käveli sisään.
+     */
+    const stepDown = (tx) => {
+      for (let ty = footY; ty <= footY + JUMP_BUDGET.wallTiles; ty++) {
+        const t = info(scene.tileAt(tx, ty));
+        if (t.hazard || t.quicksand) return null;
+        if (t.solid || t.semi) return ty;
+      }
+      return null;
+    };
+    /* Maasto luetaan tältä riviltä; `wall` ei, koska seinä on este *omalla*
+     * korkeudella eikä sen lattian korkeudella jolle ollaan astumassa.
+     *
+     * Kolme saraketta eikä yksi, ja syy on mitattu: 2-1:ssä korokkeen reuna on
+     * niin lähellä että pelkkä yhden ruudun kurkistus osuu vielä korokkeeseen
+     * itseensä, jolloin rivi ei vaihdu ja botti irtoaa korokkeelta täydellä
+     * pidolla — sama vika ja sama kuolema kuin 4-3:ssa, sarakkeessa 264.
+     * Syvin löytyvä lattia kolmen sarakkeen sisällä on se jolla kohta
+     * kävellään. */
+    let walkY = footY;
+    for (let d = 0; d <= 2; d++) {
+      const row = stepDown(aheadX + d);
+      if (row !== null && row > walkY) walkY = row;
+    }
     const wall = solid(aheadX, footY - 1) || solid(aheadX, footY - 2);
+    onGroundFor = p.onGround ? onGroundFor + 1 : 0;
+    if (p.onGround) aim = null;
 
     /* Look several tiles ahead rather than at the next one.
      *
@@ -64,11 +156,21 @@ export function runGround(scene, isSolid, frames, finished) {
     let obstacle = -1;
     for (let d = 0; d <= 5 && obstacle < 0; d++) {
       const tx = aheadX + d;
-      if (lethal(tx, footY) || lethal(tx, footY - 1)) obstacle = d;
-      else if (!solid(tx, footY) && !solid(tx + 1, footY)) obstacle = d;
+      if (lethal(tx, walkY) || lethal(tx, walkY - 1)) obstacle = d;
+      else if (!solid(tx, walkY) && !solid(tx + 1, walkY)) obstacle = d;
     }
-    // Two tiles of run-up is where a running jump clears the most.
-    const takeOff = p.onGround && (wall || (obstacle >= 0 && obstacle <= 2));
+    /* Two tiles of run-up is where a running jump clears the most.
+     *
+     * Laskeutumisframeella ei irrota, ja se on saman lauseen toinen puoli.
+     * Botti otti hypyn siltä frameelta jolla se osui maahan, sillä vauhdilla
+     * jonka edellinen kaari sattui jättämään — eli ilman sitä vauhdinottoa
+     * jonka tämä rivi sanoo tarvittavan. Mitattuna se oli 8-2:n sarake 117:
+     * kahden ruudun piikkipari, kaksi ja puoli ruutua vauhtia, ja hyppy joka
+     * jäi ruudun vajaaksi. Kaksi framea maata ennen irtoamista maksaa
+     * kuilussa nolla, koska `obstacle === 0` on yhä irtoamisen viimeinen
+     * hetki eikä sitä hetkeä siirretä. */
+    const takeOff = p.onGround
+      && (wall || (obstacle >= 0 && obstacle <= 2 && (obstacle === 0 || onGroundFor >= 2)));
 
     /* How far is it across? A player looks at the gap and jumps roughly that
      * hard. The bot used to hold jump for the full 16 frames every single
@@ -79,10 +181,44 @@ export function runGround(scene, isSolid, frames, finished) {
       let span = 0;
       if (obstacle >= 0) {
         const start = aheadX + obstacle;
-        while (span < 14 && (!solid(start + span, footY)
-          || lethal(start + span, footY) || lethal(start + span, footY - 1))) span++;
+        let deadly = false;
+        while (span < 14 && (!solid(start + span, walkY)
+          || lethal(start + span, walkY) || lethal(start + span, walkY - 1))) {
+          if (lethal(start + span, walkY) || lethal(start + span, walkY - 1)) deadly = true;
+          span++;
+        }
+        /* Tappava este maksaa yhden ruudun enemmän kuin saman levyinen kuoppa,
+         * ja perustelu on jo kirjoitettu auki `generator.js`:ään: kuopan
+         * takareuna on kieleke jolle voi raapia itsensä hyppy jo käytettynä,
+         * piikkipedin takareuna on lattiaa jonka **yli** on laskeuduttava.
+         * Sama luku ja sama syy — se oli vain kenttien mitoituksessa eikä
+         * siinä botissa joka niitä koettelee. */
+        if (deadly) span++;
+        /* Onko kuilussa astinkivi?
+         *
+         * Kysytään vasta kun kuilu on **mitattua kantamaa** leveämpi, ja se
+         * kynnys on `softGapTiles` eikä `gapTiles`. Ero on se mitä kumpikin
+         * luku tarkoittaa: `gapTiles` (6) on suunnittelubudjetti marginaaleineen,
+         * `softGapTiles` (9) on se mitä juoksuhyppy oikeasti kantaa. Botti ei
+         * suunnittele kenttää vaan yrittää päästä yli, joten sen kysymys on
+         * jälkimmäinen — ja mitattuna se on myös ainoa joka toimii: `gapTiles`
+         * -kynnyksellä botti alkoi tähdätä lankkuihin joiden **yli** se olisi
+         * hypännyt, ja 4-3:n oma yhdeksän ruudun kuilu sarakkeessa 115 muuttui
+         * suorasta hypystä laskeutumiseksi lankulle ja kuolemaksi seuraavaan
+         * laavaojaan sarakkeessa 135.
+         *
+         * Lähin sarake ensin ja siinä alin yletettävä ruutu, koska helpoin
+         * hyppy on se jonka pelaajakin ottaisi. Nousun yläraja on mitattu eikä
+         * arvattu: `wallTiles` on sama luku jolla kenttäsäännöt päättävät
+         * kuinka korkealle hyppy nostaa. Katon pitää olla auki, tai tähdätään
+         * seinään. */
+        for (let i = 0; span > JUMP_BUDGET.softGapTiles && i < span && !aim; i++) {
+          for (let ty = walkY - 1; ty >= footY - JUMP_BUDGET.wallTiles && !aim; ty--) {
+            if (stand(start + i, ty) && !stand(start + i, ty - 1)) aim = { tx: start + i, ty };
+          }
+        }
       }
-      hold = wall ? 16 : Math.max(5, Math.min(16, 3 + span * 1.1)) | 0;
+      hold = wall || aim ? 16 : Math.max(5, Math.min(16, 3 + span * 1.1)) | 0;
     }
     // Spend an air jump when falling with nothing solid below: that is what
     // the mushroom is for, and a bot that never uses it measures the wrong
@@ -91,7 +227,14 @@ export function runGround(scene, isSolid, frames, finished) {
       || solid(Math.floor(p.cx / 16), footY + 2);
     const airSave = !p.onGround && p.vy > 1.5 && !groundBelow
       && p.airJumps < p.airJumpsMax;
-    const wantJump = takeOff || airSave || (hold > 0 && p.vy < 0);
+    /* Suljettu silmukka astinkiveä kohti: pidetään kunnes jalat ovat sen
+     * pinnan yllä JA runko sen sarakkeen kohdalla. Kumpikin ehto yksin
+     * riittäisi päästämään irti liian aikaisin — pelkkä korkeus tuo alas
+     * lankun kylkeen, pelkkä sarake alittaa sen. */
+    const reaching = !!aim && !p.onGround
+      && (p.y + p.h > aim.ty * 16 || p.cx < aim.tx * 16);
+    const wantJump = takeOff || airSave
+      || (hold > 0 && p.vy < 0 && (!aim || reaching));
     if (hold > 0) hold--;
 
     input.held = blankInput();

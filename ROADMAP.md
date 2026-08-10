@@ -1041,13 +1041,12 @@ Nämä ovat tiedossa ja kirjattu, eikä yhtäkään ole aloitettu.
 
 - **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
   rytmiä. Suurin mallintamaton termi.
-- **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan**, kaikki samaa muotoa:
-  `fort_blocks`in tiilihylly (rivi 9) ja sen yllä oleva holvi (rivi 6) jättävät
-  väliin kaksi riviä kun tarvitaan kolme. Osuu kenttiin 1-F, 2-F ja 3-F.
-  Validaattori ei huomauta siitä syystä joka on myös vastaus siihen onko se
-  bugi: **hylly ei ole maareitillä**, alla oleva lattia on kuljettava, eikä
-  kenttä ole missään koossa mahdoton. Isoin pelaaja vain törmää näkymättömään
-  kattoon jos kiipeää sinne.
+- ✔ **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan — poistui 10.8.2026.**
+  Ne olivat kaikki `fort_blocks`in tiilihyllyä (rivi 9) ja sen yllä olevaa
+  holvia (rivi 6), ja ne ratkesivat poistamalla eivätkä myöntämällä: 1-F, 2-F
+  ja 3-F rakentavat linnakkeensa omista sanastoistaan, joten `fort_blocks` oli
+  palikka jota mikään kenttä ei enää asettanut. Se lähti kuolleena koodina, ja
+  `verify.mjs` vaatii nyt ettei taulussa ole yhtään sellaista palikkaa.
 - ✔ **Yön tiili ja maa erotettu 9.8.2026** (v26.08.09.40). Pari oli mitattuna
   0,4 % — heikoin koko pelissä — ja korjaus tuli sieltä mistä oli ennustettukin,
   paletista eikä muodosta. Omistajan päätöksellä liikkui **vain** `night.brick`
@@ -1083,9 +1082,15 @@ Nämä ovat tiedossa ja kirjattu, eikä yhtäkään ole aloitettu.
 
 - Botti `verify.mjs`:ssä osaa vain juosta ja hypätä, joten sen kuolemat
   vihollisiin ovat normaalia. Vain FAILURES-rivit merkitsevät.
-- `playable.mjs` sanoo **4-3: EI LÄPI EDES TUPLAHYPYLLÄ** (kuilu sarakkeessa
-  235). Sama botin rajoitus: reitti kulkee kelluvien lavojen yli, ja botti
-  hyppää suoraan eteenpäin. Todennettu vanhaksi ajamalla `230dacc` erikseen.
+- ✔ **4-3 ei ollutkaan rikki, botti oli** — selvitetty 10.8.2026. Kenttä ei
+  liikkunut ruutuakaan. Botti luki maastoa siltä riviltä jolla se *seisoi*,
+  joten kahden ruudun pilarilta sarakkeessa 220 askelma alas näytti 14 ruudun
+  kuilulta; se hyppäsi täydellä pidolla, lensi viiden ruudun
+  vauhdinottosuoran yli ja putosi siihen kuiluun jonka se olisi pitänyt
+  mitata. Samalla korjauksella aukesi **2-1**, joka oli ollut listalla
+  "tuplahypyllä läpi mutta ei ilman" ilman että kukaan oli sitä maininnut.
+  Kaikki 60 kenttää ovat nyt läpäistävissä voimatasolla 0, ja se on portti
+  `verify.mjs`:ssä eikä raportti.
 - **Ajastettua ääntä ei voi mitata kellolla.** `sprout`in sisällä on tauko,
   joten "onko väylä hiljaa" pitää kysyä kahdelta peräkkäiseltä ikkunalta ja
   samalta ikkunalta jolla tulos mitataan (v26.08.09.26). Jos uusia pitkiä

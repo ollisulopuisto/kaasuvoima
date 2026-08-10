@@ -269,10 +269,12 @@ function floorProfile(at, w) {
  *
  * That scope is a decision and not laziness. A shelf with two rows over it is
  * not a trap: a body that does not fit above it cannot get onto it in the first
- * place, so it is unreachable at that size rather than sealed. `fort_blocks`
- * (1-F, 2-F, 3-F) and the block row in `tomb_cave` are exactly that shape, all
- * four verified by hand, and a rule that fired on them would be switched off
- * within the week and then it would protect nothing.
+ * place, so it is unreachable at that size rather than sealed. The block row in
+ * `tomb_cave` is exactly that shape, verified by hand, and a rule that fired on
+ * it would be switched off within the week and then it would protect nothing.
+ * (`fort_blocks` was the other example and the one this paragraph was written
+ * for; se poistettiin 10.8.2026 kuolleena palikkana, eli sen kuusi kohtaa
+ * ratkesivat poistamalla eivätkä myöntämällä.)
  */
 function checkHeadroom(at, floor, from, to, problems, where) {
   for (let x = from; x <= to; x++) {

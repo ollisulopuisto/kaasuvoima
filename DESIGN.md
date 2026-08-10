@@ -16,7 +16,7 @@ joskus kysyy, tässä on kirjattuna mitä on käytetty ja mitä ei.
 | Grafiikka | Piirretään ajonaikaisesti kokonaislukusuorakulmioina canvasille (`src/gfx/`). Peli ei lataa yhtään kuvatiedostoa. **Myös muodot ovat omia, eivät vain pikselit** (kohta 1 c). | Ei sprite-ripejä, ei tileset-kuvia, ei skannattua pikselitaidetta mistään pelistä — eikä käsin piirrettyä kopiota sellaisesta. |
 | Äänet ja musiikki | Syntetisoidaan WebAudiolla ajonaikaisesti (`src/core/audio.js`). Repossa ei ole yhtään äänitiedostoa. Melodiat ovat omia **tai** tekijänoikeudesta vapaata sävelmistöä, nimettynä (kohta 1 b). | Ei sampleja, ei NSF/MIDI-rippejä, ei transkriptioita **suojatuista** sävelmistä. |
 | Kentät | Käsin kirjoitettuja ASCII-palikoita (`src/data/chunks.js`) ja niistä koottuja kenttiä, sekä generoituja kenttiä (kohta 3). | Ei yhdenkään olemassa olevan pelin kenttäkarttoja. |
-| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti, paukkupapu, piikkiukko, papuparooni, kurnuttaja, sääherra, luuranko, **pöhö**, **pönttö**, **nielu**, **virvatuli**, **varapallo**. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
+| Nimet ja hahmot | Omia: Super Fart Bros, Pieruprinssi, ummetuskorkki, hernekeitto, närästysliekki, ruskea pilvi, kaasulehti, paukkupapu, piikkiukko, papuparooni, kurnuttaja, sääherra, luuranko, **pöhö**, **pönttö**, **nielu**, **virvatuli**. | Ei Nintendon hahmonnimiä, hahmoja, logoja eikä tunnuksia. |
 
 Repon ainoa binääri on `card.png`, linkkien esikatselukuva. Sekin on generoitu
 **pelistä itsestään** (`node tools/make-card.mjs` valokuvaa alkuruudun), koska
@@ -109,7 +109,6 @@ kurnuttaja:
 | esine | mikä se on nyt |
 | --- | --- |
 | pierusieni | tuhkelo: pelkkä itiöpussi ja reikä päällä, ei lakkia eikä jalkaa |
-| varapallo (1-up) | solmittu ilmapallo, eli varakaasu taskussa |
 | pierukukka | torvimainen kukka, aukko osoittaa jonnekin |
 | kaasulehti | pavun parilehti, kaksi lehdykkää kuin siivet |
 | hernekeitto | pata ja kauha, kasa keittoa reunan yli |
@@ -133,6 +132,15 @@ mielipide. Siksi `tools/verify.mjs` mittaa neljä asiaa numeroina:
    pikselillä, tähti ruohon tiilestä nollalla.)
 4. **Hengitys.** Jokainen esine liikkuu pelin jaetulla hengityskellolla.
    (Vanha: nolla seitsemästä.)
+
+**Esineitä on kuusi eikä seitsemän, 10.8.2026 alkaen.** *Varapallo* piirrettiin
+tässä samassa erässä ja se oli hyvä piirros; se oli vain piirros esineelle jota
+mikään pelissä ei koskaan tuottanut — ei ruutu, ei lohko, ei vihollinen, ei
+generaattori. Se poistettiin samalla perusteella jolla `bone_twin` poistettiin,
+ja perustelu siitä miksi sille ei löytynyt kotia on kirjoitettu auki sinne mistä
+kuva lähti (`src/gfx/sprites/items.js`). Lisäelämän saa yhä sadasta kolikosta ja
+maalitangon kolmesta kortista, ja `Sfx.oneup` soi molemmissa. Yllä oleva
+mittaus 35,9 % jäi tekstiin, koska se on se havainto joka osti rajan 40 %.
 
 Mitattu, ei muistettu — ja mittaus on tässä nimenomaan se osa joka tekee
 taulukon ensimmäisestä rivistä tarkistettavan eikä uskonasian.
