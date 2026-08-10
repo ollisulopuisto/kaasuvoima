@@ -207,7 +207,7 @@ const DEADLY = new Set(['W']);
  *
  * So it is its own set, with its own rule (`checkQuicksand`) and one line in
  * `checkGaps`. **Kept character for character identical with the copy in
- * `tools/gen-levels.mjs`**, the same way `SOLID` is, and `verify.mjs` compares
+ * `src/data/generator.js`**, the same way `SOLID` is, and `verify.mjs` compares
  * the two lines as strings — a copy nobody checks is a copy that has already
  * drifted.
  */

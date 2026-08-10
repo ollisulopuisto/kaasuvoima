@@ -19,6 +19,8 @@ import {
   bestFor, setBest, formatTime, formatDelta,
 } from '../core/timeattack.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
+/* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
+import { DAILY_TITLE } from '../core/daily.js';
 
 export const VIEW_W = 320;
 export const VIEW_H = 208;
@@ -2888,7 +2890,10 @@ export class LevelScene {
     drawText(ctx, `SFB *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
 
-    drawText(ctx, `MAAILMA ${this.id}`, 196, y + 6, { color: '#8fe04a' });
+    /* Päivän kenttä ei ole missään maailmassa, joten se kertoo nimensä. Mitattu
+     * että se mahtuu: 12 merkkiä * 6 px = 72 px, 196 + 72 = 268, ja oikealle
+     * tasattu 7-numeroinen pistelukema alkaa 272:sta. */
+    drawText(ctx, this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`, 196, y + 6, { color: '#8fe04a' });
     const timeColor = this.time <= 100 ? (Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff') : '#ffffff';
     drawText(ctx, `AIKA ${padNum(this.time, 3)}`, 196, y + 17, { color: timeColor });
     if (this.race) this.drawSplit(ctx, y);

@@ -6,10 +6,16 @@ import { normalizePower, POWER_NAMES } from '../entities/player.js';
 
 /** The "MAAILMA 1-1 / SFB x 4" card shown before every level. */
 export class InterludeScene {
-  constructor(game, levelId, next) {
+  /**
+   * @param {string} [label] mitä kortissa lukee, kun "MAAILMA <tunnus>" ei ole
+   *   totta. Päivän pierun kenttä ei ole missään maailmassa eikä sen tunnus ole
+   *   kenttänumero, joten se kertoo nimensä itse.
+   */
+  constructor(game, levelId, next, label = null) {
     this.game = game;
     this.levelId = levelId;
     this.next = next;
+    this.label = label;
     this.tick = 0;
   }
 
@@ -32,7 +38,7 @@ export class InterludeScene {
   draw(ctx) {
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, 0, 320, 240);
-    drawText(ctx, `MAAILMA ${this.levelId}`, 160, 84, {
+    drawText(ctx, this.label || `MAAILMA ${this.levelId}`, 160, 84, {
       color: '#ffffff', align: 'center', shadow: '#303048',
     });
     const power = normalizePower(this.game.state.power);

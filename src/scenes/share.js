@@ -178,10 +178,25 @@ export class ShareScene {
     this.busy = false;
     this.error = '';
     this.entry = bragEntry(back);
-    this.text = shareText(this.entry);
+    /*
+     * KOHTAUS SAA KERTOA OMAN RIVINSÄ, ja se on yksi ehto eikä lista ruutuja.
+     *
+     * Päivän pierun tulos ei ole pistetaulun rivi: se on päivän tulos, ja
+     * pistetaulun paras on siitä eri asia. Ruutu joka tuntee kaksi kohtausta
+     * nimeltä on se tapa jolla tämä tiedosto alkaisi tietää muista tiloista,
+     * joten kysytään sen sijaan: onko sillä ruudulta josta tänne tultiin oma
+     * rivi kerrottavana.
+     *
+     * Ja kun on, **linkki on pelkkä peliosoite**. Haastelinkki kantaa
+     * pistetaulun tuloksen (`?s=…`), ja se olisi eri tulos kuin se joka rivissä
+     * lukee — teksti ja linkki eri mieltä samasta pelaajasta on pahempi kuin
+     * linkki ilman tulosta.
+     */
+    const own = back && typeof back.shareLine === 'function' ? back.shareLine() : null;
+    this.text = own || shareText(this.entry);
     // `url` on se mikä lähtee, `shown` se mikä lukee laatikossa. Ne ovat sama
     // asia silloin kun kehuttavaa ei ole, ja eri asia silloin kun on.
-    this.url = bragUrl(this.entry);
+    this.url = own ? shareUrl() : bragUrl(this.entry);
     this.shown = boxUrl();
     this.carries = this.url !== this.shown;
     this.how = shareCapability();
