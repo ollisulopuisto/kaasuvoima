@@ -13646,7 +13646,11 @@ const report = await page.evaluate(async () => {
         sprites.drawBeanBomb(g, 20, 40, 12);
         check('beanbomb');
       }
-      for (const v of [0, 1, 2, 3, 4]) {
+      /* Kaikki seitsemän, ei viisi. Lista oli `[0,1,2,3,4]` siihen asti kun
+       * pomot piirrettiin uusiksi, eli sääherra ja kuningas — ne kaksi jotka
+       * tulivat viimeisenä ja joita kukaan ei ollut katsonut — olivat ainoat
+       * joiden piirtoa tämä ei koskaan ajanut. */
+      for (const v of [0, 1, 2, 3, 4, 5, 6]) {
         sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
         check(`boss ${v} spiny`);
       }
@@ -13661,6 +13665,63 @@ const report = await page.evaluate(async () => {
       }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));
+
+      /*
+       * JOKAINEN POMO ON OMAN MUOTOINEN, JA SE MITATAAN VÄRIT POIS OTETTUINA.
+       *
+       * Pomot olivat vuoteen asti yksi piirros ja seitsemän väriä: sama neliöpää,
+       * sama silmäpari, sama suu, samat valkoiset kädet, ja erona hattu ja sävy.
+       * Sen huomasi vasta kun ne pani vierekkäin — eli juuri sellainen vika jota
+       * silmä ei löydä koodia lukemalla, ja jota mikään portti ei kysynyt.
+       *
+       * Väite on siksi **siluetista eikä väristä**: jokainen pomo piirretään
+       * läpinäkyvälle pohjalle, alfa pelkistetään maskiksi, ja jokainen pari
+       * verrataan leikkaus/yhdiste-suhteella. Väri ei osallistu mittaukseen
+       * lainkaan, koska väri on se puolustus jonka takana vanha muoto piileskeli
+       * — ja koska pelaaja lukee hahmon muodosta ennen kuin ehtii lukea sävyn.
+       *
+       * Kynnys 0,82. Mitattu pahin pari on nyrkkeilijä vs. pöhö **0,771**, eli
+       * varaa on 0,05; vanha jaettu vartalo olisi ollut lähellä ykköstä, joten
+       * tämä ei ole raja joka menee läpi vahingossa. Jos joku joskus piirtää
+       * kaksi pomoa samasta rungosta, tämä kaatuu ennen kuin se on kentässä.
+       */
+      {
+        const W = 40;
+        const H = 40;
+        const maskOf = (v) => {
+          const c = document.createElement('canvas');
+          c.width = W;
+          c.height = H;
+          const gg = c.getContext('2d');
+          sprites.drawBoss(gg, 4, 4, 12, 1, false, v, 1, 0);
+          const d = gg.getImageData(0, 0, W, H).data;
+          const m = new Uint8Array(W * H);
+          for (let i = 0; i < W * H; i++) m[i] = d[i * 4 + 3] > 8 ? 1 : 0;
+          return m;
+        };
+        const masks = [0, 1, 2, 3, 4, 5, 6].map(maskOf);
+        let worst = { a: -1, b: -1, iou: 0 };
+        for (let a = 0; a < masks.length; a++) {
+          for (let b = a + 1; b < masks.length; b++) {
+            let inter = 0;
+            let uni = 0;
+            for (let i = 0; i < W * H; i++) {
+              const x = masks[a][i];
+              const y = masks[b][i];
+              if (x && y) inter++;
+              if (x || y) uni++;
+            }
+            const iou = uni ? inter / uni : 1;
+            if (iou > worst.iou) worst = { a, b, iou };
+          }
+        }
+        const empty = masks.findIndex((m) => m.reduce((s, v) => s + v, 0) < 100);
+        expect('jokainen pomo on oman muotoinen, väri pois otettuna',
+          empty < 0 && worst.iou < 0.82,
+          empty >= 0
+            ? `pomo ${empty} on käytännössä tyhjä — piirto ei tuottanut siluettia`
+            : `pahin pari ${worst.a} vs ${worst.b}: ${worst.iou.toFixed(3)}, kynnys 0,82`);
+      }
     }
   }
 
