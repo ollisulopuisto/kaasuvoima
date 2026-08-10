@@ -64,6 +64,7 @@ näppäimistöasettelu ei siirrä niitä.
 | 7 | kuvaefektit: ei efektejä → hehku → kuvaputki |
 | 8 | vie pelidata tiedostoon (JSON) |
 | 9 | debug-ruutu: fps, framebudjetti, entiteetit, pelaajan tila, soiva raita, lämpökartta |
+| 5 | **aika-ajossa**: nollaa kentän ennätysajat (kysyy varmistuksen) |
 
 F5 / F8 / F6 / F3 toimivat myös, jos käyttöjärjestelmä ei vie niitä — macOS vie.
 

@@ -17,6 +17,10 @@ import { takeChallenge } from './core/challenge.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
 import { PostFX, PRESET_NAMES } from './gfx/postfx.js';
 import { Touch, LAYOUT_NAMES } from './core/touch.js';
+import {
+  PAUSE_TITLE, PAUSE_KEYS, NO_SAVESTATES, CONFIRM_RESET, TIMES_CLEARED,
+  NOTHING_TO_CLEAR, bestTimes, clearBestTimes,
+} from './core/timeattack.js';
 
 const W = 320;
 const H = 240;
@@ -55,6 +59,15 @@ class Game {
      * koska seuraavalla kerralla ensimmäinen ele voi hyvinkin olla näppäin. */
     this.audioHintOff = false;
     this.pendingNode = null;
+
+    /* AIKA-AJO. **Vain muistissa** ja tarkoituksella: tila on valinta jonka
+     * tekee se joka istuu koneen ääressä juuri nyt, ei ominaisuus jonka
+     * tallennus muistaa puolesta. Parhaat ajat ovat tallennuksessa, tila ei —
+     * eli seuraava lataus alkaa tavallisena pelinä ja ajat ovat silti
+     * tallessa. Ks. `startTimeAttack` ja core/timeattack.js. */
+    this.timeAttack = false;
+    /* Framea joina nollauksen vahvistus on voimassa. Ks. `resetBestTimes`. */
+    this.resetArmed = 0;
 
     /* Kaverin tulos, jos tänne tultiin haastelinkistä. Se asetetaan
      * käynnistyksessä ja elää **vain muistissa**: haasteen vastaanotto ei
@@ -107,7 +120,57 @@ class Game {
   }
 
   toTitle() {
+    /* Alkuruutu on se paikka josta tila valitaan, joten se on myös se paikka
+     * jossa valinta raukeaa. Ilman tätä peli poikki -ruudun kautta palaava
+     * pelaisi seuraavan kierroksen aika-ajossa valitsematta sitä. */
+    this.timeAttack = false;
+    this.resetArmed = 0;
     this.setScene(new TitleScene(this));
+  }
+
+  /**
+   * AIKA-AJO päälle ja kentille.
+   *
+   * Sama peli, samat kentät, sama pistelasku — tila lisää neljä sääntöä eikä
+   * muuta mitään olemassa olevaa: jokaisesta kentästä jää paras aika, jako
+   * kertoo kesken kentän ollaanko sitä edellä, tilaa ei ladata, ja kello käy
+   * myös taukovalikossa.
+   */
+  startTimeAttack() {
+    this.timeAttack = true;
+    if (Save.exists()) this.continueGame();
+    else this.newGame();
+  }
+
+  /**
+   * Ajat nollaan, mutta vasta kysymyksen jälkeen.
+   *
+   * Yksi painallus joka pyyhkii kaikki 60 aikaa on ansa, ja peruutusta ei ole.
+   * Toinen painallus on halvempi kuin väärä ensimmäinen. Vahvistus vanhenee
+   * itsestään kolmessa sekunnissa, koska aseistettu näppäin joka jää päälle on
+   * sama ansa hitaammin.
+   *
+   * @returns 'off' | 'empty' | 'arm' | 'cleared' — mitä painallus teki.
+   */
+  resetBestTimes() {
+    if (!this.timeAttack) return 'off';
+    if (Object.keys(bestTimes(this.state)).length === 0) {
+      this.toast(NOTHING_TO_CLEAR);
+      Sfx.play('bump');
+      return 'empty';
+    }
+    if (this.resetArmed <= 0) {
+      this.resetArmed = 180;
+      this.toast(CONFIRM_RESET, 180);
+      Sfx.play('cursor');
+      return 'arm';
+    }
+    this.resetArmed = 0;
+    const n = clearBestTimes(this.state);
+    this.persist();
+    this.toast(`${TIMES_CLEARED}  ${n}`);
+    Sfx.play('powerdown');
+    return 'cleared';
   }
 
   toWorldMap() {
@@ -307,7 +370,31 @@ class Game {
 
   /* ------------------------------ save states -------------------------- */
 
+  /**
+   * AIKA-AJOSSA ei ole tilatallennuksia.
+   *
+   * Pistetaulu merkitsee jo tähdellä kierroksen joka on ladattu tilasta, koska
+   * takaisin kelattu kierros ei kuulu samaan sarakkeeseen puhtaan kanssa
+   * (core/scores.js). Tämä tila tekee siitä periaatteesta säännön — ja
+   * nimenomaan *tässä*, yhdessä kohdassa, eikä kopioimalla tähtilogiikkaa:
+   * `usedSaveState` asetetaan yhä vain `quickLoad`in onnistuneessa haarassa,
+   * johon ei aika-ajossa päästä, joten merkintä ei voi syntyä eikä sitä
+   * tarvitse erikseen estää.
+   *
+   * Myös tallentaminen kieltäytyy, vaikka pelkkä kelaus on se joka rikkoo ajon.
+   * Tilannekuva jota peli lupaa ottaa mutta ei suostu palauttamaan on lupaus
+   * jota se ei pidä, ja kaksi eri vastausta samalle näppäinparille on
+   * hankalampi muistaa kuin yksi.
+   */
+  timeAttackRefusesStates() {
+    if (!this.timeAttack) return false;
+    this.toast(NO_SAVESTATES);
+    Sfx.play('bump');
+    return true;
+  }
+
   quickSave() {
+    if (this.timeAttackRefusesStates()) return;
     const snap = writeSlot(this, this.slot);
     if (!snap) {
       this.toast('TILAA EI VOI TALLENTAA TÄSSÄ');
@@ -319,6 +406,7 @@ class Game {
   }
 
   quickLoad() {
+    if (this.timeAttackRefusesStates()) return;
     const snap = readSlot(this.slot);
     if (!snap) {
       this.toast(`TILA ${this.slot} ON TYHJÄ`);
@@ -530,6 +618,8 @@ class Game {
     }
     if (Input.pressed.quicksave) this.quickSave();
     if (Input.pressed.quickload) this.quickLoad();
+    if (Input.pressed.reset) this.resetBestTimes();
+    if (this.resetArmed > 0) this.resetArmed--;
     if (Input.pressed.export) this.exportTelemetry();
     if (Input.pressed.warp) this.debugWarp();
     if (Input.pressed.touch) {
@@ -563,6 +653,12 @@ class Game {
       this.paused = !this.paused;
       Sfx.play('cursor');
     }
+    /* Kello käy taukovalikossa, ja tämä rivi on koko toteutus: kohtaus ei
+     * päivity, mutta ajokello saa yhden framen. Kenttäkello ei — ks.
+     * `LevelScene.tickPaused`. */
+    if (this.paused && this.timeAttack && this.scene instanceof LevelScene) {
+      this.scene.tickPaused();
+    }
     if (!this.paused && this.scene) this.scene.update(Input);
   }
 
@@ -575,10 +671,16 @@ class Game {
     if (this.paused) {
       ctx.fillStyle = 'rgba(8,8,16,0.7)';
       ctx.fillRect(0, 90, W, 48);
-      drawText(ctx, 'TAUKO', W / 2, 104, { color: '#ffffff', align: 'center', shadow: '#303048' });
+      /* Aika-ajossa otsikko sanoo sen mikä valikossa yllättää: kello käy.
+       * Sääntö jota ei kerroteta siinä paikassa jossa se puree on ansa, ja
+       * tämä on se paikka. Näppäinrivi vaihtuu samasta syystä — 1 ja 2 eivät
+       * tee siellä mitään, ja 5 tekee. */
+      drawText(ctx, this.timeAttack ? PAUSE_TITLE : 'TAUKO', W / 2, 104,
+        { color: '#ffffff', align: 'center', shadow: '#303048' });
       drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
-      drawText(ctx, `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
-        { color: '#8890b0', align: 'center' });
+      drawText(ctx, this.timeAttack ? PAUSE_KEYS
+        : `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
+      { color: '#8890b0', align: 'center' });
     }
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });

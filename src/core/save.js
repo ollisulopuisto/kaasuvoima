@@ -24,6 +24,21 @@ export const DEFAULT_SAVE = () => ({
    * add a counter that starts at zero anyway. `continues` went in the same way.
    */
   secrets: {},
+  /*
+   * levelId -> { frames, marks } eli AIKA-AJON paras aika ja sen välipisteet
+   * (ks. core/timeattack.js). Sisään samalla perusteella kuin `secrets` ja
+   * `continues`, eli **ilman versionostoa**: vanhassa tallennuksessa ei ole
+   * `bestTimes`-kenttää, alla oleva levitys antaa sille `{}`, ja `{}` ei ole
+   * arvaus vaan totuus — kukaan ei ole ajanut yhtään aikaa siinä pelissä. Yksi
+   * kenttä ei muuta merkitystään eikä mitään lueta toisena asiana.
+   *
+   * Toiseen suuntaan hinta on kirjattava rehellisesti: vanha build lukee
+   * tallennuksen ja jättää tuntemattoman avaimen huomiotta, mutta sen oma
+   * `write` ei kirjoita sitä takaisin. Vanhalla buildilla pelaaminen siis
+   * pyyhkii ajat — ei muuta, ja ajat ovat ainoa kenttä jonka menettäminen ei
+   * vie pelaajalta etenemistä.
+   */
+  bestTimes: {},
 });
 
 export const Save = {
@@ -52,6 +67,7 @@ export const Save = {
         usedSaveState: !!state.usedSaveState,
         continues: state.continues || 0,
         secrets: state.secrets || {},
+        bestTimes: state.bestTimes || {},
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */
