@@ -78,18 +78,50 @@ function windows(grid, canon) {
  * there is no corpus to compare against — never zero, because zero is an answer
  * and this is the absence of one.
  */
+/**
+ * Every `.txt` under `dir`, however deep.
+ *
+ * **Se ettei tätä ollut on tämän tiedoston oma varoitus toteutuneena.** Ylempänä
+ * lukee että tarkistuksen koko syy on olla "safeguard that quietly stops being
+ * true", ja juuri niin kävi: luku oli `readdir(CORPUS_DIR)` ilman rekursiota,
+ * ja korpuksen juuressa ei ole yhtään `.txt`-tiedostoa — siellä on pelikansiot,
+ * ja kentät ovat niiden sisällä (`Super Mario Bros/Processed/…`). Ensimmäinen
+ * oikealla korpuksella tehty ajo luki siis **nolla tiedostoa, löysi nolla
+ * osumaa ja palautti nollan**, eli näytti täydeltä puhtaalta paperilta.
+ *
+ * Nolla osumaa nollaa tiedostoa vasten ei ole tulos vaan tuloksen puute, ja se
+ * on vaarallisempi kuin punainen: se vastaa kysymykseen jota ei kysytty.
+ */
+async function corpusFiles(dir) {
+  const out = [];
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...await corpusFiles(p));
+    else if (e.name.endsWith('.txt')) out.push(p);
+  }
+  return out;
+}
+
 export async function corpusHits(rows) {
   if (!CORPUS_DIR) return { checked: false, hits: 0, files: 0 };
   const mine = windows(rows, canonOurs);
+  const list = await corpusFiles(CORPUS_DIR);
+  /* Hakemisto joka on olemassa muttei sisällä yhtään kenttää ei ole korpus.
+   * Se on **eri asia kuin puuttuva korpus**, ja siksi se ei palaudu
+   * `checked: false`:na vaan kaataa: väärään paikkaan osoittava `VGLC_DIR` on
+   * virhe jonka tekijä haluaa kuulla heti, eikä hiljainen "ei tarkistettu"
+   * jonka voi luulla tarkoittavan ettei korpusta ollut. */
+  if (!list.length) {
+    throw new Error(`VGLC_DIR=${CORPUS_DIR} ei sisällä yhtään .txt-kenttää — `
+      + 'osoittaako se korpuksen juureen?');
+  }
   let hits = 0;
-  let files = 0;
-  for (const file of (await readdir(CORPUS_DIR)).filter((f) => f.endsWith('.txt'))) {
-    files++;
-    const grid = (await readFile(join(CORPUS_DIR, file), 'utf8')).split('\n').filter((r) => r.length);
+  for (const file of list) {
+    const grid = (await readFile(file, 'utf8')).split('\n').filter((r) => r.length);
     // Both grids are trimmed to the same 14 bottom rows before comparing.
     for (const key of windows(grid.slice(-14), canonCorpus)) if (mine.has(key)) hits++;
   }
-  return { checked: true, hits, files };
+  return { checked: true, hits, files: list.length };
 }
 
 /**

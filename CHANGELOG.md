@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.48 — alkuperäistarkistus luki nolla tiedostoa ja tulosti puhtaan paperin
+
+`tools/originality.mjs` on se tiedosto joka vastaa kysymykseen "onko se mitä
+tässä repossa on nyt omaa". Ensimmäinen ajo oikealla korpuksella (TheVGLC,
+omistajan pyynnöstä otettu vertailukohdaksi) tulosti **`0 osumaa`** — ja
+samalla rivillä, pienemmällä, **`0 korpustiedostoa`**.
+
+### Vika
+
+Korpuksen luku oli `readdir(CORPUS_DIR)` ilman rekursiota. TheVGLC:n juuressa
+ei ole yhtään `.txt`-tiedostoa: siellä on pelikohtaiset kansiot, ja kentät ovat
+niiden sisällä (`Super Mario Bros/Processed/…`). Silmukka kävi siis läpi
+kansionimiä, ei kenttiä, ja vertasi jokaista kenttäämme tyhjään joukkoon.
+
+**Nolla osumaa nollaa tiedostoa vasten ei ole tulos vaan tuloksen puute.** Se
+on vaarallisempi kuin punainen, koska se näyttää vihreältä: se vastaa
+kysymykseen jota ei kysytty ("löytyikö osumia siitä mitä luin") sellaisella
+sanamuodolla joka luetaan vastaukseksi siihen joka kysyttiin ("onko tämä
+omaa").
+
+Tiedoston oma yläkommentti oli kirjoitettu varoittamaan täsmälleen tästä:
+tarkistus on olemassa siksi että ohje on *"the one kind of safeguard that
+quietly stops being true"*. Varoitus toteutui varoittajaa itseään vastaan, ja
+se on merkintänä arvokkaampi kuin korjaus.
+
+### Korjaus, kaksi osaa
+
+- `corpusFiles()` kävelee hakemistopuun läpi ja kerää jokaisen `.txt`:n
+- olemassa oleva mutta kentätön `VGLC_DIR` **kaatuu** eikä palaa
+  `checked: false`:na. Väärään paikkaan osoittava polku on eri asia kuin
+  puuttuva korpus, ja se on virhe jonka tekijä haluaa kuulla heti — hiljainen
+  "ei tarkistettu" luetaan siksi ettei korpusta ollut.
+
+Toinen kohta on se joka estäisi tämän vian uusiutumisen. Ensimmäinen vain
+korjaa sen.
+
+### Mitattu tulos
+
+**481 korpustiedostoa, 11 generoitua kenttää, 0 osumaa**, kahdeksan sarakkeen
+ikkunalla. Sama luku kuin ennen korjausta, mutta nyt se on mittaus.
+
+### Lisäksi
+
+[IDEAS.md](IDEAS.md) sai kohdan **I. KAIVAUTUMINEN** — pystykenttä joka menee
+alas, luumaailmaan. Kirjattu nyt eikä myöhemmin siksi että se on riippuvuus
+eikä toive: pystykenttätukea rakennetaan parhaillaan pilvimaailmaa varten, ja
+jos sivuttava kamera tehdään suuntaneutraalisti, alaspäin menevä kenttä ei
+maksa uutta kameratyötä lainkaan.
+
+---
+
 ## v26.08.09.47 — tehostukset piirretty uusiksi: muoto on ilmaisua
 
 Poimittavat esineet (`src/gfx/sprites/items.js`) on piirretty kokonaan
