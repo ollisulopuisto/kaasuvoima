@@ -218,6 +218,37 @@ function planTuning(hot, trace) {
  * already measured, shipped and referenced by the changelog, and re-aiming them
  * would silently rewrite a world nobody asked to change.
  *
+ * ## Poistuneet ankkurit
+ *
+ * Jokainen alla oleva resepti perustelee lukunsa **käsintehdyillä kentillä**:
+ * maailman kolme ensimmäistä ovat se mitta, johon neljä generoitua asetetaan.
+ * Käsintehty kenttä voi kuitenkin vaihtua, ja silloin perustelu jää osoittamaan
+ * tyhjään ilman että mikään punastuu — generaattoria ei ajeta joka päivä ja
+ * `src/data/generated.js` on committoitu, joten mitään ei riko *tänään*. Se
+ * rikkoutuu vasta seuraavassa ajossa, ja silloin väärästä syystä.
+ *
+ * Siksi tässä on taulu, ja se on **ainoa paikka koko tiedostossa jossa saa
+ * lukea kentän jota peli ei toimita**:
+ *
+ *   POISTUNUT 6-3 -> 6-K
+ *   POISTUNUT 7-2 -> 7-T
+ *
+ * `tools/verify.mjs` lukee tämän tiedoston tekstinä, laajentaa välit
+ * (`6-1…6-3` on väite jokaisesta päiden välissä olevasta kentästä) ja vaatii
+ * että jokainen nimetty kenttä on pelissä. Näille kahdelle riville se kääntyy
+ * toisin päin: **vasemman puolen ei saa olla pelissä ja oikean puolen on
+ * oltava.** Merkintä vanhenee siis itsestään punaiseksi jos poistunut kenttä
+ * palaa — se ei ole poikkeuslista johon lisätään vaan väite joka voi olla
+ * väärässä. Kumpikin puoli on tarkoituksellinen: viereinen palikkaväite
+ * opetti samana päivänä mitä nimetystä poikkeuksesta seuraa.
+ *
+ * Mitä poistuminen maksoi lukuina, on kirjoitettu niiden maailmojen omiin
+ * resepteihin (maailmat 6 ja 7). Lyhyesti: **lukuja ei mitattu uudelleen**,
+ * koska korvaajat ovat pystykenttiä eivätkä ole samalla akselilla — tiheys on
+ * merkkejä sadalla *sarakkeella* ja `measureClimb` mittaa *rivejä* — ja koska
+ * uudelleenmittaus joka liikuttaisi yhtäkään reseptin lukua generoisi
+ * toimitetun ja korpustarkistetun kentän uudelleen.
+ *
  * Always run this with the corpus behind VGLC_DIR (DESIGN.md kohta 3, alakohta
  * 4). Without it the similarity check cannot run at all, and the report below
  * says `not checked` rather than pretending; regenerating that way would quietly
@@ -483,19 +514,33 @@ const WORLD5 = [
  * ilman tehtaan laavaa ja putkia tämän maailman kentät nojaavat kuiluun,
  * piikkipetiin ja murenevaan lavaan.
  *
- *   density   6-1…6-3 kantavat 9,8 / 8,3 / 8,7 merkkiä sadalla sarakkeella.
+ *   density   6-1 ja 6-2 kantavat 9,8 ja 8,3 merkkiä sadalla sarakkeella.
  *             Uudet rivit pyytävät 8,4…9,8, eli maailman omalta väliltä.
+ *             Kolmas ankkuri oli 6-3:n 8,7 ja se on poistunut; kahdesta
+ *             jäljellä olevasta mitattu väli on **8,3…9,8**, eli se sisältää
+ *             yhä jokaisen pyydetyn luvun. Tämä perustelu selvisi
+ *             ankkurin menetyksestä sellaisenaan.
  *   maxGap    **viisi, ja se on maailman oma mitattu luku eikä valinta**:
- *             6-1:n, 6-2:n ja 6-3:n jokainen kuilu on tasan viisi ruutua
- *             leveä — kolme kenttää, kahdeksantoista kuilua, ei yhtään
- *             poikkeusta. Käsi päätti tämän maailman hypyn jo kerran.
+ *             6-1:n ja 6-2:n jokainen kuilu on tasan viisi ruutua leveä —
+ *             kaksi kenttää, **yhdeksän kuilua**, ei yhtään poikkeusta.
+ *             Mittaus oli kolme kenttää ja kahdeksantoista kuilua niin kauan
+ *             kuin 6-3 oli olemassa: puolet todistuksesta lähti sen mukana,
+ *             mutta jäljelle jäänyt puolisko ei sano mitään muuta kuin ennen.
+ *             Käsi päätti tämän maailman hypyn jo kerran.
  *   minIntro  32. Luun lattia on kitkaltaan tavallista maata.
- *   aim       243 → 148 → 272 → **215 → 245 → 272 → 296**. Muoto on sama
+ *   aim       243 → 148 → 247 → **215 → 245 → 272 → 296**. Muoto on sama
  *             pakotettu kuin maailmoissa 4 ja 5: ensimmäinen notko on
- *             käsintehty (6-2), käsintehty huippu 6-3 on korkeampi kuin mihin
+ *             käsintehty (6-2), käsintehty huippu on korkeampi kuin mihin
  *             ensimmäinen generoitu kenttä yltää, joten toinen notko osuu
  *             6-4:ään ja loput kolme askelta ovat nousua — täsmälleen se kolme
  *             joka on pelin pisin sallittu.
+ *
+ *             Kolmas luku oli 271,5 (6-3) ja on nyt **247,3** (6-K). Se on
+ *             pystykentän luku eli mitattu riveinä eikä sarakkeina
+ *             (`measureClimb`), joten se ei ole sama mitta vaikka se on sama
+ *             asteikko — ja juuri siksi se **luetaan tässä eikä syötetä
+ *             tähän**. Se mitä perustelu tarvitsee, pitää silti: 247,3 on
+ *             korkeampi kuin 6-4:n mitattu 215,7.
  */
 const WORLD6 = [
   {
@@ -526,16 +571,36 @@ const WORLD6 = [
  * hyppy, murtuva kansi ja se mitä lentää vastaan, ja maailman 7 oma lause
  * sanoo sen jo: **jokainen kuoppa hypätään eikä yhtäkään silloiteta.**
  *
- *   density   7-1…7-3 kantavat 9,5 / 10,1 / 9,4 merkkiä sadalla sarakkeella —
- *             pelin tasaisin kolmikko. Uudet rivit pyytävät 9,4…10,1.
+ *   density   7-1 ja 7-3 kantavat 9,5 ja 9,4 merkkiä sadalla sarakkeella.
+ *             Uudet rivit pyytävät 9,4…10,1, ja **ylin luku on velkaa**: 10,1
+ *             oli 7-2:n, eikä 7-2 ole enää pelissä. Kahdesta jäljellä olevasta
+ *             mitattu väli on **9,4…9,5**, joten 7-7:n 10,1 ei ole enää
+ *             maailman omalta väliltä — se on korkeampi kuin yksikään kenttä
+ *             jonka maailma yhä toimittaa.
+ *
+ *             Sitä ei lasketa alas, ja hinta sanotaan tässä ääneen: 7-7 on
+ *             toimitettu, mitattu ja korpustarkistettu kenttä, ja rivin luvun
+ *             muuttaminen generoi sen uudelleen. Yhden lauseen tarkkuus ei ole
+ *             sen arvoinen että 27 generoidun kentän tavuista tulee liikkuvia.
+ *             Velka luetaan siis reseptistä eikä muistilapusta, ja seuraava
+ *             joka ajaa generaattorin näkee sen ennen kuin ajaa.
  *   maxGap    viisi. Sama mittaus kuin luussa: 7-1:n ja 7-3:n kuilut ovat
- *             neljä tai viisi ruutua, ei kertaakaan kuutta.
+ *             neljä tai viisi ruutua, ei kertaakaan kuutta. **Tämä rivi ei
+ *             menettänyt mitään**: se ei koskaan nojannut poistuneeseen
+ *             kenttään, ja uudelleen mitattuna se on 15 kuilua kahdessa
+ *             kentässä, leveydet 4 ja 5.
  *   minIntro  32.
- *   aim       253 → 180 → 279 → **230 → 262 → 288 → 310**. Sama pakotettu muoto
+ *   aim       253 → 203 → 279 → **230 → 262 → 288 → 310**. Sama pakotettu muoto
  *             kolmatta kertaa, ja huippu 310 on maailman oma: se on maailman 8
  *             keskiarvon (301,0) yläpuolella yhtenä kenttänä mutta maailman
  *             keskiarvo jää sen alle, mikä on juuri se ero jonka finaalin pitää
  *             pitää — viimeinen maailma ei ole yksi kova kenttä vaan kuusi.
+ *
+ *             Keskimmäinen luku oli 180,2 (7-2) ja on nyt **202,5** (7-T),
+ *             pystykentän luku samalla varauksella kuin luussa. Notko on yhä
+ *             notko — 252,5 → 202,5 → 278,7 — ja käsintehty huippu 278,7 on
+ *             yhä korkeammalla kuin ensimmäinen generoitu kenttä 7-4 (233,7),
+ *             eli molemmat lauseet joita muoto tarvitsee ovat yhä totta.
  */
 const WORLD7 = [
   {

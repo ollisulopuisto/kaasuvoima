@@ -15359,12 +15359,13 @@ const report = await page.evaluate(async () => {
    * ja kaikki kaistat vastaan koko `CHUNKS` — eikä sitä siksi tarvitse
    * muistaa.
    *
-   * **Nimetty poikkeus, neljä kappaletta.** `chunks/fortresses.js`:n
-   * `pyre_ledge`, `crypt_ossuary`, `crypt_stair` ja `spire_squall` ovat samaa
-   * velkaa, mutta se tiedosto on toisen työn alla juuri nyt eikä tämä muutos
-   * saa koskea siihen. Ne lukevat tässä yksitellen eivätkä kuviona, joten
-   * viides orpo palikka punastaa tämän välittömästi — ja kun neljä poistuu,
-   * tämä lista poistuu niiden mukana.
+   * **Poikkeuslista on nolla, ja se on tämän väitteen tärkein luku.** Tässä
+   * luki 10.8.2026 asti neljä nimeä — `chunks/fortresses.js`:n `pyre_ledge`,
+   * `crypt_ossuary`, `crypt_stair` ja `spire_squall` — koska se tiedosto oli
+   * toisen työn alla eikä väite saanut koskea siihen. Ne on poistettu, ja
+   * niiden mukana lähti se lista josta olisi voinut kasvaa tapa: nimetty
+   * poikkeus on halpa lisätä ja kallis huomata, ja portti jossa ei ole
+   * yhtään on ainoa portti jota ei tarvitse lukea ennen kuin siihen luottaa.
    */
   {
     const { CHUNKS } = await import(join(ROOT, 'src/data/chunks.js'));
@@ -15376,15 +15377,11 @@ const report = await page.evaluate(async () => {
       for (const n of def.chunks || []) used.add(n);
       for (const band of ['sky', 'cave']) for (const [, n] of def[band] || []) used.add(n);
     }
-    /* Poikkeus kantaa tiedostonsa nimen, koska juuri se on sen ainoa peruste. */
-    const OWED = ['pyre_ledge', 'crypt_ossuary', 'crypt_stair', 'spire_squall'];
     const dead = Object.keys(CHUNKS).filter((n) => !used.has(n));
-    const extra = dead.filter((n) => !OWED.includes(n));
     expect('yksikään palikka ei ole sellainen jota mikään kenttä ei aseta',
-      extra.length === 0,
+      dead.length === 0,
       `${Object.keys(CHUNKS).length} palikkaa, ${used.size} käytössä, `
-      + `${dead.length} orpoa${extra.length ? `: ${extra.join(', ')}` : ''}`
-      + ` (kirjattu velka chunks/fortresses.js: ${OWED.filter((n) => dead.includes(n)).join(', ') || '—'})`);
+      + `${dead.length} orpoa${dead.length ? `: ${dead.join(', ')}` : ''} (poikkeuksia 0)`);
   }
 
   /* --- 3. neljä vihollista, jotka olivat kontrastikynnyksen alla --- */
@@ -15527,6 +15524,196 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- velat: loppu ---- */
+
+/* ---- rippeet: kartan äänet, reseptin proosa ---- */
+/*
+ * Kaksi rippeenä jäänyttä epäsiisteyttä, ja kumpikin on tässä siksi että
+ * kummallakin on **luku**: peli ei ollut rikki, mutta se sanoi jotain jota se
+ * ei olisi voinut todistaa.
+ *
+ * 1. **Kartta soitti `powerup`in kun mikään ei kasvanut.** Sama vika kuin
+ *    kentän puolella aamulla, samassa tapahtumassa (varalokero täyttyy) — ja
+ *    aamun korjaus ei ulottunut karttakohtaukseen, koska se väite ajettiin
+ *    `LevelScene`ä vasten. Merkki joka valehtelee opitaan uskomaan, ja se on
+ *    yhtä totta kartalla kuin kentässä.
+ * 2. **Generaattorin resepti nimesi kenttiä joita peli ei toimita.** Reseptin
+ *    luvut ovat mitattuja, ja mittaus jonka lähde on poissa on muistiinpano.
+ *    Se ei riko mitään tänään — `src/data/generated.js` on ennallaan — mutta
+ *    seuraava generointiajo mittaisi jostakin mitä ei ole.
+ *
+ * Molemmat väitteet on kirjoitettu niin ettei kumpaankaan jää nimettyä
+ * poikkeusta. Se on tämän erän oma opetus: samassa työssä poistettiin neljä
+ * orpoa palikkaa, ja niiden mukana meni viereisen väitteen poikkeuslista
+ * nollaan. Lista jota saa kasvattaa kasvaa.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  /* --- 1. varalokero täyttyy kartalla: sama tapahtuma, sama merkki --- */
+  /*
+   * Kolme mittausta yhdessä, koska yksi niistä yksin ei sano mitä tarkoitetaan:
+   *
+   *   - kartalla lokeroon menevä esine soittaa jotain **muuta** kuin `powerup`
+   *   - se on **sama** ääni jonka kenttä soittaa samasta tapahtumasta (yksi
+   *     tapahtuma, yksi merkki — ei kahta murretta samalle asialle)
+   *   - ja `powerup` soi kartalla yhä siellä missä jotain oikeasti kasvaa,
+   *     eli lokeroa käytettäessä. Ilman tätä kolmatta riviä väite menisi läpi
+   *     myös vaientamalla koko kartan.
+   */
+  {
+    const heard = await page.evaluate(async () => {
+      const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { Sfx } = await import('/src/core/audio.js');
+      const game = window.sfb3;
+
+      const real = Sfx.play;
+      const tapped = [];
+      Sfx.play = function tap(name) { tapped.push(name); };
+      const take = () => { const out = tapped.slice(); tapped.length = 0; return out; };
+
+      const blank = () => ({
+        left: false, right: false, up: false, down: false, jump: false, run: false,
+        start: false, mute: false, quicksave: false, quickload: false, slot: false,
+      });
+      const state = (extra) => {
+        game.state = {
+          lives: 5, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-h', cleared: {}, worldsOpen: 8, cards: [], ...extra,
+        };
+        game.finishLevel = () => {};
+      };
+
+      try {
+        /* a) talossa poimittu esine menee varastoon: kartta ei kasvata mitään. */
+        state({});
+        const map = new WorldMapScene(game);
+        map.mode = 'house';
+        map.houseCursor = 0;
+        take();
+        map.updateHouse({
+          held: blank(), pressed: { ...blank(), jump: true }, released: blank(), consume() {},
+        });
+        const toStore = take();
+        const storedItem = game.state.reserve;
+
+        /* b) sama tapahtuma kentässä: täysi voimataso, poimittu tehostus. */
+        state({ power: { type: 'shroom', level: 5 } });
+        const scene = new LevelScene(game, '1-1');
+        scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        scene.time = 9999;
+        game.setScene(scene);
+        take();
+        scene.player.collect('shroom');
+        const inLevel = take();
+
+        /* c) ja kartalla käytetty varasto, jossa jotain oikeasti kasvaa. */
+        state({ reserve: 'shroom', power: { type: null, level: 0 } });
+        const map2 = new WorldMapScene(game);
+        take();
+        map2.useReserve();
+        const spent = take();
+        const grewTo = game.state.power.level;
+
+        return { toStore, inLevel, spent, storedItem, grewTo };
+      } finally { Sfx.play = real; }
+    });
+
+    const [store] = heard.toStore;
+    const [level] = heard.inLevel;
+    const [spend] = heard.spent;
+    expect('varalokeron täyttyminen kuulostaa kartalla samalta kuin kentässä, eikä kasvamiselta',
+      heard.toStore.length === 1 && heard.inLevel.length === 1 && heard.spent.length === 1
+      && !!store && store === level && store !== 'powerup'
+      && spend === 'powerup' && heard.grewTo > 0 && !!heard.storedItem,
+      `varastoon kartalla "${heard.toStore.join('+') || '-'}" (${heard.storedItem || '-'}), `
+      + `kentässä "${heard.inLevel.join('+') || '-'}", `
+      + `varastoa käyttäen "${heard.spent.join('+') || '-'}" (taso 0 → ${heard.grewTo})`);
+  }
+
+  /* --- 2. `powerup` on kartallakin vain siellä missä jokin kasvaa --- */
+  /*
+   * Ylempi väite ajaa kolme tapahtumaa; tämä lukee koko tiedoston. Ero on se
+   * joka `level.js`:n kohdalla jo opittiin: kohtauksessa on kutsupaikkoja
+   * joihin testi ei aja, ja niistä juuri ne unohtuvat. Samalla tuloste kantaa
+   * kartan koko äänisanaston, jotta DESIGN.md kohdan 8 tarkistus on luettavissa
+   * portin ajosta eikä muistilapusta.
+   */
+  {
+    const src = await readFile(join(ROOT, 'src/scenes/worldmap.js'), 'utf8');
+    const calls = [...src.matchAll(/Sfx\.play\('([a-z]+)'\)/g)];
+    const tally = {};
+    for (const [, name] of calls) tally[name] = (tally[name] || 0) + 1;
+    const useAt = src.indexOf('useReserve()');
+    const powerups = calls.filter((m) => m[1] === 'powerup');
+    const outside = powerups.filter((m) => m.index < useAt);
+    expect('kartan `powerup` soi vain siinä yhdessä paikassa jossa voimataso nousee',
+      powerups.length === 1 && outside.length === 0,
+      `${calls.length} kutsua: `
+      + Object.entries(tally).sort().map(([n, c]) => `${n} ${c}`).join(', '));
+  }
+
+  /* --- 3. resepti ei nimeä kenttää jota peli ei toimita --- */
+  /*
+   * `tools/gen-levels.mjs`:n reseptit perustelevat `density`-, `maxGap`- ja
+   * `aim`-lukunsa käsintehdyillä kentillä, nimeltä ja väliltä (`6-1…6-3`).
+   * Käsintehty kenttä voi vaihtua — 6-3 ja 7-2 vaihtuivat pystykentiksi
+   * 10.8.2026 — ja silloin perustelu osoittaa tyhjään ilman että mikään
+   * punastuu: generaattoria ei ajeta joka päivä, ja `generated.js` on
+   * committoitu.
+   *
+   * Väite lukee tiedoston tekstinä ja laajentaa välit: `X-a…X-b` numeerisin
+   * päin tarkoittaa jokaista kenttää päiden välissä, koska juuri sitä se
+   * lukijalle lupaa. Jokainen näin löytyvä tunnus on oltava `levelIds()`:ssä —
+   * **eikä poikkeuslistaa ole**, vaan poistuneet ankkurit luetellaan
+   * tiedostossa itsessään rivinä `POISTUNUT vanha -> uusi`, ja väite kääntyy
+   * niille toisin päin: vanhan **ei saa** olla pelissä ja uuden **on**. Niin
+   * merkintä vanhenee itsestään punaiseksi jos poistettu kenttä palaa, eikä
+   * siitä voi tulla lista johon lisätään.
+   */
+  {
+    const src = await readFile(join(ROOT, 'tools/gen-levels.mjs'), 'utf8');
+    const { levelIds } = await import(join(ROOT, 'src/data/levels.js'));
+    const ships = new Set(levelIds());
+    const text = src.replace(/`/g, '');
+
+    const retired = new Map();
+    for (const m of text.matchAll(/POISTUNUT ([1-8]-[0-9A-Z]) -> ([1-8]-[0-9A-Z])\b/g)) {
+      retired.set(m[1], m[2]);
+    }
+
+    const cited = new Set();
+    /* Väli on väite jokaisesta päiden välissä olevasta kentästä. Kirjainpää
+     * (`4-1…4-F`) ei ole numeerinen väli vaan lista, joten siitä luetaan päät. */
+    for (const m of text.matchAll(/\b([1-8])-([0-9A-Z])…\1-([0-9A-Z])\b/g)) {
+      const [, w, a, b] = m;
+      if (/[0-9]/.test(a) && /[0-9]/.test(b)) {
+        for (let i = Number(a); i <= Number(b); i++) cited.add(`${w}-${i}`);
+      } else { cited.add(`${w}-${a}`); cited.add(`${w}-${b}`); }
+    }
+    for (const m of text.matchAll(/\b[1-8]-[0-9A-Z]\b/g)) cited.add(m[0]);
+
+    const ghosts = [...cited].filter((id) => !ships.has(id) && !retired.has(id)).sort();
+    const risen = [...retired.keys()].filter((id) => ships.has(id)).sort();
+    const missing = [...retired.values()].filter((id) => !ships.has(id)).sort();
+    expect('generaattorin resepti nimeää vain kenttiä jotka peli toimittaa',
+      ghosts.length === 0 && risen.length === 0 && missing.length === 0,
+      `${cited.size} nimettyä kenttää, ${retired.size} poistunutta ankkuria`
+      + `${retired.size ? ` (${[...retired].map(([a, b]) => `${a}→${b}`).join(', ')})` : ''}`
+      + `${ghosts.length ? ` — pelistä puuttuu: ${ghosts.join(', ')}` : ''}`
+      + `${risen.length ? ` — poistunut on palannut: ${risen.join(', ')}` : ''}`
+      + `${missing.length ? ` — korvaaja puuttuu: ${missing.join(', ')}` : ''}`);
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- rippeet: loppu ---- */
 
 await browser.close();
 server.close();

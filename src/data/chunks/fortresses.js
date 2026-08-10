@@ -575,8 +575,13 @@ const MILL_CHUNKS = {
  * Sanasto on tuo päätös rakenteena: **jokainen huone on ylitys**, ja se mikä
  * vaihtelee on se mistä ylitetään ja mille laskeudutaan.
  *
- * Neljä ylitystä, neljä eri kysymystä: kuusi ruutua ilman mitään, kahdeksan
- * kahdella astinlaudalla, mureneva ritilä, ja kivihylly josta astutaan alas.
+ * Kolme ylitystä, kolme eri kysymystä: kuusi ruutua ilman mitään, kahdeksan
+ * kahdella astinlaudalla, ja mureneva ritilä.
+ *
+ * Neljäs oli kivihylly josta astuttiin alas (`pyre_ledge`), ja se on poistettu
+ * 10.8.2026: 5-F ei asettanut sitä kertaakaan. Poistoperuste on `bone_twin`in
+ * eikä uusi — palikka jota mikään kenttä ei aseta lupaa sanaston jota ei ole —
+ * ja `verify.mjs` mittaa sen nyt ilman yhtään nimettyä poikkeusta.
  */
 const PYRE_CHUNKS = {
   /** Portti: tehostuslohko ja kouru heti perään, eli mitään ei anneta ilmaiseksi. */
@@ -692,29 +697,6 @@ const PYRE_CHUNKS = {
     13: '###WWWWWWWWW####',
     14: '###WWWWWWWWW####',
   }),
-
-  /**
-   * Hylly: kivipenger kourussa, ja sen päästä astutaan alas.
-   *
-   * Ainoa huone tässä sanastossa jossa ylitys on ilmainen — ja hinta on se että
-   * penger päättyy laavan yläpuolella, eli alastulo on ajoitettava. Penger on
-   * kolme ruutua korkea eikä neljä: 48 px on seisontahypyn 71 px:n sisällä
-   * reilusti, ja sille noustaan kolmen sarakkeen vauhdista, mikä ei riitä
-   * neljään.
-   *
-   * Penkereen yllä on lohkorivi, koska kiipeäminen tyhjään opettaa ohittamaan
-   * seuraavat kiipeämiset.
-   */
-  pyre_ledge: ck(16, {
-    0: G,
-    1: G,
-    6: '     BB?BB',
-    10: '   XXXXXXXX',
-    11: '   XXXXXXXX',
-    12: '   XXXXXXXX   g',
-    13: '###WWWWWWWWWW###',
-    14: '###WWWWWWWWWW###',
-  }),
 };
 
 /* ============================ maailma 6 ================================== */
@@ -728,8 +710,13 @@ const PYRE_CHUNKS = {
  *
  * Käytävä kulkee kivihyllyllä ja putoaa säännöllisin välein kammioon. Se on
  * silhuetti jota millään muulla linnakkeella ei ole: muissa lattia on yksi
- * viiva ja poikkeukset ovat reikiä, täällä lattia on porras alaspäin ja
- * poikkeus on se että päästään takaisin ylös.
+ * viiva ja poikkeukset ovat reikiä, täällä lattia on porras alaspäin.
+ *
+ * **Eikä ylös enää noustakaan, ja se on mittaus eikä tiukennus.** Sanastossa
+ * oli portaat takaisin hyllylle (`crypt_stair`) ja luukammio piikkiukkoineen
+ * (`crypt_ossuary`), ja 6-F:n soittolista ei asettanut kumpaakaan kertaakaan.
+ * Ne poistettiin 10.8.2026 samalla perusteella jolla `bone_twin` lähti. Lause
+ * on siis nyt se joka kentässä oikeasti soi: **krypta menee alas ja jää alas.**
  *
  * Luulinnakkeen huoneissa on katto, ja siksi ne eivät ole `bone.js`:ssä: se
  * tiedosto lupaa että taivas on auki jokaisessa palikassaan, ja `verify.mjs`
@@ -774,23 +761,6 @@ const CRYPT_CHUNKS = {
   }),
 
   /**
-   * Luukammio: tiilirivi kolautusrivillä ja piikkiukko sen alla.
-   *
-   * Hautamultaa eli tämän maailman tiiltä, ja piikkiukko on se asukas jota
-   * tallaus ei poista. Yhdessä ne ovat huone jossa palkinto on suoraan
-   * ongelman yllä: lohkoja ei saa ilman että ratkaisee ensin sen mikä seisoo
-   * alla.
-   */
-  crypt_ossuary: ck(16, {
-    0: G,
-    1: G,
-    9: '    BB?BB',
-    12: '      x       g',
-    13: G,
-    14: G,
-  }),
-
-  /**
    * Kuoppa: viisi ruutua tyhjää, yhdeksän saraketta vauhtia, kaksi laskeutumista.
    *
    * Viisi eikä kuusi, ja se on luulaakson mittaus eikä uusi: voimatason 0 botti
@@ -821,19 +791,6 @@ const CRYPT_CHUNKS = {
     14: '########     ###',
   }),
 
-  /**
-   * Portaat ylös: neljä askelmaa takaisin hyllylle, ja lohko huipulla.
-   *
-   * Kryptan ainoa nousu, ja se on kaksi kahden ruudun askelmaa eikä neljä
-   * yhden. Ero `keep_stair`iin on juuri tuo: siellä porras kävellään, täällä se
-   * hypätään, ja tässä sanastossa se on oikea suunta — maailma jonka jokainen
-   * muu liike on pudotus saa maksaa nousun.
-   *
-   * Huipulla on lohko, koska DESIGN.md kohta 5 kieltää kiipeämisen tyhjään — ja
-   * tässä sanastossa se sääntö on erityisen tärkeä, sillä nousu on
-   * harvinaisuus, ja harvinaisuus jonka päässä ei ole mitään opettaa olemaan
-   * nousematta.
-   */
   /**
    * Leuat: kaksi hammasriviä ja lauta ensimmäisen yli.
    *
@@ -874,18 +831,6 @@ const CRYPT_CHUNKS = {
     13: '########WWWWW###',
     14: '########WWWWW###',
   }),
-
-  crypt_stair: ck(16, {
-    0: G,
-    1: G,
-    5: '       B?B',
-    9: '        XXXX',
-    10: '        XXXX',
-    11: '    XXXXXXXX',
-    12: '    XXXXXXXX  g',
-    13: G,
-    14: G,
-  }),
 };
 
 /* ============================ maailma 7 ================================== */
@@ -902,6 +847,10 @@ const CRYPT_CHUNKS = {
  * päinvastoin kuin missään muualla pelissä — ja se on tarkoitus. Maareitti on
  * silti auki voimatasolla 0 (DESIGN.md kohta 5): jokainen reikä on viisi
  * ruutua ja jokaisen edessä on yhdeksän saraketta lattiaa.
+ *
+ * Puuska (`spire_squall`) oli tässä sanastossa hengähdyshuoneena ja poistettiin
+ * 10.8.2026: 7-F ei asettanut sitä kertaakaan. Torni hengähtää nyt siellä missä
+ * se oikeasti hengähtää, eli portilla ja rakeiden välissä.
  */
 const SPIRE_CHUNKS = {
   /** Portti: ensimmäinen kansi, ja ruskea pilvi sen yllä. */
@@ -958,37 +907,6 @@ const SPIRE_CHUNKS = {
   }),
 
   /**
-   * Puuska: kaksi ruskeaa pilveä, ei kuilua eikä vaaraa.
-   *
-   * `cloud_squall` sisätiloissa, ja samasta syystä: maailma jonka jokainen
-   * virhe on putoaminen on maailma jossa jokainen virhe on sama virhe. Pilvi
-   * työntää sivulle ja maksaa voimatason, ja voimataso on resurssi jonka
-   * pelaaja voi käyttää ja saada takaisin.
-   */
-  spire_squall: ck(16, {
-    0: G,
-    1: G,
-    5: '   r',
-    7: '          r',
-    9: '      o o o',
-    12: '           g',
-    13: G,
-    14: G,
-  }),
-
-  /**
-   * Ristikko: pitkä kansi koko huoneen läpi ja raekenttä sen alla.
-   *
-   * Tämä on se huone joka antaa alaspainamiselle seurauksen. Kansi on pitkä
-   * mutta se **loppuu raekentän kohdalla** eikä ennen sitä: `cloud_lattice`
-   * panee piikit kannen keskelle, tässä ne ovat sen päässä, eli kansi ei ole
-   * silta piikkien yli vaan tie niiden luo. Hinta on voimataso, sama minkä peli
-   * veloittaa jokaisesta huolimattomasta laskeutumisesta.
-   *
-   * Kolme ruutua piikkejä eikä viisi: viisi kannen alla on se sommitelma jonka
-   * luulaakso mittasi botin tappajaksi.
-   */
-  /**
    * Rakeita: kaksi raekenttää ja kansi ensimmäisen yli.
    *
    * `cloud_hail` sisätiloissa. Ruskea pilvi on toisen pedin yllä eikä maassa —
@@ -1013,6 +931,22 @@ const SPIRE_CHUNKS = {
     14: G,
   }),
 
+  /**
+   * Ristikko: pitkä kansi koko huoneen läpi ja raekenttä sen alla.
+   *
+   * Tämä on se huone joka antaa alaspainamiselle seurauksen. Kansi on pitkä
+   * mutta se **loppuu raekentän kohdalla** eikä ennen sitä: `cloud_lattice`
+   * panee piikit kannen keskelle, tässä ne ovat sen päässä, eli kansi ei ole
+   * silta piikkien yli vaan tie niiden luo. Hinta on voimataso, sama minkä peli
+   * veloittaa jokaisesta huolimattomasta laskeutumisesta.
+   *
+   * Kolme ruutua piikkejä eikä viisi: viisi kannen alla on se sommitelma jonka
+   * luulaakso mittasi botin tappajaksi.
+   *
+   * (Kommentti oli 10.8.2026 asti `spire_hail`in yllä eli väärän palikan päällä.
+   * Se siirtyi tähän kun `spire_squall` poistettiin — poistetun naapurin vieressä
+   * väärin osuva kommentti on juuri se joka jää huomaamatta.)
+   */
   spire_lattice: ck(16, {
     0: G,
     1: G,

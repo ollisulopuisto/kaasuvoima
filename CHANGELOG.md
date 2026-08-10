@@ -7,6 +7,86 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.63 — kolme ripettä mitattaviksi, ja kaksi poikkeuslistaa nollaan
+
+Pelillä ei ollut enää velkaa, joten nämä kolme ovat epäsiisteyksiä joilla on
+numero. Kunkin arvo ei ole poisto vaan se väite joka jää jäljelle.
+
+### Neljä orpoa palikkaa, ja poikkeuslista nollaan
+
+`pyre_ledge`, `crypt_ossuary`, `crypt_stair` ja `spire_squall` olivat
+määriteltyjä muttei yhdenkään kentän asettamia. Viitetarkistus ennen poistoa:
+ne esiintyivät **täsmälleen kahdessa paikassa**, omissa määritelmissään ja
+portin `OWED`-listalla. Yksikään kenttä, generaattori, työkalu tai testi ei
+nimennyt niitä, joten mitään ei tarvinnut jättää.
+
+```
+punainen  179 palikkaa, 175 käytössä, 4 orpoa (poikkeuksia 0)
+vihreä    175 palikkaa, 175 käytössä, 0 orpoa (poikkeuksia 0)
+```
+
+**Väitteessä ei ole enää yhtään varausta**, ja se on tämän kohdan koko tulos:
+portti joka sanoo "ei orpoja" ilman poikkeuslistaa on arvokkaampi kuin neljä
+poistoa. Kolme sanastokuvausta kertoi poistetuista huoneista ja kirjoitettiin
+uusiksi. Sivulöydös korjattuna: `spire_lattice`in kuvaus istui väärän palikan
+(`spire_hail`) päällä.
+
+### Kartta sanoi "kasvoit" kun mikään ei kasvanut
+
+`worldmap.js` soitti `powerup`in kun esine menee varastoon — sama vika joka
+kentän puolella korjattiin aamulla. Kartan **kaikki yksitoista** ääntä luettiin
+kohtaa 8 vasten, ja se on merkinnän arvokkaampi puolisko:
+
+| ääni | missä | tuomio |
+| --- | --- | --- |
+| `cursor` ×3 | nappula lähtee, talon valinta liikkuu | **rauhaan** — yksi merkitys: kohde vaihtui, mitään ei sitouduttu |
+| `select` ×2 | kenttään, taloon | **rauhaan** — molemmat ovat "sitoudun siihen mihin osoitin osoittaa" |
+| `bump` ×4 | suljettu polku, tyhjä talo, tyhjä varasto, jo täysi voima | **rauhaan** — neljä syytä, **yksi merkitys** (*mitään ei tapahtunut*), ja syyn kertoo ruudun teksti. Neljä eri ääntä tekisi kieltäytymisestä tapahtuman |
+| `powerup` (varastoon) | `updateHouse` | **korjattu → `reserve`** |
+| `powerup` (varasto käytetään) | `useReserve` | **rauhaan** — voimataso oikeasti nousee |
+| `Music.play('map')` | `enter` | **rauhaan** — kertojan kerros |
+
+Kaksi väitettä tarkoituksella: ajettu tapahtuma, **ja koko tiedoston luku**
+(`powerup` täsmälleen kerran, `useReserve`in sisällä). Jälkimmäinen on se joka
+nappaa kutsupaikan jota mikään testi ei aja.
+
+### Resepti osoitti kahteen kenttään jotka eivät enää toimitu
+
+`gen-levels.mjs` selittää maailmojen 6 ja 7 luvut käsintehdyillä ankkureilla
+`6-3` ja `7-2`, ja molemmat korvattiin pystykentillä. Valittu ratkaisu:
+**luvut pidetään, proosa kirjoitetaan uusiksi** — ja perustelu on mitattu eikä
+väitetty. Korvaajat ovat **pystykenttiä**: tiheys on merkkejä sataa
+**saraketta** kohden ja `difficulty.mjs` pisteyttää kiipeilyn **riveinä**, joten
+kiipeilyn luvun syöttäminen vaakareseptiin olisi yksikön vaihto eikä mittaus.
+Ja mikä tahansa uudelleenmittaus joka liikuttaisi reseptilukua regeneroisi
+toimitetun, korpustarkistetun kentän.
+
+Selvinneet ankkurit mitattiin silti, ja **yksi luku maksoi**:
+
+- w6 tiheys 8,4…9,8 vastaan toimitettu 8,3…9,8 — **kestää**
+- w6 `maxGap` 5: todistus puolittui (18 kuilua → 9), johtopäätös ei muuttunut
+- w7 tiheys pyytää **10,1**, joka ei enää ole toimitetulla välillä 9,4…9,5 —
+  eli **7-7:n tiheyden perustelee kenttä jota ei toimiteta.** Se on kirjoitettu
+  reseptiin **velaksi eikä korjattu pois.**
+
+Portti lukee reseptin tekstinä ja **laajentaa välit** (`6-1…6-3` väittää
+jokaista päiden välissä), mikä on tapa jolla `7-2` jäi kiinni vaikkei sitä
+kirjoiteta auki. Ei poikkeuslistaa: poistuneet ankkurit ilmoitetaan tiedostossa
+muodossa `POISTUNUT 6-3 -> 6-K`, ja väite **kääntyy** niille — vasen puoli ei
+saa toimittua ja oikea pitää. **Palannut poistettu kenttä punastuttaa itsensä.**
+
+### Löydetty, ei korjattu
+
+**Reseptien lihavoidut `aim`-tikkaat eivät ole koskaan täsmänneet `PLAN`in
+rivien kanssa** — eivät siitä committista jossa ne kirjoitettiin. w4 175/195/215/240
+vastaan 168/181/197/212; w5, w6 ja w7 samoin. Maailmat 1 ja 3 täsmäävät. Proosa
+kantaa sen tikkaan joka **päätettiin**, PLAN sen johon haku **ylsi**. Ei korjattu
+tässä: se koskee neljää maailmaa, ja w5:n kohdalla oikea luku kumoaa seuraavan
+lauseen samassa kappaleessa. **Väitettä ei myöskään kirjoitettu, koska punaiseksi
+jätetty väite ei ole väite.**
+
+---
+
 ## v26.08.10.62 — maailma 2 kahdeksaan: mitä "kahdeksan kenttää" on kun kartta haarautuu
 
 **Peli on 8 maailmaa ja 64 kenttää.** Maailma 2 oli viimeinen, ja se jätettiin
