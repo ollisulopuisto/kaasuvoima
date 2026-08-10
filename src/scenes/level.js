@@ -2581,8 +2581,26 @@ export class LevelScene {
         continue;
       }
 
+      /*
+       * VAARA ON ISKU, JA TÄHTI SUOJAA ISKULTA.
+       *
+       * Tämä haara ei lukenut tähteä lainkaan, ja se oli epäjohdonmukaisuus
+       * eikä päätös: **lattian piikki tarkistaa tähden** (`T.SPIKE &&
+       * !(p.star > 0)`), joten tähti suojasi piikiltä lattiassa muttei
+       * liekiltä joka nousee samasta lattiasta. Omistaja löysi sen 4-1:ssä.
+       *
+       * Raja jonka tähti vetää ei ole "vihollinen vastaan kenttä" vaan
+       * **isku vastaan paikka**: sen voi ottaa vastaan siltä mikä osuu sinuun,
+       * eikä siltä mihin sinä menet. Kuoppa, laava ja kello ovat paikkoja ja
+       * jäävät ulkopuolelle; piikki, närästysliekki ja papupommi osuvat, ja ne
+       * ovat sisällä. Se on sama raja jonka piikki jo veti — tässä se vain
+       * kirjoitettiin loppuun.
+       *
+       * Kaksi kommenttia tässä tiedostossa oli eri mieltä keskenään, ja
+       * toinen niistä oli väärässä koodia vasten. Se on korjattu alempana.
+       */
       if (e.kind === 'hazard') {
-        if (e.box.h > 0 && overlaps(p.box, e.box)) p.hurt('hazard');
+        if (e.box.h > 0 && p.star <= 0 && overlaps(p.box, e.box)) p.hurt('hazard');
         continue;
       }
 
@@ -2641,9 +2659,18 @@ export class LevelScene {
       /*
        * Supertähti. It replaces exactly one thing — the hit an enemy would
        * land — and nothing else, which is why it lives here and not in
-       * `hurt`. Pits, lava, spikes, heartburn and the clock all reach the
-       * player down their own paths and are untouched by it: the star is
-       * protection from the inhabitants, never from the level.
+       * `hurt`.
+       *
+       * **Tämä kappale sanoi pitkään että piikki ja närästysliekki eivät ole
+       * suojattuja, ja se oli väärässä samassa tiedostossa olevaa koodia
+       * vasten:** piikki on lukenut tähteä aina (`T.SPIKE && !(p.star > 0)`).
+       * Kaksi kommenttia oli siis eri mieltä, ja pelaaja löysi eron 4-1:ssä
+       * kuolemalla liekkiin tähti päällä.
+       *
+       * Raja on **isku vastaan paikka**, ei vihollinen vastaan kenttä: kuoppa,
+       * laava ja kello ovat paikkoja joihin sinä menet, eivätkä ne ole
+       * suojattuja; piikki, närästysliekki ja papupommi osuvat sinuun, ja ne
+       * ovat. Se on yhä yksi lause, se on vain eri lause kuin tässä luki.
        *
        * Delivered as a shell hit rather than a `flipDie` so the tough
        * customers stay tough — the boss still needs his three, the sun still

@@ -7707,6 +7707,11 @@ const report = await page.evaluate(async () => {
   {
     const scores = await import('/src/core/scores.js');
     reset();
+    /* Tämä lohko koskee **maailmawarppia**, ja sama näppäin tarkoittaa
+     * kentässä kentän ohitusta. Edellinen testi on voinut jättää ruudulle
+     * kentän, joten kohde sanotaan tässä ääneen sen sijaan että se
+     * perittäisiin. */
+    game.pendingNode = null;
     game.debug = false;
     const world0 = game.state.world;
     game.debugWarp();
@@ -7730,6 +7735,68 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* ---- kentän ohitus, sama näppäin eri paikassa ---- */
+  /*
+   * Omistaja kysyi tätä nimenomaan siksi että maailman warppi ei riitä
+   * testaamiseen: se vie maailman **alkusolmuun**, ja siitä eteenpäin
+   * `isLinkOpen` vaatii että jompikumpi pää on selvitetty. Kenttään 4-3
+   * pääsemiseksi piti siis pelata 4-1 ja 4-2 läpi — mahdotonta juuri silloin
+   * kun ohitettava kenttä on se joka on rikki.
+   *
+   * Kolme väitettä, ja kolmas on se joka pitää tämän rehellisenä:
+   *   1. kentässä ohitus merkitsee **sen** kentän selvitetyksi eikä vaihda
+   *      maailmaa
+   *   2. kartalla sama näppäin tekee yhä sen mitä ennenkin
+   *   3. ohitus kulkee `finishLevel`in läpi, joten se avaa seuraavan polun
+   *      samalla koodilla jolla maali sen avaisi — oikotie olisi toinen tapa
+   *      läpäistä kenttä, ja kaksi tapaa eroaa aina lopulta
+   */
+  {
+    const worldmap = await import('/src/data/worlds.js');
+    reset();
+    game.debug = true;
+    game.state.world = 3;                       // maailma 4
+    const w4 = worldmap.WORLDS[3];
+    const first = w4.nodes.find((n) => n.level);
+    game.state.node = first.id;
+    game.setScene(new LevelScene(game, first.level));
+    game.pendingNode = first;                   // kartalta tultaessa tämä on asetettu
+    /* `reset()` korvaa `finishLevel`in tyhjällä funktiolla, koska useimmat
+     * testit eivät halua kentän päättyvän. Tämä testi haluaa nimenomaan sen:
+     * koko väite on että ohitus kulkee oikeaa reittiä. Oma ominaisuus pois,
+     * niin prototyypin oikea metodi näkyy taas. */
+    delete game.finishLevel;
+    const worldBefore = game.state.world;
+    game.debugWarp();
+
+    const skipped = game.state.cleared[first.id] === true;
+    const stayed = game.state.world === worldBefore;
+    const marked = game.state.debugWarped === true;
+    expect('ohitus kentässä merkitsee sen kentän eikä vaihda maailmaa',
+      skipped && stayed && marked,
+      `${first.level} selvitetty ${skipped}, maailma ${worldBefore}->${game.state.world}, merkitty ${marked}`);
+
+    /* Ja seuraava polku on auki, koska ohitus kulki oikeaa reittiä. */
+    const link = w4.links.find((l) => l.a === first.id || l.b === first.id);
+    const map = new (await import('/src/scenes/worldmap.js')).WorldMapScene(game);
+    expect('ohitettu kenttä avaa seuraavan polun kuten maali avaisi',
+      !!link && map.isLinkOpen(link),
+      link ? `${link.a}->${link.b} auki ${map.isLinkOpen(link)}` : 'ei linkkiä');
+
+    /* Kartalla sama näppäin tarkoittaa yhä maailmaa. */
+    reset();
+    game.debug = true;
+    const before = game.state.world;
+    game.toWorldMap();
+    game.debugWarp();
+    expect('kartalla ohitusnäppäin vie yhä seuraavaan maailmaan',
+      game.state.world === (before + 1) % worldmap.WORLDS.length,
+      `${before} -> ${game.state.world}`);
+
+    game.debug = false;
+    game.state.debugWarped = false;
+  }
+
   /* ----------------------- tauko ei jää jumiin --------------------------- */
   /* A pause is something that happened to a level, not a mode the machine is
    * in. Warping out from under the pause screen used to leave `paused` true on
@@ -7744,6 +7811,9 @@ const report = await page.evaluate(async () => {
     reset();
     game.debug = true;
     game.setScene(new LevelScene(game, '1-1'));
+    /* Ilman solmua tämä on maailmawarppi, ja se on se jonka tämä testi
+     * tarkoittaa: kenttä on tässä vain lyhin tapa saada tauko päälle. */
+    game.pendingNode = null;
     game.paused = true;
     game.debugWarp();
     const cleared = game.paused === false;
@@ -9668,6 +9738,65 @@ const report = await page.evaluate(async () => {
     expect('spikes hurt where the points are and not in the air above them',
       !clear && grazed, `yläpuolella ${clear ? 'sattui' : 'ei sattunut'}, `
       + `piikeissä ${grazed ? 'sattui' : 'ei sattunut'}`);
+  }
+
+  /* ---- tähti ja vaarat: isku vastaan paikka ---- */
+  /*
+   * Omistaja kuoli 4-1:ssä närästysliekkiin tähti päällä ja kysyi eikö tähden
+   * pitäisi suojata. Pitäisi, ja koodi oli kahta mieltä itsensä kanssa:
+   * **lattian piikki luki tähteä, `kind === 'hazard'` ei lukenut lainkaan.**
+   * Tähti siis suojasi piikiltä lattiassa muttei liekiltä joka nousee samasta
+   * lattiasta, ja kaksi kommenttia tässä samassa tiedostossa väitti eri asiaa.
+   *
+   * Raja on **isku vastaan paikka**: kuoppa, laava ja kello ovat paikkoja
+   * joihin pelaaja menee eivätkä ne ole suojattuja; piikki, närästysliekki ja
+   * papupommi osuvat pelaajaan, ja ne ovat. Molemmat vaaraoliot mitataan, ei
+   * vain se jonka omistaja löysi.
+   */
+  {
+    const { Heartburn, BeanBomb } = await import('/src/entities/enemies.js');
+    const hazards = [
+      /* Suihku pannaan palamaan käsin: `idle`-vaiheessa sen laatikon korkeus on
+       * 0, eikä nollan korkuinen laatikko ole osuma. Testi mittaa törmäystä
+       * eikä ajastinta. */
+      ['närästysliekki', (lv, p) => {
+        const h = new Heartburn(lv, p.x, p.y + p.h + 16);
+        h.phase = 'fire';
+        h.height = h.maxHeight;
+        h.timer = 60;
+        return h;
+      }],
+      ['papupommi', (lv, p) => new BeanBomb(lv, p.x, p.y, 0)],
+    ];
+    const rows = [];
+    for (const [name, make] of hazards) {
+      for (const withStar of [false, true]) {
+        reset({ type: 'shroom', level: 2 });
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        const inp = mkInput();
+        for (let f = 0; f < 6; f++) sc.update(inp);
+        sc.entities = sc.entities.filter((e) => e.kind !== 'enemy');
+        const pl = sc.player;
+        if (withStar) pl.collect('star');
+        const before = pl.power.level;
+        const hz = make(sc, pl);
+        hz.alwaysActive = true;
+        /* Vaara ajetaan pelaajan päälle suoraan: se mitä mitataan on
+         * törmäyksen seuraus, ei se osuuko ajastin. */
+        hz.x = pl.x; hz.y = pl.y;
+        if (hz.box) { hz.box.x = pl.x; hz.box.y = pl.y; hz.box.w = pl.w; hz.box.h = pl.h; }
+        sc.entities.push(hz);
+        for (let f = 0; f < 4; f++) sc.update(inp);
+        rows.push({ name, withStar, before, after: pl.power.level, alive: !pl.dead });
+      }
+    }
+    const hurtBare = rows.filter((r) => !r.withStar).every((r) => r.after < r.before || !r.alive);
+    const safeStar = rows.filter((r) => r.withStar).every((r) => r.after === r.before && r.alive);
+    expect('tähti suojaa vaaralta joka osuu, kuten se suojaa piikiltä',
+      hurtBare && safeStar,
+      rows.map((r) => `${r.name} ${r.withStar ? 'tähdellä' : 'ilman'} ${r.before}->${r.after}`
+        + `${r.alive ? '' : ' kuoli'}`).join(', '));
   }
 
   /* ------------------------------ supertähti ---------------------------- */
