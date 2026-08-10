@@ -575,12 +575,21 @@ const CAM_PAGE_FRAMES = 0;
  * bars over the usual 208 rows would show the same picture and only take away
  * the part of it you were reading.
  *
- * 24 px a side leaves a 320x160 window: 2.00:1, ten tiles tall. That is as
- * narrow as it can safely go. The highest jump in the game rises **100 px**
- * (measured; see tools/measure-jump.mjs), and standing on the desert floor the
- * player's head sits 102 px below the top of the band — so the apex fits even
- * before the camera rises with it. Any taller a bar and you would be jumping
- * blind out of the top of the frame.
+ * 24 px a side leaves a 320x160 window: 2.00:1, ten tiles tall.
+ *
+ * **Tässä luki että pelin korkein hyppy nousee 100 px, ja se oli vanhentunut
+ * mittaus load-bearing-vakion vieressä.** `tools/jump-budget.json` sanoo 100
+ * px P-vauhdin hypystä ja **174 px juoksuhypystä pierupompulla** — pelin
+ * korkein on jälkimmäinen. Ja kun aavikon lattialla seisovan pelaajan pää on
+ * 102 px nauhan yläreunan alapuolella, oikea luku kääntää koko päätelmän
+ * nurin: **huippu ei mahdu ruutuun ennen kuin kamera nousee mukana**, vaan
+ * kamera on osa lupausta eikä sen varmistus.
+ *
+ * Palkki jää 24 px:ään, koska mitattu kamera nostaa näkymää nousun mukana (ks.
+ * `camAnchor` ja `CAM_V_EASE`) eikä yksikään mitattu hyppy 2-1:ssä tai
+ * 2-3:ssa poistu ruudusta. Mutta perustelu on nyt se mikä sen pitääkin olla:
+ * *kamera kantaa 174 px:n hypyn*, ei *hyppy mahtuu paikallaan*. Kumpi tahansa
+ * niistä lukee saman vakion vieressä, mutta vain toinen on totta.
  */
 const LETTERBOX_BAR = 24;
 
@@ -757,6 +766,28 @@ const CRUMBLE_FRAMES = 52;
 /** And how long the hole stays before the tile comes back. */
 const CRUMBLE_REGROW = 220;
 
+/*
+ * PUTOAVA LAATTA — möykky (`T.LUMP`), ks. `src/gfx/tiles.js`.
+ *
+ * `FALL_HANG` on varoitus ja se on ensin: möykky tärisee paikallaan 12 framea
+ * ennen ensimmäistä askeltaan, samalla liikkeellä kuin mureneva lauta, koska
+ * pelaaja on jo oppinut lukemaan sen. **Mikä voi satuttaa, sen pitää näkyä.**
+ *
+ * `FALL_STEP` on ruutu viittä framea kohti eli 3,2 px/framea. Se on nopeampi
+ * kuin kävely (1,5) ja hitaampi kuin pelaajan putoamisen huippunopeus
+ * (TERMINAL 4,0), eli sen alta ehtii pois jos lähtee heti — ja juuri se on
+ * mitattava ero varoituksen ja ansan välillä. Askelittain eikä pikselettäin,
+ * koska laatta on ruudukossa: puolikkaassa ruudussa oleva maastopala olisi
+ * ruutu jota `tileAt` ei osaa vastata.
+ *
+ * `FALL_REGROW` on 240 framea lepäämisen alusta, hitusen enemmän kuin
+ * murenevan laudan 220. Sen jälkeen möykky on takaisin kotiruudussaan ja
+ * kenttä on merkki merkiltä se jonka `playable.mjs` mittasi.
+ */
+const FALL_HANG = 12;
+const FALL_STEP = 5;
+const FALL_REGROW = 240;
+
 /* How long a switch runs. Ten seconds is enough to cross a room and get back,
  * and short enough that it is a window rather than a new normal. */
 const SWITCH_FRAMES = 600;
@@ -833,6 +864,11 @@ export class LevelScene {
      * which is deliberate — the save-state code already knows how to store a
      * per-tile timer map, so this costs one line there instead of a design. */
     this.crumbles = new Map();
+    /* Liikkeellä olevat möykyt: kotiruutu "ox,oy" → missä se nyt on ja kuinka
+     * kauan se on ollut matkalla. Avain on **kotiruutu eikä nykyinen paikka**,
+     * koska se on se ainoa asia joka ei muutu — ja se on myös se paikka johon
+     * laatta palaa, eli koko turvallisuusargumentti mahtuu avaimeen. */
+    this.falls = new Map();
     /* A switch is one number, not a rewritten grid — see `tileAt`. That is what
      * makes it impossible for an expiring switch to leave the level in a broken
      * half-state, and what makes the save state need one field instead of a
@@ -1174,6 +1210,41 @@ export class LevelScene {
   setTile(tx, ty, ch) {
     if (tx < 0 || tx >= this.w || ty < 0 || ty >= this.h) return;
     this.grid[ty][tx] = ch;
+    /*
+     * Maasto tottelee painovoimaa, ja se herää **tässä** eikä joka framen
+     * pyyhkäisyssä koko ruudukon yli.
+     *
+     * Kaksi syytä, ja jälkimmäinen on se joka ratkaisi. Pyyhkäisy maksaisi
+     * jokaisessa kentässä jossa yhtään möykkyä ei ole, eli lähes kaikissa. Ja
+     * tapahtumapohjaisena putoaminen on **kertaluontoinen ja jäljitettävä**:
+     * se alkaa siitä hetkestä jona joku tyhjensi ruudun, joten kotiin
+     * palannut möykky ei lähde saman tien uudestaan matkaan sillä perusteella
+     * että sen tuki on yhä poissa. Jatkuva tuentarkistus olisi tehnyt
+     * palaamisesta silmukan, ja silmukka on se muoto jossa "palautuva" lakkaa
+     * tarkoittamasta mitään.
+     *
+     * `this.falls` tarkistetaan, koska `setTile`iä kutsutaan myös ennen kuin
+     * konstruktori on ehtinyt luoda sen.
+     */
+    if (ch === T.EMPTY && this.falls) this.dropAbove(tx, ty);
+  }
+
+  /**
+   * Ruutu tyhjeni: jos sen päällä lepäsi möykky, se lähtee liikkeelle.
+   *
+   * Kaikki kutsujat ovat pelaajan tekoja — päänpuski (`smashBrick`), potkaistu
+   * kuori (`ShellGuy.smashAhead`) ja mureneva lauta jonka päällä pelaaja
+   * seisoi — paitsi yksi: mureneva lauta vihollisen alla (laki 2). Se on
+   * kielletty möykyn tueksi `rules.js`:ssä, ja **se kielto on koko
+   * reiluussääntö**: ilman sitä vihollinen voisi pudottaa möykyn pelaajan
+   * päähän ilman että pelaaja teki mitään.
+   */
+  dropAbove(tx, ty) {
+    const oy = ty - 1;
+    if (this.rawTileAt(tx, oy) !== T.LUMP) return;
+    const key = `${tx},${oy}`;
+    if (this.falls.has(key)) return;
+    this.falls.set(key, { ox: tx, oy, x: tx, y: oy, t: 0, rest: -1 });
   }
 
   solidAt(tx, ty) {
@@ -1360,10 +1431,26 @@ export class LevelScene {
     this.add(new Item(this, this.player.cx - 8, this.player.y - 20, kind, { emerge: false }));
   }
 
-  /** A sliding shell mows down everything it touches. */
+  /**
+   * A sliding shell mows down everything it touches.
+   *
+   * LAKI 4, ja se on tässä yhden ehdon levennys: pyyhkäisy luki
+   * `kind === 'enemy'`, eli papupommi — pelin ainoa heitetty ammus, `hazard` —
+   * oli asia jonka läpi liukuva kuori meni sanomatta mitään. Ehto on nyt
+   * *"osaako tämä ottaa kuoriosuman vastaan"*, ja se on eri kysymys kuin
+   * *"onko tämä vihollinen"*: närästysliekillä ei ole `hitByShell`iä eikä sitä
+   * ole unohdettu, koska liekki nousee lattiasta ja on sitä huonetta.
+   *
+   * **Pelaaja ei ole tässä silmukassa eikä koskaan ole ollut**, ja se on
+   * reiluussäännön puoliskoista se ilmainen: olioiden kesken syntyvä isku ei
+   * voi rakenteellisesti osua häneen. Se ainoa kuori joka häneen osuu on se
+   * jonka hän itse potkaisi, `collisions`issa — ja sen hän omistaa.
+   */
   shellSweep(shell) {
     for (const e of this.entities) {
-      if (e === shell || e.kind !== 'enemy' || e.dying || e.remove) continue;
+      if (e === shell || e.dying || e.remove) continue;
+      if (e.kind !== 'enemy' && e.kind !== 'hazard') continue;
+      if (typeof e.hitByShell !== 'function') continue;
       if (overlaps(shell.box, e.box)) e.hitByShell(Math.sign(shell.vx) || 1);
     }
   }
@@ -2002,6 +2089,7 @@ export class LevelScene {
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
+    this.updateFalls();
     this.updateSwitch();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
     /* Feet, not head: bumping your head into the sky band is not arriving. The
@@ -2027,9 +2115,30 @@ export class LevelScene {
   updateWind() {
     const cycle = this.tick % 600;
     this.gust = cycle > 380 ? Math.sin(((cycle - 380) / 220) * Math.PI) : 0;
-    if (this.gust > 0.05 && this.state === 'play') {
-      const push = this.gust * 0.055 * (this.player.onGround ? 0.5 : 1);
-      this.player.vx -= push;
+    if (this.gust <= 0.05 || this.state !== 'play') return;
+    const push = this.gust * 0.055;
+    this.player.vx -= push * (this.player.onGround ? 0.5 : 1);
+    /*
+     * LAKI 3: **tuuli kantaa kaikkea, ei vain pelaajaa.**
+     *
+     * Sama luku, sama puolitus maassa. Puolitus oli tähän asti pelaajan
+     * erikoisjärjestely ja se on nyt fysiikkaa: jalat maassa on jotain mitä
+     * vasten työntää, ilmassa ei ole. Juuri siksi tämä laki näkyy nimenomaan
+     * hyppäävässä ja lentävässä — ja siksi puuska on ensimmäistä kertaa asia
+     * jota voi *käyttää* eikä vain kestää.
+     *
+     * `push` menee `drift`iin eikä `vx`:ään, koska kävelijä kirjoittaa `vx`:n
+     * uusiksi joka framella: `vx`:ään lisätty tuuli olisi pyyhkiytynyt pois
+     * ennen kuin mikään ehti liikkua. Ks. `Enemy.moveSideways`.
+     *
+     * Vain hereillä olevat: ruudun ulkopuolella nukkuvaa vihollista ei
+     * simuloida, eikä sitä siis myöskään kanneta. Se on sama raja jonka
+     * `updateEntities` jo vetää, ja se on myös se raja joka pitää tämän lain
+     * pois ruudun ulkopuolisesta kirjanpidosta.
+     */
+    for (const e of this.entities) {
+      if (!e.active || e.remove || e.dying || !e.windborne) continue;
+      e.push(-push * (e.onGround ? 0.5 : 1));
     }
   }
 
@@ -2088,6 +2197,37 @@ export class LevelScene {
           this.crumbles.set(key, 0);
           Sfx.play('bump');
         }
+      }
+    }
+
+    /*
+     * LAKI 2: **lauta pettää myös vihollisen alta.**
+     *
+     * Lauta ei tiedä mikä sen päällä seisoo — sama lause kuin juoksuhiekalla,
+     * ja sama ratkaisu: yksi geometria, ei kahta. Kentän tekijä oppii yhden
+     * säännön eikä kahta, ja luulaakson lankku lakkaa olemasta laatta joka
+     * kantaa mitä tahansa paitsi pelaajaa.
+     *
+     * **Ääntä ei tule**, ja se on päätös eikä unohdus. `bump` on pelaajan
+     * raportti siitä että hän astui johonkin; kaksi ruutua taaksepäin
+     * naksahtava lauta jonka alle jäi kävelijä opettaisi katsomaan taakse
+     * silloin kun siellä ei ole mitään. Sama perustelu kuin sillä että
+     * juoksuhiekkaan uppoava vihollinen nähdään eikä kuulla.
+     *
+     * Ja koko lain turvallisuus on siinä että lauta **kasvaa takaisin**
+     * (`CRUMBLE_REGROW`, alla): olio ei muokkaa kenttää vaan aiheuttaa
+     * tilapäisen tapahtuman staattisessa kentässä. Ilman paluuta reitti voisi
+     * kadota, ja silloin tämä laki olisi rajan väärällä puolella.
+     */
+    for (const e of this.entities) {
+      if (e.kind !== 'enemy' || !e.active || e.dying || e.remove || !e.onGround) continue;
+      const ty = Math.floor((e.y + e.h) / TILE);
+      const x0 = Math.floor(e.x / TILE);
+      const x1 = Math.floor((e.x + e.w - 1) / TILE);
+      for (let tx = x0; tx <= x1; tx++) {
+        if (this.tileAt(tx, ty) !== T.CRUMBLE) continue;
+        const key = `${tx},${ty}`;
+        if (!this.crumbles.has(key)) this.crumbles.set(key, 0);
       }
     }
 
@@ -2163,6 +2303,103 @@ export class LevelScene {
   crumbleProgress(tx, ty) {
     const value = this.crumbles.get(`${tx},${ty}`);
     return value === undefined ? 0 : Math.min(1, value / CRUMBLE_FRAMES);
+  }
+
+  /**
+   * PUTOAVAT LAATAT. Yksi askel ruutua kohti, ja kotiin lopuksi.
+   *
+   * Koko silmukka on kirjoitettu sen ehdon ympärille joka tekee tästä
+   * turvallista: **möykky palaa kotiruutuunsa.** Niin kauan kuin se palaa,
+   * kenttä on lyhyen hetken toisenlainen ja sitten taas täsmälleen se kenttä
+   * jonka `playable.mjs` pelasi läpi voimatasolla 0. Jos joku joskus poistaa
+   * paluun, tämä laatta muuttuu olioksi joka muokkaa kenttää — ja se on tasan
+   * se asia jota ROADMAPin 10.8.2026 raja kieltää.
+   */
+  updateFalls() {
+    if (this.falls.size === 0) return;
+    for (const [key, f] of this.falls) {
+      f.t++;
+
+      if (f.rest < 0) {
+        if (f.t < FALL_HANG) continue;                     // varoitus ensin
+        if ((f.t - FALL_HANG) % FALL_STEP !== 0) continue;
+        const ny = f.y + 1;
+        const below = this.tileAt(f.x, ny);
+        if (ny >= this.h || isSolid(below) || isSemi(below)) {
+          f.rest = f.t;
+          this.shake(1.4);
+          Sfx.play('bump');
+          this.lumpImpact(f.x, f.y);
+          continue;
+        }
+        /* Vapautuva ruutu menee `setTile`n kautta, koska sen päällä voi olla
+         * toinen möykky: pino tulee alas pinona eikä ylin jää roikkumaan. */
+        this.setTile(f.x, f.y, T.EMPTY);
+        f.y = ny;
+        this.grid[f.y][f.x] = T.LUMP;
+        this.lumpImpact(f.x, f.y);
+        continue;
+      }
+
+      if (f.t - f.rest <= FALL_REGROW) continue;
+
+      /* Kotiin. Kaksi ehtoa, ja ne ovat eri asioita:
+       *
+       *   - **pelaajan sisään ei rakenneta seinää.** Sama sääntö kuin
+       *     murenevalla laudalla ja kytkimellä, ja samasta syystä: umpikiveen
+       *     sinetöityminen ajastimen takia olisi meidän vikamme eikä hänen.
+       *     Odotetaan, koska pelaaja liikkuu.
+       *   - **vihollinen ei voi lykätä paluuta.** Se joka seisoo kotiruudussa
+       *     nielaistaan ja se maksaa nolla, aivan kuten juoksuhiekkaan uponnut
+       *     — koska odottaminen tarkoittaisi että yksi kävelijä voi pitää
+       *     kentän muuttuneena loputtomiin, ja silloin "palautuva" on lupaus
+       *     jonka olio voi rikkoa.
+       */
+      const home = { x: f.ox * TILE, y: f.oy * TILE, w: TILE, h: TILE };
+      if (this.player && !this.player.dying && overlaps(this.player.box, home)) continue;
+      for (const e of this.entities) {
+        if (e.kind !== 'enemy' || e.dying || e.remove) continue;
+        if (!overlaps(e.box, home)) continue;
+        this.spawnPuff(e.cx, e.cy, true);
+        e.remove = true;
+      }
+      this.setTile(f.x, f.y, T.EMPTY);
+      this.setTile(f.ox, f.oy, T.LUMP);
+      this.falls.delete(key);
+    }
+  }
+
+  /**
+   * Mitä möykky tekee sille mikä on sen tiellä — olio ↔ olio, ei maastoa.
+   *
+   * `hitByShell` eikä `flipDie`, samasta syystä kuin maahaniskulla: sitkeät
+   * pysyvät sitkeinä ja yksi polku palvelee jokaista lajia. Ja se maksaa,
+   * toisin kuin juoksuhiekka: **pelaaja aloitti tämän ketjun** rikkomalla
+   * tuen, joten kaatuminen on hänen ansiotaan samalla tavalla kuin potkaistun
+   * kuoren kaatamat.
+   *
+   * Pelaajaan se osuu iskuna, ei paikkana, joten tähti suojaa siltä — sama
+   * raja jonka piikki ja närästysliekki jo vetävät (ks. `collisions`).
+   */
+  lumpImpact(tx, ty) {
+    const box = { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE };
+    for (const e of this.entities) {
+      if (e.kind !== 'enemy' && e.kind !== 'hazard') continue;
+      if (e.dying || e.remove || typeof e.hitByShell !== 'function') continue;
+      if (overlaps(box, e.box)) e.hitByShell(1);
+    }
+    const p = this.player;
+    if (p && !p.dying && p.star <= 0 && overlaps(box, p.box)) p.hurt('hazard');
+  }
+
+  /** How hard a hanging lump is shaking, 0…1, for the drawing code. */
+  fallWobble(tx, ty) {
+    if (this.falls.size === 0) return 0;
+    for (const f of this.falls.values()) {
+      if (f.x !== tx || f.y !== ty || f.rest >= 0) continue;
+      return Math.min(1, f.t / FALL_HANG);
+    }
+    return 0;
   }
 
   updateBumps() {
@@ -2901,6 +3138,9 @@ export class LevelScene {
             // How far, not whether: the leaves swing. See DOOR_OPEN_FRAMES.
             doorOpen: this.doorOpen,
             crumble: this.crumbleProgress(tx, ty),
+            /* Möykyn varoitustärinä. Sama kanava kuin murenevalla laudalla,
+             * koska se on sama lupaus: se mikä on lähdössä, näyttää siltä. */
+            fall: this.fallWobble(tx, ty),
             switchOn: this.switchTimer > 0,
             // A door is several tiles; each slice needs to know which of its
             // sides are the outside of the whole door.

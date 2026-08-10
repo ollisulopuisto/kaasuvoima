@@ -15714,6 +15714,392 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- rippeet: loppu ---- */
+/* ---- emergenssi: neljä lakia ---- */
+/*
+ * NELJÄ LAKIA, JA SE RAJA JOKA TEKEE NIISTÄ TURVALLISIA.
+ *
+ * ROADMAP 10.8.2026: **maasto → olio ja olio ↔ olio, ei olio → maastoa.** Raja
+ * on koko turvamarginaali eikä makuasia. Spelunky saa antaa kaiken vaikuttaa
+ * kaikkeen koska sen kenttä on kertakäyttöinen; tässä pelissä kentän on aina
+ * oltava läpäistävissä (DESIGN.md kohta 5), ja **jokainen nykyinen portti
+ * olettaa että kenttä on staattinen** — `playable.mjs` ajaa botin lähtötilan
+ * läpi, `validateLevel` lukee ruudukkoa, `difficulty.mjs` mittaa layoutin.
+ *
+ * Siksi jokainen laki tässä lohkossa on joko yksisuuntainen (maasto vaikuttaa
+ * olioon) tai olioiden välinen, ja se yksi kohta jossa maasto liikkuu —
+ * mureneva lauta ja putoava möykky — **palautuu itsestään**. Palautuva muutos
+ * on tilapäinen tapahtuma staattisessa kentässä; palautumaton olisi olio joka
+ * muokkaa kenttää, ja silloin reitti voisi kadota.
+ *
+ * Mitattu, ei muistettu: jokainen väite kantaa lukunsa mukanaan.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const E = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { Walker, ShellGuy, Flyer, BeanBomb } = await import('/src/entities/enemies.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const { captureState, restoreState } = await import('/src/core/savestate.js');
+    const { WORLDS } = await import('/src/data/worlds.js');
+    const game = window.sfb3;
+
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const reset = () => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+    };
+    /* Oma kenttä joka väitteelle, viholliset ja vaarat pois: mitattava olio on
+     * se joka tähän pannaan eikä se joka sattuu olemaan lähellä. */
+    const scene = (id) => {
+      reset();
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+    const put = (s, e) => { e.active = true; e.alwaysActive = true; s.entities.push(e); return e; };
+    const r1 = (v) => Math.round(v * 10) / 10;
+    const out = {};
+
+    /* --- 1. jää on liukas kaikille -------------------------------------- */
+    /*
+     * Mitataan **käännös**, ei lähtö, ja se on itsessään löydös: pito on sen
+     * maan ominaisuus jonka päällä keho seisoo, joten se näkyy vasta kun jokin
+     * pakottaa vauhdin muuttumaan. Seinä on juuri se jokin — `moveX` nollaa
+     * vauhdin osumassa — ja se on maastoa, eli koko mittaus pysyy laissa
+     * "maasto → olio".
+     *
+     * Sama kävelijä, sama seinä kolmen laatan päässä, kaksi teemaa. Ruoholla
+     * kävelijä saa vauhtinsa takaisin yhdellä framella (60 framea × 0,55 =
+     * täsmälleen 33 px, eli mikään ei muuttunut siellä missä lakia ei ole);
+     * jäällä se tarvitsee 55 framea eikä ehdi.
+     */
+    {
+      const walk = (id) => {
+        const s = scene(id);
+        const i = mkInput();
+        const p = s.player;
+        const w = put(s, new Walker(s, p.x + 48, p.y + p.h - 16));
+        w.facing = 1;
+        w.vx = 0;
+        const row = Math.floor((w.y + w.h - 1) / 16);
+        s.setTile(Math.floor(w.x / 16) + 3, row, T.HARD);
+        let turn = -1;
+        let xAtTurn = 0;
+        let moved = 0;
+        for (let f = 0; f < 300; f++) {
+          s.update(i);
+          if (turn < 0 && w.facing < 0) { turn = f; xAtTurn = w.x; }
+          if (turn >= 0 && f === turn + 60) moved = xAtTurn - w.x;
+        }
+        return { theme: s.theme, turn, moved: r1(moved), speed: w.speed };
+      };
+      out.ice = { grass: walk('1-1'), ice: walk('3-1'), frames: 60 };
+    }
+
+    /* --- 2. mureneva lauta pettää vihollisen alta, ja kasvaa takaisin ---- */
+    {
+      const s = scene('4-1');
+      const i = mkInput();
+      let spot = null;
+      for (let ty = 0; ty < s.h && !spot; ty++) {
+        for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.CRUMBLE) { spot = { tx, ty }; break; }
+      }
+      if (!spot) out.plank = { found: false };
+      else {
+        const w = put(s, new Walker(s, spot.tx * 16, spot.ty * 16 - 16));
+        w.speed = 0;           // seisoo paikallaan: mitataan lauta, ei kävelyä
+        w.vx = 0;
+        let started = 0;
+        for (let f = 0; f < 60; f++) {
+          s.update(i);
+          if (!started && s.crumbleProgress(spot.tx, spot.ty) > 0) started = f + 1;
+        }
+        const gone = s.tileAt(spot.tx, spot.ty) === T.EMPTY;
+        for (let f = 0; f < 320; f++) s.update(i);
+        const back = s.tileAt(spot.tx, spot.ty) === T.CRUMBLE;
+        out.plank = { found: true, at: `${spot.tx},${spot.ty}`, started, gone, back };
+      }
+    }
+
+    /* --- 3. tuuli kantaa kuoria ja vihollisia --------------------------- */
+    /* Sama kenttä ja sama olio kahdessa eri kohdassa tuulen sykliä: puuska on
+     * päällä kun `tick % 600 > 380`. Kaksi eri kenttää olisi mitannut maastoa. */
+    {
+      const gustAt = (startTick) => {
+        const s = scene('2-N');
+        const i = mkInput();
+        const p = s.player;
+        const fl = put(s, new Flyer(s, p.x + 40, p.y + p.h - 16));
+        fl.facing = 1;
+        s.tick = startTick;
+        const x0 = fl.x;
+        for (let f = 0; f < 60; f++) s.update(i);
+        return r1(fl.x - x0);
+      };
+      out.wind = { gust: gustAt(400), calm: gustAt(0), frames: 60 };
+    }
+
+    /* --- 4. potkaistu kuori tappaa sen mihin osuu ----------------------- */
+    /* Kävelijä on lähtötaso (se on kuollut aina), papupommi on se jota liukuva
+     * kuori ei ole koskaan koskenut: `shellSweep` luki vain `kind === 'enemy'`,
+     * ja papupommi on `hazard`. */
+    {
+      const s = scene('1-1');
+      const i = mkInput();
+      const p = s.player;
+      const sh = put(s, new ShellGuy(s, p.x + 40, p.y + p.h - 24));
+      sh.kick(1);
+      const bomb = put(s, new BeanBomb(s, sh.x + 4, sh.y + 2, 0));
+      const wk = put(s, new Walker(s, sh.x + 4, sh.y + 10));
+      s.update(i);
+      out.shell = { bomb: !!bomb.remove, walker: !!(wk.dying || wk.remove) };
+    }
+
+    /* --- 5. putoava laatta: möykky ------------------------------------- */
+    /*
+     * Koekenttä käsin: möykky, sen alla tiili, tiilen alla ilmaa ja maa.
+     * Tiili rikotaan (`smashBrick` = se mitä pelaajan päänpuski tekee), ja
+     * möykyn pitää tulla alas, tappaa se mikä on alla, ja **palata paikalleen**.
+     */
+    const fixture = (id, supportChar) => {
+      const s = scene(id);
+      const p = s.player;
+      /* Sarake kaukana pelaajasta, jonka lattia on ehjä ja jonka yllä on tilaa. */
+      let tx = -1;
+      for (let x = Math.floor(p.x / 16) + 10; x < s.w - 4; x++) {
+        if (s.grid[13][x] === T.GROUND && s.grid[12][x] === ' '
+          && s.grid[11][x] === ' ' && s.grid[10][x] === ' ' && s.grid[9][x] === ' ') { tx = x; break; }
+      }
+      if (tx < 0) return null;
+      s.setTile(tx, 10, T.LUMP);
+      s.setTile(tx, 11, supportChar);
+      return { s, tx };
+    };
+    {
+      const f = fixture('1-1', T.BRICK);
+      if (!f) out.lump = { built: false };
+      else {
+        const { s, tx } = f;
+        const i = mkInput();
+        const victim = put(s, new Walker(s, tx * 16, 12 * 16));
+        victim.speed = 0;
+        victim.vx = 0;
+        s.smashBrick(tx, 11);
+        let leftOrigin = 0;
+        let landedAt = 0;
+        for (let n = 0; n < 90; n++) {
+          s.update(i);
+          if (!leftOrigin && s.tileAt(tx, 10) !== T.LUMP) leftOrigin = n + 1;
+          if (!landedAt && s.tileAt(tx, 12) === T.LUMP) landedAt = n + 1;
+        }
+        const killed = !!(victim.dying || victim.remove);
+        let back = false;
+        for (let n = 0; n < 400 && !back; n++) {
+          s.update(i);
+          back = s.tileAt(tx, 10) === T.LUMP && s.tileAt(tx, 12) !== T.LUMP;
+        }
+        out.lump = { built: true, tx, leftOrigin, landedAt, killed, back };
+      }
+    }
+
+    /* --- 6. reiluus: ketju jonka pelaaja aloitti omistaa seurauksensa --- */
+    {
+      const f = fixture('1-1', T.BRICK);
+      if (!f) out.fair = { built: false };
+      else {
+        const { s, tx } = f;
+        const i = mkInput();
+        const p = s.player;
+        p.x = tx * 16;
+        p.y = 13 * 16 - p.h;
+        p.vy = 0;
+        const before = p.powerLevel;
+        s.smashBrick(tx, 11);
+        for (let n = 0; n < 90; n++) s.update(i);
+        out.fair = { built: true, before, after: p.powerLevel, alive: !p.dying };
+      }
+    }
+
+    /* --- 7. pikatallennus keskellä putoamista --------------------------- */
+    {
+      const f = fixture('1-1', T.BRICK);
+      if (!f) out.save = { built: false };
+      else {
+        const { s, tx } = f;
+        const i = mkInput();
+        s.smashBrick(tx, 11);
+        for (let n = 0; n < 12; n++) s.update(i);
+        game.pendingNode = WORLDS[0].nodes.find((n) => n.level === '1-1') || game.pendingNode;
+        const mid = s.falls ? s.falls.size : 0;
+        const snap = JSON.parse(JSON.stringify(captureState(game)));
+        const rows1 = [];
+        for (let n = 0; n < 60; n++) s.update(i);
+        for (let y = 9; y <= 13; y++) rows1.push(s.tileAt(tx, y));
+        restoreState(game, snap);
+        const s2 = game.scene;
+        const after = s2.falls ? s2.falls.size : 0;
+        for (let n = 0; n < 60; n++) s2.update(i);
+        const rows2 = [];
+        for (let y = 9; y <= 13; y++) rows2.push(s2.tileAt(tx, y));
+        out.save = {
+          built: true, mid, after,
+          same: rows1.join('') === rows2.join(''),
+          before: rows1.join(''), then: rows2.join(''),
+        };
+      }
+    }
+    return out;
+  });
+
+  /* --- laki 1 --- */
+  {
+    const { grass, ice, frames } = E.ice;
+    const ideal = grass.speed * frames;
+    expect('jää on liukas kaikille: seinästä kimmonnut kävelijä ei saa vauhtiaan takaisin jäällä',
+      grass.turn >= 0 && ice.turn >= 0
+      && grass.moved >= ideal - 0.5 && ice.moved < grass.moved * 0.8,
+      `${frames} framea käännöksen jälkeen: ruoho ${grass.moved} px `
+      + `(täysi vauhti ${ideal.toFixed(1)}), jää ${ice.moved} px `
+      + `— ${(100 * ice.moved / grass.moved).toFixed(0)} % ruohosta`);
+  }
+
+  /* --- laki 2 --- */
+  expect('mureneva lauta pettää vihollisen alta ja kasvaa takaisin',
+    E.plank.found && E.plank.started > 0 && E.plank.gone && E.plank.back,
+    E.plank.found
+      ? `lauta ${E.plank.at}: ajastin framella ${E.plank.started}, poissa ${E.plank.gone}, `
+        + `palasi ${E.plank.back}`
+      : '4-1:stä ei löytynyt murenevaa lautaa');
+
+  /* --- laki 3 --- */
+  expect('tuuli kantaa myös vihollista, ei vain pelaajaa',
+    E.wind.gust < E.wind.calm - 4,
+    `${E.wind.frames} framea 2-N:ssä: puuskassa ${E.wind.gust} px, tyynellä ${E.wind.calm} px `
+    + `— ero ${(E.wind.calm - E.wind.gust).toFixed(1)} px`);
+
+  /* --- laki 4 --- */
+  expect('potkaistu kuori tappaa sen mihin osuu, myös papupommin',
+    E.shell.walker && E.shell.bomb,
+    `kävelijä ${E.shell.walker ? 'kuoli' : 'jäi henkiin'}, `
+    + `papupommi ${E.shell.bomb ? 'räjähti' : 'jäi koskematta'}`);
+
+  /* --- putoava laatta --- */
+  expect('möykky putoaa kun sen tuki poistetaan, tappaa alta ja palaa paikalleen',
+    E.lump.built && E.lump.leftOrigin > 0 && E.lump.landedAt > 0 && E.lump.killed && E.lump.back,
+    E.lump.built
+      ? `sarake ${E.lump.tx}: lähti framella ${E.lump.leftOrigin}, pysähtyi ${E.lump.landedAt}, `
+        + `tappoi ${E.lump.killed}, palasi ${E.lump.back}`
+      : 'koekenttää ei saatu rakennettua');
+
+  /* --- reiluus --- */
+  expect('pelaajan aloittama ketju satuttaa pelaajaa',
+    E.fair.built && E.fair.after < E.fair.before,
+    E.fair.built ? `voimataso ${E.fair.before} -> ${E.fair.after}` : 'koekenttää ei saatu rakennettua');
+
+  /* --- determinismi --- */
+  expect('pikatallennus palauttaa putoavan möykyn samaan kohtaan',
+    E.save.built && E.save.mid > 0 && E.save.after === E.save.mid && E.save.same,
+    E.save.built
+      ? `putoavia ${E.save.mid} -> ${E.save.after}, sarake ${E.save.before} vs ${E.save.then}`
+      : 'koekenttää ei saatu rakennettua');
+
+  /* --- portti: möykky ei saa nojata murenevaan lautaan --- */
+  /*
+   * Tämä on reiluussäännön se puolisko joka ei ole havainto vaan portti.
+   * Vihollinen voi poistaa tasan yhden ruudun: murenevan laudan (laki 2). Jos
+   * möykky saisi nojata sellaiseen, vihollinen voisi pudottaa sen pelaajan
+   * päähän — ketju jota pelaaja ei aloittanut. Muut tuen poistajat (päänpuski,
+   * potkaistu kuori, kytkin) ovat kaikki pelaajan tekoja, joten kielto tekee
+   * säännöstä rakenteellisen eikä muistettavan: **ruudun ulkopuolista
+   * kirjanpitoa ei tarvita.**
+   */
+  {
+    const { validateLevel } = await import('../src/data/rules.js');
+    const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+    /* Möykky on kaksi riviä lattian yläpuolella eikä yksi, ja se on
+     * mittaustulos: `checkHeadroom` vaatii kolme vapaata riviä sen ruudukon
+     * yllä jonka päällä kuljetaan, joten tiili rivillä 11 olisi jo *toinen*
+     * huomautus samasta koekentästä. Yksi vika kerrallaan, kuten
+     * hiekkakoekentässä. */
+    const fixture = (over = {}) => {
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+      const set = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
+      set(8, '              C ');
+      set(9, '      !       B ');
+      set(12, '  1                         F   ');
+      set(13, '################################');
+      set(14, '################################');
+      for (const [y, s] of Object.entries(over)) set(Number(y), s);
+      return rows;
+    };
+    const lumpProblems = (list) => list.filter((p) => /falling tile/i.test(p));
+
+    const clean = validateLevel(fixture(), budget);
+    expect('kelvollinen möykky ei ole validaattorille ongelma',
+      clean.length === 0,
+      clean.length ? clean.join('; ') : 'möykky tiilen päällä, ilmaa yllä — ei huomautuksia');
+
+    const hanging = validateLevel(fixture({ 9: '      !         ' }), budget);
+    expect('ilmassa roikkuva möykky raportoidaan',
+      lumpProblems(hanging).length > 0,
+      lumpProblems(hanging)[0] || `ei huomautusta (${hanging.join('; ') || 'ei mitään'})`);
+
+    const onPlank = validateLevel(fixture({ 9: '      !       % ' }), budget);
+    expect('möykky murenevan laudan päällä raportoidaan',
+      lumpProblems(onPlank).length > 0,
+      lumpProblems(onPlank)[0] || `ei huomautusta (${onPlank.join('; ') || 'ei mitään'})`);
+
+    const walkedOn = validateLevel(fixture({ 7: '              o ' }), budget);
+    expect('möykyn päälle ei rakenneta reittiä',
+      lumpProblems(walkedOn).length > 0,
+      lumpProblems(walkedOn)[0] || `ei huomautusta (${walkedOn.join('; ') || 'ei mitään'})`);
+  }
+
+  /* --- vaikeusmittari sanoo rajansa ääneen --- */
+  /*
+   * ROADMAP 10.8.2026 kohta 3: luku pysyy vertailukelpoisena kaikkien kenttien
+   * ja kaiken ajan yli, ja siksi se mittaa yhä **lähtötilan**. Sanottu rajoitus
+   * on parempi kuin luku joka hiljaa tarkoittaa uutta asiaa — ja sanottu
+   * rajoitus jota mikään ei tarkista on muistiinpano, joten se luetaan ajosta.
+   */
+  {
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const run = promisify(execFile);
+    let stdout = '';
+    try {
+      ({ stdout } = await run(process.execPath, [join(ROOT, 'tools/difficulty.mjs')],
+        { cwd: ROOT, maxBuffer: 8 * 1024 * 1024 }));
+    } catch (err) {
+      stdout = `AJO KAATUI: ${err && err.message}`;
+    }
+    const line = stdout.split('\n').find((l) => /emergen/i.test(l)) || '';
+    expect('vaikeusmittari sanoo ääneen että se mittaa lähtötilan',
+      line.trim().length > 0,
+      line.trim() || 'ei riviä joka mainitsisi emergenssin');
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- emergenssi: loppu ---- */
 
 await browser.close();
 server.close();

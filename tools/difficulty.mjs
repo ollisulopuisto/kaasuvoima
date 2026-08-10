@@ -785,5 +785,22 @@ if (problems.length) {
 }
 
 console.log('\n  Heuristiikka lukee ruudukkoa. Se ei tiedä mitään rytmistä, pomon');
-console.log('  liikesarjasta eikä siitä miltä hyppy tuntuu.\n');
+console.log('  liikesarjasta eikä siitä miltä hyppy tuntuu.');
+/*
+ * ROADMAP 10.8.2026, kohta 3. Emergenssin ensimmäinen erä tuli sisään sinä
+ * päivänä — jää liukastaa kävelijän, tuuli kantaa vihollista, lauta pettää
+ * niiden alta, potkaistu kuori tappaa sen mihin osuu — ja mikään niistä ei näy
+ * tässä luvussa. Se on päätös eikä puute: **luku mittaa lähtötilan**, ja juuri
+ * se tekee siitä vertailukelpoisen kaikkien 64 kentän ja kaiken ajan yli, mikä
+ * on koko syy siihen että siihen luotetaan (kartan tähdet, haaran palkinto,
+ * maailman muoto).
+ *
+ * Rivi on tässä siksi että **sanottu rajoitus on parempi kuin luku joka
+ * hiljaa tarkoittaa uutta asiaa.** Jos joku joskus haluaa mitata sen mitä
+ * kentässä *tapahtuu*, se on eri mittari eikä tämän uusi versio — ja tämä rivi
+ * on se paikka josta hän huomaa ettei tämä ole se.
+ */
+console.log('  Se mittaa myös vain LÄHTÖTILAN: emergentit lopputulokset — jää,');
+console.log('  tuuli, murtuva lauta, putoava laatta, kuoriketju — ovat tämän');
+console.log('  mittauksen ulkopuolella, eivätkä ne siis nosta yhtään lukua.\n');
 }

@@ -14,9 +14,18 @@ import {
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
 } from '../gfx/sprites.js';
-import { TILE, T } from '../gfx/tiles.js';
+import { TILE, T, surfaceOf } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
+import { approach } from '../core/utils.js';
 import { Item } from './items.js';
+
+/**
+ * Kuinka kovaa tuuli saa kantaa. Sama luku kuin pelaajan kävelykatto
+ * (`MAX_WALK` 1,5), ja se on tässä siksi että ilmassa `drift` ei vaimene
+ * lainkaan: ilman kattoa 220 framen puuska kiihdyttäisi lentävän vihollisen
+ * nopeammaksi kuin pelaaja koskaan juoksee, ja **tuuli kantaa, se ei sinkoa.**
+ */
+const DRIFT_MAX = 1.5;
 
 /*
  * The bubble trap.
@@ -71,6 +80,92 @@ export class Enemy extends Entity {
      * derived value, would both have needed save code — and the version that
      * needs save code is the version somebody gets wrong. */
     this.sunk = 0;
+    /* Ulkopuolinen sivuttaisvauhti: se osa liikkeestä joka ei ole tämän olion
+     * omien jalkojen aikaansaamaa. Tuuli kirjoittaa tähän (laki 3), maa
+     * vaimentaa sen (laki 1), ja ilmassa se ei vaimene lainkaan.
+     *
+     * Tavallinen luku eikä johdettu arvo, ja samasta syystä kuin `sunk` on
+     * sellainen: `savestate.js` sarjallistaa jokaisen olion jokaisen oman
+     * kentän, joten puuskan keskellä otettu pikatallennus palautuu puuskan
+     * keskelle ilman riviäkään tallennuskoodia. */
+    this.drift = 0;
+  }
+
+  /* ==================== MAASTO → OLIO: kaksi funktiota ====================
+   *
+   * ROADMAP 10.8.2026 veti rajan: **maasto → olio ja olio ↔ olio, ei olio →
+   * maastoa.** Nämä kaksi ovat sen ensimmäinen puolisko, ja ne ovat `Enemy`n
+   * eivätkä lajin omia täsmälleen samasta syystä kuin `quicksandSurface` on
+   * `Entity`n: *maa ei tiedä mitä sen päällä seisoo*. Kaksi kopiota olisi
+   * kaksi mahdollisuutta lukea sama sääntö eri tavalla.
+   */
+
+  /** Se maa jonka päällä tämä keho seisoo — teema on aine, ks. `SURFACES`. */
+  get surface() { return surfaceOf(this.level.theme); }
+
+  /**
+   * Laji kertoo mihin se pyrkii, maa kertoo kuinka nopeasti se pääsee siihen.
+   *
+   * Tavallisella maalla `steer` on 8 px/framea², eli enemmän kuin mikään
+   * tavoite tässä pelissä on kaukana nykyisestä vauhdista — tulos on sama
+   * sijoitus kuin ennen, framelleen. Jäällä se on 0,01, ja silloin kävelijä
+   * tarvitsee 55 framea päästäkseen vauhtiinsa ja liukuu käännöksensä yli.
+   *
+   * Ilmassa vanha käytös sellaisenaan, ja se on päätös: hyppäävä vihollinen on
+   * ilmassa suurimman osan ajastaan, ja jos ilma ei antaisi pitoa lainkaan,
+   * seinään osunut lentäjä jäisi leijumaan paikalleen kaikissa kahdeksassa
+   * maailmassa. Tuuli pääsee siitä huolimatta läpi, koska tuuli ei kulje
+   * `vx`:n vaan `drift`in kautta.
+   */
+  steer(target) {
+    if (!this.onGround) { this.vx = target; return; }
+    this.vx = approach(this.vx, target, this.surface.steer);
+  }
+
+  /**
+   * Kantaako tuuli tätä.
+   *
+   * Oletus on ei, ja se on ahdas tarkoituksella: `drift` on tallennettavaa
+   * tilaa, ja tila jota kukaan ei koskaan kuluta on tilaa joka valehtelee
+   * tallennuksessa. Ne neljä jotka sanovat kyllä ovat samat neljä jotka
+   * kysyvät jalkojensa alta mitä ne voivat tehdä (`moveSideways`) — kävelijä,
+   * kuori, lentäjä ja piikkiukko. Pomo, aurinko, kuu, kurnuttaja ja putkeen
+   * pultattu nielu eivät ole tuulessa vaan kiinni jossakin, ja lista on yhden
+   * rivin mittainen levennettäväksi jos joku joskus haluaa toisin.
+   */
+  get windborne() { return false; }
+
+  /** Tuulen (tai minkä tahansa ulkopuolisen) työntö tälle framelle. */
+  push(dv) {
+    this.drift = Math.max(-DRIFT_MAX, Math.min(DRIFT_MAX, this.drift + dv));
+  }
+
+  /**
+   * Yksi vaakasiirto, oma vauhti ja ulkopuolinen työntö yhdessä.
+   *
+   * `drift` on erillinen komponentti eikä `vx`:ään laskettu lisä, koska
+   * `vx`:ään lisätty työntö kertyisi joka framella — se olisi kiihtyvyys eikä
+   * nopeus. Tässä ne lasketaan yhteen siirron ajaksi ja erotetaan heti
+   * jälkeen, joten laji näkee yhä oman vauhtinsa.
+   *
+   * Kun `drift` on nolla, tämä on merkki merkiltä `moveX`. Se on koko syy
+   * miksi kaikki kahdeksan maailmaa ovat ennallaan.
+   */
+  moveSideways() {
+    if (this.drift === 0) return moveX(this, this.level);
+    const own = this.vx;
+    this.vx = own + this.drift;
+    const hit = moveX(this, this.level);
+    if (hit) {
+      // Seinä ottaa työnnön vastaan: se on nimenomaan se asia jota vasten
+      // työntää, joten sen jälkeen kannettavaa vauhtia ei ole.
+      this.drift = 0;
+      this.vx = 0;
+    } else {
+      this.vx = own;
+      if (this.onGround) this.drift = approach(this.drift, 0, this.surface.drift);
+    }
+    return hit;
   }
 
   /*
@@ -345,6 +440,9 @@ export class Walker extends Enemy {
   /** The unit, and the one the whole thing was written for: it walks in. */
   get sinks() { return true; }
 
+  /** Se seisoo jaloillaan maassa, joten puuska saa siitä otteen. */
+  get windborne() { return true; }
+
   /*
    * A flattened walker is scenery for the rest of its animation — and a walker
    * that has just been shaken out of a flyer is untouchable for a moment.
@@ -373,8 +471,8 @@ export class Walker extends Enemy {
      * corpse on a two-thirds-of-a-second timer, and having it wade first would
      * be the sand taking credit for a stomp that has already been paid for. */
     if (this.sink()) return;
-    this.vx = this.speed * this.facing;
-    if (moveX(this, this.level)) this.facing *= -1;
+    this.steer(this.speed * this.facing);
+    if (this.moveSideways()) this.facing *= -1;
     applyGravity(this, 0.9);
     moveY(this, this.level);
     if (this.y > this.level.heightPx + 32) this.remove = true;
@@ -436,6 +534,10 @@ export class ShellGuy extends Enemy {
    * swallows you is exactly what being careful should mean.
    */
   get sinks() { return true; }
+
+  /** Kuori on pelin liikkuvin kappale, ja tuuli on se toinen asia joka voi
+   * panna sen liikkeelle ilman että kukaan potkaisi sitä. */
+  get windborne() { return true; }
 
   /**
    * A shell has no legs whichever mode it is in, so only the walking one is
@@ -532,8 +634,8 @@ export class ShellGuy extends Enemy {
     if (this.sink()) return;
 
     if (this.mode === 'walk') {
-      this.vx = this.speed * this.facing;
-      if (moveX(this, this.level)) this.facing *= -1;
+      this.steer(this.speed * this.facing);
+      if (this.moveSideways()) this.facing *= -1;
       // Unlike the walkers, these are careful about ledges.
       if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
         this.facing *= -1;
@@ -542,7 +644,7 @@ export class ShellGuy extends Enemy {
       // A shell that hits something goes through it or comes back off it, and
       // which one depends on what it hit. Bricks are the soft thing in this
       // game; everything else is masonry.
-      if (moveX(this, this.level)) {
+      if (this.moveSideways()) {
         if (!this.smashAhead()) {
           /* Bounce off it, at speed.
            *
@@ -558,7 +660,12 @@ export class ShellGuy extends Enemy {
       }
       this.level.shellSweep(this);
     } else {
-      this.vx = 0;
+      /* Levossa oleva kuori pyrkii pysymään paikallaan, ja `steer` on se joka
+       * kertoo pystyykö se siihen. Tavallisella maalla pystyy yhdellä framella
+       * — sama nolla kuin ennen — mutta jäällä lepäävä kuori ei ole levossa
+       * vaan matkalla, jos jokin on sen kerran työntänyt. */
+      this.steer(0);
+      this.moveSideways();
       if (this.reviveTimer > 0 && --this.reviveTimer === 0) this.toWalking();
     }
 
@@ -615,13 +722,17 @@ export class Flyer extends Enemy {
    */
   get sinks() { return true; }
 
+  /** Ja tämä on se joka näyttää lain: hyppääjä on ilmassa, eikä ilmassa ole
+   * mitään mitä vasten vastustaa puuskaa. */
+  get windborne() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
     if (this.sink()) return;
-    this.vx = this.speed * this.facing;
-    if (moveX(this, this.level)) this.facing *= -1;
+    this.steer(this.speed * this.facing);
+    if (this.moveSideways()) this.facing *= -1;
     applyGravity(this, 0.85);
     const hit = moveY(this, this.level);
     if (hit.ground) this.vy = this.hop;
@@ -678,13 +789,15 @@ export class SpikeGuy extends Enemy {
    * and a pool is not footing. */
   get sinks() { return true; }
 
+  get windborne() { return true; }
+
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
     if (this.bubbled) return this.updateBubbled();
     if (this.sink()) return;
-    this.vx = this.speed * this.facing;
-    if (moveX(this, this.level)) this.facing *= -1;
+    this.steer(this.speed * this.facing);
+    if (this.moveSideways()) this.facing *= -1;
     if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
       this.facing *= -1;
     }
@@ -2059,6 +2172,19 @@ export class BeanBomb extends Entity {
     Sfx.play('pop');
   }
 
+  /**
+   * Laki 4: **potkaistu kuori tappaa sen mihin osuu**, ja tämä on se osuma
+   * jota `shellSweep` ei ollut koskaan katsonut.
+   *
+   * Papupommi on `kind: 'hazard'` eikä `'enemy'`, ja pyyhkäisy luki vain
+   * vihollisia — eli pelin ainoa heitetty ammus oli ainoa asia jonka läpi
+   * liukuva kuori meni sanomatta mitään. Se on puhdas olio ↔ olio: maastoa ei
+   * ole mukana, kenttä ei muutu, ja pelaaja saa uuden vastauksen papuparoonin
+   * kysymykseen. Närästysliekki ei saa tätä metodia eikä se ole unohdus:
+   * liekki nousee lattiasta ja on sitä huonetta, ei kappale siinä.
+   */
+  hitByShell() { this.burst(); }
+
   update() {
     this.tick++;
     if (--this.life <= 0) {
@@ -2165,7 +2291,12 @@ export class BeanBaron extends Enemy {
     this.level.add(new Item(this.level, this.cx - 8, this.y + 2, 'pop', { emerge: false }));
     this.level.addScorePop(this.cx, this.y - 12, 'PAUKKUPAPU');
     this.level.shake(3);
-    Sfx.play('powerup');
+    /* `payout` eikä `powerup`: parooni pudottaa jotain, mutta kukaan ei ole
+     * vielä poiminut sitä. Sama jako kuin lohkoilla (`scenes/level.js`) —
+     * `powerup` on se hetki jolloin pelaaja kasvaa, ja lainattuna se lupaa
+     * kasvun jota ei tapahtunut. Nämä kaksi kohtaa olivat viimeiset joissa
+     * jako ei ollut vielä tehty. */
+    Sfx.play('payout');
   }
 
   /** Lobs one bean at where the player is standing. @returns the bomb. */
@@ -2270,7 +2401,9 @@ export class Moon extends Enemy {
       this.level.rollPowerup(this.level.player), { emerge: false }));
     this.level.spawnPuff(this.cx, this.y + 16);
     this.level.awardScore(this.score, this.cx, this.y);
-    Sfx.play('powerup');
+    /* `payout`, ks. `BeanBaron.defeat`: kuu antoi jotain, se ei kasvattanut
+     * ketään. Poimiminen soittaa `powerup`in omalla vuorollaan. */
+    Sfx.play('payout');
     return true;
   }
 
