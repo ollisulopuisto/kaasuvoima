@@ -2006,17 +2006,38 @@ export class Boss extends Enemy {
        * konstruktorissa, eli se voi myös **laskea**. Se on ero jokaiseen
        * muuhun pomoon: heillä numero vain nousee.
        *
-       * Signaali on kuva ja ääni yhdessä (DESIGN.md kohta 8), ja molemmat ovat
-       * pelissä jo: ruskea pilvi hänen omaa kaasuaan ja `fart`. Kolmatta
-       * pomoääntä ei tehdä — se olisi neljäs asia opeteltavaksi.
+       * Signaali on kuva ja ääni yhdessä (DESIGN.md kohta 8), ja molemmat
+       * sanovat nyt **kuka** eivätkä *että*: `onKingForm` pukee ruudun sen
+       * maailman väriin josta muoto tulee ja soittaa saapumisen oman äänen.
+       *
+       * Ennen tässä luki `Sfx.play('fart')`, ja se oli lainaa: sama ääni on
+       * jättiläisen kasvun ääni kahta riviä alempana. Yksi merkki kahdelle
+       * tilanvaihdokselle opettaa lukemaan toisen niistä väärin, ja tässä se
+       * oli erityisen kallista — kuningas *ei* kasva, joten ääni lupasi
+       * täsmälleen sen mitä hän ainoana pomona ei tee. Ruskea pilvi jää: se on
+       * hänen omaa kaasuaan ja se on paikallinen, kun taas verho on ruudun
+       * kokoinen.
        */
+      const wasIndex = this.formIndex;
       this.formIndex = Math.min(this.formIndex + 1, KING_FORMS.length - 1);
       this.form = KING_FORMS[this.formIndex];
       this.speed = 0.75 + this.form * 0.15;
       this.chargeTimer = 200;
       this.level.spawnPuff(this.cx, this.cy, true);
       this.level.shake(2);
-      Sfx.play('fart');
+      /*
+       * Vain kun joku oikeasti saapui. Viimeinen osuma kaataa hänet eikä
+       * vaihda mitään (`formIndex` on jo viimeinen), ja merkki joka laukeaa
+       * kun mikään ei muuttunut on nopein tapa opettaa pelaaja sivuuttamaan
+       * se — sama perustelu ja sama ehto kuin jättiläisen kansipölyllä alla.
+       *
+       * Ehto on `formIndex` eikä `form`, ja se on tarkoituksellinen: neljäs ja
+       * viides osuma antavat molemmat jättiläisen liikkeet (`KING_FORMS`
+       * sisältää kolmosen kahdesti, koska linna lähetti hänet 4-F:ssä ja
+       * 5-F:ssä), mutta ne ovat kaksi eri linnaketta ja siis kaksi eri väriä.
+       * Juuri se pari on koko maailman lause otettuna kirjaimellisesti.
+       */
+      if (this.formIndex !== wasIndex) this.level.onKingForm(this.formIndex);
     } else if (this.giant) {
       // Puffs up half a size with every hit, all the way to three times over.
       const before = this.targetScale;
