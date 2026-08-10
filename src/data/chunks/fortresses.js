@@ -1032,7 +1032,7 @@ const SPIRE_CHUNKS = {
  * tiedoston ennakkotapaus. Silti 8-F mittasi **0,0 %** koko pelille uutta, ja
  * syy on eri kuin muilla: 8-F ei toistanut muiden maailmojen linnakkeita vaan
  * *omia kenttiään*. `keep_vault`, `keep_teeth`, `keep_watch` ja `keep_croak`
- * ovat kaikki nähty kentissä 8-1…8-5 ennen kuin linnakkeen ovi aukeaa, joten
+ * ovat kaikki nähty kentissä 8-1…8-7 ennen kuin linnakkeen ovi aukeaa, joten
  * viimeisellä käytävällä ei ollut mitään sanottavaa.
  *
  * Siksi finaalilla on oma sanastonsa erikseen maailman omasta. Lause on se

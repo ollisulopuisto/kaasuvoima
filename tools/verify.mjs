@@ -3523,8 +3523,13 @@ const report = await page.evaluate(async () => {
      * nyt olisi punainen työstä jota ei ole vielä tehty. Kun ne valmistuvat,
      * niiden tunnukset lisätään tähän listaan — se on yhden rivin muutos ja se
      * on tarkoitus.
+     *
+     * **`w8` lisättiin 10.8.2026**, ja se oli täsmälleen se yhden rivin muutos:
+     * seitsemän uusintaa ja kuningas, kahdeksan kenttää ja kaksi hengähdystä
+     * (245 → 117 → 302 → 169 → 368 → 378 → 386). Jäljellä on `w2`, jonka haara
+     * on eri työ eri ehdoilla.
      */
-    const EIGHT_DONE = ['w1', 'w3', 'w4', 'w5', 'w6', 'w7'];
+    const EIGHT_DONE = ['w1', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8'];
     const shortOf = (id) => (shapes.find((s) => s.id === id) || { levels: 0 }).levels;
     const short = EIGHT_DONE.filter((id) => shortOf(id) !== 8);
     expect('maailmat 1 ja 3–7 ovat kahdeksan kentän mittaisia',
@@ -4121,23 +4126,41 @@ const report = await page.evaluate(async () => {
       flags: inWorld(n).reduce((s, id) => s + flagsIn(id), 0),
       doors: inWorld(n).filter((id) => getLevel(id).boss).length,
     }));
+    /*
+     * **Luku oli "kuusi ovea" 10.8.2026 asti, ja se vaihtui osuudeksi samasta
+     * syystä kuin askelten luku vaihtui kohdassa 1.** Kuusi ei ollut maailman
+     * ominaisuus vaan sen hetken, jolloin maailmassa oli kuusi kenttää, joten
+     * portti olisi kaatunut siitä oikeasta työstä joka kasvatti maailman
+     * kahdeksaan (ROADMAPin avoin kysymys 1). Väite on nyt **ovi joka
+     * kentässä**, ja se vahvistuu kun maailma kasvaa: nimittäjä kasvaa
+     * mukana.
+     */
     const w8flags = worldFlags[7];
-    expect('viimeisessä maailmassa ei ole yhtään lippua vaan kuusi ovea',
-      !!w8flags && w8flags.flags === 0 && w8flags.doors === 6
+    const w8levels = inWorld(8).length;
+    expect('viimeisessä maailmassa ei ole yhtään lippua vaan ovi joka kentässä',
+      !!w8flags && w8flags.flags === 0 && w8levels >= 6 && w8flags.doors === w8levels
       && worldFlags.slice(0, 7).every((r) => r.flags >= 3 && r.doors === 1),
-      worldFlags.map((r) => `w${r.n} ${r.flags} lippua / ${r.doors} ovea`).join(', '));
+      worldFlags.map((r) => `w${r.n} ${r.flags} lippua / ${r.doors} ovea`).join(', ')
+      + ` — w8 ${w8levels} kenttää`);
 
     /*
-     * 4. JOKAINEN POMO, EIKÄ YKSIKÄÄN KAHDESTI.
+     * 4. JOKAINEN POMO JONKA LINNA ON LÄHETTÄNYT.
      *
      * `bossVariant` on ainoa kohta jossa pomot oikeasti eroavat toisistaan —
-     * osumat, nopeus ja liikesarja tulevat siitä — ja peli on kuluttanut kuusi
-     * varianttia seitsemään linnakkeeseen (kolmonen kahdesti). Finaali kerää ne
-     * kaikki, kerran kunkin.
+     * osumat, nopeus ja liikesarja tulevat siitä — ja finaali kerää ne kaikki.
      *
-     * Toinen puolisko on se joka pitää tämän rehellisenä: **yksikään toinen
-     * maailma ei sisällä kahta eri pomoa.** Ilman sitä lukua "kuusi varianttia"
-     * olisi kuvaus eikä ero.
+     * **Tässä luki "kerran kukin" 10.8.2026 asti, ja se ehto oli tosi vain
+     * sattumalta.** Peli kuluttaa kuusi varianttia seitsemään linnakkeeseen,
+     * koska jättiläinen on kahden linnakkeen pomo (4-F ja 5-F), joten
+     * *varianttien* joukko ja *linnakkeiden* jono ovat eri asioita. Niin kauan
+     * kuin maailma 8 oli kuusi kenttää ne sattuivat mahtumaan päällekkäin;
+     * seitsemän uusinnan jälkeen eivät mahdu, ja "kerran kukin" olisi kieltänyt
+     * juuri sen toiston joka on maailman koko lause.
+     *
+     * Joukko-oppi jää siis tähän vain siltä osin kuin se erottaa jotain —
+     * **maailma 8 sisältää jokaisen pomon jonka peli tuntee, eikä yksikään muu
+     * maailma sisällä kahta** — ja jonon oikeellisuus (mikä uusinta on missä
+     * järjestyksessä) mitataan omassa lohkossaan, ks. `maailma 8 kahdeksaan`.
      */
     const variantsIn = (n) => new Set(inWorld(n).filter((id) => getLevel(id).boss)
       .map((id) => getLevel(id).bossVariant));
@@ -4145,9 +4168,8 @@ const report = await page.evaluate(async () => {
       .map((id) => getLevel(id).bossVariant));
     const w8v = variantsIn(8);
     const others = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ n, v: variantsIn(n) }));
-    expect('viimeisessä linnakkeessa on jokainen pelin pomo, kerran kukin',
+    expect('viimeisessä linnakkeessa on jokainen pelin pomo',
       w8v.size === allVariants.size && [...allVariants].every((v) => w8v.has(v))
-      && inWorld(8).filter((id) => getLevel(id).boss).length === w8v.size
       && others.every((o) => o.v.size <= 1),
       `w8 ${[...w8v].sort().join(' ')} (${w8v.size} kpl), koko peli `
       + `${[...allVariants].sort().join(' ')} — muissa maailmoissa `
@@ -4275,6 +4297,199 @@ const report = await page.evaluate(async () => {
       + `(${worstRun.run} saraketta vauhtia) — muun pelin ahtain ${elsewhereRun.id} `
       + `${elsewhereRun.run}`);
   }
+
+  /* ---- maailma 8 kahdeksaan ---- */
+  /*
+   * SEITSEMÄN UUSINTAA JA MEGAPOMO.
+   *
+   * Maailma 8 oli kuusi kenttää ja kuusi tappelua, ja se oli oikea muoto niin
+   * kauan kuin sen väite oli "jokainen pomo kerran". Omistajan päätös vaihtoi
+   * väitteen: linnakkeita on seitsemän (maailmat 1–7), joten uusintoja on
+   * **seitsemän** — yksi jokaista linnaketta kohti, siinä järjestyksessä kuin
+   * linna ne lähetti — ja kahdeksas ovi on kuningas itse.
+   *
+   * Erotus vanhaan on se että roolitus luetaan nyt **datasta eikä listasta**.
+   * Vanha ehto oli "jokainen variantti kerran", ja se piti paikkansa vain
+   * sattumalta: jättiläinen on kahden linnakkeen pomo (4-F ja 5-F), joten
+   * seitsemän uusintaa sisältää hänet kahdesti eikä joukko-oppi enää kelpaa
+   * väitteeksi. Uusi väite on jono jonoa vasten, ja se rikkoutuu jos jonkin
+   * maailman linnakkeen pomo vaihtuu ilman että maailma 8 seuraa perässä.
+   *
+   * Neljä mittausta, ja jokainen on sellainen jonka maailma voi rikkoa ja
+   * silti näyttää valmiilta:
+   *
+   *   1  jono      8-1…8-7 kantavat maailmojen 1–7 linnakepomot samassa
+   *                järjestyksessä, ja 8-F kantaa variantin jota ei ole muualla
+   *   2  verbi     kuningas ei kiihdy vaan vaihtuu — muut kiihtyvät
+   *   3  koko      kuningas ei lainaa jättiläisen kokoa, koska koko on se
+   *                ainoa asia joka vaatii toisen huoneen
+   *   4  lupaus    voimataso 0 kaataa kuninkaan, ja kellossa on ikkunoita
+   *                enemmän kuin hänellä osumia
+   *
+   * Nollatestinä on muu peli, kuten viereisessä lohkossa: jos jokainen pomo
+   * antaisi saman luvun, väite ei erottaisi mitään.
+   */
+  {
+    const K = await import('/src/entities/enemies.js');
+    const kLevels = await import('/src/data/levels.js');
+    const kGet = kLevels.getLevel;
+    const kIds = kLevels.levelIds();
+
+    /* 1. JONO JONOA VASTEN. */
+    const FORTS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F', '7-F'];
+    const rematchIds = kIds.filter((id) => /^8-[1-7]$/.test(id))
+      .sort((a, b) => a.localeCompare(b));
+    const wanted = FORTS.map((id) => kGet(id).bossVariant);
+    const got = rematchIds.map((id) => kGet(id).bossVariant);
+    const kingVariant = kGet('8-F').bossVariant;
+    const elsewhereKing = kIds.filter((id) => id !== '8-F' && kGet(id).boss
+      && kGet(id).bossVariant === kingVariant);
+    expect('maailma 8 uusii seitsemän linnaketta siinä järjestyksessä kuin ne tulivat',
+      rematchIds.length === 7 && got.join(',') === wanted.join(',')
+      && elsewhereKing.length === 0,
+      `linnakkeet ${wanted.join(' ')} — uusinnat ${got.join(' ')} `
+      + `(${rematchIds.join(' ')}), 8-F variantti ${kingVariant} `
+      + `muualla ${elsewhereKing.length} kertaa`);
+
+    /* Kuninkaan tappelu ajetaan kerran ja kaikki neljä väitettä lukevat samaa
+     * ajoa. Osumat annetaan `stomp()`illa suoraan: kysymys on siitä mitä pomo
+     * vastaa osumaan, ei siitä osuuko pelaaja — se on kohta 4. */
+    const fightOf = (id) => {
+      reset();
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      const boss = s.entities.find((e) => e instanceof K.Boss);
+      const forms = [];
+      const speeds = [];
+      const scales = [];
+      for (let hit = 0; hit < boss.maxHp; hit++) {
+        forms.push(boss.form === undefined ? boss.variant : boss.form);
+        speeds.push(Math.round(boss.speed * 100) / 100);
+        scales.push(boss.targetScale);
+        boss.invuln = 0;
+        boss.stomp();
+      }
+      scales.push(boss.targetScale);
+      return { boss, forms, speeds, scales };
+    };
+
+    /*
+     * 2. VERBI, ja se on kirjoitettu tähän muotoon vasta mittauksen jälkeen.
+     *
+     * Ensimmäinen versio väitti että *kuningas ei kiihdy* — että hänen
+     * nopeutensa on viimeisellä osumalla sama kuin ensimmäisellä. Mittaus
+     * kaatoi sen kahdesti ja molemmat kaatumiset opettivat jotain. Ensin
+     * nollatesti: **jättiläinen ei kiihdy sekään** (1,2 → 1,2), koska hänen
+     * vastauksensa on koko eikä nopeus, joten "muut kiihtyvät" oli epätosi
+     * kahdesta seitsemästä. Ja sitten väite itse: kuninkaan muotojono on
+     * linnakkeiden järjestys, ja `speed = 0,75 + variantti · 0,15`, joten
+     * järjestys **on** nopeusjärjestys — hänen nopeutensa nousee väistämättä.
+     *
+     * Oikea väite on siksi toinen ja se on tarkempi: **yksikään numero jonka
+     * kuningas kantaa ei ole hänen omansa.** Jokainen muu pomo vastaa osumaan
+     * kasvattamalla yhtä omaa lukuaan (nopeus +0,35 / +0,2, tai koko +0,5);
+     * kuningas vaihtaa koko lukusarjan jonkun toisen sarjaksi, ja jokainen
+     * nopeus jonka hän ottaa on jonkin linnakkeen oma aloitusnopeus. Muoto on
+     * se numero joka hänellä muuttuu, eikä yksikään muu pomo vaihda sitä
+     * kertaakaan.
+     */
+    const king = fightOf('8-F');
+    const others = FORTS.map((id) => ({ id, ...fightOf(id) }));
+    const baseSpeeds = new Set(others.map((o) => o.speeds[0]));
+    const borrowed = king.speeds.every((v) => baseSpeeds.has(v));
+    const steady = others.filter((o) => new Set(o.forms).size === 1);
+    const ownNumber = others.filter((o) => o.speeds[o.speeds.length - 1] > o.speeds[0]
+      || o.scales[o.scales.length - 1] > o.scales[0]);
+    expect('kuningas vastaa osumaan vaihtamalla muotoa, muut omalla numerollaan',
+      king.forms.join(',') === wanted.join(',') && borrowed
+      && new Set(king.forms).size > 1
+      && steady.length === FORTS.length && ownNumber.length === FORTS.length,
+      `kuningas muodot ${king.forms.join(' ')}, nopeudet ${king.speeds.join(' ')} `
+      + `(lainattuja ${borrowed ? 'kaikki' : 'ei kaikkia'}, linnakkeiden omat `
+      + `${[...baseSpeeds].sort((a, b) => a - b).join('/')}) — muut `
+      + `${others.map((o) => `${o.id} muoto ${[...new Set(o.forms)].join('+')} `
+        + `${o.speeds[0]}→${o.speeds[o.speeds.length - 1]} koko `
+        + `${o.scales[0]}→${o.scales[o.scales.length - 1]}`).join(', ')}`);
+
+    /* 3. KOKO. */
+    const giant = others.find((o) => o.id === '4-F');
+    expect('kuningas ei lainaa jättiläisen kokoa, vaikka lainaa hänen liikkeensä',
+      king.forms.includes(3) && king.scales.every((v) => v === 1)
+      && Math.max(...giant.scales) > 1,
+      `kuningas ${king.scales.join('/')} (muodot ${king.forms.join(' ')}), `
+      + `jättiläinen ${giant.scales.join('/')}`);
+
+    /* Ja koska kasvaminen on se ainoa asia joka vaatii toisen huoneen: jokainen
+     * kenttä jonka pomo kasvaa loppuu kannelliseen areenaan. Väite on datasta
+     * eikä nimistä, joten uusi kasvava pomo pienessä huoneessa jää tähän. */
+    const growers = kIds.filter((id) => kGet(id).boss && kGet(id).bossVariant === 3);
+    const smallRoom = growers.filter((id) => {
+      const chunks = kGet(id).chunks || [];
+      return chunks[chunks.length - 1] !== 'boss_arena_big';
+    });
+    expect('jokainen kasvava pomo tappelee kannellisessa areenassa',
+      growers.length >= 3 && smallRoom.length === 0,
+      `${growers.length} kasvavaa pomoa (${growers.join(' ')}), ilman kansia ${smallRoom.length}`);
+
+    /* 4. LUPAUS, ja se on sama simulaatio kuin muillakin pomoilla: kävele ja
+     * tallaa yhden ikkunan sisällä voimatasolla 0. */
+    {
+      reset();
+      const s = new LevelScene(game, '8-F');
+      game.setScene(s);
+      const boss = s.entities.find((e) => e instanceof K.Boss);
+      const idle = mkInput();
+      for (let f = 0; f < 90; f++) s.update(idle);
+      boss.hp = 1;
+      boss.spikePhase = 'open';
+      const openWindow = boss.openFrames;
+      boss.spikeTimer = openWindow;
+      const p = s.player;
+      p.y = boss.y + boss.h - p.h;
+      p.x = boss.cx - 90;
+      p.vx = 0; p.vy = 0;
+      s.centerCamera();
+      const i = mkInput();
+      let hitAt = -1;
+      for (let f = 0; f < openWindow && hitAt < 0; f++) {
+        boss.jumpTimer = 999; boss.chargeTimer = 999; boss.charging = 0;
+        const dx = boss.cx - p.cx;
+        const adx = Math.abs(dx);
+        i.held = blank();
+        i.pressed = blank();
+        if (!p.onGround) {
+          const want = Math.sign(dx) * Math.min(2.2, adx / 8);
+          if (p.vx < want - 0.15) i.held.right = true;
+          else if (p.vx > want + 0.15) i.held.left = true;
+          if (p.vy < 0) i.held.jump = true;
+        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+          i.held[dx > 0 ? 'right' : 'left'] = true;
+          i.held.run = true;
+        } else {
+          i.pressed.jump = true;
+          i.held.jump = true;
+        }
+        s.update(i);
+        if (boss.hp < 1 || s.bossDefeated) hitAt = f;
+      }
+      expect('8-F: voimataso 0 tallaa kuningasta yhden ikkunan sisällä',
+        hitAt >= 0, `osui framella ${hitAt}/${openWindow}`);
+    }
+
+    {
+      reset();
+      const s = new LevelScene(game, '8-F');
+      const boss = s.entities.find((e) => e instanceof K.Boss);
+      boss.hp = 1;
+      const cycle = boss.openFrames + 48 + 132;
+      const windows = Math.floor((s.time * 24) / cycle);
+      expect('kuninkaan kellossa on ikkunoita enemmän kuin hänellä osumia',
+        windows / boss.maxHp >= 4,
+        `${boss.maxHp} osumaa, ${windows} ikkunaa (${(windows / boss.maxHp).toFixed(1)} per osuma), `
+        + `kello ${s.time}, sykli ${cycle} framea`);
+    }
+  }
+  /* ---- maailma 8 kahdeksaan loppuu ---- */
 
   /* Picking up a different power-up swaps: the one you were wearing goes into
    * the reserve box rather than evaporating. */

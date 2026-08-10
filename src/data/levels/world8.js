@@ -15,64 +15,78 @@
  *
  *   **the fortress stops being the last level and becomes the whole world.**
  *
- * Six levels, every one of them indoors, and **every one of them ends in a
- * fight**. There is no flagpole anywhere in world 8. Six doors, six bosses —
- * the game's six, one per level, the whole cast the engine has — and the only
- * way out of every room is through whatever is standing in it.
+ * Kahdeksan kenttää, jokainen sisätilaa, ja **jokainen niistä päättyy
+ * tappeluun**. Maailmassa 8 ei ole yhtään lippua. Kahdeksan ovea — seitsemän
+ * uusintaa ja kuningas — eikä yhdestäkään huoneesta pääse ulos muuten kuin
+ * sen läpi mikä siinä seisoo.
  *
- * Four things follow from that, and all four are measured in `verify.mjs`
- * rather than argued here, because a claim about shape is exactly the kind that
- * can be wrong while everything still looks finished:
+ * Neljä asiaa seuraa tästä, ja kaikki neljä mitataan `verify.mjs`:ssä eikä
+ * perustella tässä, koska väite muodosta on juuri sitä lajia joka voi olla
+ * väärä samalla kun kaikki näyttää valmiilta:
  *
- *   - **six steps, not four.** `tiersOf` counts what a player walks. Every
- *     world so far is four steps, including world 2 with its branch and its six
- *     level files; this one is six.
- *   - **no outside.** Stone over every column of every level, 100 % against
- *     10–42 % for the fortress-and-three-fields worlds.
- *   - **no flag, six doors**, against three flags and one door everywhere else.
- *   - **every boss variant, once each.** No other world contains two.
+ *   - **jokainen askel on tappelu**, muualla vain viimeinen. Mitattuna 8/8 =
+ *     100 % ja jokainen muu 1/n.
+ *   - **ei ulkopuolta.** Kiveä joka kentän joka sarakkeen yllä, 100 % vastaan
+ *     10–57 % niissä maailmoissa joissa on linnake ja kolme kenttää.
+ *   - **ei lippua, ovi joka askeleella**, vastaan kolme lippua ja yksi ovi
+ *     kaikkialla muualla.
+ *   - **maailmojen 1–7 linnakepomot siinä järjestyksessä kuin ne tulivat**, ja
+ *     kahdeksantena variantti jota ei ole missään muualla.
  *
- * ## Why a boss rush, and why it is not a lazy one
+ * ## Miksi pomoralli, ja miksi se ei ole laiska
  *
- * The alternative shapes were real: a gauntlet level that quotes every
- * mechanic, or four fortresses in the old proportions. The rush was chosen
- * because it is the only one of the three that makes the finale *about the
- * game that came before it* rather than about itself. Every fight here is a
- * fight the player has already won once, in the room where they first won it,
- * and the sentence the world says is that the castle has nothing new to send.
+ * Vaihtoehtoiset muodot olivat todellisia: yksi juoksuhauta joka lainaa
+ * jokaista mekaniikkaa, tai neljä linnaketta vanhoissa mittasuhteissa. Ralli
+ * valittiin koska se on niistä kolmesta ainoa joka tekee finaalista väitteen
+ * *siitä pelistä joka tuli ennen sitä* eikä itsestään. Jokainen tappelu tässä
+ * on tappelu jonka pelaaja on jo kerran voittanut, ja maailman lause on että
+ * linnalla ei ole mitään uutta lähetettävää.
  *
- * What keeps it from being six copies of one level is that the corridor in
- * front of each fight is the level, and each one asks a different question:
+ * **Seitsemän uusintaa eikä kuusi, ja se on omistajan päätös 10.8.2026.**
+ * Vanha muoto oli kuusi kenttää ja väite "jokainen pomovariantti kerran". Se
+ * piti paikkansa vain sattumalta: varianttien joukko ja linnakkeiden joukko
+ * ovat eri joukot, koska **jättiläinen on kahden linnakkeen pomo** (4-F ja
+ * 5-F). Uusi muoto laskee linnakkeita eikä variantteja — seitsemän
+ * linnaketta, seitsemän uusintaa, jättiläinen kahdesti — ja se on ainoa
+ * laskutapa joka tekee maailman lauseesta kirjaimellisen. Linna lähettää sen
+ * mitä se on lähettänyt, myös silloin kun se lähetti saman kahdesti.
  *
- *   8-1  the gate       what a hole in a floor is, when the floor is stone
- *   8-2  the guard      the dip — no gap anywhere in it, and people instead
- *   8-3  the dungeon    two holes, one of them occupied, and the way up
- *   8-4  the forge      lava, and the two jets that decide when you cross it
- *   8-5  the storm      everything the world owns, in one corridor
- *   8-F  the throne     four trenches, nothing else, and then the giant
+ * Se mikä estää tätä olemasta kahdeksan kopiota yhdestä kentästä on se että
+ * käytävä jokaisen tappelun edessä *on* se kenttä, ja jokainen niistä kysyy
+ * eri kysymyksen:
  *
- * The fights run in the order the player first met them — variants 0, 1, 2, 4,
- * 5 — **except the giant, who is moved to the end.** He was met fourth (4-F)
- * and fought again fifth (5-F), so strict order would have put him in the
- * middle and finished on the weather lord. He is last because he is the only
- * boss in the game who needs a different room: he grows half a size per stomp,
- * the last two hits are outside a power-0 jump, and `boss_arena_big`'s decks
- * are the answer. A finale that ended on a fight the old arena could hold would
- * be ending on a smaller room than it passed through.
+ *   8-1  portti      mikä reikä lattiassa on, kun lattia on kiveä      (1-F)
+ *   8-2  vartio      notko — ei yhtään kuilua, asukkaita sen sijaan    (2-F)
+ *   8-3  tyrmä       kaksi reikää, toisessa asutaan, ja tie ylös       (3-F)
+ *   8-4  koneholvi   toinen notko: katto laskeutuu, missä saa hypätä   (4-F)
+ *   8-5  sulatto     neljä ylitystä, kaikki laavaa, ei yhtään reikää   (5-F)
+ *   8-6  ahjo        laava, ja ne kaksi suihkua jotka päättävät milloin (6-F)
+ *   8-7  myrskykammio kaikki mitä maailma omistaa, yhdessä käytävässä  (7-F)
+ *   8-F  valtaistuinsali  neljä kourua, ei muuta, ja sitten kuningas
+ *
+ * Tappelut kulkevat siinä järjestyksessä kuin pelaaja ne ensi kerran kohtasi —
+ * variantit 0, 1, 2, 3, 3, 4, 5 — **eikä yksikään ole siirretty.** Vanha
+ * kuuden kentän versio joutui siirtämään jättiläisen loppuun, koska hän oli
+ * ainoa pomo joka tarvitsee toisen huoneen ja koska muuten finaali olisi
+ * päättynyt sääherraan. Nyt siirtoa ei tarvita: hän on kohdissa 8-4 ja 8-5
+ * omine kannellisine areenoineen, ja finaalin viimeinen ovi on jonkun muun.
  *
  * ## Where the difficulty comes from
  *
- * **Lava, holes and the run-up, in that order.** The world mean is 301,0
- * against world 7's 279,2, and almost none of that is the bosses: the meter
- * prices a boss at 5,0 walkers, which over a 176-column level is worth about
- * twenty points. What carries the number is that every corridor is a corridor —
- * narrow, roofed, and cut by gaps that are lava rather than air.
+ * **Lava, holes and the run-up, in that order.** Almost none of it is the
+ * bosses: the meter prices a boss at 5,0 walkers, which over a 176-column
+ * level is worth about twenty points. What carries the number is that every
+ * corridor is a corridor — narrow, roofed, and cut by gaps that are lava
+ * rather than air.
  *
- * Measured, fortress included: 245 · 117 · 302 · 378 · 386 · 379.
+ * Mitattuna, linnake mukaan lukien:
+ * 245 · 117 · 302 · 169 · 354 · 378 · 386 · 318, keskiarvo **283,5**.
+ * Maailma 7 on 253,7, eli askel on **+29,8** — ja se kannattaa suhteuttaa
+ * pelin ohuimpaan askeleeseen, joka on w6 → w7 ja **+2,5**.
  *
  * **The dip is deeper than any before it, and that is structural rather than
- * careless.** 8-2 is 39 % of its world's mean where luulaakso's breather was
- * 56 % and kaasukehä's 65 %. Gaps are 30 % of what the meter weighs and pit
+ * careless.** 8-2 is 41 % of its world's mean where luulaakso's breather was
+ * 59 % and kaasukehä's 71 %. Gaps are 30 % of what the meter weighs and pit
  * share another 9 %, so in a world whose difficulty is almost entirely gaps, a
  * breather that takes the gaps out has further to fall than one in a world
  * whose difficulty is people. The hand disagrees with the meter here and the
@@ -82,7 +96,7 @@
  *
  * **And the composition rule is a measurement.** Nine columns of unbroken floor
  * in front of every single gap, world-wide, checked in `verify.mjs`. That one
- * number decides the chunk order of all six playlists: the shared `fort_gap`
+ * number decides the chunk order of all eight playlists: the shared `fort_gap`
  * carries only four columns of floor with it and `keep_forge` five, so neither
  * may follow a hole or another gap — a full-floor chunk goes between them,
  * every time. It is the executable form of the thing luulaakso wrote down and
@@ -104,9 +118,9 @@
  *
  * `music: 'autiovuori'` is Mussorgsky's *Night on Bald Mountain* in
  * Rimsky-Korsakov's arrangement (see `TRACKS` and DESIGN.md §1 b). The engine
- * plays the `boss` track while a fight is on, so in a world of six fights that
- * line would decide almost nothing — the piece would be heard in the corridors
- * and nowhere else.
+ * plays the `boss` track while a fight is on, so in a world of eight fights
+ * that line would decide almost nothing — the piece would be heard in the
+ * corridors and nowhere else.
  *
  * Hence `bossMusic` on 8-F, and it exists for exactly one level in the game.
  * The last fight is the only fight in this game whose music is not the boss
@@ -209,7 +223,104 @@ export const WORLD8_LEVELS = {
   },
 
   /*
-   * 8-4 AHJO — the forge, and the level about *when* rather than *whether*.
+   * 8-4 KONEHOLVI — se huone jossa kattoon voi koskea, ja maailman toinen
+   * hengähdys.
+   *
+   * **Miksi tämä kenttä on olemassa.** Maailma 8 oli kuusi kenttää ja sen
+   * väite oli "jokainen pomo kerran". Omistajan päätös vaihtoi väitteen:
+   * linnakkeita on seitsemän, joten uusintoja on seitsemän — ja jättiläinen on
+   * kahden linnakkeen pomo (4-F ja 5-F), joten hän tulee kahdesti. Kenttä 8-4
+   * on maailman 4 linnakkeen uusinta ja 8-5 maailman 5:n, ja **sama tappelu
+   * kahdesti peräkkäin on tämän maailman koko idea kirjaimellisesti otettuna**:
+   * linna lähettää sen mitä se on lähettänyt, myös silloin kun se lähetti
+   * saman kahdesti.
+   *
+   * Toisto ei siis ole tässä vahinko vaan se kohta jossa se pitää lunastaa, ja
+   * lunastus on huoneissa. **8-4 on huone jossa jättiläinen on ainoa vaara ja
+   * 8-5 se jossa hän on pienin niistä.** Toinen on hengähdys, toinen on
+   * maailman toiseksi vaikein käytävä, ja väliin ei mahdu kysymystä siitä
+   * miksi hänet nähdään kahdesti.
+   *
+   * **Hengähdyksen resepti on 8-2:n, mutta ei sama annos.** 8-2:ssa ei ole
+   * yhtään kuilua; tässä on kaksi reikää eikä tippaakaan laavaa, eli lattia
+   * pettää muttei kukaan ole kaivanut mitään. Mitattuna 117 ja 169 maailman
+   * keskiarvoa 285 vasten — 41 % ja 60 % — eli kaksi hengähdystä eri syvyyksillä
+   * eikä sama kenttä kahdesti. Luulaakson toinen notko on 59 % omastaan, joten
+   * tämä on se mitta jossa muut maailmat jo ovat.
+   *
+   * Se on toinen notko kahdeksan kentän muodossa (`verify.mjs`: kahdeksan
+   * kentän maailmassa on kaksi hengähdystä), ja se on tässä kohdassa samasta
+   * syystä kuin 6-4 ja 7-4 omissa maailmoissaan.
+   *
+   * Se mikä on uutta on `keep_yoke` ja `keep_grind`: **katto laskeutuu.** Koko
+   * maailma on tähän asti käyttänyt kattoa väitteenä — sitä on ollut joka
+   * sarakkeen yllä, ja `keep_gate` roikuttaa portin juuri korkeimman hypyn
+   * yläpuolelle — eli se on ollut asia jonka näkee. Tässä siihen törmää, ja
+   * kysymys on ensimmäistä kertaa **missä saa hypätä** eikä *kuinka pitkälle*.
+   * Se on myös se yksi asia jonka finaali tarvitsee: `throne_crawl` vie saman
+   * ajatuksen loppuun (katto rivillä 9, ei hyppyä lainkaan), ja se lause osuu
+   * kovempaa jos pelaaja on lukenut sen alkusoiton kerran.
+   *
+   * `boss_arena_big` eikä `boss_arena`, ja se on jättiläisen oma ehto eikä
+   * tämän kentän: hän kasvaa puoli kokoa jokaisesta osumasta, ja neljännen
+   * jälkeen hänen päänsä on voimatason 0 hypyn ulkopuolella. Kannet ovat se
+   * vastaus. `verify.mjs` väittää sen nyt datasta: jokainen kenttä jonka pomo
+   * kasvaa loppuu kannelliseen areenaan.
+   */
+  '8-4': {
+    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
+    chunks: [
+      'keep_start', 'fort_power', 'keep_yoke', 'keep_hole', 'keep_grind',
+      'keep_teeth', 'keep_watch', 'keep_hole', 'keep_yoke', 'boss_arena_big',
+    ],
+  },
+
+  /*
+   * 8-5 SULATTO — maailman 5 linnakkeen uusinta, ja käytävä jossa jokainen
+   * kuilu on laavaa.
+   *
+   * Sama pomo kuin 8-4:ssä ja tarkoituksella: linna lähetti jättiläisen
+   * kahdesti. Ero on huoneessa, ja se on mitattavissa yhtenä lukuna —
+   * **8-4:ssä on yksi kuilu, tässä neljä** — mutta se ei ole vielä lause. Lause
+   * on tämä: **täällä ei ole yhtään reikää.**
+   *
+   * Ero on koko maailman oma. `keep_hole` on lattia joka ei enää ole siinä,
+   * eli rakennus pettämässä; `fort_gap` ja `keep_pour` ovat kouruja, eli
+   * jotain minkä joku on kaivanut. 8-1 kysyy ensimmäisen, 8-6 kysyy neljä
+   * lajia peräkkäin, ja tämä kenttä kysyy toisen ja vain sen: neljä ylitystä,
+   * kaikki laavaa, ei yhtään lattian pettämistä. Loppupuolen linnake on
+   * pidetty kunnossa.
+   *
+   * `keep_pour` on kentän oma uusi kysymys ja se on `throne_moat`in peilikuva:
+   * mureneva lava **laskeutumispuolella** eikä lähtöpuolella. Lähtöpuolella se
+   * muuttaa hetken jolloin lähdet; laskeutumispuolella hyppy on jo tehty, ja
+   * kysymys on siitä pysähdytkö. Sama laatta, toinen kysymys — sama tapa jolla
+   * `keep_hole` ja `keep_croak` ovat sama viisi ruutua.
+   *
+   * **Ei `keep_forge`ia, vaikka se on maailman tunnetuin kouru, ja se on
+   * mittaus eikä maku.** Ensimmäinen versio avasi tällä kentällä ahjolla, ja
+   * `tools/variety.mjs` kertoi mitä se maksoi: 8-6 — se kenttä jonka *oma*
+   * ensimmäinen lause ahjo on — putosi **23,8 %:sta 5,9 %:iin** uutta muotoa
+   * ja olisi ollut koko pelin toistavin kenttä. Kaksi uutta kenttää voi siis
+   * tehdä vanhan kentän tyhjäksi kirjoittamatta siihen riviäkään, ja se
+   * tapahtuu juuri sillä palikalla joka oli sen paras. Suihkut jäävät 8-6:n
+   * omiksi.
+   *
+   * Kahta kourua ei ole peräkkäin, ja se on sääntö 3 eikä rytmi: `keep_pour`
+   * jättää taakseen murenevan huulen ja kaksi saraketta kiveä ja `fort_gap`
+   * tuo neljä. Jokaisen väliin menee täysi lattia, joka kerta — ahtain koko
+   * maailmassa on tässä kentässä, 15 saraketta.
+   */
+  '8-5': {
+    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
+    chunks: [
+      'keep_start', 'fort_power', 'keep_pour', 'keep_watch', 'fort_gap',
+      'keep_teeth', 'keep_pour', 'keep_yoke', 'fort_gap', 'boss_arena_big',
+    ],
+  },
+
+  /*
+   * 8-6 AHJO — the forge, and the level about *when* rather than *whether*.
    *
    * `keep_forge` opens it: five tiles of lava with a heartburn jet on each lip.
    * Every other gap in this world is a question about the run-up, and this one
@@ -226,7 +337,7 @@ export const WORLD8_LEVELS = {
    *
    * The fight is variant 4: the skeleton of 6-F, who comes apart at every hit.
    */
-  '8-4': {
+  '8-6': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 4,
     chunks: [
       'keep_start', 'fort_power', 'keep_forge', 'fort_hall', 'fort_gap',
@@ -235,7 +346,7 @@ export const WORLD8_LEVELS = {
   },
 
   /*
-   * 8-5 MYRSKYKAMMIO — the storm chamber, and the peak of the walk.
+   * 8-7 MYRSKYKAMMIO — the storm chamber, and the peak of the walk.
    *
    * Everything the world owns, in one corridor: the gate, three trenches, a
    * hole, the burning catwalk, an occupied hole, the teeth and the guardroom.
@@ -254,7 +365,7 @@ export const WORLD8_LEVELS = {
    * fight last among the recognitions is what makes the giant's arrival at 8-F
    * read as an interruption rather than as the next item.
    */
-  '8-5': {
+  '8-7': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 5,
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'fort_gap', 'keep_hole',
@@ -273,7 +384,7 @@ export const WORLD8_LEVELS = {
    * mittasi: **0,0 % koko pelille uutta muotoa.** Kaikki muut nollan
    * linnakkeet toistivat toisten maailmojen linnakkeita; tämä toisti *omia
    * kenttiään*. `keep_vault`, `keep_teeth`, `keep_watch` ja `keep_croak` on
-   * kaikki nähty kentissä 8-1…8-5 ennen kuin tämä ovi aukeaa, joten viimeisellä
+   * kaikki nähty kentissä 8-1…8-7 ennen kuin tämä ovi aukeaa, joten viimeisellä
    * käytävällä ei ollut mitään sanottavaa — ja jaettu `fort_gap` neljästi
    * huolehti lopusta.
    *
@@ -297,19 +408,64 @@ export const WORLD8_LEVELS = {
    * se paikka jossa voimatason 0 botti luovuttaa 5-F:ssä. Viimeinen kenttä jota
    * pienin koko ei läpäise on rikki eikä vaikea (DESIGN.md kohta 5).
    *
-   * `boss_arena_big` ja variantti 3: jättiläinen, viisi osumaa, puoli kokoa
-   * lisää jokaisesta. Kannet ovat syy siihen miksi hän on täällä eikä muualla —
-   * neljännen tallauksen jälkeen hänen päänsä on seisontahypyn ulkopuolella ja
-   * viidennen jälkeen jokaisen voimatason 0 hypyn ulkopuolella, joten kaksi
-   * viimeistä osumaa tulevat ylhäältä. Areena on jaettu, ja se on nimenomaan se
-   * osa jonka jakaminen kannattaa: areena on areena.
+   * ## MEGAPOMO, ja miksi hän ei ole isompi pomo
+   *
+   * Tässä seisoi jättiläinen (variantti 3), ja se oli oikein niin kauan kuin
+   * maailma oli kuusi kenttää ja sen väite oli "jokainen pomo kerran".
+   * Seitsemän uusinnan jälkeen se ei ole enää oikein kahdesta syystä: hänet on
+   * jo nähty kahdesti tässä maailmassa (8-4 ja 8-5, koska linna lähetti hänet
+   * 4-F:ssä ja 5-F:ssä), ja finaalin pitää olla se kohta jossa maailma tekee
+   * jotain muuta kuin toistaa.
+   *
+   * Kahdeksas ovi on siksi **PIERUKUNINGAS**, `bossVariant: 6`, ja hän on
+   * pelin ainoa megapomo. Ilmeinen megapomo on isompi sprite ja enemmän
+   * osumapisteitä, ja se on väärä ratkaisu siitä yhdestä syystä että se on
+   * *sama tappelu pidempänä*: jokainen tämän pelin pomo vastaa osumaan
+   * kasvattamalla yhtä omaa lukuaan — nopeus +0,35, luurangolla ja sääherralla
+   * +0,2, jättiläisellä koko +0,5 — ja pelaajan työ pysyy samana hieman
+   * nopeampana. Kuningas on ainoa jonka vastaus ei ole numero:
+   *
+   *     osuma ei kiihdytä häntä, se vaihtaa hänet joksikin toiseksi.
+   *
+   * Hän ottaa vuorollaan jokaisen seitsemän linnakkeen liikesarjan siinä
+   * järjestyksessä kuin linna ne lähetti — nyrkkeilijä, hyppääjä, syöksyjä,
+   * jättiläinen, jättiläinen, luuranko, sääherra — ja seitsemäs osuma kaataa
+   * hänet. Pelaajan työ ei siis ole toistaa yhtä opittua rytmiä loppuun asti
+   * vaan **tunnistaa kesken tappelun kuka juuri saapui**, ja se on tasan se
+   * taito jonka maailma 8 on seitsemässä huoneessaan opettanut. Maailman lause
+   * — linnalla ei ole mitään uutta lähetettävää, se lähettää kaiken minkä se
+   * on jo lähettänyt — on tässä yhdessä ruumiissa: **jokainen numero jonka
+   * kuningas kantaa on jonkun toisen numero**, eikä yhtään uutta mekaniikkaa
+   * synny. `src/entities/enemies.js` (`KING_FORMS`) on koko toteutus.
+   *
+   * **Se yksi asia jota hän ei lainaa on koko**, ja se on päätös. Koko on ainoa
+   * pomon ominaisuus tässä pelissä joka vaatii toisen huoneen: jättiläisen
+   * kannet ovat olemassa siksi että hänen päänsä karkaa voimatason 0 hypyn
+   * ulottuvilta. Kuningas joka kasvaisi kesken seitsemän muodon sarjan olisi
+   * joko saavuttamaton tai kutistuisi takaisin, ja DESIGN.md kohdan 5 lupaus
+   * annetaan tässä samalla mitalla kuin muillekin: `verify.mjs` ajaa
+   * voimatason 0 tallauksen yhden ikkunan sisällä myös 8-F:ssä.
+   *
+   * `boss_arena_big` jää silti, ja syy vaihtuu hänen mukanaan. Ennen kannet
+   * olivat *pakko*, koska jättiläisen päähän ei muuten yltänyt; nyt ne ovat
+   * **paikka jossa lukea**. Tappelussa jonka säännöt vaihtuvat joka osumalla
+   * pelaaja tarvitsee hetken nähdäkseen kumpi saapui, ja kannet ovat pelin
+   * ainoa jalansija jolle pomo ei yllä — se on mitattu jättiläisen omalla
+   * hypyllä, joka on nopein kuudesta.
+   *
+   * `time: 480` eikä oletus 300, ja se on johdettu eikä valittu: kellon on
+   * pidettävä sisällään reilusti enemmän ikkunoita kuin pomolla on osumia
+   * (`verify.mjs` vaatii neljä per osuma jokaiselta pomolta), ja seitsemän
+   * osumaa on kaksi enemmän kuin pelin siihenastinen ennätys. Kuninkaan ikkuna
+   * ei myöskään kapene osumien myötä niin kuin muilla — tappelu vaikeutuu
+   * vaihtumalla, ja kaksi kiristystä yhdestä osumasta on yksi liikaa.
    *
    * `bossMusic: 'autiovuori'` on pelin ainoa, ja tiedoston alku kertoo miksi:
    * kappale loppuu jo valmiiksi niin kuin tämän tappelun pitää loppua.
    */
   '8-F': {
-    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
-    bossMusic: 'autiovuori',
+    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 6,
+    bossMusic: 'autiovuori', time: 480,
     chunks: [
       'keep_start', 'throne_gate', 'throne_hoard', 'throne_crawl', 'throne_moat',
       'throne_teeth', 'throne_moat', 'throne_watch', 'throne_moat', 'throne_crawl',
