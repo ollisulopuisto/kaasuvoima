@@ -10,6 +10,38 @@ import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.
 import { secretTally } from '../core/secrets.js';
 import { MODE_NAME, SPLIT_COLORS } from '../core/timeattack.js';
 
+/*
+ * KARTAN ÄÄNET, LUETTUNA DESIGN.md KOHTAA 8 VASTEN (10.8.2026).
+ *
+ * Aamun ääniauditointi luki `level.js`:n ja pysähtyi siihen, joten kartan
+ * yksitoista `Sfx.play`-kutsua olivat lukematta. Ne on nyt luettu, ja tuomio on
+ * kirjattu tähän eikä muistiin — myös niiden kohdalla jotka jäivät ennalleen,
+ * koska "tämä on tarkasteltu ja se on oikein" on eri tieto kuin hiljaisuus.
+ *
+ * Kartta on kertojan puolta: se on **valintalauta**, ei huone. Siksi sen
+ * sanasto on valikon sanasto eikä maailman, ja kolme sanaa riittää:
+ *
+ *   `cursor`  (3) valinta liikkuu — nappula lähtee kävelemään solmulta
+ *                 toiselle, ja talon esinevalitsin liikkuu vasemmalle tai
+ *                 oikealle. Sama merkitys molemmissa: kohde vaihtui, mitään ei
+ *                 ole vielä päätetty.
+ *   `select`  (2) valinta lyödään lukkoon — kenttä alkaa, tai talon ovi
+ *                 aukeaa. Molemmat ovat "menen tähän", ja niiden erottaminen
+ *                 toisistaan vaatisi kaksi ääntä yhdelle asialle.
+ *   `bump`    (4) pyyntö ei mene läpi — suljettu polku, tyhjä talo, tyhjä
+ *                 varasto, jo täydet kaasut. Neljä eri syytä, yksi merkitys:
+ *                 **mitään ei tapahtunut**, ja syyn kertoo ruudulle ilmestyvä
+ *                 teksti. Neljä eri ääntä tekisi kieltäytymisestä tapahtuman.
+ *
+ * `Music.play('map')` on kertojaa sekin, kohdan 8 omalla listalla. Se ei ole
+ * ääniefekti eikä sitä lasketa tähän.
+ *
+ * Ja se yksi joka **ei** ollut oikein: talosta saatu esine soitti `powerup`in
+ * mennessään varastoon. Ks. `updateHouse`. Sen jälkeen `powerup` soi kartalla
+ * tasan yhdessä paikassa, `useReserve`ssa, jossa voimataso oikeasti nousee —
+ * ja `verify.mjs` lukee sen tiedostosta eikä usko tätä kommenttia.
+ */
+
 const MAP_Y = 14;
 const MAP_H = 144;
 const VIEW_W = 320;
@@ -449,7 +481,21 @@ export class WorldMapScene {
       this.game.persist();
       this.mode = 'idle';
       this.showMessage('SAIT ESINEEN VARASTOON');
-      Sfx.play('powerup');
+      /*
+       * `reserve` eikä `powerup`, ja se on aamun korjaus loppuun asti.
+       *
+       * Talosta saatu esine menee lokeroon: voimataso ei liiku, keho ei kasva,
+       * eikä ruudulla tapahdu mitään muuta kuin että HUDin lokero täyttyy.
+       * `powerup` sanoi tässä "kasvoit" — sama valhe jonka `level.js` lakkasi
+       * kertomasta aamulla — ja merkki joka valehtelee opitaan uskomaan
+       * (DESIGN.md kohta 8: yksi tilanvaihdos, yksi merkki).
+       *
+       * Kartta ja kenttä soittavat nyt samasta tapahtumasta saman äänen. Se on
+       * väitteen toinen puolisko eikä koristelu: kaksi murretta samalle asialle
+       * opettaisi pelaajan lukemaan lokeron täyttymistä kahtena eri asiana sen
+       * mukaan missä hän sattuu seisomaan.
+       */
+      Sfx.play('reserve');
     }
   }
 
