@@ -95,8 +95,8 @@ export const WORLD4_LEVELS = {
   '4-F': {
     theme: 'factory', bg: 'factory', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
-      'start', 'fac_floor', 'fort_power', 'fac_vents', 'fac_gap', 'fac_shaft',
-      'fac_belt', 'fac_vents', 'boss_arena_big',
+      'start', 'mill_gate', 'mill_duct', 'mill_press', 'mill_gap', 'mill_belt',
+      'mill_press', 'mill_duct', 'boss_arena_big',
     ],
   },
 };

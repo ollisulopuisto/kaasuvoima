@@ -483,8 +483,8 @@ export const WORLD2_LEVELS = {
   '2-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 1,
     chunks: [
-      'start', 'fort_hall', 'fort_power', 'fort_spikes', 'fort_gap', 'fort_blocks',
-      'fort_pillars', 'fort_spikes', 'fort_gap', 'fort_pillars', 'boss_arena',
+      'start', 'kiln_gate', 'kiln_hearth', 'kiln_bellows', 'kiln_flue', 'kiln_grate',
+      'kiln_bellows', 'kiln_flue', 'kiln_gate', 'kiln_grate', 'boss_arena',
     ],
   },
 };

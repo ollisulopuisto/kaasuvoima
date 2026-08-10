@@ -475,7 +475,10 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
   muotoa, nosta versionumeroa. **Päivän tulos on tarkoituksella oma avaimensa
   eikä kenttä `sfb3.save.v2`:ssa**: se vanhenee vuorokaudessa eikä ole
   edistymistä, joten sen muodon muuttuminen ei saa pakottaa nostamaan sitä
-  versionumeroa joka veisi jokaiselta pelaajalta elämät ja maailmat.
+  versionumeroa joka veisi jokaiselta pelaajalta elämät ja maailmat. Aika-ajon
+  `bestTimes` meni samaan tallennukseen, ja se on eri ratkaisu eri syystä eikä
+  ristiriita: paras aika on kertynyttä edistymistä ja se säilyy, päivän tulos
+  vanhenee huomiseen mennessä.
 - **Kuollut kohtaus lakkaa päivittämästä.** `LevelScene.update` palaa aikaisin
   140 framea kuoleman jälkeen. Testi joka haluaa ajaa kohtausta pitkään pitää
   pitää pelaaja hengissä — muuten se mittaa kuolemanimation pituutta eikä sitä

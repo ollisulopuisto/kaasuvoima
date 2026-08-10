@@ -2865,7 +2865,22 @@ const report = await page.evaluate(async () => {
   }
 
   /* Running past the boss must not delete it. The fortress door only opens on
-   * `bossDefeated`, so a despawned boss is an unwinnable level. */
+   * `bossDefeated`, so a despawned boss is an unwinnable level.
+   *
+   * KAADETTU POMO EI OLE KADONNUT POMO (10.8.2026). Tämä testi ei osannut
+   * erottaa niitä toisistaan, ja se paljastui vasta kun 1-F:n palikat
+   * vaihtuivat: uudella käytävällä sokeasti oikealle juokseva pelaaja ehtii
+   * tallata pomon framella 1310, ja `Boss.stomp` antaa kaadetulle `noclip`in ja
+   * pudottaa sen ruudun ali — eli **voittoanimaatio täytti tarkalleen sen
+   * ehdon jolla testi tunnisti karanneen pomon**, `boss.y > heightPx`.
+   *
+   * Ehto oli väärä eikä kenttä, ja väitteessä oli sen todiste: `!s.bossDefeated
+   * === !s.bossDefeated` on aina tosi, eli rivi näytti tarkistavan voiton
+   * mutta ei tarkistanut mitään. Väite on nyt se mitä se on aina yrittänyt
+   * sanoa — **pomo ei saa kadota elossa**, ja kaatuminen on hyväksytty
+   * lopputulos. Se kaataa yhä alkuperäisen vian: karkaava pomo katoaa
+   * `bossDefeated`in ollessa epätosi.
+   */
   {
     reset({ type: 'shroom', level: 1 });
     const s = new LevelScene(game, '1-F');
@@ -2884,15 +2899,22 @@ const report = await page.evaluate(async () => {
       if (f % 35 === 0) { i.pressed.jump = true; i.held.jump = true; } else if (f % 35 > 12) i.held.jump = false;
       s.player.invuln = Math.max(s.player.invuln, 4);      // survive long enough to watch
       s.update(i);
-      if (!lost && (!s.entities.includes(boss) || boss.remove || boss.y > s.heightPx)) {
+      if (!lost && !s.bossDefeated
+        && (!s.entities.includes(boss) || boss.remove || boss.y > s.heightPx)) {
         lost = { f, x: Math.round(boss.x), y: Math.round(boss.y), hp: boss.hp };
       }
     }
     expect('the boss cannot leave its arena and fall out of the level',
-      !lost && !s.bossDefeated === !s.bossDefeated && s.entities.includes(boss),
-      lost ? `pomo katosi framella ${lost.f} kohdassa ${lost.x},${lost.y} hp ${lost.hp}` : '');
+      !lost && (s.entities.includes(boss) || !!s.bossDefeated),
+      lost ? `pomo katosi framella ${lost.f} kohdassa ${lost.x},${lost.y} hp ${lost.hp}`
+        : `1500 framea, pomo ${s.bossDefeated ? 'kaadettu' : 'elossa'}`);
 
-    // The save state has to bring the boss back too, or the door never opens.
+    /* The save state has to bring the boss back too, or the door never opens.
+     * Oma kohtauksensa eikä edellisen jäännös: tallennus jossa pomo on jo
+     * kaadettu ei voi väittää mitään pomon palaamisesta. */
+    reset({ type: 'shroom', level: 1 });
+    const sSave = new LevelScene(game, '1-F');
+    game.setScene(sSave);
     game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-f');
     game.slot = 2;
     game.quickSave();
@@ -5468,6 +5490,321 @@ const report = await page.evaluate(async () => {
       expect('nothing can kill a player inside a pipe, and a forced death ends the trip',
         clockHeld && running && forced.player.transit === null && forced.player.dying,
         `kello ${s.time}, tila ${s.state}, kesken ${running}`);
+    }
+  }
+
+  /* ---------------- tilanvaihdos joka ei kuulunut eikä näkynyt ----------- */
+  /*
+   * DESIGN.md kohta 8, molemmat puolet: **kuva ja ääni yhdessä**, ja **kaksi
+   * samaa sanovaa merkkiä opettaa lukemaan väärää**. Tämä lohko mittaa neljä
+   * tilanvaihdosta joista jokainen muuttaa jotain minkä pelaaja sai tähän asti
+   * selville kokeilemalla.
+   *
+   * Punainen ennen vihreää on tässä se hyödyllinen puoli. Jokainen alla oleva
+   * väite kaatui ennen muutosta, ja **se kaatuminen on koko todiste siitä että
+   * merkkiä ei ollut**: "mittari täyttyi framella 87, ääni '-', 0 px ruudusta
+   * muuttui" on mittaus hiljaisuudesta, ei mielipide siitä että jotain pitäisi
+   * ehkä lisätä.
+   *
+   * Kuva mitataan **pelialueesta eikä HUDista** (0…VIEW_H), ja se on väitteen
+   * ydin eikä tekninen yksityiskohta: mittari vilkkuu HUDissa jo nyt, ja
+   * HUD-palkki on 320x240-ruudun alalaidassa siinä missä pelaajan silmä on
+   * kentässä. Merkki jonka näkee vain katsomalla muualle kuin siihen mitä
+   * pelaa ei ole merkki.
+   */
+  {
+    const { Sfx } = await import('/src/core/audio.js');
+
+    /* Äänet jotka tarkoittavat jo jotain muuta. Uusi merkki ei saa olla
+     * mikään näistä — ei siksi että uutuus olisi arvo sinänsä, vaan siksi
+     * että lainattu ääni tarkoittaa sen jälkeen kahta asiaa. */
+    const TAKEN = ['jump', 'bigjump', 'fart', 'bigfart', 'squeak', 'flight', 'coin',
+      'stomp', 'land', 'bump', 'brick', 'burst', 'sprout', 'dive', 'slam', 'kurnutus',
+      'loikka', 'kick', 'spikes', 'pop', 'upota', 'kahlaa', 'cork', 'soup', 'powerup',
+      'yeah', 'oof', 'letsgo', 'powerdown', 'oneup', 'die', 'clear', 'cursor', 'select',
+      'luuranko', 'boss', 'card', 'timewarn', 'door'];
+
+    const mk = (power, id = '1-1') => {
+      reset(power);
+      const s = new LevelScene(game, id);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      game.setScene(s);
+      return s;
+    };
+    const put = (s, tx, ty) => {
+      s.player.x = tx * 16 + (16 - s.player.w) / 2;
+      s.player.y = ty * 16 - s.player.h;
+      s.player.vy = 0;
+      s.player.onGround = true;
+      s.player.warpLock = 0;
+      s.centerCamera();
+    };
+    /* Kuuntelija joka ei soita läpi: nämä väitteet koskevat sitä *mitä* peli
+     * pyytää soittamaan ja millä framella, ja oikeasti soitetut äänet jäisivät
+     * soimaan tämän tiedoston myöhempien tasomittausten päälle. */
+    const listen = () => {
+      const real = Sfx.play;
+      const heard = [];
+      Sfx.play = function tap(name) { heard.push(name); };
+      return { heard, off() { Sfx.play = real; } };
+    };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const g = canvas.getContext('2d');
+    const PLAY_PX = 320 * 208;
+    /** Pelialue pikseleinä, HUD rajattuna pois. */
+    const paint = (s) => {
+      g.clearRect(0, 0, 320, 240);
+      s.draw(g);
+      return g.getImageData(0, 0, 320, 208).data;
+    };
+    const differing = (a, b) => {
+      let n = 0;
+      for (let p = 0; p < a.length; p += 4) {
+        if (a[p] !== b[p] || a[p + 1] !== b[p + 1] || a[p + 2] !== b[p + 2]) n++;
+      }
+      return n;
+    };
+    /* Kolme viidesosaa pelialueesta. Raja on tarkoituksella karkea: kyse ei ole
+     * siitä osuiko efekti tiettyyn pikseliin vaan siitä muuttuiko ruutu niin
+     * paljon että sen huomaa katsomatta HUDiin. Pelkkä juokseva hahmo ja
+     * vierivä tausta liikuttavat tässä kentässä alle kymmenesosaa. */
+    const MOST = Math.round(PLAY_PX * 0.6);
+
+    /*
+     * 1. MITTARI TÄYTTYY. Kaksi asiaa muuttuu oikeasti — nopeuskatto 2,5 ->
+     *    3,5 px/frame ja kaasulehdellä hypystä tulee lento — ja kumpikin oli
+     *    tähän asti asia jonka sai tietää kokeilemalla.
+     */
+    let fullSound = null;
+    let spentSound = null;
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      const i = mkInput();
+      const tap = listen();
+      let fullAt = -1;
+      let atFull = [];
+      let before = null;
+      let after = null;
+      try {
+        for (let f = 0; f < 300 && fullAt < 0; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          before = paint(s);
+          const n = tap.heard.length;
+          s.update(i);
+          if (s.player.pFull) { fullAt = f; atFull = tap.heard.slice(n); }
+        }
+        after = paint(s);
+      } finally { tap.off(); }
+      fullSound = atFull[0] || null;
+      const changed = before && after ? differing(before, after) : 0;
+      expect('täyttynyt vauhtimittari kuuluu ja näkyy pelialueella',
+        fullAt >= 0 && atFull.length === 1 && Sfx.has(fullSound)
+        && !TAKEN.includes(fullSound) && changed > MOST,
+        `täyttyi framella ${fullAt}, ääni "${atFull.join('+') || '-'}", `
+        + `${changed}/${PLAY_PX} px pelialueesta muuttui (vaadittu ${MOST})`);
+    }
+
+    /*
+     * 2. JA TYHJENEE, mikä on sama tapahtuma takaperin ja tarvitsee merkin
+     *    kipeämmin: nopeuskatto putoaa takaisin ja lentäminen lakkaa olemasta
+     *    mahdollista. Eri ääni kuin täyttyminen, tai pari ei ole pari vaan
+     *    kaksi samaa merkkiä.
+     */
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      const i = mkInput();
+      const tap = listen();
+      let spentAt = -1;
+      let atSpent = [];
+      let before = null;
+      let after = null;
+      try {
+        /* Täyteen, ja sitten kaksikymmentä framea täydellä vauhdilla lisää:
+         * täyttymisen oma merkki on ohi ennen kuin tyhjenemisen merkkiä
+         * mitataan, joten `before` on tavallinen ruutu eikä edellinen efekti. */
+        for (let f = 0; f < 320; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          s.update(i);
+          if (s.player.pFull && f > 20 && !s.speedPulse) break;
+        }
+        for (let f = 0; f < 300 && spentAt < 0; f++) {
+          i.held = blank(); i.pressed = blank();
+          before = paint(s);
+          const n = tap.heard.length;
+          s.update(i);
+          if (!s.player.pFull) { spentAt = f; atSpent = tap.heard.slice(n); }
+        }
+        after = paint(s);
+      } finally { tap.off(); }
+      [spentSound] = atSpent;
+      const changed = before && after ? differing(before, after) : 0;
+      expect('tyhjentynyt vauhtimittari kuuluu, ja eri äänellä kuin täyttynyt',
+        spentAt >= 0 && atSpent.length === 1 && Sfx.has(spentSound)
+        && !TAKEN.includes(spentSound) && spentSound !== fullSound && changed > MOST,
+        `tyhjeni framella ${spentAt}, ääni "${atSpent.join('+') || '-'}" `
+        + `(täyttyminen "${fullSound || '-'}"), ${changed}/${PLAY_PX} px muuttui`);
+    }
+
+    /*
+     * 3. JA SE SAMA MERKKI LENNOSSA, joka on koko asian pahin tapaus.
+     *
+     * Kaasulehdellä täysi mittari on lentolupa, ja lento kuluttaa mittarin.
+     * Kaksi asiaa on todistettava yhdessä eikä kumpaakaan yksin:
+     *
+     *   - **Nousu ei saa laukaista "meni"-merkkiä.** Mittari alkaa tyhjentyä
+     *     samalla framella jolla siivet aukeavat, joten pelkkä `pFull`-reuna
+     *     olisi huutanut menetystä juuri silloin kun etu otettiin käyttöön.
+     *   - **Mittarin loppuminen ilmassa saa sen.** Se on se hetki jolla peli
+     *     lakkaa kannattelemasta, eikä siitä ollut mitään merkkiä.
+     */
+    {
+      const s = mk({ type: 'leaf', level: 3 });
+      /* Tasainen koerata, sama temppu kuin hyppybudjetin mittauksessa: lento
+       * kestää satakuusikymmentäkahdeksan framea ja kantaa pelaajan halki
+       * puolen kentän, joten 1-1:n oma maasto olisi tässä satunnaismuuttuja
+       * eikä mitattava asia. Mittarin käyttäytyminen ei ole kentän ominaisuus. */
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      const i = mkInput();
+      const tap = listen();
+      let flewAt = -1;
+      let endAt = -1;
+      let endHeard = [];
+      let endedInAir = false;
+      let spentDuringFlight = 0;
+      try {
+        for (let f = 0; f < 40; f++) { i.held = blank(); i.pressed = blank(); s.update(i); }
+        for (let f = 0; f < 300 && !s.player.pFull; f++) {
+          i.held = blank(); i.held.right = true; i.held.run = true;
+          i.pressed = blank();
+          s.update(i);
+        }
+        for (let f = 0; f < 900 && endAt < 0; f++) {
+          i.held = blank(); i.pressed = blank();
+          /* Vauhti pidetään päällä kunnes siivet ovat auki. Mittari tyhjenee
+           * maassa heti kun juoksunappi irtoaa, ja lentolupa *on* täysi
+           * mittari — ilmassa mittari jäätyy, joten nousun ikkuna on juuri se
+           * hyppy joka lähtee täydellä vauhdilla. */
+          if (flewAt < 0) { i.held.right = true; i.held.run = true; }
+          // Pohjahyppy ensin, sitten siiveniskut: lento alkaa vasta ilmassa.
+          if (f === 0 || (flewAt >= 0 && (f - flewAt) % 8 === 0) || (flewAt < 0 && f === 6)) {
+            i.pressed.jump = true; i.held.jump = true;
+          }
+          const wasFlying = s.player.flying;
+          const n = tap.heard.length;
+          s.update(i);
+          const fresh = tap.heard.slice(n);
+          if (flewAt < 0 && s.player.flying > 0) flewAt = f;
+          if (flewAt >= 0 && wasFlying > 0 && s.player.flying === 0) {
+            endAt = f;
+            endHeard = fresh;
+            endedInAir = !s.player.onGround;
+          } else if (flewAt >= 0) {
+            spentDuringFlight += fresh.filter((x) => x === spentSound).length;
+          }
+        }
+      } finally { tap.off(); }
+      /* Sama ääni kuin maassa mitattu, ei uusi: maassa hiipuva mittari ja
+       * ilmassa loppuva lento ovat sama tilanvaihdos — etu meni — ja kaksi
+       * merkkiä samalle asialle on juuri kohdan 8 virhe. */
+      expect('lennon loppuminen ilmassa sanotaan, eikä nousu sano sitä',
+        flewAt >= 0 && endAt > flewAt + 100 && endedInAir
+        && !!spentSound && endHeard.includes(spentSound) && spentDuringFlight === 0,
+        `nousu framella ${flewAt}, lento loppui framella ${endAt} `
+        + `(ilmassa ${endedInAir}), ääni "${endHeard.join('+') || '-'}", `
+        + `merkki lennon aikana ${spentDuringFlight} kertaa`);
+    }
+
+    /*
+     * 4. PUTKESTA ULOS. Kuva on ollut olemassa koko ajan — keho nousee
+     *    mahasta, kamera leikkaa ja neljä kaasupilveä jää jalkojen alle — ja
+     *    ääni oli lainattu: `door`, sama jolla linnakkeen ovi aukeaa ja jolla
+     *    siitä kävellään sisään. Yksi ääni kolmelle asialle on se merkki jonka
+     *    pelaaja oppii lukemaan väärin.
+     */
+    {
+      const s = mk({ type: 'shroom', level: 1 }, '1-2');
+      put(s, 229, 26);
+      const i = mkInput();
+      const tap = listen();
+      let inSound = null;
+      let outSound = null;
+      let puffs = 0;
+      try {
+        for (let f = 0; f < 200 && !outSound; f++) {
+          i.held = blank(); i.held.down = f < 4; i.pressed = blank();
+          const was = s.player.transit ? s.player.transit.phase : null;
+          const n = tap.heard.length;
+          s.update(i);
+          const now = s.player.transit ? s.player.transit.phase : null;
+          const fresh = tap.heard.slice(n);
+          if (!inSound && !was && now) [inSound] = fresh;
+          if (was === 'hold' && now === 'out') {
+            [outSound] = fresh;
+            puffs = s.entities.filter((e) => e.constructor.name === 'Puff').length;
+          }
+        }
+      } finally { tap.off(); }
+      expect('putkesta ulos on oma äänensä eikä oven laina',
+        inSound === 'pipe' && !!outSound && outSound !== 'door'
+        && outSound !== inSound && Sfx.has(outSound) && puffs >= 4,
+        `sisään "${inSound || '-'}", ulos "${outSound || '-'}", `
+        + `kaasupilviä ${puffs}`);
+    }
+
+    /*
+     * 5. VARALOKERO. Täydellä voimatasolla poimittu tehostus ei muuta kehossa
+     *    mitään — se menee lokeroon — ja silti soi `powerup`. Peli sanoi
+     *    "kasvoit" hetkellä jolla mikään ei kasvanut, mikä on pahempi kuin
+     *    hiljaisuus: valheellisen merkin oppii uskomaan.
+     *
+     *    Kuvaa ei lisätä eikä tarvitse: lokero on HUDissa juuri tätä varten ja
+     *    esine ilmestyy siihen. Se mitataan tässä nimenomaan siksi, että
+     *    todiste "kuva on jo olemassa" on se perustelu jolla toinen kuva
+     *    jätetään lisäämättä.
+     */
+    {
+      const tap = listen();
+      let maxed = [];
+      let grew = [];
+      let stored = null;
+      try {
+        const s = mk({ type: 'shroom', level: 5 });
+        s.player.collect('shroom');
+        stored = game.state.reserve;
+        maxed = tap.heard.slice();
+        tap.heard.length = 0;
+        const s2 = mk({ type: 'shroom', level: 1 });
+        s2.player.collect('shroom');
+        grew = tap.heard.slice();
+      } finally { tap.off(); }
+
+      const s3 = mk({ type: 'shroom', level: 5 });
+      const box = () => {
+        g.clearRect(0, 0, 320, 240);
+        s3.draw(g);
+        return g.getImageData(6, 208 + 6, 20, 20).data;
+      };
+      game.state.reserve = null;
+      const emptyBox = box();
+      game.state.reserve = 'shroom';
+      const fullBox = box();
+      const boxPx = differing(emptyBox, fullBox);
+
+      expect('varalokeron täyttyminen on oma tapahtumansa, ei tehostuksen ääni',
+        stored === 'shroom' && maxed.length === 1 && grew.length === 1
+        && grew[0] === 'powerup' && maxed[0] !== grew[0] && Sfx.has(maxed[0])
+        && !TAKEN.includes(maxed[0]) && boxPx > 40,
+        `lokeroon "${maxed.join('+') || '-'}", kasvuun "${grew.join('+') || '-'}", `
+        + `lokeron kuva muuttui ${boxPx}/400 px`);
     }
   }
 
@@ -11327,6 +11664,92 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /*
+   * UUDET MERKIT VÄYLÄLLÄ, mitattuna eikä muistettuna.
+   *
+   * Uusi ääni on regressio kahdella tavalla joita kumpaakaan ei näe koodista:
+   * se voi jäädä pohjakohinaan (merkki jota ei kuule ei ole merkki) tai se voi
+   * nousta niin kovaksi että se peittää ne merkit jotka olivat täällä ensin.
+   * Kolikko mitataan samassa ajossa vertailukohdaksi, koska tämän tiedoston
+   * muut äänimittaukset on kalibroitu siihen (kolikko 0,32) ja muistiin
+   * kirjattu vertailuluku vanhenee ensimmäisessä miksausmuutoksessa.
+   *
+   * Väylä odotetaan hiljaiseksi ennen jokaista mittausta samalla ikkunalla
+   * jolla mitataan — sama sääntö ja sama syy kuin puhutun rivin kohdalla
+   * ylempänä: kiinteä odotus on arvaus edellisen äänen hännän pituudesta, ja
+   * arvaava portti on kolikonheitto.
+   */
+  {
+    // Esittelydemo käynnistyy kahdenkymmenen sekunnin jouten olosta ja soittaa
+    // hyppyjä tälle samalle väylälle. Kello nollataan tästä.
+    game.toTitle();
+    const { Ambience } = await import('/src/core/audio.js');
+    const tap = audioTap();
+    const measured = tap && tap.ctx.state === 'running';
+    const peaks = {};
+    let floorAfter = 0;
+    if (measured) {
+      Music.stop();
+      Ambience.stop();
+      const an = tap.ctx.createAnalyser();
+      /*
+       * 372 ms yhtäjaksoista aaltoa, eikä 46 ms, ja se on mittausvirhe joka
+       * tuotettiin tahallaan ennen kuin se korjattiin. `reserve` on kaksi
+       * kopsahdusta 95 millisekunnissa, ja 2048 näytteen ikkunalla se mittasi
+       * **0,000** — eli portti olisi julistanut äänettömäksi äänen jonka
+       * samat kaiuttimet soittavat. Sama ikkuna mittasi 0,228 heti kun se
+       * levennettiin. Lyhyt ääni ei mahdu ikkunoiden väliin kun ikkuna on
+       * pidempi kuin ääni; sama syy kuin konsonanttilohkon 32768:lla.
+       */
+      an.fftSize = 16384;
+      tap.bus.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const peakFor = async (ms) => {
+        let peak = 0;
+        const t0 = performance.now();
+        while (performance.now() - t0 < ms) {
+          an.getFloatTimeDomainData(buf);
+          for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+          await new Promise((r) => setTimeout(r, 8));
+        }
+        return peak;
+      };
+      const settle = async () => {
+        let calm = 0;
+        let level = 1;
+        const t0 = performance.now();
+        while (calm < 2 && performance.now() - t0 < 4000) {
+          level = await peakFor(200);
+          calm = level > 0.02 ? 0 : calm + 1;
+        }
+        return level;
+      };
+      for (const name of ['pfull', 'pspent', 'pipeout', 'reserve', 'pipe', 'coin', 'powerup']) {
+        await settle();
+        Sfx.play(name);
+        peaks[name] = await peakFor(600);
+      }
+      floorAfter = await settle();
+      an.disconnect();
+    }
+    const n = (name) => (peaks[name] === undefined ? 0 : peaks[name]);
+    const shown = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
+    expect('uudet merkit kuuluvat, eivät huuda, eivätkä jätä väylää soimaan',
+      !measured || (
+        // Kuuluu kolikon luokassa, ei yli pelin kovimman palkinnon.
+        n('pfull') > 0.2 && n('pfull') <= n('powerup')
+        // Soi joka kerta kun juoksunappi irtoaa, joten se on tarkoituksella
+        // selvästi täyttymistä hiljaisempi. Merkki joka soi usein ja kovaa on
+        // melua, ja melu peittää ne merkit jotka olivat täällä ensin.
+        && n('pspent') > 0.08 && n('pspent') < n('pfull') * 0.7
+        // Putken kaksi päätä ovat pari, joten ne mitataan pariksi.
+        && n('pipeout') > n('pipe') * 0.6 && n('pipeout') < n('pipe') * 1.6
+        && n('reserve') > 0.12 && n('reserve') < n('powerup')
+        // Eikä yksikään niistä jätä väylää soimaan.
+        && floorAfter < 0.02),
+      measured ? `${shown}, tausta jäljessä ${floorAfter.toFixed(3)}` : 'ei mitattu');
+  }
+
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
    * seconds behind the audio clock. Playing that backlog would build thousands
    * of oscillators in one turn of the event loop and freeze the keyboard. */
@@ -12661,6 +13084,643 @@ const report = await page.evaluate(async () => {
   report.failures.push(...gamepad.failures);
 }
 
+/* -------------------------------- aika-ajo ------------------------------- */
+/*
+ * AIKA-AJO on tila johon mennään erikseen, joten sen väitteitä on kaksi lajia:
+ * mitä tilassa tapahtuu, ja mitä tavallisessa kierroksessa **ei** tapahdu.
+ * Jälkimmäinen on se puoli joka rikkoutuu hiljaa — kukaan ei huomaa että
+ * tavallinen kenttä alkoi laskea jotain — joten se mitataan framejonona eikä
+ * luettuna koodista.
+ */
+{
+  const race = await page.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name, ok, detail });
+      if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+    };
+    const game = window.sfb3;
+    const { LevelScene, VIEW_W, VIEW_H, HUD_H } = await import('/src/scenes/level.js');
+    const { MAX_RUN } = await import('/src/entities/player.js');
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const { Save } = await import('/src/core/save.js');
+    const { captureState, restoreState } = await import('/src/core/savestate.js');
+    const { TILE } = await import('/src/gfx/tiles.js');
+    const font = await import('/src/gfx/font.js');
+
+    /* Moduuli haetaan varovasti. Kun sitä ei vielä ole, jokainen alla oleva
+     * väite saa kertoa oman puuttumisensa mittana — punainen lohko on
+     * hyödyllinen vasta kun se kertoo mitä puuttuu eikä pelkkää poikkeusta. */
+    let TA = null;
+    let taError = '';
+    try {
+      TA = await import('/src/core/timeattack.js');
+    } catch (e) {
+      taError = String((e && e.message) || e);
+    }
+
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false, reset: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const reset = (extra = {}) => {
+      game.timeAttack = false;
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {}, ...extra,
+      };
+      game.finishLevel = () => {};
+    };
+    const marks = (...v) => v;
+
+    /* Arvonta kiinni: kaksi kierrosta samasta kentästä ovat vertailukelpoisia
+     * vasta kun ne saavat saman satunnaislukujonon. */
+    const realRandom = Math.random;
+    let seed = 0;
+    const seeded = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+
+    const runTrace = (id, timeAttack, frames = 600, best = null) => {
+      seed = 20260810;
+      Math.random = seeded;
+      reset();
+      if (best) game.state.bestTimes[id] = best;
+      game.timeAttack = timeAttack;
+      const scene = new LevelScene(game, id);
+      const input = mkInput();
+      const rows = [];
+      let transit = 0;
+      for (let f = 0; f < frames; f++) {
+        input.held.right = true;
+        input.held.run = (f % 130) < 90;
+        input.held.jump = (f % 41) < 11;
+        input.pressed.jump = (f % 41) === 0;
+        if (scene.player.transit) transit++;
+        scene.update(input);
+        const p = scene.player;
+        rows.push([
+          Math.round(p.x * 100), Math.round(p.y * 100),
+          Math.round(p.vx * 1000), Math.round(p.vy * 1000),
+          scene.time, scene.timeSub, scene.tick, scene.state,
+          game.state.score, game.state.coins,
+          Math.round(scene.cam.x * 100), Math.round(scene.cam.y * 100),
+        ].join(','));
+      }
+      Math.random = realRandom;
+      game.timeAttack = false;
+      return { scene, rows, transit };
+    };
+
+    /* 1. Tavallinen kierros on muuttumaton. Ei rakenteesta vaan framejonona:
+     * sama kenttä, sama syöte, sama arvontasiemen, tila päällä ja pois. */
+    {
+      const plain = runTrace('1-1', false);
+      const timed = runTrace('1-1', true, 600,
+        { frames: 700, marks: marks(40, 90, 150, 210, 280, 340, 420, 500) });
+      let diff = 0;
+      let first = '';
+      for (let i = 0; i < plain.rows.length; i++) {
+        if (plain.rows[i] === timed.rows[i]) continue;
+        diff++;
+        if (!first) first = ` ensimmäinen frame ${i}: ${plain.rows[i]} vs ${timed.rows[i]}`;
+      }
+      expect('aika-ajo ei liikuta tavallista kierrosta yhdelläkään framella',
+        diff === 0 && plain.scene.race === null && timed.scene.race !== null,
+        `${plain.rows.length} framea, eroja ${diff};${first} tavallisessa ajokello`
+        + ` ${plain.scene.race === null ? 'puuttuu' : 'ON — sitä ei saa olla'},`
+        + ` aika-ajossa ${timed.scene.race ? 'on' : 'PUUTTUU'}`);
+    }
+
+    /* 2. HUD-nauhassa on jo viisi lukemaa. Kuudes mitataan pikseleinä: paljonko
+     * uutta mustetta, paljonko peitettyä, ja kuinka lähelle vanhaa se tulee. */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H + HUD_H;
+      const g = c.getContext('2d');
+      const BG = [0x10, 0x10, 0x18];
+      const shot = (timeAttack, tweak) => {
+        reset({ lives: 9999, coins: 99, score: 9999999 });
+        game.timeAttack = timeAttack;
+        const scene = new LevelScene(game, '1-1');
+        scene.tick = 12;
+        scene.time = 300;
+        scene.player.star = 400;          // oikean laidan lokero varattuna
+        scene.player.pMeter = 90;
+        scene.player.powerLevel = 3;
+        scene.player.type = 'leaf';
+        if (tweak) tweak(scene);
+        g.clearRect(0, 0, VIEW_W, VIEW_H + HUD_H);
+        scene.drawHud(g);
+        game.timeAttack = false;
+        return g.getImageData(0, VIEW_H, VIEW_W, HUD_H).data;
+      };
+      const plain = shot(false, null);
+      const variants = [
+        (s) => { if (s.race) { s.race.best = null; s.race.delta = null; } },
+        (s) => { if (s.race) { s.race.delta = -92; s.race.flash = 0; } },
+        (s) => { if (s.race) { s.race.delta = 137; s.race.flash = 0; } },
+        (s) => { if (s.race) { s.race.delta = 137; s.race.flash = 5; } },
+        (s) => { if (s.race) { s.race.delta = 60 * 615; s.race.flash = 0; } },
+        (s) => { if (s.race) { s.race.delta = -60 * 615; s.race.flash = 0; } },
+      ];
+      let covered = 0;
+      let added = 0;
+      const box = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 };
+      const newCols = new Set();
+      for (const tweak of variants) {
+        const shotB = shot(true, tweak);
+        for (let i = 0; i < plain.length; i += 4) {
+          const wasInk = plain[i] !== BG[0] || plain[i + 1] !== BG[1] || plain[i + 2] !== BG[2];
+          const same = plain[i] === shotB[i] && plain[i + 1] === shotB[i + 1]
+            && plain[i + 2] === shotB[i + 2];
+          if (same) continue;
+          if (wasInk) { covered++; continue; }
+          added++;
+          const px = (i / 4) % VIEW_W;
+          const py = Math.floor((i / 4) / VIEW_W);
+          newCols.add(px);
+          if (px < box.x0) box.x0 = px;
+          if (px > box.x1) box.x1 = px;
+          if (py < box.y0) box.y0 = py;
+          if (py > box.y1) box.y1 = py;
+        }
+      }
+      /* Etäisyys mitataan **siltä riviltä jolla lukema on**, ei koko nauhasta:
+       * kolikkorivi kulkee lukeman alta eri rivillä, ja sarakkeittain luettuna
+       * se näyttäisi törmäykseltä vaikka mikään ei ole päällekkäin. */
+      const oldCols = new Set();
+      for (let i = 0; i < plain.length; i += 4) {
+        const py = Math.floor((i / 4) / VIEW_W);
+        if (py < box.y0 || py > box.y1) continue;
+        if (plain[i] !== BG[0] || plain[i + 1] !== BG[1] || plain[i + 2] !== BG[2]) {
+          oldCols.add((i / 4) % VIEW_W);
+        }
+      }
+      let gap = 1e9;
+      for (const nx of newCols) for (const ox of oldCols) gap = Math.min(gap, Math.abs(nx - ox));
+      expect('aika-ajon lukema ei peitä yhtään olemassa olevaa HUD-pikseliä',
+        added > 0 && covered === 0 && gap >= 2,
+        added ? `uutta mustetta ${added} px, peitettyä ${covered} px, laatikko x`
+          + ` ${box.x0}-${box.x1} y ${box.y0}-${box.y1} (HUD-nauhan sisällä),`
+          + ` lähin vanha muste ${gap === 1e9 ? '-' : `${gap} px`}`
+          : 'lukemaa ei piirretä lainkaan: 0 px uutta mustetta');
+    }
+
+    /* 2 b. Sama mitta maalikuvalle. Rako lipputekstin ja korttikuvan välissä
+     * näyttää tyhjältä mutta on ensimmäiset kahdeksan framea seitsemän pikseliä
+     * matalampi, koska `drawBanner` iskee silloin isommalla kirjasimella. */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H + HUD_H;
+      const g = c.getContext('2d');
+      const shot = (result, age) => {
+        reset({ lives: 4, coins: 37, score: 128400 });
+        game.timeAttack = !!result;
+        const scene = new LevelScene(game, '1-1');
+        scene.tick = 12;
+        scene.time = 271;
+        scene.state = 'clear';
+        scene.stateTimer = age;
+        scene.wonCard = 'shroom';
+        if (result) scene.raceResult = result;
+        g.clearRect(0, 0, VIEW_W, VIEW_H + HUD_H);
+        scene.drawHud(g);
+        game.timeAttack = false;
+        return g.getImageData(0, 0, VIEW_W, VIEW_H + HUD_H).data;
+      };
+      const results = [
+        { frames: 4823, best: null, record: true },
+        { frames: 4823, best: 5100, record: true },
+        { frames: 5400, best: 5100, record: false },
+        { frames: 359999, best: 358000, record: false },
+      ];
+      let covered = 0;
+      let added = 0;
+      let rows = [1e9, -1e9];
+      for (const age of [2, 40]) {
+        const plain = shot(null, age);
+        for (const r of results) {
+          const timed = shot(r, age);
+          /* Vain pelikenttä: HUD-nauha on maalattu umpeen, joten siellä
+           * jokainen pikseli olisi "vanhaa mustetta" ja jokainen uusi lukema
+           * näyttäisi peitolta. Nauhan oma mitta on väitteessä 2. */
+          for (let i = 0; i < VIEW_H * VIEW_W * 4; i += 4) {
+            const wasInk = plain[i + 3] > 0;
+            const same = plain[i] === timed[i] && plain[i + 1] === timed[i + 1]
+              && plain[i + 2] === timed[i + 2] && plain[i + 3] === timed[i + 3];
+            if (same) continue;
+            if (wasInk) { covered++; continue; }
+            added++;
+            const py = Math.floor((i / 4) / VIEW_W);
+            if (py < rows[0]) rows[0] = py;
+            if (py > rows[1]) rows[1] = py;
+          }
+        }
+      }
+      expect('aika-ajon maalirivi ei peitä maalitekstiä eikä korttikuvaa',
+        added > 0 && covered === 0,
+        added ? `neljä lopputulosta kahdella iskuvaiheella: uutta mustetta ${added} px,`
+          + ` peitettyä ${covered} px, rivit ${rows[0]}-${rows[1]}`
+          : 'maaliriviä ei piirretä lainkaan');
+    }
+
+    /* 3. Sama kello, eri jako. Jos jako olisi AIKA-kellon toisinto, sama AIKA
+     * antaisi saman jaon riippumatta siitä mitä pelaaja on aiemmin tehnyt. */
+    {
+      const a = runTrace('1-1', true, 500,
+        { frames: 900, marks: marks(30, 70, 120, 180, 240, 300, 380, 460) });
+      const b = runTrace('1-1', true, 500,
+        { frames: 900, marks: marks(90, 190, 320, 480, 640, 800, 900, 980) });
+      const ra = a.scene.race;
+      const rb = b.scene.race;
+      const fmt = (d) => (TA && d !== null && d !== undefined ? TA.formatDelta(d) : String(d));
+      expect('sama AIKA-lukema mutta eri jako: jako ei ole kellon toisinto',
+        !!ra && !!rb && a.scene.time === b.scene.time
+          && ra.delta !== null && rb.delta !== null && ra.delta !== rb.delta,
+        ra && rb ? `AIKA ${a.scene.time} molemmissa, jako ${fmt(ra.delta)} vs ${fmt(rb.delta)}`
+          : `ajokelloa ei ole (${taError})`);
+    }
+
+    /* 4. Ja toisin päin: kulunut aika **on** AIKA-kellon toisinto, joten sitä ei
+     * piirretä. Väite on se laskukaava, framelleen. */
+    {
+      seed = 7;
+      Math.random = seeded;
+      reset();
+      game.timeAttack = true;
+      const scene = new LevelScene(game, '1-1');
+      const def = getLevel('1-1');
+      const input = mkInput();
+      let total = 0;
+      let agree = 0;
+      let transit = 0;
+      for (let f = 0; f < 900 && scene.state === 'play'; f++) {
+        input.held.right = true;
+        input.held.jump = (f % 41) < 11;
+        input.pressed.jump = (f % 41) === 0;
+        if (scene.player.transit) transit++;
+        scene.update(input);
+        if (scene.state !== 'play' || !scene.race) break;
+        total++;
+        if (def.time - Math.floor((scene.race.frames - transit) / 24) === scene.time) agree++;
+      }
+      Math.random = realRandom;
+      game.timeAttack = false;
+      expect('kulunut aika on johdettavissa AIKA-kellosta, siksi sitä ei piirretä toiseen kertaan',
+        total > 0 && agree === total,
+        `${agree}/${total} framea täsmää kaavaan AIKA = ${def.time} - floor((ajokello -`
+        + ` putkiframet)/24), putkessa ${transit} framea`);
+    }
+
+    /* 5. Tilan lataus. Tähtilogiikkaa ei kahdenneta: tila vain kieltäytyy, ja
+     * merkintä jää siihen missä se on aina ollut. */
+    {
+      reset();
+      game.pendingNode = { id: 'w1-1', level: '1-1' };
+      game.scene = new LevelScene(game, '1-1');
+      game.scene.time = 275;
+      game.slot = 1;
+      game.quickSave();
+      game.scene.time = 100;
+      game.quickLoad();
+      const plainLoaded = game.scene.time;
+      const plainStar = !!game.state.usedSaveState;
+
+      reset();
+      game.timeAttack = true;
+      game.pendingNode = { id: 'w1-1', level: '1-1' };
+      game.scene = new LevelScene(game, '1-1');
+      game.scene.time = 100;
+      const before = game.scene;
+      game.quickLoad();
+      const sameScene = game.scene === before;
+      const timedTime = game.scene.time;
+      const timedStar = !!game.state.usedSaveState;
+      game.timeAttack = false;
+      expect('aika-ajossa tilaa ei ladata, eikä tähtimerkintä synny',
+        plainLoaded === 275 && plainStar && sameScene && timedTime === 100 && !timedStar,
+        `tavallinen: AIKA ${plainLoaded} (odotus 275), tähti ${plainStar};`
+        + ` aika-ajo: kohtaus ${sameScene ? 'sama' : 'VAIHTUI'}, AIKA ${timedTime}`
+        + ` (odotus 100), tähti ${timedStar}`);
+    }
+
+    /* 6. Tauko. Ajokello käy, kenttäkello ei — jälkimmäinen tappaa, ja valikossa
+     * kuolemiselle ei ole vastausta. */
+    {
+      reset();
+      game.timeAttack = true;
+      game.pendingNode = { id: 'w1-1', level: '1-1' };
+      const scene = new LevelScene(game, '1-1');
+      game.scene = scene;
+      game.paused = true;
+      const t0 = scene.time;
+      const sub0 = scene.timeSub;
+      const tick0 = scene.tick;
+      const f0 = scene.race ? scene.race.frames : -1;
+      for (let i = 0; i < 120; i++) game.step();
+      const f1 = scene.race ? scene.race.frames : -1;
+      game.paused = false;
+      game.timeAttack = false;
+
+      reset();
+      const plainScene = new LevelScene(game, '1-1');
+      game.scene = plainScene;
+      game.paused = true;
+      const plainTick = plainScene.tick;
+      for (let i = 0; i < 120; i++) game.step();
+      const plainAfter = plainScene.tick;
+      game.paused = false;
+      expect('tauko ei pysäytä ajokelloa, mutta kenttäkello seisoo valikossa',
+        f1 - f0 === 120 && scene.time === t0 && scene.timeSub === sub0 && scene.tick === tick0
+          && plainAfter === plainTick,
+        `120 framea taukoa: ajokello ${f0}->${f1}, AIKA ${t0}->${scene.time},`
+        + ` timeSub ${sub0}->${scene.timeSub}, tick ${tick0}->${scene.tick};`
+        + ` tavallinen kierros tick ${plainTick}->${plainAfter}`);
+    }
+
+    /* 7. Tallennusmuoto molempiin suuntiin. */
+    {
+      const KEY = 'sfb3.save.v2';
+      const keep = localStorage.getItem(KEY);
+      const old = {
+        lives: 3, coins: 17, score: 12345, power: { type: 'leaf', level: 3 },
+        reserve: 'shroom', world: 2, node: 'w3-2', cleared: { 'w1-1': true }, worldsOpen: 3,
+        usedSaveState: true, continues: 2, secrets: { '1-1': ['a'] },
+      };
+      localStorage.setItem(KEY, JSON.stringify(old));
+      const loaded = Save.load();
+      const oldKept = Object.keys(old)
+        .filter((k) => JSON.stringify(loaded[k]) !== JSON.stringify(old[k]));
+      let emptyTimes = false;
+      try {
+        emptyTimes = !!TA && Object.keys(TA.bestTimes(loaded)).length === 0;
+      } catch { emptyTimes = false; }
+
+      Save.write({ ...loaded, bestTimes: { '1-1': { frames: 812, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) } } });
+      const raw = JSON.parse(localStorage.getItem(KEY));
+      const wrote = !!(raw.bestTimes && raw.bestTimes['1-1'] && raw.bestTimes['1-1'].frames === 812);
+      /* Vanha lataaja on tasan tämä: vanhat oletukset, ja tallennus niiden
+       * päälle. Uusi kenttä on sille tuntematon avain jota se ei lue. */
+      const viaOld = {
+        lives: 4, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: null, cleared: {}, worldsOpen: 1, usedSaveState: false,
+        continues: 0, secrets: {}, ...raw,
+      };
+      const oldBroken = Object.keys(old)
+        .filter((k) => JSON.stringify(viaOld[k]) !== JSON.stringify(old[k]));
+      if (keep === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, keep);
+      expect('parhaat ajat kulkevat vanhan tallennuksen läpi molempiin suuntiin',
+        oldKept.length === 0 && emptyTimes && wrote && oldBroken.length === 0,
+        `vanha -> uusi: ${Object.keys(old).length} kenttää ennallaan`
+        + `${oldKept.length ? ` paitsi ${oldKept.join(',')}` : ''}, ajat ${emptyTimes ? '{}' : 'EI {}'};`
+        + ` uusi -> vanha: ajat levyllä ${wrote}, vanhat kentät ehjiä`
+        + ` ${Object.keys(old).length - oldBroken.length}/${Object.keys(old).length}`);
+    }
+
+    /* 7 b. Sama kysymys pikatallennukselle: vanha tilannekuva ei tunne kenttää
+     * ollenkaan, ja `restoreState` asettaa `game.state`n suoraan. */
+    {
+      reset();
+      game.pendingNode = { id: 'w1-1', level: '1-1' };
+      game.scene = new LevelScene(game, '1-1');
+      const snap = captureState(game);
+      delete snap.gameState.bestTimes;
+      let restored = false;
+      let safe = false;
+      let err = '';
+      try {
+        restored = restoreState(game, snap);
+        safe = !!TA && Object.keys(TA.bestTimes(game.state)).length === 0;
+      } catch (e) {
+        err = String((e && e.message) || e);
+      }
+      expect('vanha pikatallennus ei jätä parhaita aikoja määrittelemättömäksi',
+        restored && safe,
+        `palautus ${restored}, ajat luettavissa ${safe}${err ? ` (${err})` : ''}`);
+    }
+
+    /* 8. Värit. Kaksi samannäköistä signaalia opettaa väärän luennan, joten
+     * mitataan etäisyys jokaiseen HUDin väriin eikä katsota silmällä. */
+    {
+      const HUD_COLORS = ['#ffffff', '#ffd048', '#8fe04a', '#ff6060', '#f0b000', '#3a3a52',
+        '#e04c3c', '#f8f8f8', '#c88c40', '#8fd0ff', '#ff8040', '#c85820', '#fff070', '#78c0ff',
+        '#2a2a3e'];
+      const LIT = ['#ffffff', '#ffd048', '#8fe04a', '#ff6060', '#f0b000', '#e04c3c',
+        '#f8f8f8', '#c88c40', '#8fd0ff', '#ff8040', '#c85820', '#fff070', '#78c0ff'];
+      const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const dist = (a, b) => {
+        const x = rgb(a);
+        const y = rgb(b);
+        return Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2]);
+      };
+      const lum = (h) => {
+        const x = rgb(h);
+        return 0.299 * x[0] + 0.587 * x[1] + 0.114 * x[2];
+      };
+      const cols = TA && TA.SPLIT_COLORS ? TA.SPLIT_COLORS : null;
+      let worst = { d: 1e9, k: '-', v: '-', h: '-' };
+      if (cols) {
+        for (const k of ['ahead', 'behind']) {
+          for (const h of HUD_COLORS) {
+            const d = dist(cols[k], h);
+            if (d < worst.d) worst = { d, k, v: cols[k], h };
+          }
+        }
+      }
+      const dimmest = Math.min(...LIT.map(lum));
+      const noneLum = cols ? lum(cols.none) : 1e9;
+      expect('aika-ajon värit eivät ole minkään muun HUD-lukeman värejä',
+        !!cols && worst.d >= 120 && noneLum < dimmest,
+        cols ? `lähin pari ${worst.k} ${worst.v} vs ${worst.h} = ${worst.d};`
+          + ` "ei tietoa" ${cols.none} kirkkaus ${noneLum.toFixed(0)},`
+          + ` himmein palava lukema ${dimmest.toFixed(0)}`
+          : `värejä ei ole (${taError})`);
+    }
+
+    /* 9. Fontti. Puuttuva merkki ei heitä, se jättää reiän ja siirtää kohdistinta. */
+    {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 12;
+      const g = canvas.getContext('2d');
+      const missing = new Set();
+      const strings = TA && TA.MODE_STRINGS ? TA.MODE_STRINGS : [];
+      for (const s of strings) {
+        for (const ch of String(s).toUpperCase()) {
+          if (ch === ' ') continue;
+          g.clearRect(0, 0, 16, 12);
+          font.drawText(g, ch, 2, 2, { color: '#ffffff' });
+          const d = g.getImageData(0, 0, 16, 12).data;
+          let ink = 0;
+          for (let i = 3; i < d.length; i += 4) if (d[i] > 0) ink++;
+          if (!ink) missing.add(ch);
+        }
+      }
+      expect('jokainen aika-ajon teksti on kirjoitettavissa tällä fontilla',
+        strings.length > 0 && missing.size === 0,
+        strings.length ? `${strings.length} merkkijonoa`
+          + `${missing.size ? `, puuttuu: ${[...missing].join('')}` : ', ei reikiä'}`
+          : `merkkijonoja ei ole (${taError})`);
+    }
+
+    /* 10. Ennätys korvautuu vain nopeammalla. */
+    {
+      const st = { bestTimes: {} };
+      const seq = [];
+      let err = '';
+      try {
+        if (TA) {
+          TA.setBest(st, '1-1', { frames: 900, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) });
+          seq.push(TA.bestFor(st, '1-1').frames);
+          TA.setBest(st, '1-1', { frames: 950, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) });
+          seq.push(TA.bestFor(st, '1-1').frames);
+          TA.setBest(st, '1-1', { frames: 800, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) });
+          seq.push(TA.bestFor(st, '1-1').frames);
+        }
+      } catch (e) {
+        err = String((e && e.message) || e);
+      }
+      expect('ennätys korvautuu vain nopeammalla ajalla',
+        seq.join(',') === '900,900,800',
+        seq.length ? `900 -> 950 -> 800 antaa ${seq.join(' ')}` : `ei mitattavissa (${taError}${err})`);
+    }
+
+    /* 11. Kentän kello ei kelpaa tavoiteajaksi, ja se on mittaus eikä mielipide:
+     * budjetti suhteessa siihen mitä täysi juoksu kentän mitalla veisi. */
+    {
+      const rows = [];
+      for (const id of levelIds()) {
+        const def = getLevel(id);
+        const floor = (def.rows[0].length * TILE) / MAX_RUN;
+        rows.push({ id, ratio: (def.time * 24) / floor });
+      }
+      rows.sort((a, b) => a.ratio - b.ratio);
+      const min = rows[0];
+      const med = rows[Math.floor(rows.length / 2)];
+      expect('kentän kello on määräaika eikä tavoiteaika',
+        rows.length > 0 && min.ratio >= 3,
+        `budjetti / täyden vauhdin alaraja: pienin ${min.ratio.toFixed(1)}x (${min.id}),`
+        + ` mediaani ${med.ratio.toFixed(1)}x, ${rows.length} kenttää`);
+    }
+
+    /* 12. Nollaus kysyy ensin. */
+    {
+      reset({ bestTimes: { '1-1': { frames: 800, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) } } });
+      game.timeAttack = true;
+      const step = () => (game.resetBestTimes ? game.resetBestTimes() : 'ei ole');
+      const count = () => {
+        try {
+          return TA ? Object.keys(TA.bestTimes(game.state)).length : -1;
+        } catch { return -1; }
+      };
+      const first = step();
+      const afterFirst = count();
+      const second = step();
+      const afterSecond = count();
+      game.timeAttack = false;
+      expect('ajat nollataan vasta toisesta painalluksesta',
+        first === 'arm' && afterFirst === 1 && second === 'cleared' && afterSecond === 0,
+        `1. painallus "${first}" jättää ${afterFirst} aikaa,`
+        + ` 2. painallus "${second}" jättää ${afterSecond}`);
+    }
+
+    /* 13. Jako liikkuu välipisteillä eikä joka framella — muuten se on kohina,
+     * ei lukema. */
+    {
+      seed = 11;
+      Math.random = seeded;
+      reset({ bestTimes: { '1-1': { frames: 1500, marks: marks(120, 260, 400, 540, 680, 820, 960, 1100) } } });
+      game.timeAttack = true;
+      const scene = new LevelScene(game, '1-1');
+      const input = mkInput();
+      let changes = 0;
+      let prev = scene.race ? scene.race.delta : null;
+      for (let f = 0; f < 1200 && scene.state === 'play' && scene.race; f++) {
+        input.held.right = true;
+        input.held.run = true;
+        input.held.jump = (f % 41) < 11;
+        input.pressed.jump = (f % 41) === 0;
+        scene.update(input);
+        if (!scene.race) break;
+        if (scene.race.delta !== prev) changes++;
+        prev = scene.race.delta;
+      }
+      const crossed = scene.race ? scene.race.next : -1;
+      const splits = TA && TA.RACE_SPLITS ? TA.RACE_SPLITS : -1;
+      Math.random = realRandom;
+      game.timeAttack = false;
+      expect('jako päivittyy välipisteillä eikä joka framella',
+        splits > 0 && crossed > 0 && changes === crossed && crossed <= splits,
+        `1200 framea: ${crossed}/${splits} välipistettä ohitettu, jako vaihtui ${changes} kertaa`);
+    }
+
+    /* 14. Maali kirjoittaa ajan, ja tavallinen kierros ei kirjoita mitään.
+     * Tämä on se polku joka kulkee `completeLevel`in ja `persist`in läpi, eli
+     * ainoa jossa aika päätyy levylle asti. */
+    {
+      const KEY = 'sfb3.save.v2';
+      const keep = localStorage.getItem(KEY);
+      const finish = (frames, timeAttack) => {
+        seed = 99;
+        Math.random = seeded;
+        game.timeAttack = timeAttack;
+        const scene = new LevelScene(game, '1-1');
+        const input = mkInput();
+        for (let f = 0; f < frames; f++) {
+          input.held.right = true;
+          scene.update(input);
+        }
+        scene.completeLevel('shroom');
+        Math.random = realRandom;
+        game.timeAttack = false;
+        return scene;
+      };
+      reset();
+      const first = finish(200, true);
+      const afterFirst = TA ? TA.bestFor(game.state, '1-1') : null;
+      const onDisk = JSON.parse(localStorage.getItem(KEY) || '{}');
+      const slower = finish(300, true);
+      const afterSlower = TA ? TA.bestFor(game.state, '1-1') : null;
+      const faster = finish(150, true);
+      const afterFaster = TA ? TA.bestFor(game.state, '1-1') : null;
+      reset();
+      const plain = finish(120, false);
+      const afterPlain = TA ? TA.bestFor(game.state, '1-1') : null;
+      if (keep === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, keep);
+      expect('maali kirjaa ajan aika-ajossa eikä kirjaa mitään tavallisessa kierroksessa',
+        !!afterFirst && afterFirst.frames === 200 && first.raceResult.best === null
+          && !!onDisk.bestTimes && onDisk.bestTimes['1-1'] && onDisk.bestTimes['1-1'].frames === 200
+          && !!afterSlower && afterSlower.frames === 200 && slower.raceResult.record === false
+          && !!afterFaster && afterFaster.frames === 150 && faster.raceResult.record === true
+          && afterPlain === null && plain.raceResult === null,
+        `200 framea -> ennätys ${afterFirst ? afterFirst.frames : 'ei'} (levyllä`
+        + ` ${onDisk.bestTimes && onDisk.bestTimes['1-1'] ? onDisk.bestTimes['1-1'].frames : 'ei'}),`
+        + ` 300 -> ${afterSlower ? afterSlower.frames : 'ei'} (uusi ennätys`
+        + ` ${slower.raceResult && slower.raceResult.record}),`
+        + ` 150 -> ${afterFaster ? afterFaster.frames : 'ei'} (uusi ennätys`
+        + ` ${faster.raceResult && faster.raceResult.record});`
+        + ` tavallinen kierros kirjasi ${afterPlain ? afterPlain.frames : 'ei mitään'}`);
+    }
+
+    reset();
+    game.timeAttack = false;
+    game.paused = false;
+    game.toTitle();
+    return { checks, failures };
+  });
+  report.checks.push(...race.checks);
+  report.failures.push(...race.failures);
+}
+
 /* --------------------- päivän pieru, selaimen puolella -------------------- */
 /*
  * Se puolisko joka on oikeasti sivulla: kentän rakentaminen, sen ainoa yritys ja
@@ -12791,9 +13851,16 @@ const report = await page.evaluate(async () => {
       game.state = before;
       localStorage.setItem('sfb3.save.v2', JSON.stringify(before));
       const stored = localStorage.getItem('sfb3.save.v2');
+      /* Aika-ajo päällä, koska juuri se on se tila jonka ei saa tarttua
+       * mukaan: yksi yritys ja paras aika ovat vastakkaisia ajatuksia, ja
+       * `setBest` kirjaisi ajan tunnuksella joka on huomenna eri kenttä. */
+      game.timeAttack = true;
       game.startDaily(d.dailyLevel(todayDay));
       const duringLives = game.state.lives;
+      const duringRace = game.timeAttack;
       game.finishDaily({ died: true });
+      const raceBack = game.timeAttack;
+      game.timeAttack = false;
       const same = localStorage.getItem('sfb3.save.v2') === stored;
       const back = game.state === before && game.state.score === 4200
         && game.state.cards.length === 1 && game.state.world === 2;
@@ -12801,6 +13868,9 @@ const report = await page.evaluate(async () => {
         same && back && duringLives === 1,
         `tallennus ${same ? 'ennallaan' : 'MUUTTUI'}, kierros ${back ? 'palautui' : 'HUKKUI'},`
         + ` yrityksen elämät ${duringLives}`);
+      expect('päivän yritys ei ole aika-ajo, eikä se sammuta aika-ajoa jälkeensä',
+        duringRace === false && raceBack === true,
+        `yrityksen aikana ${duringRace}, jälkeen ${raceBack}`);
       wipe();
       if (keepSave === null) localStorage.removeItem('sfb3.save.v2');
       else localStorage.setItem('sfb3.save.v2', keepSave);
@@ -12848,7 +13918,7 @@ const report = await page.evaluate(async () => {
           : `${d.dailyStrings().length} merkkijonoa`);
     }
 
-    /* --- 7. neljäs valikkorivi mahtuu ruudulle --- */
+    /* --- 7. valikko mahtuu ruudulle silloinkin kun se on pisimmillään --- */
     {
       /*
        * Mitataan **ruudun ulkopuolelle** eikä ruudun sisälle, ja se on koko
@@ -12857,18 +13927,27 @@ const report = await page.evaluate(async () => {
        * valikolle tapahtuu. 280 pikseliä korkealla piirtoalustalla rivit 240 ja
        * alle ovat läpinäkyviä ellei jokin piirry niille — eli ne ovat tasan se
        * mitä pelaaja ei näkisi.
+       *
+       * JA VALIKKO LUETAAN `enter()`:ISTÄ EIKÄ KIRJOITETA TÄHÄN. Tämä väite
+       * kirjoitettiin kun rivejä oli neljä, ja rivi viisi saapui viikossa
+       * toisesta haarasta (aika-ajo). Käsin kirjoitettu lista olisi mitannut
+       * neljää riviä sinä päivänä jona ruudulla on viisi — eli se olisi
+       * lakannut mittaamasta juuri sitä mitä se on olemassa mittaamaan.
+       * Tallennuksen olemassaolo on ainoa asia joka listan pituuden ratkaisee,
+       * joten se väännetään molempiin asentoihin ja kysytään ruudulta.
        */
       const { TitleScene } = await import('/src/scenes/title.js');
       const canvas = document.createElement('canvas');
       canvas.width = 320;
       canvas.height = 280;
       const g = canvas.getContext('2d');
+      const keepSave = localStorage.getItem('sfb3.save.v2');
       const lowest = (hasSave) => {
+        if (hasSave) localStorage.setItem('sfb3.save.v2', '{"lives":4}');
+        else localStorage.removeItem('sfb3.save.v2');
         const stand = Object.create(game);
         const title = new TitleScene(stand);
-        title.options = hasSave
-          ? ['JATKA PELIÄ', 'UUSI PELI', d.DAILY_TITLE, 'PARHAAT PIERUT']
-          : ['UUSI PELI', d.DAILY_TITLE, 'PARHAAT PIERUT'];
+        title.enter();
         title.tick = 40;
         title.puffs = [];
         g.clearRect(0, 0, 320, 280);
@@ -12878,12 +13957,16 @@ const report = await page.evaluate(async () => {
         for (let y = 0; y < 280; y++) {
           for (let x = 0; x < 320; x++) if (px[(y * 320 + x) * 4 + 3] > 0) { last = y; break; }
         }
-        return last;
+        return { last, rows: title.options.length };
       };
-      const four = lowest(true);
-      const three = lowest(false);
-      expect('alkuruudun valikko ja sen opaste mahtuvat ruudulle',
-        four <= 239 && three <= 239, `neljä riviä ${four}, kolme riviä ${three}`);
+      const withSave = lowest(true);
+      const without = lowest(false);
+      if (keepSave === null) localStorage.removeItem('sfb3.save.v2');
+      else localStorage.setItem('sfb3.save.v2', keepSave);
+      expect('alkuruudun valikko ja sen opaste mahtuvat ruudulle myös pisimmillään',
+        withSave.last <= 239 && without.last <= 239,
+        `${withSave.rows} riviä ${withSave.last}, ${without.rows} riviä ${without.last}`
+        + ' (ruudun viimeinen rivi 239)');
     }
 
     if (keepDaily === null) wipe(); else localStorage.setItem('sfb3.daily.v1', keepDaily);
@@ -13329,6 +14412,113 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   if (over.length) {
     report.failures.push(...over.map((l) => `${l.id} esittelee ${l.features.length} uutta asiaa kerralla`));
   }
+}
+
+/*
+ * LUULINNAKE EI OLE PILVILINNAKE — JOKAISELLA MAAILMALLA ON OMA LINNAKESANASTO.
+ *
+ * `tools/variety.mjs` mittasi 10.8.2026 sen mitä kukaan ei ollut etsimässä.
+ * Kentän uutuus on niiden kahdeksan sarakkeen ikkunoiden osuus, joita peli ei
+ * ollut vielä näyttänyt, ja linnakkeissa se luku oli tämä:
+ *
+ *     6-F 0,0 %   7-F 0,0 %   8-F 0,0 %   3-F 3,0 %
+ *
+ * Puolet pelin linnakkeista ei siis tuonut peliin yhtään uutta muotoa. Syy oli
+ * yhdessä mitassa: `fort_gap` oli **20 paikassa seitsemässä maailmassa** ja
+ * `fort_power` kaikissa kahdeksassa, eli maailmojen linnakkeet olivat saman
+ * kourallisen palikoita eri järjestyksessä. Omistajan ratkaisu 10.8.2026 oli
+ * että jokainen maailma saa oman linnakesanastonsa — maailma 8 oli jo tehnyt
+ * sen (`chunks/keep.js`), ja se on tämän muutoksen ennakkotapaus.
+ *
+ * **Tämä ei ole nahkaväite vaan muotoväite.** Omistaja sanoi saman päivän
+ * aikana suoraan ettei teemakohtaisia laattamuotoja tarvita, koska nykyinen
+ * värjäys riittää. Sama pohjapiirros toisella värillä mittaisi täsmälleen
+ * saman luvun kuin ennen, joten se mitä tässä vaaditaan on **järjestys**: missä
+ * kuilut ovat, mitä niiden yllä on, mitä huone pyytää tekemään.
+ *
+ * Kaksi väitettä, ja ne mittaavat eri asiaa tarkoituksella:
+ *
+ *   1. **Sanastot ovat olemassa ja ne ovat erillisiä.** Tämä on väite
+ *      `chunks/fortresses.js`:n datasta eikä soittolistoista: kahdeksan
+ *      maailmaa, jokaisella oma nimetty palikkajoukko, eikä yksikään palikka
+ *      kuulu kahteen. Sanasto johdetaan yhdestä taulusta jotta kaksi listaa ei
+ *      voi olla eri mieltä.
+ *   2. **Linnake ei sekoita kahden maailman sanastoa.** Vanha jaettu
+ *      `fort_*`-käytävä on yhä olemassa ja yhä käytössä niissä linnakkeissa
+ *      joita ei ole vielä johdotettu, ja se on sallittua — kiellettyä on
+ *      rakentaa maailman 7 linnake maailman 6 palikoista, mikä on juuri se
+ *      virhe jonka viiden soittolistan liittäminen myöhemmin voi tehdä.
+ *
+ * Ja yksi luku joka on portti eikä raportti: **montako linnaketta on rakennettu
+ * kokonaan oman maailmansa sanastosta.** Se on tässä ratkaisussa se numero joka
+ * liikkuu, ja raja on kolme koska kolme on se mihin tämä muutos sen nostaa
+ * (1-F, 3-F, 8-F); loput viisi soittolistaa nostavat sen kahdeksaan kun ne
+ * liitetään. Rajan tarkoitus on estää paluu taaksepäin, ja sen viereen
+ * tulostetaan jokaisen kahdeksan linnakkeen osuus, jotta kesken oleva työ näkyy
+ * portin tulosteessa eikä muistilapussa.
+ *
+ * Aloituspalikka ei ole sanastoa eikä sitä lasketa: jokainen kenttä alkaa
+ * aloitusmerkillä, ja `keep_start` on maailman 8 oma vain siksi että jaetun
+ * `start`in yllä on taivasta. Pomoareenat eivät myöskään: areena on areena,
+ * ja se on nimenomaan se osa jonka jakaminen kannattaa.
+ */
+{
+  const problems = [];
+  let detail = '';
+  try {
+    const { FORTRESS_VOCAB } = await import('../src/data/chunks/fortresses.js');
+    const { CHUNKS } = await import('../src/data/chunks.js');
+    const { getLevel, levelIds } = await import('../src/data/levels.js');
+
+    const ARENAS = new Set(['boss_arena', 'boss_arena_big', 'baron_arena']);
+    const worlds = Object.keys(FORTRESS_VOCAB);
+    const owner = new Map();
+    for (const w of worlds) {
+      for (const name of Object.keys(FORTRESS_VOCAB[w])) {
+        if (owner.has(name)) {
+          problems.push(`${name} kuuluu sekä maailmalle ${owner.get(name)} että ${w}`);
+        }
+        owner.set(name, w);
+        if (!CHUNKS[name]) problems.push(`${w}: ${name} ei ole pelin palikkataulussa`);
+      }
+    }
+    if (worlds.length !== 8) {
+      problems.push(`linnakesanastoja ${worlds.length}, maailmoja 8`);
+    }
+    for (const w of worlds) {
+      const n = Object.keys(FORTRESS_VOCAB[w]).length;
+      if (n < 4) problems.push(`${w}: sanastossa ${n} palikkaa, alle neljä ei ole sanasto`);
+    }
+
+    const forts = levelIds().filter((id) => id.endsWith('-F'));
+    const shares = forts.map((id) => {
+      const world = `w${id[0]}`;
+      /* Aloituspalikka on ensimmäinen, areenat nimeltä — kumpikaan ei ole sanastoa. */
+      const body = (getLevel(id).chunks || []).slice(1).filter((c) => !ARENAS.has(c));
+      const own = body.filter((c) => owner.get(c) === world).length;
+      const alien = [...new Set(body.filter((c) => owner.has(c) && owner.get(c) !== world))];
+      return { id, world, n: body.length, own, alien };
+    });
+    for (const s of shares) {
+      if (s.alien.length) {
+        problems.push(`${s.id} käyttää maailman ${owner.get(s.alien[0])} palikoita: ${s.alien.join(' ')}`);
+      }
+    }
+    const pure = shares.filter((s) => s.n > 0 && s.own === s.n);
+    if (pure.length < 3) {
+      problems.push(`omasta sanastostaan rakennettuja linnakkeita ${pure.length}, vaadittu 3`);
+    }
+    detail = `${pure.length}/8 linnaketta omasta sanastostaan — `
+      + shares.map((s) => `${s.id} ${s.n ? Math.round((s.own / s.n) * 100) : 0} %`).join(', ');
+  } catch (err) {
+    problems.push(`linnakesanastoja ei päästy lukemaan: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'jokaisella maailmalla on oma linnakesanasto eikä linnake sekoita kahta',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 4).join('; ') : detail,
+  });
+  if (problems.length) report.failures.push(...problems);
 }
 
 /*

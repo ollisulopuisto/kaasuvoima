@@ -180,23 +180,35 @@ export const WORLD1_LEVELS = {
    * spread is also the play order. */
   ...generated,
   /*
-   * Unchanged, and now the first place in the game a flyer appears — not
-   * because anything was added here but because 1-2 and 1-3 stopped being
-   * earlier. It arrives at column 102, between the pillars of `fort_pillars`,
-   * on flat floor with nothing else in the window and 34 columns clear of the
-   * lava at 68. The measured proxy calls that a safe introduction.
+   * JUURILINNA, ja pelin ensimmäinen linnake joka on tämän maailman oma
+   * (10.8.2026).
    *
-   * Known and deliberately not fixed here: the lava's own introduction at
-   * column 68 fails the SEURA condition, because `fort_gap` puts a shell three
-   * columns into the trench. That is a different fault (company, not crowding)
-   * and it is the only one of its kind left in the game; the owner's decision
-   * of 9.8.2026 was to gate the one-screen rule and nothing else.
+   * Tämä kenttä oli aiemmin `fort_hall`, `fort_power`, `fort_blocks`,
+   * `fort_gap`, `fort_spikes`, `fort_pillars` — eli täsmälleen samat palikat
+   * samassa tehtävässä kuin 2-F, 3-F, 6-F ja 7-F. `tools/variety.mjs` mittasi
+   * mitä se maksoi: puolet pelin linnakkeista ei tuonut peliin yhtään uutta
+   * kahdeksan sarakkeen muotoa, ja `fort_gap` yksinään oli kahdessakymmenessä
+   * paikassa seitsemässä maailmassa. Sanasto on nyt tämän maailman oma
+   * (`chunks/fortresses.js`, `root_*`) ja sen lause on maailman 1 oma lause:
+   * **käytävällä on parvi.**
+   *
+   * Kolme ensiesittelyä säilyy ja niiden välimatkat kasvoivat. Lava on nyt
+   * sarakkeessa 105, lentäjä 55:ssä ja pomo 156:ssa — eli kaikki kolme ovat yli
+   * viidenkymmenen sarakkeen päässä toisistaan, kun ennen lava ja lentäjä
+   * olivat 34:n. Portti vaatii kaksikymmentä.
+   *
+   * **Ja se yksi tunnettu vika korjaantui sivutuotteena.** Vanha 1-F reputti
+   * SEURA-ehdon lavan kohdalla, koska `fort_gap` pani kuoren kolme saraketta
+   * kouruun; `root_moat` ei pane kuiluun mitään ja sen vauhdinottopuolella on
+   * yhdeksän saraketta lattiaa. Se ei ollut tämän työn tavoite eikä sitä
+   * kirjata voitoksi — se kertoo vain että jaettu käytävä oli myös se paikka
+   * johon vika oli jäänyt asumaan.
    */
   '1-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
     chunks: [
-      'start', 'fort_hall', 'fort_power', 'fort_blocks', 'fort_gap', 'fort_spikes',
-      'fort_pillars', 'fort_hall', 'fort_gap', 'boss_arena',
+      'start', 'root_gate', 'root_pantry', 'root_drop', 'root_scale',
+      'root_vault', 'root_moat', 'root_drop', 'root_moat', 'boss_arena',
     ],
   },
 };

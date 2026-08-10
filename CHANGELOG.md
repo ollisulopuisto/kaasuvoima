@@ -7,6 +7,305 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.56 — neljä hiljaista tilanvaihdosta sai kuvan ja äänen
+
+Omistaja: *"we need more AUDIO VISUAL feedback on P meter filling up! and the
+player going down the pipe etc. various state & level changes need to be
+signalled."*
+
+Kaksi nimettyä tapausta ja avoin luokka. Avoin luokka otettiin vakavasti:
+**peli käytiin läpi ja jokainen tilanvaihdos sai tuomion**, myös ne jotka
+jätettiin rauhaan. Lista on `tools/verify.mjs`:n kommentissa; tässä sen tulos.
+
+### Neljä korjattua
+
+| vaihdos | mitä puuttui | mitä lisättiin |
+| --- | --- | --- |
+| vauhtimittari täyttyy | HUD-pipit vilkkuivat 320×240-ruudun alalaidassa, **ei ääntä**. Mitattuna vain 3772/66560 px **pelialueesta** muuttui | `pfull` + pelialueen pulssi |
+| vauhtimittari lakkaa olemasta täysi | yksi pippi tummeni, **ei ääntä** — vaikka nopeuskatto putosi 3,5 → 2,5 | `pspent` |
+| lento loppuu ilmassa | painovoima muuttui, muuta ei. **Äänetön ja näkymätön** | sama `pspent`, koska se on **sama tilanvaihdos** eikä toinen |
+| putkesta ulos | 4 kaasupilveä ja `door`, lainattuna | `pipeout` |
+| varalokero täyttyy | soitti `powerup`in, eli peli sanoi "kasvoit" kun mikään ei kasvanut | `reserve` (vain ääni) |
+
+Lennon loppuminen taitettiin mittarin tyhjenemiseen eikä omaksi merkikseen, ja
+se on kohta 8 sovellettuna: **yksi tilanvaihdos, yksi merkki.** "Tehoste loppui"
+ja "lento loppui" ovat pelaajalle sama tapahtuma.
+
+### Ja neljätoista jätettiin rauhaan, mikä on merkinnän tärkein osa
+
+Kohta 8 tekee liikamerkitsemisestä **vian**, ei vaaratonta kiillotusta.
+[IDEAS.md](IDEAS.md) hylkäsi kokonaisen mekaniikan tällä perusteella (nouseva
+vesi luolakaistassa, koska Griegin raita jo kiihtyy). Siksi:
+
+- **Kello alle sadan** sai jäädä: `timewarn`, musiikin kiihdytys **ja** HUDin
+  punainen `AIKA` — kolme merkkiä jo, ja neljäs olisi ollut nousevan veden vika
+  sanasta sanaan.
+- **Salaisuuden löytyminen** on tarkoituksella merkitsemätön sellaisenaan:
+  palkinto itse on merkki, ja "löysit salaisuuden" -merkki olisi se toinen.
+- **Tähden ja ummetuksen loppuminen** jätettiin hiljaisiksi, ja perustelu on
+  mitattu eikä arvattu: molemmilla on jo **ennakoiva** merkki (sekuntilaskuri,
+  joten hetki ei voi yllättää), ja molempien kuva on **pelaajassa itsessään**
+  eikä HUDissa — siinä mihin silmä jo katsoo. Ja jokainen ääni joka sopisi
+  merkitykseen "hyvä asia loppui" osuisi `powerdown`in viereen, joka tarkoittaa
+  aineellisesti eri asiaa. Lähisukuinen ääni siinä kohdassa opettaisi tasan sen
+  väärinluennan josta kohta 8 varoittaa.
+
+### Mitattu ääni, ei arvioitu
+
+| uusi | huippu | vertailukohta samasta ajosta |
+| --- | --- | --- |
+| `pfull` | 0.350 | `coin` 0.322, `powerup` 0.567 (katto) |
+| `pspent` | 0.161 | puolet `pfull`ista tarkoituksella — se laukeaa aina kun juoksu päästetään |
+| `pipeout` | 0.169 | `pipe` 0.168 — putken kaksi päätä ovat nyt saman kokoisia |
+| `reserve` | 0.234 | `bump`-luokkaa, mekaaninen eikä palkitseva |
+
+Melupohja kaiken jälkeen **0.000**: mitään ei peitetty eikä pohjaan lisätty.
+
+### Mittausvika joka olisi julistanut äänen olemattomaksi
+
+`reserve` mittautui aluksi **0.000**:ksi. Ääni on 95 ms ja analysaattorin
+ikkuna oli 2048 näytettä eli 46 ms — portti olisi siis todennut hiljaiseksi
+äänen jonka kaiuttimet soittavat. Ikkuna on nyt 16384 näytettä, pidempi kuin
+mikään mitä se mittaa (sama korjaus ja sama syy kuin konsonanttilohkossa).
+**Korjattiin testi eikä kynnystä.**
+
+### Löydetty, ei korjattu
+
+- **`door` tarkoittaa yhä kahta asiaa**: linnakkeen oven aukeamista ja siitä
+  sisään kävelemistä. Lievempi kuin putkitapaus, mutta samaa lajia.
+- **`onBossDefeated` soittaa `clear`in ja `door`in samalla framella**, päälle
+  musiikin uudelleenkäynnistys, tärähdys ja pistepomppu. Se on kohdan 8 omalla
+  mittarilla liikamerkitsemistä; purkaminen muuttaisi pelin suurinta hetkeä,
+  joten se on raportoitu eikä koskettu.
+- **`powerup` on pelin lainatuin ääni**, 12 kutsupaikkaa.
+- **`SFX.land` on kuollutta koodia** — määritelty, ei koskaan soitettu.
+
+HUD-rivejä ei koskettu yhtäkään: pulssi piirretään `LevelScene.draw()`ssa
+`ctx.restore()`n ja `drawLetterbox`in välissä, ja `drawHud` on tavulleen
+ennallaan. Varalokeron korjaus on pelkkä ääni juuri siksi.
+
+---
+
+## v26.08.10.55 — AIKA-AJO: kello jota vastaan ajetaan on oma ennätys
+
+Omistaja valitsi tämän pelitilaksi kahdeksan ehdotuksen joukosta. Peruste oli
+että **peli pitää jo nopeutta pointtina muttei sano sitä ääneen**: maali maksaa
+`jäljellä oleva aika × 50`, eli pisteytyksellä on tästä jo mielipide.
+
+Tila avataan alkuvalikosta. Kentän oma ennätysaika, elävä ero kahdeksassa
+välipisteessä, tilalatausten kieltäminen, kello joka käy taukovalikossa, ja
+`5` nollaa ajat vahvistuksen kanssa.
+
+### Pitchin oma väite ei kestänyt mittausta
+
+Sanoin ehdotusta esitellessäni että *"par-aika on jo laskettu jokaiselle 60
+kentälle"*. **Se ei pidä paikkaansa.** `defaultTime` antaa 1,3 yksikköä
+(31,2 framea) saraketta kohden, kun täysillä juostu kierros maksaa 6,4 framea
+saraketta kohden. Kenttäkello on siis **4,8–4,9-kertainen** täysillä juostuun
+kierrokseen nähden kaikissa 60 kentässä (pienin 4,8× kentässä 4-6, portissa
+pysyvänä mittauksena).
+
+Se on **määräaika, ei tavoiteaika**: jokainen pelaaja istuisi minuutin sen
+edellä joka kentässä, eikä sellaista vastaan aja kukaan. Vertailukohta on siis
+pelaajan **oma** ennätys, ja "ei ennätystä" on suunniteltu tila eikä
+reunatapaus — himmeä `--.-` täsmälleen niissä pikseleissä joissa oikea lukema
+tulee olemaan, ja maalin jälkeen `AIKA KIRJATTU 1:20.4`, jottei ensimmäinen
+läpäisy ole hiljainen.
+
+### HUD, mitattuna eikä silmämääräisesti
+
+Ero mahtuu nauhan ainoaan aukkoon: elämät loppuvat sarakkeeseen 153, `MAAILMA`
+alkaa 196:sta, ja levein ero (nuoli 5 px + väli 2 + `+9999` 29 px) on 156–192.
+
+```
+ok  aika-ajon lukema ei peitä yhtään olemassa olevaa HUD-pikseliä
+    [uutta mustetta 471 px, peitettyä 0 px, laatikko x 155-185 y 5-13,
+     lähin vanha muste 3 px]
+```
+
+**Kulunutta aikaa ei piirretä lainkaan**, koska se on `AIKA` väärinpäin:
+kaava täsmää **900/900 framella**. Kohta 8 kieltää kaksi samaa asiaa sanovaa
+merkkiä, ja tässä toinen niistä olisi ollut sama luku toisin päin. Itse ero ei
+ole kellon kopio: sama `AIKA 440` antaa `+4.7` tai `+3.7` riippuen vain
+tallennetusta ennätyksestä.
+
+Rakennuksen aikana löytyi toinen punainen, mittaamalla eikä katsomalla:
+maalirivi peitti läpäisybannerin. **`drawBanner` käyttää mittakaavaa 3
+ensimmäiset 8 framea**, joten näennäisesti tyhjä väli on 7 px matalampi kuin
+miltä näyttää. `uutta mustetta 1434 px, peitettyä 2304 px` → `peitettyä 0 px`.
+
+### Tauko: ajokello käy, kenttäkello seisoo
+
+Mitattu: 120 framea taukoa → ajokello 0→120, `AIKA` 460→460. Perustelu oli jo
+kirjoitettuna `updateTimer`issa: kello joka voi tappaa pelaajan paikassa jossa
+hän ei voi tehdä mitään. Valikko on täsmälleen se paikka. **Tauko maksaa eron,
+ei koskaan henkeä**, ja valikko sanoo sen itse (`TAUKO - KELLO KÄY`).
+
+**Alt-tab on kirjattu aukko eikä korjattu.** Taustalla oleva välilehti ei aja
+frameja, eikä seinäkelloon siirtyminen sulje sitä halvalla: `Game.frame`
+kaventaa yli 250 ms:n askeleen yhdeksi, ja ilman sitäkin silmukka ajaa
+korkeintaan viisi askelta framessa. Seinäkelloon siirtyminen olisi
+aika-askeleen uudelleenrakennus, joka tekisi hitaasta koneesta häviäjän samalla
+pelaamisella.
+
+### Tavallinen kierros ei liikkunut — todistettuna
+
+- Sama kenttä, sama syöte, sama siemen, tila päällä vs pois: **600 framea, 0
+  eroa** sijainnissa, nopeudessa, kellossa, pisteissä, kolikoissa, kamerassa.
+- Käännösten välillä (`3d84e77` vs tämä): 5 kenttää × 2 voimatasoa × 600 framea
+  + 30 koko ruudun tiivistettä + molemmat vanhat valikkopituudet →
+  md5 **identtinen**.
+- `difficulty.mjs` ja `playable.mjs` tavulleen samat, `src/data/difficulty.js`
+  ei liikkunut riviäkään.
+
+### Tallennusyhteensopivuus molempiin suuntiin
+
+`bestTimes` menee sisään ilman versionostoa, `secrets`/`continues`-ennakkotapauksella.
+Vanha tallennus → uusi käännös: 12/12 vanhaa kenttää ehjänä. Uusi → vanha
+lataaja: sama. **Rehellinen hinta kirjattuna `save.js`:ään:** vanha käännös
+jättää avaimen lukematta ja pudottaa sen kirjoittaessaan, eli vanhalla
+käännöksellä pelaaminen pyyhkii ajat. Se on ainoa kenttä jonka menetys ei maksa
+etenemistä.
+
+### Tähtimerkintää ei kahdennettu
+
+`usedSaveState` asetetaan yhä vain `quickLoad`in onnistumishaarassa, johon
+aika-ajo ei koskaan pääse — merkintä ei siis voi syntyä eikä sitä tarvinnut
+vaimentaa. Myös pikatallennus kieltäydytään: tilannekuva jonka peli lupaa ottaa
+mutta kieltäytyy palauttamasta on lupaus jota se ei pidä.
+
+### Löydetty, ei korjattu
+
+- Alkuvalikossa ei ollut tilaa neljännelle riville: 13 px riviltä olisi vienyt
+  vihjerivin y-koordinaattiin 244 eli ruudun ulkopuolelle. Korjattu
+  `panelY = Math.min(184, 240 − 11 − panelH)`, joka on tavulleen sama kahdella
+  ja kolmella rivillä. Neljällä rivillä paneeli tummentaa kävelevän hahmon
+  kaksi alinta riviä — kosmeettista, hyväksytty, katsottava jos viides rivi
+  joskus tulee.
+- Nollausnäppäin `5` on toimeton tilan ulkopuolella ja dokumentoitu vain tilan
+  sisällä.
+- Pystykentät ottavat y-akselin `raceProgress`issa, kirjoitettuna ja
+  perusteltuna muttei ajettuna: yksikään toimitettu kenttä ei vielä ole pysty.
+
+---
+
+## v26.08.10.54 — luulinnake ei ole pilvilinnake: kahdeksan linnakesanastoa
+
+`tools/variety.mjs` mittasi eilen illalla asian jota kukaan ei ollut etsimässä:
+**puolet pelin linnakkeista ei tuonut peliin yhtään uutta muotoa.** 6-F, 7-F ja
+8-F toivat 0.0 %, 3-F 3.0 %. Seitsemän jaettua `fort_*`-palikkaa eri
+järjestyksessä kahdeksan kertaa. Omistaja ratkaisi: **jokaiselle maailmalle oma
+linnakesanasto.**
+
+### Muoto, ei paletti
+
+Uusi `src/data/chunks/fortresses.js` kantaa kahdeksan sanastoa
+(`root_ kiln_ frost_ mill_ pyre_ crypt_ spire_ throne_`, 5–7 palikkaa kukin).
+Yksi tiedosto eikä kahdeksaa, koska `bone.js` ja `cloud.js` kantavat portteja
+jotka vaativat avointa taivasta — katettu käytävä niissä olisi tarvinnut
+hiljaisen poikkeuksen portin sisään.
+
+Ratkaiseva rajaus on että jokaisella on **rakenteellinen lause**, ei väri.
+Omistaja oli jo sanonut ettei teemakohtaista laattamuotoa tarvita — nykyinen
+skinnaus riittää — ja saman pohjan uudelleenvärjäys olisi mitannut identtisesti.
+Siksi:
+
+| maailma | lause |
+| --- | --- |
+| w1 `root_` | kaksi lattiaa |
+| w2 `kiln_` | ei yhtään kuoppaa |
+| w3 `frost_` | lattia joka ei kanna |
+| w4 `mill_` | koneisto pään päällä |
+| w5 `pyre_` | kaikki on ylitystä |
+| w6 `crypt_` | reitti menee alas |
+| w7 `spire_` | reitti menee ylös |
+| w8 `throne_` | huone kutistuu `HEAD`in korkuiseksi |
+
+### Mitattu, kaikki kahdeksan johdotettuna
+
+| linnake | ennen | nyt |
+| --- | --- | --- |
+| 1-F | 100.0 | 100.0 |
+| 2-F | 14.3 | **85.7** |
+| 3-F | **3.0** | **83.8** |
+| 4-F | 37.9 | **86.2** |
+| 5-F | 31.4 | **61.4** |
+| 6-F | **0.0** | **75.0** |
+| 7-F | **0.0** | **82.2** |
+| 8-F | **0.0** | **65.1** |
+
+Kierrätyslista 7/44 → **2/60**, ja linnakkeita siinä 4 → **0**.
+
+**Yksi luku ei ole voitto vaan siirto, ja se pitää sanoa.** 2-F nousi
+14.3 → 85.7 ilman että siihen alun perin kosketttiin: mittari on
+järjestysriippuvainen, ja 2-F:n `fort_*`-muodot olivat "jo nähtyjä" vain siksi
+että 1-F näytti ne ensin. 1-F taas oli jo 100 % eikä voinut nousta — siellä
+todellinen muutos on muotojen määrä 96 → 124 ja tyhjien ikkunoiden osuus
+33.7 % → 13.0 %.
+
+### Portti, punainen ennen vihreää
+
+```
+punainen 1  linnakesanastoja ei päästy lukemaan: Cannot find module …/fortresses.js
+punainen 2  omasta sanastostaan rakennettuja linnakkeita 0, vaadittu 3
+vihreä      8/8 linnaketta omasta sanastostaan — 1-F 100 % … 8-F 100 %
+```
+
+Väite tarkistaa kolme asiaa: sanastot ovat olemassa ja erillisiä (johdettuna
+yhdestä taulukosta eikä toisesta listasta), yksikään linnake ei sekoita kahden
+maailman sanastoa (tämä on liittämisvirheen vahti), ja omasta sanastostaan
+rakennettuja on vähintään kolme — räikkä joka kiristyi kahdeksaan kun loput
+viisi soittolistaa liitettiin.
+
+### Väite joka todisti itsensä tyhjäksi
+
+Uusi 1-F kaatoi portin *"the boss cannot leave its arena and fall out of the
+level"*. Syy oli **voittoanimaatio**: `Boss.stomp` antaa kaadetulle pomolle
+`noclip`in ja pudottaa sen kentän alle — tasan se ehto jolla testi tunnisti
+karanneen pomon. Ja väitteen oma suoja oli `!s.bossDefeated === !s.bossDefeated`,
+joka on aina tosi: rivi näytti tarkistavan voiton eikä tarkistanut mitään.
+Ehto lukee nyt vain elävää pomoa, ja tilatallennustarkistus sai oman tuoreen
+skenensä — tallennus jossa pomo on jo kaadettu ei voi kertoa mitään siitä
+palaako pomo takaisin.
+
+### Integroinnissa: kuori linnakkeen kynnyksellä
+
+Viisi soittolistaa liitettiin tässä. Yksi kaatui heti: **`spire_hole` panee
+kuoren omaan viimeiseen sarakkeeseensa**, joten soittolistan päättäminen siihen
+jätti kuoren aivan areenan ovelle, ja voimatason 0 pelaaja kuoli ennen kuin
+pomon ikkuna ehti aueta (`7-F: osui framella -1/120`). Viimeinen palikka on nyt
+`spire_hail`. Sama vika kuin kurnuttajan merkissä kaksi merkintää sitten:
+**palikan reunaan asetettu olio on sommitteluvika, ei sisältövirhe.**
+
+### Vaikeus
+
+Kahdeksan linnakkeen luku muuttui, **muut 52 kenttää ovat ennallaan**. Käyrä
+nousee joka maailmassa: 112.8 · 132.5 · 180.7 · 191.3 · 233.2 · 251.2 · 253.7 ·
+290.8.
+
+**Kapein marginaali on w6 → w7, +2.5 pistettä**, ja se on kirjattava eikä
+piilotettava: se on koko pelin tiukin kohta, ja seuraava kenttämuutos
+maailmoissa 6 tai 7 kääntää sen helposti laskuksi. 6-F ja 7-F kantavat
+neljänneksen maailmansa keskiarvosta.
+
+`playable.mjs`: **5-F oli tähän asti rikki** (`VAATII TUPLAHYPYN 32 %`,
+`fort_trench`in yhdeksän ruutua laavaa ja yksi lauta) ja on nyt läpäistävissä
+voimatasolla 0. Jäljelle jää vain 4-3, joka on vanha eikä tästä.
+
+### Jäi tekemättä
+
+`fort_hall`, `fort_gap`, `fort_spikes`, `fort_blocks`, `fort_pillars`,
+`fort_burn` ja `fort_trench` ovat nyt **kuollutta koodia** — yksikään linnake ei
+enää käytä niitä. Ne kuuluvat pois samalla perusteella jolla `bone_twin`
+poistettiin, mutta poisto on oma muutoksensa oman punaisensa kanssa.
+
+Ja yksi korjaus omaan aiempaan väitteeseeni: sanoin `fort_gap`in esiintyvän
+**28 kertaa**; mitattuna kenttädatasta se on **20 paikassa seitsemässä
+maailmassa**. Havainto oli oikea, luku ei — ja jaetuin palikka ei ollut
+`fort_gap` vaan `fort_power`, joka oli kaikissa kahdeksassa.
+
+---
+
 ## v26.08.10.53 — kurnuttaja opetusmittariin, ja kuusi kuoppaa joista ei ehtinyt pysähtyä
 
 Omistajan ratkaisu riitaan oli **korjaa 2-1, pidä sääntö ehdottomana** — ei

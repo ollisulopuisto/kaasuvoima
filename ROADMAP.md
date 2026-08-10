@@ -701,6 +701,73 @@ Nämä eivät ole tehtäviä vaan rajoja. Ne ovat täällä siksi että ne koske
 jota ei ole vielä tehty: jos joku ehdottaa ensi kuussa globaalia pistetaulua tai
 kuilujen levennystä, perustelu löytyy täältä eikä muutoslokin arkistosta.
 
+### Päätetty 10.8.2026: emergenssi ulottuu olioiden välille, muttei maastoon
+
+Omistaja kävi läpi [IDEAS.md](IDEAS.md):n kaksitoista lainattavaa verbiä ja
+päätti kohdasta 12 (*kaikki reagoi kaikkeen*, Spelunky) neljä asiaa. Ne ovat
+rajoja eivätkä tehtäviä, ja tärkein niistä on se mitä **ei** oteta.
+
+**1. Ulottuvuus: maasto → olio ja olio ↔ olio. Ei olio → maasto.**
+Jää on liukas kävelijälle, tuuli kantaa kuorta, potkaistu kuori tappaa sen mihin
+osuu. Mutta olio ei muokkaa kenttää. Tämä rajaus on koko turvallisuus: **kenttä
+pysyy staattisena**, joten `playable.mjs`, `validateLevel` ja `difficulty.mjs`
+mittaavat yhä sitä kenttää joka pelataan. Se on tasan se ehto joka kirjattiin
+IDEAS.md:n läpiajossa, ja tämä päätös vetää rajan sen turvalliselle puolelle.
+
+**2. Reiluus: pelaajaa saa satuttaa vain ketju jonka hän itse aloitti.**
+Potkaisit kuoren, joten omistat sen mitä seuraa. Kaksi vihollista jotka
+törmäävät keskenään voivat tappaa toisensa muttei sinua. Sääntö pitää jokaisen
+kuoleman jäljitettävissä johonkin mitä pelaaja teki, mikä on sama vaatimus jonka
+muu peli jo täyttää — eikä se tarvitse ruudun ulkopuolen kirjanpitoa.
+
+**3. Vaikeusmittari mittaa yhä lähtötilan, ja sanoo sen ääneen.**
+Luku pysyy vertailukelpoisena kaikkien 60 kentän ja kaiken ajan yli, mikä on
+koko syy siihen että siihen luotetaan. `difficulty.mjs` tulostaa rivin joka
+kertoo että emergentit lopputulokset ovat sen mittauksen ulkopuolella.
+**Sanottu rajoitus on parempi kuin luku joka hiljaa tarkoittaa uutta asiaa.**
+
+**4. Ensimmäinen erä, jokainen omalla punaisellaan:**
+
+| laki | mitä muuttuu |
+| --- | --- |
+| jää on liukas kaikille | maailman 3 kitka koskee myös kävelijää ja kuorta |
+| murenevat lavat murenevat vihollisen alta | luumaailman lankku ei enää kanna ketä tahansa |
+| tuuli kantaa kuoria ja vihollisia | pilvimaailman tuuli koskee kaikkea |
+| potkaistu kuori tappaa sen mihin osuu | puhdas olio ↔ olio, ei maastoa |
+
+**Omistajan lisäehto murenevaan lavaan: lankun on kasvettava takaisin.**
+Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa
+vihollisen alta eikä palaa olisi olio joka muokkaa kenttää, ja silloin reitti
+voisi kadota. Palautuvana se on tilapäinen tapahtuma staattisessa kentässä.
+
+### Päätetty 10.8.2026: kaistan vilkaisu on katsomista, ei kulkemista
+
+Kohta 4 ([IDEAS.md](IDEAS.md), *litteä maailma käännetään*, Super Paper Mario),
+kolme päätöstä.
+
+**1. Vain näkeminen — läpi ei astuta.** Naapurikaista näkyy hetken
+läpikuultavana, mutta sinne pääsee yhä vain putkella tai varrella. Tämä on
+halvin versio validoida, ja se on koko syy valintaan: **kenttägraafi ei muutu
+lainkaan**, joten `rules.js` todistaa yhä yhden kaistan eikä kaistojen välistä
+graafia. Se raskaampi versio on sama ongelma kuin areenaa muokkaavalla pomolla.
+
+**2. Hinta: täysi vauhtimittari, ja se tyhjenee.** Mittari on jo varattu
+kahteen asiaan (nopeuskatto 2,5 → 3,5 ja kaasulehden lento), joten katsominen
+maksaa juoksemisen tai lentämisen. Ilman hintaa tämä ei olisi kyky vaan tutka,
+ja silloin koko salaisuusrakenne — kartta kertoo *että* niitä on muttei
+*missä* — kuolisi kertakäytöllä.
+
+**3. Suunta: aina luolakaista, alaspäin.** Yksi nappi, yksi merkitys. Perustelu
+on tuore ja kallis: kartan nuolissa oli tasan tänään vika jossa yksi syöte ei
+osunut mihinkään suuntaan ja pelaaja jäi jumiin. Luolakaista on lisäksi se jossa
+salaisuudet ovat, eli se jonka katsominen on täyden mittarin arvoista.
+Laajentaminen ylöspäin on myöhemmin halpaa; kahden napin järjestelmän
+peruuttaminen ei ole.
+
+**Kumpikaan näistä kahdesta ei ole vielä aikataulussa.** Ne ovat päätöksiä
+siitä *mitä* rakennetaan jos rakennetaan, eivät lupauksia siitä että
+rakennetaan.
+
 ### Päätetty: haarautuva kartta, eriarvoiset haarat
 
 Omistajan päätös 9.8.2026: **haarat ovat eriarvoisia ja vaikeudesta palkitaan.**

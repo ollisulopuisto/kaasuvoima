@@ -16,6 +16,13 @@
  * vocabulary, so two people working on two worlds are not editing the same
  * file. This one stays the only address anybody imports: it merges them and
  * owns the assembly.
+ *
+ * Poikkeus on `chunks/fortresses.js`, jossa on kaikkien kahdeksan maailman
+ * linnakesanastot yhdessä. Syy on rakenteellinen eikä laiskuus: linnake on
+ * sisätila, ja teematiedostoilla on portteja jotka vaativat avointa taivasta
+ * (`bone.js`) tai kieltävät maasta nousevan kiven (`cloud.js`). Katollinen
+ * käytävä niissä tiedostoissa olisi joko rikkonut portin tai vaatinut sen
+ * sisään poikkeuksen. Tiedosto perustelee itsensä omassa alussaan.
  */
 
 import { CHUNK_ROWS, COMMON_CHUNKS } from './chunks/common.js';
@@ -26,6 +33,7 @@ import { FACTORY_CHUNKS } from './chunks/factory.js';
 import { BONE_CHUNKS } from './chunks/bone.js';
 import { CLOUD_CHUNKS } from './chunks/cloud.js';
 import { FORTRESS_CHUNKS } from './chunks/fortress.js';
+import { FORTRESS_WORLD_CHUNKS } from './chunks/fortresses.js';
 import { KEEP_CHUNKS } from './chunks/keep.js';
 import { SECRET_CHUNKS } from './chunks/secrets.js';
 
@@ -40,6 +48,7 @@ export const CHUNKS = {
   ...BONE_CHUNKS,
   ...CLOUD_CHUNKS,
   ...FORTRESS_CHUNKS,
+  ...FORTRESS_WORLD_CHUNKS,
   ...KEEP_CHUNKS,
   ...SECRET_CHUNKS,
 };

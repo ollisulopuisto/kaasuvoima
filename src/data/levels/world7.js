@@ -148,8 +148,8 @@ export const WORLD7_LEVELS = {
   '7-F': {
     theme: 'cloud', bg: 'none', music: 'cloud', boss: true, bossVariant: 5,
     chunks: [
-      'start', 'fort_power', 'fort_gap', 'fort_blocks', 'fort_gap', 'fort_spikes',
-      'fort_gap', 'fort_burn', 'fort_gap', 'fort_hall', 'fort_gap', 'fort_pillars',
+      'start', 'spire_gate', 'spire_climb', 'spire_hail', 'spire_hole', 'spire_hail',
+      'spire_hole', 'spire_lattice', 'spire_hole', 'spire_hail', 'spire_hole', 'spire_hail',
       'boss_arena',
     ],
   },

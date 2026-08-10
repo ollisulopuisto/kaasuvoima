@@ -14,6 +14,10 @@ import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY } from '../level/physics.js';
+import {
+  RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
+  bestFor, setBest, formatTime, formatDelta,
+} from '../core/timeattack.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
 import { DAILY_TITLE } from '../core/daily.js';
@@ -25,6 +29,30 @@ export const HUD_H = 32;
 const GOAL_HEIGHT = 6 * TILE;
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
+
+/*
+ * AIKA-AJON JAKO HUD-NAUHASSA. Nauhassa on jo viisi lukemaa — varaesine,
+ * P-mittari ja voimapallot vasemmalla, elämät ja kolikot niiden oikealla,
+ * maailma ja aika keskellä oikealla, pisteet reunassa — eikä yhtään vapaata
+ * riviä. Jako on kuudes, ja sille on tasan yksi aukko:
+ *
+ *   rivi y+6:  elämärivi `SFB *N` alkaa 100:sta ja on 6-9 merkkiä leveä,
+ *              eli loppuu viimeistään 153:een; `MAAILMA X-Y` alkaa 196:sta.
+ *   levein jako: nuoli 5 px + väli 2 px + `+9999` 29 px = 36 px, eli
+ *              156...192, ja käänteisenä vilkkuessaan 155...193.
+ *
+ * Kolme pikseliä jää molemmin puolin. `tools/verify.mjs` piirtää nauhan
+ * pahimmalla mahdollisella tilalla (9999 elämää, 99 kolikkoa, seitsennumeroiset
+ * pisteet, tähti päällä) tila päällä ja pois, ja vaatii nollaa peitettyä
+ * pikseliä — mitattu, ei silmämääräinen.
+ *
+ * Kulunutta aikaa **ei** piirretä, vaikka se on juuri se luku jota ajetaan.
+ * Se on jo nauhassa: `AIKA` on sama luku toisin päin, `def.time -
+ * floor((ajokello - putkiframet) / 24)`, ja portti mittaa kaavan framelleen.
+ * Kaksi lukemaa samasta luvusta on juuri se virhe jota DESIGN.md kohta 8
+ * varoo.
+ */
+const SPLIT_X = 156;
 
 /*
  * MAAHANISKUN OSUMA. The dive itself lives in player.js; these are the numbers
@@ -609,6 +637,33 @@ const CAVE_TRACK = 'cave';
  */
 const DOOR_OPEN_FRAMES = 30;
 
+/*
+ * VAUHTIMITTARIN KAKSI SYKÄYSTÄ.
+ *
+ * DESIGN.md kohta 8 nimeää tämän efektin itse — "koko ruutu sykkii kun
+ * P-mittari täyttyy" — esimerkkinä siitä milloin ei-diegeettinen kerros saa
+ * reagoida maailmaan. Se on tässä otettu kirjaimellisesti, ja kolme päätöstä
+ * seuraa siitä suoraan:
+ *
+ *   - **Pelialue, ei HUD.** Mittari vilkkuu HUDissa jo nyt, ja juuri se on
+ *     ongelma: HUD-palkki on 320x240-ruudun alalaidassa ja pelaajan silmä on
+ *     kentässä. Toinen merkki samaan palkkiin olisi ollut sama merkki
+ *     uudestaan. Sama raja pitää myös yhteen kohdan 8 omista päätöksistä:
+ *     kuumuus, huurre ja bloom eivät kosketa HUDia, koska HUD ei ole ikkuna
+ *     maailmaan.
+ *   - **Väri on mittarin oma.** #f0b000 on se sävy jolla syttynyt pykälä
+ *     piirretään, joten kuva osoittaa lähteeseensä sanomatta sitä. Se ei ole
+ *     pomon ruskea eikä maahaniskun kaasunvihreä, eli se ei syö kummankaan
+ *     lukutapaa.
+ *   - **Vastapari on pimeä eikä toinen väri.** Etu tulee ja etu menee ovat
+ *     sama tapahtuma kahteen suuntaan, ja tämän tiedoston tapa erottaa
+ *     sellainen pari on **napaisuus** eikä sointi (`sprout`/`dive`,
+ *     `kurnutus`/`loikka`). Valo tulee, valo menee. Menevä on lyhyempi kuin
+ *     tuleva, koska se soi useammin.
+ */
+const SPEED_PULSE_FULL = 14;
+const SPEED_PULSE_SPENT = 9;
+
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
  * and short enough that a wall someone cannot pass shows up on the first try. */
@@ -736,6 +791,12 @@ export class LevelScene {
     this.stateTimer = 0;
     this.bossDefeated = false;
     this.shakeAmp = 0;
+    /* Vauhtimittarin sykäys ja sen suunta. Puhtaasti kosmeettinen ja siksi
+     * `savestate.js`:n ulkopuolella samasta syystä kuin `shakeAmp`: pikalataus
+     * ei ole se hetki jolla mittari täyttyi. Reuna itse on pelaajan päällä
+     * (`Player.pBoost`), joten palautettu tallennus ei myöskään keksi sitä. */
+    this.speedPulse = 0;
+    this.speedPulseUp = false;
     /* What the last ground pound measured, or null if there has not been one.
      * A report of something that already finished, not state the level runs on
      * — which is why it is not in `savestate.js`: a restored snapshot has no
@@ -759,6 +820,110 @@ export class LevelScene {
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
     this.centerCamera();
+
+    /*
+     * AIKA-AJO on tila johon mennään erikseen, eikä tavallinen kierros saa
+     * maksaa siitä mitään. Siksi `race` on `null` aina kun tilaa ei ole
+     * valittu: jokainen alla oleva kysely on silloin yksi vertailu eikä
+     * mitään lasketa, mitata tai piirretä. Portti ajaa saman kentän saman
+     * syötteen samalla arvontasiemenellä tila päällä ja pois, ja vaatii
+     * framejonot identtisiksi.
+     */
+    this.race = null;
+    this.raceResult = null;
+    if (game.timeAttack) this.startRace();
+  }
+
+  /* ------------------------------ aika-ajo ----------------------------- */
+
+  /**
+   * Radan alku ja loppu. Vaakakentässä akseli on x ja maali lipputanko;
+   * pomokentässä lippua ei ole, joten loppu on kentän oikea reuna, koska ovi
+   * aukeaa siellä. Pystykentässä akseli on y ja etumerkki hoitaa suunnan:
+   * ylöspäin kiipeävässä `raceTo < raceFrom`, ja osamäärä kääntyy itsestään.
+   */
+  startRace() {
+    const p = this.player;
+    this.raceFrom = this.vertical ? p.cy : p.cx;
+    this.raceTo = this.vertical
+      ? (this.goal ? this.goal.y : 0)
+      : (this.goal ? this.goal.x : (this.w - 2) * TILE);
+    if (this.raceTo === this.raceFrom) this.raceTo = this.raceFrom + TILE;
+    this.race = {
+      /** Framea kentän alusta. Kasvaa myös taukovalikossa — ks. `tickPaused`. */
+      frames: 0,
+      /** Millä framella kukin välipiste ohitettiin, 0 = ei vielä. */
+      marks: new Array(RACE_SPLITS).fill(0),
+      /** Seuraava ohittamaton välipiste. */
+      next: 0,
+      /** Ero ennätykseen viimeisellä välipisteellä, null = ei vertailukohtaa. */
+      delta: null,
+      /** Framea käänteisenä sen jälkeen kun lukema vaihtui. */
+      flash: 0,
+      best: bestFor(this.game.state, this.id),
+    };
+  }
+
+  /** Kuljettu osuus radasta, 0...1. */
+  raceProgress() {
+    const cur = this.vertical ? this.player.cy : this.player.cx;
+    const span = this.raceTo - this.raceFrom;
+    if (!span) return 0;
+    return clamp((cur - this.raceFrom) / span, 0, 1);
+  }
+
+  /**
+   * Ajokello ja jako.
+   *
+   * Jako liikkuu **vain välipisteillä**, ei joka framella. Jatkuvasti laskettu
+   * ero olisi kohinaa: se hyppäisi joka kerta kun pelaaja pysähtyy hetkeksi
+   * tähtäämään, ja lukema jota ei ehdi lukea ei ole lukema. Välipisteellä
+   * kysymys on täsmällinen — *tässä kohdassa rataa olin viimeksi tällä
+   * framella* — ja vastaus pysyy ruudulla siihen asti kun seuraava saapuu.
+   *
+   * Ääni tulee kuvan kanssa (DESIGN.md kohta 8): kuva yksin jää huomaamatta
+   * silloin kun katse on kuilussa, ja juuri silloin jako vaihtuu.
+   */
+  updateRace() {
+    const r = this.race;
+    r.frames++;
+    if (r.flash > 0) r.flash--;
+    while (r.next < RACE_SPLITS && this.raceProgress() >= (r.next + 1) / RACE_SPLITS) {
+      r.marks[r.next] = r.frames;
+      if (r.best && r.best.marks[r.next] > 0) {
+        r.delta = r.frames - r.best.marks[r.next];
+        r.flash = SPLIT_FLASH;
+        Sfx.play(r.delta <= 0 ? 'edella' : 'jaljessa');
+      }
+      r.next++;
+    }
+  }
+
+  /**
+   * Kello käy myös taukovalikossa, ja se on tilan koko lupaus: aikaa ei saa
+   * ostaa pysäyttämällä peli ja katsomalla kenttä rauhassa.
+   *
+   * **Kenttäkello ei käy.** Se on eri kello ja se tappaa, ja `updateTimer`
+   * sanoo jo miksi sellaista ei tehdä: kello joka voi tappaa pelaajan
+   * paikassa jossa asialle ei voi tehdä mitään. Taukovalikko on täsmälleen
+   * sellainen paikka. Tauko maksaa siis jaossa muttei hengessä, ja
+   * `TAUKO - KELLO KÄY` lukee valikossa, koska sääntö jota ei kerrota on ansa.
+   */
+  tickPaused() {
+    if (!this.race || this.state !== 'play') return;
+    this.race.frames++;
+    if (this.race.flash > 0) this.race.flash--;
+  }
+
+  /** Maali: aika talteen, jos se oli nopeampi. */
+  recordRace() {
+    const r = this.race;
+    if (!r) return;
+    const before = r.best;
+    const record = setBest(this.game.state, this.id, { frames: r.frames, marks: r.marks });
+    if (record) this.game.persist();
+    this.raceResult = { frames: r.frames, best: before ? before.frames : null, record };
+    if (record && before) Sfx.play('yeah');
   }
 
   /* ------------------------------ building ----------------------------- */
@@ -858,6 +1023,42 @@ export class LevelScene {
   /** Kicks the camera for a frame or two. Purely cosmetic. */
   shake(amount) {
     this.shakeAmp = Math.min(6, Math.max(this.shakeAmp, amount));
+  }
+
+  /**
+   * TÄYSI VAUHTI. Seitsemän pykälää, kahdeksan framea kukin, ja perillä kaksi
+   * asiaa on toisin: nopeuskatto on 2,5:n sijaan 3,5 px/frame ja kaasulehdellä
+   * hypystä on tullut lento. Kumpikaan ei ole ennen sanonut itsestään mitään.
+   *
+   * Kuva ja ääni ovat tässä samassa metodissa, eivät kahdessa — DESIGN.md
+   * kohta 8 vaatii molemmat puolet, ja puoliksi tehty pari on juuri se vika
+   * jonka linnakkeen ovi teki ennen kuin sen lehdet alkoivat liikkua.
+   *
+   * Vaimenee kun kenttä on ohi: voittojingle ja kuolinääni omistavat ruudun
+   * kumpikin omalla hetkellään, eikä mittari saa puhua niiden päälle.
+   */
+  onSpeedFull() {
+    if (this.state !== 'play') return;
+    this.speedPulse = SPEED_PULSE_FULL;
+    this.speedPulseUp = true;
+    Sfx.play('pfull');
+  }
+
+  /**
+   * ...JA SE MENI, mikä on sama tapahtuma takaperin ja tarvitsee merkin
+   * kipeämmin kuin täyttyminen: menetyksen huomaa muuten vasta siitä että
+   * hyppy ei kanna. Ilmassa se on vieläkin selvempää — lento loppuu kun
+   * mittari on tyhjä, ja putoaminen on huono tapa saada tietää.
+   *
+   * Yksi merkki molemmille, koska ne ovat sama asia: etu meni. Kaksi merkkiä
+   * yhdelle tilanvaihdokselle olisi kohdan 8 virhe ihan yhtä lailla kuin yksi
+   * merkki kahdelle.
+   */
+  onSpeedSpent() {
+    if (this.state !== 'play') return;
+    this.speedPulse = SPEED_PULSE_SPENT;
+    this.speedPulseUp = false;
+    Sfx.play('pspent');
   }
 
   /* ------------------------------ level API ---------------------------- */
@@ -1251,7 +1452,8 @@ export class LevelScene {
     this.noteBand(p.y + shift + p.h);
     /* Going in gets the falling sweep and coming out gets the rising one, so
      * the two ends of the journey do not sound like the same event happening
-     * twice (DESIGN.md §8). */
+     * twice (DESIGN.md §8). Ne ovat nyt oikeasti pari: ulostulo soitti pitkään
+     * `door`ia, eli lupaus piti paikkansa vain puoliksi. Ks. `updateTransit`. */
     Sfx.play('pipe');
   }
 
@@ -1360,7 +1562,13 @@ export class LevelScene {
       p.y = t.arriveY - t.out;
       t.hide = null;
       this.spawnPuff(p.cx, t.arriveY + p.h);
-      Sfx.play('door');
+      /* Putken oma ulostuloääni, ei oven laina. Tässä soi `door` siihen asti
+       * kunnes se huomattiin: sama ääni tarkoitti oven aukeamista, ovesta
+       * kävelemistä ja putkesta ulos tulemista, eli yksi merkki kolmea asiaa
+       * — juuri se väärin lukemaan opettava merkki jota DESIGN.md kohta 8
+       * varoo. Kuva on ollut kunnossa koko ajan (keho nousee, kamera leikkaa,
+       * neljä kaasupilveä jää jalkojen alle); ääni oli lainassa. */
+      Sfx.play('pipeout');
       return;
     }
 
@@ -1634,6 +1842,7 @@ export class LevelScene {
       this.tryWarp(input);
       this.updateTransit();
       this.updateProgress();
+      if (this.race) this.updateRace();
     } else if (this.state === 'clear') {
       this.player.update(input);
       this.stateTimer++;
@@ -1656,6 +1865,7 @@ export class LevelScene {
      * change all stop calling it. See Ambience.hold. */
     if (this.state === 'play') Ambience.hold(this.gust);
     if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
+    if (this.speedPulse > 0) this.speedPulse--;
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
     this.updateCamera();
@@ -2310,6 +2520,7 @@ export class LevelScene {
     this.player.autoWalk = true;
     this.player.ducking = false;
     this.awardScore(Math.max(0, this.time) * 50);
+    this.recordRace();
     Music.stop();
     Ambience.stop();
     Sfx.play('clear');
@@ -2372,8 +2583,32 @@ export class LevelScene {
     this.drawPlayerInto(ctx, camX, camY);
 
     ctx.restore();
+    this.drawSpeedPulse(ctx);
     if (this.bar) this.drawLetterbox(ctx);
     this.drawHud(ctx);
+  }
+
+  /**
+   * Vauhtimittarin sykäys, ruutukoordinaateissa ja HUDiin koskematta.
+   *
+   * Piirretään `restore`n jälkeen, koska tämä ei ole maailmassa: kamera, tärinä
+   * ja kirjekuoripalkit on jo purettu, ja efekti on kertojan puolella siinä
+   * missä musiikki ja HUD. Yksi suorakulmio, ja se rajautuu itse ikkunaan
+   * (`bar`…`viewH`) — kirjekuoripalkit ja HUD jäävät sen ulkopuolelle.
+   *
+   * Verho neliöidään: isku on edessä ja häntä pitkä. Tasaisesti hiipuva verho
+   * lukisi himmennykseksi, ja etupainoinen lukee tapahtumaksi — sama muotoilu
+   * kuin `PoundWave`n renkaassa ja samasta syystä. Perustelut väreille ja
+   * kestoille ovat SPEED_PULSE_FULLin kommentissa.
+   */
+  drawSpeedPulse(ctx) {
+    if (this.speedPulse <= 0) return;
+    const span = this.speedPulseUp ? SPEED_PULSE_FULL : SPEED_PULSE_SPENT;
+    const k = clamp(this.speedPulse / span, 0, 1) ** 2;
+    ctx.fillStyle = this.speedPulseUp
+      ? `rgba(240,176,0,${(0.30 * k).toFixed(3)})`
+      : `rgba(8,8,22,${(0.34 * k).toFixed(3)})`;
+    ctx.fillRect(0, this.bar, VIEW_W, this.viewH);
   }
 
   /**
@@ -2539,6 +2774,76 @@ export class LevelScene {
     });
   }
 
+  /**
+   * Jako. Nuoli ja etumerkillinen luku, ks. SPLIT_X yllä laatikkolaskusta.
+   *
+   * Kaksi kanavaa samasta signaalista, ei kahta signaalia: nuoli osoittaa ylös
+   * kun ollaan edellä ja alas kun jäljessä, ja luvun etumerkki sanoo saman.
+   * Väri on kolmas, ja se on valittu etäisyydellä muihin HUDin väreihin.
+   *
+   * **Ei ennätystä on oikea tila eikä puuttuva arvo**, ja se on uuden pelaajan
+   * tavallisin tila — 60 kentästä 59 on ajamatta. Silloin paikalla lukee
+   * `--.-` himmeänä: se varaa saman tilan kuin oikea lukema, joten mitään ei
+   * ilmesty tyhjästä sillä hetkellä kun ensimmäinen ennätys syntyy, ja se
+   * sanoo suoraan ettei vertailukohtaa ole. Kellon jäännöstä tai kulunutta
+   * aikaa ei laiteta tilalle, koska kumpikin on jo nauhassa toisin päin.
+   */
+  drawSplit(ctx, y) {
+    const r = this.race;
+    const ty = y + 6;
+    const has = r.delta !== null;
+    const ahead = has && r.delta <= 0;
+    const color = has ? (ahead ? SPLIT_COLORS.ahead : SPLIT_COLORS.behind) : SPLIT_COLORS.none;
+    const text = formatDelta(has ? r.delta : null);
+    const flash = has && r.flash > 0;
+    if (flash) {
+      ctx.fillStyle = color;
+      ctx.fillRect(SPLIT_X - 1, ty - 1, 8 + textWidth(text), 9);
+    }
+    const ink = flash ? '#101018' : color;
+    if (has) this.drawSplitArrow(ctx, SPLIT_X, ty, ahead, ink);
+    drawText(ctx, text, SPLIT_X + 7, ty, { color: ink });
+  }
+
+  /** Viiden pikselin kärki ja varsi, samassa 7 pikselin rivissä kuin teksti. */
+  drawSplitArrow(ctx, x, y, up, color) {
+    ctx.fillStyle = color;
+    if (up) {
+      ctx.fillRect(x + 2, y, 1, 1);
+      ctx.fillRect(x + 1, y + 1, 3, 1);
+      ctx.fillRect(x, y + 2, 5, 1);
+      ctx.fillRect(x + 2, y + 3, 1, 4);
+    } else {
+      ctx.fillRect(x + 2, y, 1, 4);
+      ctx.fillRect(x, y + 4, 5, 1);
+      ctx.fillRect(x + 1, y + 5, 3, 1);
+      ctx.fillRect(x + 2, y + 6, 1, 1);
+    }
+  }
+
+  /**
+   * Maalin jälkeen yksi rivi, koska ensimmäisen kentän jälkeen jaon paikalla on
+   * lukenut `--.-` koko ajan eikä pelaaja muuten näe mitä hän juuri kirjasi.
+   *
+   * Rivi on **korttikuvan alapuolella**, ei sen yläpuolella. Väli lipputekstin
+   * ja kortin välissä näyttää tyhjältä mutta ei ole: `drawBanner` piirtää
+   * alareunaviivansa kohtaan `y + scale*7 + 4`, ja `scale` on ensimmäiset
+   * kahdeksan framea 3 eikä 2 — eli se rako on kahdeksan framen ajan 7
+   * pikseliä matalampi kuin miltä se näyttää. Kortti loppuu 100:aan, joten
+   * 104 on ensimmäinen rivi joka ei ole kenenkään.
+   */
+  drawRaceResult(ctx) {
+    const r = this.raceResult;
+    const line = r.best === null
+      ? `${FIRST_TIME}  ${formatTime(r.frames)}`
+      : (r.record
+        ? `${NEW_RECORD}  ${formatTime(r.frames)}`
+        : `${RUN_LABEL} ${formatTime(r.frames)}   ${BEST_LABEL} ${formatTime(r.best)}`);
+    drawText(ctx, line, VIEW_W / 2, 104, {
+      color: r.record ? SPLIT_COLORS.ahead : '#ffffff', align: 'center', shadow: '#101018',
+    });
+  }
+
   drawHud(ctx) {
     const th = THEMES[this.theme] || THEMES.grass;
     const y = VIEW_H;
@@ -2591,6 +2896,7 @@ export class LevelScene {
     drawText(ctx, this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`, 196, y + 6, { color: '#8fe04a' });
     const timeColor = this.time <= 100 ? (Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff') : '#ffffff';
     drawText(ctx, `AIKA ${padNum(this.time, 3)}`, 196, y + 17, { color: timeColor });
+    if (this.race) this.drawSplit(ctx, y);
 
     drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
       color: '#ffffff', align: 'right',
@@ -2623,6 +2929,7 @@ export class LevelScene {
       this.drawBanner(ctx, 'KENTTÄ SELVÄ!', 54, ['#ffd048', '#ffffff', '#8fe04a']);
       drawItem(ctx, this.wonCard, VIEW_W / 2 - 8, 84, this.tick);
     }
+    if (this.state === 'clear' && this.raceResult) this.drawRaceResult(ctx);
     if (this.state === 'dead') {
       this.drawBanner(ctx, 'VOI EI!', 74, ['#ff6060', '#ffffff', '#ffb040']);
     }
