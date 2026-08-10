@@ -16740,11 +16740,20 @@ const report = await page.evaluate(async () => {
       `möykyllä ${solid} osumaa, ilmalla ${air} — kiveä vastaan, ${WINDOW} sarakkeen ikkuna`);
   }
 
-  /* Kolme kopiota `SOLID`ista, verrattuna merkkijonoina — sama järjestely kuin
+  /* Viisi kopiota `SOLID`ista, verrattuna merkkijonoina — sama järjestely kuin
    * `SINK`illa, ja tämä on se portti joka olisi huomannut aukon itse. Kopio
    * `generator.js`:ssä on nykyään kuollutta koodia (nimeä ei lueta siellä),
    * mikä tekee siitä puhtaan väitteen ja siis juuri sellaisen jota portin
-   * kuuluu vahtia. */
+   * kuuluu vahtia.
+   *
+   * **Kopioita oli viisi ja tämä luki kolme**, ja se on sama vika kuin se jota
+   * tämän erän uusi portti korjaa: käsin kirjoitettu lista jonka ulkopuolella
+   * on juuri se tapaus jolla on väliä. `tools/curriculum.mjs` oli päivitetty
+   * mutta tarkistamaton, ja `tools/difficulty.mjs` ei ollut kumpaakaan — eli
+   * vaikeusmittari luki möykyn *ei-kiinteänä*, ja lattiarivillä lepäävä möykky
+   * olisi mitattu pohjattomana sarakkeena. Tänään se ei muuta yhdenkään kentän
+   * lukua (kummankin möykyn rivi on 8, ja `lethalCol` lukee rivit 13-14),
+   * mutta se on väärä vastaus joka odottaa oikeaa kysymystä. */
   {
     /* Koko rivi rivin alusta puolipisteeseen, eikä `[^\]]*` niin kuin `SINK`in
      * vieressä: `SOLID`in jäsenistä yksi **on** `']'`, joten hakasulkeen
@@ -16753,11 +16762,12 @@ const report = await page.evaluate(async () => {
      * loppua — ja loppu on juuri se pää johon uusi merkki lisätään. */
     const line = /^const SOLID = new Set\(.+\);$/m;
     const read = async (f) => ((await readFile(join(ROOT, f), 'utf8')).match(line) || [])[0] || '';
-    const files = ['src/data/rules.js', 'src/data/generator.js', 'tools/originality.mjs'];
+    const files = ['src/data/rules.js', 'src/data/generator.js', 'tools/originality.mjs',
+      'tools/curriculum.mjs', 'tools/difficulty.mjs'];
     const found = await Promise.all(files.map(read));
     const same = found.every((s) => s && s === found[0]);
     const missing = files.filter((f, i) => !found[i].includes("'C'"));
-    expect('SOLIDin kolme kopiota ovat sanasanaisesti samat ja tuntevat möykyn',
+    expect('SOLIDin viisi kopiota ovat sanasanaisesti samat ja tuntevat möykyn',
       same && missing.length === 0,
       same && !missing.length
         ? `${files.length} kopiota, ${found[0].length} merkkiä, sisältää 'C'`
@@ -17311,6 +17321,136 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     report.failures.push(...priceless.map((ch) => `'${ch}' puuttuu ENEMY_COST-taulusta`));
   }
 }
+
+/* ---- laattavaarojen hinta ---- */
+/*
+ * JA SAMA SÄÄNTÖ SILLE PUOLELLE JOKA EI OLE VIHOLLINEN.
+ *
+ * Portti yllä kävelee **vihollistaulun**, ja juuri se on syy siihen ettei se
+ * voinut huomata möykkyä. `T.LUMP` (`'C'`) asetettiin 4-2:een ja 4-F:ään
+ * 10.8.2026, se voi viedä pelaajalta voimatason — ja `src/data/difficulty.js`
+ * ei muuttunut yhdeltäkään riviltä.
+ *
+ * Syitä on kaksi ja jälkimmäinen on se oikea:
+ *
+ *   1. `tools/difficulty.mjs` ei tuntenut merkkiä `'C'`.
+ *   2. **Tarkistus jonka piti huomata se katsoi väärää taulua.** Vaara joka on
+ *      laatta on `ENEMY_CHARS`in ulkopuolella, joten mikään ei ollut koskaan
+ *      huomaamassa tätä. Piikkiukon vika, siirrettynä yhden luokan sivuun.
+ *
+ * Pelkän möykyn hinnoittelu jättäisi reiän auki seuraavalle vaaralaatalle, eli
+ * korjaisi sen tapauksen joka jo tiedetään. Siksi tämä portti kysyy kaikilta.
+ *
+ * LISTA JOHDETAAN, EI KIRJOITETA — koska käsin kirjoitettu lista on tasan se
+ * mikä tässä petti. Satuttavat merkit luetaan `TILE_INFO`sta, samasta taulusta
+ * jota peli itse lukee (`info`, `isSolid`, `LevelScene.playerTiles`). Se
+ * importoidaan eikä lueta lähdetekstinä niin kuin `ENEMY_CHARS` yllä, ja ero
+ * on tiedostossa eikä periaatteessa: `src/gfx/tiles.js` importoituu Nodeen
+ * sellaisenaan, `enemies.js` ei.
+ *
+ * Lippu kerrallaan, ja luokittelu on koko homman ydin:
+ *
+ *   SATUTTAA
+ *     `hazard`     kosketus vie voimatason tai hengen — piikki, laava.
+ *     `quicksand`  ei satuta kosketuksesta vaan kellosta: uppoaminen hukuttaa.
+ *     `falls`      putoaa päälle ja osuu — `LevelScene.lumpImpact` → `p.hurt`.
+ *
+ *   EI SATUTA
+ *     `solid` `semi` `breakable` `bumpable` `question` `note` `pipe` `warp`
+ *     `climb` `coin` `goal` `door` `switch` — maastoa, palkintoja ja ovia.
+ *     `crumble` on näistä ainoa jonka kohdalla on jotain sanottavaa: mureneva
+ *     lauta ei satuta, se vie jalansijan — ja se hinta on jo mittarissa
+ *     kuiluina ja tarkkuutena (`stands` ei lue sitä maaksi, `precision`
+ *     kertoo sen 1,5:llä). Kahteen kertaan laskettu vaara on yhtä väärin kuin
+ *     laskematta jätetty.
+ *
+ * **Ja luokittelu itse on portti.** Jos `TILE_INFO`iin ilmestyy lippu jota
+ * kumpikaan lista ei tunne, tämä kaatuu ja kysyy kummalle listalle se kuuluu.
+ * Ilman sitä ehtoa lista olisi taas käsin kirjoitettu — vain kauempana siitä
+ * paikasta jossa uusi laatta syntyy, mikä on huonompi eikä parempi.
+ *
+ * Väite mitataan eikä muisteta: kaksi identtistä koekenttää joissa on yhden
+ * merkin ero, ja luvun on noustava. Sama tekniikka kuin tarkistuksessa
+ * `vaikeusmittari näkee juoksuhiekan`, nyt jokaiselle satuttavalle laatalle
+ * kerralla ja johdetusta listasta. Koekenttä on tasamaata, joten ainoa termi
+ * joka voi liikkua on `hazards` — kuilut, kuilu% ja tarkkuus eivät näe
+ * yhtäkään lisättyä merkkiä.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const { TILE_INFO } = await import('../src/gfx/tiles.js');
+  const { scoreRows } = await import('./difficulty.mjs');
+
+  const HURTS = ['hazard', 'quicksand', 'falls'];
+  const HARMLESS = ['solid', 'semi', 'breakable', 'bumpable', 'question', 'note',
+    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door'];
+
+  /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
+  const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]
+    .filter((f) => !HURTS.includes(f) && !HARMLESS.includes(f));
+  const unclassified = unknownIn(TILE_INFO);
+  const flags = HURTS.length + HARMLESS.length;
+  expect('jokainen TILE_INFOn lippu on luokiteltu satuttavaksi tai vaarattomaksi',
+    unclassified.length === 0,
+    unclassified.length
+      ? `luokittelematon lippu: ${unclassified.join(' ')} — satuttaako se pelaajaa?`
+      : `${flags} lippua luokiteltu, ${HURTS.length} satuttavaa: ${HURTS.join(' ')}`);
+
+  /* Ja se toinen puolisko: että kattavuus osaisi huomata puuttuvan. Punainen
+   * ilman että mitään rikotaan — sama tapa kuin `a stale difficulty table is
+   * detected, not blessed` -tarkistuksessa. */
+  const invented = unknownIn({ ...TILE_INFO, Z: { solid: true, murskaa: true } });
+  expect('luokittelematon lippu huomataan, ei siunata',
+    invented.length === 1 && invented[0] === 'murskaa',
+    `keksitty laatta lipulla "murskaa": ${invented.length ? invented.join(' ') : 'ei huomattu'}`);
+
+  /*
+   * Koekenttä: 32 saraketta tasamaata, aloitus, tehostus ensimmäisellä
+   * neljänneksellä ja maali. Sama pohja joka merkille, yksi merkki kerrallaan
+   * sarakkeeseen 16 lattian päälle — eli sinne mihin pelaaja astuu.
+   */
+  const W = 32;
+  const fixture = (ch) => {
+    const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+    const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
+    put(9, '      !');
+    put(12, '  1                         F   ');
+    put(13, '#'.repeat(W));
+    put(14, '#'.repeat(W));
+    rows[12] = `${rows[12].slice(0, 16)}${ch}${rows[12].slice(17)}`;
+    return rows;
+  };
+
+  const empty = scoreRows(fixture(' '));
+  const hurting = Object.entries(TILE_INFO)
+    .filter(([, info]) => HURTS.some((f) => info[f]))
+    .map(([ch, info]) => ({
+      ch,
+      why: HURTS.filter((f) => info[f]).join('+'),
+      delta: scoreRows(fixture(ch)) - empty,
+    }));
+  const free = hurting.filter((t) => t.delta <= 0.05);
+  const shown = hurting.map((t) => `'${t.ch}' ${t.why} ${t.delta > 0 ? '+' : ''}${t.delta.toFixed(1)}`);
+  expect('jokaisella satuttavalla laatalla on hinta vaikeusmittarissa',
+    hurting.length > 0 && free.length === 0,
+    hurting.length
+      ? `sama koekenttä ${empty.toFixed(1)}, yhden merkin erolla: ${shown.join(', ')}`
+        + `${free.length ? ` — hinnaton: ${free.map((t) => `'${t.ch}'`).join(' ')}` : ''}`
+      : 'TILE_INFOssa ei ole yhtään satuttavaa laattaa — lista on tyhjä, ei vihreä');
+  if (free.length) {
+    failures.push(...free.map((t) => `'${t.ch}' (${t.why}) maksaa vaikeusmittarissa nollan`));
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- laattavaarojen hinta: loppu ---- */
 
 {
   const { difficultyTable, compareTable } = await import('./difficulty.mjs');

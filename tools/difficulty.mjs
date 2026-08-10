@@ -127,6 +127,9 @@ export const ENEMY_COST = {
  * spikes as a single row, so counting tiles would say a lava trench is twice
  * the hazard a spike bed of the same width is purely because of how the chunk
  * is spelled. What the player meets is the width of the thing.
+ *
+ * Kosketushinnat vain: möykky on `LUMP_COST` alempana ja juoksuhiekka
+ * `QUICKSAND_COST`, ja silmukat lukevat yhdistetyn `HAZARD_COST`in.
  */
 const LETHAL_TILE = { '^': 1.0, W: 1.5 };  // lava has no ledge to land on; spikes do
 
@@ -159,7 +162,71 @@ const LETHAL_TILE = { '^': 1.0, W: 1.5 };  // lava has no ledge to land on; spik
 const QUICKSAND_COST = { shallow: 0.5, deep: 1.2 };
 const QUICKSAND = '~';
 
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+/*
+ * MÖYKKY (`T.LUMP`, `'C'`) — 0,6, ja tämä luku on koko sen työn suunnittelupäätös.
+ *
+ * Se asetettiin 4-2:een ja 4-F:ään ja tämä tiedosto ei muuttunut riviäkään:
+ * mittari ei tuntenut merkkiä, eikä portti joka olisi huomannut sen katsonut
+ * laattoja lainkaan (ks. `verify.mjs`, "laattavaarojen hinta"). Portti on nyt
+ * olemassa; tässä on se luku jota se vaatii.
+ *
+ * **Nolla olisi väärin ja piikin 1,0 olisi väärin, ja syyt ovat eri.**
+ *
+ * Miksei nolla. Möykky osuu (`LevelScene.lumpImpact` → `p.hurt`), ja huone on
+ * rakennettu sen ympärille: molemmissa kentissä se on `BB?BB`-lohkorivin päällä,
+ * eli tasan siinä rivissä johon pelaajan on tarkoitus lyödä päätään. Nolla on
+ * 2-4:n savikuopan hinta, ja se hinta on ansaittu siksi että kaivanto **ei voi
+ * maksaa mitään millään ketjulla** — se on maastoa joka siirtää muuta tavaraa.
+ * Möykky voi maksaa, joten se on tuon rajan toisella puolella.
+ *
+ * Miksei 1,0. Piikki on reitillä: jokainen joka kulkee sarakkeen läpi kohtaa
+ * sen, ja pienen pelaajan se tappaa. Möykky ei ole kummankaan puolesta:
+ *
+ *   - **Se ei putoa ellei pelaaja pudota sitä.** `dropAbove` lähtee siitä että
+ *     ruutu tyhjenee, ja tuki saa olla vain tiili (`rules.js`, `checkFalling`,
+ *     joka kieltää murenevan laudan). Tiilen rikkoo iso pelaaja päällään,
+ *     potkaistu kuori tai papupommi — kaikki pelaajan tekoja. Ohi kävelevä ei
+ *     kohtaa sitä lainkaan, mikä ei päde yhteenkään muuhun tämän tiedoston
+ *     hinnoittelemaan laattaan.
+ *   - **Se ei voi viedä henkeä sillä ketjulla jonka varaan se on rakennettu.**
+ *     Voimatasolla 0 tiiltä ei saa rikki, joten möykyn pudottaja on iso ja osuma
+ *     maksaa koon eikä henkeä (mitattu 4-F:ssä: 1 → 0). Tämä on tasan se raja
+ *     jolla juoksuhiekka jaetaan matalaan ja syvään — "voiko tämä päättää
+ *     yrityksen" — ja möykky on sen väärällä puolella niin kuin matala hiekka.
+ *   - **Ja se varoittaa.** 12 framea paikallaan täristen, sitten 3,2 px/framea,
+ *     mikä on kävelyä nopeampi mutta putoamista hitaampi. Mitattu: paikalleen
+ *     jäänyt menettää voimatason, kävelyvauhdissa lähtenyt ei menetä mitään.
+ *
+ * Miksi silti matalan hiekan 0,5:n **yläpuolella**: matala hiekka ei satuta
+ * ollenkaan, se maksaa kellon ja rimpuilun. Möykky vie voimatason, ja DESIGN.md
+ * kohta 5 käyttää kokonaisen luvun siihen mitä menetetty voimataso maksaa.
+ * Osuma on enemmän kuin vero. Se ei ole paljon enemmän, koska kaksi ylläolevaa
+ * alennusta ovat isoja — siksi 0,6 eikä 0,9.
+ *
+ * Laskettu per sarake niin kuin kaikki muukin tässä taulussa, joten kaksi
+ * möykkyä maksaa kaksi ja pino yhdessä sarakkeessa maksaa yhden: pelaaja kohtaa
+ * sen leveyden, ei sen korkeuden.
+ *
+ * MITÄ TÄMÄ LUKU EI KATA, sanottuna ääneen koska sanottu rajoitus on parempi
+ * kuin luku joka hiljaa tarkoittaa muuta: potkaistu kuori rikkoo tiilen myös
+ * pienen pelaajan puolesta, eli **kuoren ulottuvilla oleva möykky voi tappaa**.
+ * Yksikään pelin kahdesta möykystä ei ole sellaisessa huoneessa, eikä mittari
+ * osaa kysyä kuoren ulottuvuutta ruudukosta — se lukisi olioiden liikettä eikä
+ * lähtötilaa. Jos sellainen huone joskus rakennetaan, tämä luku on liian pieni
+ * sille huoneelle, ja se on tämän rivin vika eikä sen huoneen.
+ */
+const LUMP_COST = 0.6;
+const LUMP = 'C';
+
+/**
+ * Mitä yksi merkki maksaa sarakkeessaan. `LETHAL_TILE` on se puolisko joka
+ * satuttaa pelkästä koskemisesta; möykky vaatii pelaajan teon ensin, ja siksi
+ * sillä on oma lukunsa ja omat perustelunsa yllä. Yhdistetty taulu on se jota
+ * silmukat lukevat, jotta uusi vaaralaatta lisätään yhteen paikkaan.
+ */
+const HAZARD_COST = { ...LETHAL_TILE, [LUMP]: LUMP_COST };
+
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
 
 /**
  * Same band rule as src/data/rules.js: the route is the band the player starts
@@ -269,7 +336,7 @@ function measureClimb(rows) {
         enemyCost += ENEMY_COST[ch];
         enemies[ch] = (enemies[ch] || 0) + 1;
       }
-      worst = Math.max(worst, LETHAL_TILE[ch] || 0);
+      worst = Math.max(worst, HAZARD_COST[ch] || 0);
     }
     hazardCost += worst;
   }
@@ -382,7 +449,7 @@ function measure(rows, opts = {}) {
         enemies[ch] = (enemies[ch] || 0) + 1;
       }
       if (ch === QUICKSAND) sand++;
-      worst = Math.max(worst, LETHAL_TILE[ch] || 0);
+      worst = Math.max(worst, HAZARD_COST[ch] || 0);
     }
     if (sand) worst = Math.max(worst, sand > 1 ? QUICKSAND_COST.deep : QUICKSAND_COST.shallow);
     hazardCost += worst;
@@ -799,8 +866,18 @@ console.log('  liikesarjasta eikä siitä miltä hyppy tuntuu.');
  * hiljaa tarkoittaa uutta asiaa.** Jos joku joskus haluaa mitata sen mitä
  * kentässä *tapahtuu*, se on eri mittari eikä tämän uusi versio — ja tämä rivi
  * on se paikka josta hän huomaa ettei tämä ole se.
+ *
+ * MÖYKKY ON NYT TÄSSÄ RAJASSA MOLEMMIN PUOLIN, ja rivi luki sen väärin siihen
+ * asti kunnes se hinnoiteltiin: "putoava laatta" oli tässä listassa niiden
+ * joukossa jotka *eivät nosta yhtään lukua*, ja se lause oli epätosi sinä
+ * hetkenä kun laatta asetettiin kenttään. Raja kulkee laatan ja sen
+ * putoamisen välissä: **laatta on lähtötilaa** ja siitä maksetaan
+ * (`LUMP_COST`), koska se on ruudukossa ennen kuin kukaan koskee mihinkään.
+ * Putoaminen on lopputulos — mihin se päätyy, minkä se tukkii, kenet se
+ * osuessaan kaataa — ja se on yhä ulkopuolella niin kuin jää ja tuuli.
  */
 console.log('  Se mittaa myös vain LÄHTÖTILAN: emergentit lopputulokset — jää,');
-console.log('  tuuli, murtuva lauta, putoava laatta, kuoriketju — ovat tämän');
-console.log('  mittauksen ulkopuolella, eivätkä ne siis nosta yhtään lukua.\n');
+console.log('  tuuli, murtuva lauta, putoavan möykyn matka, kuoriketju — ovat');
+console.log('  tämän mittauksen ulkopuolella. Möykky itse on lähtötilaa ja');
+console.log('  maksaa 0,6 sarakkeeltaan; sen putoaminen ei maksa mitään.\n');
 }

@@ -7,6 +7,88 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.67 — möykylle hinta, ja portti joka kysyy sitä jokaiselta vaaralaatalta
+
+Möykky asetettiin kahteen kenttään eikä `src/data/difficulty.js` muuttunut
+riviäkään. Syitä oli kaksi, ja **toinen on se oikea**: mittari ei tuntenut
+merkkiä `'C'`, ja portti *"jokaisella vihollismerkillä on hinta"* kävelee
+**vihollistaulua** — laattana oleva vaara oli sen ulottumattomissa, joten
+mikään ei koskaan olisi napannut tätä.
+
+Pelkän möykyn hinnoittelu olisi jättänyt reiän auki seuraavalle vaaralaatalle.
+
+### Auditointi: neljä satuttavaa laattaa, kolme jo hinnoiteltua
+
+Sama 32 sarakkeen koekenttä, yhden merkin ero, perustaso 7,2:
+
+| merkki | lippu | ennen | jälkeen |
+| --- | --- | --- | --- |
+| `^` piikki | `hazard` | +9,8 | +9,8 |
+| `W` laava | `hazard` | +14,7 | +14,7 |
+| `~` juoksuhiekka | `quicksand` | +4,9 | +4,9 |
+| `C` möykky | `falls` | **0,0 hinnaton** | **+5,9** |
+
+Kaksi jotka **eivät** kuulu listalle, ja perustelu: `H` närästyssuihku on
+`ENEMY_CHARS`-merkki ja vihollisportti hinnoitteli sen aina — se ei ollut
+koskaan reiässä. `%` mureneva lauta on tarkoituksella luokiteltu kosketuksesta
+vaarattomaksi: se vie jalansijan eikä voimaa, ja se hinta on jo `gaps`- ja
+`precision`-luvuissa. Vaarana hinnoittelu **laskisi sen kahdesti**.
+
+### Portti joka ei voi toistaa tätä
+
+Uusi väite johtaa satuttavat merkit **`TILE_INFO`sta**, samasta taulusta jonka
+peli lukee, tuotuna eikä tekstistä haravoituna — käsin kirjoitettu lista on
+tasan se mikä tässä petti. Ja se **portittaa luokittelun itsensä**: mikä tahansa
+`TILE_INFO`n lippu jota kumpikaan lista ei tunne kaataa portin ja kysyy kummalle
+puolelle se kuuluu. Todistettu ei-tyhjäksi keinotekoisella laatalla.
+
+### Toinen vika samalla matkalla: `SOLID`illa on viisi kopiota
+
+Vanha portti vertasi **kolmea**. `tools/curriculum.mjs` oli päivitetty muttei
+tarkistettu; `tools/difficulty.mjs` ei kumpaakaan — **eli mittari luki möykyn
+ei-kiinteänä**. Se ei muuta yhtäkään pistettä tänään (molemmat möykyt ovat
+rivillä 8, `lethalCol` lukee rivit 13–14), mutta se on **väärä vastaus joka
+odottaa oikeaa kysymystä**. Molemmat tiedostot ovat nyt portissa.
+
+### Hinta 0,6 per sarake, ja se on perusteltu eikä sovitettu
+
+**Ei nolla**, koska se osuu ja koska molemmissa huoneissa se on suoraan sen
+`BB?BB`-lohkorivin yllä jota pelaajan on tarkoitus lyödä. Nolla on
+SAVIKUOPPAn taksa, ja sen ansaitsee kuoppa joka ei voi maksaa mitään
+**millään** ketjulla.
+
+**Ei piikin 1,0**, kolmesta syystä jotka kasautuvat: se ei putoa ellei pelaaja
+itse pudota sitä, joten ohikulkija ei kohtaa sitä lainkaan; se ei voi viedä
+henkeä sillä ketjulla jonka ympärille se on rakennettu (voimatasolla 0 tiiltä ei
+saa rikki, joten pudottaja on iso ja osuma maksaa koon); ja se varoittaa 12
+framea ja liikkuu 3,2 px/frame — **paikallaan seisova menettää tason, kävelevä
+ei mitään**.
+
+Silti **yli matalan hiekan 0,5:n**, koska matala hiekka ei voi satuttaa
+lainkaan — se maksaa kelloa. Osuma on enemmän kuin vero, muttei paljon enempää
+kahden ison alennuksen jälkeen.
+
+**Rajoitus kirjattuna luvun viereen:** potkaistu kuori rikkoo tiilen myös
+pienelle pelaajalle, joten kuoren ulottuvilla oleva möykky **voi tappaa**.
+Kumpikaan pelin kahdesta möykystä ei ole sellaisessa huoneessa, eikä mittari voi
+kysyä kuoren ulottuvuutta lähtöruudukosta. Jos sellainen huone joskus
+rakennetaan, 0,6 on sille liian vähän.
+
+### Knock-on
+
+`4-2` 141,2 → **141,7**, `4-F` 214,1 → **215,2**, w4 keskiarvo 191,3 → **191,5**.
+Muoto ennallaan (2 notkoa), käyrä nousee joka askeleella (+10,8 alle, +41,7
+yli). **Mikään ei tarvinnut antaa periksi**, eli hintaa ei sovitettu porttiin.
+Muut **62 kenttää tavu tavulta ennallaan** — diff on tasan kaksi riviä.
+
+### Löydetty, ei korjattu
+
+`measureClimb` ei laske juoksuhiekkaa lainkaan, vain `HAZARD_COST`:in. Toimeton
+tänään (yksikään kenttä ei ole `vertical: true`), mutta **möykky on nyt
+käsitelty molemmilla akseleilla ja hiekka ei**.
+
+---
+
 ## v26.08.10.65 — ruutu pukee saapuvan maailman värin kun kuningas vaihtuu
 
 Omistaja pyysi kokoruudun palautetta megapomon muodonvaihtoon ja hyväksyi
