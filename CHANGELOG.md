@@ -7,6 +7,85 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.56 — neljä hiljaista tilanvaihdosta sai kuvan ja äänen
+
+Omistaja: *"we need more AUDIO VISUAL feedback on P meter filling up! and the
+player going down the pipe etc. various state & level changes need to be
+signalled."*
+
+Kaksi nimettyä tapausta ja avoin luokka. Avoin luokka otettiin vakavasti:
+**peli käytiin läpi ja jokainen tilanvaihdos sai tuomion**, myös ne jotka
+jätettiin rauhaan. Lista on `tools/verify.mjs`:n kommentissa; tässä sen tulos.
+
+### Neljä korjattua
+
+| vaihdos | mitä puuttui | mitä lisättiin |
+| --- | --- | --- |
+| vauhtimittari täyttyy | HUD-pipit vilkkuivat 320×240-ruudun alalaidassa, **ei ääntä**. Mitattuna vain 3772/66560 px **pelialueesta** muuttui | `pfull` + pelialueen pulssi |
+| vauhtimittari lakkaa olemasta täysi | yksi pippi tummeni, **ei ääntä** — vaikka nopeuskatto putosi 3,5 → 2,5 | `pspent` |
+| lento loppuu ilmassa | painovoima muuttui, muuta ei. **Äänetön ja näkymätön** | sama `pspent`, koska se on **sama tilanvaihdos** eikä toinen |
+| putkesta ulos | 4 kaasupilveä ja `door`, lainattuna | `pipeout` |
+| varalokero täyttyy | soitti `powerup`in, eli peli sanoi "kasvoit" kun mikään ei kasvanut | `reserve` (vain ääni) |
+
+Lennon loppuminen taitettiin mittarin tyhjenemiseen eikä omaksi merkikseen, ja
+se on kohta 8 sovellettuna: **yksi tilanvaihdos, yksi merkki.** "Tehoste loppui"
+ja "lento loppui" ovat pelaajalle sama tapahtuma.
+
+### Ja neljätoista jätettiin rauhaan, mikä on merkinnän tärkein osa
+
+Kohta 8 tekee liikamerkitsemisestä **vian**, ei vaaratonta kiillotusta.
+[IDEAS.md](IDEAS.md) hylkäsi kokonaisen mekaniikan tällä perusteella (nouseva
+vesi luolakaistassa, koska Griegin raita jo kiihtyy). Siksi:
+
+- **Kello alle sadan** sai jäädä: `timewarn`, musiikin kiihdytys **ja** HUDin
+  punainen `AIKA` — kolme merkkiä jo, ja neljäs olisi ollut nousevan veden vika
+  sanasta sanaan.
+- **Salaisuuden löytyminen** on tarkoituksella merkitsemätön sellaisenaan:
+  palkinto itse on merkki, ja "löysit salaisuuden" -merkki olisi se toinen.
+- **Tähden ja ummetuksen loppuminen** jätettiin hiljaisiksi, ja perustelu on
+  mitattu eikä arvattu: molemmilla on jo **ennakoiva** merkki (sekuntilaskuri,
+  joten hetki ei voi yllättää), ja molempien kuva on **pelaajassa itsessään**
+  eikä HUDissa — siinä mihin silmä jo katsoo. Ja jokainen ääni joka sopisi
+  merkitykseen "hyvä asia loppui" osuisi `powerdown`in viereen, joka tarkoittaa
+  aineellisesti eri asiaa. Lähisukuinen ääni siinä kohdassa opettaisi tasan sen
+  väärinluennan josta kohta 8 varoittaa.
+
+### Mitattu ääni, ei arvioitu
+
+| uusi | huippu | vertailukohta samasta ajosta |
+| --- | --- | --- |
+| `pfull` | 0.350 | `coin` 0.322, `powerup` 0.567 (katto) |
+| `pspent` | 0.161 | puolet `pfull`ista tarkoituksella — se laukeaa aina kun juoksu päästetään |
+| `pipeout` | 0.169 | `pipe` 0.168 — putken kaksi päätä ovat nyt saman kokoisia |
+| `reserve` | 0.234 | `bump`-luokkaa, mekaaninen eikä palkitseva |
+
+Melupohja kaiken jälkeen **0.000**: mitään ei peitetty eikä pohjaan lisätty.
+
+### Mittausvika joka olisi julistanut äänen olemattomaksi
+
+`reserve` mittautui aluksi **0.000**:ksi. Ääni on 95 ms ja analysaattorin
+ikkuna oli 2048 näytettä eli 46 ms — portti olisi siis todennut hiljaiseksi
+äänen jonka kaiuttimet soittavat. Ikkuna on nyt 16384 näytettä, pidempi kuin
+mikään mitä se mittaa (sama korjaus ja sama syy kuin konsonanttilohkossa).
+**Korjattiin testi eikä kynnystä.**
+
+### Löydetty, ei korjattu
+
+- **`door` tarkoittaa yhä kahta asiaa**: linnakkeen oven aukeamista ja siitä
+  sisään kävelemistä. Lievempi kuin putkitapaus, mutta samaa lajia.
+- **`onBossDefeated` soittaa `clear`in ja `door`in samalla framella**, päälle
+  musiikin uudelleenkäynnistys, tärähdys ja pistepomppu. Se on kohdan 8 omalla
+  mittarilla liikamerkitsemistä; purkaminen muuttaisi pelin suurinta hetkeä,
+  joten se on raportoitu eikä koskettu.
+- **`powerup` on pelin lainatuin ääni**, 12 kutsupaikkaa.
+- **`SFX.land` on kuollutta koodia** — määritelty, ei koskaan soitettu.
+
+HUD-rivejä ei koskettu yhtäkään: pulssi piirretään `LevelScene.draw()`ssa
+`ctx.restore()`n ja `drawLetterbox`in välissä, ja `drawHud` on tavulleen
+ennallaan. Varalokeron korjaus on pelkkä ääni juuri siksi.
+
+---
+
 ## v26.08.10.55 — AIKA-AJO: kello jota vastaan ajetaan on oma ennätys
 
 Omistaja valitsi tämän pelitilaksi kahdeksan ehdotuksen joukosta. Peruste oli
