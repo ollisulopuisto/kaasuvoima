@@ -163,8 +163,25 @@ export const COMMON_CHUNKS = {
    * drawing the arc here would be pointing the player *into* the one column of
    * air that is sometimes occupied.
    */
+  /*
+   * MERKKI ON KUILUN LÄHIREUNALLA EIKÄ SEN KESKELLÄ, JA SE ON MITTAUS.
+   *
+   * Merkki oli sarakkeessa 7, kuilun keskellä. Voimatason 0 jarrutusmatka on
+   * **56 px eli 4 laattaa**, joten jarrutusikkuna on `[merkki−4, merkki−1]` —
+   * ja keskeltä laskettuna sen **kaksi viimeistä saraketta olivat jo ilman
+   * päällä**. Pelaaja joka reagoi oikein ei silti ehtinyt pysähtyä: 2/4
+   * ikkunan sarakkeesta oli maata. Lähireunalla mitattuna 4/4.
+   *
+   * Kuilu on yhä kuusi laattaa leveä eikä yhtään saraketta liikkunut, joten
+   * `pit_s`:n kanssa mitattu vaikeusvastaavuus säilyy ja olento on yhä
+   * lattiattomassa sarakkeessa — eli `hazard`-lippu on yhä rehellinen.
+   *
+   * Se on myös parempaa peliä. Loikka on pystysuora, joten vaara on tasan yksi
+   * sarake; lähireunalla se sarake osuu **ponnistukseen**, jota pelaaja yhä
+   * ohjaa, eikä lakipisteeseen, jota kukaan ei ohjaa.
+   */
   pit_croak: ck(16, {
-    13: '#####  U   #####',
+    13: '#####U     #####',
     14: '#####      #####',
   }),
 

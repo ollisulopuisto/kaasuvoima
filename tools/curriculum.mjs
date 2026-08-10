@@ -38,20 +38,6 @@
  * repeated and cheap to fix, and it was the only thing acted on. The direction
  * matters and is worth keeping straight: the gate borrows this measurement, the
  * measurement does not borrow the gate.
- *
- * 10.8.2026: the kurnuttaja (`U`) is in the enemy table at last — it was in
- * `ENEMY_CHARS` and not here from the day both shipped, so for a year of
- * commits this tool measured twelve of the game's thirteen enemy species and
- * said nothing about the thirteenth. Adding it turns the gate red, for a reason
- * that is a genuine argument rather than a bug; RIITA, at `ENEMY_EXTRA` below,
- * is the whole of what was done about that and why. The one-line version: the
- * report counts it, the two exports the gate reads do not, and the tool prints
- * the disagreement on every run instead of keeping it in a comment.
- *
- * A third pivot of the same measurement lives next door in
- * `tools/variety.mjs`, which asks how often features are used rather than where
- * they are first met — monotony rather than teaching order. It imports
- * `CURRICULUM_USES` from here rather than redefining what a feature is.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -167,16 +153,21 @@ const FOLLOW_TILES = 2;
 /**
  * Enemy markers, straight off `ENEMY_CHARS` in src/entities/enemies.js.
  *
- * "Straight off" is a copy and copies go stale, so here is the one that did:
- * **`U`, the kurnuttaja, was in `ENEMY_CHARS` and not in this table** from the
- * day both shipped until 10.8.2026, because they shipped on the same day and
- * neither knew about the other. Every measurement this tool made in between was
- * made with one of the game's thirteen enemy species invisible.
+ * "Straight off" is a copy and copies go stale, and this table is where one
+ * did. `U`, the kurnuttaja, shipped the same day this tool did and neither
+ * knew about the other, so for one release the measurement below had a hole
+ * in it: the game's newest enemy was the one species the curriculum could not
+ * see. The row was added on 10.8.2026 and it is an ordinary row — the two
+ * failures it uncovered are fixed in the levels rather than excused here (see
+ * `levels/world2.js`), because a table with an exception in it measures the
+ * exception and not the game.
  *
- * The row is in now. What it costs is under RIITA below, and the short version
- * is that it is not free: it is the one place in the game where this tool's
- * rule and a level's stated design argue, and adding the row is what makes the
- * argument visible instead of a paragraph nobody runs.
+ * `tools/verify.mjs` has a check for exactly this shape of staleness on the
+ * difficulty meter — "jokaisella vihollismerkillä on hinta vaikeusmittarissa" —
+ * and the same one over this table is now cheap: it would pass on the day it
+ * lands, which is the one thing that was true of neither of the two days
+ * before this one. It is the obvious next thing and it is named here rather
+ * than written, because it belongs in the gate and not in the measurement.
  */
 const ENEMY_NAMES = {
   g: 'kävelijä',
@@ -190,82 +181,26 @@ const ENEMY_NAMES = {
   H: 'närästysliekki',
   O: 'kuu',
   P: 'papuparooni',
-  U: 'kurnuttaja',
   b: 'linnakepomo',
+  U: 'kurnuttaja',
 };
 
 /**
- * RIITA — a feature the measurement sees and the GATE does not, declared here
- * rather than left out of the table.
+ * The enemies that ARE the hazard, in the sense POHJA means it.
  *
- * There is exactly one, and this block is the whole of it. Read it before
- * touching either end.
+ * `hazard` changes one thing: the footing test stops at the feature's own
+ * columns instead of running through them (see TURVAPROXY). For a tile that is
+ * lava or spikes that is obvious. For an enemy it is a claim about where the
+ * marker is allowed to stand, and exactly one enemy makes it: `ENEMY_CHARS`
+ * specifies the kurnuttaja's marker as "the first floor row of the chunk, in a
+ * column where that row is empty" — the creature lives in the hole, so its own
+ * column has no floor by definition, and measuring one would fail every pit
+ * that has ever had something in it for being a pit.
  *
- * **What the kurnuttaja is.** The pit leaper: it lives in a hole, telegraphs
- * for 90 frames, and comes up through the gap you were about to jump. Its
- * marker is documented in `ENEMY_CHARS` as going "in the first floor row of the
- * chunk, in a column where that row is empty" — that is, *by construction* in a
- * column with no floor under it.
- *
- * **Why it carries `hazard`.** POHJA asks whether the encounter window has
- * standing, non-lethal floor. Over the creature's own column the answer is no
- * everywhere in the game and always will be, because the marker is specified to
- * sit over a hole. Measuring it there would not be a finding, it would be the
- * definition of the marker read back. `hazard` is precisely the flag that says
- * "the feature's own columns ARE the danger, measure only the approach", and
- * lava and the spike bed carry it for the same reason. With it, POHJA measures
- * the four columns of run-up the player brakes in, which is the question worth
- * asking about a hole with something in it.
- *
- * It does not change the verdict in 2-1 and that is worth reading rather than
- * skipping: POHJA still fails, and now for a reason that is a statement about
- * the level instead of about the marker. `pit_croak` is a six-wide hole at
- * columns 117–122 with the creature at 119, so the braking window [115, 118]
- * has its last **two** columns already over air. The measured power-0 braking
- * distance is four tiles (APPROACH_TILES, from PHYSICS.md), so a player who
- * sees the creature at the moment it becomes visible has two tiles of floor to
- * stop on and not four. Whether that is wrong is a design question about a
- * creature whose entire premise is a hole — but it is now a question with a
- * number attached, which is the only thing this tool is for.
- *
- * **Why it carries `disputed`, and what that does.** The creature's first
- * encounter is 2-1 at column 119. The pipe plant's is column 101 and the
- * heartburn jet's is column 134 — eighteen and fifteen columns away, both
- * inside the one screen YKSIN forbids. `tools/verify.mjs` asserts YKSIN, and it
- * asserts a second rule that no level introduces more than three things; with
- * this row 2-1 introduces four and becomes the only level in the game that
- * does. So the honest row turns two green checks red.
- *
- * The obvious repair is a chunk swap in 2-1 (`pit_croak` for `pit_l` puts the
- * creature at 197 and clears both), and `src/data/levels/world2.js` argues at
- * length against exactly that: the plant and the kurnuttaja are the game's only
- * unstompable telegraphed enemies, one stands still and one comes out of the
- * floor, and the contrast is the lesson — which only reads side by side. That
- * is a design decision with a stated reason, not an oversight, and a tool has
- * no business overturning one by editing the level it disagrees with.
- *
- * So `disputed` names the standoff instead of picking a winner:
- *
- *   - the REPORT counts the kurnuttaja like any other feature. It is in the
- *     table, in the safety verdicts, in the totals, and it has a section of its
- *     own that prints what it costs. Nothing is hidden from the reader.
- *   - the two EXPORTS the gate reads (`CURRICULUM_ROWS`, `CURRICULUM_INTRO`)
- *     leave it out, so `verify.mjs` asserts exactly what the owner ruled on
- *     9.8.2026 and not one thing more. A disputed feature also cannot make
- *     *another* feature fail YKSIN, which is why it stays out of
- *     `FIRST_IN_LEVEL` — otherwise the carve-out would leak into two verdicts
- *     it was not given.
- *
- * This is a worse state than agreement and it is meant to look like one. The
- * two ways out are the owner's: rule for the design and the exception becomes
- * permanent and stays printed, or rule for the rule and 2-1 changes and this
- * whole block is deleted. What is NOT available any more is the third state
- * this file was in until 10.8.2026, where the disagreement existed and no
- * number anywhere said so.
+ * It does not weaken the test where it counts. The approach is still measured
+ * in full, and the approach is where a player has to be able to stop.
  */
-const ENEMY_EXTRA = {
-  U: { hazard: true, disputed: '2-1' },
-};
+const ENEMY_HAZARD = new Set(['U']);
 
 /**
  * A feature, as this tool models one.
@@ -285,10 +220,6 @@ const ENEMY_EXTRA = {
  *            rows in the table, one thing in the room — the crowding tests skip
  *            such a pair, because a level cannot introduce the baron without
  *            introducing what the baron drops.
- *   disputed the level id this feature's first encounter argues with. Measured
- *            and printed in full, but kept out of the two exports the gate in
- *            `tools/verify.mjs` reads. There is exactly one, and RIITA above is
- *            the whole reason it exists.
  */
 const FEATURES = [
   /* ---------------------------- the mechanics --------------------------- */
@@ -321,7 +252,8 @@ const FEATURES = [
 
   /* --------------------------- enemy species ---------------------------- */
   ...Object.entries(ENEMY_NAMES).map(([ch, name]) => ({
-    key: `enemy_${ch}`, name: `vihu: ${name}`, chars: ch, enemy: true, ...ENEMY_EXTRA[ch],
+    key: `enemy_${ch}`, name: `vihu: ${name}`, chars: ch, enemy: true,
+    hazard: ENEMY_HAZARD.has(ch),
   })),
 
   /* ------------------ the two that are not in the grid ------------------ */
@@ -561,9 +493,12 @@ function firstInstance(feature, level) {
  *            APPROACH_TILES); two is the landing. FAIL means the player is
  *            learning the new thing while also over a hole, so one mistake is a
  *            death and not a lesson.
- *            For a feature that IS the hazard — lava, the glacier, spikes —
- *            only the approach columns are measured, because standing in lava
- *            is the feature and not a surprise about the floor.
+ *            For a feature that IS the hazard — lava, the glacier, spikes, and
+ *            the one enemy whose marker is specified to stand in a floorless
+ *            column (see ENEMY_HAZARD) — only the approach columns are
+ *            measured, because standing in lava is the feature and not a
+ *            surprise about the floor. The approach is still measured whole,
+ *            and that is the half that decides whether a player can stop.
  *
  *   SEURA  — nothing else is asking for attention. No other enemy species and
  *            no hazard tile inside the same window. Another copy of the SAME
@@ -788,12 +723,6 @@ function firstEncounters(feature) {
  * the coin and the question block, which is true and useless: the first screen
  * of the first level introduces the alphabet, and no curriculum can schedule
  * that away.
- *
- * A `disputed` feature is out of this list for a different reason and the
- * difference matters: it is measured AGAINST the list — its own YKSIN verdict
- * is real and printed — but it does not sit IN it, so it cannot drag a feature
- * the owner already ruled on into a failure. RIITA says why the carve-out
- * exists at all.
  */
 const FIRST_IN_LEVEL = new Map(LEVEL_IDS.map((id) => [id, []]));
 const ROWS_OUT = [];
@@ -801,7 +730,7 @@ for (const f of FEATURES) {
   const enc = firstEncounters(f);
   if (!enc) { ROWS_OUT.push({ feature: f, enc: null }); continue; }
   const inst = USES.get(enc.earliest)[f.key];
-  if (!f.core && !f.disputed) FIRST_IN_LEVEL.get(enc.earliest).push({ key: f.key, same: f.same, ...inst });
+  if (!f.core) FIRST_IN_LEVEL.get(enc.earliest).push({ key: f.key, same: f.same, ...inst });
   ROWS_OUT.push({ feature: f, enc, inst });
 }
 for (const r of ROWS_OUT) {
@@ -816,9 +745,8 @@ for (const r of ROWS_OUT) {
  * the baron drops; that is one new thing in the room and counting it as two
  * would inflate the very number this tool exists to report.
  */
-function introducedIn(id, { disputed = false } = {}) {
-  const here = ROWS_OUT.filter((r) => r.enc && r.enc.earliest === id && !r.feature.core
-    && (disputed || !r.feature.disputed));
+function introducedIn(id) {
+  const here = ROWS_OUT.filter((r) => r.enc && r.enc.earliest === id && !r.feature.core);
   const seen = new Set();
   return here.filter((r) => {
     if (seen.has(r.feature.key)) return false;
@@ -833,20 +761,9 @@ const MAIN = ROWS_OUT.filter((r) => !r.feature.core);
 const CORE = ROWS_OUT.filter((r) => r.feature.core);
 const MISSING = ROWS_OUT.filter((r) => !r.enc);
 const UNSAFE = MAIN.filter((r) => r.enc && !r.safety.safe);
-const DISPUTED = MAIN.filter((r) => r.feature.disputed && r.enc);
-/*
- * Two pivots of the same thing, and the difference between them is the whole
- * of RIITA. `INTRO_ALL` is what the levels do and it is what the report prints;
- * `INTRO` is what the owner ruled on and it is what leaves this file. They are
- * identical the day the dispute is settled either way, and `DISPUTED` above is
- * the list of rows that separate them — empty when there is nothing to argue
- * about, which is the state to aim at.
- */
-const INTRO_ALL = LEVEL_IDS.map((id) => ({ id, features: introducedIn(id, { disputed: true }) }));
 const INTRO = LEVEL_IDS.map((id) => ({ id, features: introducedIn(id) }));
-const GATE_ROWS = ROWS_OUT.filter((r) => !r.feature.disputed);
-const CROWDED = INTRO_ALL.filter((l) => l.features.length >= 2);
-const QUIET = INTRO_ALL.filter((l) => !l.features.length);
+const CROWDED = INTRO.filter((l) => l.features.length >= 2);
+const QUIET = INTRO.filter((l) => !l.features.length);
 
 /**
  * The last level on each play order that introduces anything at all, and how
@@ -856,7 +773,7 @@ const QUIET = INTRO_ALL.filter((l) => !l.features.length);
  * table runs out.
  */
 const LAST_INTRO = PATHS.map((p) => {
-  const idx = p.levels.map((id, i) => (introducedIn(id, { disputed: true }).length ? i : -1))
+  const idx = p.levels.map((id, i) => (introducedIn(id).length ? i : -1))
     .filter((i) => i >= 0);
   const last = idx.length ? idx[idx.length - 1] : -1;
   return {
@@ -938,7 +855,6 @@ function json() {
       key: r.feature.key,
       name: r.feature.name,
       core: !!r.feature.core,
-      disputed: r.feature.disputed || null,
       first: r.enc ? r.enc.earliest : null,
       guaranteed: r.enc ? r.enc.guaranteed : null,
       branchOnly: r.enc ? r.enc.branchOnly : null,
@@ -957,7 +873,6 @@ function json() {
       crowdedLevels: CROWDED.length,
       quietLevels: QUIET.length,
       levels: LEVEL_IDS.length,
-      disputed: DISPUTED.length,
     },
   };
 }
@@ -985,21 +900,22 @@ if (!IS_MAIN) {
  * is the same data pivoted per level: what each level is the first place to
  * meet. `SCREEN_COLS` is exported so the gate can quote the unit in its own
  * message instead of writing 20 down again.
+ */
+/*
+ * `CURRICULUM_USES` on `level id → { featureKey: instance }` jokaiselle
+ * ominaisuudelle jokaisessa pelattavassa kentässä, ja se on olemassa jotta
+ * `tools/variety.mjs` voi kääntää saman mittauksen kolmanteen asentoon
+ * (kuinka USEIN ominaisuutta käytetään, ei missä se ensi kertaa kohdataan)
+ * ilman toista kopiota kahdestakymmenestäseitsemästä tunnistimesta.
  *
- * **Both of those two leave out `disputed` rows and the report does not** — see
- * RIITA. Anything else exported from here is the honest set, because nothing
- * else is read by a gate: `CURRICULUM_USES` is `level id → { featureKey:
- * instance }` for every feature in every playable level, and it exists so that
- * `tools/variety.mjs` can pivot the same measurement a third way (how OFTEN a
- * feature is used, rather than where it is first met) without a second copy of
- * twenty-seven detectors. One definition of "feature" in the repository is
- * worth an export even between two reporting tools; two definitions would mean
- * the variety meter and the curriculum meter could disagree about what the
- * game contains, and then neither number would mean anything.
+ * Yksi määritelmä sanalle "ominaisuus" on viennin arvoinen kahden
+ * raportointityökalunkin välillä: kaksi määritelmää tarkoittaisi että
+ * vaihtelumittari ja opetusmittari voisivat olla eri mieltä siitä mitä peli
+ * sisältää, eikä kumpikaan luku silloin tarkoittaisi mitään.
  */
 export {
-  FEATURES, PATHS, GATE_ROWS as CURRICULUM_ROWS, INTRO as CURRICULUM_INTRO, SCREEN_COLS,
-  ROWS_OUT as CURRICULUM_ROWS_ALL, USES as CURRICULUM_USES, LEVELS as CURRICULUM_LEVELS,
+  FEATURES, PATHS, ROWS_OUT as CURRICULUM_ROWS, INTRO as CURRICULUM_INTRO, SCREEN_COLS,
+  USES as CURRICULUM_USES, LEVELS as CURRICULUM_LEVELS,
 };
 
 function report() {
@@ -1095,33 +1011,6 @@ for (const l of CROWDED) {
 if (MISSING.length) {
   console.log('\n  Ei esiinny yhdessäkään kentässä:');
   for (const r of MISSING) console.log(`    ${r.feature.name}`);
-}
-
-/*
- * RIITA, printed rather than commented. The block at ENEMY_EXTRA says why the
- * carve-out exists; this says what it currently costs, in the numbers of the
- * tree it is run in, so that neither side of the argument can go stale without
- * somebody seeing it. When the owner settles it this section prints nothing at
- * all, because DISPUTED is empty.
- */
-if (DISPUTED.length) {
-  console.log('\n  RIITA — mitattu, mutta ei portissa. Ks. ENEMY_EXTRA tässä tiedostossa.');
-  console.log(`  ${DISPUTED.length} ominaisuus/ominaisuutta on tässä raportissa mukana ja jätetty`);
-  console.log('  pois viedyistä taulukoista, koska sääntö ja kentän kirjattu suunnittelu');
-  console.log('  ovat eri mieltä eikä työkalu ratkaise sitä kenttää muokkaamalla.\n');
-  for (const r of DISPUTED) {
-    const others = FIRST_IN_LEVEL.get(r.enc.earliest)
-      .filter((o) => Math.abs(o.x0 - r.inst.x0) < SCREEN_COLS && o.band === r.inst.band);
-    console.log(`    ${pad(r.feature.name, 26)}${pad(r.enc.earliest, 7)}sarake ${pad(r.inst.x0, 6)}`
-      + `${r.safety.safe ? 'turvaproxi ok' : 'turvaproxi EI'}`);
-    for (const o of others) {
-      console.log(`      ${SCREEN_COLS} laatan sisällä: ${pad(o.key, 12)}sarake ${o.x0} `
-        + `(${Math.abs(o.x0 - r.inst.x0)} laattaa)`);
-    }
-    const gate = INTRO.find((l) => l.id === r.enc.earliest).features.length;
-    const real = INTRO_ALL.find((l) => l.id === r.enc.earliest).features.length;
-    console.log(`      ${r.enc.earliest} esittelee portin mielestä ${gate} uutta asiaa, mitattuna ${real}.`);
-  }
 }
 
 /*
