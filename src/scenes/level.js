@@ -635,6 +635,33 @@ const CAVE_TRACK = 'cave';
  */
 const DOOR_OPEN_FRAMES = 30;
 
+/*
+ * VAUHTIMITTARIN KAKSI SYKÄYSTÄ.
+ *
+ * DESIGN.md kohta 8 nimeää tämän efektin itse — "koko ruutu sykkii kun
+ * P-mittari täyttyy" — esimerkkinä siitä milloin ei-diegeettinen kerros saa
+ * reagoida maailmaan. Se on tässä otettu kirjaimellisesti, ja kolme päätöstä
+ * seuraa siitä suoraan:
+ *
+ *   - **Pelialue, ei HUD.** Mittari vilkkuu HUDissa jo nyt, ja juuri se on
+ *     ongelma: HUD-palkki on 320x240-ruudun alalaidassa ja pelaajan silmä on
+ *     kentässä. Toinen merkki samaan palkkiin olisi ollut sama merkki
+ *     uudestaan. Sama raja pitää myös yhteen kohdan 8 omista päätöksistä:
+ *     kuumuus, huurre ja bloom eivät kosketa HUDia, koska HUD ei ole ikkuna
+ *     maailmaan.
+ *   - **Väri on mittarin oma.** #f0b000 on se sävy jolla syttynyt pykälä
+ *     piirretään, joten kuva osoittaa lähteeseensä sanomatta sitä. Se ei ole
+ *     pomon ruskea eikä maahaniskun kaasunvihreä, eli se ei syö kummankaan
+ *     lukutapaa.
+ *   - **Vastapari on pimeä eikä toinen väri.** Etu tulee ja etu menee ovat
+ *     sama tapahtuma kahteen suuntaan, ja tämän tiedoston tapa erottaa
+ *     sellainen pari on **napaisuus** eikä sointi (`sprout`/`dive`,
+ *     `kurnutus`/`loikka`). Valo tulee, valo menee. Menevä on lyhyempi kuin
+ *     tuleva, koska se soi useammin.
+ */
+const SPEED_PULSE_FULL = 14;
+const SPEED_PULSE_SPENT = 9;
+
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
  * and short enough that a wall someone cannot pass shows up on the first try. */
@@ -762,6 +789,12 @@ export class LevelScene {
     this.stateTimer = 0;
     this.bossDefeated = false;
     this.shakeAmp = 0;
+    /* Vauhtimittarin sykäys ja sen suunta. Puhtaasti kosmeettinen ja siksi
+     * `savestate.js`:n ulkopuolella samasta syystä kuin `shakeAmp`: pikalataus
+     * ei ole se hetki jolla mittari täyttyi. Reuna itse on pelaajan päällä
+     * (`Player.pBoost`), joten palautettu tallennus ei myöskään keksi sitä. */
+    this.speedPulse = 0;
+    this.speedPulseUp = false;
     /* What the last ground pound measured, or null if there has not been one.
      * A report of something that already finished, not state the level runs on
      * — which is why it is not in `savestate.js`: a restored snapshot has no
@@ -988,6 +1021,42 @@ export class LevelScene {
   /** Kicks the camera for a frame or two. Purely cosmetic. */
   shake(amount) {
     this.shakeAmp = Math.min(6, Math.max(this.shakeAmp, amount));
+  }
+
+  /**
+   * TÄYSI VAUHTI. Seitsemän pykälää, kahdeksan framea kukin, ja perillä kaksi
+   * asiaa on toisin: nopeuskatto on 2,5:n sijaan 3,5 px/frame ja kaasulehdellä
+   * hypystä on tullut lento. Kumpikaan ei ole ennen sanonut itsestään mitään.
+   *
+   * Kuva ja ääni ovat tässä samassa metodissa, eivät kahdessa — DESIGN.md
+   * kohta 8 vaatii molemmat puolet, ja puoliksi tehty pari on juuri se vika
+   * jonka linnakkeen ovi teki ennen kuin sen lehdet alkoivat liikkua.
+   *
+   * Vaimenee kun kenttä on ohi: voittojingle ja kuolinääni omistavat ruudun
+   * kumpikin omalla hetkellään, eikä mittari saa puhua niiden päälle.
+   */
+  onSpeedFull() {
+    if (this.state !== 'play') return;
+    this.speedPulse = SPEED_PULSE_FULL;
+    this.speedPulseUp = true;
+    Sfx.play('pfull');
+  }
+
+  /**
+   * ...JA SE MENI, mikä on sama tapahtuma takaperin ja tarvitsee merkin
+   * kipeämmin kuin täyttyminen: menetyksen huomaa muuten vasta siitä että
+   * hyppy ei kanna. Ilmassa se on vieläkin selvempää — lento loppuu kun
+   * mittari on tyhjä, ja putoaminen on huono tapa saada tietää.
+   *
+   * Yksi merkki molemmille, koska ne ovat sama asia: etu meni. Kaksi merkkiä
+   * yhdelle tilanvaihdokselle olisi kohdan 8 virhe ihan yhtä lailla kuin yksi
+   * merkki kahdelle.
+   */
+  onSpeedSpent() {
+    if (this.state !== 'play') return;
+    this.speedPulse = SPEED_PULSE_SPENT;
+    this.speedPulseUp = false;
+    Sfx.play('pspent');
   }
 
   /* ------------------------------ level API ---------------------------- */
@@ -1381,7 +1450,8 @@ export class LevelScene {
     this.noteBand(p.y + shift + p.h);
     /* Going in gets the falling sweep and coming out gets the rising one, so
      * the two ends of the journey do not sound like the same event happening
-     * twice (DESIGN.md §8). */
+     * twice (DESIGN.md §8). Ne ovat nyt oikeasti pari: ulostulo soitti pitkään
+     * `door`ia, eli lupaus piti paikkansa vain puoliksi. Ks. `updateTransit`. */
     Sfx.play('pipe');
   }
 
@@ -1490,7 +1560,13 @@ export class LevelScene {
       p.y = t.arriveY - t.out;
       t.hide = null;
       this.spawnPuff(p.cx, t.arriveY + p.h);
-      Sfx.play('door');
+      /* Putken oma ulostuloääni, ei oven laina. Tässä soi `door` siihen asti
+       * kunnes se huomattiin: sama ääni tarkoitti oven aukeamista, ovesta
+       * kävelemistä ja putkesta ulos tulemista, eli yksi merkki kolmea asiaa
+       * — juuri se väärin lukemaan opettava merkki jota DESIGN.md kohta 8
+       * varoo. Kuva on ollut kunnossa koko ajan (keho nousee, kamera leikkaa,
+       * neljä kaasupilveä jää jalkojen alle); ääni oli lainassa. */
+      Sfx.play('pipeout');
       return;
     }
 
@@ -1787,6 +1863,7 @@ export class LevelScene {
      * change all stop calling it. See Ambience.hold. */
     if (this.state === 'play') Ambience.hold(this.gust);
     if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
+    if (this.speedPulse > 0) this.speedPulse--;
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
     this.updateCamera();
@@ -2504,8 +2581,32 @@ export class LevelScene {
     this.drawPlayerInto(ctx, camX, camY);
 
     ctx.restore();
+    this.drawSpeedPulse(ctx);
     if (this.bar) this.drawLetterbox(ctx);
     this.drawHud(ctx);
+  }
+
+  /**
+   * Vauhtimittarin sykäys, ruutukoordinaateissa ja HUDiin koskematta.
+   *
+   * Piirretään `restore`n jälkeen, koska tämä ei ole maailmassa: kamera, tärinä
+   * ja kirjekuoripalkit on jo purettu, ja efekti on kertojan puolella siinä
+   * missä musiikki ja HUD. Yksi suorakulmio, ja se rajautuu itse ikkunaan
+   * (`bar`…`viewH`) — kirjekuoripalkit ja HUD jäävät sen ulkopuolelle.
+   *
+   * Verho neliöidään: isku on edessä ja häntä pitkä. Tasaisesti hiipuva verho
+   * lukisi himmennykseksi, ja etupainoinen lukee tapahtumaksi — sama muotoilu
+   * kuin `PoundWave`n renkaassa ja samasta syystä. Perustelut väreille ja
+   * kestoille ovat SPEED_PULSE_FULLin kommentissa.
+   */
+  drawSpeedPulse(ctx) {
+    if (this.speedPulse <= 0) return;
+    const span = this.speedPulseUp ? SPEED_PULSE_FULL : SPEED_PULSE_SPENT;
+    const k = clamp(this.speedPulse / span, 0, 1) ** 2;
+    ctx.fillStyle = this.speedPulseUp
+      ? `rgba(240,176,0,${(0.30 * k).toFixed(3)})`
+      : `rgba(8,8,22,${(0.34 * k).toFixed(3)})`;
+    ctx.fillRect(0, this.bar, VIEW_W, this.viewH);
   }
 
   /**
