@@ -7,6 +7,123 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.54 — luulinnake ei ole pilvilinnake: kahdeksan linnakesanastoa
+
+`tools/variety.mjs` mittasi eilen illalla asian jota kukaan ei ollut etsimässä:
+**puolet pelin linnakkeista ei tuonut peliin yhtään uutta muotoa.** 6-F, 7-F ja
+8-F toivat 0.0 %, 3-F 3.0 %. Seitsemän jaettua `fort_*`-palikkaa eri
+järjestyksessä kahdeksan kertaa. Omistaja ratkaisi: **jokaiselle maailmalle oma
+linnakesanasto.**
+
+### Muoto, ei paletti
+
+Uusi `src/data/chunks/fortresses.js` kantaa kahdeksan sanastoa
+(`root_ kiln_ frost_ mill_ pyre_ crypt_ spire_ throne_`, 5–7 palikkaa kukin).
+Yksi tiedosto eikä kahdeksaa, koska `bone.js` ja `cloud.js` kantavat portteja
+jotka vaativat avointa taivasta — katettu käytävä niissä olisi tarvinnut
+hiljaisen poikkeuksen portin sisään.
+
+Ratkaiseva rajaus on että jokaisella on **rakenteellinen lause**, ei väri.
+Omistaja oli jo sanonut ettei teemakohtaista laattamuotoa tarvita — nykyinen
+skinnaus riittää — ja saman pohjan uudelleenvärjäys olisi mitannut identtisesti.
+Siksi:
+
+| maailma | lause |
+| --- | --- |
+| w1 `root_` | kaksi lattiaa |
+| w2 `kiln_` | ei yhtään kuoppaa |
+| w3 `frost_` | lattia joka ei kanna |
+| w4 `mill_` | koneisto pään päällä |
+| w5 `pyre_` | kaikki on ylitystä |
+| w6 `crypt_` | reitti menee alas |
+| w7 `spire_` | reitti menee ylös |
+| w8 `throne_` | huone kutistuu `HEAD`in korkuiseksi |
+
+### Mitattu, kaikki kahdeksan johdotettuna
+
+| linnake | ennen | nyt |
+| --- | --- | --- |
+| 1-F | 100.0 | 100.0 |
+| 2-F | 14.3 | **85.7** |
+| 3-F | **3.0** | **83.8** |
+| 4-F | 37.9 | **86.2** |
+| 5-F | 31.4 | **61.4** |
+| 6-F | **0.0** | **75.0** |
+| 7-F | **0.0** | **82.2** |
+| 8-F | **0.0** | **65.1** |
+
+Kierrätyslista 7/44 → **2/60**, ja linnakkeita siinä 4 → **0**.
+
+**Yksi luku ei ole voitto vaan siirto, ja se pitää sanoa.** 2-F nousi
+14.3 → 85.7 ilman että siihen alun perin kosketttiin: mittari on
+järjestysriippuvainen, ja 2-F:n `fort_*`-muodot olivat "jo nähtyjä" vain siksi
+että 1-F näytti ne ensin. 1-F taas oli jo 100 % eikä voinut nousta — siellä
+todellinen muutos on muotojen määrä 96 → 124 ja tyhjien ikkunoiden osuus
+33.7 % → 13.0 %.
+
+### Portti, punainen ennen vihreää
+
+```
+punainen 1  linnakesanastoja ei päästy lukemaan: Cannot find module …/fortresses.js
+punainen 2  omasta sanastostaan rakennettuja linnakkeita 0, vaadittu 3
+vihreä      8/8 linnaketta omasta sanastostaan — 1-F 100 % … 8-F 100 %
+```
+
+Väite tarkistaa kolme asiaa: sanastot ovat olemassa ja erillisiä (johdettuna
+yhdestä taulukosta eikä toisesta listasta), yksikään linnake ei sekoita kahden
+maailman sanastoa (tämä on liittämisvirheen vahti), ja omasta sanastostaan
+rakennettuja on vähintään kolme — räikkä joka kiristyi kahdeksaan kun loput
+viisi soittolistaa liitettiin.
+
+### Väite joka todisti itsensä tyhjäksi
+
+Uusi 1-F kaatoi portin *"the boss cannot leave its arena and fall out of the
+level"*. Syy oli **voittoanimaatio**: `Boss.stomp` antaa kaadetulle pomolle
+`noclip`in ja pudottaa sen kentän alle — tasan se ehto jolla testi tunnisti
+karanneen pomon. Ja väitteen oma suoja oli `!s.bossDefeated === !s.bossDefeated`,
+joka on aina tosi: rivi näytti tarkistavan voiton eikä tarkistanut mitään.
+Ehto lukee nyt vain elävää pomoa, ja tilatallennustarkistus sai oman tuoreen
+skenensä — tallennus jossa pomo on jo kaadettu ei voi kertoa mitään siitä
+palaako pomo takaisin.
+
+### Integroinnissa: kuori linnakkeen kynnyksellä
+
+Viisi soittolistaa liitettiin tässä. Yksi kaatui heti: **`spire_hole` panee
+kuoren omaan viimeiseen sarakkeeseensa**, joten soittolistan päättäminen siihen
+jätti kuoren aivan areenan ovelle, ja voimatason 0 pelaaja kuoli ennen kuin
+pomon ikkuna ehti aueta (`7-F: osui framella -1/120`). Viimeinen palikka on nyt
+`spire_hail`. Sama vika kuin kurnuttajan merkissä kaksi merkintää sitten:
+**palikan reunaan asetettu olio on sommitteluvika, ei sisältövirhe.**
+
+### Vaikeus
+
+Kahdeksan linnakkeen luku muuttui, **muut 52 kenttää ovat ennallaan**. Käyrä
+nousee joka maailmassa: 112.8 · 132.5 · 180.7 · 191.3 · 233.2 · 251.2 · 253.7 ·
+290.8.
+
+**Kapein marginaali on w6 → w7, +2.5 pistettä**, ja se on kirjattava eikä
+piilotettava: se on koko pelin tiukin kohta, ja seuraava kenttämuutos
+maailmoissa 6 tai 7 kääntää sen helposti laskuksi. 6-F ja 7-F kantavat
+neljänneksen maailmansa keskiarvosta.
+
+`playable.mjs`: **5-F oli tähän asti rikki** (`VAATII TUPLAHYPYN 32 %`,
+`fort_trench`in yhdeksän ruutua laavaa ja yksi lauta) ja on nyt läpäistävissä
+voimatasolla 0. Jäljelle jää vain 4-3, joka on vanha eikä tästä.
+
+### Jäi tekemättä
+
+`fort_hall`, `fort_gap`, `fort_spikes`, `fort_blocks`, `fort_pillars`,
+`fort_burn` ja `fort_trench` ovat nyt **kuollutta koodia** — yksikään linnake ei
+enää käytä niitä. Ne kuuluvat pois samalla perusteella jolla `bone_twin`
+poistettiin, mutta poisto on oma muutoksensa oman punaisensa kanssa.
+
+Ja yksi korjaus omaan aiempaan väitteeseeni: sanoin `fort_gap`in esiintyvän
+**28 kertaa**; mitattuna kenttädatasta se on **20 paikassa seitsemässä
+maailmassa**. Havainto oli oikea, luku ei — ja jaetuin palikka ei ollut
+`fort_gap` vaan `fort_power`, joka oli kaikissa kahdeksassa.
+
+---
+
 ## v26.08.10.53 — kurnuttaja opetusmittariin, ja kuusi kuoppaa joista ei ehtinyt pysähtyä
 
 Omistajan ratkaisu riitaan oli **korjaa 2-1, pidä sääntö ehdottomana** — ei

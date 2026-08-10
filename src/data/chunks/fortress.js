@@ -1,8 +1,22 @@
 /**
- * The corridors every world ends in, and the two arenas. They are their own
- * file because a fortress is the one level type that repeats unchanged across
- * five worlds — the same hall, gap and pillars in a different order — so a
- * change here is felt five times and should be reviewed once.
+ * Pomoareenat, ja se vanha jaettu käytävä joka on jäämässä pois.
+ *
+ * Tämä tiedosto sanoi aiemmin olevansa "the corridors every world ends in", ja
+ * se piti paikkansa: sama halli, sama kuilu ja samat pilarit eri järjestyksessä
+ * seitsemässä maailmassa. `tools/variety.mjs` mittasi 10.8.2026 mitä se
+ * maksoi — 6-F, 7-F ja 8-F toivat peliin **0,0 %** uusia kahdeksan sarakkeen
+ * muotoja ja 3-F 3,0 % — ja omistaja päätti että jokainen maailma saa oman
+ * linnakesanastonsa. Ne ovat `chunks/fortresses.js`:ssä.
+ *
+ * Mitä tänne jää pysyvästi: **areenat.** Pomoareena on pomoareena, se on
+ * nimenomaan se osa jonka jakaminen kannattaa, ja `boss_arena_big`illa on oma
+ * pitkä perustelunsa siitä miksi sen kannet ovat siellä missä ovat.
+ *
+ * Mitä tänne jää tilapäisesti: `fort_*`-käytävät. 1-F, 3-F ja 8-F eivät enää
+ * käytä niitä; 2-F, 4-F, 5-F, 6-F ja 7-F käyttävät, kunnes niiden soittolistat
+ * vaihdetaan. Kun viimeinenkin on vaihtunut, nämä ovat kuollutta koodia ja
+ * kuuluvat pois samalla perusteella jolla `bone_twin` poistettiin: palikka jota
+ * kukaan ei saa asettaa on huonompi kuin ei palikkaa.
  */
 
 import { ck, G } from './common.js';

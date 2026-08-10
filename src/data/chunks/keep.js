@@ -3,16 +3,28 @@
  *
  * ## Why this file exists at all, when `fortress.js` already does
  *
- * `chunks/fortress.js` is the corridor every world ends in: a hall, a gap, some
- * pillars, and it is deliberately the same five pieces in a different order
- * seven times over. That is right for a room you visit for ninety seconds at
- * the end of a world. It is not enough to *be* a world, and reshuffling those
- * five pieces into six levels is precisely the thing world 8 must not be —
- * "world 7 with a different palette" spelled in stone instead of cloud.
+ * `chunks/fortress.js` oli tätä kirjoitettaessa se käytävä johon jokainen
+ * maailma päättyi: halli, kuilu ja pilarit, tarkoituksella samat viisi
+ * palikkaa eri järjestyksessä seitsemän kertaa. Se on oikein huoneelle jossa
+ * ollaan yhdeksänkymmentä sekuntia maailman lopussa. Se ei riitä *maailmaksi*,
+ * ja noiden viiden sekoittaminen kuudeksi kentäksi on täsmälleen se mitä
+ * maailma 8 ei saa olla — "maailma 7 toisella paletilla", kirjoitettuna kiveen
+ * pilven sijaan.
  *
  * So this file is the fortress's own vocabulary rather than a second copy of
  * the shared one, and the levels use both: `fort_*` is the castle a player
  * already knows, `keep_*` is what the castle turns out to have been hiding.
+ *
+ * **Ja 10.8.2026 tästä tuli koko pelin malli.** `tools/variety.mjs` mittasi
+ * että puolet linnakkeista ei tuonut peliin yhtään uutta muotoa, ja omistaja
+ * päätti antaa jokaiselle maailmalle oman linnakesanastonsa juuri tämän
+ * tiedoston esimerkin mukaan; ne ovat `chunks/fortresses.js`:ssä. Samalla
+ * paljastui tämän maailman oma vika, joka on eri vika kuin muilla: 8-F mittasi
+ * **0,0 %** koko pelille uutta, koska se toisti *näitä* palikoita — pelaaja on
+ * nähnyt `keep_vault`in, `keep_teeth`in, `keep_watch`in ja `keep_croak`in
+ * kentissä 8-1…8-5 ennen kuin linnakkeen ovi aukeaa. Finaalilla on siksi oma
+ * sanastonsa (`throne_*`) erillään maailman omasta, ja tämä tiedosto on nyt
+ * kenttien 8-1…8-5 sanasto eikä 8-F:n.
  *
  * ## Three rules, and every one of them is measured in `verify.mjs`
  *

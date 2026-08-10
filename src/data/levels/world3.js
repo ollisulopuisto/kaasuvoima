@@ -193,11 +193,32 @@ export const WORLD3_LEVELS = {
   },
   /* `3-4`…`3-7`, generated; the spread's position is the play order. */
   ...generated,
+  /*
+   * JÄÄLINNA, ja se linnake jonka mittaus nimesi (10.8.2026).
+   *
+   * `tools/variety.mjs` antoi tälle kentälle **3,0 %** koko pelille uutta
+   * muotoa — omalle maailmalleen 100 %, mikä on juuri se ero jonka takia
+   * kumpikin luku tulostetaan. Kenttä oli uusi maailmalle 3 ja ei kenellekään
+   * muulle, koska se oli `fort_pillars`, `fort_gap` ja `fort_spikes` kolmatta
+   * kertaa peräkkäin: samat palikat samassa tehtävässä kuin 1-F:ssä ja 2-F:ssä.
+   *
+   * Sanasto on nyt `frost_*` (`chunks/fortresses.js`) ja sen lause on se osa
+   * jäämaailmasta joka toimii myös kivellä: **lattia ei kanna.** Liukkautta
+   * täällä ei ole — teema vaihtuu ovella eikä sitä muuteta — mutta mureneva
+   * lava jäätikön yllä, kolmen ruudun halkeamat ja neljän ruudun saarekkeet
+   * kysyvät saman asian ilman fysiikkaa.
+   *
+   * Kuilut ovat kolme ja neljä saraketta eivätkä kuusi, ja se on `ice_pit`in
+   * mittaus eikä uusi: kuuden budjetti olettaa että pelaaja saapuu juosten.
+   * Kenttä ei siis ole entistä helpompi siksi että kuilut kapenivat, vaan siksi
+   * mitattu että niitä on enemmän.
+   */
   '3-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 2,
     chunks: [
-      'start', 'fort_hall', 'fort_power', 'fort_pillars', 'fort_gap', 'fort_spikes',
-      'fort_blocks', 'fort_gap', 'fort_spikes', 'fort_pillars', 'fort_spikes', 'boss_arena',
+      'start', 'frost_gate', 'frost_rift', 'frost_hall', 'frost_vault',
+      'frost_twin', 'frost_shelf', 'frost_gate', 'frost_hall', 'frost_shelf',
+      'frost_vault', 'boss_arena',
     ],
   },
 };

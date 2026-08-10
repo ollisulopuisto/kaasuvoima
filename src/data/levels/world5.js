@@ -36,8 +36,8 @@ export const WORLD5_LEVELS = {
   '5-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
-      'start', 'fort_hall', 'fort_power', 'fort_trench', 'fort_spikes', 'fort_burn',
-      'fort_gap', 'fort_trench', 'fort_burn', 'fort_spikes', 'boss_arena_big',
+      'start', 'pyre_gate', 'pyre_hall', 'pyre_grate', 'pyre_hall', 'pyre_steps',
+      'pyre_hall', 'pyre_trench', 'pyre_gate', 'pyre_hall', 'boss_arena_big',
     ],
   },
 };

@@ -2865,7 +2865,22 @@ const report = await page.evaluate(async () => {
   }
 
   /* Running past the boss must not delete it. The fortress door only opens on
-   * `bossDefeated`, so a despawned boss is an unwinnable level. */
+   * `bossDefeated`, so a despawned boss is an unwinnable level.
+   *
+   * KAADETTU POMO EI OLE KADONNUT POMO (10.8.2026). Tämä testi ei osannut
+   * erottaa niitä toisistaan, ja se paljastui vasta kun 1-F:n palikat
+   * vaihtuivat: uudella käytävällä sokeasti oikealle juokseva pelaaja ehtii
+   * tallata pomon framella 1310, ja `Boss.stomp` antaa kaadetulle `noclip`in ja
+   * pudottaa sen ruudun ali — eli **voittoanimaatio täytti tarkalleen sen
+   * ehdon jolla testi tunnisti karanneen pomon**, `boss.y > heightPx`.
+   *
+   * Ehto oli väärä eikä kenttä, ja väitteessä oli sen todiste: `!s.bossDefeated
+   * === !s.bossDefeated` on aina tosi, eli rivi näytti tarkistavan voiton
+   * mutta ei tarkistanut mitään. Väite on nyt se mitä se on aina yrittänyt
+   * sanoa — **pomo ei saa kadota elossa**, ja kaatuminen on hyväksytty
+   * lopputulos. Se kaataa yhä alkuperäisen vian: karkaava pomo katoaa
+   * `bossDefeated`in ollessa epätosi.
+   */
   {
     reset({ type: 'shroom', level: 1 });
     const s = new LevelScene(game, '1-F');
@@ -2884,15 +2899,22 @@ const report = await page.evaluate(async () => {
       if (f % 35 === 0) { i.pressed.jump = true; i.held.jump = true; } else if (f % 35 > 12) i.held.jump = false;
       s.player.invuln = Math.max(s.player.invuln, 4);      // survive long enough to watch
       s.update(i);
-      if (!lost && (!s.entities.includes(boss) || boss.remove || boss.y > s.heightPx)) {
+      if (!lost && !s.bossDefeated
+        && (!s.entities.includes(boss) || boss.remove || boss.y > s.heightPx)) {
         lost = { f, x: Math.round(boss.x), y: Math.round(boss.y), hp: boss.hp };
       }
     }
     expect('the boss cannot leave its arena and fall out of the level',
-      !lost && !s.bossDefeated === !s.bossDefeated && s.entities.includes(boss),
-      lost ? `pomo katosi framella ${lost.f} kohdassa ${lost.x},${lost.y} hp ${lost.hp}` : '');
+      !lost && (s.entities.includes(boss) || !!s.bossDefeated),
+      lost ? `pomo katosi framella ${lost.f} kohdassa ${lost.x},${lost.y} hp ${lost.hp}`
+        : `1500 framea, pomo ${s.bossDefeated ? 'kaadettu' : 'elossa'}`);
 
-    // The save state has to bring the boss back too, or the door never opens.
+    /* The save state has to bring the boss back too, or the door never opens.
+     * Oma kohtauksensa eikä edellisen jäännös: tallennus jossa pomo on jo
+     * kaadettu ei voi väittää mitään pomon palaamisesta. */
+    reset({ type: 'shroom', level: 1 });
+    const sSave = new LevelScene(game, '1-F');
+    game.setScene(sSave);
     game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-f');
     game.slot = 2;
     game.quickSave();
@@ -13096,6 +13118,113 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   if (over.length) {
     report.failures.push(...over.map((l) => `${l.id} esittelee ${l.features.length} uutta asiaa kerralla`));
   }
+}
+
+/*
+ * LUULINNAKE EI OLE PILVILINNAKE — JOKAISELLA MAAILMALLA ON OMA LINNAKESANASTO.
+ *
+ * `tools/variety.mjs` mittasi 10.8.2026 sen mitä kukaan ei ollut etsimässä.
+ * Kentän uutuus on niiden kahdeksan sarakkeen ikkunoiden osuus, joita peli ei
+ * ollut vielä näyttänyt, ja linnakkeissa se luku oli tämä:
+ *
+ *     6-F 0,0 %   7-F 0,0 %   8-F 0,0 %   3-F 3,0 %
+ *
+ * Puolet pelin linnakkeista ei siis tuonut peliin yhtään uutta muotoa. Syy oli
+ * yhdessä mitassa: `fort_gap` oli **20 paikassa seitsemässä maailmassa** ja
+ * `fort_power` kaikissa kahdeksassa, eli maailmojen linnakkeet olivat saman
+ * kourallisen palikoita eri järjestyksessä. Omistajan ratkaisu 10.8.2026 oli
+ * että jokainen maailma saa oman linnakesanastonsa — maailma 8 oli jo tehnyt
+ * sen (`chunks/keep.js`), ja se on tämän muutoksen ennakkotapaus.
+ *
+ * **Tämä ei ole nahkaväite vaan muotoväite.** Omistaja sanoi saman päivän
+ * aikana suoraan ettei teemakohtaisia laattamuotoja tarvita, koska nykyinen
+ * värjäys riittää. Sama pohjapiirros toisella värillä mittaisi täsmälleen
+ * saman luvun kuin ennen, joten se mitä tässä vaaditaan on **järjestys**: missä
+ * kuilut ovat, mitä niiden yllä on, mitä huone pyytää tekemään.
+ *
+ * Kaksi väitettä, ja ne mittaavat eri asiaa tarkoituksella:
+ *
+ *   1. **Sanastot ovat olemassa ja ne ovat erillisiä.** Tämä on väite
+ *      `chunks/fortresses.js`:n datasta eikä soittolistoista: kahdeksan
+ *      maailmaa, jokaisella oma nimetty palikkajoukko, eikä yksikään palikka
+ *      kuulu kahteen. Sanasto johdetaan yhdestä taulusta jotta kaksi listaa ei
+ *      voi olla eri mieltä.
+ *   2. **Linnake ei sekoita kahden maailman sanastoa.** Vanha jaettu
+ *      `fort_*`-käytävä on yhä olemassa ja yhä käytössä niissä linnakkeissa
+ *      joita ei ole vielä johdotettu, ja se on sallittua — kiellettyä on
+ *      rakentaa maailman 7 linnake maailman 6 palikoista, mikä on juuri se
+ *      virhe jonka viiden soittolistan liittäminen myöhemmin voi tehdä.
+ *
+ * Ja yksi luku joka on portti eikä raportti: **montako linnaketta on rakennettu
+ * kokonaan oman maailmansa sanastosta.** Se on tässä ratkaisussa se numero joka
+ * liikkuu, ja raja on kolme koska kolme on se mihin tämä muutos sen nostaa
+ * (1-F, 3-F, 8-F); loput viisi soittolistaa nostavat sen kahdeksaan kun ne
+ * liitetään. Rajan tarkoitus on estää paluu taaksepäin, ja sen viereen
+ * tulostetaan jokaisen kahdeksan linnakkeen osuus, jotta kesken oleva työ näkyy
+ * portin tulosteessa eikä muistilapussa.
+ *
+ * Aloituspalikka ei ole sanastoa eikä sitä lasketa: jokainen kenttä alkaa
+ * aloitusmerkillä, ja `keep_start` on maailman 8 oma vain siksi että jaetun
+ * `start`in yllä on taivasta. Pomoareenat eivät myöskään: areena on areena,
+ * ja se on nimenomaan se osa jonka jakaminen kannattaa.
+ */
+{
+  const problems = [];
+  let detail = '';
+  try {
+    const { FORTRESS_VOCAB } = await import('../src/data/chunks/fortresses.js');
+    const { CHUNKS } = await import('../src/data/chunks.js');
+    const { getLevel, levelIds } = await import('../src/data/levels.js');
+
+    const ARENAS = new Set(['boss_arena', 'boss_arena_big', 'baron_arena']);
+    const worlds = Object.keys(FORTRESS_VOCAB);
+    const owner = new Map();
+    for (const w of worlds) {
+      for (const name of Object.keys(FORTRESS_VOCAB[w])) {
+        if (owner.has(name)) {
+          problems.push(`${name} kuuluu sekä maailmalle ${owner.get(name)} että ${w}`);
+        }
+        owner.set(name, w);
+        if (!CHUNKS[name]) problems.push(`${w}: ${name} ei ole pelin palikkataulussa`);
+      }
+    }
+    if (worlds.length !== 8) {
+      problems.push(`linnakesanastoja ${worlds.length}, maailmoja 8`);
+    }
+    for (const w of worlds) {
+      const n = Object.keys(FORTRESS_VOCAB[w]).length;
+      if (n < 4) problems.push(`${w}: sanastossa ${n} palikkaa, alle neljä ei ole sanasto`);
+    }
+
+    const forts = levelIds().filter((id) => id.endsWith('-F'));
+    const shares = forts.map((id) => {
+      const world = `w${id[0]}`;
+      /* Aloituspalikka on ensimmäinen, areenat nimeltä — kumpikaan ei ole sanastoa. */
+      const body = (getLevel(id).chunks || []).slice(1).filter((c) => !ARENAS.has(c));
+      const own = body.filter((c) => owner.get(c) === world).length;
+      const alien = [...new Set(body.filter((c) => owner.has(c) && owner.get(c) !== world))];
+      return { id, world, n: body.length, own, alien };
+    });
+    for (const s of shares) {
+      if (s.alien.length) {
+        problems.push(`${s.id} käyttää maailman ${owner.get(s.alien[0])} palikoita: ${s.alien.join(' ')}`);
+      }
+    }
+    const pure = shares.filter((s) => s.n > 0 && s.own === s.n);
+    if (pure.length < 3) {
+      problems.push(`omasta sanastostaan rakennettuja linnakkeita ${pure.length}, vaadittu 3`);
+    }
+    detail = `${pure.length}/8 linnaketta omasta sanastostaan — `
+      + shares.map((s) => `${s.id} ${s.n ? Math.round((s.own / s.n) * 100) : 0} %`).join(', ');
+  } catch (err) {
+    problems.push(`linnakesanastoja ei päästy lukemaan: ${err && err.message}`);
+  }
+  report.checks.push({
+    name: 'jokaisella maailmalla on oma linnakesanasto eikä linnake sekoita kahta',
+    ok: problems.length === 0,
+    detail: problems.length ? problems.slice(0, 4).join('; ') : detail,
+  });
+  if (problems.length) report.failures.push(...problems);
 }
 
 /*
