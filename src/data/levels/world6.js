@@ -142,8 +142,8 @@ export const WORLD6_LEVELS = {
   '6-F': {
     theme: 'bone', bg: 'none', music: 'bone', boss: true, bossVariant: 4,
     chunks: [
-      'start', 'fort_power', 'fort_gap', 'fort_spikes', 'fort_gap', 'fort_burn',
-      'fort_gap', 'fort_blocks', 'fort_gap', 'fort_pillars', 'boss_arena',
+      'start', 'crypt_gate', 'crypt_nave', 'crypt_pit', 'crypt_ash', 'crypt_jaws',
+      'crypt_pit', 'crypt_ash', 'crypt_pit', 'crypt_ash', 'boss_arena',
     ],
   },
 };
