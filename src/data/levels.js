@@ -65,7 +65,23 @@ export function getLevel(id) {
     bossVariant: 0,
     time: defaultTime(rows[0].length),
     ...def,
-    bands: rows.length > CHUNK_ROWS ? BANDS : null,
+    /*
+     * A tall grid is bands **unless the level says it is a climb**, and the
+     * order matters: this line overrules the spread above it, so a level
+     * cannot declare `bands` and it cannot declare its way out of them either
+     * — except by declaring what it is.
+     *
+     * The two are the same number of rows and nothing else. A banded level is
+     * three separate 15-row *rooms* stacked in one grid, reached by a pipe or
+     * a beanstalk, and the camera stays inside whichever one your feet are in
+     * (`clampCamY`) precisely so that walking under a secret does not show it
+     * to you. A vertical level is one room that happens to be forty rows tall,
+     * with no seams, no rooms and nothing hidden — the camera is meant to
+     * travel its whole height, and band clamping would pin it to fifteen rows
+     * and stop the climb dead at the first seam. So a climb takes the plain
+     * branch, which is the one that says "this level is as tall as it is".
+     */
+    bands: !def.vertical && rows.length > CHUNK_ROWS ? BANDS : null,
     rows,
   };
   cache.set(id, level);

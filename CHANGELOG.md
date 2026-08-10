@@ -7,6 +7,202 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.52 — ylös on suunta: sivuttain vaihtuva kamera, ja kolme työkalua jotka oppivat kiipeämään
+
+Omistaja pyysi pilvimaailmaan **pystykentän**: kiivetään tasanteelta toiselle,
+putoaminen ei tapa vaan pudottaa alemmas ja kiivetään uudestaan. Tämä muutos
+ei tee kenttää — sen sijoittaa myöhempi tekijä — vaan **kyvyn**, ja todistaa
+sen `tools/verify.mjs`:n koekentällä samasta syystä kuin karttavieritys
+todistettiin koemaailma `wL`:llä: kyky jota kokeillaan vain sillä sisällöllä
+jonka se on siunaamassa ei ole kokeiltu.
+
+Ja koko työn kova reunaehto oli, että **mikään olemassa oleva ei saa liikkua**:
+toinen tekijä virittää samaan aikaan kuuttatoista kenttää nykyistä mittaria
+vasten. Se ei ole väite vaan mittaus, kolmesti:
+
+| mitattu | ennen ja jälkeen |
+| --- | --- |
+| `node tools/difficulty.mjs` (myös `--raw` ja `--json`) | tavulleen sama, md5 `ec331323…` / `3d452afe…` / `75e659af…` |
+| `PW_MODULE=… node tools/playable.mjs` | tavulleen sama, md5 `cc7c683f…` |
+| kameran rata: `cam.x`,`cam.y` neljän desimaalin tarkkuudella, 44 kenttää × 2 voimatasoa × 900 framea = **55 684 framea** | tavulleen sama, md5 `094fc014…` |
+
+Kolmas on omistajan oma vaatimus tältä illalta — *"vaakakentissä pystysuoran
+kameran pitää seurata pelaajaa kuten nyt"* — eikä sitä voi väittää
+rakenteesta, koska rakenne on juuri se mikä muuttui. Sen lisäksi `verify.mjs`
+ajaa jokaisen kentän 600 framea ja kysyy paljonko se vaihtoi sivua: **44
+kenttää, 0 sivunvaihtoa.**
+
+### 1. Kamera: paikallaan, sivunvaihto, paikallaan
+
+Omistajan sanoin: *"hahmo pysähtyy siihen, ja sitten kamera kallistuu alas… ja
+peli jatkuu niin että hahmo on ruudun yläreunassa. Silloin alaspäin mennessä
+näet mitä alla on."*
+
+**Liipaisin on `camAnchor`, ja se valinta on koko suunnittelu.** Ankkuri on se
+viimeinen jalkalinja johon pelaaja oikeasti *asettui*: se liikkuu sillä
+framella jolla jalat koskettavat, se seuraa putoamista sillä framella jolla se
+tapahtuu, eikä se liiku nousevan kaaren aikana. Siitä seuraa kolme asiaa jotka
+kaikki ovat mittauksia eivätkä toiveita:
+
+1. **Sivunvaihto ei voi katkaista hyppyä kesken nousun** — mitattuna
+   koekiipeilyssä **0/5**, voimatasolla 0 ja 5, sekä leikkauksena että 12
+   framen panorointina.
+2. **Se ei voi värähdellä.** Päähän ripustettu sivunvaihto nousee kaaren
+   huipulla ja putoaa takaisin lähtölavalle, joka on nyt uuden ruudun alapuolella
+   — ja vaihtaa heti takaisin. Se ei ole viritettävissä pois: turvallinen
+   sivunvaihto on `viewH − 32 − h − J`, mikä isoimmalla keholla ja pieruhypyllä
+   on **−41 px**.
+3. **Putoaminen vaihtaa sivua heti**, koska ankkuri seuraa laskua. Kiipeilyssä
+   putoaminen on tavallista, joten alla oleva pitää näkyä jo ilmassa.
+
+**Ja tämä on kova leikkaus tarkoituksella, ei `CAM_SNAP` palaamassa.**
+Perustelu on kirjoitettu `level.js`:ään neljänä kohtana, koska se on juuri se
+asia jonka seuraava lukija tulkitsee väärin: `CAM_SNAP` laukesi *etäisyydestä*
+(48 px, sääntö virheen koosta) ja laukesi siksi tavalliseen laskeutumiseen;
+tämä laukeaa *ylityksestä* (keho on poistunut nimetyltä kaistalta, sääntö
+paikasta kuvassa). `CAM_SNAP` oli kiinniottoa easen päällä; tämä on ainoa asia
+joka kuvaa liikuttaa. `CAM_SNAP` mitattiin **0 laukeamaan 30 kentässä**; tämä
+laukeaa rakenteesta viisi kertaa koekiipeilyssä. Ja `CAM_SNAP` koski jokaista
+kenttää; tämä ei kosketa yhtäkään olemassa olevaa.
+
+**Ruutu on 13 ruutua ja hyppy 5,3 — joten koko ruudun sivunvaihtoa ei ole.**
+Omistaja pyysi ruudullista; aritmetiikka kieltää sen. Sivunvaihdon jälkeen
+ankkurin on jäätävä niin kauas vastakkaisesta kaistasta, ettei yksi tavallinen
+askelma työnnä sitä takaisin yli, eli `CAM_PAGE_LAND − CAM_PAGE_EDGE` (112−32 =
+80 px) > yksi askelma (64 px). Yli jää **64–112 px, 4–7 ruutua**. Se on
+mitattu raja eikä varovaisuus, ja se lukee koodissa lukuina.
+
+**Pää ei silti pysyisi ruudussa pelkällä sivunvaihdolla**, ja se on toinen
+saman aritmetiikan seuraus: viimeinen lava ennen sivunvaihtoa voi olla
+`CAM_PAGE_EDGE`:n päässä ylälaidasta, ja hyppy siitä nousee askelman +
+ylityksen + kehon = 77 px. Ilman kattoa mitattiin **45,31 px päätä ruudun yli**
+jokaista sivunvaihtoa edeltävällä hypyllä. Ratkaisu ei ole uusi vaan vanha:
+`CAM_TOP_MARGIN`, sama turvaverkko jonka tavallinen kamera jo dokumentoi
+sanoilla *"raja, ei kohde… nostaa kuvaa vain sen verran kuin on pakko"*. Sen
+kanssa **0,00 px**, ja hinta on kirjattu sellaisena kuin se on: katto on se
+sitova termi 167 framella 779:stä voimatasolla 0 ja 365:llä 777:stä tasolla 5.
+
+**Jäädytys: rakennettiin molemmat, mitattiin molemmat, ja suositus on ilman.**
+
+| sivunvaihto | ohjausta pois | uusi maa näkyy | kesken nousua | kiipeäminen |
+| --- | --- | --- | --- | --- |
+| 0 framea (leikkaus) | **0 framea** | samalla framella | 0/5 | 779 framea |
+| 12 framea (panorointi) | 60 framea | 12 framen päästä | 0/5 | 899 framea |
+
+Jäädytys ostaa tasan yhden asian: se estää pelaajaa toimimasta kuvasta jota ei
+ole vielä lukenut. Ankkurisääntö osti sen jo — sivunvaihto tapahtuu vain
+laskeutumisella tai putoamisessa, ei koskaan nousevan kaaren aikana — joten
+jäädytys maksetaan tyhjästä kahdesti: uusi maa näkyy kokonaisen sivunvaihdon
+*aiemmin* ilman sitä, ja sekunti kiipeilyä palautuu. `camPageFrames` jää silti
+kentän kenttänä, koska taulukko yllä on mittaus ja mittauksen pitää olla
+toistettavissa; `verify.mjs` ajaa saman kiipeilyn molemmilla ja tulostaa
+molemmat rivit.
+
+**Kaistat ja pystykenttä rinnakkain.** Ne ovat sama rivimäärä ja ei mitään
+muuta samaa. Kaistoitettu kenttä on kolme erillistä 15 rivin **huonetta**
+päällekkäin, joihin mennään putkella tai pavunvarrella, ja kamera pysyy siinä
+jossa jalat ovat (`clampCamY`) juuri siksi, ettei salaisuutta näytetä alta
+kävelevälle. Pystykenttä on **yksi huone joka sattuu olemaan 45 riviä korkea**:
+ei saumoja, ei huoneita, ei piilotettua, ja kameran kuuluu kulkea sen koko
+korkeus. Siksi `getLevel` antaa kiipeilylle `bands: null` vaikka ruudukko on
+pitkä — kaistarajaus naulaisi näkymän viiteentoista riviin ja pysäyttäisi
+kiipeämisen ensimmäiseen saumaan.
+
+### 2. Kolme työkalua oppii että ylös on suunta
+
+**`tools/playable.mjs`.** Botti juoksi oikealle ja hyppi. Kahdenkymmenen
+sarakkeen kentällä se ei heikkene vaan **kääntyy nurin**: se kävelee oikeaan
+seinään kahdessa sekunnissa ja raportoi 100 % edenneensä eikä maalia. "Yksikään
+kenttä ei liity kaatuneiden listalle" on ollut koko päivän kova sääntö, joten
+vastaus ei voinut olla poikkeuslupa: pystykenttä saa **yhtä oikean todisteen**
+— sama moottori, sama fysiikka, voimataso 0, ja `finishLevel` oikeasti
+laukeaa. Kiipeilijä on omassa tiedostossaan (`tools/climb-bot.js`), koska
+`verify.mjs` todistaa sen koekentällä ja `playable.mjs` käyttää samaa. Se lukee
+reittinsä **validaattorin omasta verkosta** (`climbGraph`): botti joka kiipeäisi
+sen minkä säännöt kieltävät tekisi säännöistä muodollisuuden, ja botti joka ei
+kiipeäisi siunattua kaatasi kelvollisia kenttiä.
+
+Kaksi punaista tuli botista itsestään ja molemmat ovat kirjattuina koodissa:
+reitinhaku joka minimoi *hyppyjen määrän* valitsi ensimmäiseksi neljän ruudun
+loikan yhden ruudun levyiselle tehostuspalikalle (kiipesi **5 %**), ja hypyn
+pito joka kysyi vapautusehtoa samalla framella kuin painallusta ei pitänyt
+koskaan (**32 px** nousua siinä missä pidetty seisova hyppy antaa 71).
+
+**`src/data/rules.js`.** `floorProfile`, `checkGaps` ja `checkWalls` lukevat
+riviä 13. Pystykentässä ne eivät heikkene vaan vastaavat toiseen kenttään, ja
+se on mitattu: sama koekenttä vaakasäännöillä raportoi **seitsemän ongelmaa
+joista yksikään ei ole totta**. Tilalla on `climbGraph` — mikä tasanne on minkä
+päästä saavutettavissa — ja neljä sääntöä joiden vastineet ovat DESIGN.md
+kohdassa 5. Yksi luku on kirjoitettava tähän erikseen: **mitä yksi hyppy kantaa
+sivusuunnassa kun sen pitää myös nousta.** Päät ovat mitattuja (`gapTiles` 6
+tasamaalla, `wallTiles` 4 nousua), väli on suora viiva niiden välillä, ja se
+sanotaan koodissa ääneen — oikea kaari on kovera, joten suora **lupaa liian
+vähän keskellä**, mikä on turvallinen suunta säännölle jonka tehtävä on hylätä
+mahdottomia kenttiä.
+
+**`tools/difficulty.mjs`.** Mittari laskee per sata **saraketta**, ja
+kiipeilyssä se on hiljaista valehtelua: 20 saraketta viisinkertaistaa kaiken.
+Kiipeily mitataan per sata **riviä**, ja neljä akselia nimeävää suuretta
+käännetään. Yksi niistä on kirjattu virheenä koska se oli sellainen: naiivi
+käännös — sama neliö per askelma kuin per kuilu — antoi koekiipeilylle **1920,5
+pistettä** maailman 1 tason sadan sijaan. Syy on että tasamaalla hyppy on
+poikkeus ja kiipeilyssä *jokainen* liike on hyppy, joten hinta per askelma
+mittaa muotoa eikä vaikeutta. Oikea kysymys on **tarvitseeko askelma
+vauhtia**: `jump-budget.json` mittaa sekä seisovan (71 px) että juoksevan
+(85 px) hypyn, mikä samalla 0,8 turvakertoimella on 3 ja 4 ruutua, ja
+kolmen ruudun askelma on ilmainen. Nyt koekiipeily saa **104,3**.
+
+### 3. Korpus, ja mitä siitä otettiin
+
+Rainbow Islands ja Kid Icarus ovat korpuksen ainoat pystypelit, ja omistaja
+nosti asian itse esiin. `tools/mine-pacing.mjs --vertical` louhii niistä
+**pelkkiä aggregaatteja** (DESIGN.md kohta 3): 34 kenttää, 6054 riviä, 2341
+tasannetta. Mediaaniaskelma **4 ruutua**, p90 **6**; tasanteen leveys mediaani
+4; **47,9 %:lla tasanteista on useampi kuin yksi tie ylös**; ja **24,2 %:lla ei
+ole mitään ulottuvilla ylhäällä**. Viimeinen on se joka muutti sääntöä: se
+kertoo että umpiperät ovat lajityypissä tavallisia, joten meidän tiukempi
+sääntö ("umpiperä maksaa palkinnon") on tämän pelin oma valinta eikä
+konvention kopio, ja se lukee nyt DESIGN.md:ssä sellaisena.
+
+Yhtään kenttäkarttaa, palikkasommitelmaa tai pätkää ei otettu, korpus on repon
+ulkopuolella (`VGLC_DIR=/workspace/thevglc/thevglc`), ja vanhat aggregaatit
+**yhdistettiin eikä korvattu** — `git diff tools/pacing-stats.json` on 115
+lisättyä riviä ja yksi poistettu, joka on sulkeva hakasulje.
+`VGLC_DIR=… node tools/originality.mjs` jälkeenpäin: **481 korpustiedostoa, 11
+generoitua kenttää, 0 osumaa.**
+
+### Punainen ennen vihreää, ja mitä punainen sanoi
+
+- `a climbing view holds still and then pages`: **0 sivunvaihtoa, 388
+  liikeframea 779:stä, pahin 12,00 px** — tavallinen ease tekemässä juuri sitä
+  mitä sen kuuluu tehdä, väärän muotoisella kentällä: kuva liikkuu joka toisella
+  framella eikä koskaan seiso.
+- `a climb is passable at power 0, and the bot climbs it`: vanha botti
+  **96 % oikealle, 11 % ylös, ei maalia** — se löysi oikean seinän ja jäi
+  sinne.
+- `vaakasäännöt lukevat pystykentän väärin`: **7 huomautusta**, kärjessä
+  `no power-up in the first quarter`.
+- `vaikeusmittari mittaa kiipeilyn riveinä eikä sarakkeina`: vaakana **73,1**,
+  ensimmäisenä pystyversiona **1920,5**, oikein **104,3**.
+- `a paging view keeps the climber in the frame`: **45,31 px päätä ruudun yli**
+  ennen kattoa.
+- Ja neljä pystyvalidaattorin sääntöä yksi vika kerrallaan: liian korkea
+  loikka, pohjaton sarake, piikit putoamisen päässä, tehostus alkuneljänneksen
+  ulkopuolella, umpiperä — jokainen punainen erikseen ja jokainen sama
+  koekenttä ilman vikaa vihreä.
+
+### Neljä vanhaa kameraporttia, ennen ja jälkeen
+
+Rivi riviltä samat, mikä on sama asia kuin taulukon kolmas rivi mutta
+tarkistettuna toisesta suunnasta:
+
+| portti | ennen | jälkeen |
+| --- | --- | --- |
+| `a view that has to rise animates instead of snapping` | pahin 1,95 px | 1,95 px |
+| `a view that has fallen stops when the player stops` | pahin 2,94 px / 7 framea | sama |
+| `a view that has to rise on landing animates instead of cutting` | 12,50 px, asettui 14 framessa | sama |
+| `the view does not ride a jump upward` | alle 2 px kaikilla riveillä | sama |
+
 ## v26.08.10.51 — kuusitoista kenttää neljään maailmaan: 4, 5, 6 ja 7 kahdeksaan
 
 Peli on nyt **8 maailmaa ja 60 kenttää** (oli 44). Maailmat 4, 5, 6 ja 7 ovat

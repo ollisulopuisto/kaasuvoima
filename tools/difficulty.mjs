@@ -19,6 +19,12 @@
  * The sky and cave bands of a tall level are optional bonus rooms; counting
  * their contents as difficulty would say a level got harder because it hid a
  * reward in it.
+ *
+ * ...unless the level is a CLIMB (`vertical: true`), which is measured per 100
+ * rows instead of per 100 columns and has four of its six metrics re-aimed.
+ * See `measureClimb`. No level in the game is one today, so nothing any level
+ * scores has moved: the whole report, `--raw` and `--json` included, is byte
+ * for byte what it was before that branch existed.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -39,6 +45,23 @@ const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), '
 
 const ROWS = 15;
 const FLOOR = 13;
+/**
+ * How tall a screen is, in tiles: `VIEW_H` 208 / `TILE` 16. Only the climb
+ * measurement uses it, and it uses it as the line between "a fall you can see
+ * the bottom of" and "a fall that takes the level off the picture".
+ */
+const SCREEN_ROWS = 13;
+/**
+ * The rise one jump carries **from a standstill**, in tiles, derived from the
+ * same measured case and the same 0.8 safety factor `wallTiles` is derived
+ * with (see `tools/measure-jump.mjs`). Derived rather than written down,
+ * because the day somebody re-measures physics this has to move with it —
+ * "mitattu, ei muistettu" applies to the numbers a tool computes as much as to
+ * the ones it reads.
+ */
+const STAND_TILES = Math.max(1, Math.floor(
+  ((budget.cases.find((c) => c.label === 'standing, held') || { height: 0 }).height * 0.8) / 16,
+));
 
 /*
  * Enemy cost, in "walkers". The walker is 1.0 because it is the thing every
@@ -170,7 +193,178 @@ function runs(route, chars) {
   return out;
 }
 
-function measure(rows) {
+/*
+ * THE SAME METER, TURNED NINETY DEGREES.
+ *
+ * Every number this tool prints is "per hundred columns", and on a climb that
+ * is nonsense of a particularly quiet kind: a vertical level is twenty columns
+ * wide by definition, so dividing by the width multiplies everything by five
+ * and a level with four enemies in it scores like a level with twenty. It
+ * would not fail, it would lie — which is exactly what the spiky walker did
+ * when it shipped priced at zero, and the reason that story is in `ENEMY_COST`
+ * rather than in a commit message.
+ *
+ * So a climb is measured **per hundred rows of climb**, and the four metrics
+ * that name an axis are re-aimed rather than reused:
+ *
+ *   gaps → **the steps that need a run-up.** The horizontal term is
+ *          (span / jump budget)² per hole, because a hole is the exception on
+ *          a floor and its width against the jump is what makes it hard. The
+ *          naive translation — the same square per step of the ladder — was
+ *          tried first and it is wrong by a factor of twenty, for a reason
+ *          worth writing down: on a floor a jump is the exception, and in a
+ *          climb every single move is one, so summing a cost per step prices
+ *          the shape of the level rather than its difficulty. Measured, the
+ *          fixture climb scored **1920** that way against a world-1 level's
+ *          100, which is not a hard level, it is a broken scale.
+ *
+ *          What actually varies between two climbs is whether the steps can be
+ *          taken **from a standstill**. `tools/jump-budget.json` measures both
+ *          jumps: standing-held rises 71 px and running-held 85 px, which at
+ *          the same 0.8 safety factor `wallTiles` is derived with are 3 tiles
+ *          and 4. A three-tile step is free — you hop it from where you stand,
+ *          and a climb's platforms are short enough that standing is usually
+ *          all you have. A four-tile step demands a run-up on a platform that
+ *          may not be long enough to take one, and *that* is the thing that
+ *          kills climbs. So the cost is the excess over the standing jump,
+ *          squared against the budget, and a climb built at three tiles scores
+ *          zero here — correctly, because it has asked for nothing.
+ *   hazards → per **row**, not per column. "What the player meets is the width
+ *          of the thing" is why the horizontal one collapses a lava slab to
+ *          its columns; on a climb what you meet is its height.
+ *   pit → **how far a miss costs you.** There are no bottomless columns in a
+ *          climb — the rules refuse them, because falling is a setback and not
+ *          a death — so the horizontal "share of the level that is over death"
+ *          has nothing to count. What survives is the exposure the horizontal
+ *          term is really measuring: the share of the footing from which a
+ *          missed landing drops you **more than one screen**, 13 rows, so the
+ *          climb you lose leaves the picture entirely. A ladder whose rungs
+ *          catch each other scores zero; one built over its own void does not.
+ *   drought → the longest stretch **of the climb** with no power block, as a
+ *          share of the height rather than the width.
+ *
+ * The references in `WEIGHTS` stay frozen at world 1's horizontal averages,
+ * and that is a decision with a cost worth stating: a climb's score is
+ * comparable with other climbs exactly, and with a horizontal level only as
+ * far as "per 100 rows" and "per 100 columns" are comparable units of
+ * exposure. They are the same unit of *time* — the player crosses about as
+ * many tiles a second either way — which is the honest defence, and it is a
+ * weaker one than the meter usually has. Re-referencing the scale to a
+ * vertical world would be worse: it would renormalise, and the frozen
+ * references exist precisely so the scale cannot.
+ */
+function measureClimb(rows) {
+  const h = rows.length;
+  const w = rows[0].length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
+
+  let enemyCost = 0;
+  const enemies = {};
+  let hazardCost = 0;
+  for (let y = 0; y < h; y++) {
+    let worst = 0;
+    for (let x = 0; x < w; x++) {
+      const ch = at(x, y);
+      if (ENEMY_COST[ch] !== undefined) {
+        enemyCost += ENEMY_COST[ch];
+        enemies[ch] = (enemies[ch] || 0) + 1;
+      }
+      worst = Math.max(worst, LETHAL_TILE[ch] || 0);
+    }
+    hazardCost += worst;
+  }
+
+  /* The ladder. A platform is a run of footing with open sky over it, and a
+   * step is the rise from one to the cheapest thing above it — the same
+   * "nearest reachable" the climb graph works with, spelled here rather than
+   * imported because this tool measures the grid as written and the validator
+   * measures it against the engine. */
+  const stands = (x, y) => (SOLID.has(at(x, y)) || at(x, y) === '-') && !SOLID.has(at(x, y - 1));
+  const tops = [];
+  for (let y = 0; y < h; y++) {
+    let from = -1;
+    for (let x = 0; x <= w; x++) {
+      if (x < w && stands(x, y)) { if (from < 0) from = x; continue; }
+      if (from >= 0) tops.push({ y, x0: from, x1: x - 1 });
+      from = -1;
+    }
+  }
+  let climbRisk = 0;
+  const spans = [];
+  for (const p of tops) {
+    let best = null;
+    for (const q of tops) {
+      if (q.y >= p.y) continue;
+      const across = q.x0 > p.x1 ? q.x0 - p.x1 - 1 : p.x0 > q.x1 ? p.x0 - q.x1 - 1 : 0;
+      if (across > budget.gapTiles) continue;
+      if (!best || q.y > best.y) best = q;
+    }
+    if (!best) continue;
+    const rise = p.y - best.y;
+    climbRisk += (Math.max(0, rise - STAND_TILES) / budget.wallTiles) ** 2;
+    spans.push(rise);
+  }
+
+  /* How far a miss costs: footing with more than one screen of nothing under
+   * it. Measured straight down from every column of the platform, because
+   * that is where a body that missed the next rung goes. */
+  let exposed = 0;
+  for (const p of tops) {
+    for (let x = p.x0; x <= p.x1; x++) {
+      let d = 1;
+      while (p.y + d < h && !SOLID.has(at(x, p.y + d)) && at(x, p.y + d) !== '-') d++;
+      if (d > SCREEN_ROWS) { exposed++; break; }
+    }
+  }
+  const pitShare = tops.length ? (exposed / tops.length) * 100 : 0;
+
+  let drought = 0;
+  let sinceP = 0;
+  for (let y = h - 1; y >= 0; y--) {
+    const power = Array.from({ length: w }, (_, x) => at(x, y)).includes('!');
+    sinceP = power ? 0 : sinceP + 1;
+    drought = Math.max(drought, sinceP);
+  }
+
+  /* Precision, unchanged in meaning: narrow footing is hard in proportion to
+   * how little of it there is. Every plank in a climb is over a drop, so the
+   * "over death" multiplier is read from the drop under it rather than from a
+   * floor row that does not exist here. */
+  let precision = 0;
+  for (const p of tops) {
+    if (!Array.from({ length: p.x1 - p.x0 + 1 }, (_, i) => at(p.x0 + i, p.y))
+      .some((ch) => ch === '-' || ch === '%')) continue;
+    const width = p.x1 - p.x0 + 1;
+    let over = false;
+    for (let x = p.x0; x <= p.x1; x++) {
+      let d = 1;
+      while (p.y + d < h && !SOLID.has(at(x, p.y + d)) && at(x, p.y + d) !== '-') d++;
+      if (d > SCREEN_ROWS) over = true;
+    }
+    const crumbles = Array.from({ length: width }, (_, i) => at(p.x0 + i, p.y) === '%').some(Boolean);
+    precision += Math.min(1, 3 / width) * (over ? 2.5 : 1) * (crumbles ? 1.5 : 1);
+  }
+
+  const per100 = (n) => (n / h) * 100;
+  return {
+    cols: w,
+    rows: h,
+    vertical: true,
+    enemies,
+    spans,
+    metrics: {
+      enemies: per100(enemyCost),
+      gaps: per100(climbRisk),
+      hazards: per100(hazardCost),
+      pit: pitShare,
+      drought: (drought / h) * 100,
+      precision: per100(precision),
+    },
+  };
+}
+
+function measure(rows, opts = {}) {
+  if (opts.vertical) return measureClimb(rows);
   const route = routeBand(rows);
   const w = route[0].length;
   const at = (x, y) => (y < 0 || y >= ROWS || x < 0 || x >= w ? ' ' : route[y][x]);
@@ -343,7 +537,12 @@ const playOrder = WORLDS.map((world) => ({
 const rows = [];
 for (const world of playOrder) {
   for (const { id, fortress } of world.levels) {
-    const m = measure(getLevel(id).rows);
+    /* The level says which axis it is on; the tool does not guess from the row
+     * count, because a tall level is three stacked rooms and a climb is one
+     * tall room and no grid can tell those apart. Inert for every level in the
+     * game today — none of them carries the flag. */
+    const def = getLevel(id);
+    const m = measure(def.rows, { vertical: !!def.vertical });
     rows.push({
       id, world: world.id, fortress, ...m, ...score(m.metrics),
     });
@@ -360,8 +559,8 @@ for (const world of playOrder) {
  * tile and asserts the number moves, which is a test of the *table above*
  * rather than of any level, and there is no other way to write it.
  */
-export function scoreRows(rows) {
-  return score(measure(rows).metrics).total;
+export function scoreRows(rows, opts = {}) {
+  return score(measure(rows, opts).metrics).total;
 }
 
 /** The one number per level that leaves this tool. One decimal, and no more:

@@ -81,6 +81,8 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
   const { LevelScene } = await import('/src/scenes/level.js');
   const { isSolid } = await import('/src/gfx/tiles.js');
   const { levelIds } = await import('/src/data/levels.js');
+  const { makeClimber, isClimb } = await import('/tools/climb-bot.js');
+  const budget = await (await fetch('/tools/jump-budget.json')).json();
   const game = window.sfb3;
 
   const blank = () => ({
@@ -103,6 +105,66 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
    * it is demanding, and the bot is not good. A level that fails both is worth
    * opening.
    */
+  /**
+   * The same run, upward.
+   *
+   * `reach` is still a percentage and still the honest one for the shape: how
+   * much of the climb was ascended, measured from the start's own row so that
+   * a level which digs downward reports the same way. `stuckAt` is a row and
+   * not a column, and the report says so, because "jumissa sarakkeessa 3" on a
+   * level three columns from either wall is a sentence that helps nobody.
+   */
+  const climb = (scene, boss) => {
+    const rows = scene.def.rows;
+    const bot = makeClimber(scene, rows, budget);
+    const input = mkInput();
+    const startY = scene.player.y + scene.player.h;
+    const goalY = (bot.goalPlat ? bot.goalPlat.y : 0) * 16;
+    const span = Math.abs(startY - goalY) || 1;
+    let bestY = startY;
+    let stuckAt = null;
+    let stuckFor = 0;
+    let death = null;
+    let finishedHere = null;
+    game.finishLevel = (r) => { finishedHere = r; };
+
+    for (let f = 0; f < frames && !finishedHere; f++) {
+      const p = scene.player;
+      const want = bot.step();
+      input.held = blank();
+      input.pressed = blank();
+      input.held.left = want.left;
+      input.held.right = want.right;
+      input.held.jump = want.jump;
+      input.pressed.jump = want.press;
+      scene.update(input);
+
+      const feet = p.y + p.h;
+      if (Math.abs(feet - goalY) < Math.abs(bestY - goalY) - 4) {
+        bestY = feet;
+        stuckFor = 0;
+      } else if (++stuckFor === 600 && stuckAt === null) {
+        stuckAt = Math.floor(bestY / 16);
+      }
+      if (scene.state === 'dead' && !finishedHere) {
+        death = { tx: Math.floor(p.cx / 16), ty: Math.floor(p.cy / 16), how: 'maasto' };
+        break;
+      }
+    }
+
+    return {
+      cleared: !!(finishedHere && finishedHere.cleared),
+      reach: Math.round((Math.abs(startY - bestY) / span) * 100),
+      width: scene.w,
+      height: scene.h,
+      vertical: true,
+      pages: scene.camPages,
+      stuckAt,
+      death,
+      died: scene.state === 'dead',
+    };
+  };
+
   const run = (id, power) => {
     game.state = {
       lives: 9, coins: 0, score: 0, power, reserve: null,
@@ -123,6 +185,26 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
     const boss = !!scene.def.boss;
     if (boss) scene.bossDefeated = true;      // the door is the exit; the fight is not the point
     scene.time = 9999;
+
+    /*
+     * UP IS A DIRECTION, AND THIS BOT ONLY KNEW ONE.
+     *
+     * Everything below this branch measures "how far right did it get", and on
+     * a level twenty columns wide and forty rows tall that question answers
+     * itself in two seconds and means nothing: the bot walks into the wall,
+     * reports 100 % reach and no exit, and a level that is perfectly sound
+     * joins the failure list. "No level may join the failure list" is a hard
+     * rule, so the answer cannot be an exemption — a vertical level gets a
+     * proof of passability that is exactly as real as the horizontal one. Same
+     * engine, same physics, same power level 0, same "did `finishLevel` fire",
+     * and the only thing that changes is which way the bot is trying to go.
+     *
+     * The climber is in `tools/climb-bot.js` because `verify.mjs` proves it
+     * against a fixture climb — the game has no vertical level yet, and a bot
+     * proved only by the content it is about to bless is not proved. See there
+     * for why it shares the validator's own reachability graph.
+     */
+    if (isClimb(scene.def)) return climb(scene, boss);
 
     const input = mkInput();
     let prevJump = false;
@@ -246,11 +328,15 @@ for (const r of report) {
     : d && d.cleared ? 'VAATII TUPLAHYPYN'
       : s.died ? 'KUOLI' : 'JUMISSA';
   const worst = d && !d.cleared ? d : s;
+  /* A climb reports rows, because a column number on a twenty-column level
+   * says nothing about where the bot stopped. Same table, same verdicts, one
+   * word different — and unreachable for every level in the game today. */
   const where = worst.death
-    ? `${worst.death.how} sarakkeessa ${worst.death.tx}`
-    : worst.stuckAt !== null ? `jumissa sarakkeessa ${worst.stuckAt}` : '';
+    ? `${worst.death.how} ${s.vertical ? 'rivillä' : 'sarakkeessa'} ${s.vertical ? worst.death.ty : worst.death.tx}`
+    : worst.stuckAt !== null
+      ? `jumissa ${s.vertical ? 'rivillä' : 'sarakkeessa'} ${worst.stuckAt}` : '';
   console.log(`  ${pad(r.id, 8)}${pad(verdict, 18)}${pad(`${s.reach}%`, 7)}`
-    + `${s.cleared ? '' : `${where}  (leveys ${s.width})`}`);
+    + `${s.cleared ? '' : `${where}  (${s.vertical ? `korkeus ${s.height}` : `leveys ${s.width}`})`}`);
   if (s.cleared) continue;
   if (d && d.cleared) demanding.push(r.id);
   else broken.push(r.id);
