@@ -2409,6 +2409,69 @@ const report = await page.evaluate(async () => {
       + `(ruudun keskeltä reunaan 8, pisteen puolikas 3)`);
     expect('kävelijä kulkee sitä mutkaa joka on piirretty',
       offCurve <= 0.5, `suurin poikkeama piirretystä käyrästä ${offCurve.toFixed(3)} px`);
+
+    /*
+     * JOKAISELTA SOLMULTA PÄÄSEE POIS JOLLAKIN NUOLELLA.
+     *
+     * Ylempi lohko ajaa jo `tryMove`n joka linkille — mutta se päättelee suunnan
+     * linkin omasta askeleesta ja kääri tuloksen `if (m.mode === 'walk')`:iin.
+     * Linkki jota **mikään nuoli ei osu** ei siis kaada mitään: `tryMove` palaa
+     * hiljaa, `if` ei aukea, eikä yksikään väite jää kertomatta. Testi mittasi
+     * mutkan syvyyden niistä linkeistä joita pitkin pääsi kulkemaan, ja oli
+     * täysin sokea niille joita pitkin ei päässyt.
+     *
+     * Ja juuri se osui pelaajaan: `tryMove` vaatii että askeleen (dx, dy) on
+     * tasan yksi nuolista, eli toisen komponentin on oltava nolla. Kun maailmat
+     * 1 ja 3 kasvatettiin kahdeksaan kenttään, solmut aseteltiin siksakkiin
+     * ilman kulmapistettä — jolloin joka linkin ensimmäinen askel on
+     * **vinottain**, eikä yksikään nuoli osu siihen. Maailmassa 1 pääsi siis
+     * ensimmäiselle kentälle ja siihen se loppui.
+     *
+     * Kaksi väitettä, koska kaksi eri tapaa mennä rikki:
+     *   1. jokaiselta linkiltä, kummastakin päästä, JOKIN nuoli vie perille
+     *   2. eikä kaksi linkkiä samalta solmulta vaadi SAMAA nuolta — muuten
+     *      "oikealle" tarkoittaisi kahta paikkaa ja valinta olisi kirjoitusjärjestys
+     */
+    const ARROWS = ['left', 'right', 'up', 'down'];
+    const stranded = [];
+    const collisions = [];
+    let claimedTotal = 0;
+    for (const w of WORLDS) {
+      const claimed = new Map();
+      for (const link of w.links) {
+        for (const [from, to] of [[link.a, link.b], [link.b, link.a]]) {
+          const hits = ARROWS.filter((arrow) => {
+            reset();
+            game.state.world = WORLDS.indexOf(w);
+            game.state.node = from;
+            game.state.cleared = Object.fromEntries(w.nodes.map((n) => [n.id, true]));
+            const m = new WorldMapScene(game);
+            m.mode = 'idle';
+            m.tryMove(arrow);
+            return m.mode === 'walk' && m.targetNode && m.targetNode.id === to;
+          });
+          if (!hits.length) {
+            const pts = worlds.linkPoints(w, link);
+            const head = link.a === from ? pts : [...pts].reverse();
+            stranded.push(`${w.id} ${from}->${to} askel `
+              + `(${Math.sign(head[1].tx - head[0].tx)},${Math.sign(head[1].ty - head[0].ty)})`);
+          }
+          for (const arrow of hits) {
+            const key = `${from}|${arrow}`;
+            if (claimed.has(key)) collisions.push(`${w.id} ${from} ${arrow}: ${claimed.get(key)} ja ${to}`);
+            else { claimed.set(key, to); claimedTotal++; }
+          }
+        }
+      }
+    }
+    const linkEnds = WORLDS.reduce((n, w) => n + w.links.length * 2, 0);
+    expect('jokaiselta solmulta pääsee jokaista linkkiä pitkin jollakin nuolella',
+      stranded.length === 0,
+      stranded.length ? `${stranded.length}/${linkEnds} umpikujaa: ${stranded.join(', ')}`
+        : `${linkEnds} linkinpäätä, kaikki nuolen päässä`);
+    expect('kaksi linkkiä samalta solmulta ei vaadi samaa nuolta',
+      collisions.length === 0,
+      collisions.length ? collisions.join(' / ') : `${claimedTotal} suuntaa, ei päällekkäisyyksiä`);
   }
 
   /* ------------- kartta joka on näkymää leveämpi, ja sen kamera ------------ */

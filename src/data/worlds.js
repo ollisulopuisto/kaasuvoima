@@ -80,16 +80,33 @@ const WORLD_DEFS = [
       { id: 'w1-7', tx: 15, ty: 7, type: 'level', level: '1-7', name: 'MYLLYNMÄKI' },
       { id: 'w1-f', tx: 17, ty: 4, type: 'fortress', level: '1-F', name: 'LINNAKE 1' },
     ],
+    /*
+     * KULMAPISTE EI OLE KORISTE VAAN OHJAUS.
+     *
+     * Siksak-solmut ovat vinottain toisiinsa nähden, ja `WorldMapScene.tryMove`
+     * lukee suunnan linkin **ensimmäisestä laatta-askeleesta**: se vaatii että
+     * askel on tasan yksi nuolista, eli toisen komponentin on oltava nolla. Ilman
+     * kulmapistettä askel on (1,-1) tai (1,1), eikä yksikään nuoli osu siihen —
+     * mikä on täsmälleen se vika jonka pelaaja löysi: maailmassa 1 pääsi
+     * ensimmäiselle kentälle ja siihen se loppui.
+     *
+     * Kulmapiste on aina `[kohteen sarake, lähdön rivi]`, sama muoto kuin
+     * maailmoissa 4 ja 5. Se tekee kahta asiaa yhdellä luvulla: eteenpäin
+     * lähdetään aina **vaakasuoraan** (oikealle), ja takaisin aina
+     * **pystysuoraan**. Siksakissa se tarkoittaa että oikea on koko maailman
+     * läpi "eteenpäin" ja paluu vaihtelee ylös/alas — eikä kaksi linkkiä samalta
+     * solmulta koskaan vaadi samaa nuolta, mikä on `verify.mjs`:n toinen väite.
+     */
     links: [
       { a: 'w1-s', b: 'w1-1' },
-      { a: 'w1-1', b: 'w1-2' },
+      { a: 'w1-1', b: 'w1-2', path: [[5, 7]] },
       { a: 'w1-2', b: 'w1-h' },
-      { a: 'w1-2', b: 'w1-3' },
-      { a: 'w1-3', b: 'w1-4' },
-      { a: 'w1-4', b: 'w1-5' },
-      { a: 'w1-5', b: 'w1-6' },
-      { a: 'w1-6', b: 'w1-7' },
-      { a: 'w1-7', b: 'w1-f', path: [[17, 6]] },
+      { a: 'w1-2', b: 'w1-3', path: [[7, 5]] },
+      { a: 'w1-3', b: 'w1-4', path: [[9, 7]] },
+      { a: 'w1-4', b: 'w1-5', path: [[11, 5]] },
+      { a: 'w1-5', b: 'w1-6', path: [[13, 7]] },
+      { a: 'w1-6', b: 'w1-7', path: [[15, 5]] },
+      { a: 'w1-7', b: 'w1-f', path: [[17, 7]] },
     ],
   },
   {
@@ -201,16 +218,20 @@ const WORLD_DEFS = [
       { id: 'w3-7', tx: 15, ty: 2, type: 'level', level: '3-7', name: 'IKIROUTA' },
       { id: 'w3-f', tx: 17, ty: 5, type: 'fortress', level: '3-F', name: 'PIERUKUNINGAS' },
     ],
+    /* Kulmapisteet samalla säännöllä kuin maailmassa 1: `[kohteen sarake,
+     * lähdön rivi]`, eli eteenpäin vaakasuoraan ja takaisin pystysuoraan. Sama
+     * vika oli täälläkin, ja samasta syystä — molemmat maailmat kasvatettiin
+     * kahdeksaan kenttään siksakilla eikä kummallekaan kirjoitettu kulmia. */
     links: [
       { a: 'w3-s', b: 'w3-1' },
-      { a: 'w3-1', b: 'w3-2' },
-      { a: 'w3-2', b: 'w3-3' },
-      { a: 'w3-3', b: 'w3-4' },
+      { a: 'w3-1', b: 'w3-2', path: [[5, 2]] },
+      { a: 'w3-2', b: 'w3-3', path: [[7, 4]] },
+      { a: 'w3-3', b: 'w3-4', path: [[9, 2]] },
       { a: 'w3-4', b: 'w3-h' },
-      { a: 'w3-4', b: 'w3-5' },
-      { a: 'w3-5', b: 'w3-6' },
-      { a: 'w3-6', b: 'w3-7' },
-      { a: 'w3-7', b: 'w3-f', path: [[17, 3]] },
+      { a: 'w3-4', b: 'w3-5', path: [[11, 4]] },
+      { a: 'w3-5', b: 'w3-6', path: [[13, 2]] },
+      { a: 'w3-6', b: 'w3-7', path: [[15, 4]] },
+      { a: 'w3-7', b: 'w3-f', path: [[17, 2]] },
     ],
   },
   {
