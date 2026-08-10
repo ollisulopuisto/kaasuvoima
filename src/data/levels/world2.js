@@ -480,6 +480,97 @@ export const WORLD2_LEVELS = {
       'baron_arena', 'baron_vault', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /*
+   * 2-4 SAVIKUOPPA — ensimmäinen kenttä sen jälkeen kun tiet yhtyvät.
+   *
+   * Maailma 2 kasvoi kahdeksaan kenttään 10.8.2026, ja molemmat uudet kentät
+   * tulivat **risteyksen jälkeen**. Perustelu on kartalla (worlds.js) ja se on
+   * mitattu eikä valittu; tässä on se puoli joka koskee kenttää itseään.
+   *
+   * **Tämä on ensimmäinen kenttä koko pelissä jonka kaksi eri pelaajaa pelaa
+   * eri asiat mukanaan.** Hiekkatietä tullut on nähnyt yön ja murenevan
+   * lankun; laavatietä tullut on nähnyt laavan, kytkimen ja voittanut
+   * paukkupavun. Kentän on siis oltava kokonaan pelattavissa ilman pavusta,
+   * ja silti sellainen että pavun kanssa siinä on jotain: `clay_vault` on
+   * juuri se, ja se on kolikoita eikä reittiä.
+   *
+   * **Yksi idea: kuoppa johon kävellään.** Palikan oma kommentti
+   * (chunks/desert.js, `clay_cut`) kertoo miksi lattian yläpinnan poistaminen
+   * on eri asia kuin kuilu. Kentän kannalta olennaista on että se on ainoa
+   * aavikkokenttä jossa maa nousee pelaajan molemmin puolin — ja siksi ainoa
+   * joka **ei ole kinemascopessa**: 2-1 ja 2-3 ovat rajattuja koska niissä on
+   * pelkkää etäisyyttä, ja tässä rajaus söisi juuri sen reunan jonka takia
+   * kaivanto on kaivanto.
+   *
+   * Neljä kaivantoa, kolme eri muotoa, ja järjestys on opetusjärjestys:
+   *
+   *   32   `clay_cut`     leveä, kävelijä pohjalla ja korkki reunalla — tämä
+   *                       kertoo mikä kaivanto on
+   *   80   `clay_vault`   muurattu holvi maan tasossa, kansi kuljettava
+   *   160  `clay_rim`     kapea, närästysliekki pohjalla: sama muoto, nyt se
+   *                       kysyy takaisin
+   *   192  `clay_boards`  laudoitettu: kansi on reitti ja palkinto on **alla**
+   *   256  `clay_cut`     ja vielä kerran ilman mitään uutta, ennen loppunousua
+   *
+   * Holvi on aikaisin — sarakkeessa 80 — eikä lopussa, ja se on tarkoitus:
+   * paukkupavun kanssa saapunut pelaaja ei ole vielä ehtinyt menettää sitä,
+   * ja ilman papua saapunut näkee sen niin aikaisin että ehtii ihmetellä sitä
+   * koko loppukentän. `clay_boards` on sen vastapari sarakkeessa 192: siellä
+   * palkinto on alhaalla eikä muurin takana, eli sen saa kuka tahansa joka
+   * huomaa lankkujen olevan lankkuja.
+   */
+  '2-4': {
+    theme: 'desert', bg: 'dunes', music: 'level',
+    chunks: [
+      'start', 'power', 'clay_cut', 'walkers', 'pit_twin', 'clay_vault',
+      'shell', 'spikes', 'flyer', 'pit_plat', 'clay_rim', 'plat_steps',
+      'clay_boards', 'pit_l', 'heartburn_pair', 'note_pair', 'clay_cut', 'power',
+      'steps_up', 'run_up', 'goal', 'goal_end',
+    ],
+  },
+  /*
+   * 2-5 PAAHDE — viimeinen kenttä ennen linnaketta, ja maailman toinen
+   * hengähdys.
+   *
+   * **Se on mitattuna helpompi kuin 2-4, ja se on muoto eikä laiskuus.**
+   * Kahdeksan kentän maailmassa on kaksi notkoa (`verify.mjs`), ja
+   * haarautuvassa maailmassa ensimmäinen niistä on lyöty lukkoon ennen kuin
+   * kukaan kirjoittaa riviäkään: haaran luku on sen helpomman reitin luku
+   * (124,2), joka on pienempi kuin 2-2:n (126,4). Toinen notko ei siis voi
+   * olla 2-4 — kaksi notkoa peräkkäin on kielletty — joten se on tämä kenttä.
+   * Ja se on hyvä paikka: linnake on 160,7 eli koko maailman huippu, ja
+   * muototesti jättää linnakkeen tarkoituksella pois juuri siksi, ettei
+   * viimeisen numeroidun kentän tarvitse olla maailman vaikein. Sisäänhengitys
+   * ennen ovea.
+   *
+   * **Yksi idea: kuumuus rytminä.** Kolme närästysliekkiä (`heat_row`,
+   * sarakkeet 32 ja 224) eivät ole este vaan metronomi, ja koska jokaisella on
+   * oma laskurinsa, kolmea ei ohiteta yhdellä opitulla tahdilla. Se on sama
+   * taito jota linnakkeen pomo kysyy heti perään, ja tämä on ainoa kenttä
+   * jossa se kysytään ilman että sen alla on kuilu.
+   *
+   * Toinen puoli on maasto, ja se nousee kolmessa muodossa: `heat_step` (80)
+   * nostaa kaksi laattaa, `heat_ledge` (112) tuo saman hyllyn toisin päin ja
+   * pudottaa liekin eteen, `heat_ramp` (176) menee kahdessa portaassa kolme
+   * riviä ylös. Maailman 2 lattia on ollut yhtä tasoa kahdeksassa kentässä, ja
+   * viimeinen yhteinen matka nousee linnaketta kohti — halvin tapa sanoa että
+   * ollaan menossa jonnekin.
+   *
+   * Kinemascope on takaisin (2-1 ja 2-3 ovat rajattuja, 2-4 ei), ja se on
+   * ehto eikä koriste: rajattu ikkuna näyttää rivit 6–13, joten mitattuna
+   * **tämän kentän ylin rivi jolla on mitään on 8** ja 2-4:n on 4. Siksi
+   * tässä ei ole `plat_steps`iä eikä `power_hi`ta — ne olisivat kehyksen
+   * ulkopuolella, ja rajaus on **crop eikä maski**.
+   */
+  '2-5': {
+    theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
+    chunks: [
+      'start', 'power', 'heat_row', 'walkers', 'pit_s', 'heat_step',
+      'shell', 'heat_ledge', 'coins', 'pit_l', 'corks', 'heat_ramp',
+      'flyer', 'spike_bridge', 'heat_row', 'power', 'pit_plat', 'walker',
+      'run_up', 'goal', 'goal_end',
+    ],
+  },
   '2-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 1,
     chunks: [

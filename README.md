@@ -195,10 +195,18 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 7 KAASUKEHÄ | pilvikerroksen päällä | **SÄÄHERRA**, joka nousee ilmaan jokaisesta osumasta |
 | 8 VIIMEINEN LINNAKE | linnake, ei ulkopuolta | seitsemän uusintaa ja **PIERUKUNINGAS**, joka vastaa osumaan ottamalla seuraavan linnakkeen liikesarjan |
 
-Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: seitsemän
-maailmaa kahdeksasta on kasvanut kahdeksan kentän mittaan, ja viimeinen
-— maailma 2 — kasvaa omilla ehdoillaan. Kentän läpäisy avaa siitä
-lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
+Maailmassa on hernetalo, linnake ja **seitsemän kenttää**: kaikki kahdeksan
+maailmaa ovat kahdeksan kentän mittaisia, eli peli on 64 kenttää. Kentän
+läpäisy avaa siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan
+maailman.
+
+**Maailma 2 haarautuu, ja siellä kahdeksan kenttää tarkoittaa kahta asiaa.**
+Kartalla on kahdeksan solmua kuten muissakin, mutta `2-2` on risteys: HIEKKATIE
+ja LAAVATIE yhtyvät vasta kentässä `2-4`, joten yhtä reittiä kulkeva pelaaja
+kävelee kuusi kenttää ja toista seitsemän. Molemmat luvut ovat portissa
+(`tools/verify.mjs`): jokainen reitti kävelee vähintään kuusi maailman
+kahdeksasta kentästä eikä reittien ero ole yhtä suurempi, eli valinta saa
+piilottaa neljänneksen maailmasta muttei enempää.
 
 **Maailma 8 on eri muotoinen kuin muut, ja se on tarkoitus.** Siinä ei ole
 yhtään lippua: jokainen kahdeksasta kentästä päättyy oveen, ja seitsemän
@@ -213,7 +221,7 @@ vaikeuskäyrässä on **kaksi hengähdyskenttää** yhden sijaan — perustelu o
 [CHANGELOG.md](CHANGELOG.md):ssä ja sääntö on `tools/verify.mjs`:ssä.
 
 Kentät **1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7 ja 7-4…7-7 ovat
-generoituja** — 27 kenttää kuudestakymmenestäkahdesta: rytmi tulee mitatuista
+generoituja** — 27 kenttää kuudestakymmenestäneljästä: rytmi tulee mitatuista
 tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siitä
 onko sen alkuperäisyys tarkistettu korpusta vasten (kaikki 27 on, osumia 0).
 Linnakkeet ja maailman opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.

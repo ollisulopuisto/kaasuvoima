@@ -109,6 +109,57 @@ const WORLD_DEFS = [
       { a: 'w1-7', b: 'w1-f', path: [[17, 7]] },
     ],
   },
+  /*
+   * HIKIHIEKKA, maailma 2 — kahdeksan kenttää, ja pelin ainoa haara.
+   *
+   * TÄMÄ KARTTA KASVOI VIIMEISENÄ, JA SE KASVOI YHDESTÄ PÄÄSTÄ. Seitsemässä
+   * muussa maailmassa kahdeksan kenttää on kahdeksan askelta; täällä ne ovat
+   * kuusi tai seitsemän riippuen siitä kumman tien valitsee, ja siksi kysymys
+   * *mihin* kaksi uutta kenttää pannaan ei ollut makuasia. Kolme paikkaa oli
+   * tarjolla — ennen risteystä, haarojen sisään, tai risteyksen jälkeen — ja
+   * mittaus valitsi viimeisen:
+   *
+   *   **Ennen risteystä** olisi jättänyt LAAVATIEn päättymään 2-M:ään, jonka
+   *   luku on 110,7 eli pienempi kuin 2-1:n 118,6. Kävely joka päättyy
+   *   alemmas kuin alkaa ei nouse, ja `verify.mjs` mittaa nyt muodon
+   *   kävelystä eikä litistetystä rivistä — eli tuo sijoitus olisi ollut
+   *   punainen porttiin asti eikä vain kyseenalainen.
+   *   **Haarojen sisään** olisi kasvattanut sitä epäsuhtaa jota tämä haara
+   *   kantaa jo: reitit olisivat viisi ja kuusi, eli lyhyempi kävely näkisi
+   *   maailmasta viisi kenttää kahdeksasta.
+   *   **Risteyksen jälkeen** korjaa molemmat. Kävelyt ovat kuusi ja seitsemän,
+   *   molemmat nousevat, ja se yhden kentän ero jonka haara on aina maksanut
+   *   on nyt yksi kuudesta eikä yksi neljästä.
+   *
+   * Ja se ostaa yhden asian jota kumpikaan muu sijoitus ei ostaisi:
+   * **paukkupapulla on vihdoin paikka jossa sen ehtii käyttää.** Ennen tätä
+   * murtava tehostus voitettiin 2-M:ssä ja seuraava ovi oli linnake; nyt
+   * palkinnon jälkeen tulee kaksi kenttää, ja 2-4:n muuratun holvin saa auki
+   * vain sillä. Palkittu reitti maksaa siis itsensä takaisin yhteisellä
+   * tiellä, mutta ei kenellekään pakollisena: holvi on kolikoita eikä reitti,
+   * ja `worldProblems`in sääntö 6 mittaa yhä että palkitsematon tie vie
+   * linnakkeeseen asti.
+   *
+   * Solmut ovat parillisilla sarakkeilla 1…17 kuten maailmoissa 6–8. Kartta ei
+   * leventynyt (perustelu on maailman 4 kommentissa), joten tila kahdelle
+   * uudelle solmulle otettiin haarasta: 2-3 ja 2-M siirtyivät **kaksi
+   * saraketta vasemmalle** lähemmäs risteystä ja linnake kaksi oikealle
+   * sarakkeeseen 17. 2-1, 2-2, 2-N ja hernetalo ovat entisillä ruuduillaan.
+   *
+   * RISTEYS ON NYT SYMMETRINEN, ja se on ohjausta eikä koristetta. Molemmat
+   * lähdöt 2-2:sta ovat kulmapisteitä muotoa `[lähtösarake, kohderivi]`, eli
+   * ensimmäinen askel on **pystysuora**: alas hiekkatielle, ylös laavatielle.
+   * Ennen laavatie lähti vaakasuoraan ja hiekkatie pystysuoraan, mikä toimi
+   * (`tryMove` vaatii vain että kaksi linkkiä eivät vaadi samaa nuolta) mutta
+   * piirsi valinnan epäsymmetrisenä. Kaksi tietä joiden pitäisi näyttää
+   * vaihtoehdoilta lähtevät nyt samasta pisteestä vastakkaisiin suuntiin.
+   *
+   * Kalusto istutettiin uudelleen säännön 8 mukaan kuten maailmoissa 6–8: tie
+   * muuttui, joten sen raivattu vyöhyke muuttui, eikä yhtäkään kaktusta
+   * siirretty sen takia miltä se näyttää. 84 vapaata ruutua, **15 pyydettyä ja
+   * 15 istutettua** — tasan se määrä joka kartalla oli ennenkin, eli maisemaa
+   * ei lisätty eikä vähennetty, se siirtyi.
+   */
   {
     id: 'w2',
     name: 'HIKIHIEKKA',
@@ -116,13 +167,13 @@ const WORLD_DEFS = [
     terrain: [
       'SSSSSSSSSSSSSSSSSSSS',
       'SSMSSSSSCSSRSMSMMSSS',
-      'SSSSSSCSSCSSSSSSSSSS',
-      'SSSSSSSRSSSSSSSSSSSS',
-      'SSSSSSSSSSSSSSSSSCSS',
-      'SSSSSSSSSSSSSCSSSSSS',
-      'SSSSSSSSSSSSSSSSSRSS',
-      'SSCSSSSSSSSSSSSSSSCS',
-      'SSSRSSSSSSSSSSSSSSSS',
+      'SSSSSSCSSSSSSSSSSRSS',
+      'SSSSSRSSSSSSSSSSSSSS',
+      'SSSSSSSSSSSSSSSSCSSS',
+      'SSSSSSSSSSCSSSSSSSSS',
+      'SSSSSSSSSSSSSSSSSSSS',
+      'SSCSRSSSSSSSSSSSSSSS',
+      'SSSRSSSSSSSSSSSSSSCS',
     ],
     nodes: [
       { id: 'w2-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
@@ -130,25 +181,32 @@ const WORLD_DEFS = [
       { id: 'w2-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
       { id: 'w2-2', tx: 7, ty: 5, type: 'level', level: '2-2', name: 'HIEKKAMYRSKY' },
       { id: 'w2-n', tx: 9, ty: 7, type: 'level', level: '2-N', name: 'AAVIKON YÖ' },
-      { id: 'w2-3', tx: 11, ty: 3, type: 'level', level: '2-3', name: 'LAAVAKUILU' },
+      { id: 'w2-3', tx: 9, ty: 3, type: 'level', level: '2-3', name: 'LAAVAKUILU' },
       /* The desert mini-boss, on the upper road because that is the measured
-       * harder one — 156 against 124. The fight's own author proposed hanging
+       * harder one — 159 against 124. The fight's own author proposed hanging
        * it off 2-N instead, reasoning that the night level is "the harder way";
        * the meter disagrees, and the reward has to sit on the road that
        * actually costs more or `worldProblems` rejects the map. Which is the
-       * point of measuring it rather than remembering it. */
-      { id: 'w2-m', tx: 13, ty: 3, type: 'level', level: '2-M', name: 'PAROONIEN KUOPPA' },
-      { id: 'w2-f', tx: 15, ty: 5, type: 'fortress', level: '2-F', name: 'LINNAKE 2' },
+       * point of measuring it rather than remembering it. Ja se mitattiin
+       * uudestaan kun maailma kasvoi kahdeksaan: molemmat uudet kentät ovat
+       * rungolla eivätkä kummallakaan reitillä, joten reittien luvut eivät
+       * liikkuneet lainkaan — 159,3 vastaan 124,2, sama järjestys. */
+      { id: 'w2-m', tx: 11, ty: 3, type: 'level', level: '2-M', name: 'PAROONIEN KUOPPA' },
+      { id: 'w2-4', tx: 13, ty: 5, type: 'level', level: '2-4', name: 'SAVIKUOPPA' },
+      { id: 'w2-5', tx: 15, ty: 7, type: 'level', level: '2-5', name: 'PAAHDE' },
+      { id: 'w2-f', tx: 17, ty: 5, type: 'fortress', level: '2-F', name: 'LINNAKE 2' },
     ],
     links: [
       { a: 'w2-s', b: 'w2-1' },
       { a: 'w2-1', b: 'w2-h' },
       { a: 'w2-1', b: 'w2-2' },
       { a: 'w2-2', b: 'w2-n', path: [[7, 7]] },
-      { a: 'w2-n', b: 'w2-f', path: [[15, 7]] },
-      { a: 'w2-2', b: 'w2-3', path: [[11, 5]] },
+      { a: 'w2-n', b: 'w2-4', path: [[13, 7]] },
+      { a: 'w2-2', b: 'w2-3', path: [[7, 3]] },
       { a: 'w2-3', b: 'w2-m' },
-      { a: 'w2-m', b: 'w2-f', path: [[15, 3]] },
+      { a: 'w2-m', b: 'w2-4', path: [[13, 3]] },
+      { a: 'w2-4', b: 'w2-5', path: [[15, 5]] },
+      { a: 'w2-5', b: 'w2-f', path: [[17, 7]] },
     ],
     /*
      * The first fork in the game. 2-N used to hang off the road with no way
@@ -156,14 +214,21 @@ const WORLD_DEFS = [
      * link to the fortress is what turns it into a choice.
      *
      * The low road is the gentler one and pays nothing. The lava road is the
-     * harder one — measured, 156 against 124 — and it is where the desert
+     * harder one — measured, 159 against 124 — and it is where the desert
      * mini-boss and the breaking power-up go. Both start at 2-2 and both end at
-     * the fortress, so taking the low road all the way still finishes world 2.
+     * the same node, so taking the low road all the way still finishes world 2.
+     *
+     * **Ne kaksi tietä yhtyvät nyt kenttään eivätkä linnakkeeseen**, ja se on
+     * 10.8.2026 tehty muutos: `to` on `w2-4`. Haaran ilmoitus ei muuttunut
+     * muuten miksikään — samat reitit, samat omat solmut, sama palkinto — mutta
+     * yhtymäkohta on paikka jossa on peliä eikä ovi. Sen jälkeen molemmat
+     * kulkevat saman kaksi kenttää, mikä on ainoa kohta koko maailmassa jossa
+     * kaksi eri tavalla tänne tullutta pelaajaa tekee saman asian.
      */
     branches: [
       {
         from: 'w2-2',
-        to: 'w2-f',
+        to: 'w2-4',
         routes: [
           { name: 'HIEKKATIE', via: ['w2-n'] },
           { name: 'LAAVATIE', via: ['w2-3', 'w2-m'], reward: 'break' },
@@ -891,6 +956,36 @@ export function tiersOf(world) {
       .map((l) => l.b)[0];
   }
   return tiers;
+}
+
+/**
+ * KÄVELYT — se mitä pelaaja oikeasti kulkee, eikä se mitä kartalla on.
+ *
+ * `tiersOf` litistää haaran yhdeksi askeleeksi, koska maailman *eteneminen* on
+ * yksi askel siinä kohtaa riippumatta siitä kumman tien valitsee. Se on oikea
+ * mitta kartalle ja väärä mitta pelaajalle: haarautuvassa maailmassa ei ole
+ * yhtä kulkua vaan kaksi, eikä kumpikaan niistä ole se litistetty rivi.
+ *
+ * Tämä palauttaa ne kulut sellaisinaan — yksi per täysi reitti alusta
+ * linnakkeeseen, talot kävelemättä kuten `tiersOf`issa, linnake mukana. Maailma
+ * jossa ei ole haaraa palauttaa tasan yhden kävelyn, ja se on merkki merkiltä
+ * sama jono kuin `tiersOf`in, joten seitsemälle maailmalle kahdeksasta tämä ei
+ * ole uusi mitta vaan sama mitta uudella nimellä.
+ */
+export function walksOf(world) {
+  let walks = [{ names: [], nodes: [] }];
+  for (const tier of tiersOf(world)) {
+    if (!tier.branch) {
+      const node = findNode(world, tier.id);
+      for (const w of walks) w.nodes.push(node);
+      continue;
+    }
+    walks = walks.flatMap((w) => tier.branch.routes.map((route) => ({
+      names: [...w.names, route.name],
+      nodes: [...w.nodes, ...route.via.map((id) => findNode(world, id)).filter((n) => n && n.level)],
+    })));
+  }
+  return walks.map((w) => ({ name: w.names.join(' + ') || 'SUORA', nodes: w.nodes }));
 }
 
 /**

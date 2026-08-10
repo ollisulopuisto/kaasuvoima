@@ -7,6 +7,89 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.62 — maailma 2 kahdeksaan: mitä "kahdeksan kenttää" on kun kartta haarautuu
+
+**Peli on 8 maailmaa ja 64 kenttää.** Maailma 2 oli viimeinen, ja se jätettiin
+viimeiseksi siksi että se on ainoa haarautuva maailma — siellä väite
+"kahdeksan kenttää" ei tarkoita samaa kuin muualla.
+
+### Kaksi hylättyä ehdokasta, ja miksi
+
+- **Kahdeksan kenttää joka reitillä — hylätty aritmetiikalla.** Kun runko on
+  `t` kenttää ja kaksi reittiä omistaa omansa, kahdeksan kentän *kävely*
+  vaatii kartalle `15 − t` solmua: maailma 2 olisi tällä rungolla **12
+  kenttää** ja pelin summa 68 eikä 64. **Saavuttamaton ehto ei ole tiukka vaan
+  väärä.**
+- **Kahdeksan solmua ja ei muuta — hylätty löysänä.** Se päästäisi läpi
+  maailman jossa runko on kolme ja sivupolku neljä, eli kahdeksan kenttää
+  joista yksi kävely näkee viisi.
+
+### Valittu: kahdeksan solmua **ja** lattia kävelylle
+
+Jokainen reitti kävelee vähintään **kuusi** maailman kahdeksasta, eikä reittien
+ero ole yhtä suurempi. Kuusi ei ole poimittu luku vaan toinen muoto lauseelle
+*"korkeintaan kaksi kenttää saa olla yhden reitin yksinoikeutta"* — valinta saa
+piilottaa neljänneksen maailmasta eikä enempää. Mitattuna **HIEKKATIE 6,
+LAAVATIE 7**.
+
+### Ja toinen puolisko: muoto on kävelyn ominaisuus, ei kartan
+
+`shapes` luki `tiersOf`, joka litistää haaran yhdeksi askeleeksi — eli maailma
+2:n kohdalla se mittasi **riviä jota kukaan ei kävele**. Se lukee nyt uutta
+`walksOf()`:ia, ja seitsemälle haarattomalle maailmalle tulos on merkki
+merkiltä sama kuin ennen (yksi maailma = yksi kävely), joten mikään ei löystynyt.
+
+### Punainen joka oli löydös eikä muodollisuus
+
+```
+FAIL jokainen kävely nousee   [w2 LAAVATIE 119→126→159→111]
+```
+
+**LAAVATIE päättyi 2-M:ään (110,7), joka on alle 2-1:n (118,6) — se kävely ei
+noussut.** Vika oli olemassa ennen tätä työtä eikä mikään ollut sitä mitannut,
+koska muototesti katsoi litistettyä riviä.
+
+Se mittaus myös **päätti minne uudet kentät menevät**: tienhaaran *jälkeen*,
+ei ennen sitä. Ennen haaraa ne eivät olisi koskeneet tuohon lukuun lainkaan.
+Sivutuotteena paukkupavulle tuli paikka jossa se kuluu (`clay_vault`) ja haaran
+pituusrangaistus pieneni yhdestä neljästä yhteen kuudesta.
+
+### Numerot
+
+- **Reittien pituudet** 4 / 5 → **6 / 7** (kävely sisältää linnakkeen).
+- **Käyrä:** `112,8 · 133,2 · 180,7 · 191,3 · 233,2 · 248,2 · 256,5 · 283,5`.
+  w2 132,5 → **133,2**; marginaalit +20,4 ja +47,5, ja pelin ohuin askel
+  w6→w7 (+8,3) on koskematon.
+- **Vaikeampi reitti mitattuna uudelleen:** LAAVATIE **159,3** vastaan
+  HIEKKATIE **124,2** — *sama kuin ennen*, koska kumpikaan uusi kenttä ei ole
+  reitin oma solmu. Palkinto on yhä mitatusti vaikeammalla tiellä, ja
+  palkitsematon tie pelin läpi on yhä olemassa.
+- **`difficulty.js` kasvoi tasan kahdella rivillä**; muiden **62 kentän pisteet
+  ovat tavu tavulta ennallaan**.
+- **Voimataso 0:** `Jokainen kenttä on läpäistävissä pienimmällä koolla.`
+
+### Sisältö
+
+**2-4 SAVIKUOPPA** on *kuoppa johon kävellään*: lattian ylempi rivi puuttuu,
+alempi ei, joten `checkGaps` lukee käytävän eikä reikää ja vaikeusmittari
+antaa siitä nollan — se mitä se muuttaa on se mihin kaikki muu asettuu.
+`clay_boards` on pelin ainoa palkinto joka on **reitin alapuolella**: lankkukansi
+on tie, kolikot sen alla. **2-5 PAAHDE** on kuumuus metronomina, kolme liekkiä
+kolmella omalla laskurillaan, maan noustessa kolme riviä porttia kohti.
+
+### Löydetty, ei korjattu
+
+**Uudet kentät eivät esittele mitään uutta** (`variety.mjs` MYKKIÄ 0 → 2), ja se
+on rakenteellista: kaikki minkä maailma 2 tietää on jo maailmassa 2, joten uusi
+mekaniikka olisi lainattava myöhemmästä maailmasta ja rikkoisi opetusjärjestyksen.
+Maailman uutuuskeskiarvo 49,3 → 44,7. Tämän nostaminen tarkoittaa uutta sanastoa
+maailmalle jonka opetussuunnitelma on jo täynnä — eri muutos.
+
+Ja **notko 2-4 → 2-5 on 13,1 pistettä**. Ei ohut pelin mittapuulla, mutta portti
+lukee etumerkin, joten kumman tahansa kentän muokkaus voi kääntää sen.
+
+---
+
 ## v26.08.10.60 — kaksi pystykenttää kentiksi, ja neljä velkaa mitattavaksi
 
 ### Pystykentät: 6-3 → 6-K KAIVAUTUMINEN, 7-2 → 7-T TERMIIKKI

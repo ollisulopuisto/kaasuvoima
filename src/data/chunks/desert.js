@@ -212,6 +212,189 @@ export const DESERT_CHUNKS = {
     14: '################',
   }),
 
+  /* ------------------------ savikuoppa: 2-4:n kaivanto ------------------ */
+  /**
+   * KUOPPA JOHON KÄVELLÄÄN, EIKÄ JONKA YLI HYPÄTÄÄN.
+   *
+   * Tähän asti peli on opettanut kuopan yhdellä tavalla: se on reikä, sen yli
+   * mennään, ja sen pohja on kuolema. `pit_s`, `pit_l`, `pit_twin` ja
+   * `pit_croak` ovat kaikki sama lause eri leveyksillä. Tämä on sen vastakohta
+   * ja se maksaa yhden rivin: **lattian yläpinta puuttuu, alapinta ei**. Rivi
+   * 14 on ehjä, joten kaivanto ei ole kuilu vaan käytävä jonka pohjalla
+   * kävellään ruutu alempana kuin reunalla.
+   *
+   * Mitä se ostaa, sanottuna niin että sen voi tarkistaa:
+   *
+   *   - **Validaattori lukee sen oikein ilman poikkeusta.** `checkGaps` etsii
+   *     saraketta jossa kumpikaan lattiarivi ei ole kiinteä; tässä alempi on,
+   *     joten kaivanto ei ole kuilu eikä sitä mitata hyppybudjettia vasten.
+   *     `checkWalls` näkee sisään yhden ruudun laskun ja ulos yhden ruudun
+   *     nousun, mitattua neljää vastaan.
+   *   - **Vaikeusmittari ei anna siitä pistettä**, ja se on oikein: kaivanto ei
+   *     ole vaara vaan maasto. Se mitä se muuttaa on **mihin muu tavara
+   *     asettuu** — kävelijä pohjalla on silmien tasalla, korkki reunalla on
+   *     pään yläpuolella, ja kolikot ovat neljän rivin päässä eivätkä kolmen.
+   *   - **Ja se on ainoa paikka koko pelissä jossa horisontti on lähellä.**
+   *     Aavikko on kaukaisuutta joka kentässä; savikuoppa on se kohta jossa
+   *     maa nousee molemmin puolin, ja siksi 2-4 on ainoa aavikkokenttä joka
+   *     ei ole kinemascopessa (ks. levels/world2.js).
+   *
+   * Kaksi versiota eikä yksi kolmesti, koska kolmesti toistettu palikka on
+   * `tools/variety.mjs`:lle sama ruutu kolmesti. Leveä ja kapea kaivanto
+   * kantavat eri asiat: leveässä on kävelijä, kapeassa närästysliekki jonka
+   * suihku nousee reunan yli.
+   */
+  clay_cut: ck(16, {
+    10: '     o o o o',
+    12: '  c',
+    13: '####   g    ####',
+    14: '################',
+  }),
+  clay_rim: ck(16, {
+    9: '        o o',
+    12: '            k',
+    13: '###  H   #######',
+    14: '################',
+  }),
+
+  /**
+   * LAUDOITETTU KAIVANTO — ja koko pelin ainoa palkinto joka on **alempana**
+   * kuin reitti.
+   *
+   * Puulava on tässä pelissä aina ollut tie ylöspäin: sen päälle noustaan ja
+   * sen päällä on kolikot. Tässä se on kansi. Savikuopan yli on lyöty lankut
+   * penkereen pinnan tasalle, joten reitti kulkee suoraan yli eikä pelaajan
+   * tarvitse tietää kaivannosta mitään — ja koska `-` on yksisuuntainen, sen
+   * läpi pääsee alas painamalla alas ja takaisin ylös hyppäämällä.
+   *
+   * Penger on nostettu rivin verran (`dune_sink_deep`in temppu, sama syy):
+   * kaivannon pohja on rivi 14, joten kansi mahtuu riville 12 ja väliin jää
+   * yksi rivi joka on juuri sen kokoinen että siellä on jotain. Ilman
+   * pengertä lankku olisi kaivannon pohjalla eikä sen päällä.
+   *
+   * **Kolikot ovat molemmin puolin lautaa, ja se on sääntö eikä anteliaisuus.**
+   * Validaattorin "ei portaita tyhjään" katsoo lavarivin *yläpuolelle* neljän
+   * ruudun sisään, joten kansi ilman mitään ylhäällä on kenttä jonka se
+   * hylkää — aivan oikein, koska yli kävelevä pelaaja ei saisi mitään. Ylhäällä
+   * olevat kaksi merkitsevät ylityksen, alla oleva rivi on se mitä uteliaisuus
+   * maksaa.
+   */
+  clay_boards: ck(16, {
+    9: '     o   o',
+    12: '####--------####',
+    13: '####oooooooo####',
+    14: '################',
+  }),
+
+  /**
+   * TIILIHOLVI SAVIKUOPAN POHJASSA — ja ensimmäinen paikka jossa paukkupavun
+   * voi käyttää sen jälkeen kun sen on voittanut.
+   *
+   * `baron_vault` on sama ajatus (muurattu ovi, palkinto takana) ja se on
+   * neljä sekuntia palkinnon jälkeen, eli oppitunti. Tämä on käyttö: se on
+   * yhteisellä tiellä, kaksi kenttää minipomon jälkeen, ja se on siellä
+   * *nimenomaan siksi* että kaksi uutta kenttää tulivat risteyksen jälkeen
+   * eivätkä ennen sitä (perustelu on worlds.js:ssä).
+   *
+   * Muoto on eri kuin `baron_vault`illa eikä vain peilikuva. Se on hylly
+   * johon kiivetään; tämä on **maan tasossa**, holvi jonka katto on se sama
+   * kansi jota pitkin reitti kulkee yli. Neljän ruudun tiilipilari on ainoa
+   * ovi, sen yli pääsee mitatulla nousulla (4 laattaa, sama kuin
+   * `brick_wall`illa jonka pelaaja on ylittänyt 2-2:ssa), ja katto on kolme
+   * riviä holvin lattian yllä — tasan se korkeus jonka isoin keho tarvitsee,
+   * eli sisään murtautunut pelaaja ei jää kattoon kiinni.
+   *
+   * **Se on palkinto eikä reitti**, ja se on rakenteessa eikä lupauksessa:
+   * kansi on kuljettava, holvissa on vain kolikoita, eikä maali ole sen
+   * takana. Palkitsematonta reittiä kulkeva pelaaja kävelee tästä yli
+   * huomaamatta mitään puuttuvan.
+   */
+  clay_vault: ck(16, {
+    9: '     XXXXXXX',
+    10: '     B     X',
+    11: '     B ooo X',
+    12: '     B ooo X',
+    13: G,
+    14: G,
+  }),
+
+  /* --------------------------- paahde: 2-5:n kuumuus -------------------- */
+  /**
+   * KOLME LIEKKIÄ, JA NE OVAT RYTMI EIVÄTKÄ ESTE.
+   *
+   * Närästysliekki on esitelty 2-2:ssa yksittäisenä ja käytetty 2-N:ssä
+   * lyhtynä. Tässä sitä käytetään kolmantena asiana: **metronomina**. Kolme
+   * suihkua kuuden sarakkeen välein on kentän mitassa sama kuin
+   * `heartburn_pair`in kaksi yhdessä palikassa, mutta ero on se että
+   * jokaisella on oma laskurinsa (`Heartburn` käynnistyy satunnaisesta
+   * arvosta), joten kolmea ei voi ohittaa yhdellä opitulla tahdilla. Se on
+   * juuri se lause jonka linnake sanoo seuraavaksi.
+   *
+   * Kolikot ovat suihkujen *välissä* eivätkä niiden päällä, koska ahne linja
+   * ja turvallinen linja ovat tässä sama linja: kolikko on siinä missä on
+   * turvallista seistä ja odottaa.
+   */
+  heat_row: ck(16, {
+    9: '   o o   o o',
+    12: '  H     H     H',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * PAAHTEEN PENGER: kahden ruudun terassi jolla kuljetaan linnaketta kohti.
+   *
+   * Maailman 2 maa on ollut yhtä tasoa kahdeksassa kentässä; viimeisellä
+   * yhteisellä matkalla se nousee. Penger on kaksi laattaa eli puolet
+   * mitatusta noususta, joten se on kuljettava eikä este — ja se on
+   * kokonaisen ruudun mittainen, joten se muuttaa horisontin eikä ole askelma.
+   *
+   * Kolikot ovat pengerryksen päällä kolme riviä ylhäällä: sama hyppy joka
+   * nousee terassille ottaa ne, eli nousu on itsessään palkittu.
+   */
+  heat_step: ck(16, {
+    8: '        o o o',
+    11: '       XXXXXXXXX',
+    12: '       XXXXXXXXX',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * Sama penger toisin päin: hylly joka **alkaa** korkealta ja päättyy
+   * pudotukseen, ja jonka reunalla seisoo liekki. Kolme kolikkoa hyllyn päällä
+   * ovat se rivi joka kertoo mihin asti sillä kannattaa kävellä.
+   *
+   * Liekki on hyllyn *jälkeen* eikä sen päällä, koska hyllyn päällä se olisi
+   * este (kaksi laattaa kapealla tasanteella) ja sen jälkeen se on ajoitus:
+   * pudotus antaa vauhdin, ja vauhdin kanssa liekin ohi mennään tai ei mennä.
+   */
+  heat_ledge: ck(16, {
+    9: '   o o o',
+    11: '   XXXXXXXX',
+    12: '   XXXXXXXX H',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * Ja kahdessa portaassa ylös, tämän maailman viimeinen nousu ennen ovea.
+   *
+   * Kaksi laattaa ja sitten kolmas: kumpikaan askel ei ole mitatun nousun
+   * (neljä laattaa) rajoilla, joten tämä ei kysy mitään uutta — se **näyttää**
+   * jotain. Linnake on kartalla ylempänä kuin mikään muu maailman 2 solmu, ja
+   * tämä on ainoa paikka jossa sen näkee kentän sisältä: maa nousee kolme
+   * riviä eikä laske enää ennen maalitolppaa.
+   */
+  heat_ramp: ck(16, {
+    8: '          o o',
+    10: '        XXXXXXXX',
+    11: '    XXXXXXXXXXXX',
+    12: '    XXXXXXXXXXXX',
+    13: G,
+    14: G,
+  }),
+
   /* --------------------------- minipomoareena -------------------------- */
   /**
    * The papuparoonit's arena: two stone plinths in a sand bowl, one baron on

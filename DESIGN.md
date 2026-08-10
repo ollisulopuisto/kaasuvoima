@@ -347,7 +347,7 @@ kertoo tarkalleen mitä pitäisi säätää.
 
 Nämä eivät ole tyylivalintoja vaan tarkistettavia sääntöjä: `tools/gen-levels.mjs`
 hylkää kentän joka rikkoo niitä. **Tarkistus koskee vain generoituja kenttiä**
-(1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7, 7-4…7-7 — 27 kenttää 60:stä);
+(1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7, 7-4…7-7 — 27 kenttää 64:stä);
 käsintehdyissä säännöt ovat suunnitteluohje, ja jos ne joskus halutaan taata
 koko pelille, sama validaattori pitää ajaa `tools/verify.mjs`:stä.
 

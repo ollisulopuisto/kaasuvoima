@@ -12,19 +12,27 @@ ennen pushia on `node tools/verify.mjs`.
 
 ## Tila 10.8.2026 (iltapäivä)
 
-Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 60 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 64 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa
 geometrian, `node tools/difficulty.mjs` vaikeuskäyrän, ja kaksi uutta mittaria
 — `node tools/curriculum.mjs` (milloin asia opetetaan) ja `node tools/variety.mjs`
 (kuinka usein se sanotaan uudelleen) — eivät ole portteja vaan mittareita.
 
-**Kahdeksan kentän muoto: seitsemän maailmaa kahdeksasta.** Maailmat 1, 3–7 ja
-nyt myös **8** ovat kahdeksan kentän mittaisia. Maailma 8 tuli mittaan
-10.8.2026: seitsemän uusintaa ja megapomo, eli kaksi kenttää lisää
-(**8-4 KONEHOLVI** ja **8-5 SULATTO**), ja vanhat 8-4 ja 8-5 numeroituina
-8-6:ksi ja 8-7:ksi tavu tavulta ennallaan. Jäljellä on vain **maailma 2**
-(haara: kahdeksan kenttää on siellä kuusi tai seitsemän askelta), eli
-**kaksi kenttää** tavoitteesta 64.
+**Kahdeksan kentän muoto: kaikki kahdeksan maailmaa, 64 kenttää.** Maailma 8
+tuli mittaan 10.8.2026 (seitsemän uusintaa ja megapomo, **8-4 KONEHOLVI** ja
+**8-5 SULATTO**), ja **maailma 2** samana päivänä viimeisenä: **2-4 SAVIKUOPPA**
+ja **2-5 PAAHDE**, molemmat sen jälkeen kun tiet yhtyvät.
+
+Haarautuvassa maailmassa "kahdeksan kenttää" ei ole sama väite kuin muualla, ja
+se on nyt kirjoitettu porttiin eikä tähän (`tools/verify.mjs`, EIGHT_DONE-lohko):
+**kahdeksan solmua kartalla, ja jokainen reitti kävelee niistä vähintään kuusi
+niin ettei reittien ero ole yhtä suurempi** — mitattuna HIEKKATIE 6 ja LAAVATIE
+7. Samalla muototesti siirtyi mittaamaan **kävelyä eikä litistettyä riviä**
+(`walksOf`): haarattomassa maailmassa se on merkki merkiltä sama jono kuin
+ennen, maailmassa 2 se on kaksi jonoa, ja kummankin on noustava ja
+hengähdettävä kahdesti. Juuri se mittaus valitsi uusien kenttien paikan: ennen
+risteystä ne olisivat jättäneet LAAVATIEn päättymään 2-M:ään (110,7), joka on
+matalampi kuin 2-1 (118,6), eli kävely ei olisi noussut.
 
 **Kaksi pelitilaa on olemassa.** `AIKA-AJO` (v26.08.10.55): kentän oma ennätys,
 elävä ero kahdeksassa välipisteessä, tilalataus kielletty. `PÄIVÄN PIERU`
@@ -42,10 +50,10 @@ ja 8-F 0,0 %); nyt jokainen rakentuu omasta sanastostaan ja kierrätyslista on
 **Pystykentät ovat tuettuja muttei käytössä** (v26.08.10.52). Sivunvaihtava
 kamera, kiipeävä botti, pystysuora `validateLevel` ja rivipohjainen vaikeus ovat
 olemassa ja testattuja; **yksikään toimitettu kenttä ei ole vielä pysty**, ja
-portti vartioi sitä (`no shipped level ever pages`, 60 kenttää, 0 sivunvaihtoa).
+portti vartioi sitä (`no shipped level ever pages`, 64 kenttää, 0 sivunvaihtoa).
 
 **Käyrä nousee joka maailmassa**, ja luvut ovat linnakkeiden jälkeen
-`112,8 · 132,5 · 180,7 · 191,3 · 233,2 · 251,2 · 253,7 · 290,8`.
+`112,8 · 133,2 · 180,7 · 191,3 · 233,2 · 251,2 · 253,7 · 283,5`.
 **Tiukin askel on w6 → w7, +2,5 pistettä**, ja se on koko pelin ohuin kohta:
 seuraava kenttämuutos kummassa tahansa maailmassa kääntää sen helposti
 laskuksi. 6-F ja 7-F kantavat neljänneksen maailmansa keskiarvosta.
@@ -389,9 +397,10 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on **8 maailmaa ja 62 kenttää**, eli maailmat ovat kasassa, muoto on
-päätetty, seitsemän maailmaa on siinä mitassa ja kenttiä puuttuu **kaksi**:
-maailma 2. Tavoite on 64.
+Nyt on **8 maailmaa ja 64 kenttää**, eli tavoite on täynnä: jokainen maailma on
+kahdeksan kentän mittainen, ja viimeisenä tuli maailma 2 (2-4 ja 2-5,
+10.8.2026). Mitä "kahdeksan kenttää" tarkoittaa haarautuvassa maailmassa, lukee
+portissa — ks. tilannekatsaus tämän tiedoston alussa.
 
 **Muoto ei ole enää auki (v26.08.09.46), ja se on portissa eikä tässä.**
 Kahdeksan kenttää on `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on
@@ -990,16 +999,22 @@ kenttiä joita luetaan joka framessa.
 
 ### Auki 10.8.2026, työjärjestyksessä
 
-Nämä ovat tiedossa ja kirjattu, eikä yhtäkään ole aloitettu.
+Nämä ovat tiedossa ja kirjattu; ✔ merkitsee tehdyn.
 
 1. **MEGABOSS ja maailma 8 kahdeksaan.** Omistajan muotoilu: seitsemän
    linnakepomoa uusintaotteluina ja PIERUKUNINGAS palanneena finaaliksi
    `VALTAISTUINSALI`ssa. Odotti maailmojen 4–7 vapautumista, jotka ovat nyt
    vapaita — tämä on suurin yksittäinen jäljellä oleva sisältötyö.
-2. **Maailma 2 kahdeksaan.** Haarautuva kartta tekee tästä eri tehtävän kuin
-   muista: kahdeksan kenttää on siellä kuusi tai seitsemän askelta riippuen
-   reitistä, ja muotoportti tarvitsee haaralausekkeen ennen kuin maailman voi
-   lisätä nimettyyn listaan.
+2. ✔ **Maailma 2 kahdeksaan** — tehty 10.8.2026 (**2-4 SAVIKUOPPA**, **2-5
+   PAAHDE**). Haarautuva kartta teki tästä eri tehtävän kuin muista, ja se
+   ratkesi kolmeen väitteeseen portissa: kahdeksan **solmua** kartalla, jokainen
+   **reitti** vähintään kuusi kenttää ja reittien ero korkeintaan yksi (6 ja 7),
+   ja muoto mitattuna **kävelystä** eikä litistetystä rivistä. Kaksi asiaa jäi
+   kirjatuksi: uudet kentät tulivat risteyksen jälkeen koska ennen sitä
+   LAAVATIEn kävely ei olisi noussut (päättyisi 2-M:ään, 110,7 < 2-1:n 118,6),
+   ja haaran mitatut luvut eivät liikkuneet lainkaan (159,3 vastaan 124,2),
+   koska kumpikaan uusi kenttä ei ole kummankaan reitin oma. Muutosloki on
+   velkaa merkinnän.
 3. **Oikea pystykenttä maailmaan 7.** Työkalut ovat olemassa (v26.08.10.52) ja
    niiden mukana kahdeksan kohdan ohje: `vertical: true` + `rows`, **tasan 20
    saraketta** (21 kytkee vaakakameran takaisin), peruskallio alimmalle riville,
