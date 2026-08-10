@@ -114,7 +114,7 @@ siirtyy [ROADMAP.md](ROADMAP.md):hen.
 | 1 | vauhti korkeudeksi | Sonic | **kyllä, vahvin** |
 | 2 | ammus joka on lava | Rainbow Islands | ei |
 | 3 | maailman vaihto lennossa | Giana Sisters | ei |
-| 4 | litteä maailma käännetään | Super Paper Mario | harkintaan — lisätiedot alla |
+| 4 | litteä maailma käännetään | Super Paper Mario | **päätetty 10.8.** → ROADMAP |
 | 5 | vahinko muuttaa muotoa | Wario Land | epävarma |
 | 6 | syö vihollinen, saat kyvyn | Kirby | **kyllä** |
 | 7 | syöksy jolla on lataus | Celeste | ehkä |
@@ -122,7 +122,7 @@ siirtyy [ROADMAP.md](ROADMAP.md):hen.
 | 9 | painovoiman kääntö | VVVVVV | ei |
 | 10 | putoavat lohkot | Boulder Dash | **kyllä, yhdelle laattatyypille** |
 | 11 | ammuksen voi ratsastaa | Mr. Gimmick | harkintaan |
-| 12 | kaikki reagoi kaikkeen | Spelunky | harkintaan — läpiajo alla |
+| 12 | kaikki reagoi kaikkeen | Spelunky | **päätetty 10.8.** → ROADMAP |
 
 ### Miksi kohta 1 on vahvin, omistajan sanoin
 
