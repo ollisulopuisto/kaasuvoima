@@ -13,7 +13,8 @@
  *               arranged around it
  *   6-2  147,5  the dip — teeth in the floor, blocks over it, and only two
  *               holes in the whole level
- *   6-3  271,5  the dance: eight holes and everything the world owns
+ *   6-K  247,3  the dig: the world's one level that goes down, where the
+ *               punishment is in the terrain because the fall is not one
  *   6-F  395,4  the crypt, and a boss made of the floor he is standing on
  *
  * World mean 264,2, which is +8,0 on world 5 — the smallest step on the curve,
@@ -76,9 +77,9 @@ export const WORLD6_LEVELS = {
    * standing in the floor, which cost a power level and not a life.
    *
    * That is what a breather is allowed to be in the *last* world. Measured, it
-   * is 147,5 against 242,5 and 271,5 either side of it, and almost all of the
-   * difference is gaps: 48 against 124 and 151. The enemies barely move (66
-   * against 82 and 75), which is the point — the level is not emptier, it is
+   * is 147,5 against 242,5 and 247,3 either side of it, and almost all of the
+   * difference is gaps: 48 against 124 either side. The enemies barely move
+   * (66 against 82), which is the point — the level is not emptier, it is
    * survivable.
    *
    * It is 6-2 rather than 6-1 or 6-3 for the same reason 4-2 is: the breather
@@ -94,24 +95,120 @@ export const WORLD6_LEVELS = {
     ],
   },
   /*
-   * The peak, and it is eight holes. Every one of them is the same five tiles;
-   * what changes is what is over them and what is between them.
+   * KAIVAUTUMINEN — pelin ensimmäinen alaspäin menevä kenttä, ja se seisoo
+   * sen kentän paikalla jolla oli koko pelin heikoin peruste.
    *
-   * The two `flat8`s are the level's whole pacing, and they are eight columns
-   * of absolutely nothing. Both sit where three holes would otherwise have run
-   * together, which is the one arrangement measured to break the promise
-   * ("kuilu sarakkeessa 93" at power level 0). A breath is cheaper than a
-   * sixteen-column chunk and it is what the geometry actually needs — the run-up
-   * is the resource, not the ground.
+   * Omistajan pyyntö: *"kun pystykentät toimivat, olisi hauskaa saada
+   * kaivautumiskenttä jonnekin luumaailman tapaiseen, sellainen jossa mennään
+   * oikeasti alaspäin."*
+   *
+   * ## Miksi tämä korvaa juuri 6-3:n
+   *
+   * Vanha 6-3 oli maailman huippu ja kahdeksan kuoppaa: sama viiden ruudun
+   * kuoppa kahdeksan kertaa, ja lista siitä mitä maailmassa on. `node
+   * tools/variety.mjs` mittaa sen, ja luku ei ole mielipide: **6-3 oli koko
+   * pelin vähiten uusi kenttä, uutuus 11,7 % omalle maailmalleen ja 10,5 %
+   * pelille**, ja 84,6 % sen muodoista oli 6-1:n muotoja. Se oli niin
+   * yksiselitteisesti pelin toistavin kenttä, että `variety.mjs` valitsi sen
+   * itse oman ansankokeensa koekentäksi.
+   *
+   * Mitä siitä jää voimaan: kaksi asiaa, ja molemmat elävät edelleen
+   * naapureissaan. **Kuoppa on aina viisi ruutua** mitattua kuuden budjettia
+   * vasten (6-1, 6-2) ja **kolmea kuoppaa ei ketjuteta** — se `flat8`in koko
+   * perustelu, "kuilu sarakkeessa 93". Kumpikaan ei ollut 6-3:n oma keksintö
+   * vaan maailman sääntö, ja maailma pitää ne ilman sitä.
+   *
+   * ## Miksi tämä ei ole pilvikenttä ylösalaisin (IDEAS.md I)
+   *
+   * **Ylöspäin virhe maksaa sivun; alaspäin se kantaa eteenpäin, väärään
+   * paikkaan.** Kiipeilyssä pudotus vie takaisin sinne mistä tulit ja
+   * kiivetään uudestaan, joten rangaistusta ei tarvitse rakentaa: se on
+   * matkassa. Kaivautuessa painovoima on *puolellasi* ja vie sinut eteenpäin
+   * joka tapauksessa — pudotus ei siis maksa mitään, ellei maasto maksata.
+   * Siksi tämän kentän rangaistus on maastossa eikä putoamisessa, ja se on
+   * mitattavissa: **7 riviä piikkejä** siellä minne väärä pudotus vie, kun
+   * pilvikentässä on nolla tappavaa ruutua.
+   *
+   * Ja luulaaksolla oli tähän sanasto valmiina. **Alaspäin mureneva lauta on
+   * ovi eikä ansa**: `%` kahdessa käytävän lattiassa (rivit 25 ja 33) on
+   * oikotie alempaan käytävään — sille astutaan tahallaan. Vaakakentässä sama
+   * lauta on se joka pettää alta.
+   *
+   * ## Muoto: kuilu on reitti, käytävät ovat kenttä
+   *
+   * Sarake 3 on kuilu ja se on auki koko matkan; sarakkeet 0–2 ovat länsiseinää
+   * (`X`), ja sen alla, pohjalla, on maalikammio. Massa on sarakkeista 4–19
+   * yhtenä luuna pohjakallioon asti, ja siihen on louhittu kahdeksan käytävää
+   * itään. **Reitti alas on astua kuilun puoleiselta reunalta** — se on tämän
+   * kentän maareitti, ja se on se jonka botti todistaa voimatasolla 0
+   * (`tools/playable.mjs`). Käytävät ovat vapaaehtoisia täsmälleen kuten
+   * vaakakentän ylätasot ovat: siellä ovat kolikot, ovet ja hampaat.
+   *
+   * Kerrokset ovat neljän rivin välein, eikä se ole sisustusta vaan kaksi
+   * mitattua ehtoa yhdessä: käytävän on oltava kolme riviä korkea (isoin keho
+   * on kolme riviä, `HEAD`), ja neljän ruudun askelma on tasan se mitä mitattu
+   * hyppy nousee (`wallTiles`). **Jokaisesta käytävästä pääsee siis vielä
+   * takaisin ylempään** — juoksuhypyllä, ei paikaltaan — ja se on koko
+   * rangaistus sanottuna geometriana: väärä pudotus ei maksa kenttää vaan
+   * kiipeämisen takaisin. Vaikeusmittari laskee saman asian: neljän ruudun
+   * askelma vaatii vauhdin, ja tämän kentän pisteistä puolet tulee siitä.
+   *
+   * `!` on ensimmäisen käytävän katossa, riviltä 6, eli korkeuden
+   * ensimmäisessä neljänneksessä lähdöstä kulkusuuntaan mitattuna. Se on myös
+   * se palkinto joka maksaa pinnan: pinnalta pääsee alas mutta ei takaisin
+   * ylös (viisi riviä, budjetti neljä), joten pinta on umpiperä ja
+   * DESIGN.md kohdan 5 pystymuoto vaatii siltä jotain. Kolikko rivillä 3
+   * maksaa saman seinän harjalle.
    */
-  '6-3': {
-    theme: 'bone', bg: 'bones', music: 'bone',
-    chunks: [
-      'start', 'bone_dance', 'power', 'bone_grave', 'bone_wisp', 'flat8',
-      'bone_grave', 'bone_marrow', 'bone_jaws', 'bone_grave', 'bone_wisp',
-      'flat8', 'bone_grave', 'bone_ribs', 'bone_stones', 'bone_jaws',
-      'bone_marrow', 'bone_grave', 'bone_wisp', 'bone_dance', 'bone_ridge',
-      'run_up', 'goal', 'goal_end',
+  '6-K': {
+    theme: 'bone', bg: 'bones', music: 'bone', vertical: true,
+    rows: [
+      '                    ',
+      '                    ',
+      '                    ',
+      '   o                ',
+      '        1           ',
+      'XXX ################',
+      'XXX     !    #######',
+      'XXX        o #######',
+      'XXX      ^^^ #######',
+      'XXX ################',
+      'XXX      ###########',
+      'XXX      ###########',
+      'XXX   ^^ ###########',
+      'XXX ################',
+      'XXX              ###',
+      'XXX           oo ###',
+      'XXX     ^^^^g    ###',
+      'XXX ################',
+      'XXX       ##########',
+      'XXX       ##########',
+      'XXX    ^^ ##########',
+      'XXX ################',
+      'XXX            #####',
+      'XXX          o #####',
+      'XXX       ^^g  #####',
+      'XXX ##%%%###########',
+      'XXX      ###########',
+      'XXX      ###########',
+      'XXX      ###########',
+      'XXX ################',
+      'XXX               ##',
+      'XXX             oo##',
+      'XXX     ^^^ x ^^^ ##',
+      'XXX #########%%%####',
+      'XXX             ####',
+      'XXX  o          ####',
+      '      ^^        ####',
+      '    ################',
+      '                    ',
+      '                    ',
+      '                    ',
+      '    ################',
+      '    ################',
+      ' F  ################',
+      '####################',
+      '####################',
     ],
   },
   /*

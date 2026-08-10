@@ -12,11 +12,24 @@
  * nimenomaan se osa jonka jakaminen kannattaa, ja `boss_arena_big`illa on oma
  * pitkä perustelunsa siitä miksi sen kannet ovat siellä missä ovat.
  *
- * Mitä tänne jää tilapäisesti: `fort_*`-käytävät. 1-F, 3-F ja 8-F eivät enää
- * käytä niitä; 2-F, 4-F, 5-F, 6-F ja 7-F käyttävät, kunnes niiden soittolistat
- * vaihdetaan. Kun viimeinenkin on vaihtunut, nämä ovat kuollutta koodia ja
- * kuuluvat pois samalla perusteella jolla `bone_twin` poistettiin: palikka jota
- * kukaan ei saa asettaa on huonompi kuin ei palikkaa.
+ * Mitä tänne jää tilapäisesti: `fort_*`-käytävät. Ne kuuluvat pois samalla
+ * perusteella jolla `bone_twin` poistettiin — palikka jota kukaan ei saa
+ * asettaa on huonompi kuin ei palikkaa — ja **kaksi niistä lähti 10.8.2026**,
+ * `fort_blocks` ja `fort_trench`, koska mitattuna yksikään kenttä ei asettanut
+ * niitä.
+ *
+ * Loput viisi jäivät, ja se on mittaustulos eikä armo. Muutosloki väitti
+ * (v26.08.10.55) että kaikki seitsemän ovat kuollutta koodia; kenttädatasta
+ * laskettuna maailma 8 asettaa niistä viisi yhä — `fort_gap` kahdeksassa
+ * paikassa (8-1, 8-3, 8-4, 8-5), `fort_spikes` kahdessa ja `fort_hall`,
+ * `fort_pillars` ja `fort_burn` kukin kerran. Väite oli siis totta siitä
+ * *linnakekentästä* (`x-F`) jota se katsoi ja epätosi koko pelistä, ja ero on
+ * juuri se jonka takia `verify.mjs` laskee tämän nyt itse eikä lue sitä
+ * mistään: **käyttämätön palikka on kysymys jonka data osaa vastata.**
+ *
+ * `fort_power` ei ole tässä joukossa eikä ole lähdössä: se on koko pelin
+ * jaetuin palikka, kahdeksassa kentässä neljässä maailmassa, ja se on
+ * DESIGN.md kohdan 5 "perustehostus on aina lähellä alkua" konkreettinen muoto.
  */
 
 import { ck, G } from './common.js';
@@ -34,16 +47,6 @@ export const FORTRESS_CHUNKS = {
     12: '       k',
     13: '####      ######',
     14: '####WWWWWW######',
-  }),
-  fort_blocks: ck(16, {
-    0: G,
-    1: G,
-    5: '    BBBB',
-    6: '    B  B',
-    9: '  BB?BBB',
-    12: '            g',
-    13: G,
-    14: G,
   }),
   fort_spikes: ck(16, {
     0: G,
@@ -66,20 +69,6 @@ export const FORTRESS_CHUNKS = {
     12: 'XX    f     XX',
     13: G,
     14: G,
-  }),
-  /**
-   * The trench. Nine tiles of lava, one plank in the middle, and the spikes on
-   * the near lip so the run-up has to be measured instead of taken — two
-   * three-tile hops rather than one long one, which is a different skill and
-   * the one a last fortress should be asking about.
-   */
-  fort_trench: ck(16, {
-    0: G,
-    1: G,
-    10: '      ---',
-    12: ' ^^',
-    13: '###         ####',
-    14: '###WWWWWWWWW####',
   }),
   /**
    * The factory catwalk, rebuilt over lava. There it cost you the fall; here it

@@ -30,11 +30,19 @@ const args = process.argv.slice(2);
 const only = args.find((a) => !a.startsWith('--')) || null;
 /*
  * Report only, unless asked otherwise. This bot is a heuristic: it runs right,
- * jumps, and that is the whole repertoire. It cannot hop from floating platform
- * to floating platform, duck, enter a pipe, kick a shell or wait for a moving
- * one — and several levels are built around exactly those. Letting a heuristic
- * fail the build would mean hand-made levels get "fixed" to suit a bad bot,
- * which is the wrong way round. --strict is for when you want a gate anyway.
+ * jumps, and that is the whole repertoire. It cannot duck, enter a pipe, kick a
+ * shell or wait for a moving one — and several levels are built around exactly
+ * those. Letting a heuristic fail the build would mean hand-made levels get
+ * "fixed" to suit a bad bot, which is the wrong way round. --strict is for when
+ * you want a gate anyway.
+ *
+ * **Se gate on nyt olemassa muualla, ja se on tarkoituksellisesti eri asia.**
+ * 10.8.2026 alkaen `tools/verify.mjs` vaatii että jokainen kentän 60:stä on
+ * läpäistävissä voimatasolla 0 — sama botti, sama moottori, kaatava portti.
+ * Tämä työkalu jäi silti raportiksi, koska sen tehtävä on toinen: portti sanoo
+ * *läpi vai ei*, tämä sanoo **missä sarakkeessa ja kuinka pitkälle**, ja
+ * kertoo lisäksi mikä aukeaisi tuplahypyllä. Kun portti punastuu, tämä on se
+ * komento jolla katsotaan miksi.
  */
 const STRICT = args.includes('--strict');
 const FRAMES = Number(args[args.indexOf('--frames') + 1]) || 7000;
@@ -254,8 +262,8 @@ if (demanding.length) {
 if (broken.length) {
   console.log(`EI LÄPI EDES TUPLAHYPYLLÄ: ${broken.join(', ')}`);
   console.log('Avaa nämä ensin — mutta katso kartta ennen kuin muutat mitään.');
-  console.log('Botti hyppää suoraan eteenpäin eikä osaa käyttää kelluvia lavoja,');
-  console.log('joten lavojen yli kulkeva reitti näyttää sille umpikujalta.\n');
+  console.log('Botti juoksee oikealle ja hyppää. Se osaa askelman alas ja kuilun');
+  console.log('astinkiven, mutta ei kyykistyä, putkea, kuoren potkua eikä odottaa.\n');
   if (STRICT) process.exit(1);
 }
 if (!demanding.length) console.log('Jokainen kenttä on läpäistävissä pienimmällä koolla.\n');

@@ -545,6 +545,44 @@ class Game {
       this.toast('WARP VAATII DEBUG-RUUDUN (9)');
       return;
     }
+    /*
+     * SAMA NÄPPÄIN TARKOITTAA "OHITA", JA KONTEKSTI PÄÄTTÄÄ MITÄ.
+     *
+     * Kentässä se ohittaa kentän, kartalla maailman. Numerorivi on täynnä
+     * (1–0 ovat kaikki varattuja), ja uusi näppäin olisi joka tapauksessa
+     * väärä ratkaisu: kaksi näppäintä joista toinen ohittaa kentän ja toinen
+     * maailman on kaksi asiaa muistettavaksi siellä missä yksi riittää.
+     *
+     * **Kentän ohittaminen on se jota testaaminen oikeasti tarvitsee.** Maailman
+     * warppi vie maailman alkusolmuun, ja siitä eteenpäin `isLinkOpen` vaatii
+     * että jompikumpi pää on selvitetty — eli päästäkseen kenttään 4-3 piti
+     * pelata 4-1 ja 4-2 läpi. Juuri se on mahdotonta silloin kun ohitettava
+     * kenttä on se joka on rikki.
+     *
+     * Ohitus kulkee `finishLevel`in läpi eikä oikoteitä sen ohi: kenttä
+     * merkitään selvitetyksi, pelinappula kävelee, seuraava polku aukeaa ja
+     * kortti jää saamatta samalla koodilla jolla maali sen antaisi. Oikotie
+     * olisi toinen tapa läpäistä kenttä, ja kaksi tapaa eroaa aina lopulta.
+     */
+    /*
+     * `pendingNode` on ehto eikä varmistus. Kenttä voi olla ruudulla ilman
+     * karttasolmua kahdessa tapauksessa — päivän yritys ja suoraan rakennettu
+     * `LevelScene` (jollaisia portti tekee kymmeniä) — eikä kummallakaan ole
+     * kenttää jonka voisi merkitä selvitetyksi. Silloin tämä näppäin tarkoittaa
+     * yhä sitä mitä se ennenkin tarkoitti, eli maailmaa.
+     *
+     * Tämä ehto **löytyi punaisesta**: ilman sitä kaksi vanhaa väitettä kaatui,
+     * koska ne rakentavat kentän suoraan ja odottivat maailmawarppia.
+     */
+    if (this.scene instanceof LevelScene && !this.dailyRun && this.pendingNode) {
+      const id = this.scene.id;
+      this.state.debugWarped = true;
+      this.persist();
+      this.toast(`OHITETTU: ${id} (PISTETAULU POIS)`);
+      Sfx.play('powerup');
+      this.finishLevel({ cleared: true, card: null });
+      return;
+    }
     const next = (this.state.world + 1) % WORLDS.length;
     this.state.world = next;
     this.state.worldsOpen = Math.max(this.state.worldsOpen, next + 1);

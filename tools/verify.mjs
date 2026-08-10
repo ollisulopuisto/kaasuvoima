@@ -3147,7 +3147,14 @@ const report = await page.evaluate(async () => {
     const budget = await (await fetch('/tools/jump-budget.json')).json();
     const perLevel = [];
     for (const id of levelIds()) {
-      const problems = validateLevel(getLevel(id).rows, budget);
+      /* Akseli luetaan kentän omasta lipusta eikä ruudukon muodosta: korkea
+       * kenttä on kolme huonetta päällekkäin ja pystykenttä on yksi korkea
+       * huone, eikä ruudukko erota niitä. Ilman tätä `6-K` ja `7-T` luettaisiin
+       * vaakasäännöillä, jotka lukevat rivin 13 ja raportoivat seitsemän
+       * ongelmaa joista yksikään ei ole totta (mitattu koekentällä lohkossa
+       * "PYSTYKENTTÄ, JA KOLME TYÖKALUA…"). */
+      const level = getLevel(id);
+      const problems = validateLevel(level.rows, budget, { vertical: !!level.vertical });
       if (problems.length) perLevel.push({ id, problems });
     }
     // Every level is clean as of v26.08.08.15, so any violation from here on is
@@ -3601,7 +3608,14 @@ const report = await page.evaluate(async () => {
    * kenttä joka vaatisi sitä jäisi tähän kiinni.
    */
   {
-    const handmade = levelIds().filter((id) => /^[678]-/.test(id));
+    /* Pystykentät jäävät pois, eivätkä vapautuksena vaan siksi että tämä botti
+     * mittaisi niistä väärää asiaa: se juoksee oikealle, ja kahdenkymmenen
+     * sarakkeen kentässä se on seinään käveleminen kahdessa sekunnissa. Sama
+     * lupaus — maareitti aukeaa voimatasolla 0, `finishLevel` laukeaa — pätee
+     * niihin täsmälleen yhtä kaatavana, ja se ajetaan kiipeilijällä lohkossa
+     * "pystykentät kentissä". Yksikään kenttä ei siis putoa listalta. */
+    const { getLevel: levelDef } = await import('/src/data/levels.js');
+    const handmade = levelIds().filter((id) => /^[678]-/.test(id) && !levelDef(id).vertical);
     const rows = [];
     for (const id of handmade) {
       reset({ type: null, level: 0 });
@@ -3674,11 +3688,20 @@ const report = await page.evaluate(async () => {
      * silmukka ei pudottanut yhtään hiljaa) ja **niitä on vähintään se määrä
      * mikä pelissä tänään on**. Jälkimmäinen on lattia eikä yhtäsuuruus, joten
      * maailman 8 neljä puuttuvaa kenttää nostavat sitä eivätkä kaada tätä.
+     *
+     * **Ja lattia lasketaan kaikista kentistä, ei vain tässä ajetuista.**
+     * Pystykentät ajetaan kiipeilijällä ("pystykentät kentissä"), koska tämä
+     * botti juoksee oikealle; jos ne vain putoaisivat tästä silmukasta, lattia
+     * laskisi kahdella ja väite kattaisi hiljaa kaksi kenttää vähemmän. Luku 22
+     * on siis edelleen se mitä maailmoissa 6–8 on, ja jakauma sanotaan ääneen.
      */
+    const climbers = levelIds().filter((id) => /^[678]-/.test(id) && levelDef(id).vertical);
     expect('maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0',
-      rows.length === handmade.length && rows.length >= 22 && stuck.length === 0,
+      rows.length === handmade.length && rows.length + climbers.length >= 22
+      && stuck.length === 0,
       rows.length
-        ? `${rows.length} kenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+        ? `${rows.length} vaakakenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+          + ` — ja ${climbers.length} pystykenttää kiipeilijällä (${climbers.join(' ') || '—'})`
         : 'ei 6-, 7- eikä 8-kenttiä lainkaan');
   }
 
@@ -3837,12 +3860,19 @@ const report = await page.evaluate(async () => {
         w,
       };
     };
-    const levels = ['7-1', '7-2', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 13) }));
+    /* Kaksi eikä kolme, ja se on rajaus eikä löysennys: `7-2`:n paikalla on
+     * nyt pystykenttä `7-T`, jossa ei ole riviä 13 sen enempää kuin
+     * lattiariviäkään — `shares` lukisi siitä mielivaltaisen rivin ja
+     * raportoisi luvun joka ei mittaa mitään. Sama väite tehdään sille omalla
+     * akselillaan lohkossa "pystykentät kentissä": puolet sen jalansijasta on
+     * pakattua pilveä, bonushuoneen nollaa vastaan. Väite koskee siis edelleen
+     * jokaista tämän maailman omaa kenttää. */
+    const levels = ['7-1', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 13) }));
     const garden = shares(CHUNKS.sky_garden.rows, 13);
     const worstGround = levels.reduce((m, l) => Math.min(m, l.ground), 100);
     const worstPlank = levels.reduce((m, l) => Math.max(m, l.plank), 0);
     expect('pilvimaailmassa on lattia, bonushuoneessa ei — mitattuna molemmat',
-      levels.length === 3 && worstGround >= 80 && worstPlank <= 25
+      levels.length === 2 && worstGround >= 80 && worstPlank <= 25
       && garden.ground === 0 && garden.plank === 100,
       `${levels.map((l) => `${l.id} maata ${l.ground.toFixed(0)} % / lautaa `
         + `${l.plank.toFixed(0)} % (${l.w} saraketta)`).join(', ')}`
@@ -3875,7 +3905,13 @@ const report = await page.evaluate(async () => {
      * putoamaan lattiaan asti — sukellus jonka jalat ovat jo kannen päällä ei
      * mittaa mitään, koska se laskeutuu sille kannelle. */
     let top = null;
-    for (const id of ['7-1', '7-2', '7-3']) {
+    /* Sama rajaus kuin kohdassa 3 ja samasta syystä: pystykentässä `7-T`:ssä
+     * rivit 0..12 eivät ole taivas vaan kiipeilyä, ja tämä silmukka etsii
+     * maailman ylintä *lautaa lattian yläpuolelta*. Se löytäisi sieltä lavan
+     * riviltä 3 ja mittaisi sukelluksen kentässä jossa ei ole lattiaa mihin
+     * sukeltaa. `cloud_anvil` on edelleen `7-3`:ssa, eli väite mittaa saman
+     * kannen kuin ennen. */
+    for (const id of ['7-1', '7-3']) {
       const rows = getLevel(id).rows;
       for (let y = 0; y < 13 && (!top || y < top.y); y++) {
         for (let x = 0; x < rows[y].length - 1; x++) {
@@ -3963,7 +3999,13 @@ const report = await page.evaluate(async () => {
     const { tiersOf } = await import('/src/data/worlds.js');
     const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
 
-    const ids = levelIds();
+    /* Pystykentät pois vertailuluvusta, ja se on rajaus eikä vapautus: jokainen
+     * väite alla lukee riviä 13 ("lattia") ja kysyy mitä sen edessä on
+     * *sivusuunnassa*. Kiipeilyssä ei ole riviä 13 sen enempää kuin
+     * lattiariviäkään, ja `routeOf` palauttaisi sille viisi riviä ruudukon
+     * pohjalta — vertailuluku laskettaisiin siis ruudukosta jota ei ole. Väite
+     * on vaakakenttien väite ja mitataan vaakakentistä. */
+    const ids = levelIds().filter((id) => !getLevel(id).vertical);
     const inWorld = (n) => ids.filter((id) => id.startsWith(`${n}-`));
     const w8 = inWorld(8);
     const FLOOR = 13;
@@ -7707,6 +7749,11 @@ const report = await page.evaluate(async () => {
   {
     const scores = await import('/src/core/scores.js');
     reset();
+    /* Tämä lohko koskee **maailmawarppia**, ja sama näppäin tarkoittaa
+     * kentässä kentän ohitusta. Edellinen testi on voinut jättää ruudulle
+     * kentän, joten kohde sanotaan tässä ääneen sen sijaan että se
+     * perittäisiin. */
+    game.pendingNode = null;
     game.debug = false;
     const world0 = game.state.world;
     game.debugWarp();
@@ -7730,6 +7777,68 @@ const report = await page.evaluate(async () => {
     scores.clearScores();
   }
 
+  /* ---- kentän ohitus, sama näppäin eri paikassa ---- */
+  /*
+   * Omistaja kysyi tätä nimenomaan siksi että maailman warppi ei riitä
+   * testaamiseen: se vie maailman **alkusolmuun**, ja siitä eteenpäin
+   * `isLinkOpen` vaatii että jompikumpi pää on selvitetty. Kenttään 4-3
+   * pääsemiseksi piti siis pelata 4-1 ja 4-2 läpi — mahdotonta juuri silloin
+   * kun ohitettava kenttä on se joka on rikki.
+   *
+   * Kolme väitettä, ja kolmas on se joka pitää tämän rehellisenä:
+   *   1. kentässä ohitus merkitsee **sen** kentän selvitetyksi eikä vaihda
+   *      maailmaa
+   *   2. kartalla sama näppäin tekee yhä sen mitä ennenkin
+   *   3. ohitus kulkee `finishLevel`in läpi, joten se avaa seuraavan polun
+   *      samalla koodilla jolla maali sen avaisi — oikotie olisi toinen tapa
+   *      läpäistä kenttä, ja kaksi tapaa eroaa aina lopulta
+   */
+  {
+    const worldmap = await import('/src/data/worlds.js');
+    reset();
+    game.debug = true;
+    game.state.world = 3;                       // maailma 4
+    const w4 = worldmap.WORLDS[3];
+    const first = w4.nodes.find((n) => n.level);
+    game.state.node = first.id;
+    game.setScene(new LevelScene(game, first.level));
+    game.pendingNode = first;                   // kartalta tultaessa tämä on asetettu
+    /* `reset()` korvaa `finishLevel`in tyhjällä funktiolla, koska useimmat
+     * testit eivät halua kentän päättyvän. Tämä testi haluaa nimenomaan sen:
+     * koko väite on että ohitus kulkee oikeaa reittiä. Oma ominaisuus pois,
+     * niin prototyypin oikea metodi näkyy taas. */
+    delete game.finishLevel;
+    const worldBefore = game.state.world;
+    game.debugWarp();
+
+    const skipped = game.state.cleared[first.id] === true;
+    const stayed = game.state.world === worldBefore;
+    const marked = game.state.debugWarped === true;
+    expect('ohitus kentässä merkitsee sen kentän eikä vaihda maailmaa',
+      skipped && stayed && marked,
+      `${first.level} selvitetty ${skipped}, maailma ${worldBefore}->${game.state.world}, merkitty ${marked}`);
+
+    /* Ja seuraava polku on auki, koska ohitus kulki oikeaa reittiä. */
+    const link = w4.links.find((l) => l.a === first.id || l.b === first.id);
+    const map = new (await import('/src/scenes/worldmap.js')).WorldMapScene(game);
+    expect('ohitettu kenttä avaa seuraavan polun kuten maali avaisi',
+      !!link && map.isLinkOpen(link),
+      link ? `${link.a}->${link.b} auki ${map.isLinkOpen(link)}` : 'ei linkkiä');
+
+    /* Kartalla sama näppäin tarkoittaa yhä maailmaa. */
+    reset();
+    game.debug = true;
+    const before = game.state.world;
+    game.toWorldMap();
+    game.debugWarp();
+    expect('kartalla ohitusnäppäin vie yhä seuraavaan maailmaan',
+      game.state.world === (before + 1) % worldmap.WORLDS.length,
+      `${before} -> ${game.state.world}`);
+
+    game.debug = false;
+    game.state.debugWarped = false;
+  }
+
   /* ----------------------- tauko ei jää jumiin --------------------------- */
   /* A pause is something that happened to a level, not a mode the machine is
    * in. Warping out from under the pause screen used to leave `paused` true on
@@ -7744,6 +7853,9 @@ const report = await page.evaluate(async () => {
     reset();
     game.debug = true;
     game.setScene(new LevelScene(game, '1-1'));
+    /* Ilman solmua tämä on maailmawarppi, ja se on se jonka tämä testi
+     * tarkoittaa: kenttä on tässä vain lyhin tapa saada tauko päälle. */
+    game.pendingNode = null;
     game.paused = true;
     game.debugWarp();
     const cleared = game.paused === false;
@@ -8658,12 +8770,24 @@ const report = await page.evaluate(async () => {
      * they only reach full alpha where they land on the stacked outline, and a
      * puff of gas behind an enemy is not part of its body. */
     const ART = new Set([
-      '122,76,24', '248,248,248', '16,16,24',
-      '200,200,216', '60,52,80', '88,76,116', '42,36,56', '90,80,64',
+      '248,248,248', '16,16,24',
+      '200,200,216', '90,80,64',
       '232,224,200', '168,152,120', '216,168,96', '156,106,40',
-      '138,90,42', '92,58,22',
-      '60,32,50', '106,60,88', '74,44,24', '200,160,88', '255,208,72',
-      '106,68,36',
+      '255,208,72',
+      /* Neljä lajia, jotka menivät kontrastikynnyksen alle ja maalattiin
+       * uudestaan 10.8.2026. Vanhat sävyt lähtivät tästä listasta samalla,
+       * koska "jokainen väri jolla vihollisen runko on maalattu" on väite ja
+       * väri jota mikään ei enää maalaa tekee siitä epätoden — ja koska juuri
+       * tämä lista on se joka päättää mikä on ruumista ja mikä ei.
+       *
+       * piikkiukko: kylläinen violetti harmaanvioletin tilalle */
+      '240,40,200', '168,12,144', '120,4,108',
+      // ruskea pilvi: kellertävä myrkkyruskea maanruskean tilalle
+      '180,164,16', '108,96,4',
+      // ummetuskorkki: kumitulpan runko, ja korkki yhä sen päälaella
+      '48,96,200', '28,56,120', '16,28,72',
+      // papuparooni: luumu ruskean tilalle, hattu mukana
+      '156,16,96', '88,8,52', '60,8,36', '108,16,68', '240,184,144',
       // kurnuttaja: suo-turkoosi, joka ei ole kenenkään muun väri tässä pelissä
       '30,90,76', '52,140,110', '108,200,160', '18,60,52',
       // pöhö: suolenvärinen kaasupussi, joka korvasi ruskean kävelijän
@@ -9091,7 +9215,10 @@ const report = await page.evaluate(async () => {
   {
     const sprites = await import('/src/gfx/sprites.js');
     const { THEMES } = await import('/src/gfx/tiles.js');
-    const KINDS = ['shroom', 'oneup', 'flower', 'leaf', 'soup', 'pop', 'star'];
+    /* Kuusi eikä seitsemän: `oneup` poistettiin 10.8.2026, koska mikään pelissä
+     * ei koskaan tuottanut sitä (ks. src/gfx/sprites/items.js). Portin
+     * mittaamat esineet ovat ne jotka pelaaja voi saada. */
+    const KINDS = ['shroom', 'flower', 'leaf', 'soup', 'pop', 'star'];
     const BOX = 16;
     const W = 48; const H = 48; const OX = 16; const OY = 16;
     const PERIOD = sprites.BREATH_PERIOD;
@@ -9218,7 +9345,9 @@ const report = await page.evaluate(async () => {
      * The old pickups had eight pairs under that line and the worst of them
      * was the flower and the leaf at 29.7 %. The pair this was written for was
      * the mushroom and the 1-up: one drawing, two hues, 35.9 % apart, and the
-     * difference between one more hit and one more life.
+     * difference between one more hit and one more life. (The 1-up itself is
+     * gone since 10.8.2026 — nothing in the game ever spawned it — but the
+     * threshold it bought stays, because it is what keeps the next pair honest.)
      */
     const APART = 40;
     const pairs = [];
@@ -9668,6 +9797,65 @@ const report = await page.evaluate(async () => {
     expect('spikes hurt where the points are and not in the air above them',
       !clear && grazed, `yläpuolella ${clear ? 'sattui' : 'ei sattunut'}, `
       + `piikeissä ${grazed ? 'sattui' : 'ei sattunut'}`);
+  }
+
+  /* ---- tähti ja vaarat: isku vastaan paikka ---- */
+  /*
+   * Omistaja kuoli 4-1:ssä närästysliekkiin tähti päällä ja kysyi eikö tähden
+   * pitäisi suojata. Pitäisi, ja koodi oli kahta mieltä itsensä kanssa:
+   * **lattian piikki luki tähteä, `kind === 'hazard'` ei lukenut lainkaan.**
+   * Tähti siis suojasi piikiltä lattiassa muttei liekiltä joka nousee samasta
+   * lattiasta, ja kaksi kommenttia tässä samassa tiedostossa väitti eri asiaa.
+   *
+   * Raja on **isku vastaan paikka**: kuoppa, laava ja kello ovat paikkoja
+   * joihin pelaaja menee eivätkä ne ole suojattuja; piikki, närästysliekki ja
+   * papupommi osuvat pelaajaan, ja ne ovat. Molemmat vaaraoliot mitataan, ei
+   * vain se jonka omistaja löysi.
+   */
+  {
+    const { Heartburn, BeanBomb } = await import('/src/entities/enemies.js');
+    const hazards = [
+      /* Suihku pannaan palamaan käsin: `idle`-vaiheessa sen laatikon korkeus on
+       * 0, eikä nollan korkuinen laatikko ole osuma. Testi mittaa törmäystä
+       * eikä ajastinta. */
+      ['närästysliekki', (lv, p) => {
+        const h = new Heartburn(lv, p.x, p.y + p.h + 16);
+        h.phase = 'fire';
+        h.height = h.maxHeight;
+        h.timer = 60;
+        return h;
+      }],
+      ['papupommi', (lv, p) => new BeanBomb(lv, p.x, p.y, 0)],
+    ];
+    const rows = [];
+    for (const [name, make] of hazards) {
+      for (const withStar of [false, true]) {
+        reset({ type: 'shroom', level: 2 });
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        const inp = mkInput();
+        for (let f = 0; f < 6; f++) sc.update(inp);
+        sc.entities = sc.entities.filter((e) => e.kind !== 'enemy');
+        const pl = sc.player;
+        if (withStar) pl.collect('star');
+        const before = pl.power.level;
+        const hz = make(sc, pl);
+        hz.alwaysActive = true;
+        /* Vaara ajetaan pelaajan päälle suoraan: se mitä mitataan on
+         * törmäyksen seuraus, ei se osuuko ajastin. */
+        hz.x = pl.x; hz.y = pl.y;
+        if (hz.box) { hz.box.x = pl.x; hz.box.y = pl.y; hz.box.w = pl.w; hz.box.h = pl.h; }
+        sc.entities.push(hz);
+        for (let f = 0; f < 4; f++) sc.update(inp);
+        rows.push({ name, withStar, before, after: pl.power.level, alive: !pl.dead });
+      }
+    }
+    const hurtBare = rows.filter((r) => !r.withStar).every((r) => r.after < r.before || !r.alive);
+    const safeStar = rows.filter((r) => r.withStar).every((r) => r.after === r.before && r.alive);
+    expect('tähti suojaa vaaralta joka osuu, kuten se suojaa piikiltä',
+      hurtBare && safeStar,
+      rows.map((r) => `${r.name} ${r.withStar ? 'tähdellä' : 'ilman'} ${r.before}->${r.after}`
+        + `${r.alive ? '' : ' kuoli'}`).join(', '));
   }
 
   /* ------------------------------ supertähti ---------------------------- */
@@ -11276,7 +11464,7 @@ const report = await page.evaluate(async () => {
       }
 
       /*
-       * AND NOT ONE LINE OF IT RUNS IN A SHIPPED LEVEL.
+       * AND IT RUNS IN EXACTLY THE TWO LEVELS THAT ASKED FOR IT.
        *
        * The owner's constraint, in his own words: the paging camera is a
        * vertical-level feature and the horizontal levels keep exactly the
@@ -11284,14 +11472,27 @@ const report = await page.evaluate(async () => {
        * paging branch is behind `this.vertical`, which is `def.vertical` — and
        * guaranteed is not measured, so it is measured: every level in the game
        * is driven for 600 frames and asked whether it ever paged.
+       *
+       * **Tämä väite oli `no shipped level ever pages` siihen asti kun peli sai
+       * kaksi pystykenttää (10.8.2026), ja se on nyt kavennettu eikä
+       * poistettu.** Vanha muoto oli oikea niin kauan kuin pystykenttiä oli
+       * nolla: silloin "yksikään ei sivuta" ja "vain pystykenttä sivuttaa"
+       * olivat sama lause. Nyt ne eroavat, ja se mitä omistaja pyysi
+       * suojeltavaksi — vaakakentän kamera — on jälkimmäinen. Vaakakentät
+       * mitataan täsmälleen kuten ennen; pystykentät poistetaan tästä
+       * silmukasta nimeltä ja lasketaan, ja niiden oma sivutus mitataan
+       * kiipeilijällä lohkossa "pystykentät kentissä" — tämä botti juoksee
+       * oikealle, mikä on pystykentässä seinään käveleminen eikä mittaus.
        */
       {
         const bad = [];
+        const climbs = [];
         for (const id of levelIds()) {
           reset();
           const s = new LevelScene(game, id);
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          if (s.vertical) { climbs.push(id); continue; }
           const input = mkInput();
           for (let f = 0; f < 600; f++) {
             input.held = blank();
@@ -11303,11 +11504,310 @@ const report = await page.evaluate(async () => {
             s.update(input);
             if (s.player.dying) break;
           }
-          if (s.vertical || s.camPages || s.camPage) bad.push(`${id}:${s.camPages}`);
+          if (s.camPages || s.camPage) bad.push(`${id}:${s.camPages}`);
         }
-        expect('no shipped level ever pages',
-          bad.length === 0,
-          bad.length ? bad.join(' ') : `${levelIds().length} kenttää, 0 sivunvaihtoa`);
+        expect('vain pystykenttä sivuttaa — yksikään vaakakenttä ei',
+          bad.length === 0 && climbs.length === 2,
+          bad.length ? bad.join(' ')
+            : `${levelIds().length - climbs.length} vaakakenttää, 0 sivunvaihtoa — `
+              + `pystykentät ${climbs.join(' ') || '—'}`);
+      }
+    }
+
+    /* ---- pystykentät kentissä ---- */
+    /*
+     * KAKSI PYSTYKENTTÄÄ, JA NE OVAT TARKOITUKSELLA ERI KENTTIÄ.
+     *
+     * Yllä oleva lohko todistaa **kyvyn** koekentällä, ja se on oikein: kyky
+     * jota kokeillaan vain sillä sisällöllä jonka se siunaa ei ole kokeiltu.
+     * Tämä lohko todistaa **toimitetun sisällön**, ja se on eri väite. Koekenttä
+     * on kolmentoista lankun tikkaat joissa jokainen askelma on sama; nämä kaksi
+     * ovat kenttiä joita pelataan, ja kysymykset ovat siksi toiset.
+     *
+     * Kentät ovat `7-T` TERMIIKKI (kaasukehä, ylös) ja `6-K` KAIVAUTUMINEN
+     * (luulaakso, alas). Ne eivät ole toistensa peilikuvia, ja se on koko syy
+     * siihen että ne ovat kaksi kenttää eikä yksi kahteen suuntaan
+     * (IDEAS.md I):
+     *
+     *   - **Ylöspäin virhe maksaa sivun.** Pudotus vie takaisin alemmalle
+     *     lavalle ja kiivetään uudestaan, joten kiipeilyssä ei tarvita — eikä
+     *     saa olla — tappavaa maastoa. Mitattuna: 7-T:ssä on **nolla** tappavaa
+     *     ruutua, ja jokainen sen tasanne on sellainen että alla on jotain
+     *     alle yhden ruudun päässä. Sen vaikeus on askelman korkeus ja se
+     *     kuinka kapealle pitää osua.
+     *   - **Alaspäin virhe kantaa eteenpäin, väärään paikkaan**, joten
+     *     rangaistus on rakennettava maastoon. Mitattuna: 6-K:ssa on piikkejä
+     *     usealla rivillä, ja ne ovat siellä minne väärä pudotus vie.
+     *
+     * Kolme väitettä on tässä sellaisia joita `validateLevel` ei tee, ja
+     * jokainen on tämän muodon oma:
+     *
+     *   1. **Ei ansoja.** `checkClimb` tulvittaa lähdöstä maaliin ja on
+     *      tyytyväinen kun maali löytyy. Kaivautumiskentässä se ei riitä:
+     *      pudotus vie *eteenpäin*, joten pelaaja päätyy paikkoihin joihin ei
+     *      tähdännyt, ja tasku josta ei pääse pois läpäisisi validaattorin ja
+     *      jumittaisi pelaajan. Tässä kysytään vahva yhteys: **jokaisesta
+     *      tasanteesta johon lähdöstä pääsee, maaliin pääsee edelleen.** Se on
+     *      juuri se ero jonka IDEAS.md nimeää — umpiperä saa maksaa kiipeämisen
+     *      takaisin, ei kenttää.
+     *   2. **Umpiperäsääntö on käytössä eikä vain voimassa.** DESIGN.md kohdan
+     *      5 pystymuoto sanoo että tasanne josta ei jatketa on oltava käymisen
+     *      arvoinen. Sääntö jota yksikään toimitettu kenttä ei laukaise on
+     *      sääntö jota ei ole koeteltu, joten tässä lasketaan että toimitetussa
+     *      sisällössä on ainakin yksi maksettu umpiperä.
+     *   3. **Botti pelaa molemmat läpi voimatasolla 0** — sama moottori, sama
+     *      fysiikka, `finishLevel` oikeasti laukeaa — ja kamera sivuttaa
+     *      molemmissa. Kiipeilijä on sama `tools/climb-bot.js` jonka koekenttä
+     *      yllä todistaa, joten tämä ei ole toinen botti vaan sama botti
+     *      toisella sisällöllä.
+     */
+    {
+      const { getLevel } = await import('/src/data/levels.js');
+      const { validateLevel, climbGraph } = await import('/src/data/rules.js');
+      const { makeClimber } = await import('/tools/climb-bot.js');
+      const climbBudget = await (await fetch('/tools/jump-budget.json')).json();
+
+      const climbIds = levelIds().filter((id) => getLevel(id).vertical);
+      const shape = (id) => {
+        const rows = getLevel(id).rows;
+        return { id, w: rows[0].length, h: rows.length, rows };
+      };
+
+      expect('peli toimittaa tasan kaksi pystykenttää, yhden ylös ja yhden alas',
+        climbIds.join(' ') === '6-K 7-T',
+        climbIds.length
+          ? climbIds.map((id) => { const s = shape(id); return `${id} ${s.w}×${s.h}`; }).join(', ')
+          : 'ei yhtään pystykenttää');
+
+      /* Leveys ei ole enimmäismäärä vaan leveys, ja tämä on se kohta jossa se
+       * koskee oikeaa kenttää eikä koekenttää: 21 saraketta kytkisi
+       * vaakavierityksen takaisin päälle juuri siinä muodossa jossa sitä ei saa
+       * olla. Korkeus on toinen puolisko — yhden ruudun korkuinen "pystykenttä"
+       * ei sivuttaisi kertaakaan. */
+      {
+        const wrong = climbIds.filter((id) => shape(id).w !== 20 || shape(id).h <= 15);
+        expect('molemmat pystykentät ovat tasan ruudun levyisiä ja montaa ruutua korkeita',
+          climbIds.length === 2 && wrong.length === 0,
+          climbIds.map((id) => { const s = shape(id); return `${id} ${s.w} saraketta × ${s.h} riviä`; })
+            .join(', ') || 'ei mitattavaa');
+      }
+
+      /* Suunta luetaan ruudukosta eikä nimestä: lähtö ja maali, ja kumpi on
+       * ylempänä. Kaksi kenttää, kaksi merkkiä. */
+      {
+        const dirOf = (id) => {
+          const { rows } = shape(id);
+          const find = (ch) => {
+            for (let y = 0; y < rows.length; y++) if (rows[y].includes(ch)) return y;
+            return -1;
+          };
+          return { start: find('1'), goal: find('F') };
+        };
+        const dirs = climbIds.map((id) => ({ id, ...dirOf(id) }));
+        const up = dirs.filter((d) => d.goal < d.start);
+        const down = dirs.filter((d) => d.goal > d.start);
+        expect('toinen pystykenttä nousee ja toinen laskee',
+          up.length === 1 && down.length === 1 && up[0].id === '7-T' && down[0].id === '6-K',
+          dirs.map((d) => `${d.id} rivi ${d.start} → ${d.goal}`).join(', ') || 'ei mitattavaa');
+      }
+
+      /* Pystysäännöt luetaan toimitetuista kentistä. Sama kutsu kuin
+       * `design rules across every level` tekee, tässä nimeltä, jotta
+       * huomautus näkyy sellaisenaan eikä lukumääränä. */
+      {
+        const probs = climbIds.flatMap((id) => validateLevel(shape(id).rows, climbBudget, { vertical: true })
+          .map((p) => `${id}: ${p}`));
+        expect('molemmat pystykentät läpäisevät pystysäännöt',
+          climbIds.length === 2 && probs.length === 0,
+          probs.length ? probs.slice(0, 3).join(' / ')
+            : `${climbIds.length} kenttää, 0 huomautusta`);
+      }
+
+      /*
+       * EI ANSOJA — vahva yhteys, ei pelkkä läpäisy.
+       *
+       * Sama verkko kuin validaattorilla ja botilla, kysyttynä toisin päin:
+       * jokaisesta tasanteesta johon lähdöstä pääsee, tulvitetaan uudestaan ja
+       * kysytään löytyykö maali. Alaspäin mentäessä tämä on se väite joka
+       * pitää kentän pelattavana — pudotus vie eteenpäin, ei takaisin.
+       */
+      {
+        const trapped = [];
+        const counts = [];
+        for (const id of climbIds) {
+          const { rows } = shape(id);
+          const g = climbGraph(rows, climbBudget);
+          const at = (x, y) => rows[y][x];
+          const find = (ch) => {
+            for (let y = 0; y < rows.length; y++) {
+              for (let x = 0; x < rows[0].length; x++) if (at(x, y) === ch) return { x, y };
+            }
+            return null;
+          };
+          const landsOn = (x, y) => {
+            let best = null;
+            for (const p of g.platforms) {
+              if (p.y < y || x < p.x0 || x > p.x1) continue;
+              if (!best || p.y < best.y) best = p;
+            }
+            return best;
+          };
+          const flood = (seed) => {
+            const seen = new Set([seed]);
+            const stack = [seed];
+            while (stack.length) for (const n of g.edges[stack.pop()]) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+            return seen;
+          };
+          const st = find('1');
+          const go = find('F');
+          const from = st && landsOn(st.x, st.y);
+          const to = go && landsOn(go.x, go.y);
+          if (!from || !to) { trapped.push(`${id}: lähtö tai maali ei seiso millään`); continue; }
+          const reach = flood(from.i);
+          for (const i of reach) {
+            if (!flood(i).has(to.i)) trapped.push(`${id}: ${g.platforms[i].x0},${g.platforms[i].y}`);
+          }
+          counts.push(`${id} ${reach.size}/${g.platforms.length} tasannetta`);
+        }
+        expect('jokaisesta tasanteesta johon pääsee, pääsee vielä maaliin',
+          climbIds.length === 2 && trapped.length === 0,
+          trapped.length ? trapped.slice(0, 4).join(' / ') : counts.join(', ') || 'ei mitattavaa');
+      }
+
+      /*
+       * UMPIPERÄSÄÄNTÖ ON KÄYTÖSSÄ, EI VAIN VOIMASSA.
+       *
+       * Lasketaan samalla määritelmällä kuin `checkClimb`: tasanne joka on
+       * saavutettavissa, ei ole maalin oma, eikä siitä lähde yhtään ylöspäin
+       * vievää kaarta. Sellainen tasanne on kentässä vain jos se on maksettu —
+       * validaattori olisi hylännyt maksamattoman — joten tämä luku on
+       * "montako kertaa sääntö oikeasti mitattiin toimitetussa sisällössä".
+       */
+      {
+        const paid = [];
+        for (const id of climbIds) {
+          const { rows } = shape(id);
+          const g = climbGraph(rows, climbBudget);
+          let n = 0;
+          for (const p of g.platforms) {
+            if (g.edges[p.i].some((j) => g.platforms[j].y < p.y)) continue;
+            n++;
+          }
+          paid.push({ id, n });
+        }
+        expect('toimitettu pystykenttä koettelee umpiperäsäännön',
+          paid.length === 2 && paid.some((p) => p.n > 0),
+          paid.map((p) => `${p.id} ${p.n} umpiperää`).join(', ') || 'ei mitattavaa');
+      }
+
+      /*
+       * MIKÄ RANKAISEE MISTÄKIN, LUKUINA.
+       *
+       * Kiipeilyssä pudotus on takaisku, joten maasto ei saa tappaa: nolla
+       * tappavaa ruutua. Kaivautumisessa pudotus vie eteenpäin, joten
+       * rangaistuksen on oltava maastossa: piikkirivejä enemmän kuin nolla.
+       * Tämä on sama ero kuin IDEAS.md I:ssä, mitattuna eikä muistettuna.
+       */
+      {
+        const lethalRows = (id) => (climbIds.includes(id)
+          ? shape(id).rows.filter((r) => /[\^W]/.test(r)).length : -1);
+        const upKill = lethalRows('7-T');
+        const downKill = lethalRows('6-K');
+        expect('kiipeäminen ei tapa maastolla, kaivautuminen tappaa',
+          upKill === 0 && downKill >= 4,
+          `7-T ${upKill} tappavaa riviä, 6-K ${downKill}`);
+      }
+
+      /*
+       * JA PILVIMAAILMAN OMA VÄITE, KÄÄNNETTYNÄ TOISELLE AKSELILLE.
+       *
+       * Kohta 3 luulaakson ja pilvimaailman lohkossa mittaa että kaasukehässä
+       * on lattia eikä se ole bonushuone venytettynä: `sky_garden` on 0 %
+       * maata ja 100 % lautaa, ja maailman kentät ovat 80 %+ / alle 25 %.
+       * `7-T`:llä ei ole riviä 13, joten se jää sieltä pois — ja pois jäävä
+       * väite on hiljaa lakkaava väite, mikä on pahempi kuin korvattu.
+       *
+       * Pystyvastine on sama kysymys ilman lattiariviä: **kuinka suuri osa
+       * siitä mille voi seistä on pakattua pilveä eikä lautaa.** Bonushuoneessa
+       * vastaus on nolla; tässä sen pitää olla huomattava osa. Kenttä on
+       * rakennettu niin että alempi puolisko on pankkia ja ylempi ohutta, eli
+       * luku on rakenteen mitta eikä sattuma.
+       */
+      {
+        const { CHUNKS } = await import('/src/data/chunks.js');
+        const bankShare = (rows) => {
+          let bank = 0;
+          let plank = 0;
+          for (const row of rows) {
+            for (const ch of row) {
+              if (ch === '#' || ch === 'X') bank++;
+              else if (ch === '-') plank++;
+            }
+          }
+          return bank + plank ? (bank / (bank + plank)) * 100 : 0;
+        };
+        const climbShare = climbIds.includes('7-T') ? bankShare(shape('7-T').rows) : -1;
+        const garden = bankShare(CHUNKS.sky_garden.rows);
+        expect('pystykentässäkin kaasukehällä on lattia, bonushuoneella ei',
+          climbShare >= 40 && garden === 0,
+          `7-T ${climbShare.toFixed(0)} % pakattua pilveä jalansijasta, `
+          + `sky_garden ${garden.toFixed(0)} %`);
+      }
+
+      /*
+       * JA BOTTI PELAA MOLEMMAT LÄPI VOIMATASOLLA 0.
+       *
+       * Sama kiipeilijä kuin koekentällä, sama moottori, samat viholliset pois
+       * (maasto on kysymys; vihollisen alle jääminen on eri testi ja se on jo
+       * olemassa). Sivunvaihdot lasketaan samalla ajolla: kenttä joka ei
+       * sivuta kertaakaan on pystykenttä vain nimeltä.
+       */
+      {
+        const runs = [];
+        for (const id of climbIds) {
+          const { rows } = shape(id);
+          reset({ type: null, level: 0 });
+          let finished = null;
+          game.finishLevel = (r) => { finished = r; };
+          const s = new LevelScene(game, id);
+          game.setScene(s);
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const bot = makeClimber(s, rows, climbBudget);
+          const input = mkInput();
+          const startFeet = s.player.y + s.player.h;
+          const goalFeet = (bot.goalPlat ? bot.goalPlat.y : 0) * 16;
+          const span = Math.abs(goalFeet - startFeet) || 1;
+          let best = startFeet;
+          let frames = 0;
+          for (let f = 0; f < 9000 && !finished; f++) {
+            frames = f;
+            const want = bot.step();
+            input.held = blank();
+            input.pressed = blank();
+            input.held.left = want.left;
+            input.held.right = want.right;
+            input.held.jump = want.jump;
+            input.pressed.jump = want.press;
+            s.update(input);
+            const feet = s.player.y + s.player.h;
+            if (Math.abs(feet - goalFeet) < Math.abs(best - goalFeet)) best = feet;
+            if (s.state === 'dead') break;
+          }
+          runs.push({
+            id,
+            cleared: !!(finished && finished.cleared),
+            went: Math.round((Math.abs(best - startFeet) / span) * 100),
+            pages: s.camPages,
+            frames,
+            died: s.state === 'dead',
+          });
+        }
+        expect('kiipeilijä pelaa molemmat pystykentät läpi voimatasolla 0, ja kamera sivuttaa',
+          runs.length === 2 && runs.every((r) => r.cleared && r.pages >= 3),
+          runs.map((r) => `${r.id}: ${r.went} % kuljettu, ${r.pages} sivunvaihtoa, `
+            + `${r.frames} framea, maali ${r.cleared ? 'saavutettu' : r.died ? 'kuoli' : 'saavuttamatta'}`)
+            .join(' — ') || 'ei mitattavaa');
       }
     }
 
@@ -14657,6 +15157,262 @@ const report = await page.evaluate(async () => {
   report.failures.push(...pp.failures);
 }
 
+
+/* ---- velat: 4-3, kuolleet palikat, kontrasti, oneup ---- */
+/*
+ * Neljä velkaa, yksi lohko, ja jokainen niistä on tässä samasta syystä: ne
+ * kaikki olivat asioita jotka **joku muisti** eivätkä asioita joita mikään
+ * mittasi. 4-3:n läpäisemättömyys asui muutoslokin "tiedossa olevissa
+ * rajoituksissa", kuolleet palikat "jäi tekemättä" -listalla, neljän
+ * vihollisen kontrasti portin *mittaamatta*-rivillä ja varapallo pelkkänä
+ * hiljaisuutena. Muistiinpano kestää täsmälleen niin kauan kuin sen kirjoittaja.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  /* --- 1. jokainen kenttä on läpäistävissä voimatasolla 0 --- */
+  /*
+   * DESIGN.md kohta 5 lupaa että maareitti aukeaa pienimmällä koolla ilman
+   * yhtään tehostusta. `tools/playable.mjs` on kysynyt sitä pitkään ja
+   * vastannut siihen raporttina, ei porttina — se ei kaadu, koska sen botti
+   * on heuristiikka ja "huono botti kaataa hyvän kentän" on väärin päin.
+   *
+   * Mutta raportti jonka kukaan ei ole velvollinen lukemaan on muistiinpano, ja
+   * juuri niin kävi: 4-3 seisoi tuolla raportilla **rikkinäisenä niin kauan
+   * että siitä tuli rivi muutoslokin rajoituslistalla**. Ja koska kukaan ei
+   * lukenut listaa loppuun, 2-1 oli sen rinnalla saman lupauksen rikkojana
+   * ilman että sitä oli koskaan mainittu missään.
+   *
+   * Ero raporttiin on se että tämä ei kysy botilta mielipidettä kentästä vaan
+   * kentältä mielipidettä botista: **kaikki kuusikymmentä tai punainen.**
+   * Poikkeuslistaa ei ole, koska sellaista ei tarvita — ja jos sellainen
+   * joskus tarvitaan, se kirjoitetaan tähän nimeltä ja perusteluineen eikä
+   * muutoslokiin.
+   */
+  {
+    const rows = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { isSolid } = await import('/src/gfx/tiles.js');
+      const { levelIds } = await import('/src/data/levels.js');
+      const { runGround } = await import('/tools/level-bot.js');
+      const { isClimb } = await import('/tools/climb-bot.js');
+      const game = window.sfb3;
+      const out = [];
+      const keepFinish = game.finishLevel;
+      for (const id of levelIds()) {
+        game.state = {
+          lives: 9, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+        };
+        let finished = null;
+        game.finishLevel = (r) => { finished = r; };
+        const scene = new LevelScene(game, id);
+        game.scene = scene;
+        /* Viholliset ja vaarat pois: tämä väite koskee maastoa. Ne kuolemat on
+         * mitattu muualla ja ne ovat tunnettua kohinaa. */
+        scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        if (scene.def.boss) scene.bossDefeated = true;
+        scene.time = 9999;
+        /* Pystykentät kiipeävät eivätkä juokse; niillä on oma todisteensa
+         * `climb-bot.js`:ssä ja `playable.mjs`:ssä. Peliin ei kuulu vielä
+         * yhtään, joten tämä haara on varaus eikä poikkeus. */
+        if (isClimb(scene.def)) { out.push({ id, cleared: true, reach: 100, vertical: true }); continue; }
+        const r = runGround(scene, isSolid, 7000, () => finished);
+        out.push({ id, cleared: r.cleared, reach: r.reach, at: r.death ? r.death.tx : r.stuckAt });
+      }
+      game.finishLevel = keepFinish;
+      return out;
+    });
+    const stuck = rows.filter((r) => !r.cleared);
+    expect('jokainen kenttä on läpäistävissä voimatasolla 0',
+      stuck.length === 0,
+      stuck.length
+        ? `${stuck.length}/${rows.length} jäi: ${stuck.map((r) => `${r.id} ${r.reach} % (sarake ${r.at})`).join(', ')}`
+        : `${rows.length} kenttää, matalin eteneminen ${Math.min(...rows.map((r) => r.reach))} %`);
+  }
+
+  /* --- 2. palikkataulussa ei ole palikkaa jota mikään kenttä ei aseta --- */
+  /*
+   * Sama peruste jolla `bone_twin` poistettiin, nyt mittana: palikka jota
+   * kukaan ei saa asettaa on huonompi kuin ei palikkaa, koska se lupaa
+   * sanaston jota ei ole. Kysymys on puhtaasti datasta — kaikki soittolistat
+   * ja kaikki kaistat vastaan koko `CHUNKS` — eikä sitä siksi tarvitse
+   * muistaa.
+   *
+   * **Nimetty poikkeus, neljä kappaletta.** `chunks/fortresses.js`:n
+   * `pyre_ledge`, `crypt_ossuary`, `crypt_stair` ja `spire_squall` ovat samaa
+   * velkaa, mutta se tiedosto on toisen työn alla juuri nyt eikä tämä muutos
+   * saa koskea siihen. Ne lukevat tässä yksitellen eivätkä kuviona, joten
+   * viides orpo palikka punastaa tämän välittömästi — ja kun neljä poistuu,
+   * tämä lista poistuu niiden mukana.
+   */
+  {
+    const { CHUNKS } = await import(join(ROOT, 'src/data/chunks.js'));
+    const worlds = await Promise.all([1, 2, 3, 4, 5, 6, 7, 8]
+      .map((n) => import(join(ROOT, `src/data/levels/world${n}.js`))));
+    const defs = Object.assign({}, ...worlds.map((m) => Object.values(m)[0]));
+    const used = new Set();
+    for (const def of Object.values(defs)) {
+      for (const n of def.chunks || []) used.add(n);
+      for (const band of ['sky', 'cave']) for (const [, n] of def[band] || []) used.add(n);
+    }
+    /* Poikkeus kantaa tiedostonsa nimen, koska juuri se on sen ainoa peruste. */
+    const OWED = ['pyre_ledge', 'crypt_ossuary', 'crypt_stair', 'spire_squall'];
+    const dead = Object.keys(CHUNKS).filter((n) => !used.has(n));
+    const extra = dead.filter((n) => !OWED.includes(n));
+    expect('yksikään palikka ei ole sellainen jota mikään kenttä ei aseta',
+      extra.length === 0,
+      `${Object.keys(CHUNKS).length} palikkaa, ${used.size} käytössä, `
+      + `${dead.length} orpoa${extra.length ? `: ${extra.join(', ')}` : ''}`
+      + ` (kirjattu velka chunks/fortresses.js: ${OWED.filter((n) => dead.includes(n)).join(', ') || '—'})`);
+  }
+
+  /* --- 3. neljä vihollista, jotka olivat kontrastikynnyksen alla --- */
+  /*
+   * Portilla on ollut tämä mitta pitkään, mutta se **portitti kolme lajia ja
+   * mittasi loput**: kolme uudelleenpiirrettyä kaadetaan, muut tulostetaan
+   * rivillä "mittaamatta portissa". Se rivi sanoi 10.8.2026 aamulla
+   * piikkiukko 3,3 %, papuparooni 3,3 %, ummetuskorkki 7,2 %, ruskea pilvi
+   * 7,4 % — kynnys 8,6 % — eli neljä asiaa jotka voivat tappaa pelaajan
+   * seisoivat maassa jota vasten niitä ei erota.
+   *
+   * Ne on maalattu uudestaan, ja tämä on se väite joka pitää maalin paikallaan.
+   * Sama kaava kuin vieressä ja tarkoituksella: keskimääräinen kanavaero
+   * 255:stä, ääriviiva pois laskuista, ja kynnys luettuna aavikon omasta
+   * maa/tiili-parista eikä kirjoitettuna käsin — "vähintään yhtä erillään kuin
+   * se huonoin pari jonka kanssa peli jo elää" pysyy totena kun paletti
+   * liikkuu.
+   */
+  {
+    const rows = await page.evaluate(async () => {
+      const sprites = await import('/src/gfx/sprites.js');
+      const { THEMES, T, drawTile } = await import('/src/gfx/tiles.js');
+      const W = 96; const H = 64; const OX = 32; const OY = 16;
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      /* Vain nämä neljä, ja jokainen värinsä kanssa: läpikuultavat vanat ja
+       * varjot eivät ole ruumista (sama raja kuin viereisellä portilla). */
+      const ART = new Set([
+        '248,248,248',
+        // piikkiukko: runko + luupiikit, jotka ovat jaettua sanastoa
+        '240,40,200', '168,12,144', '120,4,108',
+        '232,224,200', '168,152,120', '90,80,64',
+        // ruskea pilvi
+        '180,164,16', '108,96,4',
+        // ummetuskorkki: kumitulppa ja se korkki jonka se ampuu
+        '48,96,200', '28,56,120', '16,28,72', '216,168,96', '156,106,40',
+        // papuparooni
+        '156,16,96', '88,8,52', '60,8,36', '108,16,68', '240,184,144', '255,208,72',
+      ]);
+      const subjects = [
+        { n: 'piikkiukko', paint: () => sprites.drawSpikeGuy(g, OX, OY, 0, 1) },
+        { n: 'ruskea pilvi', paint: () => sprites.drawStinkCloud(g, OX, OY, 0, 1, true) },
+        { n: 'ummetuskorkki', paint: () => sprites.drawCorkGuy(g, OX, OY, 0, 1) },
+        { n: 'papuparooni', paint: () => sprites.drawBeanBaron(g, OX, OY, 0, 1, 0, false) },
+      ];
+      /* Kuinka monta pikseliä viimeinen mittaus luki. Tämä on ulkona siksi että
+       * `ART`-lista voi mennä hiljaa vanhaksi: väri jota lista ei tunne ei
+       * kaada mitään, se vain katoaa otoksesta. Luku tulostuu jokaisesta
+       * lajista, joten kutistunut otos näkyy ennen kuin se ehtii valehdella. */
+      let seen = 0;
+      const mean = (paint, art) => {
+        g.clearRect(0, 0, W, H);
+        paint();
+        const d = g.getImageData(0, 0, W, H).data;
+        let r = 0; let gg = 0; let b = 0; let n = 0;
+        for (let i = 0; i < W * H; i++) {
+          const q = i * 4;
+          if (d[q + 3] !== 255) continue;
+          const key = `${d[q]},${d[q + 1]},${d[q + 2]}`;
+          if (art && !art.has(key)) continue;
+          r += d[q]; gg += d[q + 1]; b += d[q + 2]; n++;
+        }
+        seen = n;
+        return n ? [r / n, gg / n, b / n] : null;
+      };
+      const tile = (ch, theme) => mean(() => drawTile(g, ch, 0, 0, theme, 3, 5, 0, ' ', {}), null);
+      const sep = (a, b) => (!a || !b ? 0
+        : ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3 / 255) * 100);
+      const floor = sep(tile(T.GROUND, 'desert'), tile(T.BRICK, 'desert'));
+      const grounds = Object.keys(THEMES).map((th) => [th, tile(T.GROUND, th)]);
+      return {
+        floor,
+        rows: subjects.map((s) => {
+          const m = mean(s.paint, ART);
+          const px = seen;
+          let worst = { th: '?', v: 1e9 };
+          for (const [th, ground] of grounds) {
+            const v = sep(m, ground);
+            if (v < worst.v) worst = { th, v };
+          }
+          return { n: s.n, px, ...worst };
+        }),
+      };
+    });
+    const sunk = rows.rows.filter((r) => r.v < rows.floor);
+    expect('neljä huonoiten näkyvää vihollista erottuvat nyt jokaisen teeman maasta',
+      sunk.length === 0,
+      `kynnys ${rows.floor.toFixed(1)} % = aavikon maa vs tiili; `
+      + rows.rows.map((r) => `${r.n} ${r.v.toFixed(1)} % (${r.th}, ${r.px} px)`).join(', '));
+  }
+
+  /* --- 4. piirretty poimittava on sellainen jonka peli osaa antaa --- */
+  /*
+   * Varapallo oli piirretty, poimittava, äänekäs ja mitattu neljällä akselilla,
+   * eikä yksikään ruutu, lohko, vihollinen tai generaattori tuottanut sitä
+   * koskaan. Se on omanlaisensa kuollut koodi: ei haara jota ei ajeta vaan
+   * **ominaisuus jota teeskennellään**, ja se on huonompi kuin puuttuva
+   * ominaisuus, koska se lukee valmiilta jokaiselle joka avaa tiedoston.
+   *
+   * Väite on tarkoituksella yleinen eikä varapallon nimi: jokainen kuva jonka
+   * `drawItem` maalaa on kuva esineestä jonka joku voi saada. Tuottaja on
+   * lähdekoodissa `new Item(...)`, `rollPowerup`in `return` tai maalitangon
+   * `completeLevel(...)` — kolme paikkaa, ja kolme on koko lista. `Sfx.play`ta
+   * ei lasketa, ja juuri se ero on tässä se joka merkitsee: `Sfx.play('oneup')`
+   * elää yhä sadan kolikon ja korttipotin äänenä, eikä ääni ole esine.
+   */
+  {
+    const CANDIDATES = ['shroom', 'flower', 'leaf', 'soup', 'pop', 'star', 'oneup'];
+    const drawable = await page.evaluate(async (kinds) => {
+      const sprites = await import('/src/gfx/sprites.js');
+      const cv = document.createElement('canvas');
+      cv.width = 48; cv.height = 48;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const out = [];
+      for (const k of kinds) {
+        g.clearRect(0, 0, 48, 48);
+        sprites.drawItem(g, k, 16, 16, 0);
+        const d = g.getImageData(0, 0, 48, 48).data;
+        let n = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+        if (n > 0) out.push(k);
+      }
+      return out;
+    }, CANDIDATES);
+    const SOURCES = ['src/scenes/level.js', 'src/entities/enemies.js'];
+    const text = (await Promise.all(SOURCES.map((f) => readFile(join(ROOT, f), 'utf8')))).join('\n');
+    const spawnLines = text.split('\n').filter((l) => l.includes('new Item(')
+      || /\breturn '/.test(l) || l.includes('completeLevel('));
+    const spawned = new Set(CANDIDATES.filter((k) => spawnLines.some((l) => l.includes(`'${k}'`))));
+    const ghosts = drawable.filter((k) => !spawned.has(k));
+    expect('jokainen piirretty poimittava on sellainen jonka peli osaa antaa',
+      ghosts.length === 0,
+      `piirrettyjä ${drawable.length} (${drawable.join(' ')}), `
+      + `tuotettuja ${spawned.size} (${[...spawned].join(' ')})`
+      + (ghosts.length ? ` — kuvia ilman lähdettä: ${ghosts.join(', ')}` : ''));
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- velat: loppu ---- */
+
 await browser.close();
 server.close();
 
@@ -15668,6 +16424,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     });
   }
 }
+
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);

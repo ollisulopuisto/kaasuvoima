@@ -11,13 +11,20 @@
  *
  * The difference is the floor, and it is measured rather than argued
  * (`verify.mjs`, "pilvimaailmassa on lattia, bonushuoneessa ei"). A bonus room
- * has no floor at all and everything you can stand on in it is a plank; these
- * three levels have packed cloud under nine columns in ten, and the planks are
- * a minority of the footing. In one sentence: **the sky band is somewhere you
- * hop, kaasukehä is somewhere you walk.** The second difference is what is
- * absent — there is no beanstalk and no sky band anywhere in this world,
- * because the whole rhetoric of that secret is climbing out above the world,
- * and there is nothing above this one.
+ * has no floor at all and everything you can stand on in it is a plank; the
+ * two horizontal levels of this world have packed cloud under nine columns in
+ * ten, and the planks are a minority of the footing. In one sentence: **the
+ * sky band is somewhere you hop, kaasukehä is somewhere you walk.** The second
+ * difference is what is absent — there is no beanstalk and no sky band
+ * anywhere in this world, because the whole rhetoric of that secret is
+ * climbing out above the world, and there is nothing above this one.
+ *
+ * The climb, `7-T`, has no row 13 to measure and is therefore outside that
+ * gate; it makes the same claim on its own axis and it is asserted there
+ * ("pystykentät kentissä" in `verify.mjs`): half of everything you can stand
+ * on in it is packed cloud, against the bonus room's nought per cent. The
+ * world's sentence survives the change of axis rather than being dropped
+ * quietly with it.
  *
  * **And it must be passable at the smallest size, all the way down.** A world
  * of clouds is a pit for its whole length unless somebody decides otherwise;
@@ -27,7 +34,7 @@
  * ## What each level is for, and what it measures
  *
  *   7-1  the layers: two heights, nothing to fall into, then holes
- *   7-2  the dip — weather instead of holes
+ *   7-T  the dip, on the other axis: a climb, where falling is a setback
  *   7-3  the anvil: every hole the world owns, and the one place with a roof
  *   7-F  the keep, and the weather lord
  *
@@ -79,22 +86,163 @@ export const WORLD7_LEVELS = {
     ],
   },
   /*
-   * The dip, bought the way every dip in this game is bought: by taking the
-   * holes out and leaving the inhabitants in. Two holes against 7-1's four, and
-   * what fills the space is weather — brown clouds and flyers, which cost a
-   * power level and not a life.
+   * TERMIIKKI — pelin toinen pystykenttä, ja se seisoo maailman
+   * hengähdyspaikalla, koska juuri se paikka on tässä pelissä varattu uudelle
+   * asialle.
    *
-   * It is 7-2 and not 7-1 or 7-3 for the same reason 4-2 and 6-2 are: the
-   * breather is where curiosity is affordable, and this is the level with the
-   * most standing around under decks in it.
+   * Omistajan pyyntö sanatarkasti: *"pilvimaailmaan pystykenttä, sellainen
+   * jossa hypitään lavalta lavalle ylöspäin eikä putoaminen tapa, vähän kuin
+   * Rainbow Islands."*
+   *
+   * ## Miksi tämä korvaa juuri 7-2:n
+   *
+   * Vanha 7-2 oli tämän maailman notko: samat palikat kuin 7-1:ssä, reiät pois.
+   * `node tools/variety.mjs` mittaa sen, ja luku on syy eikä jälkiperustelu:
+   * **7-2 oli maailman 7 vähiten uusi kenttä, uutuus 17,6 %**, ja 82,4 % sen
+   * muodoista oli 7-1:n muotoja. Se ei sanonut mitään mitä edeltäjänsä ei ollut
+   * jo sanonut. Toiseksi vähiten uusi oli 7-3 (18,4 %), eli ero on ohut — ja
+   * silloin ratkaisee toinen mittaus: 7-3 on maailman ainoa katollinen paikka
+   * ja sen `cloud_anvil`in kansi on se ylin lauta jolta `verify.mjs` mittaa
+   * maahaniskun tappavuuden. Sen purkaminen olisi purkanut mittauksen; 7-2:n
+   * purkaminen ei purkanut mitään.
+   *
+   * Ja vanhan kentän oma perustelu jää voimaan sanasta sanaan — se vain koskee
+   * nyt eri sisältöä: *"hengähdys on siellä missä uteliaisuuteen on varaa."*
+   * Se on täsmälleen se argumentti jonka nojalla **uusi akseli** kuuluu juuri
+   * tähän kohtaan maailmaa eikä sen huipulle: pelaaja tapaa ensimmäisen kerran
+   * kentän jota kuljetaan ylöspäin siinä kohdassa käyrää jossa virheellä on
+   * pienin hinta. Mitattu: 7-2 oli 180,2 ja tämä on 202,5, eli notko pysyy
+   * notkona — maailman seuraavaksi helpoin on 233,7.
+   *
+   * ## Kaksi asiaa omistajan lauseesta, ja molemmat ovat rakenteessa
+   *
+   * **1. Putoaminen on takaisku, ei kuolema.** Tässä kentässä ei ole yhtään
+   * tappavaa ruutua, ja lisäksi *jokaisen* tasanteen jokaisen sarakkeen alla on
+   * jotain enintään seitsemän rivin päässä, eli aina alle yhden ruudullisen
+   * (13 riviä). Pudotus maksaa siis enintään sen mitä kamera näyttää kerralla
+   * — yhden sivullisen kiipeämistä — eikä koskaan kenttää. Vaikeusmittarin
+   * `KUILU%` lukee sen nollana, ja se nolla on tämän kentän koko lupaus lukuna:
+   * mittari kysyy juuri "mistä osasta jalansijaa pudotus vie yli ruudullisen".
+   *
+   * **2. Tämä ei ole bonushuone venytettynä**, ja se on sama väite jonka varaan
+   * koko maailma on rakennettu (ks. tiedoston alku). Bonushuoneessa ei ole
+   * lattiaa lainkaan ja sen jokainen jalansija on lautaa; täällä **73 %
+   * jalansijasta on pakattua pilveä** (`#`) — samaa maata kuin maailman 1 nurmi
+   * — ja loput ohutta (`-`). Se on mitattu portissa ("pystykentässäkin
+   * kaasukehällä on lattia, bonushuoneella ei").
+   *
+   * `chunks/cloud.js`:n sääntö 1 sanoo että tässä maailmassa ei seiso mikään,
+   * eikä yhtään `#`:ää ole lattiarivien yläpuolella. Sääntö on kirjoitettu
+   * kentälle jota kuljetaan sivuttain, ja siellä se on oikea: pilvikukkula
+   * tyhjän päällä olisi mäki joka ei kanna itseään. Pystykentässä koko kenttä
+   * **on** taivas, eikä pilvipankki korkeudella ole mäki vaan pankki — se ei
+   * kannattele mitään, se kelluu, mikä on tasan se mitä pilvi tekee. Sääntö
+   * kääntyy siis samaksi lauseeksi toisella akselilla eikä katoa hiljaa.
+   *
+   * ## Muoto: kaksi pankkia ja sauma, ja sauma on ohut mitatusta syystä
+   *
+   * Vasen pankki on sarakkeet 0–10, oikea 9–19, ja **ne menevät päällekkäin
+   * sarakkeissa 9 ja 10**. Käärme nousee vuorotellen vasemmalle ja oikealle, ja
+   * päällekkäisyys on se mikä tekee siitä kiivettävän: sen ansiosta on aina
+   * sarake joka kuuluu sekä siihen pankkiin jolla seisot että siihen jolle olet
+   * menossa, eli hyppy otetaan omalta lavalta eikä sen reunan yli.
+   *
+   * **Ja sauma — sarakkeet 8–11 — on ohutta pilveä, koska pakattu pilvi on
+   * katto.** Tämä on kentän ainoa kohta joka on kirjoitettu botin punaisesta:
+   * ensimmäinen versio oli pankkia laidasta laitaan, ja `tools/playable.mjs`
+   * sanoi **JUMISSA, 2 % kiivetty, rivi 48** — kiipeilijä hyppää suoraan sen
+   * lavan alta jolle se on menossa, ja `#`:n alapinta pysäytti hypyn 16
+   * pikselin jälkeen. Ohuen pilven läpi noustaan; pakatun päälle noustaan.
+   * Kentän jokainen puola on siis ohut siitä sarakkeesta josta se otetaan ja
+   * pakattu siitä mille lasketaan — mikä on samalla se lause jonka tämä maailma
+   * on koko ajan sanonut sivusuunnassa, luettuna pystyyn.
+   *
+   * Yksi puola on kokonaan ohutta, ja sekin on botin sanelema eikä koriste:
+   * **alin, rivin 45 puola.** Kaikki muut otetaan toiselta puolalta, jolloin
+   * lähtösarake on aina se kahden pankin päällekkäisyys; tämä otetaan
+   * pilvipankin pohjalta, joka on kaksikymmentä saraketta leveä, eikä
+   * lähtösaraketta voi siis rajata mihinkään. Se on ainoa puola jonka jokainen
+   * sarake on lähtösarake, joten sen jokainen sarake on ohut.
+   *
+   * Askelmat ovat 3 ja 4 ruutua (korpuksen mediaani 4, p90 6; meidän mitattu
+   * `wallTiles` 4), eikä yksikään sivusiirtymä ylitä sitä mitä nouseva hyppy
+   * kantaa — päällekkäiset pankit tekevät sivusiirtymästä nollan. **Kolmen
+   * ruudun askelma otetaan paikaltaan, neljän vaatii vauhdin**, ja juuri sen
+   * eron vaikeusmittari laskee: neljän ruudun askelmia on neljä, ja ne ovat
+   * tämän kentän vaikeus.
+   *
+   * **Rivin 44 hylly on umpiperä, ja se on siellä tarkoituksella.** Kolmen
+   * ruudun lauta pohjapankin yllä, josta ei pääse ylemmäs — lähin lava on
+   * neljä saraketta sivussa ja nouseva hyppy kantaa kolme. DESIGN.md kohdan 5
+   * pystymuoto vaatii että sellainen kantaa palkinnon neljän rivin sisällä, ja
+   * tässä se on kolme kolikkoa rivillä 43. Se on kentän ainoa paikka jossa
+   * sääntö oikeasti laukeaa, ja siksi se on tässä: sääntö jota mikään
+   * toimitettu kenttä ei koettele on sääntö jota ei ole koeteltu.
+   *
+   * Väki on säätä, ja sekin seuraa säännöstä eikä mausta: `rules.js` vaatii
+   * että kävelevä vihollinen seisoo *kiinteän* päällä (`checkEnemyFooting`),
+   * eikä lauta ole kiinteä. Saumassa ei siis voi seistä kukaan, ja koko kentän
+   * väki on niitä jotka eivät seiso: ruskea pilvi (`r`), tämän maailman oma, ja
+   * lentäjä (`f`).
+   *
+   * `time: 400` eikä oletus 300. Oletus tulee kentän *leveydestä*, joka on
+   * pystykentässä 20 saraketta eli aina se pienin mahdollinen luku, ja se olisi
+   * hiljainen virhe: putoaminen on tämän kentän mekaniikka, ja kello on ainoa
+   * asia joka voi muuttaa takaiskun tappioksi.
    */
-  '7-2': {
-    theme: 'cloud', bg: 'clouds', music: 'cloud',
-    chunks: [
-      'start', 'cloud_bank', 'power', 'cloud_lattice', 'cloud_squall', 'cloud_blocks',
-      'cloud_hole', 'cloud_bank', 'cloud_gate', 'cloud_updraft', 'cloud_hail',
-      'cloud_squall', 'cloud_flock', 'cloud_hole_deck', 'cloud_blocks',
-      'run_up', 'goal', 'goal_end',
+  '7-T': {
+    theme: 'cloud', bg: 'clouds', music: 'cloud', vertical: true, time: 400,
+    rows: [
+      '                    ',
+      '                    ',
+      '                    ',
+      '                    ',
+      '    F               ',
+      '########---         ',
+      '                    ',
+      '            oo      ',
+      '         ---########',
+      '                    ',
+      '                r   ',
+      '   oo               ',
+      '########---         ',
+      '                    ',
+      '                    ',
+      '         ---########',
+      '                    ',
+      '                    ',
+      '########---         ',
+      '                    ',
+      '                    ',
+      '            oo      ',
+      '         ---########',
+      '                    ',
+      '                    ',
+      '########---         ',
+      '                    ',
+      '                    ',
+      '         ---########',
+      '                    ',
+      '    f               ',
+      '   oo               ',
+      '########---         ',
+      '                    ',
+      '                    ',
+      '         ---########',
+      '                    ',
+      '                    ',
+      '########---         ',
+      '                    ',
+      '                    ',
+      '                    ',
+      '         ---########',
+      '  ooo               ',
+      '  ---         !     ',
+      '-----------         ',
+      '                    ',
+      '  1                 ',
+      '####################',
+      '####################',
     ],
   },
   /*
