@@ -244,6 +244,30 @@ mutta oikein päin, ja DESIGN.md kohta 3 sanoo sen nyt näin.
   Kuusitoista uutta kenttää eivät esittele mitään, koska peli esittelee
   viimeisen uuden asiansa kentässä `3-3`.
 
+### Integroinnissa: sama kartanvika neljässä uudessa maailmassa
+
+Nämä neljä maailmaa rakennettiin haarasta joka oli tehty ennen kuin
+kulmapistevika löytyi, joten niiden siksak-kartat syntyivät **ilman
+kulmapisteitä** — sama vika kuin maailmoissa 1 ja 3, neljä kertaa lisää.
+Tunti aiemmin lisätty portti nappasi sen ensimmäisellä ajolla:
+
+```
+FAIL jokaiselta solmulta pääsee jokaista linkkiä pitkin jollakin nuolella
+     [58/138 umpikujaa: w4 … w5 … w6 … w7 …]
+```
+
+Kulmapisteet kirjoitettiin kaikkiin 31 linkkiin samalla säännöllä. Yksi
+poikkeus: maailmassa 7 hernetalo on solmun `w7-1` yläpuolella, joten paluu
+alkuun ei voi olla "ylös" — se olisi ollut portin toisen väitteen mukainen
+törmäys. Siellä tie lähtee alkusolmulta **alas** ja paluu on **vasen**.
+
+Uudet kulmat vievät polun ruutuihin joissa ennen ei ollut polkua, ja maisema
+oli istutettu vanhoja polkuja vasten: **8 puuta, kiveä ja koneistoa** jäi
+raivausvyöhykkeen sisään (w4 2, w5 4 — sitten w6 4, w7 4). Ne poistettiin,
+ja kapein etäisyys polun ja kaluston välillä nousi 7 pikselistä 13:een.
+
+---
+
 ## v26.08.10.50 — maailmoissa 1 ja 3 ei päässyt ensimmäistä kenttää pidemmälle
 
 Omistajan pelitesti: *"I just did a playtest where I completed the first world
