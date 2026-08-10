@@ -264,53 +264,56 @@ export const WORLD8_LEVELS = {
   },
 
   /*
-   * 8-F VALTAISTUINSALI — the throne hall, and the last room in the game.
+   * 8-F VALTAISTUINSALI — pelin viimeinen huone, ja se linnake jonka mittaus
+   * yllätti (10.8.2026).
    *
-   * **Four trenches and nothing else**, and it is the one level in this world
-   * that is not a list. Everything here has been about which *kind* of gap is
-   * in front of you — built or fallen, timed or open, empty or occupied — and
-   * the throne hall drops the question: the same six tiles of lava four times,
-   * with a full chunk of floor in front of every one of them, because rule 3
-   * does not get a holiday for the last level. The single variation is
-   * `keep_croak` third from the end, so the last thing the castle does before
-   * the door is the one trick it kept.
+   * Tässä luki aiemmin pitkä perustelu neljälle kourulle, ja se perustelu oli
+   * hyvä: sama kysymys neljästi, täysi vauhdinotto jokaisen edessä, ja
+   * `keep_croak` kolmantena lopusta. Sen vika oli se mitä `tools/variety.mjs`
+   * mittasi: **0,0 % koko pelille uutta muotoa.** Kaikki muut nollan
+   * linnakkeet toistivat toisten maailmojen linnakkeita; tämä toisti *omia
+   * kenttiään*. `keep_vault`, `keep_teeth`, `keep_watch` ja `keep_croak` on
+   * kaikki nähty kentissä 8-1…8-5 ennen kuin tämä ovi aukeaa, joten viimeisellä
+   * käytävällä ei ollut mitään sanottavaa — ja jaettu `fort_gap` neljästi
+   * huolehti lopusta.
    *
-   * The meter reads it at 379, below 8-5's 386, and that is arithmetic rather
-   * than design: `boss_arena_big` is forty-eight columns of empty floor against
-   * `boss_arena`'s thirty-two, and every number the tool prints is per hundred
-   * columns. It cannot see that the fight at the end of those columns is the
-   * longest in the game — its own file says so, in the comment on
-   * `ENEMY_COST.b`.
+   * Sanasto on nyt `throne_*` (`chunks/fortresses.js`), joka on maailman 8 oma
+   * mutta erillinen `keep.js`:stä samasta syystä: finaalin pitää sanoa jotain
+   * mitä maailma ei ole jo sanonut. Lause on se ainoa jota `keep.js` ei sano:
+   * **huone kutistuu.** `throne_crawl`in katto on rivillä 9, eli jalansijaa on
+   * kolme riviä — `HEAD` rules.js:ssä, 48 px ilmaa 43 px:n kroppaa vasten — ja
+   * peli jossa kaikki ratkaistaan hyppäämällä päättyy käytävään jossa ei voi
+   * hypätä.
    *
-   * **No `fort_trench`, anywhere in world 8.** That is measured rather than
-   * chosen and the measurement is old: the trench is nine tiles of lava with
-   * one plank in the middle, and it is where the power-0 bot gives up in 5-F.
-   * A last level that the smallest size cannot pass is broken and not hard
-   * (DESIGN.md §5), and the finale is the worst possible place to find that
-   * out. `fort_gap` is harder to read and easier to cross, and the meter agrees
-   * with the hands for once, because a bridged hole scores no gap risk at all
-   * while a bare one scores the maximum.
+   * Maailman kolme sääntöä pätevät jokaiseen uuteen palikkaan ja `verify.mjs`
+   * mittaa ne kaikki: joka sarakkeen yllä on kiveä, tiili ei kosketa kiveä
+   * (`throne_hoard`in molemmat kerrokset leijuvat), ja jokaisen kuilun edessä
+   * on yhdeksän saraketta lattiaa. `throne_moat` kantaa oman vauhdinottonsa
+   * mukanaan: yhdeksän kiveä ja yksi mureneva huuli, joka on jalansijaa siihen
+   * asti kunnes sille astuu.
    *
-   * `boss_arena_big` and variant 3: the giant, five hits, growing half a size
-   * with each one. The decks either side are the reason he is here rather than
-   * anywhere else — by the fourth stomp his head is outside a standing jump and
-   * by the fifth outside every jump a power-0 player has, so the last two hits
-   * come down from above. That is also the one place in this world where the
-   * ground pound (v26.08.09.31) has a drop worth taking: the move opens a
-   * place, never the level, and the bot that proves this room at power 0 does
-   * not know it exists.
+   * **Ei `fort_trench`iä, ei täälläkään.** Se mittaus on vanha eikä se muuttunut
+   * mihinkään: kouru on yhdeksän ruutua laavaa ja yksi lauta keskellä, ja se on
+   * se paikka jossa voimatason 0 botti luovuttaa 5-F:ssä. Viimeinen kenttä jota
+   * pienin koko ei läpäise on rikki eikä vaikea (DESIGN.md kohta 5).
    *
-   * `bossMusic: 'autiovuori'` is the only one in the game, and the comment at
-   * the top of this file says why: the piece already ends the way this fight
-   * has to.
+   * `boss_arena_big` ja variantti 3: jättiläinen, viisi osumaa, puoli kokoa
+   * lisää jokaisesta. Kannet ovat syy siihen miksi hän on täällä eikä muualla —
+   * neljännen tallauksen jälkeen hänen päänsä on seisontahypyn ulkopuolella ja
+   * viidennen jälkeen jokaisen voimatason 0 hypyn ulkopuolella, joten kaksi
+   * viimeistä osumaa tulevat ylhäältä. Areena on jaettu, ja se on nimenomaan se
+   * osa jonka jakaminen kannattaa: areena on areena.
+   *
+   * `bossMusic: 'autiovuori'` on pelin ainoa, ja tiedoston alku kertoo miksi:
+   * kappale loppuu jo valmiiksi niin kuin tämän tappelun pitää loppua.
    */
   '8-F': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
     bossMusic: 'autiovuori',
     chunks: [
-      'keep_start', 'fort_power', 'keep_vault', 'fort_gap', 'keep_teeth',
-      'fort_gap', 'keep_watch', 'fort_gap', 'keep_croak', 'keep_teeth',
-      'fort_gap', 'boss_arena_big',
+      'keep_start', 'throne_gate', 'throne_hoard', 'throne_crawl', 'throne_moat',
+      'throne_teeth', 'throne_moat', 'throne_watch', 'throne_moat', 'throne_crawl',
+      'throne_moat', 'boss_arena_big',
     ],
   },
 };
