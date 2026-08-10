@@ -332,6 +332,42 @@ Jokaisessa kentässä on tehostuspalikka ensimmäisen neljänneksen sisällä. J
 menetät voimasi heti, korjaus on lähellä, eikä loppukenttää tarvitse pelata
 pienimmällä koolla.
 
+### Pystykenttä: sama lupaus, toinen akseli
+
+Päätetty 10.8.2026. Yllä olevat kolme sääntöä on kirjoitettu kentälle jota
+kuljetaan vasemmalta oikealle. **Pystykenttä** (`vertical: true`) on toisen
+muotoinen: yhden ruudun levyinen — `VIEW_W` 320 / `TILE` 16 = **20 saraketta,
+ei enempää eikä vähempää** — ja monta ruutua korkea, maali ylhäällä (tai
+kaivautumiskentässä alhaalla), ja **putoaminen on takaisku eikä kuolema**.
+Kolme edellä olevaa sääntöä eivät katoa, ne käännetään, ja käännös on kirjattu
+tähän koska *hiljaa lakkaava sääntö on pahempi kuin korvattu sääntö*:
+
+| vaakasääntö | pystyvastine |
+| --- | --- |
+| jokainen kuilu mahtuu hyppybudjettiin tai siinä on astinkivi | jokainen askelma mahtuu **mitattuun nousuun** (`wallTiles`), ja kiipeäminen alusta maaliin todistetaan reitinhakuna eikä kuiluttain |
+| — (vaakakentässä kuilu tappaa) | **kenttä ottaa kiinni**: yhdessäkään sarakkeessa ei ole pohjatonta putoamista, eikä laskeutumisrivillä ole tappavaa ruutua |
+| tehostuspalikka ensimmäisen neljänneksen sisällä | tehostuspalikka **korkeuden** ensimmäisen neljänneksen sisällä, mitattuna lähtöpaikasta kulkusuuntaan |
+| ei portaita tyhjään: puulavarivin päässä on jotain | **umpiperä on maksettava**: tasanne josta ei pääse ylemmäs kantaa palkinnon neljän ruudun sisällä, tai kenttä hylätään |
+
+Viimeinen on se joka ei käänny suoraan, ja siksi se on tässä kokonaisena.
+Kiipeilyssä *jokainen* lava on reitti, joten "vieekö tämä johonkin" vastaa
+itsensä ja sääntö hyväksyisi kaiken. Sääntö ei kuitenkaan suojele lavoja vaan
+pelaajan halua tutkia — yksi tyhjä kiipeäminen opettaa ohittamaan seuraavatkin
+— joten pystymuoto kysyy saman kysymyksen samasta aikeesta: tasanne johon
+pääsee mutta josta ei jatketa, on oltava käymisen arvoinen.
+
+Se on tietoisesti **tiukempi kuin lajityyppi**. Korpuksen kahdesta
+pystypelistä louhittu aggregaatti (kohta 3; `tools/pacing-stats.json`,
+`vertical`) sanoo että 2341 tasanteesta **24,2 %:lla ei ole mitään
+ulottuvilla ylhäällä**. Neljännes niiden pelien lavoista ei vie mihinkään.
+Meillä vie, tai maksaa.
+
+Ja DESIGN.md kohdan 5 pääväite pysyy sanasta sanaan: **maareitin on oltava
+läpäistävissä pienimmällä koolla ja yhdellä hypyllä**. Se todistetaan
+pystykentässä samalla tavalla kuin vaakakentässä — botti pelaa kentän läpi
+voimatasolla 0 moottorissa, `tools/playable.mjs`, vain kulkusuunta vaihtuu.
+Lupaus ei siis selvinnyt akselinvaihdoksesta väitteenä vaan mittauksena.
+
 ### Ei portaita tyhjään
 
 Jos rakennat palikkapolun ylöspäin, sen päässä on jotain: kolikoita, tehostus

@@ -2,6 +2,12 @@
  * Mines PACING STATISTICS from a corpus of classic platformer levels.
  *
  *   VGLC_DIR=/path/to/vglc/levels node tools/mine-pacing.mjs
+ *   VGLC_DIR=/path/to/vglc      node tools/mine-pacing.mjs --vertical
+ *
+ * The second form mines CLIMB pacing from the corpus's two vertical games and
+ * merges one `vertical` key into the existing statistics rather than replacing
+ * them — see the "climbs" section below. It reads the corpus ROOT, not a
+ * single Processed directory, because it needs two named games out of it.
  *
  * Why this exists, and what it deliberately does not do
  * ----------------------------------------------------
@@ -190,7 +196,153 @@ function analyse(grid) {
   };
 }
 
+/* ------------------------------- climbs ---------------------------------- */
+
+/**
+ * UP IS A DIRECTION, AND THE CORPUS HAS TWO GAMES THAT KNOW IT.
+ *
+ * Everything above this line measures a floor left to right. The game is about
+ * to get a level that is one screen wide and many screens tall, and the
+ * question that shape asks — *how far apart are the rungs, against what a jump
+ * lifts* — has no answer anywhere in the horizontal statistics. Rainbow Islands
+ * and Kid Icarus are the only two vertical games in the corpus, so they are
+ * where the answer is.
+ *
+ * **DESIGN.md §3 applies unchanged and is worth restating rather than
+ * assumed.** What comes out of here is aggregate: distributions of rung
+ * spacing, platform width, sideways offset, and how often a rung offers more
+ * than one way on. What does not come out is a layout, a fragment or an
+ * arrangement — nothing here can reconstruct a level, and nothing is copied
+ * into the repository. The corpus stays outside it (`VGLC_DIR`), the numbers
+ * go to `tools/pacing-stats.json`, and the scaling to our own jump budget
+ * happens downstream (§3 point 5), because these are the source games' tiles
+ * and not ours.
+ *
+ * The existing statistics are **merged, not replaced**. Two reasons and both
+ * matter: the horizontal numbers were mined from a different corpus directory
+ * and re-mining them from this one would silently change what every generated
+ * level was built against, and another agent is tuning sixteen levels against
+ * those exact numbers while this runs. `--vertical` reads the file, adds one
+ * key, writes it back, and `git diff` shows one added block.
+ *
+ * The alphabets are the two games' own (`Kid Icarus/KidIcarus.json` names its
+ * tiles; Rainbow Islands ships none, so anything that is not the empty `.` is
+ * footing). Both are folded to "can you stand on it", which is the only
+ * property a rung has.
+ */
+const VERTICAL_GAMES = ['Rainbow Islands', 'Kid Icarus'];
+/** `#` and `D` are Kid Icarus rock and doors, `T`/`M` its platforms, `B`/`G`
+ *  Rainbow Islands' two kinds of block. `H` is its hazard and is not footing. */
+const STANDABLE = new Set(['#', 'D', 'T', 'M', 'B', 'G', 'X', 'S']);
+
+/** Maximal horizontal runs of footing with open sky over them. */
+function rungs(grid) {
+  const h = grid.length;
+  const w = grid[0].length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? '.' : grid[y][x]);
+  const out = [];
+  for (let y = 0; y < h; y++) {
+    let from = -1;
+    for (let x = 0; x <= w; x++) {
+      const stands = x < w && STANDABLE.has(at(x, y)) && !STANDABLE.has(at(x, y - 1));
+      if (stands) { if (from < 0) from = x; continue; }
+      if (from >= 0) out.push({ y, x0: from, x1: x - 1 });
+      from = -1;
+    }
+  }
+  return out;
+}
+
+const apart = (a, b) => (b.x0 > a.x1 ? b.x0 - a.x1 - 1 : a.x0 > b.x1 ? a.x0 - b.x1 - 1 : 0);
+
+/**
+ * One vertical level, as the four numbers a climb is made of.
+ *
+ * `REACH` is a neutral box and not a claim about the source games' physics: we
+ * do not know what their jump carries, and guessing would put a made-up number
+ * into a file whose whole point is that it holds measured ones. Six rows and
+ * six columns is wide enough to catch the rung a climber would actually use
+ * and narrow enough not to count the whole level as one step. The scaling to
+ * what *our* jump carries happens in the generator, off `jump-budget.json`.
+ */
+function analyseClimb(grid) {
+  const REACH = 6;
+  const all = rungs(grid);
+  const rises = [];
+  const shifts = [];
+  const widths = all.map((p) => p.x1 - p.x0 + 1);
+  const ways = [];
+  for (const p of all) {
+    const above = all.filter((q) => q.y < p.y && p.y - q.y <= REACH && apart(p, q) <= REACH);
+    ways.push(above.length);
+    if (!above.length) continue;
+    const best = above.reduce((a, b) => (b.y > a.y ? b : a));
+    rises.push(p.y - best.y);
+    shifts.push(apart(p, best));
+  }
+  return {
+    rises, shifts, widths, ways, height: grid.length, width: grid[0].length, rungCount: all.length,
+  };
+}
+
 /* --------------------------------- main --------------------------------- */
+
+if (process.argv.includes('--vertical')) {
+  const games = [];
+  let levels = 0;
+  let rowsRead = 0;
+  const all = { rises: [], shifts: [], widths: [], ways: [] };
+  for (const game of VERTICAL_GAMES) {
+    const dir = join(DIR, game, 'Processed');
+    let names;
+    try {
+      names = (await readdir(dir)).filter((f) => f.endsWith('.txt')).sort();
+    } catch {
+      console.error(`\n  ${game}: ei löydy hakemistosta ${DIR}\n`);
+      process.exit(2);
+    }
+    if (!names.length) { console.error(`no .txt levels in ${dir}`); process.exit(2); }
+    for (const file of names) {
+      const grid = (await readFile(join(dir, file), 'utf8')).split('\n').filter((r) => r.length);
+      const a = analyseClimb(grid);
+      levels++;
+      rowsRead += a.height;
+      for (const k of ['rises', 'shifts', 'widths', 'ways']) all[k].push(...a[k]);
+    }
+    games.push({ game, levels: names.length });
+  }
+  const stats = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
+  stats.vertical = {
+    note: 'Aggregate climb pacing only, from the corpus\'s two vertical games. '
+      + 'No layout is stored, derivable or shipped from this file. '
+      + 'Regenerate with: VGLC_DIR=… node tools/mine-pacing.mjs --vertical',
+    corpus: { games: games.map((g) => `${g.game} (${g.levels})`), levels, rows: rowsRead },
+    rungRise: summarise(all.rises),
+    rungShift: summarise(all.shifts),
+    rungWidth: summarise(all.widths),
+    waysOn: summarise(all.ways),
+    twoWaysShare: Number((all.ways.filter((n) => n >= 2).length / all.ways.length).toFixed(3)),
+    deadEndShare: Number((all.ways.filter((n) => n === 0).length / all.ways.length).toFixed(3)),
+    rungsPer100Rows: Number(((all.widths.length / rowsRead) * 100).toFixed(2)),
+  };
+  await writeFile(join(ROOT, 'tools/pacing-stats.json'), `${JSON.stringify(stats, null, 2)}\n`);
+  const v = stats.vertical;
+  console.log(`\nMined ${levels} vertical levels, ${rowsRead} rows, `
+    + `${all.widths.length} rungs.\n`);
+  const line = (label, s) => console.log(
+    `  ${label.padEnd(22)} median ${String(s.median).padStart(3)}   p90 ${String(s.p90).padStart(3)}`
+    + `   max ${String(s.max).padStart(3)}   (n=${s.n})`,
+  );
+  line('rung rise', v.rungRise);
+  line('rung shift', v.rungShift);
+  line('rung width', v.rungWidth);
+  line('ways on', v.waysOn);
+  console.log(`\n  rungs / 100 rows       ${v.rungsPer100Rows}`);
+  console.log(`  two ways on            ${v.twoWaysShare}`);
+  console.log(`  dead ends              ${v.deadEndShare}`);
+  console.log('\n  merged into tools/pacing-stats.json (vertical)\n');
+  process.exit(0);
+}
 
 const files = (await readdir(DIR)).filter((f) => f.endsWith('.txt')).sort();
 if (!files.length) {

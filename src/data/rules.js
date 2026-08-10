@@ -13,6 +13,18 @@
  *
  * See DESIGN.md section 5 for the reasoning behind each one.
  *
+ * ## Two axes, and only one of them is the default
+ *
+ * Everything in the next section is about a level you cross left to right. A
+ * level marked `vertical` is a **climb**: one screen wide, many screens tall,
+ * the exit at the top (or, for a level that digs, at the bottom), and falling
+ * a setback rather than a death. `validateLevel(rows, budget, { vertical:
+ * true })` asks a different set of questions on the same grid — see the
+ * "climbs" section below for which rules survive the change of axis, which are
+ * replaced, and which are dropped and why. The flag is off by default and no
+ * level in the game sets it, so nothing here changed for the levels that
+ * exist: their output is compared byte for byte against the run before.
+ *
  * ## The three kinds of rule
  *
  * A tall level is three bands of 15 rows stacked into one grid — sky, route,
@@ -104,6 +116,22 @@
 
 const ROWS = 15;
 const FLOOR = 13;
+/**
+ * How wide a vertical level is, and it is not a maximum: it is the width.
+ *
+ * `VIEW_W` is 320 and `TILE` is 16, so one screen is 20 columns exactly. A
+ * climb is locked sideways — the camera's horizontal clamp is `widthPx -
+ * VIEW_W`, which is zero here, so `cam.x` is 0 for the whole level and the
+ * dead zone and the look-ahead have nothing to do. Twenty-one columns would
+ * quietly turn that off and give the climb a scrolling horizontal camera as
+ * well, which is the one thing the shape is meant not to have; nineteen would
+ * letterbox the level sideways with no code anywhere to draw the bars.
+ *
+ * Duplicated from `src/scenes/level.js` in the same idiom as
+ * `BEAN_BLOCK_OVER_FLOOR` — the validator may not import a scene — and
+ * `verify.mjs` asserts the two agree.
+ */
+const VERTICAL_COLS = 20;
 
 /**
  * The tallest power level is 21x43 px (`PLAYER_SIZES[5]`). Standing on a floor
@@ -389,6 +417,340 @@ function checkWalls(floor, from, to, reach, problems, where) {
     const rise = floor[x - 1] - floor[x];
     if (rise > reach.wall) problems.push(`wall of ${rise} at column ${x}${where}`);
   }
+}
+
+/**
+ * Universal. Footing is a question about one tile and the tile under it, so it
+ * is asked of the whole grid: an enemy hanging in mid-air is a mistake wherever
+ * it is, and "wherever" now includes a climb. Lifted out of `validateLevel`
+ * unchanged so that both shapes of level ask it in the same words — the message
+ * is compared against shipped output, so the wording is load-bearing.
+ */
+function checkEnemyFooting(rows, w, problems) {
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = rows[y][x];
+      if (!ENEMY.has(ch)) continue;
+      // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
+      // a tile high and drop in) have no footing to check. The player start is
+      // likewise allowed to be in mid-air: the game drops them in.
+      if ('ApfrkO'.includes(ch)) continue;
+      const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
+      if (!SOLID.has(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
+    }
+  }
+}
+
+/* --------------------------------- climbs -------------------------------- */
+
+/**
+ * UP IS A DIRECTION, AND EVERY RULE ABOVE THIS LINE IS ABOUT THE OTHER ONE.
+ *
+ * `floorProfile`, `checkGaps` and `checkWalls` all read row 13 and ask what
+ * happens as `x` increases. On a level that is 20 columns wide and forty rows
+ * tall they do not degrade, they invert: the whole level is one gap, the floor
+ * profile is the topmost platform in each column and the "walls" are the climb
+ * itself. So a climb gets its own reachability, and the honest meaning of
+ * reachable upward is **the measured jump**, not a spacing somebody liked.
+ *
+ * ## What one jump carries when it also has to rise
+ *
+ * `tools/jump-budget.json` measures two numbers off the running-held jump and
+ * the generator has used both for as long as it has existed: `gapTiles` = 6,
+ * how far it carries across flat ground, and `wallTiles` = 4, how far it
+ * rises. Those are the two ENDS of the same arc, and a climb needs the middle:
+ * how far sideways can a jump that must also gain three tiles carry?
+ *
+ * The two ends are measured. The line between them is the cheapest assumption
+ * that respects them — one arc, so what it spends on height it cannot spend on
+ * distance — and it is stated here rather than buried because it is the one
+ * thing in this file that is neither measured nor grid geometry:
+ *
+ *     carry(rise) = floor(gapTiles × (wallTiles + 1 − rise) / (wallTiles + 1))
+ *
+ *     rise 0 → 6 tiles   rise 1 → 4   rise 2 → 3   rise 3 → 2   rise 4 → 1
+ *
+ * A real arc is concave — you can go a long way while still clearing a modest
+ * height — so a straight line **under-promises in the middle**, and that is
+ * the safe direction for a rule whose job is to refuse impossible levels: it
+ * will reject a climb that a good player could just about make, and it will
+ * never bless one that nobody can. If it ever turns out to reject real content,
+ * the fix is to measure the arc in `measure-jump.mjs` and read the table from
+ * there, not to widen the line by feel.
+ *
+ * Rise 0 is in the table because a climb has sideways hops too, and at rise 0
+ * the formula returns `gapTiles` unchanged — the same number `checkGaps` uses,
+ * which is how you can tell the two rules are the same rule seen from two
+ * directions rather than two opinions.
+ */
+function climbCarry(reach) {
+  const span = reach.wall + 1;
+  return (rise) => Math.max(0, Math.floor((reach.gap * (span - rise)) / span));
+}
+
+/**
+ * Every surface a body can stand on, as maximal horizontal runs.
+ *
+ * A cell is a standing surface when it is footing and the cell above it is not
+ * rock. Planks count as footing — they are solid from above, which is the only
+ * direction anybody lands from — and a plank *above* a surface does not cover
+ * it, because you pass up through one. That asymmetry is the whole reason a
+ * climb can be built out of them.
+ */
+export function platformsOf(rows, w) {
+  const h = rows.length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
+  const out = [];
+  for (let y = 0; y < h; y++) {
+    let from = -1;
+    for (let x = 0; x <= w; x++) {
+      const ch = at(x, y);
+      const stands = x < w && (SOLID.has(ch) || SEMI.has(ch)) && !SOLID.has(at(x, y - 1));
+      if (stands) { if (from < 0) from = x; continue; }
+      if (from >= 0) out.push({ y, x0: from, x1: x - 1, i: out.length });
+      from = -1;
+    }
+  }
+  return out;
+}
+
+/** Columns strictly between two platforms; 0 when they overlap or touch. */
+function sideways(a, b) {
+  if (b.x0 > a.x1) return b.x0 - a.x1 - 1;
+  if (a.x0 > b.x1) return a.x0 - b.x1 - 1;
+  return 0;
+}
+
+/**
+ * The climb as a graph: which platform you can get to from which, and how.
+ *
+ * Exported because the validator and the bot in `tools/playable.mjs` must not
+ * hold two opinions about what is reachable. A bot that could climb something
+ * the rules call impossible would make the rules a formality; a bot that could
+ * not climb what the rules bless would fail sound levels. One graph, two
+ * readers — the same argument `rules.js` makes for the generator and the test
+ * suite in its first paragraph.
+ *
+ * Upward edges are the measured jump (see `climbCarry`), and they check that
+ * the landing column is actually open between the two platforms: a shelf under
+ * a stone ceiling is within reach of the jump and is still not somewhere you
+ * can arrive. Planks in the way are fine, because you pass up through them.
+ *
+ * Downward edges are free within `gapTiles`, and that is the shape of the
+ * level rather than generosity: a fall in a climb is a setback and not a
+ * death, gravity needs no budget, and drifting sideways while falling carries
+ * at least as far as a flat jump does.
+ */
+export function climbGraph(rows, budget) {
+  const reach = { gap: budget.gapTiles, wall: budget.wallTiles };
+  const w = rows[0].length;
+  const carry = climbCarry(reach);
+  const platforms = platformsOf(rows, w);
+  const at = (x, y) => (y < 0 || y >= rows.length || x < 0 || x >= w ? ' ' : rows[y][x]);
+  const open = (b, a) => {
+    /* The column you come up through: the end of the landing platform nearest
+     * the one you left, which is where a climber actually aims. */
+    const x = a.x1 < b.x0 ? b.x0 : a.x0 > b.x1 ? b.x1 : Math.max(b.x0, Math.min(b.x1, a.x0));
+    for (let y = b.y + 1; y < a.y; y++) if (SOLID.has(at(x, y))) return false;
+    return true;
+  };
+  const edges = platforms.map(() => []);
+  for (const a of platforms) {
+    for (const b of platforms) {
+      if (a === b) continue;
+      const gap = sideways(a, b);
+      if (b.y < a.y) {
+        const rise = a.y - b.y;
+        if (rise <= reach.wall && gap <= carry(rise) && open(b, a)) edges[a.i].push(b.i);
+      } else if (gap <= reach.gap) edges[a.i].push(b.i);
+    }
+  }
+  return { platforms, edges, carry, reach };
+}
+
+/** Platforms reachable from a seed, following `edges`. */
+function flood(edges, seeds) {
+  const seen = new Set(seeds);
+  const stack = [...seeds];
+  while (stack.length) for (const n of edges[stack.pop()]) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+  return seen;
+}
+
+/** The platform a body dropped at `x,y` comes to rest on, or null. */
+function landsOn(graph, x, y) {
+  let best = null;
+  for (const p of graph.platforms) {
+    if (p.y < y || x < p.x0 || x > p.x1) continue;
+    if (!best || p.y < best.y) best = p;
+  }
+  return best;
+}
+
+/**
+ * Route-only, and the vertical half of "the route works at the smallest size".
+ *
+ * Three questions, and each is the climb's version of one the horizontal rules
+ * already ask:
+ *
+ *   - **the climb connects.** `checkGaps` asks whether every hole fits the
+ *     jump; this asks whether every step of the ladder does, which on this
+ *     axis is a reachability question rather than a per-hole one, because a
+ *     climb has branches and a floor does not. Reported as the step that
+ *     breaks it, with the two numbers that decide it.
+ *   - **the level catches you.** Falling is not fatal in a climb — that is the
+ *     shape's whole promise, the thing that makes it forgiving enough to be
+ *     tall — so a column with nothing under it is a promise broken, and a
+ *     lethal tile on the landing row is the same promise broken more quietly.
+ *     This is the exact counterpart of `checkGaps` refusing a bottomless run
+ *     on a horizontal level, and for the same reason: the level may not kill
+ *     you for the mistake it is built around.
+ *   - **no stairway to nothing, on the axis where every stair is the route.**
+ *     DESIGN.md §5's rule cannot be read literally here: a plank run in a
+ *     climb *is* the way up, so "does it lead to something" is answered by the
+ *     climb itself and the rule would pass everything. What it is protecting
+ *     is not planks, it is the player's willingness to explore — one empty
+ *     climb teaches you to skip the next. So the vertical form asks the same
+ *     question of the same intent: **a platform you can reach but cannot
+ *     continue from has to be worth having gone to.** A dead end with a coin
+ *     on it is a detour; a dead end with nothing on it is the stairway to
+ *     nothing, wearing the other axis.
+ */
+function checkClimb(rows, w, graph, budget, problems) {
+  const h = rows.length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
+  const find = (ch) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (at(x, y) === ch) return { x, y };
+    return null;
+  };
+
+  /* The bottom of the level, before anything else: a climb whose floor has a
+   * hole in it fails every other question for the wrong reason.
+   *
+   * Two halves, and the second is the one that would otherwise be found by
+   * playing. A floor you land on is not a floor if what is resting on it kills
+   * you — a spike bed at the bottom of a climb turns every missed jump into a
+   * life, which is the shape's one promise broken silently. So the tile the
+   * fall actually stops at is the one that is asked, and it is found the way
+   * the body finds it: the first thing down the column, not the last row. */
+  for (let x = 0; x < w; x++) {
+    if (!SOLID.has(at(x, h - 1))) {
+      problems.push(`column ${x} has no floor at the bottom of the climb: a fall`
+        + ' is a setback here, not a death, so there has to be something to land on');
+      continue;
+    }
+    let y = h - 1;
+    while (y > 0 && SOLID.has(at(x, y - 1))) y--;
+    const on = at(x, y - 1);
+    if (DEADLY.has(on) || on === '^') {
+      problems.push(`column ${x} lands you on "${on}" at the bottom of the`
+        + ' climb: falling may cost the climb, not the life');
+    }
+  }
+
+  const start = find('1');
+  const goal = find('F');
+  if (!start) { problems.push('vertical level with no player start'); return; }
+  if (!goal) { problems.push('vertical level with no goal'); return; }
+  const from = landsOn(graph, start.x, start.y);
+  const to = landsOn(graph, goal.x, goal.y);
+  if (!from) { problems.push(`the start at ${start.x},${start.y} falls out of the level`); return; }
+  if (!to) { problems.push(`the goal at ${goal.x},${goal.y} stands on nothing`); return; }
+
+  const reachable = flood(graph.edges, [from.i]);
+  if (!reachable.has(to.i)) {
+    /* The useful coordinate is where the climb stops, not where it was going.
+     * The highest platform that can be reached, and the cheapest step off it
+     * that would have continued, with both numbers the jump is judged by. */
+    let top = from;
+    for (const i of reachable) if (graph.platforms[i].y < top.y) top = graph.platforms[i];
+    let next = null;
+    for (const p of graph.platforms) {
+      if (p.y >= top.y || reachable.has(p.i)) continue;
+      if (!next || p.y > next.y) next = p;
+    }
+    const rise = next ? top.y - next.y : null;
+    problems.push(`the climb stops at the platform on row ${top.y}: `
+      + (next
+        ? `the next footing up is ${rise} tiles above and ${sideways(top, next)} across,`
+        + ` and the measured jump rises ${budget.wallTiles} and carries`
+        + ` ${graph.carry(Math.min(rise, budget.wallTiles))} at that rise`
+        : 'there is nothing above it at all'));
+    return;
+  }
+
+  /*
+   * The stairway to nothing, on the axis where every stair is the route.
+   *
+   * Asked as "no way further up, and nothing on it", which is as close to the
+   * horizontal rule's own words as the axis allows: it looks up four rows from
+   * the platform for something to take, and rejects it when there is neither a
+   * reward there nor anywhere left to climb. The first draft asked instead
+   * whether the platform was on a route to the goal, and that rule can never
+   * fire — you can always drop off a ledge back onto the climb, so every
+   * platform in a well-formed climb reaches the goal and the check passes
+   * everything. A rule that cannot fail is worse than no rule, because it
+   * reads like cover.
+   *
+   * The goal's own platform is exempt for the obvious reason: nothing is above
+   * it, and that is what makes it the top.
+   *
+   * **This is stricter than the genre, on purpose, and the corpus says by how
+   * much.** `tools/mine-pacing.mjs --vertical` reads the two vertical games in
+   * the corpus (DESIGN.md §3: aggregates only, and they are in
+   * `tools/pacing-stats.json` under `vertical`): across 2341 rungs, **24.2 %
+   * have nothing above them in reach**. A quarter of the footing in those
+   * games goes nowhere. So this rule is not the genre convention, it is this
+   * game's own §5 — *"jos rakennat palikkapolun ylöspäin, sen päässä on
+   * jotain"* — held on the other axis, and it costs a design choice those
+   * games did not make. It is worth the cost for the same reason it was
+   * horizontally: one empty climb teaches you to skip the next.
+   *
+   * The same run says the median rung rise is **4 tiles and the p90 is 6**,
+   * against our measured `wallTiles` of 4 — so a climb built to this rule sits
+   * at the corpus's median and refuses its top decile, which is what scaling
+   * to our own jump budget rather than to theirs means (§3 point 5).
+   */
+  for (const p of graph.platforms) {
+    if (!reachable.has(p.i) || p.i === to.i) continue;
+    if (graph.edges[p.i].some((j) => graph.platforms[j].y < p.y)) continue;
+    const paid = [...Array(p.x1 - p.x0 + 3).keys()]
+      .some((i) => [1, 2, 3, 4].some((up) => REWARD.has(at(p.x0 - 1 + i, p.y - up))));
+    if (!paid) {
+      problems.push(`platform at ${p.x0},${p.y} has nothing above it in reach and`
+        + ' nothing on it: a stairway to nothing, standing on end');
+    }
+  }
+}
+
+/**
+ * Route-only. The basic power-up is near the start, and near is measured along
+ * the axis the player travels.
+ *
+ * The horizontal rule is "within the first quarter of the width", and its
+ * reason has nothing to do with width: *if you lose your power immediately,
+ * the repair is close, and you do not have to play the rest of the level at
+ * the smallest size.* On a climb the quarter is a quarter of the **height**,
+ * and it is taken from the start rather than from the bottom of the grid — a
+ * level that digs downward starts at the top, and a rule that always looked at
+ * the bottom rows would demand the power-up at the far end of it.
+ */
+function checkClimbPower(rows, w, problems) {
+  const h = rows.length;
+  let startRow = -1;
+  let goalRow = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (rows[y][x] === '1') startRow = y;
+      if (rows[y][x] === 'F') goalRow = y;
+    }
+  }
+  if (startRow < 0 || goalRow < 0) return;      // already reported by checkClimb
+  const quarter = Math.floor(h * 0.25);
+  const up = goalRow < startRow;
+  const from = up ? Math.max(0, startRow - quarter) : startRow;
+  const to = up ? startRow : Math.min(h - 1, startRow + quarter);
+  for (let y = from; y <= to; y++) for (let x = 0; x < w; x++) if (rows[y][x] === '!') return;
+  problems.push(`no power-up in the first quarter of the climb (rows ${from}-${to})`);
 }
 
 /* --------------------------- warps and vines ------------------------------ */
@@ -708,9 +1070,15 @@ function checkBonusBand(rows, w, band, b, routeIndex, mouths, seams, reach, prob
 /**
  * @param {string[]} rows padded level rows
  * @param {{gapTiles:number, wallTiles:number}} budget measured jump budget
+ * @param {{vertical?:boolean}} [opts] what shape of level this is. Omitted
+ *   everywhere in the game, because every level in the game is horizontal;
+ *   a climb has to say so, and saying so is what switches the axis. Defaulting
+ *   it off is what makes this change inert for the 30 levels that exist — an
+ *   inference from the grid's shape would have to guess, and guessing wrong
+ *   about a tall level would rewrite the rules under the banded ones.
  * @returns {string[]} human-readable problems, empty when the level is sound
  */
-export function validateLevel(rows, budget) {
+export function validateLevel(rows, budget, opts = {}) {
   const reach = { gap: budget.gapTiles, wall: budget.wallTiles };
   const problems = [];
   const w = rows[0].length;
@@ -721,22 +1089,54 @@ export function validateLevel(rows, budget) {
   if (rows.some((r) => r.length !== w)) return ['ragged rows'];
 
   /*
-   * Universal. Footing is a question about one tile and the tile under it, so
-   * it is asked of the whole grid: an enemy hanging in mid-air is a mistake
-   * wherever it is.
+   * A CLIMB, AND THEREFORE A DIFFERENT SET OF QUESTIONS.
+   *
+   * Everything below this block reads row 13 and walks left to right. On a
+   * 20-column, forty-row level that is not a weaker answer, it is an answer to
+   * another level: the "floor" is the topmost platform of each column, the
+   * whole grid is one gap, and the power-up "in the first quarter" is in the
+   * first quarter of a width that is one screen.
+   *
+   * So the route rules are replaced rather than reused, and the ones that are
+   * genuinely about a tile and its neighbour are kept:
+   *
+   *   kept    ragged rows, enemies standing on something, beanstalk clearance.
+   *           None of them mentions a floor, a start or a flag.
+   *   replaced gaps and walls → `checkClimb`; the power-up in the first quarter
+   *           → the first quarter of the *climb*; "no stairway to nothing" →
+   *           the dead-end rule inside `checkClimb`.
+   *   dropped headroom and the quicksand rim, and both for the same reason:
+   *           they are measured off `floorProfile`, which is row 13. Headroom
+   *           would also be wrong even if it were re-aimed — a climb's
+   *           platforms are spaced by the jump budget, four tiles at the most,
+   *           so a rule demanding three clear rows over every one of them
+   *           fires on every correctly built climb. That is the same escape
+   *           the horizontal rule already grants a low shelf, in its own
+   *           words: a body that does not fit above it cannot get onto it, so
+   *           it is unreachable at that size rather than sealed.
+   *
+   * The width is checked here and not left to the camera to discover, because
+   * the camera would not discover it — it would quietly start scrolling
+   * sideways and the level would be a different shape than the one anybody
+   * designed. See VERTICAL_COLS.
    */
-  for (let y = 0; y < rows.length; y++) {
-    for (let x = 0; x < w; x++) {
-      const ch = rows[y][x];
-      if (!ENEMY.has(ch)) continue;
-      // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
-      // a tile high and drop in) have no footing to check. The player start is
-      // likewise allowed to be in mid-air: the game drops them in.
-      if ('ApfrkO'.includes(ch)) continue;
-      const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
-      if (!SOLID.has(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
+  if (opts.vertical) {
+    if (w !== VERTICAL_COLS) {
+      problems.push(`a climb is ${VERTICAL_COLS} columns wide and this one is ${w}:`
+        + ' one screen exactly, or the camera starts scrolling sideways');
     }
+    if (rows.length <= ROWS) {
+      problems.push(`a climb is taller than one screen and this one is ${rows.length} rows`);
+    }
+    checkEnemyFooting(rows, w, problems);
+    checkVines(rows, w, problems);
+    const graph = climbGraph(rows, budget);
+    checkClimb(rows, w, graph, budget, problems);
+    checkClimbPower(rows, w, problems);
+    return problems;
   }
+
+  checkEnemyFooting(rows, w, problems);
 
   const bands = bandsOf(rows);
   let routeIndex = routeIndexOf(bands);
@@ -809,4 +1209,4 @@ export function validateLevel(rows, budget) {
   return problems;
 }
 
-export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR };
+export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS };

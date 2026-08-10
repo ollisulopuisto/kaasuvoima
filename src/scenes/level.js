@@ -312,6 +312,150 @@ const CAM_TOP_LEAD = 3;
 const CAM_FALL_LEAD = 3;
 
 /*
+ * ...and the one kind of level where none of the above is the right answer:
+ * a climb (`vertical: true`).
+ *
+ * A vertical level is exactly one screen wide — 20 columns, because VIEW_W is
+ * 320 and TILE is 16 — and many screens tall. The exit is at the top (or, for a
+ * level that digs, at the bottom) rather than at the right edge, falling is a
+ * setback and not a death, and the whole level is one continuous climb. On that
+ * shape the eased follow above is wrong in a way no amount of tuning fixes: it
+ * would spend the entire level in motion, because on this axis the player is
+ * always going somewhere, and a picture that never holds still is a picture you
+ * cannot read a jump off.
+ *
+ * So the view **holds absolutely still, and then pages**. When the line the
+ * framing hangs from leaves a band at the edge of the frame, the view moves in
+ * one step and puts the player back near the *opposite* edge, so the ground
+ * they are climbing into is already on screen when they arrive. Between pages
+ * `cam.y` does not move by a pixel.
+ *
+ * **THIS IS A HARD CUT, AND IT IS NOT `CAM_SNAP` COMING BACK.** That sentence
+ * needs the next four paragraphs, because `CAM_SNAP` was deleted hours before
+ * this was written and the next reader deserves to know which of the two they
+ * are looking at.
+ *
+ *   - **`CAM_SNAP` fired on a distance, this fires on a crossing.** `CAM_SNAP`
+ *     said "if the view is more than 48 px from where it wants to be, stop
+ *     easing and jump" — a rule about the size of an error, which cannot tell a
+ *     view that is behind because the player warped from a view that is behind
+ *     because the player landed on a tall platform. It could not, and it fired
+ *     on the landing. This fires when the player has left a *named band of the
+ *     window*: it is a rule about where the body is in the picture, and there
+ *     is no error for it to misread.
+ *   - **`CAM_SNAP` was a catch-up, this is the only thing that moves the view.**
+ *     There is no ease underneath it to outrun. A vertical level's camera is
+ *     "still, page, still" and nothing else, so the cut is not the failure mode
+ *     of a smooth mechanism, it *is* the mechanism — for legibility, the same
+ *     way a comic strip cuts between panels rather than panning.
+ *   - **`CAM_SNAP` protected nothing: measured across all 30 levels it fired
+ *     zero times.** This fires by construction, several times per climb, and if
+ *     it ever stops firing the level has become unreadable rather than smooth.
+ *     A gate that never fires and a gate that always fires are not the same
+ *     kind of thing, and the measurement is the difference.
+ *   - **`CAM_SNAP` applied to every level, this applies to none of the existing
+ *     ones.** It is behind `def.vertical`, which no shipped level sets, so the
+ *     30 levels that measured `CAM_SNAP` at zero execute not one line of this.
+ *     `verify.mjs` records `cam.x`/`cam.y` per frame over a scripted run of
+ *     every shipped level at two power levels and compares the whole recording
+ *     with the one taken before this landed: identical to the fourth decimal,
+ *     900 frames a level.
+ *
+ * **THE TRIGGER IS `camAnchor`, AND THAT CHOICE IS THE WHOLE DESIGN.** The
+ * anchor is the last feet position the player actually *settled* at (see
+ * `updateCamAnchor`): it moves the frame the feet touch down, it moves on any
+ * downward move because you must see what you are falling towards, and it
+ * deliberately does **not** move while a jump is rising. Hanging the page off
+ * it buys three things that a page hung off the body itself does not:
+ *
+ *   1. **A page can never interrupt a jump mid-arc.** The apex of a jump does
+ *      not move the anchor, so it cannot reach a band, so it cannot page. This
+ *      is the answer to the question the owner asked about freezing the player
+ *      during the page: measured over the fixture climb, pages taken while a
+ *      jump was still rising = **0 of 5**, at power 0 and at power 5, with the
+ *      page as a cut and as a twelve-frame pan alike. There is no mid-arc page
+ *      to protect the player from.
+ *   2. **It cannot oscillate**, which is the failure mode of every page hung
+ *      off the head. Paging up on the head at its apex and then letting the
+ *      body fall back to the platform it took off from puts the feet under the
+ *      new frame, which pages straight back down — a flicker for a jump that
+ *      went nowhere. Arithmetically it is not tunable away: a page of D is
+ *      safe only while D ≤ viewH − 32 − h − J, and at the tallest size with
+ *      the fart jump (h = 43, J = 174) that is **−41 px**. The anchor holds
+ *      through the arc, so the case does not arise at all.
+ *   3. **A fall still pages promptly downward**, because the anchor tracks a
+ *      fall on the frame it happens. Falling in a climb is ordinary — it is
+ *      the level's own way of punishing a miss — so the view has to show what
+ *      is underneath while you are still in the air, and it does.
+ *
+ * `CAM_PAGE_EDGE` is the band at each edge of the window that triggers the
+ * page, and `CAM_PAGE_LAND` is how far from the *opposite* edge the page then
+ * puts the anchor. Both are stated in the window rather than in the world, for
+ * the same reason `CAM_TOP_MARGIN` is: what they describe is a body's place in
+ * the picture.
+ *
+ * **THE PAGE IS NOT A WHOLE SCREEN, AND THAT IS ARITHMETIC RATHER THAN
+ * TIMIDITY.** The owner asked for a page of a screen. Three numbers make that
+ * impossible in this engine and they are all measured:
+ *
+ *   - the window is **208 px, 13 tiles** (160 and 10 if the level is
+ *     letterboxed),
+ *   - a running-held jump rises **85 px, 5.3 tiles**, and the tallest body is
+ *     **43 px**,
+ *   - the largest step a climb may be built at is `wallTiles` = **4 tiles**,
+ *     which is what `src/data/rules.js` measures a climb against.
+ *
+ * The last one is what fixes `CAM_PAGE_LAND`. After a page the anchor has to
+ * come to rest far enough from the *opposite* band that one ordinary hop
+ * cannot push it back over — otherwise a player stepping between two platforms
+ * either side of a boundary pages the view back and forth for a 48 px move,
+ * which is a strobe rather than a camera. So `CAM_PAGE_LAND − CAM_PAGE_EDGE`
+ * must exceed one maximal hop: 112 − 32 = **80 px, five tiles, against a
+ * four-tile hop**. What is left over is the page itself, `viewH −
+ * CAM_PAGE_LAND − CAM_PAGE_EDGE` = **64 px at the least and 96 px in the
+ * ordinary case**, four to six tiles of a thirteen-tile window. A page of a
+ * whole screen would leave nothing for the hysteresis and the strobe would be
+ * the feature.
+ *
+ * **And the page alone cannot keep the head in the frame** — see
+ * `applyPageView`, which is where `CAM_TOP_MARGIN` turns up again and why it
+ * has to.
+ */
+const CAM_PAGE_EDGE = 32;
+const CAM_PAGE_LAND = 112;
+
+/*
+ * How many frames a page takes, and therefore how long the player is frozen.
+ *
+ * **Zero, and that is a measurement rather than a preference.** The owner's
+ * instinct was a held beat — "you freeze the character while the camera moves,
+ * and then play continues" — and it is arcade-correct in the games it comes
+ * from. Both were built and both were measured on the same fixture climb, one
+ * page length against the other:
+ *
+ *   | page length | control lost | new ground shows | pages mid-rise | climb |
+ *   | 0 frames    | 0 frames     | the same frame   | 0 of 5         |   779 |
+ *   | 12 frames   | 60 frames    | 12 frames later  | 0 of 5         |   899 |
+ *
+ * A freeze buys exactly one thing: it stops the player acting on a picture
+ * they have not read yet. The anchor rule above has already bought that — a
+ * page only ever happens on a landing or during a fall, never while a jump is
+ * rising — so the freeze is paid for and delivers nothing, twice over: the new
+ * ground is on screen a whole page *earlier* without it, and a second of the
+ * climb is given back. A second of a level in which the player is holding a
+ * direction and cannot use it, at the exact moments the level is asking them
+ * to aim, is the same complaint this camera has already answered twice today,
+ * and it is not worth paying for something already owned.
+ *
+ * The number stays a field on the scene (`camPageFrames`) rather than being
+ * folded away, because the table above is a measurement and a measurement has
+ * to be repeatable: `verify.mjs` runs the same climb at 0 and at 12 and prints
+ * both rows. If a later vertical level wants the beat back — a boss climb, a
+ * scripted moment — it is one number and the freeze is fully implemented.
+ */
+const CAM_PAGE_FRAMES = 0;
+
+/*
  * Cinemascope, for the levels that ask for it (`letterbox: true`).
  *
  * The bars are a **crop, not a mask**. Widescreen is a narrower window on the
@@ -522,9 +666,20 @@ const SECRET_COIN_RATE = 0.07;
 const SECRET_POWER_RATE = 0.015;
 
 export class LevelScene {
-  constructor(game, levelId) {
+  /**
+   * @param {object} game
+   * @param {string} levelId
+   * @param {object} [def] a level definition to build instead of looking the id
+   *   up. The one caller is `tools/verify.mjs`, and it is the same seam and the
+   *   same reason as `scoreRows` in `tools/difficulty.mjs`: a rule proved only
+   *   against shipped content is a rule proved against content that happens to
+   *   be right, and a fixture for a level *shape the game does not have yet*
+   *   cannot be a shipped level without shipping it. Omitted everywhere else,
+   *   so the lookup is what the game does.
+   */
+  constructor(game, levelId, def) {
     this.game = game;
-    this.def = getLevel(levelId);
+    this.def = def || getLevel(levelId);
     this.id = levelId;
     this.theme = this.def.theme;
 
@@ -560,6 +715,18 @@ export class LevelScene {
     this.camAnchor = 0;
     /** How far ahead of the feet that line is aimed — see CAM_FALL_LEAD. */
     this.camLead = 0;
+    /** A climb, and therefore a paging camera. See CAM_PAGE_EDGE. */
+    this.vertical = !!this.def.vertical;
+    /** Frames a page takes, 0 for a cut. See CAM_PAGE_FRAMES. */
+    this.camPageFrames = CAM_PAGE_FRAMES;
+    /** Frames left of a page in flight; while it runs the player is frozen. */
+    this.camPage = 0;
+    this.camPageFrom = 0;
+    this.camPageTo = 0;
+    /** The line the page holds the view at, before the headroom net. */
+    this.camPageY = 0;
+    /** How many pages this climb has taken. Reported, never played on. */
+    this.camPages = 0;
     this.tick = 0;
     this.time = this.def.time;
     this.timeSub = 0;
@@ -1439,6 +1606,25 @@ export class LevelScene {
   update(input) {
     this.tick++;
 
+    /* A page in flight is the one moment the world holds still, and it is the
+     * whole of the freeze the owner asked about: the picture moves, nothing
+     * else does. Enemies stop with the player rather than only the player,
+     * because a walker that keeps walking while you cannot answer is the
+     * freeze charging you for itself.
+     *
+     * `tick` is deliberately outside it. It drives the breathing clock every
+     * sprite shares, and a picture that stops breathing reads as the game
+     * having crashed rather than as the camera having moved.
+     *
+     * Dead code in every shipped level: `camPage` can only be non-zero in a
+     * vertical level, and only when `camPageFrames` has been raised off its
+     * measured default of 0. See CAM_PAGE_FRAMES for the measurement that put
+     * it there. */
+    if (this.camPage > 0) {
+      this.updateCameraPage();
+      return;
+    }
+
     if (this.state === 'play') {
       this.updateTimer();
       this.player.update(input);
@@ -1721,9 +1907,118 @@ export class LevelScene {
     return Infinity;
   }
 
+  /**
+   * The climb's camera: still, page, still. See `CAM_PAGE_EDGE` for the whole
+   * argument, including why a hard cut here is not the threshold that was
+   * deleted this morning.
+   *
+   * Two jobs and they are in this order on purpose. A page already in flight
+   * finishes before anything else is asked, because the freeze — when there is
+   * one — is defined as "the picture is moving and the player is not", and a
+   * page that could be re-triggered while it ran would be a page that never
+   * ends.
+   *
+   * `cam.x` never appears here. A vertical level is exactly one screen wide,
+   * so `widthPx - VIEW_W` is zero and the horizontal clamp in `updateCamera`
+   * pins the view at 0 for the whole level; the dead zone and the look-ahead
+   * are computed and thrown away rather than skipped, which keeps one code
+   * path instead of two and costs two multiplications a frame.
+   *
+   * @returns {boolean} true when a page is in flight and the world is held.
+   */
+  updateCameraPage() {
+    const p = this.player;
+    if (this.camPage > 0) {
+      this.camPage--;
+      const t = 1 - this.camPage / this.camPageFrames;
+      this.camPageY = this.camPageFrom + (this.camPageTo - this.camPageFrom) * t;
+      this.applyPageView();
+      return this.camPage > 0;
+    }
+    /* Dying and travelling freeze the view for the same reason they freeze the
+     * anchor: the body is going somewhere the picture has no business
+     * following, and a page taken off a corpse's flight would show the room
+     * above the pit to somebody who was only dying. */
+    if (p.dying || p.transit) return false;
+
+    const top = this.camPageY + CAM_PAGE_EDGE;
+    const bottom = this.camPageY + this.viewH - CAM_PAGE_EDGE;
+    let want = null;
+    /* The settled line, not the body: `camAnchor` holds through a rising arc
+     * and tracks a fall on the frame it happens, which is exactly the
+     * asymmetry a climb needs. See CAM_PAGE_EDGE, point 1.
+     *
+     * Compared against the page's own line and not against `cam.y`, because
+     * `cam.y` is the page line *plus the headroom net below*, and a trigger
+     * that read the net's lift would page early on a jump, which is the one
+     * thing the anchor is here to prevent. */
+    if (this.camAnchor < top) want = this.camAnchor - (this.viewH - CAM_PAGE_LAND);
+    else if (this.camAnchor > bottom) want = this.camAnchor - CAM_PAGE_LAND;
+    if (want === null) { this.applyPageView(); return false; }
+
+    /* Placed relative to the player rather than by a fixed step, which is what
+     * makes "you arrive at the opposite edge" true however far outside the
+     * frame the anchor got — a long fall moves it by more than a page in one
+     * frame, and a fixed step would need several pages to catch up with a body
+     * that is already past them. */
+    const to = this.clampCamY(want);
+    if (Math.abs(to - this.camPageY) < 0.5) { this.applyPageView(); return false; }
+    this.camPages++;
+    if (this.camPageFrames <= 0) {
+      this.camPageY = to;
+      this.applyPageView();
+      return false;
+    }
+    this.camPageFrom = this.camPageY;
+    this.camPageTo = to;
+    this.camPage = this.camPageFrames;
+    this.applyPageView();
+    return true;
+  }
+
+  /**
+   * The page line, and the one thing allowed to override it.
+   *
+   * **`CAM_TOP_MARGIN` is here too, and it has to be, and the arithmetic that
+   * says so is worth keeping.** A page fires on the settled feet, so the last
+   * platform before a page can be `CAM_PAGE_EDGE` from the top of the frame,
+   * and the jump *off* it rises a rung plus its overshoot plus a body — 77 px
+   * at the smallest size on three-tile spacing. To contain that inside the
+   * page alone the edge band would have to be 77 px at each end, which with
+   * one rung of hysteresis leaves `208 − 2×77 − 48` = **−90 px** for the page
+   * itself. It does not fit, and no choice of the two constants makes it fit:
+   * the window is 13 tiles and a jump is 5.
+   *
+   * So the climb borrows the answer the ordinary camera already gives, in that
+   * camera's own words — *"a limit, not a destination… it only ever moves the
+   * view up, and only as far as the band allows"*. It engages near the apex of
+   * a jump taken high in the frame, follows the head exactly as far as it must,
+   * and lets go on the way down. It is continuous in both directions, so it is
+   * not a second cut, and between pages it is the *only* thing that can move
+   * the view — measured on the fixture climb, and asserted as such rather than
+   * described.
+   *
+   * Without it the fixture climb put the head **45.31 px** above the top of the
+   * frame on the last jump before each page. With it, 0.00.
+   */
+  applyPageView() {
+    const p = this.player;
+    const held = p.dying || p.transit
+      ? this.camPageY : Math.min(this.camPageY, p.y - CAM_TOP_MARGIN);
+    this.cam.y = this.clampCamY(held);
+  }
+
   updateCamera() {
     const p = this.player;
     this.updateCamAnchor();
+    /* The climb takes the whole vertical axis and leaves the horizontal one
+     * alone. Nothing below this line touches `cam.y` in a vertical level, and
+     * nothing above it touches `cam.x` in any level. */
+    if (this.vertical) {
+      this.updateCameraPage();
+      this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
+      return;
+    }
     const speed = Math.abs(p.vx);
     const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * Math.min(1, speed / MAX_RUN) : 0;
     this.camLook += (wanted - this.camLook) * (Math.abs(wanted) > Math.abs(this.camLook)
@@ -1779,6 +2074,24 @@ export class LevelScene {
    */
   cameraY() {
     const p = this.player;
+    /*
+     * A climb has no settled line to ease towards — it has pages, and this is
+     * only ever asked of it by `centerCamera`, i.e. at a cut: level entry, a
+     * respawn, the far end of a warp. So the answer is where a page would have
+     * put the body had it arrived from the direction it is about to travel in.
+     *
+     * Which direction that is, is read off the level rather than declared:
+     * a body placed in the lower half of a tall level is at the bottom of a
+     * climb and is going up, so it is framed near the bottom edge and sees
+     * what is above it; one placed in the upper half is about to go down and
+     * is framed near the top. That covers the digging level as well as the
+     * climbing one without either of them having to say so twice.
+     */
+    if (this.vertical) {
+      const climbing = this.camAnchor > this.heightPx / 2;
+      return this.clampCamY(this.camAnchor
+        - (climbing ? this.viewH - CAM_PAGE_LAND : CAM_PAGE_LAND));
+    }
     /* The settled line, then the one thing allowed to override it: the head
      * must not leave the top of the window. Frozen bodies get the line alone —
      * a dying player flies upwards and a travelling one is not in the room. */
@@ -1820,8 +2133,12 @@ export class LevelScene {
     this.camAnchor = this.player.y + this.player.h;
     this.camLead = 0;
     this.camLook = 0;
+    /* A cut outranks a page: whatever the climb's camera was in the middle of,
+     * the body is somewhere else now and the picture goes there whole. */
+    this.camPage = 0;
     this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
     this.cam.y = this.cameraY();
+    this.camPageY = this.cam.y;
   }
 
   /* ------------------------------ collisions --------------------------- */

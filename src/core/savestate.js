@@ -72,6 +72,12 @@ export function captureState(game) {
         entities: scene.entities.map(entityToJSON),
         player: entityToJSON(scene.player),
         cam: { x: scene.cam.x, y: scene.cam.y },
+        /* The climb's page line. It is not derivable from `cam.y`, because
+         * `cam.y` is the page line with the headroom net possibly subtracted,
+         * and a snapshot taken at the apex of a jump would restore the page
+         * one jump too high and never page back. Always written, always a
+         * number, zero and unread in every horizontal level. */
+        camPageY: scene.camPageY,
         tick: scene.tick,
         time: scene.time,
         timeSub: scene.timeSub,
@@ -117,6 +123,9 @@ export function restoreState(game, snap) {
   scene.entities = data.entities.map((e) => entityFromJSON(scene, e)).filter(Boolean);
   scene.player = entityFromJSON(scene, data.player);
   scene.cam = { ...data.cam };
+  // An older snapshot has no page line; the view it was taken at is the honest
+  // fallback, and in a horizontal level nothing ever reads it.
+  scene.camPageY = data.camPageY === undefined ? data.cam.y : data.camPageY;
   scene.tick = data.tick;
   scene.time = data.time;
   scene.timeSub = data.timeSub;

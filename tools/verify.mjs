@@ -10464,6 +10464,256 @@ const report = await page.evaluate(async () => {
           + `asettui ${r.settle || '>40'} framessa`).join(', '));
     }
 
+    /* ------------------------------- kiipeäminen ------------------------- */
+    /*
+     * PYSTYKENTTÄ: KAMERA, BOTTI JA SE ETTÄ KUMPIKAAN EI KOSKE MUUHUN PELIIN.
+     *
+     * Red before green (DESIGN.md §7) for the owner's fifth camera report, and
+     * it is not a bug this time but a shape the game does not have yet: *"the
+     * player character stops there, and then the camera tilts down… and then
+     * play continues with the player character at the top of the screen. That
+     * way, if you're going down, you see what's beneath you."*
+     *
+     * The fixture is a CLIMB and not a level: 20 columns — one screen exactly,
+     * see `VERTICAL_COLS` — by 45 rows, thirteen plank rungs three tiles apart,
+     * a power block in the bottom quarter, bedrock across the bottom because a
+     * fall here is a setback and not a death, and the flag at the top. It is
+     * built here rather than in `src/data/levels/` for the same reason
+     * `scoreRows` exists: another agent owns the level files, the game ships no
+     * vertical level yet, and a capability proved only by the content it is
+     * about to bless is not proved. `LevelScene` takes the definition directly.
+     *
+     * What the red said, on the code as it stood this morning:
+     *
+     *   - the paging test, with the same fixture built as an ordinary level:
+     *     `0 sivunvaihtoa, 388 liikeframea 779:stä, pahin 12.00 px` — the
+     *     ordinary ease doing exactly what it is meant to do on the wrong
+     *     shape of level, moving on every other frame and never holding still.
+     *   - the bot: `96 % oikealle, 11 % ylös, ei maalia` — the run-right-and-
+     *     jump bot finds the right-hand wall and stays there.
+     *   - the rules: reading the same fixture horizontally reports six problems
+     *     and not one of them is true — `no power-up in the first quarter`,
+     *     four `platform at … leads to nothing`, `nothing leads into the sky
+     *     band`.
+     *   - the meter: `1920.5` against a world-1 level's 100, from summing a
+     *     gap-shaped cost over every rung of a ladder.
+     */
+    {
+      const { RULE_CONSTANTS, climbGraph } = await import('/src/data/rules.js');
+      const { makeClimber } = await import('/tools/climb-bot.js');
+      const { TILE: TILE_PX } = await import('/src/gfx/tiles.js');
+      const budget = await (await fetch('/tools/jump-budget.json')).json();
+      const W = RULE_CONSTANTS.VERTICAL_COLS;
+      const H = 45;
+
+      /** The fixture climb. One fault at a time, the same way the tall one does. */
+      const climbRows = (over = {}) => {
+        const rows = Array.from({ length: H }, () => ' '.repeat(W));
+        const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
+        put(3, '              F     ');
+        [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
+          put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+        });
+        put(39, '     !              ');
+        put(42, '  1                 ');
+        put(43, '####################');
+        put(44, '####################');
+        for (const [y, s] of Object.entries(over)) put(Number(y), s);
+        return rows;
+      };
+      const climbDef = (over) => ({
+        id: 'vFix', theme: 'cloud', bg: 'clouds', music: 'cloud', time: 9999,
+        boss: false, bossVariant: 0, bands: null, vertical: true, rows: climbRows(over),
+      });
+
+      /**
+       * One climb, driven by the shared climber, with the camera watched.
+       *
+       * @param {number} pageFrames 0 = a cut, >0 = a pan with the player frozen
+       */
+      const runClimb = (power, pageFrames, over) => {
+        reset(power);
+        const s = new LevelScene(game, 'vFix', climbDef(over));
+        s.camPageFrames = pageFrames;
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        let finished = null;
+        game.finishLevel = (r) => { finished = r; };
+        const bot = makeClimber(s, climbRows(over), budget);
+        const input = mkInput();
+        const startFeet = s.player.y + s.player.h;
+        let top = startFeet;
+        let moves = 0;            // frames on which the page line moved at all
+        let pages = 0;            // and how many of those completed a page
+        let biggest = 0;
+        let frozen = 0;           // frames the player could not act
+        let midArc = 0;           // pages taken while a jump was still rising
+        let net = 0;              // frames the headroom net was the binding term
+        let headOut = 0;          // px the head ever went above the frame
+        let feetOut = 0;          // px the feet ever went below it
+        let firstSeen = -1;       // frames from a page to the new ground showing
+        let frames = 0;
+        for (let f = 0; f < 4000 && !finished; f++) {
+          frames = f;
+          const p = s.player;
+          const before = s.camPageY;
+          const wasFrozen = s.camPage > 0;
+          /* Only the played part of the level is measured. Touching the flag
+           * hands the body to the clear animation, which walks it off the top
+           * platform and back down the shaft — five pages of camera that
+           * nobody is playing, and counting them would put the freeze's bill
+           * on the wrong side of the ledger. */
+          const playing = s.state === 'play';
+          const want = bot.step();
+          input.held = blank();
+          input.pressed = blank();
+          input.held.left = want.left;
+          input.held.right = want.right;
+          input.held.jump = want.jump;
+          input.pressed.jump = want.press;
+          s.update(input);
+          if (!playing) continue;
+          if (wasFrozen) frozen++;
+          if (Math.abs(s.camPageY - before) > 0.001) {
+            moves++;
+            biggest = Math.max(biggest, Math.abs(s.camPageY - before));
+            if (s.camPage <= 0) {
+              pages++;
+              if (firstSeen < 0) firstSeen = Math.max(0, pageFrames);
+              if (!p.onGround && p.vy < 0) midArc++;
+            }
+          }
+          if (Math.abs(s.cam.y - s.camPageY) > 0.001) net++;
+          headOut = Math.max(headOut, s.cam.y - p.y);
+          feetOut = Math.max(feetOut, (p.y + p.h) - (s.cam.y + s.viewH));
+          top = Math.min(top, p.y + p.h);
+        }
+        return {
+          cleared: !!(finished && finished.cleared),
+          climbed: Math.round(((startFeet - top) / (startFeet - 4 * TILE_PX)) * 100),
+          pages, moves, biggest, frozen, midArc, net, headOut, feetOut,
+          firstSeen, frames, camX: s.cam.x,
+        };
+      };
+
+      const cut = runClimb({ type: null, level: 0 }, 0);
+      const held = runClimb({ type: null, level: 0 }, 12);
+      const tall = runClimb({ type: 'leaf', level: 5 }, 0);
+
+      /*
+       * **The view holds still and then pages.** A cut is the whole distance on
+       * one frame and an ease is a decaying series over many, so the question
+       * is asked as a count rather than as a size: how many frames did the page
+       * line move on, and how many pages were there? An eased camera moves on
+       * almost every frame; this one may only move on the frames it pages, and
+       * each of those moves is most of a screen.
+       */
+      expect('a climbing view holds still and then pages',
+        cut.pages >= 4 && cut.moves === cut.pages && cut.biggest >= 64,
+        `${cut.pages} sivunvaihtoa, ${cut.moves} liikeframea ${cut.frames}:sta, `
+        + `suurin askel ${cut.biggest.toFixed(2)} px`);
+
+      /* Locked sideways: one screen wide means `cam.x` is 0 for the whole
+       * level, not merely small. */
+      expect('a climb is locked sideways',
+        cut.camX === 0 && climbRows()[0].length === 20,
+        `cam.x ${cut.camX}, leveys ${climbRows()[0].length} saraketta`);
+
+      /* And the body stays in the picture — at the smallest size, which is the
+       * promise, and at the largest, which is where it is hardest. Without the
+       * headroom net inside `applyPageView` the head went 45.31 px above the
+       * frame on the last jump before every page; the net is what buys the
+       * zero, and the price of the net is the frames it is the binding term,
+       * which is reported rather than hidden. */
+      expect('a paging view keeps the climber in the frame',
+        cut.headOut <= 0 && cut.feetOut <= 0 && tall.headOut <= 0 && tall.feetOut <= 0,
+        `taso 0: pää ${cut.headOut.toFixed(2)} px yli, jalat ${cut.feetOut.toFixed(2)} px ali, `
+        + `katto käytössä ${cut.net}/${cut.frames} framea — `
+        + `taso 5: ${tall.headOut.toFixed(2)} / ${tall.feetOut.toFixed(2)}, `
+        + `katto ${tall.net}/${tall.frames}`);
+
+      /*
+       * FREEZE VERSUS NO FREEZE, MEASURED RATHER THAN ARGUED.
+       *
+       * The owner's instinct was to freeze the player while the camera moves.
+       * Both are built; this is the table. The decisive column is the last one:
+       * because the page hangs off `camAnchor`, which does not move while a
+       * jump is rising, a page **cannot** happen in mid-air — so the freeze has
+       * nothing left to protect the player from, and the whole of what it does
+       * is take the frames away.
+       */
+      expect('freezing the climber during a page buys nothing it does not already have',
+        cut.midArc === 0 && held.midArc === 0 && cut.frozen === 0
+        && held.frozen === held.pages * 12 && cut.cleared && held.cleared
+        && held.frames > cut.frames,
+        `leikkaus: ${cut.frozen} framea ohjausta pois, maa näkyvissä `
+        + `${cut.firstSeen} framen päästä, ${cut.midArc}/${cut.pages} kesken nousua, `
+        + `kiipeäminen ${cut.frames} framea — 12 framen panorointi: ${held.frozen} framea `
+        + `pois, ${held.firstSeen} framen päästä, ${held.midArc}/${held.pages} kesken `
+        + `nousua, kiipeäminen ${held.frames} framea`);
+
+      /*
+       * THE BOT, AND THE PROMISE IT CARRIES.
+       *
+       * DESIGN.md §5 promises the route works at the smallest size with no
+       * power-up, and that promise has to survive the change of axis rather
+       * than be quietly dropped with it. So this is the same proof
+       * `playable.mjs` gives every horizontal level — power level 0, no
+       * enemies, `finishLevel` actually fired — with the only difference being
+       * which way the bot is trying to go.
+       */
+      expect('a climb is passable at power 0, and the bot climbs it',
+        cut.cleared && cut.climbed >= 99,
+        `${cut.climbed} % kiivetty, maali ${cut.cleared ? 'saavutettu' : 'saavuttamatta'}, `
+        + `${cut.pages} sivunvaihtoa`);
+
+      /* The climber may not be cleverer than the validator: a bot that clears
+       * what the rules refuse would make the rules a formality. Same graph,
+       * asked twice. */
+      {
+        const g = climbGraph(climbRows(), budget);
+        const carry = [0, 1, 2, 3, 4].map((r) => g.carry(r));
+        expect('the bot and the validator read the same jump',
+          carry.join(',') === '6,4,3,2,1' && g.platforms.length === 15,
+          `kantama nousun mukaan ${carry.join(',')} ruutua, ${g.platforms.length} tasannetta`);
+      }
+
+      /*
+       * AND NOT ONE LINE OF IT RUNS IN A SHIPPED LEVEL.
+       *
+       * The owner's constraint, in his own words: the paging camera is a
+       * vertical-level feature and the horizontal levels keep exactly the
+       * vertical follow they have. That is guaranteed structurally — every
+       * paging branch is behind `this.vertical`, which is `def.vertical` — and
+       * guaranteed is not measured, so it is measured: every level in the game
+       * is driven for 600 frames and asked whether it ever paged.
+       */
+      {
+        const bad = [];
+        for (const id of levelIds()) {
+          reset();
+          const s = new LevelScene(game, id);
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const input = mkInput();
+          for (let f = 0; f < 600; f++) {
+            input.held = blank();
+            input.pressed = blank();
+            input.held.right = true;
+            input.held.run = true;
+            if (f % 45 === 20) { input.pressed.jump = true; input.held.jump = true; }
+            else if (f % 45 > 20 && f % 45 < 36) input.held.jump = true;
+            s.update(input);
+            if (s.player.dying) break;
+          }
+          if (s.vertical || s.camPages || s.camPage) bad.push(`${id}:${s.camPages}`);
+        }
+        expect('no shipped level ever pages',
+          bad.length === 0,
+          bad.length ? bad.join(' ') : `${levelIds().length} kenttää, 0 sivunvaihtoa`);
+      }
+    }
+
     /* ---------------------------- vihainen aurinko ---------------------- */
     /*
      * The sun is the one enemy that positions itself against the camera, which
@@ -12826,7 +13076,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
  * sisällöllä ei ole koeteltu millään.
  */
 {
-  const { validateLevel } = await import('../src/data/rules.js');
+  const { validateLevel, RULE_CONSTANTS } = await import('../src/data/rules.js');
   const { scoreRows } = await import('./difficulty.mjs');
   const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
 
@@ -12922,6 +13172,141 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   });
   if (!(withSand > withoutSand + 0.5)) {
     report.failures.push('vaikeusmittari pisteyttää juoksuhiekan nollaksi');
+  }
+
+  /*
+   * PYSTYKENTTÄ, JA KOLME TYÖKALUA JOTKA EIVÄT TIENNEET ETTÄ YLÖS ON SUUNTA.
+   *
+   * Sama kuria kuin hiekalla yllä: yksi koekenttä, yksi vika kerrallaan, ja
+   * sama kenttä ilman vikoja on puhdas. Ero on siinä että tässä koekenttä on
+   * kokonaan uusi *muoto* eikä uusi ruutumerkki — 20 saraketta (yksi ruutu,
+   * ks. `VERTICAL_COLS`) ja 45 riviä, kolmentoista lankun tikkaat kolmen
+   * ruudun välein, tehostuspalikka alimmassa neljänneksessä, kallio pohjalla
+   * koska putoaminen on takaisku eikä kuolema, lippu ylhäällä.
+   *
+   * **Punainen sanoi ensin tämän**, ja se on kirjattu koska se on koko syy
+   * siihen että pystykäsittely on olemassa: sama ruudukko vaakasuoraan luettuna
+   * raportoi kuusi ongelmaa joista yksikään ei ole totta —
+   * `no power-up in the first quarter`, neljä kertaa `platform at … leads to
+   * nothing`, ja `nothing leads into the sky band`. Vaikeusmittari luki samasta
+   * ruudukosta **73.1** pistettä (viisinkertaistettuna sarakeleveydellä 20) ja
+   * ensimmäinen pystyversio **1920.5**, kun oikea luku on 104.3.
+   */
+  {
+    const W = 20;
+    const H = 45;
+    const climb = (over = {}) => {
+      const rows = Array.from({ length: H }, () => ' '.repeat(W));
+      const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
+      put(3, '              F     ');
+      [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
+        put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+      });
+      put(39, '     !              ');
+      put(42, '  1                 ');
+      put(43, '####################');
+      put(44, '####################');
+      for (const [y, s] of Object.entries(over)) put(Number(y), s);
+      return rows;
+    };
+    const vert = (over) => validateLevel(climb(over), budget, { vertical: true });
+
+    const clean = vert();
+    report.checks.push({
+      name: 'kelvollinen pystykenttä ei ole validaattorille ongelma',
+      ok: clean.length === 0,
+      detail: clean.length ? clean.join('; ') : '20 saraketta, 45 riviä, 13 lankkua, ei huomautuksia',
+    });
+    if (clean.length) report.failures.push(...clean.map((p) => `pystykoekenttä: ${p}`));
+
+    /* Sama ruudukko vaakasääntöjen läpi: tämä on se punainen, ja se on tässä
+     * väitteenä eikä muistiinpanona — jos joku joskus poistaa `opts.vertical`
+     * -haaran, tämä rivi kertoo mitä sen tilalle tulee. */
+    const asFlat = validateLevel(climb(), budget);
+    report.checks.push({
+      name: 'vaakasäännöt lukevat pystykentän väärin — siksi haara on olemassa',
+      ok: asFlat.length >= 5 && clean.length === 0,
+      detail: `vaakana ${asFlat.length} huomautusta (${asFlat[0]}), pystynä ${clean.length}`,
+    });
+    if (!(asFlat.length >= 5)) {
+      report.failures.push('vaakasäännöt eivät enää eroa pystysäännöistä koekentällä');
+    }
+
+    /* Neljä vikaa, yksi kerrallaan. Jokainen on pystyakselin vastine jollekin
+     * vaakasäännölle, ja jokaisen pitää löytyä nimeltä eikä sivutuotteena. */
+    const faults = [
+      ['liian korkea loikka raportoidaan', { 34: '                    ' }, /the climb stops at/],
+      ['pohjaton sarake raportoidaan', { 43: '########  ##########', 44: '########  ##########' },
+        /has no floor at the bottom/],
+      ['piikit putoamisen päässä raportoidaan', { 42: '  1     ^^^^        ' },
+        /lands you on "\^"/],
+      ['tehostus alkuneljänneksen ulkopuolella raportoidaan', { 39: '                    ' },
+        /first quarter of the climb/],
+      ['umpiperä jonka päällä ei ole mitään raportoidaan', { 21: '               ---- ' },
+        /stairway to nothing/],
+    ];
+    for (const [name, over, re] of faults) {
+      const got = vert(over);
+      const hit = got.find((p) => re.test(p));
+      report.checks.push({ name, ok: !!hit, detail: hit || `ei huomautusta (${got.join('; ') || 'ei mitään'})` });
+      if (!hit) report.failures.push(`pystyvalidaattori ei huomaa: ${name}`);
+    }
+
+    /* Leveys ei ole enimmäismäärä vaan leveys: 21 saraketta antaisi kiipeilylle
+     * vaakavierivän kameran, joka on tasan se mitä muodossa ei saa olla. */
+    const wide = validateLevel(climb().map((r) => `${r} `), budget, { vertical: true });
+    report.checks.push({
+      name: 'yhtä saraketta liian leveä pystykenttä raportoidaan',
+      ok: wide.some((p) => /columns wide/.test(p)),
+      detail: wide.find((p) => /columns wide/.test(p)) || 'ei huomautusta leveydestä',
+    });
+    if (!wide.some((p) => /columns wide/.test(p))) {
+      report.failures.push('pystyvalidaattori hyväksyy näyttöä leveämmän kiipeilyn');
+    }
+
+    /* Ja mittari. Kaksi lukua samasta ruudukosta: vaakana se on hölynpölyä
+     * (jaettuna 20 sarakkeella eikä 45 rivillä), pystynä se on maailman 1
+     * tason luokkaa. Väitetään haarukkana eikä tarkkana lukuna, koska tarkka
+     * luku olisi tämän koekentän ominaisuus eikä mittarin. */
+    const upScore = scoreRows(climb(), { vertical: true });
+    const flatScore = scoreRows(climb());
+    report.checks.push({
+      name: 'vaikeusmittari mittaa kiipeilyn riveinä eikä sarakkeina',
+      ok: upScore > 60 && upScore < 200 && Math.abs(upScore - flatScore) > 20,
+      detail: `pystynä ${upScore.toFixed(1)}, vaakana luettuna ${flatScore.toFixed(1)}`,
+    });
+    if (!(upScore > 60 && upScore < 200)) {
+      report.failures.push(`vaikeusmittari antaa kiipeilylle ${upScore.toFixed(1)} pistettä`);
+    }
+
+    /* Ja se että mittari näkee kiipeilyn vaikeuden: kaksi identtistä tikapuuta,
+     * toisen askel yhtä ruutua korkeampi. Sama vika jonka piikkikävelijä teki. */
+    const steeper = scoreRows(climb({ 34: '                    ', 33: '         ---------- ' }), { vertical: true });
+    report.checks.push({
+      name: 'vaikeusmittari näkee korkeamman askelman',
+      ok: steeper > upScore + 0.5,
+      detail: `kolmen ruudun askel ${upScore.toFixed(1)}, neljän ${steeper.toFixed(1)} `
+        + `(+${(steeper - upScore).toFixed(1)})`,
+    });
+    if (!(steeper > upScore + 0.5)) {
+      report.failures.push('vaikeusmittari pisteyttää neljän ruudun askelman kuin kolmen');
+    }
+
+    /* Kaksi kopiota, kuten hiekalla: ruudun leveys on `src/scenes/level.js`:ssä
+     * ja `src/data/rules.js`:ssä, eikä validaattori saa importoida kohtausta. */
+    const camSrc = await readFile(join(ROOT, 'src/scenes/level.js'), 'utf8');
+    const viewW = Number((camSrc.match(/export const VIEW_W = (\d+)/) || [])[1]);
+    const tilePx = Number((await readFile(join(ROOT, 'src/gfx/tiles.js'), 'utf8'))
+      .match(/export const TILE = (\d+)/)[1]);
+    report.checks.push({
+      name: 'pystykentän leveys on sama luku kuin ruudun leveys',
+      ok: viewW / tilePx === RULE_CONSTANTS.VERTICAL_COLS,
+      detail: `VIEW_W ${viewW} / TILE ${tilePx} = ${viewW / tilePx}, `
+        + `rules.js sanoo ${RULE_CONSTANTS.VERTICAL_COLS}`,
+    });
+    if (viewW / tilePx !== RULE_CONSTANTS.VERTICAL_COLS) {
+      report.failures.push('VERTICAL_COLS ei vastaa ruudun leveyttä');
+    }
   }
 
   /* Kolme paikkaa, ja kaksi niistä on tarkoituksellisia kopioita. Verrataan

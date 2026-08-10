@@ -370,5 +370,119 @@
     24.8,
     20.4,
     14.9
-  ]
+  ],
+  "vertical": {
+    "note": "Aggregate climb pacing only, from the corpus's two vertical games. No layout is stored, derivable or shipped from this file. Regenerate with: VGLC_DIR=… node tools/mine-pacing.mjs --vertical",
+    "corpus": {
+      "games": [
+        "Rainbow Islands (28)",
+        "Kid Icarus (6)"
+      ],
+      "levels": 34,
+      "rows": 6054
+    },
+    "rungRise": {
+      "n": 1774,
+      "mean": 3.59,
+      "min": 1,
+      "p25": 2,
+      "median": 4,
+      "p75": 5,
+      "p90": 6,
+      "max": 6,
+      "histogram": {
+        "1": 188,
+        "2": 306,
+        "3": 382,
+        "4": 347,
+        "5": 265,
+        "6": 286
+      }
+    },
+    "rungShift": {
+      "n": 1774,
+      "mean": 1.51,
+      "min": 0,
+      "p25": 0,
+      "median": 0,
+      "p75": 3,
+      "p90": 5,
+      "max": 6,
+      "histogram": {
+        "0": 929,
+        "1": 155,
+        "2": 193,
+        "3": 139,
+        "4": 160,
+        "5": 108,
+        "6": 90
+      }
+    },
+    "rungWidth": {
+      "n": 2341,
+      "mean": 6.04,
+      "min": 1,
+      "p25": 2,
+      "median": 4,
+      "p75": 7,
+      "p90": 12,
+      "max": 32,
+      "histogram": {
+        "1": 187,
+        "2": 573,
+        "3": 198,
+        "4": 450,
+        "5": 91,
+        "6": 223,
+        "7": 62,
+        "8": 151,
+        "9": 32,
+        "10": 74,
+        "11": 19,
+        "12": 49,
+        "13": 19,
+        "14": 34,
+        "15": 11,
+        "16": 40,
+        "17": 3,
+        "18": 9,
+        "19": 1,
+        "20": 4,
+        "21": 2,
+        "22": 8,
+        "24": 5,
+        "25": 2,
+        "26": 10,
+        "27": 3,
+        "28": 1,
+        "30": 1,
+        "31": 2,
+        "32": 77
+      }
+    },
+    "waysOn": {
+      "n": 2341,
+      "mean": 1.61,
+      "min": 0,
+      "p25": 1,
+      "median": 1,
+      "p75": 2,
+      "p90": 4,
+      "max": 8,
+      "histogram": {
+        "0": 567,
+        "1": 652,
+        "2": 588,
+        "3": 297,
+        "4": 167,
+        "5": 52,
+        "6": 12,
+        "7": 5,
+        "8": 1
+      }
+    },
+    "twoWaysShare": 0.479,
+    "deadEndShare": 0.242,
+    "rungsPer100Rows": 38.67
+  }
 }
