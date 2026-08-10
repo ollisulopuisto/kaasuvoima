@@ -208,6 +208,30 @@ tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siit
 onko sen alkuperäisyys tarkistettu korpusta vasten (kaikki 27 on, osumia 0).
 Linnakkeet ja maailman opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.
 
+## Päivän pieru
+
+Alkuruudun kolmas valinta: **yksi generoitu kenttä vuorokaudessa, yksi yritys,
+sama kenttä kaikille.** Kenttä rakennetaan selaimessa samasta generaattorista ja
+samoista mitatuista rytmiluvuista kuin pelin 27 generoitua kenttää — siemen on
+päivämäärä, ei satunnaisluku.
+
+- **Päivä on UTC-vuorokausi**, myös ruudulla lukeva päiväys. Yksi kello on koko
+  tilan ehto: eri kello Helsingissä ja Kaliforniassa tarkoittaisi eri kenttää
+  samalla päivämäärällä.
+- **Yritys kuluu kun kenttä alkaa.** Sivun lataus kesken kentän ei anna uutta
+  yritystä eikä nollaa tulosta: se on luovutus siihen kohtaan johon pääsit.
+  Tulos on `sfb3.daily.v1`, oma avaimensa eikä osa pelin tallennusta — päivän
+  yritys ei koske pelaajan elämiin, pisteisiin eikä maailmoihin.
+- **Jaettava rivi ei paljasta kentästä mitään**: päivä ja tulos, ei teemaa eikä
+  sitä mihin jäit kiinni. X avaa jakoruudun päivän tulosruudusta.
+- **Jokainen päivän kenttä on tarkistettu etukäteen.** Selaimessa ei voi verrata
+  korpukseen eikä ajaa bottia, joten koko ikkuna luetteloidaan Nodessa:
+  `VGLC_DIR="…" node tools/daily-origin.mjs` generoi jokaisen päivän kentän,
+  vertaa sen korpukseen ja pelaa sen läpi voimatasolla 0. Repoon jää pelkkä
+  tuomio (`src/data/daily-origin.js`). Ikkunan ulkopuolella tila **ei tarjoa
+  kenttää** — tarkistamaton päivän kenttä olisi huonompi kuin ei kenttää. Ks.
+  [DESIGN.md](DESIGN.md) kohdat 3 ja 5.
+
 ## Työkalut
 
 ```bash
@@ -220,6 +244,8 @@ node tools/gen-levels.mjs    # generoi kaikki generoidut kentät tilastoista
 node tools/gen-levels.mjs --world w3               # ...vain yhden maailman
 node tools/gen-levels.mjs --telemetry loki.json    # ...ja säätää niitä pelidatan mukaan
 node tools/originality.mjs   # vertaa committoidut kentät korpukseen (vaatii VGLC_DIR)
+node tools/daily-origin.mjs  # tarkistaa päivän pierun koko ikkunan (vaatii VGLC_DIR)
+node tools/mirror-pacing.mjs # kantaa mitatut luvut selaimen luettaviksi (src/data/pacing.js)
 node tools/difficulty.mjs    # vaikeuskäyrä; --write päivittää src/data/difficulty.js
 node tools/curriculum.mjs    # opetusjärjestys: missä mikäkin asia kohdataan ensi kertaa
 node tools/variety.mjs       # vaihtelu: sanooko maailma saman asian kahdesti (--raw lisää palikkatoiston)
@@ -412,11 +438,24 @@ src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
 src/core/           syöte, kosketus, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat, kuvaefektit
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
+src/data/generator.js  kenttägeneraattorin ydin — sama koodi työkalulle ja selaimelle
 src/entities/       pelaaja, viholliset, esineet, efektit
 src/level/          fysiikka ja törmäykset
-src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit, pistetaulu
+src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit, pistetaulu, päivän pieru
 tools/              verify, hyppymittaus, tilastolouhinta, kenttägenerointi
 ```
+
+**Generaattori on yksi eikä kaksi.** `src/data/generator.js` on se mitä kenttä
+on — palikat, teemat, säännöt, `buildLevel` — ja `tools/gen-levels.mjs` se mitkä
+kentät tehdään: `PLAN`, siemenhaku, telemetria, korpustarkistus ja tiedoston
+kirjoittaminen. Jako on päivän pierun takia (se generoi selaimessa), ja sen
+ainoa ehto on ettei mikään liikkunut: `src/data/generated.js` tulee siirron
+jälkeen ulos tavulleen samana.
+
+Mitatut luvut kulkevat selaimeen `src/data/pacing.js`:n kautta — kannettu kopio
+`tools/pacing-stats.json`:sta ja `tools/jump-budget.json`:sta, jonka
+`verify.mjs` vertaa alkuperäisiin. Jos ajat `measure-jump.mjs`:n tai
+`mine-pacing.mjs`:n, aja perään `node tools/mirror-pacing.mjs`.
 
 ### Kenttien tekeminen
 

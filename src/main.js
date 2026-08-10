@@ -12,6 +12,8 @@ import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { ShareScene } from './scenes/share.js';
+import { DailyScene } from './scenes/daily.js';
+import { dailyBegin, dailyProgress, dailyFinish, DAILY_TITLE } from './core/daily.js';
 import { qualifies, GAME_VERSION } from './core/scores.js';
 import { takeChallenge } from './core/challenge.js';
 import { downloadExport, eventCount, levelSummary, clearTelemetry } from './core/telemetry.js';
@@ -55,6 +57,9 @@ class Game {
      * koska seuraavalla kerralla ensimmäinen ele voi hyvinkin olla näppäin. */
     this.audioHintOff = false;
     this.pendingNode = null;
+    /* Käynnissä oleva päivän yritys, tai null. Elää **vain muistissa**: se mikä
+     * siitä säilyy on `sfb3.daily.v1`, ja sen kirjoittaa `core/daily.js`. */
+    this.dailyRun = null;
 
     /* Kaverin tulos, jos tänne tultiin haastelinkistä. Se asetetaan
      * käynnistyksessä ja elää **vain muistissa**: haasteen vastaanotto ei
@@ -114,6 +119,82 @@ class Game {
     this.setScene(new WorldMapScene(this));
   }
 
+  /* ----------------------------- päivän pieru --------------------------- */
+
+  toDaily() {
+    this.setScene(new DailyScene(this));
+  }
+
+  /**
+   * Käynnistää päivän yrityksen — ja kuluttaa sen.
+   *
+   * Kaksi asiaa tapahtuu tässä eikä missään muualla, ja molemmat ovat
+   * päätöksiä (ks. `src/core/daily.js`):
+   *
+   *   1. **Yritys kuluu nyt**, ei kentän lopussa. `dailyBegin` palauttaa
+   *      `false` jos päivä on jo käytetty, ja silloin tästä ei mennä
+   *      minnekään: se on tilan koko sääntö yhtenä ehtona.
+   *   2. **Oma tila, jota ei kirjoiteta tallennukseen.** Päivän kenttä ei saa
+   *      koskea pelaajan elämiin, maailmaan eikä pisteisiin — sama vaatimus
+   *      kuin esittelytilalla. Kierroksen tila on tilapäinen olio ja oikea
+   *      talletetaan muistiin sellaisenaan, ei `adoptState`n kautta, koska se
+   *      tyhjentäisi kesken olevan kierroksen kortit.
+   */
+  startDaily(level) {
+    if (!dailyBegin(level.day)) return;
+    this.dailyRun = { day: level.day, saved: this.state, frames: 0 };
+    this.state = {
+      lives: 1, coins: 0, score: 0, power: makePower(), reserve: null,
+      world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+      continues: 0, usedSaveState: false,
+    };
+    this.setScene(new InterludeScene(this, level.def.id, () => {
+      this.setScene(new LevelScene(this, level.def.id, level.def));
+    }, DAILY_TITLE));
+  }
+
+  /** Kuinka suuren osan kentästä pelaaja on ehtinyt kulkea, prosentteina. */
+  dailyReach(scene) {
+    if (!scene || !scene.widthPx) return 0;
+    return Math.max(0, Math.min(100, Math.round((scene.bestX / scene.widthPx) * 100)));
+  }
+
+  /**
+   * Kentän aikana kirjattu eteneminen, ja se on koko syy siihen että sivun
+   * lataus kesken kentän on luovutus eikä nolla.
+   *
+   * Puolen sekunnin välein: harvemmin kuin framea kohti, koska localStorage on
+   * synkroninen kirjoitus, ja tiheämmin kuin kerran kentässä, koska muuten
+   * "siihen asti mihin pääsit" olisi karkeampi kuin pelaajan viimeinen hyppy.
+   */
+  noteDailyProgress() {
+    const run = this.dailyRun;
+    if (!run || !(this.scene instanceof LevelScene)) return;
+    if (++run.frames % 30) return;
+    dailyProgress(run.day, {
+      reach: this.dailyReach(this.scene),
+      score: this.state.score,
+      coins: this.state.coins,
+    });
+  }
+
+  /**
+   * Päivän yritys päättyi. Tulos on lopullinen kummallakin tavalla — maaliin
+   * tai kuolemaan — koska yrityksiä on yksi.
+   */
+  finishDaily(result) {
+    const run = this.dailyRun;
+    const rec = dailyFinish(run.day, {
+      cleared: !!result.cleared,
+      reach: this.dailyReach(this.scene),
+      score: this.state.score,
+      coins: this.state.coins,
+    });
+    this.state = run.saved;
+    this.dailyRun = null;
+    this.setScene(new DailyScene(this, rec));
+  }
+
   /**
    * `runScore` on juuri päättyneen kierroksen tulos, tai -1 kun taululle
    * tullaan valikosta. Se on erillään `highlight`istä siksi että kierros voi
@@ -137,7 +218,10 @@ class Game {
    * ollenkaan, koska kohtauksen vaihto keskellä kenttää tappaisi juoksun.
    */
   canShareHere() {
-    return this.scene instanceof TitleScene || this.scene instanceof HighScoreScene;
+    /* Päivän ruutu on kolmas: se on pelatun yrityksen pääteasema ja se ainoa
+     * paikka jossa päivän tulosrivi on olemassa. */
+    return this.scene instanceof TitleScene || this.scene instanceof HighScoreScene
+      || this.scene instanceof DailyScene;
   }
 
   /** Sama kohtausolio talteen, jotta paluu tuo pistetaulun korostuksineen. */
@@ -252,6 +336,14 @@ class Game {
   finishLevel(result) {
     const scene = this.scene;
     const node = this.pendingNode;
+
+    /* Päivän yrityksellä ei ole solmua kartalla eikä sillä ole seuraavaa
+     * kenttää: se päättyy omaan ruutuunsa kummallakin tavalla. Haara on ensin,
+     * koska kaikki alla oleva puhuu `pendingNode`ista. */
+    if (this.dailyRun) {
+      this.finishDaily(result);
+      return;
+    }
 
     if (result.died) {
       this.state.power = makePower();
@@ -564,6 +656,8 @@ class Game {
       Sfx.play('cursor');
     }
     if (!this.paused && this.scene) this.scene.update(Input);
+    /* Päivän yrityksen eteneminen talteen kentän aikana, ei vasta lopussa. */
+    if (!this.paused) this.noteDailyProgress();
   }
 
   render() {

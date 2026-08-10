@@ -276,6 +276,43 @@ Käytännön suojatoimet:
 
    Ohje pysyy: **aja generaattori aina `VGLC_DIR` asetettuna.** Erona vain se,
    että sen laiminlyönti lukee nyt datassa.
+
+   ### Selaimessa generoitu kenttä: luetteloitu etukäteen, ei tarkistamaton
+
+   Päätetty 10.8.2026 päivän pierun myötä (`src/core/daily.js`). Se tila
+   generoi kentän **selaimessa**, ja selaimessa tätä tarkistusta ei voi tehdä:
+   korpus ei ole repossa eikä julkaisussa (alakohta 1), joten ajossa syntyvä
+   kenttä olisi määritelmällisesti `not checked`. Se on reikä juuri tässä
+   kohdassa, eikä sitä paikata sanomalla että kenttä on "todennäköisesti oma".
+
+   Reikä suljetaan sillä havainnolla että **siemenavaruus on äärellinen**:
+   päivän kenttä on funktio päivämäärästä, joten koko tarkistusikkuna voidaan
+   luetella etukäteen. `tools/daily-origin.mjs` generoi jokaisen päivän kentän
+   Nodessa, vertaa sen korpukseen samalla kahdeksan sarakkeen ikkunalla kuin
+   toimitetut kentät, ja repoon jää `src/data/daily-origin.js` — **pelkkä
+   tuomio**: ikkunan rajat, päiväkohtainen siemenyritys yhtenä lukuna, ja
+   sormenjälki. Korpuksesta ei kopioidu repoon mitään, eikä kentistäkään: yksi
+   36-kantainen luku päivää kohti ei ole kenttäkartta.
+
+   Kolme ehtoa tekee tästä tarkistuksen eikä lupauksen:
+
+   - **Sormenjälki on tuomion aihe.** Se lasketaan ikkunan jokaisen päivän
+     riveistä, ja `tools/verify.mjs` laskee sen uudestaan. Jos generaattori,
+     rytmiluvut, hyppybudjetti tai päivän resepti muuttuu, tuomio koskee eri
+     kenttiä kuin ne jotka pelaaja saa — ja portti punastuu silloin ja vain
+     silloin. Kalenteri ei punasta sitä, koska pysyvästi punainen portti
+     sammutetaan.
+   - **Ikkunan ulkopuolella tila ei tarjoa kenttää.** Tämä on tarkoituksella
+     ankarampi kuin `origin: 'not checked'` toimitetuissa kentissä. Ero on
+     siinä mitä sisältö on: toimitettu kenttä on maailmassa jonka pelaaja
+     valitsee, päivän kenttä tarjotaan päivän kenttänä ja siitä lähtee jaettu
+     rivi muille. **Tarkistamaton päivän kenttä olisi huonompi kuin ei päivän
+     kenttää** — sama lause kuin läpipääsemättömästä kentästä (kohta 5), ja
+     samasta syystä.
+   - **Alkuperämerkintä on ruudulla.** Tila lukee `origin`in todistuksesta ja
+     sanoo sen pelaajalle. Väite jonka pelaaja näkee on väite jonka joku voi
+     käydä tarkistamassa: `VGLC_DIR="…" node tools/daily-origin.mjs` tuottaa
+     saman tuomion uudestaan.
 5. **Skaalaus omaan hyppybudjettiin.** Kuilut mitoitetaan mitattuun
    hyppybudjettiin (`tools/jump-budget.json`), ei lähdepelin ruutuihin. Sama
    *vaikeus*, eri *mitat*.
@@ -368,6 +405,32 @@ pystykentässä samalla tavalla kuin vaakakentässä — botti pelaa kentän lä
 voimatasolla 0 moottorissa, `tools/playable.mjs`, vain kulkusuunta vaihtuu.
 Lupaus ei siis selvinnyt akselinvaihdoksesta väitteenä vaan mittauksena.
 
+### Ajossa generoitu kenttä: sama lupaus, sama botti, eri hetki
+
+Päätetty 10.8.2026. Päivän pieru (`src/core/daily.js`) rakentaa kenttänsä
+selaimessa, eikä selain aja `tools/playable.mjs`:n bottia. Lupaus ei siksi
+löysty vaan siirtyy ajassa: **jokainen päivän kenttä pelataan botilla läpi
+voimatasolla 0 ennen kuin päivä pääsee todistukseen** (kohta 3), samalla
+botilla ja samassa moottorissa kuin toimitetut kentät —
+`tools/level-bot.js` on nyt yksi kopio, jota sekä `playable.mjs` että
+`daily-origin.mjs` ajavat. Mitattu ensimmäisellä ajolla: 1096 päivää, 40
+siementä hylättiin nimenomaan siihen että botti ei päässyt läpi.
+
+Mitä selain itse tekee ja mitä se ei tee, sanottuna ääneen koska ero on juuri
+se paikka jossa tällainen järjestely yleensä valehtelee:
+
+| | mitä se todistaa |
+| --- | --- |
+| `validateLevel` selaimessa | ruudukkogeometrian: kuilut hyppybudjettiin, seinien korkeus, tehostus ensimmäisessä neljänneksessä, ei portaita tyhjään, ei vihollisia ilmassa. **Ei simulaatiota** — se on saman tiedoston oma varaus. |
+| botti etukäteen | että joku pääsee alusta maaliin voimatasolla 0, kitkoineen ja vauhteineen. **Ei sitä** että kenttä on hyvä eikä sitä että sen kolikot ovat saatavissa. |
+| todistuksen sormenjälki | että nuo kaksi tehtiin **juuri niille kentille** jotka peli rakentaa. |
+
+Ja se mitä botti ei osaa on ennallaan (`tools/level-bot.js`): se ei hyppää
+kelluvalta lavalta toiselle, ei kyykisty, ei mene putkeen eikä potki kuorta.
+Päivän kentän hyväksymisehto on siksi tiukempi kuin toimitetun kentän: kenttä
+jonka botti hylkää *vaihdetaan* toiseen siemeneen sen sijaan että sitä
+katsottaisiin käsin.
+
 ### Ei portaita tyhjään
 
 Jos rakennat palikkapolun ylöspäin, sen päässä on jotain: kolikoita, tehostus
@@ -407,8 +470,12 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
 - **ES-moduulit vaativat http-palvelimen**, `file://` ei toimi.
 - **localStorage-avaimet**: `sfb3.save.v2` (edistyminen), `sfb3.savestate.1..3`
   (pikatallennukset), `sfb3.scores.v1` (pistetaulu), `sfb3.telemetry.v1`
-  (pelidata), `sfb3.fx.v1` (kuvaefektit) ja `sfb3.touch.v1` (ohjausmalli). Jos muutat tallennuksen
-  muotoa, nosta versionumeroa.
+  (pelidata), `sfb3.fx.v1` (kuvaefektit), `sfb3.touch.v1` (ohjausmalli) ja
+  `sfb3.daily.v1` (päivän pierun se yksi yritys). Jos muutat tallennuksen
+  muotoa, nosta versionumeroa. **Päivän tulos on tarkoituksella oma avaimensa
+  eikä kenttä `sfb3.save.v2`:ssa**: se vanhenee vuorokaudessa eikä ole
+  edistymistä, joten sen muodon muuttuminen ei saa pakottaa nostamaan sitä
+  versionumeroa joka veisi jokaiselta pelaajalta elämät ja maailmat.
 - **Kuollut kohtaus lakkaa päivittämästä.** `LevelScene.update` palaa aikaisin
   140 framea kuoleman jälkeen. Testi joka haluaa ajaa kohtausta pitkään pitää
   pitää pelaaja hengissä — muuten se mittaa kuolemanimation pituutta eikä sitä

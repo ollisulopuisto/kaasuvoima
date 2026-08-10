@@ -3,6 +3,7 @@ import { drawPlayer, drawWalker, drawGasPuff, WALK_FRAMES } from '../gfx/sprites
 import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
 import { challengeLine } from '../core/challenge.js';
+import { DAILY_TITLE } from '../core/daily.js';
 
 /*
  * Silence this long and the cabinet starts playing by itself. Twenty seconds is
@@ -25,8 +26,8 @@ export class TitleScene {
   enter() {
     Music.play('title');
     this.options = Save.exists()
-      ? ['JATKA PELIÄ', 'UUSI PELI', 'PARHAAT PIERUT']
-      : ['UUSI PELI', 'PARHAAT PIERUT'];
+      ? ['JATKA PELIÄ', 'UUSI PELI', DAILY_TITLE, 'PARHAAT PIERUT']
+      : ['UUSI PELI', DAILY_TITLE, 'PARHAAT PIERUT'];
     this.cursor = 0;
     this.idle = 0;
   }
@@ -67,6 +68,7 @@ export class TitleScene {
       const choice = this.options[this.cursor];
       if (choice === 'JATKA PELIÄ') this.game.continueGame();
       else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
+      else if (choice === DAILY_TITLE) this.game.toDaily();
       else this.game.newGame();
     }
   }
@@ -136,7 +138,18 @@ export class TitleScene {
     // The menu grows with the number of options, so its box is measured rather
     // than hard-coded — that is how it ended up under the control hints before.
     const panelH = this.options.length * 13 + 6;
-    const panelY = 184;
+    /*
+     * Laatikko nousee vasta kun se ei enää mahdu, ja se on koko ehto.
+     *
+     * Neljäs valikkorivi (päivän pieru) työnsi ohjausvihjeen ruudun alalaidan
+     * yli: kolmella rivillä laatikko on 45 px ja vihje mahtuu, neljällä se on
+     * 58 ja ei mahdu. `231` on se rivi jolle vihje asettuu nykyisellä
+     * kolmen rivin valikolla (184 + 45 + 2), joten `Math.min` pitää vanhan
+     * asettelun **pikselilleen** ennallaan ja siirtää vain sitä valikkoa joka
+     * ei muuten mahtuisi. Mitattu: kolmella rivillä 184, neljällä 173, ja
+     * alin piirtyvä pikseli on molemmissa 239.
+     */
+    const panelY = Math.min(184, 231 - panelH);
     ctx.fillStyle = 'rgba(8,8,16,0.65)';
     ctx.fillRect(72, panelY, 176, panelH);
     this.options.forEach((option, i) => {
