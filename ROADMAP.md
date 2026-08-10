@@ -10,35 +10,47 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
-## Tila 10.8.2026
+## Tila 10.8.2026 (iltapäivä)
 
 Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 60 kenttää.**
-`node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
-ja `node tools/difficulty.mjs` vaikeuskäyrän.
+`node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa
+geometrian, `node tools/difficulty.mjs` vaikeuskäyrän, ja kaksi uutta mittaria
+— `node tools/curriculum.mjs` (milloin asia opetetaan) ja `node tools/variety.mjs`
+(kuinka usein se sanotaan uudelleen) — eivät ole portteja vaan mittareita.
 
-**Kahdeksan kentän maailman muoto on päätetty** (v26.08.09.46): seitsemän
-numeroitua kenttää ja linnake, ja kävelyssä kaksi hengähdystä. Muoto on portissa
-eikä tässä dokumentissa, ja maailmat **1, 3, 4, 5, 6 ja 7** on tehty sen mukaan
-(v26.08.10.49) — kuusi kahdeksasta, ja portti nimeää ne. Jäljellä maailmat **2**
-(haara: kahdeksan kenttää on siellä kuusi tai seitsemän askelta) ja **8** (pomo
-joka kentässä, eikä generaattorissa ole areenapalikkaa), eli **neljä kenttää**
-tavoitteesta 64.
+**Kahdeksan kentän muoto: kuusi maailmaa kahdeksasta.** Maailmat 1 ja 3–7 ovat
+kahdeksan kentän mittaisia. Jäljellä **maailma 2** (haara: kahdeksan kenttää on
+siellä kuusi tai seitsemän askelta) ja **maailma 8** (pomo joka kentässä, eikä
+generaattorissa ole areenapalikkaa), eli **neljä kenttää** tavoitteesta 64.
 
-**Alkuperäisyystarkistus on ajettu** (v26.08.10.49). Korpus saapui, `VGLC_DIR`
-oli asetettuna, ja kaikki 27 generoitua kenttää kantavat merkinnän
-`origin: 'checked'`: **481 korpustiedostoa, 0 osumaa**. Maailmojen 1, 3 ja 5
-yksitoista vanhaa kenttää tulivat ulos tavu tavulta samoina — vain
-`origin`-rivi vaihtui. Portti ilman korpusta ei enää vaadi merkintää
-`not checked` vaan lukee mitä tallenne sanoo; perustelu on DESIGN.md kohdassa 3.
+**Kaksi pelitilaa on olemassa.** `AIKA-AJO` (v26.08.10.55): kentän oma ennätys,
+elävä ero kahdeksassa välipisteessä, tilalataus kielletty. `PÄIVÄN PIERU`
+(v26.08.10.57): päivämäärästä generoitu kenttä, sama kaikille, yksi yritys, ja
+**1096 päivää tarkistettuna korpusta vastaan etukäteen** (0 osumaa) — selaimessa
+generoitu kenttä ei voi olla korpustarkistettu, joten siemenavaruus luetteloitiin
+ja toimitetaan vain tuomio. Molemmat ovat alkuvalikon rivejä; lista on nyt viisi
+riviä pisimmillään ja portti mittaa että se mahtuu.
 
-**Käyrän loppupää loiveni, ja se on kirjattu koska se on mitattavissa.**
-Maailmojen keskiarvot ovat nyt `111,3 · 148,7 · 171,8 · 189,8 · 250,0 · 255,4 ·
-266,9 · 301,0`. Kolme neljästä täytetystä maailmasta **laski** (w5 256,2 →
-250,0, w6 264,2 → 255,4, w7 279,2 → 266,9), koska generoitu kenttä ei tällä
-sanastolla yllä käsintehdyn huipun tasolle — mitattu katto on tehtaassa 215,
-luussa 285 ja pilvessä 275. Tiukin askel on nyt **w5 → w6, +5,4** (oli +8,0).
-Käyrä nousee yhä joka maailmassa ja se on portti; jos loivuus halutaan takaisin
-jyrkäksi, se on generaattorin sanaston laajentamista eikä numeroiden säätämistä.
+**Jokaisella maailmalla on oma linnakesanasto** (v26.08.10.54). `variety.mjs`
+mittasi että puolet linnakkeista ei tuonut peliin yhtään uutta muotoa (6-F, 7-F
+ja 8-F 0,0 %); nyt jokainen rakentuu omasta sanastostaan ja kierrätyslista on
+**7/44 → 2/60**, linnakkeita siinä **4 → 0**.
+
+**Pystykentät ovat tuettuja muttei käytössä** (v26.08.10.52). Sivunvaihtava
+kamera, kiipeävä botti, pystysuora `validateLevel` ja rivipohjainen vaikeus ovat
+olemassa ja testattuja; **yksikään toimitettu kenttä ei ole vielä pysty**, ja
+portti vartioi sitä (`no shipped level ever pages`, 60 kenttää, 0 sivunvaihtoa).
+
+**Käyrä nousee joka maailmassa**, ja luvut ovat linnakkeiden jälkeen
+`112,8 · 132,5 · 180,7 · 191,3 · 233,2 · 251,2 · 253,7 · 290,8`.
+**Tiukin askel on w6 → w7, +2,5 pistettä**, ja se on koko pelin ohuin kohta:
+seuraava kenttämuutos kummassa tahansa maailmassa kääntää sen helposti
+laskuksi. 6-F ja 7-F kantavat neljänneksen maailmansa keskiarvosta.
+
+**Alkuperäisyystarkistus on ajettu ja se on nyt oikeasti tarkistus**
+(v26.08.10.48). Korpuksen luku oli rekursioton, joten ensimmäinen ajo luki
+**nolla tiedostoa ja tulosti 0 osumaa** — vastaus kysymykseen jota ei kysytty.
+Korjattuna: **481 korpustiedostoa, 27 generoitua kenttää, 0 osumaa.**
 
 **Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
@@ -966,6 +978,50 @@ eikä käynyt oikeaa puolta läpi — kuusi itsevarmaa väärää löydöstä, k
 kenttiä joita luetaan joka framessa.
 
 ## Avoimet kysymykset
+
+### Auki 10.8.2026, työjärjestyksessä
+
+Nämä ovat tiedossa ja kirjattu, eikä yhtäkään ole aloitettu.
+
+1. **MEGABOSS ja maailma 8 kahdeksaan.** Omistajan muotoilu: seitsemän
+   linnakepomoa uusintaotteluina ja PIERUKUNINGAS palanneena finaaliksi
+   `VALTAISTUINSALI`ssa. Odotti maailmojen 4–7 vapautumista, jotka ovat nyt
+   vapaita — tämä on suurin yksittäinen jäljellä oleva sisältötyö.
+2. **Maailma 2 kahdeksaan.** Haarautuva kartta tekee tästä eri tehtävän kuin
+   muista: kahdeksan kenttää on siellä kuusi tai seitsemän askelta riippuen
+   reitistä, ja muotoportti tarvitsee haaralausekkeen ennen kuin maailman voi
+   lisätä nimettyyn listaan.
+3. **Oikea pystykenttä maailmaan 7.** Työkalut ovat olemassa (v26.08.10.52) ja
+   niiden mukana kahdeksan kohdan ohje: `vertical: true` + `rows`, **tasan 20
+   saraketta** (21 kytkee vaakakameran takaisin), peruskallio alimmalle riville,
+   puolat ≤ 4 laattaa erillään. Fikstuurin mitta-asteikko on 104,3 ≈ maailman 1
+   kenttä, joten maailman 7 kiipeily haluaa selvästi sen yli.
+4. **Kaivautuva kenttä luumaailmaan** ([IDEAS.md](IDEAS.md) kohta I). Halpa jos
+   sivutus on suuntaneutraali, ja se on — mutta rangaistus pitää rakentaa
+   maastoon eikä putoamiseen, koska alaspäin virhe vie *eteenpäin* väärään
+   paikkaan.
+5. **Kamera 2-1:ssä.** Pelaajan tavoitettavissa oleva vika toimitetussa
+   kentässä: voimatasolla 3, tiilillä sarakkeessa 228, pieruhyppy nostaa kuvaa
+   **2,85 px yhdellä framella** (katto 2,5) ja pää on tasan **16,00 px** ylhäällä
+   (lattia 16). Kamerafikstuuri ei ole napannut sitä koska sen botti kuolee 2-1:ssä
+   aiemmin — pääseekö se tiilille asti on palikkajärjestyksen sattuma.
+6. **4-3 ei ole läpäistävissä voimatasolla 0** eikä tuplahypylläkään.
+   `playable.mjs` on raportoinut tämän pitkään; botti ei osaa kellulavoja, joten
+   osa siitä voi olla botin rajoite eikä kentän vika — mutta sitä ei ole
+   selvitetty, ja se on ainoa kenttä jonka kohdalla lupausta ei ole todistettu.
+7. **Kuollut `fort_*`-sanasto.** `fort_hall`, `fort_gap`, `fort_spikes`,
+   `fort_blocks`, `fort_pillars`, `fort_burn` ja `fort_trench` eivät ole enää
+   yhdenkään linnakkeen käytössä. Poisto on oma muutoksensa oman punaisensa
+   kanssa.
+8. **Äänten kaksoismerkitykset.** `door` tarkoittaa oven aukeamista ja siitä
+   sisään kävelemistä; `onBossDefeated` soittaa `clear`in **ja** `door`in samalla
+   framella; `powerup` on 12 kutsupaikassa; `SFX.land` on määritelty muttei
+   koskaan soiteta. Kohdan 8 mittarilla nämä ovat vikoja, mutta suurimman
+   hetken purkaminen on oma harkintansa.
+9. **Neljä vihollista on kontrastikynnyksen alla** taustaansa vasten: piikkiukko
+   3,3 %, papuparooni 3,3 %, korkkiukko 7,2 %, löyhkäpilvi 7,4 %.
+10. **`oneup` piirretään ja se on kerättävissä muttei koskaan ilmesty.**
+
 
 - ✔ **Putken suunta korjattu kenttiin asti 9.8.2026** (v26.08.09.23).
   `WARP_COMPAT` on poistettu; kaikki suut ovat rivillä 9, koska kolme tyhjää
