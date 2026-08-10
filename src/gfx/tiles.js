@@ -359,6 +359,45 @@ export const THEMES = {
   },
 };
 
+/**
+ * MAAILMAN VÄRI YHTENÄ SÄVYNÄ, johdettuna paletista eikä kirjoitettuna toiseen
+ * kertaan.
+ *
+ * Kuninkaan muodonvaihto (`Boss.stomp`, `LevelScene.onKingForm`) pukee ruudun
+ * sen maailman väriin josta saapuva muoto tulee, ja ainoa tapa jolla se voi
+ * mennä pieleen hiljaa on että väri kopioidaan toiseen tauluun ja paletti
+ * siirtyy myöhemmin ilman sitä. Siksi tämä lukee `THEMES`iä eikä lisää yhtään
+ * uutta sävyä: mitään ei ole keksitty, kaikki on jo ruudulla.
+ *
+ * **Kuusi maata, ei koko palettia ja ei yhtä ruutua.** Teemassa on myös tiili,
+ * kova palikka, putki ja pilvi, mutta ne ovat *kalustoa* — sama tiili seisoo
+ * kolmessa maailmassa lähes samanvärisenä, ja niiden mukaan laskettu keskiarvo
+ * kutistaa kaikki kahdeksan teemaa samaan harmaaseen (mitattuna heikoin pari
+ * 5,5 % koko paletista, 6,5 % ilman taivasta). Yksi kenttä yksinään taas
+ * kaatuu toiseen suuntaan: pelkkä `groundTop` on jäällä, luulla ja pilvellä
+ * kolme kertaa lähes valkoinen (heikoin pari 3,9 %). Maa, sen varjo, sen pinta
+ * ja taustan kukkulat ovat se osa palettia joka **on** se paikka, ja niiden
+ * keskiarvona heikoin pari on 12,7 % eli reilusti yli sen 8,6 %:n jonka peli
+ * jo sietää (aavikon maa vastaan aavikon tiili).
+ *
+ * Taivas on jätetty pois tarkoituksella vaikka se erottaisi hyvin: verho
+ * piirretään pomohuoneeseen jonka yllä ei ole taivasta, ja väri jota ei voi
+ * nähdä siinä maailmassa jota se nimeää olisi arvoitus eikä muistutus.
+ */
+const TINT_KEYS = ['ground', 'groundDark', 'groundTop', 'groundTopDark', 'hill', 'hillDark'];
+
+/** @returns [r,g,b] 0..255, or null for a theme that does not exist. */
+export function themeTint(name) {
+  const th = THEMES[name];
+  if (!th) return null;
+  const acc = [0, 0, 0];
+  for (const key of TINT_KEYS) {
+    const c = th[key];
+    for (let i = 0; i < 3; i++) acc[i] += parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  }
+  return acc.map((v) => Math.round(v / TINT_KEYS.length));
+}
+
 function bevel(ctx, x, y, w, h, light, dark) {
   ctx.fillStyle = light;
   ctx.fillRect(x, y, w, 1);

@@ -66,6 +66,65 @@ export const FACTORY_CHUNKS = {
     14: '#####WWWWW######',
   }),
   /**
+   * MÖYKKY, ja se huone jossa se esitellään (`T.LUMP`, ks. `src/gfx/tiles.js`).
+   *
+   * ## Miksi möykky on tehtaassa
+   *
+   * Möykky on ummetuskorkin sukua, ja ummetuskorkki asuu täällä: `corks`,
+   * `cork_gap`, `fac_star` ja `fac_shaft` asettavat sen jokainen. Tehdas on
+   * myös pelin ainoa maailma joka on sisätilaa ensimmäisestä laatasta
+   * viimeiseen, eli ainoa jossa laatan yllä on aina jotain mistä se on voinut
+   * irrota. Avoimen taivaan alla möykky luetaan kiveksi, katon alla
+   * kalkkeutumaksi — ja `src/gfx/tiles.js` sanoo suoraan ettei se ole kivi.
+   *
+   * ## Miksi tämä on tavallinen lohkorivi
+   *
+   * **Möykyn ainoa tuki on tiili.** `LevelScene.dropAbove` lähtee liikkeelle
+   * vain siitä että jokin ruutu *tyhjenee*, ja pelissä on tasan kolme tapaa
+   * tyhjentää ruutu möykyn alta: päänpuski, paukkupavulla juokseminen ja
+   * potkaistu kuori. Mureneva lauta on neljäs ja se on kielletty (`rules.js`,
+   * `checkFalling`). Paukkupapu on vain toisella haaralla (2-M), ja kuori on
+   * tällä hetkellä rikki oikealle päin — ks. `verify.mjs`, lohko *möykky
+   * kentissä*, ja `LÖYDETTY, EI KORJATTU` — joten **jokaisen pelaajan
+   * käytettävissä oleva keino on päänpuski**, ja päänpuski tehdään siitä
+   * sarakkeesta johon möykky putoaa.
+   *
+   * Se ei tee ensiesittelystä epäreilua, ja syy on rakenteellinen eikä
+   * varovainen: **vain iso pelaaja hajottaa tiilen** (`bumpTile`: pienelle se
+   * on pelkkä kolaus), joten kukaan ei voi pudottaa möykkyä itselleen
+   * voimatasolla 0. Osuma maksaa siis aina koon eikä koskaan henkeä — mikä on
+   * täsmälleen se raja jonka `tools/curriculum.mjs`:n TURVAPROXY vetää.
+   *
+   * ## Muoto: sama rivi kuin `mill_lump`, tyhjässä huoneessa
+   *
+   * `BB?BB` on tämän pelin lohkorivi (`bricks`, `power_hi`, `mill_duct`), ja
+   * möykky istuu `?`:n vasemmalla naapurilla. Sama esine kahdesti: täällä
+   * tasaisella lattialla ilman yhtään vihollista, ja 4-F:ssä kolmen
+   * närästyssuihkun huoneessa. Katto ja lattia ovat huoneen koko muu sisältö,
+   * koska ensiesittelyn ympärillä ei saa olla mitään muuta katsottavaa
+   * (SEURA-ehto mittaa ikkunan [x−4, x+2]).
+   *
+   * ## Yksi kerta kentässä, ja se on tuen seuraus eikä möykyn
+   *
+   * Tiili ei kasva takaisin. Möykky sen sijaan palaa kotiruutuunsa (mitattu:
+   * 153 framea laskeutumisesta), ja `dropAbove` on tapahtumavetoinen, joten se
+   * jää sinne vaikka tuki on poissa — se ei lähde uudestaan, koska mikään ei
+   * enää tyhjennä ruutua sen alta. Möykky on siis kentässä **kertakäyttöinen,
+   * kuten `?`-lohko**, ja lopputila on möykky lohkorivissä sen aukon kohdalla
+   * jonka pelaaja itse teki. Ainoa tuki joka kasvaisi takaisin on mureneva
+   * lauta, ja se on juuri se jonka `checkFalling` kieltää — kertakäyttöisyys
+   * on siis reiluussäännön hinta eikä unohdus.
+   */
+  fac_lump: ck(16, {
+    0: G,
+    1: G,
+    8: '        C',
+    9: '       BB?BB',
+    13: G,
+    14: G,
+  }),
+
+  /**
    * Supertähti, tehtaan versio.
    *
    * The block sits on the ordinary bump row for the same reason world 1's does:

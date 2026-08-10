@@ -1179,6 +1179,36 @@ const SFX = {
     });
     noise({ dur: 0.04, from: 4200, to: 2000, q: 1.2, gain: 0.1, type: 'highpass', attack: 0.003 });
   },
+  saapuu: () => {
+    /*
+     * JOKU TOINEN SAAPUI, ja se on eri tapahtuma kuin osuma.
+     *
+     * PIERUKUNINGAS vastaa tallaukseen vaihtumalla joksikin toiseksi, eli
+     * samalla framella tapahtuu kaksi asiaa: osuma osui ja joku uusi tuli
+     * tilalle. Osumalla on jo äänensä (`stomp`), ja saapuminen soitti
+     * `fart`ia — jättiläisen kasvun ääntä. Se oli lainaa pahimmassa
+     * mahdollisessa paikassa: kuningas on pelin ainoa pomo joka **ei** kasva,
+     * joten ääni lupasi täsmälleen sen mitä ei tapahdu.
+     *
+     * **Rakenne kantaa merkityksen, koska melodia ei voi.** Nousevien jonojen
+     * hylly on käytetty loppuun (`coin`, `powerup`, `oneup`, `soup`, `select`)
+     * ja sointu on jo `pfull`in oma. Tälle jää se jota kukaan muu ei käytä:
+     * **sointiväri vaihtuu kesken sävelen.** Puhdas kolmio soi ensin ja kuolee
+     * pois, ja saman sävelen alta nousee särisevä saha joka jää soimaan ja
+     * liukuu alas kvartin. Sama ruumis, toinen olento — eli täsmälleen se mitä
+     * ruudulla tapahtuu, ja tämän väylän ainoa ääni jonka sointi muuttuu
+     * matkalla.
+     *
+     * Suunta on **alas** eikä ylös, ja se on toinen puoli samasta erosta:
+     * jokainen nouseva ääni tässä pelissä tarkoittaa että pelaaja sai jotain.
+     * Kuninkaan vaihtuminen ei ole palkinto vaan lasku.
+     */
+    tone({ type: 'triangle', from: 392, dur: 0.13, gain: 0.30, hold: 0.25, attack: 0.004 });
+    tone({
+      type: 'sawtooth', from: 392, to: 294, dur: 0.36, gain: 0.26,
+      delay: 0.07, hold: 0.5, attack: 0.08, detune: 11, curve: 'lin',
+    });
+  },
   /**
    * Luurangon nauru, ja sen kaksi puoliskoa.
    *

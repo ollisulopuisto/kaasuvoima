@@ -1273,8 +1273,24 @@ export function buildLevel({
  * missing from here would be compared to the corpus as if it were air and the
  * similarity check would be looking at the wrong grid. `%`, `S` and `*` joined
  * it with the tiles they name.
+ *
+ * `'C'` — möykky — liittyi 10.8.2026, ja **se ei muuta yhtään generoitua
+ * kenttää**. Kaksi syytä, ja molemmat kannattaa sanoa ääneen koska tämä on
+ * juuri se rivi jota kukaan ei uskalla koskea sormenjälkiportin takia
+ * (`src/data/daily-origin.js`):
+ *
+ *   - generaattori ei tuota `'C'`:tä: sitä ei ole yhdessäkään sanastossa,
+ *     joten mikään ruudukko jota tämä joukko koskisi ei sisällä sitä
+ *   - **tätä nimeä ei lueta täällä kertaakaan.** Kanonisointi muutti osoitetta
+ *     ja asuu nyt `tools/originality.mjs`:ssä; jäljelle jäi kopio jonka koko
+ *     arvo on se että se on kopio, eli että portti voi verrata sitä
+ *     merkkijonona `rules.js`:n riviin. Sen ajantasaisuus on siis puhtaasti
+ *     väite eikä käyttäytymistä — ja väite joka ei pidä paikkaansa on
+ *     täsmälleen se mitä `SINK`in vieressä oleva kappale varoittaa.
+ *
+ * Päivän pierun sormenjälki laskettiin uudestaan tämän jälkeen ja se on sama.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
 /*
  * Juoksuhiekka, and it is here for the reason the comment above gives about
  * `SOLID`: `canonOurs` below folds every character it does not recognise into

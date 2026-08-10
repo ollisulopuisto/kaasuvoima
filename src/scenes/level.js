@@ -1,7 +1,10 @@
 import { getLevel } from '../data/levels.js';
 import {
-  TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP,
+  TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP, themeTint,
 } from '../gfx/tiles.js';
+/* Vain kuninkaan verhoa varten, ks. `onKingForm`: saapuvan muodon maailma on
+ * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
+import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
@@ -1176,6 +1179,38 @@ export class LevelScene {
     this.speedPulse = SPEED_PULSE_SPENT;
     this.speedPulseUp = false;
     Sfx.play('pspent');
+  }
+
+  /**
+   * KUNINGAS VAIHTUI JOKSIKIN TOISEKSI, ja ruutu sanoo **kuka** saapui.
+   *
+   * Jokainen muu pomo vastaa osumaan nostamalla yhtä omaa numeroaan;
+   * PIERUKUNINGAS vaihtaa liikevalikoimansa seuraavan linnakkeen valikoimaksi
+   * (`KING_FORMS`, `src/entities/enemies.js`). Se ero on koko finaalin idea, ja
+   * se lunastuu vain jos pelaaja tunnistaa kesken tappelun kenet hän juuri sai
+   * vastaansa — mikä on tasan se taito jonka maailman 8 seitsemän uusintaa
+   * opettivat. Yleinen välähdys sanoisi *että* jotain vaihtui; se on juuri se
+   * tieto joka pelaajalla jo on, koska hän tallasi.
+   *
+   * Väri on siis se maailma josta muoto tulee, ja se luetaan sen maailman
+   * paletista (`themeTint`). Uutta sävyä ei keksitä eikä vanhaa kirjoiteta
+   * toiseen kertaan: toinen kopio ajautuisi erilleen ensimmäisestä sinä
+   * päivänä kun jotakin palettia siirretään, ja se ero näkyisi vain tässä
+   * yhdessä tappelussa.
+   *
+   * Kuva ja ääni yhdessä (DESIGN.md kohta 8). Ääni on `saapuu` eikä `stomp`:
+   * osuma ja saapuminen ovat kaksi eri tilanvaihdosta samalla framella, ja
+   * yksi merkki kahdelle asialle opettaa lukemaan toisen niistä väärin.
+   * Tärähdys jää sille mitä se on aina ollut — sen kertominen että osuma osui
+   * — eikä verho lainaa sitä, koska silloin saapumisella olisi merkki jonka
+   * osuma jo omistaa.
+   *
+   * @param {number} index kohta `KING_FORMS`issa, eli maailma `index + 1`
+   */
+  onKingForm(index) {
+    const world = WORLDS[index];
+    if (world) PostFX.flash(themeTint(world.theme));
+    Sfx.play('saapuu');
   }
 
   /* ------------------------------ level API ---------------------------- */

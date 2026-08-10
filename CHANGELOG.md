@@ -7,6 +7,103 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.65 — ruutu pukee saapuvan maailman värin kun kuningas vaihtuu
+
+Omistaja pyysi kokoruudun palautetta megapomon muodonvaihtoon ja hyväksyi
+muotoilun: **ruutu pukee hetkeksi sen maailman värin josta muoto tulee.**
+
+PIERUKUNINGAS on pelin ainoa pomo joka vastaa tallaukseen **vaihtumalla
+joksikin toiseksi**; kaikki muut nostavat yhtä omaa numeroaan. Se ero lunastuu
+vain jos pelaaja tunnistaa kesken tappelun **kuka juuri saapui** — tasan se
+taito jonka maailman 8 seitsemän uusintaa opettivat. Tähän asti vaihdos luki
+vain spritin ja nopeuden muutoksena, ja sen ainoa oma ääni oli lainattu `fart`,
+**eli jättiläisen kasvun ääni**: lainaa pahimmassa mahdollisessa paikassa,
+koska kuningas on se yksi pomo joka ei kasva.
+
+Yleinen valkoinen välähdys olisi heittänyt ominaisuuden pois: se sanoisi
+*että* jotain vaihtui, mikä on juuri se tieto joka pelaajalla jo on — hän
+tallasi.
+
+### Väri luetaan paletista, ja rajaus on mitattu
+
+`themeTint` laskee teeman **maan ja kukkulan kuudesta sävystä** yhden värin.
+Uutta sävyä ei keksitty eikä vanhaa kirjoitettu toiseen kertaan, koska toinen
+kopio ajautuisi erilleen sinä päivänä kun jotakin palettia siirretään.
+
+Kuusi sävyä eikä koko paletti eikä yksi, ja molemmat ääripäät mitattiin:
+**koko paletin keskiarvo kutistaa kaikki teemat samaan harmaaseen** (heikoin
+pari 5,5 %), ja pelkkä `groundTop` on jäällä, luulla ja pilvellä kolmesti
+lähes valkoinen (3,9 %). Maat ja kukkulat antavat **12,7 %**, reilusti yli sen
+8,6 %:n jonka peli jo sietää.
+
+### Verho on rengas eikä verho, ja se on reiluutta
+
+Pelaaja on sillä framella kesken hyppyä pomon päällä, ja läpinäkymätön
+täysvälähdys juuri siinä olisi epäreilu. Kirkas ydin, väri reunoilla:
+**76,1 % pelialueesta, 19 framea (317 ms), pomon päällä enintään 3/255 ja
+pelaajan päällä 0/255.** Lisäävä (`lighter`) eikä peittävä, koska ruohon tumma
+vihreä peittävänä olisi lukenut varjoksi eikä väriksi. Tärähdys jää sille mitä
+se on aina ollut — osuman merkki — eikä verho lainaa sitä.
+
+`_flashPass` ajetaan ennen `apply`n paluuta, koska **"pois" sammuttaa
+kuvatehosteet eikä peliä**: verho olisi muuten näkymätön tasan sille pelaajalle
+joka on pyytänyt nähdä pelin sellaisenaan. Mitattu kaikilla kolmella
+asetuksella ja molemmilla piirtopoluilla; ilman ajuria kuvaputken vinjetti syö
+nurkan noususta 106 → 42, mikä on yhä nelinkertainen kynnykseen nähden.
+
+Pikatallennus palauttaa kuninkaan samaan muotoon **ja verhon samaan väriin**.
+
+---
+
+## v26.08.10.66 — möykky kahteen kenttään, ja kolme porttia jotka mittaavat sijoituksen
+
+`T.LUMP` rakennettiin fysiikkoineen, kolmine turvaehtoineen ja tallennuksineen
+— **eikä sitä asetettu yhteenkään kenttään.** Laatta jota ei ole missään on
+koodia joka esittää ominaisuutta: jokainen sitä koskeva väite on tosi tyhjästä
+joukosta, ja **tyhjä joukko läpäisee mitä tahansa.**
+
+### Maailma 4, ja perustelu on sekä rekisteri että rakenne
+
+Möykky on ummetuskorkin sukua, ja korkki asuu tehtaassa (`corks`, `cork_gap`,
+`fac_star`, `fac_shaft` asettavat sen jokainen). Tehdas on myös **pelin ainoa
+maailma joka on sisätilaa ensimmäisestä laatasta viimeiseen**, eli ainoa jossa
+laatan yllä on aina jotain mistä se on voinut irrota — avoimen taivaan alla
+möykky luetaan kiveksi, ja `tiles.js` sanoo suoraan ettei se ole kivi.
+
+Kaksi kenttää eikä kuusi, koska tämä on uusi verbi:
+
+- **4-2 ensiesittely** — tavallinen `BB?BB`-lohkorivi, möykky `?`:n vasemmalla
+  naapurilla, tyhjä huone, tasainen lattia.
+- **4-F** — sama rivi ja sama möykky, mutta kolmen närästyssuihkun huoneessa.
+  Sama huone kahdesti, ja toisella kerralla sen katossa on jotain.
+
+### Miksi ensiesittely on turvallinen rakenteesta eikä varovaisuudesta
+
+Möykyn tuki voi olla **vain tiili** (`dropAbove` lähtee ruudun tyhjenemisestä,
+ja mureneva lauta on kielletty), ja tiilen hajottaa **vain iso pelaaja**.
+Kukaan ei siis voi pudottaa möykkyä itselleen voimatasolla 0, joten osuma
+maksaa aina koon eikä koskaan henkeä — täsmälleen se raja jonka TURVAPROXY
+vetää. Mitattuna 4-2: POHJA on, SEURA on, YKSIN on.
+
+Mitattu moottorista, oikeista kentistä eikä koekentästä: 4-2 möykky lähtee
+framella 12, laskeutuu 27, on kotona 153 framea myöhemmin; voimatasolla 0
+mikään ei liikkunut 90 framessa; 4-F paikallaan jäänyt 1 → 0, kävelyvauhdissa
+1 → 1 ja 8,4 laattaa sivuun.
+
+### Löydetty, ei korjattu: mittari ei tunne möykkyä
+
+`src/data/difficulty.js` **ei muuttunut riviäkään**, vaikka kaksi kenttää sai
+tappavan laatan. Syy on että `tools/difficulty.mjs` ei tunne merkkiä `'C'`, ja
+olemassa oleva portti *"jokaisella vihollismerkillä on hinta vaikeusmittarissa"*
+kattaa **vihollismerkit** eikä laattavaaroja.
+
+Se on sama vika kuin piikkiäijän puuttuva hinta jonka tämä sama sessio korjasi
+aiemmin, yhtä luokkaa siirrettynä. Ei korjattu tässä, koska hinnan lisääminen
+liikuttaa 4-2:n ja 4-F:n lukuja ja siten maailman 4 käyrä- ja muotoportteja —
+oma muutoksensa omalla punaisellaan.
+
+---
+
 ## v26.08.10.64 — emergenssin ensimmäinen erä: neljä lakia ja yksi laatta joka putoaa
 
 Omistajan päätös 10.8.2026 (ROADMAP, *"emergenssi ulottuu olioiden välille,

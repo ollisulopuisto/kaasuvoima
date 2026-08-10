@@ -5899,7 +5899,10 @@ const report = await page.evaluate(async () => {
        * oli määritelty eikä kumpaakaan soitettu mistään. Kolme uutta ovat tässä
        * siksi että lista on "nämä tarkoittavat jo jotain", ja nyt ne
        * tarkoittavat. */
-      'payout', 'kytkin', 'doorin'];
+      'payout', 'kytkin', 'doorin',
+      /* `saapuu` tarkoittaa nyt kuninkaan muodonvaihdosta, ks. lohko
+       * "kuninkaan muodonvaihto". Lista on "nämä tarkoittavat jo jotain". */
+      'saapuu'];
 
     const mk = (power, id = '1-1') => {
       reset(power);
@@ -12585,6 +12588,483 @@ const report = await page.evaluate(async () => {
       measured ? `${shown}, tausta jäljessä ${floorAfter.toFixed(3)}` : 'ei mitattu');
   }
 
+  /* ---- kuninkaan muodonvaihto ---- */
+  /*
+   * RUUTU PUKEE SAAPUVAN MAAILMAN VÄRIN.
+   *
+   * PIERUKUNINGAS (8-F, variantti 6) on pelin ainoa pomo joka vastaa
+   * tallaukseen **vaihtumalla joksikin toiseksi**: jokainen osuma antaa
+   * hänelle seuraavan linnakkeen liikevalikoiman (`KING_FORMS`). Jokainen muu
+   * pomo nostaa jotakin omaa numeroaan, ja se ero on koko finaalin idea — se
+   * lunastuu vain jos pelaaja **tunnistaa kesken tappelun kuka juuri saapui**,
+   * eli tasan sen taidon jonka maailman 8 seitsemän uusintaa opettivat.
+   *
+   * Merkki ei siis saa sanoa *että* jotain vaihtui vaan **kuka** vaihtui, ja
+   * siksi valkoinen välähdys olisi heittänyt koko ominaisuuden pois. Ruutu
+   * pukee sen maailman värin josta saapuva muoto tulee, ja väri luetaan
+   * paletista (`themeTint` + `WORLDS[i].theme`) eikä kirjoiteta toiseen
+   * kertaan — toinen kopio ajautuisi erilleen ensimmäisestä heti kun jotakin
+   * palettia siirretään.
+   *
+   * Viisi mittausta, ja ne mittaavat viittä eri tapaa mennä pieleen:
+   *
+   *   1  merkki    vaihdos näkyy koko ruudulla ja kuuluu omalla äänellään —
+   *                eikä peitä sitä tappelua jonka päällä se soi
+   *   2  väri      jokainen saapuminen kantaa oman maailmansa paletin, ja
+   *                jokainen pari mitataan pelin omaa 8,6 %:n kynnystä vasten
+   *   3  tallennus muoto ja sen väri kestävät pikatallennuksen
+   *   4  efektit   sama merkki kaikilla kolmella kuvatehosteasetuksella,
+   *                myös `pois` — jossa `PostFX.apply` palaa aikaisin
+   *   5  ääni      huippu mitattuna, ei arvattuna: kuuluu, ei huuda, ei jää
+   *                soimaan
+   *
+   * **Punainen ennen vihreää.** Ennen tätä muutosta kohta 1 mittasi
+   * "0/66560 px pelialueesta muuttui, saapumisen ääni fart" — eli kuvaa ei
+   * ollut lainkaan ja ääni oli lainattu jättiläisen kasvulta. Se on mittaus
+   * hiljaisuudesta eikä mielipide siitä että tähän pitäisi ehkä lisätä jotain.
+   */
+  {
+    const { PostFX: FX, PRESETS: FX_PRESETS } = await import('/src/gfx/postfx.js');
+    const kingMod = await import('/src/entities/enemies.js');
+    const tiles8 = await import('/src/gfx/tiles.js');
+    const tintOf = tiles8.themeTint;
+
+    /* Äänet jotka tarkoittavat jo jotain muuta. Sama lista ja sama syy kuin
+     * lohkossa "tilanvaihdos joka ei kuulunut eikä näkynyt": lainattu ääni
+     * tarkoittaa lainaamisen jälkeen kahta asiaa, ja pelaaja oppii lukemaan
+     * toisen niistä väärin. `fart` on tässä nimenomaan siksi että se oli se
+     * ääni jolla kuningas vaihtoi muotoa — ja se on jättiläisen kasvun ääni. */
+    const OTHERS = ['jump', 'bigjump', 'fart', 'bigfart', 'squeak', 'flight', 'coin',
+      'stomp', 'bump', 'brick', 'burst', 'sprout', 'dive', 'slam', 'kurnutus',
+      'loikka', 'kick', 'spikes', 'pop', 'upota', 'kahlaa', 'cork', 'soup', 'powerup',
+      'yeah', 'oof', 'letsgo', 'powerdown', 'oneup', 'die', 'clear', 'cursor', 'select',
+      'luuranko', 'boss', 'timewarn', 'door', 'payout', 'kytkin', 'doorin',
+      'pfull', 'pspent', 'pipeout', 'reserve', 'pipe'];
+
+    const kc = document.createElement('canvas');
+    kc.width = 320;
+    kc.height = 240;
+    const kg = kc.getContext('2d', { willReadFrequently: true });
+    const PLAY_W = 320;
+    const PLAY_H = 208;
+    const PLAY_PX = PLAY_W * PLAY_H;
+    /* Kuva niin kuin se menee ruudulle: kohtaus ja sen päälle jälkikäsittely,
+     * koska verho asuu `PostFX.apply`issa eikä `LevelScene.draw`issa. */
+    const shot = () => {
+      kg.clearRect(0, 0, 320, 240);
+      game.scene.draw(kg);
+      FX.apply(kg);
+      return kg.getImageData(0, 0, PLAY_W, PLAY_H).data;
+    };
+    /* Verho pois ilman että maailmaan kosketaan: kaksi muuten identtistä
+     * ruutua, joten erotus on verho ja vain verho. */
+    const stopFlash = () => { FX.flashLeft = 0; };
+    const listenK = () => {
+      const real = Sfx.play;
+      const heard = [];
+      Sfx.play = function tap(name) { heard.push(name); };
+      return { heard, off() { Sfx.play = real; } };
+    };
+    const kingFight = () => {
+      reset();
+      const s = new LevelScene(game, '8-F');
+      game.setScene(s);
+      stopFlash();
+      return { s, boss: s.entities.find((e) => e instanceof kingMod.Boss) };
+    };
+    /* Yksi osuma, ja siitä kaksi kuvaa: verhon kanssa ja ilman. Maailmaa ei
+     * päivitetä välissä, joten erotus ei voi olla kävelevä pomo. */
+    const hit = (boss) => {
+      const tap = listenK();
+      let heard = [];
+      try {
+        boss.invuln = 0;
+        boss.stomp();
+        heard = tap.heard.slice();
+      } finally { tap.off(); }
+      const lit = shot();
+      stopFlash();
+      const dark = shot();
+      return { heard, lit, dark };
+    };
+    const changed = (a, b) => {
+      let n = 0;
+      for (let p = 0; p < a.length; p += 4) {
+        if (a[p] !== b[p] || a[p + 1] !== b[p + 1] || a[p + 2] !== b[p + 2]) n++;
+      }
+      return n;
+    };
+    /** Suorakulmion keskimääräinen ja pahin värimuutos, kanavittain. */
+    const boxDelta = (a, b, x0, y0, w, h) => {
+      const d = [0, 0, 0];
+      let n = 0;
+      let worst = 0;
+      for (let y = Math.max(0, y0); y < Math.min(PLAY_H, y0 + h); y++) {
+        for (let x = Math.max(0, x0); x < Math.min(PLAY_W, x0 + w); x++) {
+          const p = (y * PLAY_W + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            d[c] += a[p + c] - b[p + c];
+            worst = Math.max(worst, Math.abs(a[p + c] - b[p + c]));
+          }
+          n++;
+        }
+      }
+      return { mean: n ? d.map((v) => v / n) : [0, 0, 0], worst, n };
+    };
+    /** Nurkka, jossa verho on täydessä voimassaan eikä kukaan seiso. */
+    const corner = (r) => boxDelta(r.lit, r.dark, 0, 0, 12, 12).mean;
+    /* Sama mitta kuin vihollisen ja maan kontrastilla: keskimääräinen
+     * kanavaero täydestä 255:stä. Karkea, mutta **sama luku** kuin se jota
+     * peli jo käyttää erottuvuuden mittana, ja se on tässä arvokkaampaa kuin
+     * parempi luku jota ei voi verrata mihinkään. */
+    const sepK = (a, b) => ((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
+      + Math.abs(a[2] - b[2])) / 3 / 255) * 100;
+    /* Kynnys ei ole typotettu tähän: se on aavikon oma maa/tiili-ero, pelin
+     * heikoin pari joka on jo tuotannossa ja tiedetään siedettäväksi. */
+    const floorSep = (() => {
+      const mean = (ch, theme) => {
+        kg.clearRect(0, 0, 16, 16);
+        tiles8.drawTile(kg, ch, 0, 0, theme, 3, 5, 0, ' ', {});
+        const d = kg.getImageData(0, 0, 16, 16).data;
+        const acc = [0, 0, 0];
+        let n = 0;
+        for (let q = 0; q < d.length; q += 4) {
+          if (d[q + 3] < 8) continue;
+          acc[0] += d[q]; acc[1] += d[q + 1]; acc[2] += d[q + 2]; n++;
+        }
+        return n ? acc.map((v) => v / n) : [0, 0, 0];
+      };
+      return sepK(mean(tiles8.T.GROUND, 'desert'), mean(tiles8.T.BRICK, 'desert'));
+    })();
+
+    let arriveSfx = null;
+
+    /*
+     * 1. MERKKI. Kaksi puolta yhdessä (DESIGN.md kohta 8) ja kolmas ehto joka
+     *    on reiluutta eikä kauneutta: verho ei saa peittää sitä tappelua jonka
+     *    päällä se soi. Pelaaja on tällä framella kesken hyppyä pomon päällä,
+     *    ja läpinäkymätön täysvälähdys juuri siinä on epäreilu eikä koriste.
+     *    Ruudun keskus jää siksi koskemattomaksi ja väri asuu reunoilla, josta
+     *    sen näkee katsomatta pois siitä mitä tekee.
+     */
+    {
+      const { s, boss } = kingFight();
+      const p = s.player;
+      /* Se hetki jota väite koskee: pelaaja on juuri tallannut ja on ilmassa
+       * pomon pään yläpuolella. Kentän alussa mitattuna kumpikaan ei ole edes
+       * ruudulla, ja "verho ei peitä tappelua" mitattaisiin tyhjästä
+       * käytävästä. */
+      p.x = boss.cx - p.w / 2;
+      p.y = boss.y - p.h - 12;
+      p.vx = 0;
+      p.vy = -2;
+      p.onGround = false;
+      s.centerCamera();
+      const cam = { x: Math.round(s.cam.x), y: Math.round(s.cam.y) };
+      const r = hit(boss);
+      const cover = changed(r.lit, r.dark);
+      const onBoss = boxDelta(r.lit, r.dark, Math.round(boss.x) - cam.x,
+        Math.round(boss.y) - cam.y + s.bar, Math.round(boss.w), Math.round(boss.h));
+      const onPlayer = boxDelta(r.lit, r.dark, Math.round(p.x) - cam.x,
+        Math.round(p.y) - cam.y + s.bar, Math.round(p.w), Math.round(p.h));
+      const arrive = r.heard.filter((x) => x !== 'stomp');
+      arriveSfx = arrive.length === 1 ? arrive[0] : null;
+      /* Kesto mitataan pikseleistä eikä vakiosta luetaan: verho elää niin
+       * kauan kuin se muuttaa ruutua. Osuman jälkeen pomoon ei voi osua 70
+       * frameen (`invuln`), joten se on se ikkuna jonka sisään sen on
+       * mahduttava — merkki joka on yhä ruudulla kun tappelu jatkuu on
+       * suodatin eikä merkki. */
+      let frames = 0;
+      {
+        const { boss: b2 } = kingFight();
+        b2.invuln = 0;
+        b2.stomp();
+        for (let f = 0; f < 240; f++) {
+          const a = shot();
+          const keep = FX.flashLeft || 0;
+          FX.flashLeft = 0;
+          const b = shot();
+          FX.flashLeft = keep;
+          if (changed(a, b) > 0) frames++; else break;
+        }
+      }
+      expect('kuninkaan muodonvaihto näkyy koko ruudulla ja kuuluu omalla äänellään',
+        !!arriveSfx && Sfx.has(arriveSfx) && !OTHERS.includes(arriveSfx)
+        && cover > PLAY_PX * 0.5 && onBoss.worst <= 26 && onPlayer.worst <= 26
+        && frames >= 8 && frames <= 40,
+        `ääni "${r.heard.join('+') || '-'}" (saapuminen "${arrive.join('+') || '-'}"), `
+        + `${cover}/${PLAY_PX} px pelialueesta = ${((cover / PLAY_PX) * 100).toFixed(1)} %, `
+        + `kesto ${frames} framea = ${Math.round((frames / 60) * 1000)} ms `
+        + `(osumattomuus 70 framea), pomon päällä enintään ${onBoss.worst}/255, `
+        + `pelaajan päällä ${onPlayer.worst}/255`);
+    }
+
+    /*
+     * 2. VÄRI, ja tämä on se väite joka on ensimmäistä arvokkaampi.
+     *
+     *    Merkki joka nimeää kaksi eri saapujaa samalla värillä on pahempi kuin
+     *    merkitsemättömyys, koska sen oppii uskomaan. Siksi jokainen pari
+     *    mitataan, ja kynnyksenä on pelin oma: aavikon maa vastaan aavikon
+     *    tiili, se heikoin pari jonka peli jo tietoisesti sietää.
+     *
+     *    **Ja tässä on löydös jota ei etsitty.** Maailma 5 (JÄLKIPYYKKI)
+     *    kantaa maailman 1 palettia — kirjattu päätös `worlds.js`:ssä ("sama
+     *    ruoho, eri maasto") — joten niiden pari mittaa **0,0 %**. Se ei
+     *    kuitenkaan osu tähän merkkiin, ja syy on kuninkaan omassa
+     *    kierrossaan: hän **kävelee sisään** maailman 1 muodossa eikä saavu
+     *    siinä, ja seitsemäs osuma kaataa hänet vaihtamatta muotoa. Verhoja on
+     *    siis kuusi ja ne ovat maailmat 2…7, joissa jokainen paletti esiintyy
+     *    kerran. Portti vaatii sen erikseen: yksikään maalattu pari ei jää
+     *    kynnyksen alle. Jos joku joskus antaa kuninkaalle kahdeksannen
+     *    linnakkeen tai laukaisee verhon myös tappelun alussa, tämä kaatuu.
+     */
+    {
+      const forms = kingMod.KING_FORMS ? kingMod.KING_FORMS.length : 7;
+      const worlds = [];
+      for (let i = 0; i < forms; i++) worlds.push(WORLDS[i]);
+      const tints = worlds.map((w) => (tintOf ? tintOf(w.theme) : null));
+
+      const { boss } = kingFight();
+      const seen = [];
+      for (let i = 0; i < forms; i++) {
+        const from = boss.formIndex;
+        const r = hit(boss);
+        seen.push({ from, to: boss.formIndex, d: corner(r) });
+      }
+      const arrivals = seen.filter((x) => x.to !== x.from);
+      const painted = arrivals.filter((x) => Math.max(...x.d.map(Math.abs)) > 4);
+      const worldsPainted = painted.map((x) => x.to);
+
+      /* Kaikki 21 paria luetaan raporttiin, myös se nolla: mitattu luku joka
+       * ei ole missään näkyvissä on sama asia kuin muistettu luku. */
+      const pairs = [];
+      let worstPainted = 1e9;
+      let worstPaintedPair = '-';
+      for (let i = 0; i < forms; i++) {
+        for (let j = i + 1; j < forms; j++) {
+          const v = tints[i] && tints[j] ? sepK(tints[i], tints[j]) : 0;
+          const both = worldsPainted.includes(i) && worldsPainted.includes(j);
+          pairs.push(`w${i + 1}/w${j + 1} ${v.toFixed(1)}${both ? '' : '°'}`);
+          if (both && v < worstPainted) {
+            worstPainted = v;
+            worstPaintedPair = `w${i + 1}/w${j + 1}`;
+          }
+        }
+      }
+      /* Ja sama erottuvuus mitattuna ruudulta eikä paletista: verho on
+       * lisäävä, joten kahden verhon ero ruudulla on sama ero vaimennettuna. */
+      let worstPx = 1e9;
+      for (let i = 0; i < painted.length; i++) {
+        for (let j = i + 1; j < painted.length; j++) {
+          worstPx = Math.min(worstPx, sepK(painted[i].d, painted[j].d));
+        }
+      }
+      expect('jokainen saapuminen kantaa oman maailmansa värin, ja ne erottuvat toisistaan',
+        !!tintOf && arrivals.length === forms - 1 && painted.length === arrivals.length
+        && new Set(worldsPainted).size === painted.length
+        && worstPainted >= floorSep && worstPx > 0,
+        `kynnys ${floorSep.toFixed(1)} % (aavikon maa vs tiili); `
+        + `verhoja ${painted.length}/${arrivals.length} saapumista `
+        + `(maailmat ${worldsPainted.map((i) => i + 1).join(' ')}); `
+        + `heikoin maalattu pari ${worstPaintedPair} `
+        + `${worstPainted === 1e9 ? '-' : `${worstPainted.toFixed(1)} %`}, `
+        + `ruudulta mitattuna ${worstPx === 1e9 ? '-' : `${worstPx.toFixed(1)} %`}; `
+        + `värit ${tints.map((c, i) => `w${i + 1} ${c ? c.join('/') : '-'}`).join(' ')}; `
+        + `kaikki parit ${pairs.join(' ')} (° = pari jota ei koskaan maalata)`);
+    }
+
+    /*
+     * 3. PIKATALLENNUS. Kuninkaan kohta kierrossa on `formIndex`, ja jos se ei
+     *    kestä tallennusta, ladattu tappelu jatkuu väärältä muodolta ja verho
+     *    nimeää väärän maailman. `savestate.js` sarjallistaa entiteetin omat
+     *    kentät, joten tämä kaatuu jos joku joskus siirtää muodon johonkin
+     *    mikä ei ole oma kenttä — ja verhon oma tila on tarkoituksella
+     *    `PostFX`:ssä eikä tallennuksessa, samoin kuin vauhtimittarin sykäys.
+     */
+    {
+      const { boss } = kingFight();
+      for (let i = 0; i < 3; i++) { boss.invuln = 0; boss.stomp(); }
+      stopFlash();
+      const before = { form: boss.form, index: boss.formIndex, hp: boss.hp };
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      restoreState(game, snap);
+      const back = game.scene.entities.find((e) => e instanceof kingMod.Boss);
+      const after = back
+        ? { form: back.form, index: back.formIndex, hp: back.hp } : null;
+      const r = back ? hit(back) : null;
+      const got = r ? corner(r) : [0, 0, 0];
+      /* Verho on lisäävä, joten muutos osoittaa värin suuntaan. Lähin
+       * seitsemästä maailmasta on se jonka ruutu puki — ja vertailu tehdään
+       * väriin eikä numeroon, koska kaksi maailmaa jakaa paletin. */
+      const norm = (v) => {
+        const m = Math.max(1e-6, Math.hypot(v[0], v[1], v[2]));
+        return v.map((x) => x / m);
+      };
+      let nearest = -1;
+      if (tintOf && r) {
+        const g0 = norm(got);
+        let best = -1;
+        for (let i = 0; i < 7; i++) {
+          const c = norm(tintOf(WORLDS[i].theme));
+          const dot = c[0] * g0[0] + c[1] * g0[1] + c[2] * g0[2];
+          if (dot > best) { best = dot; nearest = i; }
+        }
+      }
+      const want = after && tintOf ? tintOf(WORLDS[after.index + 1].theme) : null;
+      const drew = nearest >= 0 && tintOf ? tintOf(WORLDS[nearest].theme) : null;
+      expect('pikatallennus palauttaa kuninkaan samaan muotoon, ja verho samaan väriin',
+        !!after && JSON.stringify(before) === JSON.stringify(after)
+        && !!want && !!drew && want.join(',') === drew.join(','),
+        `ennen ${JSON.stringify(before)}, jälkeen ${JSON.stringify(after)}, `
+        + `seuraava verho rgb(${got.map((v) => Math.round(v)).join(',')}) → `
+        + `${drew ? `rgb(${drew.join(',')})` : '-'} (maailma ${nearest + 1}), `
+        + `odotettu ${want ? `rgb(${want.join(',')})` : '-'} `
+        + `(maailma ${after ? after.index + 2 : '-'})`);
+    }
+
+    /*
+     * 4. KUVATEHOSTEET, ja **kaikki kuusi yhdistelmää eikä kolmea**.
+     *
+     *    `7` kiertää kolme asetusta, ja niistä yksi on `pois`, jossa
+     *    `PostFX.apply` palaa aikaisin: verho joka olisi kirjoitettu sen paluun
+     *    alapuolelle olisi näkymätön tasan sille pelaajalle joka on pyytänyt
+     *    nähdä pelin sellaisenaan.
+     *
+     *    Mutta asetus on vain toinen puoli. Ilman WebGL:ää skanviivat ja
+     *    vinjetti piirretään **2D:nä samaan kankaaseen verhon jälkeen**, eli
+     *    juuri siinä polussa nurkka voi tummua takaisin — ja se on se polku
+     *    jota tämä ajo ei muuten koskaan aja, koska ajuri on tässä koneessa
+     *    kunnossa. Siksi sama mittaus tehdään myös irrallisella 2D-instanssilla
+     *    (`Object.create`, sama tapa kuin jälkikäsittelyn omassa lohkossa).
+     *
+     *    Peitto yksinään ei kelpaa väitteeksi kummassakaan: sama pikselimäärä
+     *    voi muuttua paljon vähemmän. Siksi mitataan myös kuinka monta askelta
+     *    255:stä nurkka nousee.
+     */
+    {
+      const was = FX.preset;
+      /* 2D-polku omana instanssinaan: sama koodi, sama kangas, ei ajuria.
+       * `_bloomCtx` ja muut välimuistit peritään, mikä on tarkoitus — ne ovat
+       * työkaluja eivätkä tilaa. */
+      const soft = Object.create(FX);
+      soft.mode = '2d';
+      soft.source = kc;
+      soft.ambience = null;
+      soft.ambienceAmount = 0;
+      soft.tick = 0;
+      soft.flashLeft = 0;
+      soft.flashRgb = null;
+      soft.flashSpan = 1;
+      /** Sama kuva toisella jälkikäsittelijällä, verhon kanssa ja ilman. */
+      const shotWith = (fx) => {
+        kg.clearRect(0, 0, 320, 240);
+        game.scene.draw(kg);
+        fx.apply(kg);
+        return kg.getImageData(0, 0, PLAY_W, PLAY_H).data;
+      };
+      const rows = [];
+      let worstShare = 1;
+      let worstLift = 255;
+      for (const name of FX_PRESETS) {
+        FX.setPreset(name);
+        soft.preset = name;
+        const { boss } = kingFight();
+        const r = hit(boss);
+        const share = changed(r.lit, r.dark) / PLAY_PX;
+        const lift = Math.max(...corner(r));
+        rows.push(`${name}/${FX.mode} ${(share * 100).toFixed(1)} % +${lift.toFixed(0)}`);
+        worstShare = Math.min(worstShare, share);
+        worstLift = Math.min(worstLift, lift);
+
+        // Ja sama ilman ajuria. Verho laukaistaan käsin, koska pomo puhuu
+        // moduulin omalle instanssille.
+        const { boss: b2 } = kingFight();
+        b2.invuln = 0;
+        b2.stomp();
+        soft.flashRgb = FX.flashRgb;
+        soft.flashSpan = FX.flashSpan;
+        soft.flashLeft = FX.flashLeft;
+        const lit2 = shotWith(soft);
+        soft.flashLeft = 0;
+        const dark2 = shotWith(soft);
+        const share2 = changed(lit2, dark2) / PLAY_PX;
+        const lift2 = Math.max(...boxDelta(lit2, dark2, 0, 0, 12, 12).mean);
+        rows.push(`${name}/2d ${(share2 * 100).toFixed(1)} % +${lift2.toFixed(0)}`);
+        worstShare = Math.min(worstShare, share2);
+        worstLift = Math.min(worstLift, lift2);
+      }
+      FX.setPreset(was);
+      expect('verho näkyy kaikilla kolmella kuvatehosteasetuksella, myös ilman ajuria',
+        worstShare > 0.5 && worstLift > 20,
+        `${rows.join(', ')} (osuus pelialueesta ja nurkan nousu 255:stä)`);
+    }
+
+    /*
+     * 5. ÄÄNI, mitattuna eikä arvattuna. Uusi ääni voi jäädä pohjakohinaan
+     *    (merkki jota ei kuule ei ole merkki) tai nousta niin kovaksi että se
+     *    peittää ne merkit jotka olivat täällä ensin. Vertailukohdat mitataan
+     *    samassa ajossa, koska muistiin kirjattu luku vanhenee ensimmäisessä
+     *    miksausmuutoksessa — ja `stomp` on niistä tärkein: osuma ja saapuminen
+     *    ovat kaksi tapahtumaa samalla framella, ja saapumisen on oltava se
+     *    jonka korva poimii.
+     */
+    {
+      game.toTitle();
+      const { Ambience: Amb } = await import('/src/core/audio.js');
+      const tap = audioTap();
+      const measured = tap && tap.ctx.state === 'running';
+      const peaks = {};
+      let floorAfter = 0;
+      if (measured) {
+        Music.stop();
+        Amb.stop();
+        const an = tap.ctx.createAnalyser();
+        // Sama 16384 kuin muillakin lyhyillä äänillä: ikkunan on oltava
+        // pidempi kuin mitattava ääni, tai portti julistaa äänettömäksi äänen
+        // jonka kaiuttimet soittavat.
+        an.fftSize = 16384;
+        tap.bus.connect(an);
+        const buf = new Float32Array(an.fftSize);
+        const peakFor = async (ms) => {
+          let peak = 0;
+          const t0 = performance.now();
+          while (performance.now() - t0 < ms) {
+            an.getFloatTimeDomainData(buf);
+            for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+            await new Promise((r) => setTimeout(r, 8));
+          }
+          return peak;
+        };
+        const settle = async () => {
+          let calm = 0;
+          let level = 1;
+          const t0 = performance.now();
+          while (calm < 2 && performance.now() - t0 < 4000) {
+            level = await peakFor(200);
+            calm = level > 0.02 ? 0 : calm + 1;
+          }
+          return level;
+        };
+        for (const name of [arriveSfx, 'stomp', 'coin', 'powerup']) {
+          if (!name || !Sfx.has(name)) continue;
+          await settle();
+          Sfx.play(name);
+          peaks[name] = await peakFor(600);
+        }
+        floorAfter = await settle();
+        an.disconnect();
+      }
+      const n = (name) => (name && peaks[name] !== undefined ? peaks[name] : 0);
+      const shown = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
+      expect('saapumisen ääni kuuluu, ei huuda, eikä jätä väylää soimaan',
+        !measured || (
+          n(arriveSfx) > n('coin') && n(arriveSfx) <= n('powerup')
+          && n(arriveSfx) > n('stomp') && floorAfter < 0.02),
+        measured ? `${shown}, tausta jäljessä ${floorAfter.toFixed(3)}` : 'ei mitattu');
+    }
+  }
+  /* ---- kuninkaan muodonvaihto loppuu ---- */
+
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
    * seconds behind the audio clock. Playing that backlog would build thousands
    * of oscillators in one turn of the event loop and freeze the keyboard. */
@@ -16100,6 +16580,417 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- emergenssi: loppu ---- */
+/* ---- möykky kentissä ---- */
+/*
+ * MÖYKKY ON KENTISSÄ, JA SE ON TÄMÄN LOHKON KOKO AIHE.
+ *
+ * `T.LUMP` rakennettiin 10.8.2026 fysiikkoineen, kolmine portteineen ja
+ * tallennuksineen, eikä sitä asetettu yhteenkään kenttään. Laatta jota ei ole
+ * missään on koodia joka esittää ominaisuutta: jokainen edellinen väite siitä
+ * on tosi tyhjästä joukosta, ja tyhjä joukko läpäisee mitä tahansa.
+ *
+ * Tämä lohko mittaa neljä asiaa jotka kaikki lakkasivat olemasta triviaaleja
+ * sinä hetkenä kun ensimmäinen `C` kirjoitettiin palikkaan:
+ *
+ *   1. **niitä on.** Ei yhtään on eri asia kuin nolla ongelmaa.
+ *   2. **rules.js:n kolme sääntöä kysytään pelin omilta möykyiltä.**
+ *      `validateLevel` ajetaan generoiduille kentille; käsintehdyille se on
+ *      DESIGN.md kohdan 5 mukaan suunnitteluohje. `checkFalling` ei ole
+ *      suunnitteluohje vaan turvaehto, joten se luetaan täältä jokaisesta
+ *      kentästä johon möykky on asetettu.
+ *   3. **möykyn alla oleva tiili oikeasti hajoaa.** Tämä on se ehto jota
+ *      `rules.js` **ei voi** kysyä eikä kysy, ja se on se joka olisi mennyt
+ *      hiljaa pieleen: salaisuutta kätkevä tiili ei hajoa millään koolla
+ *      (`bumpTile`) eikä potkaistulle kuorelle (`smashAhead`) — se muuttuu
+ *      käytetyksi lohkoksi. Sen päällä möykky ei voi koskaan pudota, eli se
+ *      olisi koriste. Mitattu 4-F:n omasta rivistä: neljästä tiilestä
+ *      **kolme kätkee jotain**, joten oikeita sarakkeita oli yksi.
+ *   4. **kanonisointi lukee sen kiinteänä.** `tools/originality.mjs` taittaa
+ *      tuntemattoman merkin ilmaksi, joten `C`:n sisältävä kenttä
+ *      verrattaisiin korpukseen reikä keskellä. Väite on käyttäytymisestä eikä
+ *      rivin sisällöstä: rakennetaan ikkuna jossa on yksi `C` ja kysytään
+ *      osuuko se ikkunaan jossa samassa kohdassa on kiveä.
+ *
+ * Ja lopuksi kaksi mittausta moottorista, oikeista kentistä eikä koekentästä,
+ * koska sijoituksen arvo on juuri siinä että se on kentässä: ensiesittely
+ * jossa kuori tekee työn ja pelaaja katsoo vierestä (4-2), ja toinen
+ * kohtaaminen jossa pelaaja tekee sen itse ja maksaa siitä jos jää seisomaan
+ * (4-F). Jälkimmäinen on pari eikä yksi väite — sama puski, kaksi eri
+ * jatkoa — koska "ehtii pois jos lähtee heti" ei tarkoita mitään ilman sitä
+ * toista puoliskoa.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const { getLevel, levelIds } = await import('../src/data/levels.js');
+  const { brickHides } = await import('../src/core/secrets.js');
+  const { validateLevel } = await import('../src/data/rules.js');
+  const jump = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+
+  /* Jokainen möykky pelissä: kenttä, sarake, rivi ja se merkki jonka päällä se
+   * seisoo. Luetaan kootusta ruudukosta eikä palikkatiedostosta, koska palikan
+   * sarake ei ole kentän sarake ja ehto 3 on kentän sarakkeesta. */
+  const lumps = [];
+  for (const id of levelIds()) {
+    const rows = getLevel(id).rows;
+    for (let y = 0; y < rows.length; y++) {
+      for (let x = 0; x < rows[y].length; x++) {
+        if (rows[y][x] !== 'C') continue;
+        lumps.push({
+          id,
+          x,
+          y,
+          below: y + 1 < rows.length ? rows[y + 1][x] : '#',
+          above: y > 0 ? rows[y - 1][x] : ' ',
+        });
+      }
+    }
+  }
+  const inLevels = [...new Set(lumps.map((l) => l.id))];
+
+  expect('möykky on jossain kentässä',
+    lumps.length > 0,
+    lumps.length
+      ? `${lumps.length} kpl ${inLevels.length} kentässä: `
+        + lumps.map((l) => `${l.id}@${l.x},${l.y}`).join(' ')
+      : `0 kpl ${levelIds().length} kentässä — laatta on olemassa muttei missään`);
+
+  /* Ehdot 1-3 luetaan rules.js:n omasta koodista eikä kirjoiteta uudestaan:
+   * `checkFalling`in huomautukset alkavat aina sanoilla "falling tile". */
+  {
+    const problems = [];
+    for (const id of inLevels) {
+      for (const p of validateLevel(getLevel(id).rows, jump)) {
+        if (/falling tile/i.test(p)) problems.push(`${id}: ${p}`);
+      }
+    }
+    expect('rules.js:n kolme sääntöä pitävät jokaisesta pelin möykystä',
+      problems.length === 0,
+      problems.length ? problems.join(' — ')
+        : `${lumps.length} möykkyä, ${inLevels.length} kenttää, 0 huomautusta `
+          + `(tuet: ${lumps.map((l) => JSON.stringify(l.below)).join(' ')})`);
+  }
+
+  /* Ehto 4: tuki on tiili joka hajoaa. `brickHides` on paikan puhdas funktio,
+   * joten tämä on kentän sarakkeesta eikä palikan. */
+  {
+    const stuck = lumps.filter((l) => l.below === 'B' && brickHides(l.x, l.y + 1));
+    const brickLumps = lumps.filter((l) => l.below === 'B');
+    expect('möykyn alla oleva tiili on tiili joka oikeasti hajoaa',
+      stuck.length === 0 && brickLumps.length > 0,
+      stuck.length
+        ? stuck.map((l) => `${l.id}@${l.x},${l.y}: tuki kätkee "${brickHides(l.x, l.y + 1)}"`).join(' — ')
+        : brickLumps.length
+          ? `${brickLumps.length}/${lumps.length} möykkyä tiilen päällä, 0 salaisuuden päällä`
+          : 'yksikään möykky ei seiso tiilen päällä — mikään ei voi pudottaa sitä');
+  }
+
+  /* Ja se toinen puolisko samasta ehdosta: että mittaus osaisi huomata vian.
+   * Punainen ilman että mitään rikotaan — luetaan sama rivi 4-F:stä ja
+   * kysytään mitä sen muut tiilet kätkevät. */
+  {
+    const lump = lumps.find((l) => l.id === '4-F');
+    const rows = getLevel('4-F').rows;
+    const row = lump ? rows[lump.y + 1] : '';
+    const bricks = [];
+    for (let x = 0; x < row.length; x++) if (row[x] === 'B') bricks.push(x);
+    const near = bricks.filter((x) => Math.abs(x - (lump ? lump.x : -99)) <= 4);
+    const hiding = near.filter((x) => brickHides(x, lump.y + 1));
+    expect('salaisuutta kätkevä tiili tunnistetaan, eli ehto ei ole tyhjä',
+      !!lump && near.length > 1 && hiding.length > 0,
+      lump
+        ? `4-F rivi ${lump.y + 1}: `
+          + `${near.map((x) => `${x}=${brickHides(x, lump.y + 1) ? 'kätkee' : 'hajoaa'}`).join(' ')}`
+          + ` — möykky on sarakkeessa ${lump.x}`
+        : '4-F:ssä ei ole möykkyä');
+  }
+
+  /* Ehto 5: kanonisointi. Käyttäytyminen eikä rivin sisältö — rakennetaan
+   * yksi 8 sarakkeen ikkuna jossa on möykky, ja korpuksen puolelta sama ikkuna
+   * jossa samassa kohdassa on kiveä. Jos `C` taittuisi ilmaksi, avaimet eivät
+   * osuisi ja luku olisi 0. */
+  {
+    const { hitsAgainst, WINDOW } = await import('./originality.mjs');
+    const H = 14;
+    const at = (ch) => {
+      const rows = [];
+      for (let y = 0; y < H; y++) {
+        rows.push(y === 5 ? `   ${ch}    ` : ' '.repeat(WINDOW));
+      }
+      return rows;
+    };
+    /* Korpuksen kanonisointi: kiinteä on 'X', kaikki muu '-'. Avain on
+     * `windows()`in muoto — sarakkeet pystyssä, putkella eroteltuina. */
+    const cols = [];
+    for (let x = 0; x < WINDOW; x++) {
+      let col = '';
+      for (let y = 0; y < H; y++) col += (y === 5 && x === 3) ? 'X' : '-';
+      cols.push(col);
+    }
+    const index = { keys: new Set([cols.join('|')]), files: 1 };
+    const solid = hitsAgainst(index, at('C'));
+    const air = hitsAgainst(index, at(' '));
+    expect('möykky kanonisoituu kiinteäksi eikä ilmaksi alkuperäisyystarkistuksessa',
+      solid === 1 && air === 0,
+      `möykyllä ${solid} osumaa, ilmalla ${air} — kiveä vastaan, ${WINDOW} sarakkeen ikkuna`);
+  }
+
+  /* Kolme kopiota `SOLID`ista, verrattuna merkkijonoina — sama järjestely kuin
+   * `SINK`illa, ja tämä on se portti joka olisi huomannut aukon itse. Kopio
+   * `generator.js`:ssä on nykyään kuollutta koodia (nimeä ei lueta siellä),
+   * mikä tekee siitä puhtaan väitteen ja siis juuri sellaisen jota portin
+   * kuuluu vahtia. */
+  {
+    /* Koko rivi rivin alusta puolipisteeseen, eikä `[^\]]*` niin kuin `SINK`in
+     * vieressä: `SOLID`in jäsenistä yksi **on** `']'`, joten hakasulkeen
+     * kieltävä luokka katkaisee osuman kesken joukon ja vertaisi kahden
+     * tiedoston alkupäitä toisiinsa. Se olisi vihreä portti joka ei mittaa
+     * loppua — ja loppu on juuri se pää johon uusi merkki lisätään. */
+    const line = /^const SOLID = new Set\(.+\);$/m;
+    const read = async (f) => ((await readFile(join(ROOT, f), 'utf8')).match(line) || [])[0] || '';
+    const files = ['src/data/rules.js', 'src/data/generator.js', 'tools/originality.mjs'];
+    const found = await Promise.all(files.map(read));
+    const same = found.every((s) => s && s === found[0]);
+    const missing = files.filter((f, i) => !found[i].includes("'C'"));
+    expect('SOLIDin kolme kopiota ovat sanasanaisesti samat ja tuntevat möykyn',
+      same && missing.length === 0,
+      same && !missing.length
+        ? `${files.length} kopiota, ${found[0].length} merkkiä, sisältää 'C'`
+        : `${missing.length ? `'C' puuttuu: ${missing.join(', ')}` : ''}`
+          + `${same ? '' : ` — rivit eroavat: ${files.filter((f, i) => found[i] !== found[0]).join(', ')}`}`);
+  }
+
+  /* --- ja sitten moottorista, oikeista kentistä --- */
+  /*
+   * KOLME MITTAUSTA, JA NE MITATAAN NIISTÄ KENTISTÄ JOTKA PELI TOIMITTAA.
+   *
+   * Koekenttä vastaa kysymykseen "toimiiko laatta". Tämä lohko kysyy
+   * "toimiiko *sijoitus*", ja se on eri kysymys: se koskee sitä riviä, sitä
+   * saraketta ja sitä lattiaa jonka pelaaja oikeasti kohtaa.
+   */
+  const M = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { ShellGuy } = await import('/src/entities/enemies.js');
+    const { MAX_WALK } = await import('/src/entities/player.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const game = window.sfb3;
+
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const scene = (id, level) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: level ? { type: 'shroom', level } : null,
+        reserve: null, world: 3, node: 'w4-2', cleared: {}, worldsOpen: 8, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      /* Viholliset ja vaarat pois: mitattava on möykky eikä se mikä sattuu
+       * seisomaan viereisessä sarakkeessa. */
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+    const findLump = (s) => {
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) if (s.grid[y][x] === T.LUMP) return { x, y };
+      }
+      return null;
+    };
+    /* Lattiarivi luetaan ruudukosta eikä kirjoiteta tähän: kaksi kenttää, kaksi
+     * eri riviä (4-2 on kolmikaistainen), ja sama koe molemmille. */
+    const floorUnder = (s, at) => {
+      let y = at.y + 1;
+      while (y < s.h && !'#X'.includes(s.grid[y][at.x])) y++;
+      return y;
+    };
+    const stand = (s, at, x) => {
+      const p = s.player;
+      p.x = x * 16;
+      p.y = floorUnder(s, at) * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      return p;
+    };
+    const out = {};
+
+    /* --- 1. ensiesittely 4-2: puski, putoaminen, paluu ------------------ */
+    {
+      const s = scene('4-2', 1);
+      const i = mkInput();
+      const at = findLump(s);
+      const p = stand(s, at, at.x);
+      const floor = floorUnder(s, at);
+      s.bumpTile(at.x, at.y + 1, p);
+      const broke = s.tileAt(at.x, at.y + 1) !== T.BRICK;
+      let left = 0;
+      let landed = 0;
+      for (let n = 0; n < 120; n++) {
+        s.update(i);
+        if (!left && s.tileAt(at.x, at.y) !== T.LUMP) left = n + 1;
+        if (!landed && s.tileAt(at.x, floor - 1) === T.LUMP) landed = n + 1;
+      }
+      let home = 0;
+      for (let n = 0; n < 400 && !home; n++) {
+        s.update(i);
+        if (s.tileAt(at.x, at.y) === T.LUMP && s.tileAt(at.x, floor - 1) !== T.LUMP) home = n + 1;
+      }
+      out.intro = {
+        at: `${at.x},${at.y}`, floor, broke, left, landed, home,
+      };
+    }
+
+    /* --- 2. pieni pelaaja ei voi pudottaa sitä itselleen ---------------- */
+    /* Tämä on koko ensiesittelyn turvaperuste rakenteena: `bumpTile` hajottaa
+     * tiilen vain kun `player.big`, joten voimatasolla 0 möykky ei liiku, ja
+     * osuma maksaa siis aina koon eikä koskaan henkeä. */
+    {
+      const s = scene('4-2', 0);
+      const i = mkInput();
+      const at = findLump(s);
+      const p = stand(s, at, at.x);
+      const big = !!p.big;
+      s.bumpTile(at.x, at.y + 1, p);
+      for (let n = 0; n < 90; n++) s.update(i);
+      out.small = {
+        big,
+        power: p.powerLevel,
+        brick: s.tileAt(at.x, at.y + 1),
+        lump: s.tileAt(at.x, at.y),
+      };
+    }
+
+    /* --- 3. toinen kohtaaminen 4-F: sama puski, kaksi jatkoa ------------ */
+    /*
+     * Ero näiden kahden ajon välillä on **yksi luku**: se vauhti jolla pelaaja
+     * on lohkorivin alla sillä hetkellä kun tiili hajoaa. Nolla on se joka jää
+     * seisomaan; `MAX_WALK` on pelin oma kävelykatto, eli hitain mahdollinen
+     * "oli jo matkalla" — juoksukatto olisi tehnyt väitteestä helpomman.
+     */
+    {
+      const bump = (vx) => {
+        const s = scene('4-F', 1);
+        const i = mkInput();
+        const at = findLump(s);
+        const p = stand(s, at, at.x);
+        p.vx = vx;
+        const before = p.powerLevel;
+        s.bumpTile(at.x, at.y + 1, p);
+        const broke = s.tileAt(at.x, at.y + 1) !== T.BRICK;
+        for (let n = 0; n < 90; n++) {
+          if (vx) {
+            i.held = blank();
+            i.held.right = true;
+            i.pressed = blank();
+          }
+          s.update(i);
+        }
+        return {
+          at: `${at.x},${at.y}`,
+          broke,
+          before,
+          after: p.powerLevel,
+          moved: Math.round((p.x / 16 - at.x) * 10) / 10,
+        };
+      };
+      out.stay = bump(0);
+      out.leave = bump(MAX_WALK);
+      out.walk = MAX_WALK;
+    }
+
+    /* --- 4. potkaistun kuoren suunta, mitattuna ------------------------- */
+    /*
+     * Kolmas keino irrottaa möykky on potkaistu kuori, ja se on mitattu tässä
+     * eikä oletettu. Koekenttä eikä kenttä: yhdessäkään toimitetussa
+     * kentässä ei ole kuorta möykyn vieressä, ja syy siihen on tämän
+     * mittauksen tulos.
+     */
+    {
+      const dir = (d) => {
+        const s = scene('4-2', 1);
+        const i = mkInput();
+        const at = findLump(s);
+        const floor = floorUnder(s, at);
+        /* Oma pilari kaukana kaikesta: tiili lattialla ja möykky sen päällä,
+         * eli tasan se korkeus jolla liukuva kuori kulkee. */
+        const px = at.x + 20;
+        s.setTile(px, floor - 1, T.BRICK);
+        s.setTile(px, floor - 2, T.LUMP);
+        s.player.x = (px - 12 * d) * 16;
+        s.player.y = (floor - 1) * 16 - s.player.h;
+        const sh = new ShellGuy(s, (px - 6 * d) * 16, (floor - 1) * 16 - 24);
+        sh.active = true;
+        sh.alwaysActive = true;
+        s.entities.push(sh);
+        sh.kick(d);
+        let broke = 0;
+        for (let n = 0; n < 120; n++) {
+          s.update(i);
+          if (!broke && s.tileAt(px, floor - 1) !== T.BRICK) broke = n + 1;
+        }
+        return broke;
+      };
+      out.shell = { right: dir(1), left: dir(-1) };
+    }
+    return out;
+  });
+
+  expect('ensiesittely 4-2: tiili hajoaa, möykky lähtee ja se palaa kotiin',
+    M.intro.broke && M.intro.left > 0 && M.intro.landed > 0 && M.intro.home > 0,
+    `möykky ${M.intro.at}, lattia rivillä ${M.intro.floor}: tiili hajosi ${M.intro.broke}, `
+    + `lähti framella ${M.intro.left}, laskeutui framella ${M.intro.landed}, `
+    + `kotona ${M.intro.home} framea myöhemmin`);
+
+  expect('voimatasolla 0 möykkyä ei saa liikkeelle, eli se ei voi maksaa henkeä',
+    !M.small.big && M.small.brick === 'B' && M.small.lump === 'C' && M.small.power === 0,
+    `pieni pelaaja: iso ${M.small.big}, tiili "${M.small.brick}", möykky "${M.small.lump}", `
+    + `voima ${M.small.power} — 90 framea puskun jälkeen`);
+
+  expect('toinen kohtaaminen 4-F: paikallaan jäänyt maksaa, jo liikkeellä ollut ei',
+    M.stay.broke && M.stay.after < M.stay.before
+      && M.leave.broke && M.leave.after === M.leave.before,
+    `möykky ${M.stay.at}: paikallaan ${M.stay.before} → ${M.stay.after}, `
+    + `kävelyvauhdissa (${M.walk} px/frame) ${M.leave.before} → ${M.leave.after} `
+    + `ja ${M.leave.moved} laattaa sivuun`);
+
+  /*
+   * LÖYDETTY, EI KORJATTU — ja se on tässä numerona eikä muistiinpanona.
+   *
+   * `ShellGuy.smashAhead` lukee suuntansa `this.vx`:stä, mutta se kutsutaan
+   * vasta kun `moveSideways()` on osunut seinään — ja `moveX` **nollaa
+   * vauhdin osumassa** (`src/level/physics.js`, sama rivi jonka kimmokkeen
+   * kommentti `enemies.js`:ssä jo mainitsee). Nolla ei ole suurempi kuin
+   * nolla, joten haara on aina se vasen: oikealle liukuva kuori tutkii sen
+   * sarakkeen josta se juuri tuli. Vasemmalle liukuva osuu oikeaan
+   * sarakkeeseen vahingossa, koska `x - 1` on törmäyksen jälkeen seinän oma
+   * sarake.
+   *
+   * Korjaus on yksi merkki `src/entities/enemies.js`:ssä (`this.facing`
+   * `this.vx`:n sijaan), ja **se tiedosto kuuluu tässä erässä toiselle**.
+   * Siksi tämä on väite siitä mitä mitattiin eikä siitä mitä toivotaan: se
+   * pysyy vihreänä myös sen jälkeen kun oikea suunta alkaa toimia, ja
+   * yksityiskohta kertoo kumpi suunta oli mitä.
+   */
+  expect('potkaistu kuori pudottaa möykyn, ja suunta on mitattu eikä oletettu',
+    M.shell.left > 0 || M.shell.right > 0,
+    `oikealle ${M.shell.right ? `framella ${M.shell.right}` : 'ei koskaan'}, `
+    + `vasemmalle ${M.shell.left ? `framella ${M.shell.left}` : 'ei koskaan'} `
+    + '— smashAhead lukee suunnan vx:stä, jonka moveX on juuri nollannut');
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- möykky kentissä: loppu ---- */
 
 await browser.close();
 server.close();

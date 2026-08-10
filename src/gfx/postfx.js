@@ -139,6 +139,41 @@ const SPOT_DIM = 0.24;
  */
 const HUD_H = 32;
 
+/*
+ * KUNINKAAN VERHO — se hetki jolloin ruutu pukee saapuvan maailman värin.
+ *
+ * PIERUKUNINGAS vastaa tallaukseen vaihtumalla joksikin toiseksi, ja pelaajan
+ * työ on tunnistaa **kuka juuri saapui**. Väri tulee `themeTint`istä eli siitä
+ * paletista jossa se maailma on jo maalattu; tämä tiedosto ei tiedä väreistä
+ * mitään eikä sen kuulukaan — se osaa vain koko ruudun, joka on syy siihen että
+ * verho asuu täällä eikä kohtauksessa.
+ *
+ * Neljä päätöstä, ja jokainen niistä on vastaus johonkin mitä ruutu jo tekee:
+ *
+ *   - **Keskus jää tyhjäksi.** Pelaaja on tällä framella kesken hyppyä pomon
+ *     päällä. Täysi läpinäkymätön välähdys juuri siinä ei ole koriste vaan
+ *     epäreiluus, joten verho on rengas: kirkas ydin `FLASH_CORE`iin asti, sen
+ *     jälkeen nouseva reunaan. Sama muoto ja samat suhteet kuin vinjetillä,
+ *     koska silmä on jo oppinut lukemaan tämän ruudun reunoja.
+ *   - **Lisäävä eikä peittävä.** `lighter` valaisee huoneen sen värisenä eikä
+ *     maalaa sen päälle: mikään ei katoa, kaikki kirkastuu. Peittävä verho
+ *     tummalla värillä (ruoho on `rgb(74,112,40)`) olisi lukenut varjoksi eikä
+ *     väriksi juuri siinä maailmassa joka on pelin ensimmäinen.
+ *   - **Etupainoinen häntä.** Voimakkuus neliöidään, eli isku on edessä ja
+ *     hiipuminen pitkä — sama muotoilu kuin vauhtimittarin sykäyksellä ja
+ *     `PoundWave`n renkaalla. Tasaisesti hiipuva verho lukisi himmennykseksi.
+ *   - **HUD jää ulkopuolelle**, kuten kuumuus, huurre, lamppu ja hehku. HUD ei
+ *     ole ikkuna maailmaan (DESIGN.md kohta 8).
+ *
+ * Kesto on lyhyempi kuin pomon osumattomuus (70 framea): merkki joka on yhä
+ * ruudulla kun tappelu jatkuu on suodatin eikä merkki.
+ */
+const FLASH_FRAMES = 20;
+const FLASH_ALPHA = 0.55;
+/** Kirkkaan ytimen säde ja täyden voiman säde, pelialueen korkeudesta. */
+const FLASH_CORE = 0.34;
+const FLASH_EDGE = 0.68;
+
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -342,6 +377,18 @@ export const PostFX = {
   focus: { x: 160, y: 120 },
   /** How many of the world-light slots are filled this frame. */
   lightCount: 0,
+  /**
+   * Kuninkaan verho: framet jäljellä, koko kesto ja väri `r,g,b`-merkkijonona.
+   *
+   * Tila on tarkoituksella **täällä eikä tallennuksessa**, samoin kuin
+   * vauhtimittarin sykäys on kohtauksen kenttä jota `captureState` ei lue: se
+   * on kolmasosasekunnin kertojanpuoleinen ele eikä maailman tila. Se mikä
+   * *on* maailman tilaa — kuninkaan kohta kierrossa — on `Boss.formIndex`, ja
+   * se on entiteetin oma kenttä ja kestää siksi pikatallennuksen sellaisenaan.
+   */
+  flashLeft: 0,
+  flashSpan: FLASH_FRAMES,
+  flashRgb: null,
   tick: 0,
   _lights: null,
   _lightD2: null,
@@ -452,11 +499,38 @@ export const PostFX = {
     const kind = def && def.spotlight ? 'spotlight' : (THEME_AMBIENCE[theme] || null);
     this.ambience = kind;
     this.ambienceAmount = kind === 'spotlight' ? 1 : (kind ? (AMBIENCE_STRENGTH[theme] || 1) : 0);
+    /* Uusi kohtaus, ei vanhaa verhoa. Tämä kutsutaan `Game.setScene`sta, eli
+     * juuri silloin kun huone vaihtuu — ja kolmasosasekunnin merkki joka jäisi
+     * palamaan kuolinruudulle tai voittokortille olisi merkki väärästä
+     * tapahtumasta. Sama syy kuin lampun keskittämisellä rivi alempana. */
+    this.flashLeft = 0;
     // Centre it again, so a leftover position from the last level cannot put
     // the light somewhere nobody is standing on the first frame of the next.
     this.setFocus(this.source ? this.source.width / 2 : 160,
       this.source ? this.source.height / 2 : 120);
     return kind;
+  },
+
+  /**
+   * Panee ruudun pukemaan yhden värin lyhyeksi hetkeksi.
+   *
+   * Kutsuja antaa värin, tämä ei tiedä mistä se tulee — juuri siksi tämä on
+   * yleiskäyttöinen eikä "kuninkaan verho": `LevelScene.onKingForm` lukee sen
+   * maailman paletista (`themeTint`), ja jos joskus jokin muu tapahtuma haluaa
+   * saman eleen, se antaa oman värinsä eikä tähän tarvitse koskea.
+   *
+   * Arvot kirjoitetaan omiksi kentiksi (`Object.create(PostFX)` on se tapa
+   * jolla testit tekevät instansseja, ks. `setFocus`).
+   *
+   * @param {number[]|null} rgb [r,g,b] 0..255
+   * @returns the colour string in use, or null when nothing was set
+   */
+  flash(rgb, frames = FLASH_FRAMES) {
+    if (!rgb || rgb.length < 3) return null;
+    this.flashRgb = rgb.map((v) => Math.max(0, Math.min(255, Math.round(v)))).join(',');
+    this.flashSpan = Math.max(1, frames);
+    this.flashLeft = this.flashSpan;
+    return this.flashRgb;
   },
 
   /**
@@ -660,11 +734,30 @@ export const PostFX = {
    */
   apply(ctx) {
     this.tick++;
-    if (this.preset === 'pois') return;
     const { source } = this;
     const smoothing = ctx.imageSmoothingEnabled;
     const alpha = ctx.globalAlpha;
     const op = ctx.globalCompositeOperation;
+
+    /*
+     * Verho ennen aikaista paluuta, ja se on koko syy siihen että tämä metodi
+     * ei enää palaa ennen tilan talteenottoa.
+     *
+     * `pois` sammuttaa kuvatehosteet, ei peliä. Verho on tapahtuman merkki
+     * siinä missä pomon askel tai kolikon kilahdus — kertoja, mutta pelistä
+     * eikä kuvaputkesta — ja jos se olisi kirjoitettu tämän paluun alapuolelle,
+     * se olisi näkymätön tasan sille pelaajalle joka on pyytänyt nähdä pelin
+     * sellaisenaan. Hehku, skanviivat ja vinjetti tulevat sen päälle silloin
+     * kun ne ovat päällä, mikä on oikea järjestys: verho on kuvassa, ja
+     * kuvaputki katsoo kuvaa.
+     */
+    this._flashPass(ctx, source);
+    if (this.preset === 'pois') {
+      ctx.globalCompositeOperation = op;
+      ctx.globalAlpha = alpha;
+      ctx.imageSmoothingEnabled = smoothing;
+      return;
+    }
 
     // Atmosphere is the level talking, not the filter, so it is done in 2D as
     // well. Without WebGL you lose the curved glass — you should not also lose
@@ -685,6 +778,37 @@ export const PostFX = {
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = smoothing;
     if ('filter' in ctx) ctx.filter = 'none';
+  },
+
+  /**
+   * Kuninkaan verho: rengas saapuvan maailman väriä, kirkas keskus, lyhyt
+   * häntä. Perustelut ovat `FLASH_FRAMES`in kommentissa.
+   *
+   * Liukuväri rakennetaan joka framella eikä välimuistiin, ja se on tässä
+   * oikea päätös vaikka `_vignettePass` tekee päinvastoin: vinjetti piirtyy
+   * joka framella koko pelin ajan, tämä kaksikymmentä kertaa tappelua kohti
+   * ja aina eri värisenä. Välimuisti olisi valkoinen rengas ja kaksi
+   * yhdistelyvaihetta sen värittämiseksi — enemmän työtä kuin se korvaa.
+   *
+   * Laskuri vähenee tässä eikä kohtauksen `update`ssa, koska verho on kuvan
+   * puolella: se elää piirretyissä frameissa siinä missä skanviivakin.
+   */
+  _flashPass(ctx, source) {
+    if (!(this.flashLeft > 0) || !this.flashRgb) return;
+    const w = source.width;
+    const h = source.height - HUD_H;          // HUD ei ole ikkuna maailmaan
+    const k = (this.flashLeft / this.flashSpan) ** 2;
+    this.flashLeft--;
+    const grad = ctx.createRadialGradient(w / 2, h / 2, h * FLASH_CORE,
+      w / 2, h / 2, h * FLASH_EDGE);
+    grad.addColorStop(0, `rgba(${this.flashRgb},0)`);
+    grad.addColorStop(1, `rgba(${this.flashRgb},${(FLASH_ALPHA * k).toFixed(3)})`);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
   },
 
   /**
