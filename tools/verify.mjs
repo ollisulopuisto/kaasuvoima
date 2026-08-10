@@ -5734,10 +5734,15 @@ const report = await page.evaluate(async () => {
      * mikään näistä — ei siksi että uutuus olisi arvo sinänsä, vaan siksi
      * että lainattu ääni tarkoittaa sen jälkeen kahta asiaa. */
     const TAKEN = ['jump', 'bigjump', 'fart', 'bigfart', 'squeak', 'flight', 'coin',
-      'stomp', 'land', 'bump', 'brick', 'burst', 'sprout', 'dive', 'slam', 'kurnutus',
+      'stomp', 'bump', 'brick', 'burst', 'sprout', 'dive', 'slam', 'kurnutus',
       'loikka', 'kick', 'spikes', 'pop', 'upota', 'kahlaa', 'cork', 'soup', 'powerup',
       'yeah', 'oof', 'letsgo', 'powerdown', 'oneup', 'die', 'clear', 'cursor', 'select',
-      'luuranko', 'boss', 'card', 'timewarn', 'door'];
+      'luuranko', 'boss', 'timewarn', 'door',
+      /* `land` ja `card` olivat tässä ja ovat nyt poissa koko taulusta: molemmat
+       * oli määritelty eikä kumpaakaan soitettu mistään. Kolme uutta ovat tässä
+       * siksi että lista on "nämä tarkoittavat jo jotain", ja nyt ne
+       * tarkoittavat. */
+      'payout', 'kytkin', 'doorin'];
 
     const mk = (power, id = '1-1') => {
       reset(power);
@@ -12518,6 +12523,466 @@ const report = await page.evaluate(async () => {
       }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));
+    }
+  }
+
+  /* ---- kamera ja äänten merkitykset ---- */
+  /*
+   * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.
+   *
+   * 1. **Kamera hyllyllä.** 2-1:n tiilihylly sarakkeessa 228 (palikka 14, rivi
+   *    9) on toimitetussa kentässä ja pelaaja pääsee sille. Voimatasolla 3 sieltä
+   *    lähtevä pieruhyppy nosti näkymää **2,73 px yhdellä framella** (katto 2,5)
+   *    ja jätti päälle **16,10 px** pelivaraa (lattia 16) — eli toinen luku oli
+   *    kymmenesosapikselin päässä siitä että sekin kaatuisi. Kaksi
+   *    porttiväitettä kattaa juuri tämän — *"a view that has to rise animates
+   *    instead of snapping"* ja *"anticipating the rise costs neither the
+   *    headroom nor the ground"* — eivätkä ne ole koskaan nähneet sitä.
+   *
+   * 2. **Ja se on niistä pienempi vika.** Molemmat väitteet ajavat bottia 2-1:n
+   *    alusta, ja botti kuolee ennen saraketta 228. Kattavuus on siis
+   *    palikkajärjestyksen sivutuote: sekoita `chunks`-lista ja väite alkaa tai
+   *    lakkaa mittaamasta hyllyä ilman että kukaan muuttaa väitettä. Sama muoto
+   *    kuin kahdessa muussa tänään löytyneessä viassa — `if (m.mode === 'walk')`
+   *    joka ei koskaan lauennut ja alkuperäisyystarkistus joka luki nolla
+   *    korpustiedostoa ja tulosti puhtaat paperit.
+   *
+   * Siksi tämä lohko ei aja bottia lainkaan. Se **etsii** kentästä sen hyllyn
+   * jolla kuvaa on vähiten pään yllä — seisontakorkeus plus kameran jäljellä
+   * oleva matka — ja **asettaa** pelaajan sinne, ja hyppy on käsikirjoitettu.
+   * Kolme asiaa seuraa siitä ja ne ovat koko korjaus kattavuuteen:
+   *
+   *   - jos kenttädata muuttuu, haku löytää uuden ahtaimman paikan eikä vanha
+   *     sarakenumero jää valehtelemaan;
+   *   - jos ahtainta paikkaa ei löydy, väite kaatuu sen sijaan että se ohittaisi
+   *     itsensä hiljaa (`spots.length` on osa väitettä);
+   *   - jokainen rivi kantaa mukanaan todisteen siitä että se **oli** ilmassa ja
+   *     että näkymä oikeasti liikkui (`air`, `moved`). Rivi joka ei mitannut
+   *     mitään ei ole vihreä rivi.
+   *
+   * Ja kaksi eri väitettä eikä yksi, koska kameralla on raja jota se ei voi
+   * ylittää: kun kenttä loppuu näkymän yläpuolelta, `clampCamY` pysäyttää
+   * kuvan ja pään pelivara on se joka antaa periksi. Se ei ole kameran vika
+   * vaan kentän korkeus, joten se mitataan omana rivinään — mutta pehmeys ei
+   * anna periksi siinäkään tapauksessa. Jos yksikään rivi ei osu kentän
+   * kattoon, se väite on tyhjä — ja se on tässä turvallista siksi että
+   * jokainen rivi on silloin toisen väitteen alla, joka on niistä kahdesta
+   * vahvempi. Tyhjä väite ei siis piilota riviä, se vain vaihtaa vartijaa.
+   */
+  {
+    const { TILE } = await import('/src/gfx/tiles.js');
+
+    /**
+     * Jokainen ruudun katto jolla keho voi seisoa, ahtain ensin.
+     *
+     * Järjestys on **pään yläpuolelle jäävä kuva yhteensä**: seisova pelivara
+     * plus se matka joka kameralla on vielä jäljellä. Pelkkä hyllyn korkeus
+     * olisi väärä mitta, koska kentän oma yläraja ratkaisee onko korkea hylly
+     * ahdas paikka vai ei — sama perustelu kuin laskeutumisväitteen `climb`illä
+     * rivin `cameraY()` ympärillä.
+     */
+    const shelves = (id, power) => {
+      reset(power);
+      const probe = new LevelScene(game, id);
+      const p = probe.player;
+      const found = [];
+      for (let tx = 3; tx < probe.w - 3; tx++) {
+        for (let ty = 2; ty < probe.h - 1; ty++) {
+          if (!probe.solidAt(tx, ty) || probe.solidAt(tx, ty - 1)) continue;
+          if (!probe.solidAt(tx - 1, ty) || !probe.solidAt(tx + 1, ty)) continue;
+          // Kaksi tyhjää riviä yllä: isoin keho seisoo, eikä hyppy ala kattoon.
+          if (probe.solidAt(tx, ty - 2) || probe.solidAt(tx, ty - 3)) continue;
+          const feet = ty * TILE;
+          p.y = feet - p.h;
+          p.vy = 0;
+          p.onGround = true;
+          probe.camAnchor = feet;
+          const cam = probe.cameraY();
+          const lo = probe.clampCamY(-1e9);
+          found.push({ tx, ty, reach: (feet - p.h) - lo, rest: cam, travel: cam - lo });
+        }
+      }
+      found.sort((a, b) => a.reach - b.reach || a.tx - b.tx);
+      return found;
+    };
+
+    /** Yksi käsikirjoitettu juokseva pieruhyppy nimetyltä ruudun katolta. */
+    const jumpFrom = (id, power, spot) => {
+      reset(power);
+      const s = new LevelScene(game, id);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const p = s.player;
+      p.x = spot.tx * TILE + (TILE - p.w) / 2;
+      p.y = spot.ty * TILE - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = true;
+      s.centerCamera();
+      const input = mkInput();
+      // Näkymä asettuu ensin: hyppy joka lähtee kesken liu'un mittaisi liukua.
+      for (let f = 0; f < 30; f++) { input.held = blank(); input.pressed = blank(); s.update(input); }
+      const settled = Math.abs(s.cam.y - s.cameraY()) < 0.5;
+      const takeoff = p.y + p.h;
+      let rise = 0;
+      let head = Infinity;
+      let air = 0;
+      let seen = 0;
+      let spent = 0;
+      let moved = 0;
+      const restCam = s.cam.y;
+      for (let f = 0; f < 90; f++) {
+        input.held = blank();
+        input.pressed = blank();
+        input.held.right = true;
+        input.held.run = true;
+        if (f === 0) { input.pressed.jump = true; input.held.jump = true; }
+        else if (f < 20) input.held.jump = true;
+        if (f === 8) { input.pressed.jump = true; input.held.jump = true; }   // pieruhyppy
+        const camBefore = s.cam.y;
+        s.update(input);
+        if (p.dying) break;
+        if (!p.onGround) {
+          air++;
+          if (takeoff < s.cam.y + s.viewH) seen++;
+          rise = Math.max(rise, camBefore - s.cam.y);
+          head = Math.min(head, p.y - s.cam.y);
+          // Kuinka paljon näkymä lopulta liikkui. Rivi jolla tämä on nolla ei
+          // ole ajanut mekanismia lainkaan eikä siis todista siitä mitään.
+          moved = Math.max(moved, restCam - s.cam.y);
+          if (s.cam.y <= s.clampCamY(-1e9) + 0.01) spent++;
+        }
+        if (p.onGround && f > 20) break;
+      }
+      return { air, seen, spent, settled, rise, head, moved };
+    };
+
+    const rows = [];
+    for (const [id, power] of [['2-1', { type: 'shroom', level: 3 }],
+      ['2-1', { type: null, level: 0 }], ['2-1', { type: 'leaf', level: 5 }],
+      ['2-3', { type: 'shroom', level: 3 }], ['2-3', { type: 'leaf', level: 5 }],
+      ['1-1', { type: 'shroom', level: 3 }]]) {
+      const spots = shelves(id, power);
+      const spot = spots[0];
+      if (!spot) { rows.push({ id, level: power.level, spots: 0 }); continue; }
+      rows.push({
+        id, level: power.level, spots: spots.length, tx: spot.tx, ty: spot.ty,
+        ...jumpFrom(id, power, spot),
+      });
+    }
+    const say = (r) => `${r.id} taso ${r.level} (${r.tx},${r.ty}): `
+      + `${r.rise.toFixed(2)} px/frame, pää ${r.head.toFixed(2)} px, `
+      + `maa ${r.seen}/${r.air}`;
+    // Rivit joilla kentän oma katto ei vielä pysäyttänyt kuvaa, ja loput.
+    const free = rows.filter((r) => r.air && !r.spent);
+    const capped = rows.filter((r) => r.air && r.spent);
+
+    /* Sama katto ja sama perustelu kuin lattialta mitatussa sisaressa: 2,5 on
+     * alle sen mitä nykäys tuottaa ja yli sen mitä liuku tuottaa, joten se on
+     * nykäys joka ei voi palata eikä mekanismi joka jäädytetään. Tämä rivi ajaa
+     * sen paikan yli jolla nykäys oikeasti tapahtui. */
+    expect('hyllyltä lähtevä hyppy animoi näkymän, ei nykäise sitä',
+      rows.length === 6 && rows.every((r) => r.spots > 20 && r.air > 20 && r.settled)
+      && rows.every((r) => r.rise < 2.5),
+      rows.map((r) => `${say(r)}${r.spent ? ` (pohjassa ${r.spent})` : ''}`).join(', '));
+
+    /* Ja pelivara pysyy, niin kauan kuin kameralla on matkaa jäljellä. Rivi
+     * jolla näkymä ei liikkunut lainkaan ei todista tästä mitään — se sanoisi
+     * vain että hyppy ei yltänyt pelivaraan asti — joten vähintään yhden rivin
+     * on oikeasti ajanut mekanismin. Se ehto on koko kattavuuskorjaus yhdellä
+     * rivillä: väite joka lakkaa mittaamasta kaatuu sen sijaan että vihertäisi. */
+    expect('hyllyltä lähtevä hyppy ei maksa pelivaraa niin kauan kuin kuvaa riittää',
+      free.length >= 4 && free.some((r) => r.moved > 8)
+      && free.every((r) => r.head > 16 && r.seen === r.air),
+      free.map((r) => `${say(r)}, näkymä liikkui ${r.moved.toFixed(2)} px`).join(', '));
+
+    /* Ja kun kenttä loppuu yläpuolelta, kamera on käyttänyt kaiken minkä sillä
+     * oli. Se on eri väite eikä poikkeus: pelivara antaa periksi vain silloin
+     * kun kuva on lopussa, eikä koskaan siksi että kamera olisi myöhässä. */
+    expect('kun kenttä loppuu näkymän yläpuolelta, kuva on lopussa eikä kamera myöhässä',
+      capped.every((r) => r.rise < 2.5 && r.spent > 0 && r.seen === r.air),
+      capped.length
+        ? capped.map((r) => `${say(r)}, pohjassa ${r.spent}/${r.air} framea`).join(', ')
+        : 'yksikään rivi ei osunut kentän kattoon');
+
+    /*
+     * SEISOVAN PELAAJAN KUVA EI SAA LIIKAHTAA, JA SE ON ARITMETIIKKAA EIKÄ
+     * LIPPU. Kallistus on ilmaan ulottuva vain siksi että seisovan kehon pää ei
+     * yllä `CAM_AIR_MARGIN`iin missään ikkunassa millään koolla. Sitä ei ole
+     * kytketty pois maassa lipulla, joten jos ikkuna kapenee tai keho kasvaa, se
+     * alkaa purra seisovaan kuvaan — ja juuri sen tämä rivi estää. (Seisova keho
+     * on lisäksi paikallaan, joten `push` on nolla; tämä on niistä kahdesta
+     * vartijasta se joka ei riipu siitä että toinen muistetaan.)
+     */
+    {
+      const worst = [];
+      for (const id of ['1-1', '2-1', '2-3', '1-2']) {
+        for (const level of [0, 1, 2, 3, 4, 5]) {
+          reset({ type: level ? 'leaf' : null, level });
+          const probe = new LevelScene(game, id);
+          const p = probe.player;
+          let slack = Infinity;
+          for (let ty = 3; ty < probe.h - 1; ty++) {
+            const feet = ty * TILE;
+            p.y = feet - p.h;
+            p.vy = 0;
+            p.onGround = true;
+            probe.camAnchor = feet;
+            const rest = feet - probe.viewH * 0.55 - 26;
+            slack = Math.min(slack, (feet - p.h) - rest - 48);   // CAM_AIR_MARGIN
+          }
+          worst.push({ id, level, h: p.h, slack });
+        }
+      }
+      const tight = worst.reduce((a, b) => (b.slack < a.slack ? b : a));
+      expect('leveä raja ei yllä seisovan kehon päähän missään koossa eikä ikkunassa',
+        worst.every((w) => w.slack > 0),
+        `ahtain ${tight.id} taso ${tight.level} (korkeus ${tight.h}): `
+        + `${tight.slack.toFixed(1)} px pelivaraa`);
+    }
+
+    /*
+     * ÄÄNET JOTKA TARKOITTIVAT KAHTA ASIAA.
+     *
+     * Aamun auditointi jätti neljä löysää päätä raportoiduiksi eikä
+     * korjatuiksi. Ne ovat kaikki samaa lajia kuin putki, joka sai oman
+     * `pipeout`insa: **yksi merkki kahdelle tilanvaihdokselle**. Tässä ne
+     * mitataan, ja mittaus on se osa jota kommentti ei voi korvata — "door
+     * tarkoittaa kahta asiaa" on väite, "door soi framella 10 ja uudestaan
+     * framella 47 samassa kentässä" on luku.
+     *
+     * Kolme näistä on kuvattu auki `LevelScene.onBossDefeated`issa ja
+     * `audio.js`:ssä. Neljäs — kuollut `SFX.land` — on poistettu, ja sen
+     * tilalle tuli portti joka estää seuraavan: **jokaisella äänellä on
+     * kutsupaikka.** Se on täsmälleen sama vikaluokka kuin tämän lohkon
+     * kamerapuolisko, kirjoitettuna toisin päin: siinä testi lakkasi
+     * mittaamasta, tässä koodi lakkasi soimasta, eikä kumpikaan sanonut mitään.
+     */
+    {
+      const { Sfx: A } = await import('/src/core/audio.js');
+      const { TILE: TZ, info: tinfo } = await import('/src/gfx/tiles.js');
+
+      /** Kuuntelija joka ei soita läpi: mitataan mitä peli pyytää, ei väylää. */
+      const clock = { f: 0 };
+      const listen = () => {
+        const real = A.play;
+        const heard = [];
+        A.play = (name) => { heard.push({ name, f: clock.f }); };
+        return { heard, off() { A.play = real; } };
+      };
+
+      /* 1. LINNAKKEEN OVI. Pomo kaadetaan framella 10 ja pelaaja siirretään
+       * oven eteen — käsin, koska botti ei pääse linnakkeen ovelle asti ja
+       * mittaus joka riippuu siitä ei mittaa ovea vaan bottia. */
+      const fortress = [];
+      for (const id of ['1-F', '2-F', '8-F']) {
+        reset({ type: 'shroom', level: 3 });
+        const s = new LevelScene(game, id);
+        s.time = 9999;
+        s.entities = s.entities.filter((e) => e.kind !== 'hazard');
+        const boss = s.entities.find((e) => e.constructor.name === 'Boss');
+        let door = null;
+        for (let tx = 0; tx < s.w && !door; tx++) {
+          for (let ty = 0; ty < s.h; ty++) {
+            if (tinfo(s.tileAt(tx, ty)).door) { door = { tx, ty }; break; }
+          }
+        }
+        const tap = listen();
+        const input = mkInput();
+        const p = s.player;
+        try {
+          for (let f = 0; f < 400; f++) {
+            clock.f = f;
+            input.held = blank();
+            input.pressed = blank();
+            if (f === 10 && boss) { boss.hp = 1; boss.stomp(1); }
+            if (f === 12 && door) {
+              p.x = (door.tx - 3) * TZ;
+              p.y = door.ty * TZ + TZ - p.h;
+              p.vx = 0;
+              p.vy = 0;
+              p.onGround = true;
+              s.centerCamera();
+            }
+            if (f > 12) input.held.right = true;
+            s.update(input);
+            if (s.state === 'clear' && f > 20) break;
+          }
+        } finally { tap.off(); }
+        const at = (name) => tap.heard.filter((h) => h.name === name).map((h) => h.f);
+        fortress.push({
+          id, done: s.state === 'clear', open: at('door'), walk: at('doorin'), clear: at('clear'),
+        });
+      }
+      const fsay = (r) => `${r.id} ovi auki ${r.open.join('+') || '-'}, `
+        + `sisään ${r.walk.join('+') || '-'}, kenttä läpi ${r.clear.join('+') || '-'}`;
+      expect('oven aukeaminen ja siitä sisään käveleminen ovat eri äänet',
+        fortress.length === 3 && fortress.every((r) => r.done
+          && r.open.length === 1 && r.walk.length === 1 && r.open[0] < r.walk[0]),
+        fortress.map(fsay).join(' | '));
+      /* Ja sama jingle kahdesti sekunnin sisällä oli se toinen puolisko. `clear`
+       * kuuluu kentän loppumiselle ja sitä on tasan yksi, vaikka linnakkeessa
+       * on kaksi hetkeä joita voisi juhlia. */
+      expect('linnakkeen läpäisyjingle soi kerran eikä kahdesti',
+        fortress.every((r) => r.clear.length === 1 && r.clear[0] > r.walk[0]),
+        fortress.map((r) => `${r.id}: clear ${r.clear.join('+') || '-'} `
+          + `(ovi ${r.open.join('+') || '-'})`).join(', '));
+
+      /* 2. LOHKO JOKA ANTAA, JA KEHO JOKA KASVAA. Sama mansikka, kaksi
+       * tapahtumaa: se työntyy ulos lohkosta ja sekunti myöhemmin se syödään.
+       * Mitataan molemmat samasta ajosta, koska väite on niiden **erosta**. */
+      let payout = null;
+      let grew = null;
+      let switched = null;
+      {
+        reset({ type: null, level: 0 });
+        const s = new LevelScene(game, '1-1');
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        let block = null;
+        for (let tx = 3; tx < s.w && !block; tx++) {
+          for (let ty = 2; ty < s.h - 1; ty++) {
+            if (tinfo(s.tileAt(tx, ty)).question) { block = { tx, ty }; break; }
+          }
+        }
+        const tap = listen();
+        try {
+          if (block) s.bumpTile(block.tx, block.ty, s.player);
+          payout = tap.heard.map((h) => h.name);
+          tap.heard.length = 0;
+          s.player.collect('shroom');
+          grew = tap.heard.map((h) => h.name);
+          tap.heard.length = 0;
+          s.startSwitch();
+          switched = tap.heard.map((h) => h.name);
+        } finally { tap.off(); }
+      }
+      expect('lohkon maksu, kehon kasvu ja kytkin ovat kolme eri merkkiä',
+        payout.length === 1 && grew.length === 1 && switched.length === 1
+        && new Set([payout[0], grew[0], switched[0]]).size === 3
+        && grew[0] === 'powerup' && A.has(payout[0]) && A.has(switched[0]),
+        `lohko "${payout.join('+') || '-'}", kasvu "${grew.join('+') || '-'}", `
+        + `kytkin "${switched.join('+') || '-'}"`);
+
+      /* 3. EIKÄ `powerup` OLE ENÄÄ KENTÄN SISÄLLÄ MUUTA KUIN KASVAMINEN.
+       * Luettu lähteestä eikä ajosta: kutsupaikka jota mikään testi ei satu
+       * ajamaan on juuri se joka jää. Valikot ja kartta saavat pitää sen —
+       * ne ovat kertojan puolella (kohta 8) — mutta kenttä ei. */
+      const srcOf = async (path) => (await fetch(path)).text();
+      const levelSrc = await srcOf('/src/scenes/level.js');
+      const inLevel = (levelSrc.match(/Sfx\.play\('powerup'\)/g) || []).length;
+      expect('kentän moottori ei enää lainaa kasvamisen ääntä',
+        inLevel === 0, `Sfx.play('powerup') src/scenes/level.js:ssä ${inLevel} kertaa`);
+
+      /*
+       * 4. EIKÄ YKSIKÄÄN ÄÄNI OLE MÄÄRITELTY SOIMATTA.
+       *
+       * `SFX.land` oli määritelty ja soittamaton, ja se löytyi lukemalla eikä
+       * ajamalla — mikä on toinen tapa sanoa että mikään ei ollut estämässä
+       * seuraavaa. Tämä lukee lähteet ja vaatii jokaiselta nimeltä kutsupaikan.
+       *
+       * Poikkeuslista on **yksi nimi ja se on kirjattu**: `oof` on repliikki
+       * jolle peli ei ole vielä keksinyt paikkaa, ja se on aiemmin kirjattu
+       * juuri niin. Poikkeus jonka nimi on tässä on päätös; poikkeus jota ei
+       * ole tässä on unohdus, ja ero näiden välillä on koko portin idea.
+       */
+      const SILENT_ON_PURPOSE = ['oof'];
+      /* Tiedostolista **kävellään moduuligraafista** eikä kirjoiteta käsin, ja
+       * se on sama päätös kuin kamerapuoliskon hyllynhaku: käsin kirjoitettu
+       * lista vanhenee ensimmäisessä uudessa tiedostossa, ja vanhentunut lista
+       * julistaisi elävän äänen kuolleeksi tai päinvastoin. Lähtö on se sama
+       * `main.js` jonka selain lataa, joten kattavuus on määritelmän mukaan sama
+       * kuin pelin oma. */
+      const seenFiles = new Map();
+      const walk = async (path) => {
+        if (seenFiles.has(path)) return;
+        seenFiles.set(path, '');
+        let text = '';
+        try { text = await srcOf(path); } catch { return; }
+        seenFiles.set(path, text);
+        const specs = [...text.matchAll(/(?:from|import)\s*\(?\s*'(\.[^']+)'/g)].map((m) => m[1]);
+        for (const spec of specs) {
+          await walk(new URL(spec, `${location.origin}${path}`).pathname);
+        }
+      };
+      await walk('/src/main.js');
+      const sources = [...seenFiles.values()].join('\n');
+      const played = new Set();
+      for (const m of sources.matchAll(/Sfx\.play\(\s*'([a-z]+)'/g)) played.add(m[1]);
+      // Kolme paikkaa valitsee nimen ehdollisesti, ja ne ovat literaaleja siinä
+      // missä muutkin — vain sulkujen sisällä.
+      for (const m of sources.matchAll(/Sfx\.play\([^)]*\?\s*'([a-z]+)'\s*:\s*'([a-z]+)'/g)) {
+        played.add(m[1]);
+        played.add(m[2]);
+      }
+      const dead = A.names().filter((n) => !played.has(n) && !SILENT_ON_PURPOSE.includes(n));
+      const stale = SILENT_ON_PURPOSE.filter((n) => played.has(n) || !A.has(n));
+      expect('jokaisella määritellyllä äänellä on kutsupaikka, tai nimetty syy olla ilman',
+        seenFiles.size > 25 && dead.length === 0 && stale.length === 0,
+        `${seenFiles.size} tiedostoa, ${A.names().length} ääntä, ${played.size} soitettua, `
+        + `kuolleita ${dead.join(', ') || '0'}, `
+        + `vanhentunut poikkeus ${stale.join(', ') || '0'}`);
+
+      /*
+       * 5. JA UUDET MERKIT KUULUVAT. Sama mittaustapa ja sama 16384 näytteen
+       * ikkuna kuin aamun erässä — ikkuna on pidempi kuin mikään mitä se
+       * mittaa, koska 2048 näytteellä 95 ms:n ääni mittautui nollaksi ja portti
+       * olisi julistanut kuulumattomaksi äänen jonka kaiuttimet soittavat.
+       */
+      const tap2 = audioTap();
+      const measured = tap2 && tap2.ctx.state === 'running';
+      const peaks = {};
+      let after = 0;
+      if (measured) {
+        const { Ambience: Amb } = await import('/src/core/audio.js');
+        Music.stop();
+        Amb.stop();
+        const an = tap2.ctx.createAnalyser();
+        an.fftSize = 16384;
+        tap2.bus.connect(an);
+        const buf = new Float32Array(an.fftSize);
+        const peakFor = async (ms) => {
+          let peak = 0;
+          const t0 = performance.now();
+          while (performance.now() - t0 < ms) {
+            an.getFloatTimeDomainData(buf);
+            for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+            await new Promise((r) => setTimeout(r, 8));
+          }
+          return peak;
+        };
+        const settle = async () => {
+          let calm = 0;
+          let level = 1;
+          const t0 = performance.now();
+          while (calm < 2 && performance.now() - t0 < 4000) {
+            level = await peakFor(200);
+            calm = level > 0.02 ? 0 : calm + 1;
+          }
+          return level;
+        };
+        for (const name of ['payout', 'kytkin', 'doorin', 'door', 'pipe', 'coin', 'powerup']) {
+          await settle();
+          A.play(name);
+          peaks[name] = await peakFor(600);
+        }
+        after = await settle();
+        an.disconnect();
+      }
+      const pk = (name) => (peaks[name] === undefined ? 0 : peaks[name]);
+      const shownPeaks = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
+      expect('uudet merkit kuuluvat, eivät huuda, eivätkä jätä väylää soimaan',
+        !measured || (
+          // Kuuluu, mutta on pienempi kuin se palkinto jota se ei ole: lohko
+          // antaa, poimiminen palkitsee, ja tässä järjestyksessä.
+          pk('payout') > 0.15 && pk('payout') < pk('coin')
+          // Huoneen muutos on iso, muttei pelin kovin ääni.
+          && pk('kytkin') > 0.15 && pk('kytkin') < pk('powerup')
+          // Näkyvistä häviämisen kaksi tapaa mitataan pariksi, samalla tavalla
+          // kuin putken kaksi päätä aamulla.
+          && pk('doorin') > pk('pipe') * 0.6 && pk('doorin') < pk('pipe') * 1.6
+          && after < 0.02),
+        measured ? `${shownPeaks}, tausta jäljessä ${after.toFixed(3)}` : 'ei mitattu');
     }
   }
 

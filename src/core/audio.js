@@ -728,7 +728,25 @@ const SFX = {
     noise({ dur: 0.13, from: 700, to: 130, q: 2, gain: 0.28 });
     tone({ type: 'triangle', from: 200, to: 60, dur: 0.12, gain: 0.24, hold: 0.2, curve: 'lin' });
   },
-  land: () => noise({ dur: 0.07, from: 420, to: 120, q: 1.4, gain: 0.12 }),
+  /*
+   * `land` sat here: `noise({ dur: 0.07, from: 420, to: 120, q: 1.4 })`,
+   * määriteltynä ja **soittamatta yhdestäkään paikasta**. Se on poistettu, ja
+   * poisto on tässä oikea vastaus eikä laiskuus.
+   *
+   * Kaksi syytä, ja jälkimmäinen on se tärkeämpi. Ensimmäinen: kohta 8 tekee
+   * liikamerkitsemisestä vian, ja alastulo on pelin yleisin yksittäinen
+   * tapahtuma — merkki joka soi joka toinen sekunti lakkaa olemasta merkki ja
+   * alkaa peittää niitä jotka olivat täällä ensin. Sama perustelu kuin
+   * `pspent`in hiljaisuudella, käännettynä ääripäähän asti: alastulolle oikea
+   * äänenvoimakkuus on nolla.
+   *
+   * Toinen: **soittamaton ääni on lupaus jota kukaan ei ole tarkistanut.** Se
+   * näyttää koodissa siltä kuin peli sanoisi jotain jota se ei sano, ja
+   * seuraava lukija joko lisää sille kutsupaikan (jolloin päätös yllä kumotaan
+   * vahingossa) tai kiertää sen kirjoittamalla toisen samanlaisen. Kumpikin on
+   * huonompi kuin tyhjä kohta. `verify.mjs` vaatii nyt jokaiselta `SFX`in
+   * nimeltä kutsupaikan, joten tätä ei voi enää tapahtua hiljaa.
+   */
   bump: () => tone({ type: 'triangle', from: 180, to: 110, dur: 0.09, gain: 0.24, hold: 0.25 }),
   brick: () => {
     noise({ dur: 0.2, from: 2600, to: 380, q: 1.1, gain: 0.28, type: 'highpass' });
@@ -950,6 +968,58 @@ const SFX = {
     // "NAM" — the mouth is full, so the line is a nasal at both ends.
     vox({ word: 'nam', dur: 0.36, pitch: 250, bend: 1.35, gain: 0.44, delay: 0.18 });
   },
+  payout: () => {
+    /*
+     * LOHKO ANTOI JOTAKIN, ja se on eri tapahtuma kuin `powerup` yllä.
+     *
+     * Tämä oli `powerup`, eli **saman mansikan kohdalla soi sama ääni kahdesti**:
+     * kerran kun esine työntyy ulos lohkosta ja kerran sekunti myöhemmin kun
+     * pelaaja poimii sen. Ensimmäinen niistä valehteli — mikään ei kasvanut
+     * silloin — ja se on täsmälleen sama vika kuin varalokerossa aamulla
+     * (`reserve`): merkki joka sanoo väärän asian oppii tulemaan uskotuksi.
+     * DESIGN.md kohta 8 sanoo saman lyhyemmin: yksi tilanvaihdos, yksi merkki.
+     *
+     * Kuvaa ei tarvitse lisätä eikä lisätä: esine nousee lohkon päältä esiin ja
+     * lohko vaihtuu käytetyksi, ja juuri se on se perustelu jolla toinen kuva
+     * jätetään tekemättä.
+     *
+     * Muoto valittiin sen mukaan mikä hylly oli **vapaana**. Nousevien jonojen
+     * hylly on käytetty loppuun (`coin`, `powerup`, `oneup`, `soup`, `select` —
+     * ks. `pfull`), joten tämä ei ole melodia lainkaan: **yksi sävel joka
+     * nytkähtää ylös kvartin ja jää siihen**, ja sen alla lyhyt työntävä kohina
+     * joka nousee. Se on esineen liike, ei palkinto — ja se on tarkoituksella
+     * lyhyempi ja hiljaisempi kuin `powerup`, koska palkinto tulee vasta
+     * poimittaessa. Ei `sprout` (sama tapahtuma mutta puolitoista sekuntia),
+     * ei `coin` (kaksi kirkasta sointua), ei `pop` (kupla, laskeva).
+     */
+    tone({ type: 'triangle', from: 392, dur: 0.06, gain: 0.14, hold: 0.5 });
+    tone({ type: 'triangle', from: 523, dur: 0.14, gain: 0.14, delay: 0.05, hold: 0.45, detune: 7 });
+    noise({ dur: 0.13, from: 400, to: 1500, q: 3, gain: 0.07, attack: 0.03 });
+  },
+  kytkin: () => {
+    /*
+     * KYTKIN LÄHTI KÄYNTIIN, ja tämäkin oli `powerup`.
+     *
+     * "Tiilet kolikoiksi" ei ole kasvamista eikä palkinnon saamista: se on
+     * **määräaikainen muutos koko huoneeseen**, ja huone menee takaisin
+     * ennalleen. Kuva sanoo sen jo kolmella tavalla — jokainen tiili ruudulla
+     * vaihtuu, ruutu tärähtää ja pistepomppu lukee TIILET KOLIKOIKSI — joten
+     * puuttui vain ääni joka sanoo saman eikä sano "kasvoit".
+     *
+     * Rakenne on **kaksi vastakkaista liikettä yhtä aikaa**, eikä sellaista ole
+     * tällä väylällä ennestään: sävel putoaa (vipu painuu alas) ja kohina
+     * nousee ja leviää (muutos lähtee liikkeelle). `sprout` nousee molemmilla,
+     * `dive` laskee molemmilla, `pfull` seisoo paikallaan — tämä kulkee
+     * kahtaalle, ja juuri se erottaa sen korvassa ilman opettelua.
+     *
+     * Pituus on puoli sekuntia eikä puolitoista: kytkin *alkaa* tässä, ja sen
+     * kesto on jo kerrottu kolikoilla jotka ovat ruudulla koko ajan. Ääni joka
+     * kestäisi yhtä kauan kuin tila olisi toinen kello, ja kelloja on jo yksi.
+     */
+    tone({ type: 'square', from: 330, to: 98, dur: 0.16, gain: 0.22, hold: 0.3, curve: 'lin' });
+    tone({ type: 'triangle', from: 165, to: 82, dur: 0.42, gain: 0.14, hold: 0.4, curve: 'lin' });
+    noise({ dur: 0.44, from: 320, to: 2600, q: 1.6, gain: 0.13, attack: 0.12 });
+  },
   /*
    * The game is Finnish and now it can say so. Every one of these was a vowel
    * glide before, which is why they all sounded like the same person going
@@ -1134,14 +1204,64 @@ const SFX = {
     farty({ dur: 0.5, base: 62, gain: 0.36, wobble: 9, wet: 0.9, vary: 0.5 });
     tone({ type: 'sawtooth', from: 120, to: 46, dur: 0.45, gain: 0.16, detune: 14, hold: 0.5 });
   },
-  card: () => tone({ from: 880, dur: 0.07, gain: 0.15, hold: 0.5 }),
+  /*
+   * `card` oli tässä: `tone({ from: 880, dur: 0.07 })`, ja se oli sama vika kuin
+   * `land` ylempänä — määritelty, ei kutsupaikkaa. Se löytyi vasta siinä
+   * portissa jonka `land` synnytti, mikä on tämän muutoksen paras yksittäinen
+   * todiste: kuollutta koodia ei löydetä katsomalla, se löydetään mittarilla.
+   *
+   * Poistettu eikä kytketty johonkin, koska paikan keksiminen äänelle on väärä
+   * järjestys: korttiruudulla on jo omat merkkinsä (`select`, `cursor`,
+   * `clear`), eikä tämä tiedosto tiedä mitä puuttuvaa tapahtumaa varten
+   * 880 hertsin piippaus aikanaan kirjoitettiin. Jos korttien paljastumiselle
+   * halutaan oma merkki, se tulee takaisin **kutsupaikkansa kanssa**.
+   */
   timewarn: () => {
     tone({ from: 1568, dur: 0.06, gain: 0.16 });
     tone({ from: 1568, dur: 0.06, gain: 0.16, delay: 0.12 });
   },
+  /*
+   * LINNAKKEEN OVI AUKEAA, ja tästä eteenpäin se tarkoittaa vain sitä.
+   *
+   * Sama ääni soi ennen myös silloin kun ovesta kävellään sisään, eli kaksi eri
+   * tilanvaihdosta samalla merkillä — mitattuna 37 framen välein samassa
+   * kentässä (ks. `LevelScene.onBossDefeated`). Se on sama laji kuin putken
+   * kaksi päätä aamulla, ja korjattu samalla tavalla: vanha ääni jää sille
+   * tapahtumalle joka se oikeasti on, ja toinen saa omansa.
+   *
+   * Ja tämä on nimenomaan aukeaminen: pitkä pehmeästi kirkastuva kohina ilman
+   * kärkeä (isku 0,2 s puolen sekunnin äänessä) ja sen alla nouseva kolmio.
+   * Mikään siinä ei osu mihinkään — ovi ei kolahda, se kääntyy.
+   */
   door: () => {
     noise({ dur: 0.5, from: 200, to: 1200, q: 2, gain: 0.14, attack: 0.2 });
     tone({ type: 'triangle', from: 130, to: 240, dur: 0.5, gain: 0.12, hold: 0.6 });
+  },
+  doorin: () => {
+    /*
+     * ...JA SIITÄ KÄVELLÄÄN SISÄÄN. Oven pari, samalla tavalla kuin `pipeout`
+     * on putken pari.
+     *
+     * Kolme asiaa erottaa sen naapureistaan, ja jokainen niistä on käännös
+     * jostakin mitä naapurilla on:
+     *
+     *   - **Oveen nähden se on toisin päin ja sillä on kärki.** `door` nousee
+     *     ilman iskua; tämä alkaa yhdellä matalalla kolahduksella — askel
+     *     kynnyksen yli — ja laskee. Kynnys on se hetki jolla keho lakkaa
+     *     olemasta huoneessa.
+     *   - **Putkeen nähden se on puuta eikä metallia.** `pipe` on saha 400 ->
+     *     80 vibratolla, yksi liukuva putki; tämä on kolmio ja kaistarajattu
+     *     kohina, eikä siinä ole vibratoa lainkaan. Kaksi eri tapaa hävitä
+     *     näkyvistä pitää kuulostaa kahdelta.
+     *   - **Se sulkeutuu.** Hännäksi jää kohina joka putoaa 1600:sta 220:een ja
+     *     vaimenee: huone jää oven taakse. `pipeout`illa on sama purskaus
+     *     etupainoisena ja nousevana, koska siinä tullaan ulos.
+     *
+     * Tasoltaan `pipe`n luokkaa (0,17) eikä `door`in: matkalle lähteminen on
+     * pienempi tapahtuma kuin oven aukeaminen, ja se soi useammin.
+     */
+    tone({ type: 'triangle', from: 220, to: 96, dur: 0.12, gain: 0.17, hold: 0.25, curve: 'lin' });
+    noise({ dur: 0.34, from: 1600, to: 220, q: 1.8, gain: 0.1, attack: 0.012, delay: 0.03 });
   },
 };
 
