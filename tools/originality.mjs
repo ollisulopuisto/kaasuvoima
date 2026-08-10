@@ -102,6 +102,46 @@ async function corpusFiles(dir) {
   return out;
 }
 
+/**
+ * Koko korpus yhtenä ikkunajoukkona, luettuna kerran.
+ *
+ * `corpusHits` lukee 481 tiedostoa **joka kutsulla**, mikä on täsmälleen oikein
+ * silloin kun kysymys esitetään kahdellekymmenelleseitsemälle kentälle. Päivän
+ * pierun todistus (`tools/daily-origin.mjs`) kysyy sen tuhannelle kentälle, ja
+ * silloin sama luku on tuhat kertaa sama työ.
+ *
+ * Sama kanonisointi, sama kahdeksan sarakkeen ikkuna, sama neljätoista alinta
+ * riviä — eli sama kysymys. Ainoa ero on suunta: `corpusHits` laskee montako
+ * *korpuksen* ikkunaa osuu meihin, tämä montako *meidän* ikkunaamme osuu
+ * korpukseen. Lukuina ne eroavat toisintojen verran; nollana ne ovat sama asia,
+ * ja nolla on se ainoa vastaus joka kelpaa.
+ *
+ * Korpuksesta ei jää tähän kenttiä vaan kanonisoituja ikkunoita — neljän
+ * kirjaimen aakkosto, josta ei rekonstruoi mitään — eikä mitään kirjoiteta
+ * levylle.
+ */
+export async function corpusIndex() {
+  if (!CORPUS_DIR) return null;
+  const list = await corpusFiles(CORPUS_DIR);
+  if (!list.length) {
+    throw new Error(`VGLC_DIR=${CORPUS_DIR} ei sisällä yhtään .txt-kenttää — `
+      + 'osoittaako se korpuksen juureen?');
+  }
+  const keys = new Set();
+  for (const file of list) {
+    const grid = (await readFile(file, 'utf8')).split('\n').filter((r) => r.length);
+    for (const key of windows(grid.slice(-14), canonCorpus)) keys.add(key);
+  }
+  return { keys, files: list.length };
+}
+
+/** Montako kentän ikkunaa löytyy valmiiksi luetusta korpuksesta. */
+export function hitsAgainst(index, rows) {
+  let hits = 0;
+  for (const key of windows(rows, canonOurs)) if (index.keys.has(key)) hits++;
+  return hits;
+}
+
 export async function corpusHits(rows) {
   if (!CORPUS_DIR) return { checked: false, hits: 0, files: 0 };
   const mine = windows(rows, canonOurs);

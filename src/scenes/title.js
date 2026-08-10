@@ -4,6 +4,7 @@ import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
 import { challengeLine } from '../core/challenge.js';
 import { MODE_NAME } from '../core/timeattack.js';
+import { DAILY_TITLE } from '../core/daily.js';
 
 /*
  * Silence this long and the cabinet starts playing by itself. Twenty seconds is
@@ -29,8 +30,8 @@ export class TitleScene {
      * mennään vahingossa ei ole tila johon mennään erikseen. Se on listalla
      * myös ilman tallennusta: aika-ajo alkaa 1-1:stä siinä missä uusi peli. */
     this.options = Save.exists()
-      ? ['JATKA PELIÄ', 'UUSI PELI', MODE_NAME, 'PARHAAT PIERUT']
-      : ['UUSI PELI', MODE_NAME, 'PARHAAT PIERUT'];
+      ? ['JATKA PELIÄ', 'UUSI PELI', MODE_NAME, DAILY_TITLE, 'PARHAAT PIERUT']
+      : ['UUSI PELI', MODE_NAME, DAILY_TITLE, 'PARHAAT PIERUT'];
     this.cursor = 0;
     this.idle = 0;
   }
@@ -72,6 +73,7 @@ export class TitleScene {
       if (choice === 'JATKA PELIÄ') this.game.continueGame();
       else if (choice === MODE_NAME) this.game.startTimeAttack();
       else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
+      else if (choice === DAILY_TITLE) this.game.toDaily();
       else this.game.newGame();
     }
   }
@@ -145,7 +147,16 @@ export class TitleScene {
      * Ohjerivi on osa valikkoa eikä koristetta — se on ainoa paikka jossa
      * hyppy- ja juoksunäppäin lukevat — joten se ei saa pudota pois ruudulta
      * siksi että listalle tuli neljäs rivi. Kahdella ja kolmella rivillä tämä
-     * on tasan entinen 184: 240 - 11 - 45 = 184. */
+     * on tasan entinen 184: 240 - 11 - 45 = 184.
+     *
+     * **Viisi riviä on nyt se todellinen maksimi** — aika-ajo ja päivän pieru
+     * saapuivat samaan valikkoon eri haaroista — ja se on mitattu eikä
+     * pääteltiin: `tools/verify.mjs` piirtää alkuruudun 280 pikseliä korkealle
+     * alustalle ja katsoo alimman väritetyn rivin. Ruudun oma taustaliukuväri
+     * peittää rivit 0–239, joten mittaus 240-korkealla alustalla vastaisi aina
+     * 239 riippumatta siitä mitä valikolle tapahtuu; korkeampi alusta näyttää
+     * tasan sen mitä pelaaja ei näkisi. Mitattu tällä kaavalla: viidellä
+     * rivillä alin piirtyvä pikseli 239, samoin neljällä ja kolmella. */
     const panelY = Math.min(184, 240 - 11 - panelH);
     ctx.fillStyle = 'rgba(8,8,16,0.65)';
     ctx.fillRect(72, panelY, 176, panelH);

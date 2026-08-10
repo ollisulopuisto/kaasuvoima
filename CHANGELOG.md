@@ -7,6 +7,124 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.57 — päivän pieru: generaattori selaimeen, ja tuhat kenttää tarkistettuna etukäteen
+
+Omistajan valitsema toinen pelitila: **yksi generoitu kenttä päivässä, sama
+kaikille, yksi yritys**, ja tulos jakoruudulle rivinä jossa ei ole
+juonipaljastuksia.
+
+Tilan hinta sanottiin ääneen jo ehdotusvaiheessa eikä se ollut yllätys:
+`tools/gen-levels.mjs` on ollut käännösaikainen työkalu joka kirjoittaa
+`src/data/generated.js`:n, ja **tämä tila on se joka pakotti generoinnin
+selaimeen**. Se siirto on työn runko; päivittäinen kuori on pienempi puolisko.
+
+### Siirto
+
+`gen-levels.mjs`:n keskiosa — palat, teemat, `THEME_RULES`, `buildLevel`,
+`validateGenerated` — siirtyi sanasanaisesti `src/data/generator.js`:ään.
+Työkalu piti sen mikä on vain Nodea (`PLAN`, siemenhaku, telemetria,
+korpustarkistus, tiedoston kirjoitus) ja vie `THEME_RULES`/`themeProblems`
+edelleen, joten `verify.mjs` ei huomaa mitään. Mitatut luvut tulevat sivulle
+`src/data/pacing.js`:n kautta, ja **työkalu lukee saman kopion** — peilistä
+tuli siis se mistä toimitetut kentät oikeasti rakennetaan eikä lupaus.
+
+Todiste että siirto ei muuttanut mitään: `gen-levels.mjs` tuottaa
+`generated.js`:n md5 `c7ceafa7…` ennen ja jälkeen, ja työkalun tulostekin
+diffaa puhtaana.
+
+### Alkuperäisyys: aukko joka olisi ollut helppo lakaista maton alle
+
+Selaimessa generoitu kenttä **ei voi** olla korpustarkistettu — korpus ei ole
+repossa eikä koskaan toimiteta (kohta 3). Kenttä olisi siis rakenteellisesti
+`not checked`, ja se on reikä kohdassa 1, siinä säännössä jonka varaan koko
+projekti on rakennettu.
+
+Ratkaisu: **luetteloi siemenavaruus etukäteen ja toimita vain tuomio.**
+Päivän kenttä on päivämäärän funktio, joten avaruus on äärellinen.
+`tools/daily-origin.mjs` (kieltäytyy ajamasta ilman `VGLC_DIR`) generoi jokaisen
+päivän ikkunassa, vertaa korpukseen samalla kahdeksan sarakkeen ikkunalla kuin
+toimitetut kentät, ja kirjoittaa vain tuomion: rajat, yksi 36-kantainen
+yritysnumero per päivä, sormenjälki. Ei korpusta, ei kenttädataa — **yksi luku
+päivää kohden ei ole kenttäkartta.**
+
+Ensimmäinen ajo: **1096 päivää (10.8.2026–9.8.2029), 481 korpustiedostoa, 0
+osumaa**, 7295 siementä hylättynä sääntöjen ja 40 botin toimesta.
+
+Kaksi asiaa tekee tästä tarkistuksen eikä väitteen:
+
+- **Sormenjälki on kenttien omista tavuista** ja `verify.mjs` laskee sen
+  uudelleen. Muuta generaattoria, rytmilukuja, hyppybudjettia tai päivän
+  reseptiä ja tuomio koskee eri kenttiä kuin ne jotka pelaaja saa — **portti
+  menee punaiseksi silloin ja vain silloin.** Kalenteri ei tee siitä punaista;
+  umpeutuva ikkuna on tulostettu varoitus (alle 90 päivää), koska pysyvästi
+  punainen portti kytketään pois.
+- **Ikkunan ulkopuolella tila ei tarjoa kenttää lainkaan.** Tämä on
+  tarkoituksella tiukempi kuin `origin: 'not checked'` toimitetuissa kentissä:
+  toimitettu kenttä on maailmassa jonka pelaaja valitsi, päivän kenttä
+  *tarjotaan päivän kenttänä* ja lähtee rivinä muille ihmisille.
+  **Tarkistamaton päivän kenttä on huonompi kuin ei päivän kenttää.**
+
+### Voimataso 0: mitä takuu kattaa ja mitä ei
+
+| | todistaa |
+| --- | --- |
+| `validateLevel` + `themeProblems`, sivulla, joka kerta | ruudukon geometrian: kuilut mitattua budjettia vasten, seinäkorkeus, tehostus ensimmäisessä neljänneksessä, ei portaita tyhjään. **Ei simulaatio** — `rules.js`:n oma varaus |
+| botti, Nodessa, ennen kuin päivä pääsee todistukseen | että joku pääsee alusta maaliin voimatasolla 0, oikealla kitkalla ja liikemäärällä. Siemen jonka botti kaataa **korvataan**, ei tarkastella käsin |
+| sormenjälki | että molemmat yllä tehtiin **tasan niille** kentille jotka peli rakentaa |
+
+Ei kata: botti ei osaa kellulavoja, kyykkyä, putkia, kuoren potkimista eikä
+odottamista, eikä mikään tässä sano että kenttä on **hyvä**. Samat rajat kuin
+60 toimitetulla kentällä — takuu siirtyi ajassa, ei heikentynyt.
+
+### Aikavyöhyke ja yritys
+
+**UTC**, myös ruudulla näkyvä päivämäärä. Yksi kello on tilan edellytys
+(Helsingin ja Kalifornian eri mieltä oleminen tekisi jakorivistä vertailun
+tyhjäksi), ja UTC on ainoa kello joka jokaisella selaimella on ilman
+aikavyöhyketietokantaa (kohta 7). Hinta kirjattu koodiin: suomalainen pelaaja
+klo 00–02 saa eilisen kentän **ja eilisen päivämäärän** — kenttä ja päiväys ovat
+keskenään samaa mieltä, mikä on tärkeämpää kuin seinäkalenterin kanssa.
+
+Yritys kuluu kun kenttä **alkaa**. Uudelleenlataus kesken kentän ei ole uusi
+yritys eikä nolla vaan **luovutus siihen sarakkeeseen johon ehdit**, minkä takia
+eteneminen kirjoitetaan puolen sekunnin välein. Oma avain `sfb3.daily.v1`:
+se vanhenee päivittäin eikä ole etenemistä, joten sen muoto ei saa koskaan
+pakottaa versionostoa joka pyyhkisi kaikkien elämät ja maailmat.
+
+### Kaksi tilaa samana päivänä, ja niiden yhteentörmäys
+
+Aika-ajo tuli tuntia aiemmin, ja molemmat lisäsivät valikkorivin. Portti sai
+tästä oman väitteensä, ja se kirjoitettiin ajamaan **oikeaa** `TitleScene`ä
+eikä omaa kopiotaan valikosta — ensimmäinen versio kovakoodasi oman listansa ja
+olisi jäänyt mittaamaan neljää riviä ruudulla jossa on viisi:
+
+```
+punainen  5 riviä 263, 4 riviä 250   (ruudun viimeinen rivi 239)
+vihreä    5 riviä 239, 4 riviä 239
+```
+
+Ja uusi väite siitä että päivän yritys **ei ole aika-ajo**: yksi yritys ei voi
+tuottaa ennätystä, ja ennätys avaimella `PP` olisi huomenna eri kenttä.
+
+### Tallennuspäätökset eivät ole ristiriidassa
+
+`bestTimes` meni **sisään** `sfb3.save.v2`:een koska ennätysaika on kertynyttä
+etenemistä; päivän tulos jää **ulos** koska se vanhenee huomiseen mennessä.
+Lause lisätty DESIGN.md:hen jottei niitä lueta toistensa vastakohdiksi.
+
+### Löydetty, ei korjattu
+
+- **4-3 kaatuu yhä voimatason 0 botilla** (vanha; käytettiin tässä punaisena
+  fikstuurina).
+- Päivän ajot kirjoittavat telemetriaa kenttätunnuksella `PP`, jolloin
+  `gen-levels.mjs --telemetry` tulostaa `ignored PP`.
+- `secrets.js`:n välimuisti pitää eilisen listan sivuistunnossa joka ylittää
+  UTC-keskiyön. Tässä tilassa ei näytetä salaisuuslaskuria, joten se on
+  näkymätön.
+- Todistettu ikkuna päättyy **9.8.2029**. Uusiminen on yksi komento.
+
+---
+
 ## v26.08.10.56 — neljä hiljaista tilanvaihdosta sai kuvan ja äänen
 
 Omistaja: *"we need more AUDIO VISUAL feedback on P meter filling up! and the

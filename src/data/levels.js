@@ -38,7 +38,7 @@ const cache = new Map();
  * level with a long clock is not tension, it is just a number going down.
  * `time` in a level definition overrides this.
  */
-const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((columns * 1.3) / 10) * 10));
+export const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((columns * 1.3) / 10) * 10));
 
 /**
  * Where the bands of a tall level sit, in tile rows. Everything that needs to
@@ -90,3 +90,27 @@ export function getLevel(id) {
 
 export const hasLevel = (id) => !!LEVEL_DEFS[id];
 export const levelIds = () => Object.keys(LEVEL_DEFS);
+
+/**
+ * Panee ajossa rakennetun kentän välimuistiin, jotta `getLevel` löytää sen.
+ *
+ * Päivän pieru rakentaa kenttänsä selaimessa (`src/core/daily.js`), eikä se
+ * kenttä ole `LEVEL_DEFS`:ssä — eikä saakaan olla. `levelIds()` on pelin
+ * sisällysluettelo: kartta, `tools/verify.mjs`, `tools/playable.mjs` ja
+ * `tools/difficulty.mjs` kaikki kävelevät sen läpi, ja päivän kenttä siellä
+ * olisi 61. kenttä joka vaihtuu joka yö.
+ *
+ * Välimuistiin se silti kuuluu, ja syy on `src/core/secrets.js`: se kysyy
+ * `getLevel(id)`:llä mitä kentässä on piilossa, ja saa muuten `unknown level`
+ * -poikkeuksen ensimmäisestä tiilestä johon pelaaja koskee. Sama seam kuin
+ * `LevelScene`in kolmas parametri, samasta syystä.
+ *
+ * Sama tunnus joka päivä on tarkoituksellista (HUD ja telemetria lukevat sen),
+ * ja sen ainoa seuraus on että `secrets.js`:n oma avainvälimuisti pitää
+ * eilispäivän listan siihen asti kun sivu ladataan — päivän pierussa ei näytetä
+ * salatilastoa, joten se ei näy missään.
+ */
+export function registerLevel(def) {
+  cache.set(def.id, def);
+  return def;
+}

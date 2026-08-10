@@ -13721,6 +13721,262 @@ const report = await page.evaluate(async () => {
   report.failures.push(...race.failures);
 }
 
+/* --------------------- päivän pieru, selaimen puolella -------------------- */
+/*
+ * Se puolisko joka on oikeasti sivulla: kentän rakentaminen, sen ainoa yritys ja
+ * se rivi joka lähtee kaverille.
+ *
+ * Node rakentaa saman kentän tässä vieressä ja rivit verrataan merkkijonoina.
+ * Se on tämän osion kallein väite ja myös sen tärkein: koko tila lepää sen
+ * varassa että selain ja työkalu ovat samaa mieltä siitä mitä päivän kenttä on
+ * — todistus (`src/data/daily-origin.js`) on tehty Nodessa ja pelataan
+ * selaimessa.
+ */
+{
+  const daily = await import(join(ROOT, 'src/core/daily.js'));
+  const today = daily.dayNumber();
+  /* Kolme päivää eikä yksi: tänään on se jota pelataan, ja kaksi muuta ovat
+   * siellä missä `attempt` on jotain muuta kuin nolla — sama koodi eri
+   * haaralla. */
+  const sample = [today, today + 37, today + 365].filter((d) => daily.dailyCertificate(d));
+  const mine = sample.map((day) => {
+    const cert = daily.dailyCertificate(day);
+    return { day, attempt: cert.attempt, rows: daily.dailyBuild(day, cert.attempt).def.rows.join('\n') };
+  });
+
+  const pp = await page.evaluate(async ({ jobs, todayDay }) => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name, ok, detail });
+      if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+    };
+    const d = await import('/src/core/daily.js');
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { isSolid } = await import('/src/gfx/tiles.js');
+    const { runGround } = await import('/tools/level-bot.js');
+    const { validateLevel } = await import('/src/data/rules.js');
+    const { themeProblems } = await import('/src/data/generator.js');
+    const { JUMP_BUDGET } = await import('/src/data/pacing.js');
+    const font = await import('/src/gfx/font.js');
+    const game = window.sfb3;
+
+    const keepDaily = localStorage.getItem('sfb3.daily.v1');
+    const wipe = () => localStorage.removeItem('sfb3.daily.v1');
+
+    /* --- 1. sivu rakentaa saman kentän kuin työkalu --- */
+    {
+      const bad = jobs.filter((j) => d.dailyBuild(j.day, j.attempt).def.rows.join('\n') !== j.rows);
+      expect('selain rakentaa saman päivän kentän kuin Node',
+        bad.length === 0,
+        bad.length ? `eroaa: ${bad.map((b) => b.day).join(' ')}`
+          : `${jobs.length} päivää, ${jobs.map((j) => j.attempt).join('/')} yritystä`);
+    }
+
+    /* --- 2. tämän päivän kenttä läpäisee säännöt tässä selaimessa --- */
+    const level = d.dailyLevel(todayDay);
+    {
+      const problems = level.ok
+        ? validateLevel(level.def.rows, JUMP_BUDGET)
+          .concat(themeProblems(level.def.theme, level.def.rows))
+        : [`kenttää ei ole: ${level.reason}`];
+      expect('tämän päivän kenttä läpäisee säännöt selaimessa',
+        problems.length === 0,
+        problems.length ? problems.slice(0, 2).join('; ')
+          : `${level.def.rows[0].length} saraketta, teema ${level.def.theme}, `
+            + `merkintä "${level.def.origin}"`);
+    }
+
+    /* --- 3. ja botti pääsee sen läpi voimatasolla 0 --- */
+    if (level.ok) {
+      game.state = {
+        lives: 9, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const scene = new LevelScene(game, level.def.id, level.def);
+      game.scene = scene;
+      scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      scene.time = 9999;
+      const r = runGround(scene, isSolid, 7000, () => finished);
+      expect('päivän kenttä on läpäistävissä voimatasolla 0',
+        r.cleared, r.cleared ? `${scene.w} saraketta läpi` : `eteni ${r.reach} %`);
+      game.finishLevel = () => {};
+    }
+
+    /* --- 4. yksi yritys, ja lataus on luovutus --- */
+    {
+      wipe();
+      const first = d.dailyBegin(todayDay);
+      const second = d.dailyBegin(todayDay);
+      expect('päivän yritys kuluu kerran ja vain kerran',
+        first === true && second === false, `ensimmäinen ${first}, toinen ${second}`);
+
+      /* Sivun lataus kesken kentän: merkintä jää 'kesken', ja se luetaan
+       * tulokseksi sellaisenaan eikä uudeksi yritykseksi. */
+      d.dailyProgress(todayDay, { reach: 41, score: 3400, coins: 5 });
+      const midway = d.dailyStatus(todayDay);
+      const forfeited = d.dailyForfeit(todayDay);
+      const after = d.dailyBegin(todayDay);
+      expect('lataus kesken kentän on luovutus siihen asti mihin pääsi, ei uusi yritys',
+        midway === 'kesken' && forfeited.reach === 41 && forfeited.keskeytyi === true
+          && after === false,
+        `kesken: ${midway}, luovutettu ${forfeited.reach} %, uusi yritys: ${after}`);
+
+      /* Eilinen merkintä ei ole tämän päivän. */
+      wipe();
+      d.dailyBegin(todayDay - 1);
+      expect('eilinen tulos ei vie tämän päivän yritystä',
+        d.dailyStatus(todayDay) === 'vapaa' && d.dailyBegin(todayDay) === true,
+        `tänään: ${d.dailyStatus(todayDay)}`);
+      wipe();
+    }
+
+    /* --- 4 b. eikä se koske pelaajan omaan tallennukseen --- */
+    if (level.ok) {
+      const keepSave = localStorage.getItem('sfb3.save.v2');
+      const keepScene = game.scene;
+      const keepState = game.state;
+      const keepFinish = game.finishLevel;
+      wipe();
+      /* Kierros jossa on jotain menetettävää: kolme elämää, pisteitä ja
+       * maailma 3. Päivän yritys ajetaan sen päälle ja katsotaan mitä siitä
+       * jäi — sama vaatimus kuin esittelytilalla, ja sama syy. */
+      const before = {
+        lives: 3, coins: 17, score: 4200, power: { type: 'shroom', level: 2 }, reserve: 'flower',
+        world: 2, node: 'w3-2', cleared: { 'w3-1': true }, worldsOpen: 3, cards: ['shroom'],
+        secrets: {}, continues: 1, usedSaveState: false,
+      };
+      game.state = before;
+      localStorage.setItem('sfb3.save.v2', JSON.stringify(before));
+      const stored = localStorage.getItem('sfb3.save.v2');
+      /* Aika-ajo päällä, koska juuri se on se tila jonka ei saa tarttua
+       * mukaan: yksi yritys ja paras aika ovat vastakkaisia ajatuksia, ja
+       * `setBest` kirjaisi ajan tunnuksella joka on huomenna eri kenttä. */
+      game.timeAttack = true;
+      game.startDaily(d.dailyLevel(todayDay));
+      const duringLives = game.state.lives;
+      const duringRace = game.timeAttack;
+      game.finishDaily({ died: true });
+      const raceBack = game.timeAttack;
+      game.timeAttack = false;
+      const same = localStorage.getItem('sfb3.save.v2') === stored;
+      const back = game.state === before && game.state.score === 4200
+        && game.state.cards.length === 1 && game.state.world === 2;
+      expect('päivän yritys ei kirjoita pelaajan tallennukseen eikä vie hänen kierrostaan',
+        same && back && duringLives === 1,
+        `tallennus ${same ? 'ennallaan' : 'MUUTTUI'}, kierros ${back ? 'palautui' : 'HUKKUI'},`
+        + ` yrityksen elämät ${duringLives}`);
+      expect('päivän yritys ei ole aika-ajo, eikä se sammuta aika-ajoa jälkeensä',
+        duringRace === false && raceBack === true,
+        `yrityksen aikana ${duringRace}, jälkeen ${raceBack}`);
+      wipe();
+      if (keepSave === null) localStorage.removeItem('sfb3.save.v2');
+      else localStorage.setItem('sfb3.save.v2', keepSave);
+      game.state = keepState;
+      game.scene = keepScene;
+      game.finishLevel = keepFinish;
+      game.dailyRun = null;
+    }
+
+    /* --- 5. jakorivi ei paljasta kentästä mitään --- */
+    {
+      /* Mitattu eikä mielipide: sama tulos kahtena eri päivänä on kahden eri
+       * kentän tulos, ja jos rivi kantaisi kentästä yhdenkään merkin, nämä
+       * kaksi riviä eroaisivat muualtakin kuin päiväyksestä. */
+      const a = d.dailyShareLine({ day: todayDay, reach: 63, score: 12345, cleared: false });
+      const b = d.dailyShareLine({ day: todayDay + 37, reach: 63, score: 12345, cleared: false });
+      const strip = (s, day) => s.replace(d.dayLabel(day), '');
+      expect('jakorivi kertoo tuloksen eikä kenttää',
+        strip(a, todayDay) === strip(b, todayDay + 37),
+        `${a} | ${b}`);
+      expect('jakorivissä ei ole kentän teemaa eikä tunnusta',
+        !/GRASS|DESERT|NIGHT|ICE|FACTORY|BONE|CLOUD|MAAILMA/.test(a.toUpperCase()), a);
+    }
+
+    /* --- 6. jokainen tilan piirtämä merkki on fontissa --- */
+    {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 12;
+      const g = canvas.getContext('2d');
+      const missing = new Set();
+      for (const s of d.dailyStrings()) {
+        for (const ch of String(s).toUpperCase()) {
+          if (ch === ' ') continue;
+          g.clearRect(0, 0, 16, 12);
+          font.drawText(g, ch, 2, 2, { color: '#ffffff' });
+          const px = g.getImageData(0, 0, 16, 12).data;
+          let ink = 0;
+          for (let i = 3; i < px.length; i += 4) if (px[i] > 0) ink++;
+          if (!ink) missing.add(ch);
+        }
+      }
+      expect('päivän pierun jokainen merkkijono on kirjoitettavissa pelin fontilla',
+        missing.size === 0, missing.size ? `puuttuu: ${[...missing].join('')}`
+          : `${d.dailyStrings().length} merkkijonoa`);
+    }
+
+    /* --- 7. valikko mahtuu ruudulle silloinkin kun se on pisimmillään --- */
+    {
+      /*
+       * Mitataan **ruudun ulkopuolelle** eikä ruudun sisälle, ja se on koko
+       * mittauksen juju: alkuruutu maalaa taustan liukuvärillä joka peittää
+       * rivit 0–239, joten "alin väritetty rivi" on 239 riippumatta siitä mitä
+       * valikolle tapahtuu. 280 pikseliä korkealla piirtoalustalla rivit 240 ja
+       * alle ovat läpinäkyviä ellei jokin piirry niille — eli ne ovat tasan se
+       * mitä pelaaja ei näkisi.
+       *
+       * JA VALIKKO LUETAAN `enter()`:ISTÄ EIKÄ KIRJOITETA TÄHÄN. Tämä väite
+       * kirjoitettiin kun rivejä oli neljä, ja rivi viisi saapui viikossa
+       * toisesta haarasta (aika-ajo). Käsin kirjoitettu lista olisi mitannut
+       * neljää riviä sinä päivänä jona ruudulla on viisi — eli se olisi
+       * lakannut mittaamasta juuri sitä mitä se on olemassa mittaamaan.
+       * Tallennuksen olemassaolo on ainoa asia joka listan pituuden ratkaisee,
+       * joten se väännetään molempiin asentoihin ja kysytään ruudulta.
+       */
+      const { TitleScene } = await import('/src/scenes/title.js');
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 280;
+      const g = canvas.getContext('2d');
+      const keepSave = localStorage.getItem('sfb3.save.v2');
+      const lowest = (hasSave) => {
+        if (hasSave) localStorage.setItem('sfb3.save.v2', '{"lives":4}');
+        else localStorage.removeItem('sfb3.save.v2');
+        const stand = Object.create(game);
+        const title = new TitleScene(stand);
+        title.enter();
+        title.tick = 40;
+        title.puffs = [];
+        g.clearRect(0, 0, 320, 280);
+        title.draw(g);
+        const px = g.getImageData(0, 0, 320, 280).data;
+        let last = -1;
+        for (let y = 0; y < 280; y++) {
+          for (let x = 0; x < 320; x++) if (px[(y * 320 + x) * 4 + 3] > 0) { last = y; break; }
+        }
+        return { last, rows: title.options.length };
+      };
+      const withSave = lowest(true);
+      const without = lowest(false);
+      if (keepSave === null) localStorage.removeItem('sfb3.save.v2');
+      else localStorage.setItem('sfb3.save.v2', keepSave);
+      expect('alkuruudun valikko ja sen opaste mahtuvat ruudulle myös pisimmillään',
+        withSave.last <= 239 && without.last <= 239,
+        `${withSave.rows} riviä ${withSave.last}, ${without.rows} riviä ${without.last}`
+        + ' (ruudun viimeinen rivi 239)');
+    }
+
+    if (keepDaily === null) wipe(); else localStorage.setItem('sfb3.daily.v1', keepDaily);
+    return { checks, failures };
+  }, { jobs: mine, todayDay: today });
+
+  report.checks.push(...pp.checks);
+  report.failures.push(...pp.failures);
+}
+
 await browser.close();
 server.close();
 
@@ -14521,7 +14777,11 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   const src = {
     tiles: await readFile(join(ROOT, 'src/gfx/tiles.js'), 'utf8'),
     rules: await readFile(join(ROOT, 'src/data/rules.js'), 'utf8'),
-    gen: await readFile(join(ROOT, 'tools/gen-levels.mjs'), 'utf8'),
+    /* Kopio on siellä missä se koodi jota se palvelee: `SOLID`, `SINK` ja
+     * `ENEMY` seurasivat `validateGenerated`ia `src/data/generator.js`:ään kun
+     * generaattorin ydin siirrettiin selaimen ulottuville. Sama väite, uusi
+     * osoite — ja osoite luetaan tässä eikä muistista juuri siksi. */
+    gen: await readFile(join(ROOT, 'src/data/generator.js'), 'utf8'),
     diff: await readFile(join(ROOT, 'tools/difficulty.mjs'), 'utf8'),
     orig: await readFile(join(ROOT, 'tools/originality.mjs'), 'utf8'),
   };
@@ -14532,13 +14792,13 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   const places = [
     ['src/gfx/tiles.js', /QUICKSAND: '~'/.test(src.tiles) && /\[T\.QUICKSAND\]:/.test(src.tiles)],
     ['src/data/rules.js', !!inRules && inRules.includes("'~'")],
-    ['tools/gen-levels.mjs', !!inGen && inGen === inRules],
+    ['src/data/generator.js', !!inGen && inGen === inRules],
     /* A FOURTH COPY APPEARED, and this line is what stops it from being the one
      * that rots. `tools/originality.mjs` folds every character it does not
      * recognise into air before comparing against the corpus, so a tile missing
      * from its sets is compared as if the level had a hole where the tile is —
      * exactly the failure the comment in rules.js describes, one module further
-     * out. The comment in gen-levels.mjs says the fourth copy is the moment to
+     * out. The comment in generator.js says the fourth copy is the moment to
      * move the set into `src/gfx/tiles.js`; that is still true and still not
      * done, so until it is, the copy is checked as a string like the others. */
     ['tools/originality.mjs', !!inOrig && inOrig === inRules],
@@ -14549,7 +14809,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     name: 'uusi ruutumerkki on kaikissa paikoissa joissa sen pitää olla',
     ok: missing.length === 0,
     detail: missing.length ? `puuttuu: ${missing.join(', ')}`
-      : `${places.length} paikkaa, rules.js ja gen-levels.mjs sanasanaisesti samat`,
+      : `${places.length} paikkaa, rules.js ja generator.js sanasanaisesti samat`,
   });
   if (missing.length) report.failures.push(...missing.map((f) => `~ puuttuu tiedostosta ${f}`));
 
@@ -14580,6 +14840,152 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   });
   if (!(grains >= 4 && !sink.includes('farty('))) {
     report.failures.push('juoksuhiekan ääni ei erotu laavasta ja vedestä rakenteeltaan');
+  }
+}
+
+/* ------------------------------ päivän pieru ----------------------------- */
+/*
+ * Selaimessa generoitu kenttä, ja ne kaksi lupausta jotka se ei voi itse pitää.
+ *
+ * Päivän pieru rakentaa kenttänsä sivulla, samoista tilastoista ja samoilla
+ * säännöillä kuin `tools/gen-levels.mjs`. Kaksi asiaa ei kulje mukana selaimeen
+ * eikä kumpaakaan voi teeskennellä:
+ *
+ *   **alkuperäisyys** (DESIGN.md kohta 3) vaatii korpuksen, jota ei ole
+ *   repossa eikä julkaisussa. Selaimessa generoitu kenttä olisi siis
+ *   rakenteeltaan `not checked`.
+ *
+ *   **maareitti voimatasolla 0** (DESIGN.md kohta 5) todistetaan botilla
+ *   (`tools/playable.mjs`), eikä botti aja pelaajan selaimessa.
+ *
+ * Vastaus on `src/data/daily-origin.js`: **siemenavaruus on äärellinen ja
+ * lueteltavissa**, koska päivän kenttä on funktio päivämäärästä. Joten se
+ * luetellaan etukäteen — `tools/daily-origin.mjs` generoi jokaisen päivän
+ * kentän, vertaa sen korpukseen ja pelaa sen botilla läpi voimatasolla 0 — ja
+ * repoon jää **pelkkä tuomio**, ei korpusta eikä kenttiä.
+ *
+ * Tuomio on kuitenkin tuomio *jostakin*, ja tässä mitataan mistä: sormenjälki
+ * on niistä tiedostoista jotka määräävät mitä kenttä on. Jos generaattori,
+ * rytmiluvut, hyppybudjetti tai päivän oma resepti muuttuu, tuomio koskee eri
+ * kenttiä kuin ne jotka pelaaja saa — ja tämä portti punastuu silloin ja vain
+ * silloin. Kalenteri ei punasta sitä: umpeutuva ikkuna on varoitus, koska
+ * pysyvästi punainen portti sammutetaan.
+ */
+{
+  const { createHash } = await import('node:crypto');
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  /* 1. Kannettu kopio on sama kuin mittaus. */
+  {
+    const statsJson = JSON.parse(await readFile(join(ROOT, 'tools/pacing-stats.json'), 'utf8'));
+    const budgetJson = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+    let mirror = null;
+    try {
+      mirror = await import(join(ROOT, 'src/data/pacing.js'));
+    } catch (err) {
+      mirror = { error: err.message };
+    }
+    const statsOk = !!mirror.PACING_STATS && eq(mirror.PACING_STATS, statsJson);
+    const budgetOk = !!mirror.JUMP_BUDGET && eq(mirror.JUMP_BUDGET, budgetJson);
+    const detail = mirror.error ? mirror.error
+      : `pacing ${statsOk ? 'sama' : 'ERI'}, hyppybudjetti ${budgetOk ? 'sama' : 'ERI'}`
+        + ` (gapTiles ${budgetJson.gapTiles}, wallTiles ${budgetJson.wallTiles})`;
+    report.checks.push({
+      name: 'selaimen kopio rytmiluvuista on sama kuin mitattu',
+      ok: statsOk && budgetOk,
+      detail,
+    });
+    if (!(statsOk && budgetOk)) {
+      report.failures.push('src/data/pacing.js ei vastaa mitattua — aja: node tools/mirror-pacing.mjs');
+    }
+  }
+
+  const daily = await import(join(ROOT, 'src/core/daily.js'));
+  const { DAILY_ORIGIN } = await import(join(ROOT, 'src/data/daily-origin.js'));
+  const today = daily.dayNumber();
+
+  /* 2. Todistus on tuomio NÄISTÄ kentistä.
+   *
+   * Sormenjälki lasketaan uudestaan ikkunan jokaisen päivän riveistä. Se on
+   * ainoa tapa huomata se hiljainen vika jota vastaan koko rakenne on: joku
+   * muuttaa generaattoria, rytmilukuja tai päivän reseptiä, pelaaja saa eri
+   * kentät kuin ne jotka tarkistettiin, eikä mikään sano mitään. */
+  {
+    const hash = createHash('sha256');
+    let attemptsOk = true;
+    for (let day = DAILY_ORIGIN.from; day <= DAILY_ORIGIN.to; day++) {
+      const cert = daily.dailyCertificate(day);
+      if (!cert) { attemptsOk = false; break; }
+      const { def, problems } = daily.dailyBuild(day, cert.attempt);
+      if (problems.length) { attemptsOk = false; break; }
+      hash.update(`${day}:${cert.attempt}\n${def.rows.join('\n')}\n`);
+    }
+    const mine = hash.digest('hex').slice(0, 16);
+    const ok = attemptsOk && mine === DAILY_ORIGIN.fingerprint;
+    const span = DAILY_ORIGIN.to - DAILY_ORIGIN.from + 1;
+    report.checks.push({
+      name: 'päivän kenttien todistus koskee juuri niitä kenttiä jotka peli rakentaa',
+      ok,
+      detail: ok ? `${span} päivää, sormenjälki ${mine}, merkintä "${DAILY_ORIGIN.origin}"`
+        : `todistus ${DAILY_ORIGIN.fingerprint}, kentät ${mine}`,
+    });
+    if (!ok) {
+      report.failures.push('src/data/daily-origin.js on vanhentunut — aja: '
+        + 'VGLC_DIR="…" node tools/daily-origin.mjs');
+    }
+  }
+
+  /* 3. Ikkuna kattaa tämän päivän.
+   *
+   * Varoitus eikä kaatava portti, ja se on DESIGN.md kohdan 3 oma perustelu:
+   * pysyvästi punainen portti sammutetaan. Kalenteri ei ole vika kenessäkään,
+   * mutta umpeutuva ikkuna on asia joka pitää nähdä ajoissa — ja pelaajan
+   * puolella se ei ole hiljainen, koska tila kieltäytyy tarjoamasta kenttää. */
+  {
+    const left = DAILY_ORIGIN.to - today + 1;
+    report.checks.push({
+      name: 'päivän pierun ikkuna kattaa tämän päivän',
+      ok: today >= DAILY_ORIGIN.from && today <= DAILY_ORIGIN.to,
+      detail: `${left} päivää jäljellä (${daily.dayLabel(DAILY_ORIGIN.from)} … `
+        + `${daily.dayLabel(DAILY_ORIGIN.to)})`,
+    });
+    if (today > DAILY_ORIGIN.to || today < DAILY_ORIGIN.from) {
+      console.log('\n  HUOM: päivän pierun tarkistusikkuna ei kata tätä päivää.');
+      console.log('  Tila ei tarjoa kenttää ennen kuin ikkuna uusitaan:');
+      console.log('    VGLC_DIR="…" node tools/daily-origin.mjs\n');
+    } else if (left < 90) {
+      console.log(`\n  HUOM: päivän pierun ikkunaa on jäljellä ${left} päivää.\n`);
+    }
+  }
+
+  /* 4. Korpuksen kanssa: tuomio tarkistetaan otoksella eikä uskota.
+   *
+   * Sama muoto kuin `originality.mjs`illa toimitetuille kentille — ilman
+   * korpusta ei väitetä mitään, korpuksen kanssa väite mitataan. Otos eikä
+   * kaikki 1096, koska tämä on portti jota ajetaan joka muutoksella;
+   * `tools/daily-origin.mjs` on se joka kysyy koko ikkunalta. */
+  if (process.env.VGLC_DIR) {
+    const { corpusIndex, hitsAgainst } = await import(join(ROOT, 'tools/originality.mjs'));
+    const index = await corpusIndex();
+    const sample = [DAILY_ORIGIN.from, today, Math.floor((today + DAILY_ORIGIN.to) / 2),
+      DAILY_ORIGIN.to].filter((d, i, a) => a.indexOf(d) === i && daily.dailyCertificate(d));
+    let hits = 0;
+    for (const day of sample) {
+      const cert = daily.dailyCertificate(day);
+      hits += hitsAgainst(index, daily.dailyBuild(day, cert.attempt).def.rows);
+    }
+    report.checks.push({
+      name: 'päivän kentät ovat yhä puhtaita korpusta vasten',
+      ok: hits === 0,
+      detail: `${sample.length} päivää otoksena, ${index.files} korpustiedostoa, ${hits} osumaa`,
+    });
+    if (hits > 0) report.failures.push(`päivän kentissä ${hits} osumaa korpukseen`);
+  } else {
+    report.checks.push({
+      name: 'päivän kenttien alkuperäisyys: merkintä luettu, ei väitetty',
+      ok: DAILY_ORIGIN.origin === 'checked' || DAILY_ORIGIN.origin === 'not checked',
+      detail: `merkintä "${DAILY_ORIGIN.origin}", VGLC_DIR asettamatta`,
+    });
   }
 }
 
