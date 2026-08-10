@@ -2028,29 +2028,65 @@ const report = await page.evaluate(async () => {
       goldHere > 100 && goldThere === 0,
       `palkintotekstiä haarassa ${goldHere} px, muualla ${goldThere} px`);
 
-    /* And the branch has to be walkable in both directions, or it is a picture
-     * of a choice rather than one. */
-    reset();
-    game.state.world = 1;
-    game.state.node = 'w2-2';
-    game.state.cleared = { 'w2-2': true, 'w2-n': true, 'w2-3': true };
-    const map = new WorldMapScene(game);
-    const walkTo = (dir) => {
-      map.mode = 'idle';
-      map.tryMove(dir);
-      for (let f = 0; f < 4000 && map.mode === 'walk'; f++) map.update({
-        pressed: blank(), held: blank(), released: blank(), consume() {},
-      });
-      return map.node.id;
+    /*
+     * And the branch has to be walkable in both directions, or it is a picture
+     * of a choice rather than one.
+     *
+     * **Kävely luetaan nyt haarailmoituksesta eikä muistista, ja se kävellään
+     * linnakkeeseen asti.** Vanha muoto oli kolme nimettyä askelta — alas
+     * `w2-n`, oikealle `w2-f`, oikealle `w2-3` — ja se oli sekä liian vähän
+     * että liian paljon. Liian vähän, koska otsikko lupaa että molemmat tiet
+     * *päätyvät linnakkeeseen* eikä testi kävellyt laavatietä pidemmälle kuin
+     * ensimmäiseen solmuun. Liian paljon, koska nuolet ja solmutunnukset olivat
+     * kirjoitettuna tähän: kun tiet 10.8.2026 alkoivat yhtyä kenttään 2-4
+     * linnakkeen sijaan, testi punastui kartasta joka on kunnossa — se mittasi
+     * vanhaa karttaa eikä nykyistä lupausta.
+     *
+     * Nyt jono johdetaan datasta (`branch.routes`, `routeChain` ja loppupää
+     * linkkejä seuraten) ja suunta etsitään kokeilemalla kaikki neljä nuolta,
+     * kuten linkkiportti tekee. Testi ei siis tiedä kartasta mitään paitsi sen
+     * mitä kartta itse sanoo, ja se kestää seuraavankin muutoksen.
+     */
+    const fortId = (worlds.fortressNode(w2) || {}).id;
+    const tail = [];
+    for (let cur = branch.to; cur && cur !== fortId;) {
+      const next = w2.links.filter((l) => l.a === cur).map((l) => l.b)[0];
+      if (!next) break;
+      tail.push(next);
+      cur = next;
+    }
+    const walkRoute = (route) => {
+      const want = [...route.via, branch.to, ...tail];
+      const seen = [];
+      let at = branch.from;
+      for (const id of want) {
+        let arrived = null;
+        for (const dir of ['left', 'right', 'up', 'down']) {
+          reset();
+          game.state.world = 1;
+          game.state.node = at;
+          game.state.cleared = Object.fromEntries(w2.nodes.map((n) => [n.id, true]));
+          const map = new WorldMapScene(game);
+          map.mode = 'idle';
+          map.tryMove(dir);
+          if (map.mode !== 'walk' || !map.targetNode || map.targetNode.id !== id) continue;
+          for (let f = 0; f < 4000 && map.mode === 'walk'; f++) map.update({
+            pressed: blank(), held: blank(), released: blank(), consume() {},
+          });
+          arrived = map.node.id;
+          break;
+        }
+        if (arrived !== id) { seen.push(`✗${id}`); break; }
+        seen.push(id);
+        at = id;
+      }
+      return seen;
     };
-    const low = walkTo('down');
-    const toFort = walkTo('right');
-    map.node = worlds.findNode(w2, 'w2-2');
-    map.pos = { x: map.node.tx * 16 + 8, y: map.node.ty * 16 + 8 };
-    const high = walkTo('right');
+    const routes = (branch.routes || []).map((r) => ({ name: r.name, seen: walkRoute(r) }));
+    const arrives = routes.every((r) => r.seen[r.seen.length - 1] === fortId);
     expect('both roads out of the fork are walkable and both reach the fortress',
-      low === 'w2-n' && toFort === 'w2-f' && high === 'w2-3',
-      `alas ${low}, sieltä ${toFort}, oikealle ${high}`);
+      routes.length >= 2 && arrives,
+      routes.map((r) => `${r.name}: ${r.seen.join(' → ')}`).join(' | '));
   }
 
   /* ------------- kartan luettavuus: polku, kalusto ja vaikeuslaatta -------- */
@@ -3434,11 +3470,26 @@ const report = await page.evaluate(async () => {
    * haluaa. Se on ainoa kohta jossa sääntö on väljempi, ja se on sanottu ääneen.
    */
   {
-    const { tiersOf, tierScore } = await import('/src/data/worlds.js');
+    const { tiersOf, tierScore, walksOf } = await import('/src/data/worlds.js');
     const { DIFFICULTY } = await import('/src/data/difficulty.js');
-    const shapes = WORLDS.map((w) => {
-      const walk = tiersOf(w).filter((t) => !t.fortress);
-      const seq = walk.map((t) => tierScore(w, t, DIFFICULTY));
+    /*
+     * MUOTO ON KÄVELYN OMINAISUUS, EI KARTAN.
+     *
+     * Tämä luki `tiersOf`illa 10.8.2026 asti, ja se oli oikein niin kauan kuin
+     * jokainen maailma oli yksi jono: `tiersOf` litistää haaran yhdeksi
+     * askeleeksi, joten haarautuvasta maailmasta se mittasi rivin **jota
+     * kukaan ei kävele** — maailman 2 luku `[124|159]` on kahden vaihtoehdon
+     * pienempi eikä kummankaan reitin oma kokemus.
+     *
+     * Nyt jokainen väite tässä lohkossa mitataan kävelystä (`walksOf`), ja
+     * haarautuvassa maailmassa niitä on kaksi. Seitsemälle maailmalle
+     * kahdeksasta se on merkki merkiltä sama jono kuin ennen — yksi haaraton
+     * maailma on tasan yksi kävely — joten muutos ei löysennä eikä kiristä
+     * niitä lainkaan. Maailmassa 2 se kiristää, ja se on koko pointti: väite
+     * jonka haara pääsee ohi ei ole väite haarautuvasta maailmasta.
+     */
+    const shapes = WORLDS.flatMap((w) => walksOf(w).map((walk) => {
+      const seq = walk.nodes.filter((n) => n.type !== 'fortress').map((n) => DIFFICULTY[n.level] || 0);
       const steps = seq.slice(1).map((v, i) => (v < seq[i] ? -1 : 1));
       const dips = steps.filter((s) => s < 0).length;
       const twice = steps.some((s, i) => i > 0 && s < 0 && steps[i - 1] < 0);
@@ -3450,19 +3501,22 @@ const report = await page.evaluate(async () => {
       }
       return {
         id: w.id,
+        route: walk.name,
         seq,
         dips,
         twice,
         longest,
+        walked: walk.nodes.length,
         levels: w.nodes.filter((n) => n.level).length,
         rises: seq[seq.length - 1] > seq[0],
       };
-    });
+    }));
+    const say = (s) => `${s.id}${s.route === 'SUORA' ? '' : ` ${s.route}`} `
+      + `${s.seq.map((v) => v.toFixed(0)).join('→')} ${s.dips} notkoa, pisin nousu ${s.longest}`;
     const bad = shapes.filter((s) => !s.rises || s.dips < 1 || s.twice || s.longest > 3);
-    expect('jokaisen maailman käyrä nousee, hengähtää, eikä kiipeä kolmea pidempään',
+    expect('jokainen kävely nousee, hengähtää, eikä kiipeä kolmea pidempään',
       bad.length === 0,
-      shapes.map((s) => `${s.id} ${s.seq.map((v) => v.toFixed(0)).join('→')} `
-        + `${s.dips} notkoa, pisin nousu ${s.longest}`).join(', '));
+      shapes.map(say).join(', '));
 
     /*
      * KAHDEKSAN KENTÄN MAAILMAN MUOTO, ja se on tämän päivän päätös kirjoitettuna
@@ -3503,14 +3557,16 @@ const report = await page.evaluate(async () => {
      * Väite on siksi askelina eikä kenttinä: kahdeksan kentän maailmassa on
      * seitsemän askelta *jos* mikään niistä ei ole haara, ja maailma 2 saa olla
      * kuusi askelta samalla kahdeksalla kentällä. Notkojen määrä on kaksi
-     * kummassakin tapauksessa.
+     * kummassakin tapauksessa — ja koska muoto mitataan nyt kävelystä, se on
+     * kaksi **kummallakin reitillä** eikä kaksi litistetyllä rivillä.
      */
     const eight = shapes.filter((s) => s.levels === 8);
     const wrong = eight.filter((s) => s.dips !== 2);
     expect('kahdeksan kentän maailmassa on kaksi hengähdystä',
       eight.length >= 2 && wrong.length === 0,
-      `${eight.length} kahdeksan kentän maailmaa `
-      + `(${eight.map((s) => `${s.id} ${s.seq.length} askelta, ${s.dips} notkoa`).join('; ') || '—'})`);
+      `${eight.length} kävelyä kahdeksan kentän maailmoissa `
+      + `(${eight.map((s) => `${s.id}${s.route === 'SUORA' ? '' : ` ${s.route}`} `
+        + `${s.seq.length} askelta, ${s.dips} notkoa`).join('; ') || '—'})`);
 
     /*
      * JA KUKA ON JO SIINÄ MITASSA — nimeltä, eikä lukumääränä.
@@ -3533,16 +3589,75 @@ const report = await page.evaluate(async () => {
      *
      * **`w8` lisättiin 10.8.2026**, ja se oli täsmälleen se yhden rivin muutos:
      * seitsemän uusintaa ja kuningas, kahdeksan kenttää ja kaksi hengähdystä
-     * (245 → 117 → 302 → 169 → 368 → 378 → 386). Jäljellä on `w2`, jonka haara
-     * on eri työ eri ehdoilla.
+     * (245 → 117 → 302 → 169 → 368 → 378 → 386).
+     *
+     * **JA `w2` LISÄTTIIN SAMANA PÄIVÄNÄ, MUTTA SE EI OLLUT YHDEN RIVIN
+     * MUUTOS.** Lista on nyt täysi, joten tämä on se kohta johon seuraava
+     * lukija tulee kysymään mitä "kahdeksan kenttää" tarkoittaa maailmassa
+     * jossa on haara — ja vastaus ei ole "sama kuin muissa", joten se lukee
+     * tässä eikä muutoslokissa.
+     *
+     * Ehdokkaita oli kolme, ja kaksi hylättiin mittaamalla:
+     *
+     *   **kahdeksan kenttää jokaisella reitillä.** Hylättiin aritmetiikalla,
+     *   ei mausta. Jos runko on `t` kenttää (linnake mukaan lukien) ja
+     *   molemmilla reiteillä on omansa, kahdeksan kentän kävely vaatii
+     *   `8 − t` omaa kenttää **kummallekin**, eli kartalle `15 − t` solmua:
+     *   maailma 2 olisi 12 kenttää sillä rungolla joka sillä on. Se olisi puolta
+     *   isompi kuin yksikään toinen maailma, eikä pelin summa olisi 64 vaan 68.
+     *   Ehto joka on määritelmällisesti saavuttamaton ei ole ankara vaan väärä.
+     *
+     *   **kahdeksan solmua, eikä muuta.** Se on projektin oma laskuyksikkö (8 x
+     *   8 = 64) ja se mitä kartta näyttää, mutta yksinään se on liian löysä:
+     *   sen läpäisisi maailma jonka rungolla on kolme kenttää ja jonka toisella
+     *   haaralla on neljä, eli kahdeksan kentän maailma josta yksi kävely näkee
+     *   viisi. Haaran hinta ei saa olla se että puolet maailmasta katoaa
+     *   valinnan taakse.
+     *
+     *   **valittu: kahdeksan solmua JA kävelyn alaraja.** Kartalla on kahdeksan
+     *   kenttää kuten kaikissa muissakin maailmoissa, ja lisäksi väitetään mitä
+     *   yksi kävely niistä näkee: **vähintään kuusi, eikä reittien ero ole yhtä
+     *   suurempi**. Kuusi ei ole valittu luku vaan sama luku toisin päin —
+     *   kahdeksasta kentästä korkeintaan kaksi saa olla yhden reitin omia, eli
+     *   valinta saa piilottaa neljänneksen maailmasta muttei enempää. Mitattuna
+     *   HIEKKATIE kävelee kuusi ja LAAVATIE seitsemän.
+     *
+     * Ja se mitä tämä *ei* sano, koska sitä ei voi luvata: reitit eivät ole yhtä
+     * pitkiä. Kahdeksan solmua ja kaksi eripituista reittiä on sama epäsuhta
+     * joka haarassa on ollut alusta asti — ero on yksi kenttä ennen ja jälkeen —
+     * mutta suhteessa kävelyyn se **pieneni**, 1/4:sta 1/6:een. Haara on siis
+     * tasapainoisempi kahdeksan kentän mitassa kuin kuuden, mikä oli se riski
+     * jonka takia tämä maailma jätettiin viimeiseksi.
      */
-    const EIGHT_DONE = ['w1', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8'];
+    const EIGHT_DONE = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8'];
     const shortOf = (id) => (shapes.find((s) => s.id === id) || { levels: 0 }).levels;
     const short = EIGHT_DONE.filter((id) => shortOf(id) !== 8);
-    expect('maailmat 1 ja 3–7 ovat kahdeksan kentän mittaisia',
+    expect('jokainen kahdeksasta maailmasta on kahdeksan kentän mittainen',
       short.length === 0,
       EIGHT_DONE.map((id) => `${id} ${shortOf(id)}`).join(', ')
       + ` — vajaana ${short.length}`);
+
+    /*
+     * JA HAARAUTUVASSA MAAILMASSA MYÖS SE MITÄ YKSI KÄVELY NÄKEE.
+     *
+     * Yllä oleva väite laskee solmuja, eli sen minkä kartta näyttää. Tämä
+     * laskee kenttiä yhden pelaajan matkalla, eli sen minkä hän pelaa, ja ne
+     * ovat eri luku vain haarautuvassa maailmassa. Väite on tyhjä siellä missä
+     * haaraa ei ole, joten se vaatii vähintään yhden haarautuvan maailman
+     * ollakseen mitattu eikä vain läpäisty.
+     */
+    const branched = WORLDS.filter((w) => (w.branches || []).length);
+    const walked = branched.map((w) => {
+      const lens = walksOf(w).map((walk) => ({ name: walk.name, n: walk.nodes.length }));
+      const min = Math.min(...lens.map((l) => l.n));
+      const max = Math.max(...lens.map((l) => l.n));
+      return { id: w.id, lens, min, max };
+    });
+    const lopsided = walked.filter((x) => x.min < 6 || x.max - x.min > 1);
+    expect('haarautuvassa maailmassa jokainen reitti kävelee vähintään kuusi kenttää, eikä ero ole yhtä suurempi',
+      branched.length >= 1 && lopsided.length === 0,
+      walked.map((x) => `${x.id}: ${x.lens.map((l) => `${l.name} ${l.n}`).join(', ')}`).join(' — ')
+      || 'ei yhtään haarautuvaa maailmaa');
 
     /*
      * Ja maailmasta maailmaan käyrä nousee myös, mikä on eri väite kuin
