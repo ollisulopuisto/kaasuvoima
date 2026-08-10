@@ -1051,15 +1051,38 @@ lainattavaan verbiin: **kyllä** kohdille 1 (vauhti korkeudeksi), 6 (syö
 vihollinen, saat kyvyn) ja 10 (putoavat lohkot yhdelle laattatyypille), ja
 **harkintaan** kohdalle 11 (ammuksen voi ratsastaa).
 
-### Kuusi pelitilaa jotka on suunniteltu muttei rakennettu
+### Päätetty 10.8.2026: kuutta pelitilaa ei rakenneta
 
-Kaksi kahdeksasta on tehty (`AIKA-AJO`, `PÄIVÄN PIERU`). Loput kuusi
-kortteineen ja työarvioineen: **PIKKUINEN** (koko peli voimatasolla 0, työ 1 —
-ainoa jonka läpäistävyys on jo todistettu, koska `playable.mjs` ajaa juuri
-sen joka ajolla), **YHDELLÄ HENGELLÄ** (työ 1), **POMOKIERROS** (kahdeksan
-pomoa peräkkäin, työ 2), **AARTEENETSINTÄ** (työ 2), **ARVOTTU MATKA**
-(kartta arvotaan joka ajolle mitatusta vaikeudesta, työ 3) ja
-**PIERUMARATONI** (loputon, työ 5).
+Kahdeksan pelitilaa suunniteltiin ja esitettiin kortteina työarvioineen.
+Omistaja valitsi kaksi, ja ne on tehty: **AIKA-AJO** (v26.08.10.55) ja
+**PÄIVÄN PIERU** (v26.08.10.57). Lopuista kuudesta hän päätti samana päivänä:
+**näitä ei rakenneta.**
+
+Merkintä on tässä siksi että **hylätty idea ilman kirjausta palaa takaisin
+samana ideana**, ja nämä kuusi ovat kaikki riittävän houkuttelevia palatakseen.
+Suunnittelutyö on tehty ja se on tässä valmiina jos päätös joskus kääntyy, mutta
+se ei ole jonossa eikä sitä pidä ehdottaa uudelleen ilman uutta syytä.
+
+| tila | mitä se on | työarvio |
+| --- | --- | --- |
+| **PIKKUINEN** | koko peli voimatasolla 0, jokainen tehostus kolikkona | 1 |
+| **YHDELLÄ HENGELLÄ** | yksi elämä, ei jatkoja, ei tilalatauksia | 1 |
+| **POMOKIERROS** | kahdeksan pomoa peräkkäin, yhteinen elämäpotti | 2 |
+| **AARTEENETSINTÄ** | maali ei ole päämäärä, löytäminen on | 2 |
+| **ARVOTTU MATKA** | kartta arvotaan joka ajolle mitatusta vaikeudesta | 3 |
+| **PIERUMARATONI** | loputon kenttä, palikat liitetään edellä | 5 |
+
+Yksi niistä kannattaa tietää erikseen jos päätös joskus kääntyy: **PIKKUINEN on
+ainoa jonka läpäistävyys on jo todistettu.** Kohta 5 vaatii että maareitti on
+läpäistävissä pienimmällä koolla, `tools/playable.mjs` mittaa sen joka ajolla, ja
+10.8.2026 alkaen se on tosi **kaikista 64 kentästä**. Tila olisi siis kytkin
+olemassa olevan invariantin päällä eikä uusi lupaus.
+
+Ja yksi hylättiin jo suunnitteluvaiheessa, perusteluineen: **PEILI** (kentät
+vaakasuunnassa käännettyinä). `tools/playable.mjs` juoksee ja hyppää vain
+**oikealle**, joten peilatuista kentistä se ei voisi todistaa mitään, ja kohdan 5
+takuu lakkaisi hiljaa koskemasta koko peliä. **Tila joka maksaa turvaverkkonsa
+on kalliimpi kuin diffinsä.**
 
 ## Myöhemmin
 
