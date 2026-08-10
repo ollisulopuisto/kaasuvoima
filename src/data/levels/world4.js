@@ -13,6 +13,12 @@
  *   4-3  the switch
  */
 
+import { GENERATED_LEVELS } from '../generated.js';
+
+/** Which of the generated levels belong to this world — the file holds them all. */
+const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
+  .filter(([id]) => id.startsWith('4-')));
+
 export const WORLD4_LEVELS = {
   /*
    * The star goes in the world's first level because it is the world's first
@@ -84,6 +90,8 @@ export const WORLD4_LEVELS = {
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
+  /* `4-4`…`4-7`, generated; the spread's position is the play order. */
+  ...generated,
   '4-F': {
     theme: 'factory', bg: 'factory', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [

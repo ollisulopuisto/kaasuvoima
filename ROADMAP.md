@@ -10,29 +10,46 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
-## Tila 9.8.2026
+## Tila 10.8.2026
 
-Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 44 kenttää.**
+Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 60 kenttää.**
 `node tools/verify.mjs` on portti, `node tools/playable.mjs` tarkistaa geometrian
 ja `node tools/difficulty.mjs` vaikeuskäyrän.
 
 **Kahdeksan kentän maailman muoto on päätetty** (v26.08.09.46): seitsemän
 numeroitua kenttää ja linnake, ja kävelyssä kaksi hengähdystä. Muoto on portissa
-eikä tässä dokumentissa, ja maailmat **1 ja 3** on tehty sen mukaan — generaattori
-osaa nyt kaikki kahdeksan teemaa ehtoineen. Jäljellä maailmat 2 ja 4–8, eli **20
-kenttää**. Yksi varaus, ja se on iso: **alkuperäisyystarkistusta ei voitu ajaa**
-(`VGLC_DIR` asettamatta), joten jokainen generoitu kenttä kantaa merkinnän
-`origin: 'not checked'` ja `node tools/originality.mjs` odottaa korpusta.
+eikä tässä dokumentissa, ja maailmat **1, 3, 4, 5, 6 ja 7** on tehty sen mukaan
+(v26.08.10.49) — kuusi kahdeksasta, ja portti nimeää ne. Jäljellä maailmat **2**
+(haara: kahdeksan kenttää on siellä kuusi tai seitsemän askelta) ja **8** (pomo
+joka kentässä, eikä generaattorissa ole areenapalikkaa), eli **neljä kenttää**
+tavoitteesta 64.
+
+**Alkuperäisyystarkistus on ajettu** (v26.08.10.49). Korpus saapui, `VGLC_DIR`
+oli asetettuna, ja kaikki 27 generoitua kenttää kantavat merkinnän
+`origin: 'checked'`: **481 korpustiedostoa, 0 osumaa**. Maailmojen 1, 3 ja 5
+yksitoista vanhaa kenttää tulivat ulos tavu tavulta samoina — vain
+`origin`-rivi vaihtui. Portti ilman korpusta ei enää vaadi merkintää
+`not checked` vaan lukee mitä tallenne sanoo; perustelu on DESIGN.md kohdassa 3.
+
+**Käyrän loppupää loiveni, ja se on kirjattu koska se on mitattavissa.**
+Maailmojen keskiarvot ovat nyt `111,3 · 148,7 · 171,8 · 189,8 · 250,0 · 255,4 ·
+266,9 · 301,0`. Kolme neljästä täytetystä maailmasta **laski** (w5 256,2 →
+250,0, w6 264,2 → 255,4, w7 279,2 → 266,9), koska generoitu kenttä ei tällä
+sanastolla yllä käsintehdyn huipun tasolle — mitattu katto on tehtaassa 215,
+luussa 285 ja pilvessä 275. Tiukin askel on nyt **w5 → w6, +5,4** (oli +8,0).
+Käyrä nousee yhä joka maailmassa ja se on portti; jos loivuus halutaan takaisin
+jyrkäksi, se on generaattorin sanaston laajentamista eikä numeroiden säätämistä.
 
 **Mekaniikat:** kuplaloukku (pallo vangitsee, puhkaisu tappaa, karkaava vihu
 vihastuu) · supertähti (kuolemattomuus vihollisille ja maan piikeille, ei
 kuopalle/laavalle/kellolle) · kytkinruudut · murenevat lavat · murtava tehostus
 PAUKKUPAPU, joka rikkoo tiilen ja **vain** tiilen (v26.08.09.14) · **juoksuhiekka**
 aavikossa, kahdessa kentässä viidestä (v26.08.09.35) · pavunvarsi ja
-warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuuksia **59 kpl 21
-kentässä**, mitattuna `secretKeys`illä eikä muistista: 30 ladattua tiiltä, 7
-tähtilohkoa, 4 kytkintä ja 8 sisäänkäyntiä piilokaistalle (tässä luki pitkään
-39, mikä oli vanhentunut) · piikkiukko · pomon deterministinen piikkisykli.
+warp-putki (45 rivin kenttä maailmoissa 1–4) · salaisuuksia **167 kpl 49
+kentässä**, mitattuna `secretKeys`illä eikä muistista: 104 ladattua tiiltä, 31
+tähtilohkoa, 24 kytkintä ja 8 sisäänkäyntiä piilokaistalle (luku oli 59/21
+ennen kuutta kymmentä kenttää, ja ennen sitä tässä luki pitkään 39, mikä oli
+vanhentunut) · piikkiukko · pomon deterministinen piikkisykli.
 
 **Sisältö:** haarautuva kartta maailmassa 2 — `2-2` on risteys, `HIEKKATIE` ja
 `LAAVATIE` päätyvät molemmat linnakkeeseen, ja haaran vaikeus ja palkinto lukevat
@@ -54,7 +71,9 @@ päällä** (0 vastaan muun pelin 73), ja lattia on mitattu bonushuonetta vasten
 (v26.08.09.42): ei uutta teemaa vaan uusi *muoto* — kuusi kenttää, kuusi
 tappelua, ei yhtään lippua, `chunks/keep.js`, kentät 8-1…8-F ja kartta jolla on
 kuusi solmua. Neljä väitettä portissa: **kuusi askelta** (`tiersOf`, muut
-neljä), **kattoa 100 %** sarakkeista (lähin kilpailija tehdas 57 %), **0
+neljä), **kattoa 100 %** sarakkeista (lähin kilpailija tehdas, 56,6 % ennen
+maailman 4 täyttämistä ja **27,1 %** sen jälkeen — generoidun tehdaskentän
+kansi roikkuu rivillä 2, ks. v26.08.10.49), **0
 lippua / 6 ovea** (muualla 3/1) ja **jokainen pelin pomovariantti kerran**
 (muissa maailmoissa yksi). Lisäksi kaksi rakennesääntöä: **tiili ei kosketa
 kiveä** (0 kosketusta vastaan muun pelin 14, koska linnaketeeman tiili ja maa
@@ -355,8 +374,9 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on **8 maailmaa ja 44 kenttää**, eli maailmat ovat kasassa, muoto on
-päätetty ja kenttiä puuttuu **20**: maailmat 2 ja 4–8. Tavoite on 64.
+Nyt on **8 maailmaa ja 60 kenttää**, eli maailmat ovat kasassa, muoto on
+päätetty, kuusi maailmaa on siinä mitassa ja kenttiä puuttuu **neljä**:
+maailmat 2 ja 8. Tavoite on 64.
 
 **Muoto ei ole enää auki (v26.08.09.46), ja se on portissa eikä tässä.**
 Kahdeksan kenttää on `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on
@@ -380,9 +400,11 @@ koskee tekemättä olevia maailmoja:
 - **Maailma 8 on eri työ kuin muut.** Neljä kenttää lisää, ja jokaisen niistä on
   oltava pomohuone (ei lippua, katto joka sarakkeen yllä). Generaattorissa **ei
   ole areenapalikkaa**; se on nimetty puute eikä yllätys.
-- **Maailma 4 on ahtain paikka kahdesta suunnasta.** Käyrässä sen ylä- ja
-  alapuolella on +17,5 ja +66,8, ja sen katto-osuus (57 %) on maailman 8
-  väitteen lähin kilpailija — generoitu tehdaskenttä ei saa kattaa riviä 0.
+- ✔ **Maailma 4 oli ahtain paikka kahdesta suunnasta** — tehty (v26.08.10.49).
+  Käyrässä sen ylä- ja alapuolella oli +17,5 ja +66,8, ja molemmat varoitukset
+  osuivat. Katto-osuus: generoitu tehdaskenttä **kattoi rivin 0** (`ceilingPass`
+  maalasi rivistä 3 ylöspäin), maailma 4 nousi 56,6 %:sta **79,4 %:iin** ja
+  maailman 8 portti kaatui. Kansi roikkuu nyt riveillä 2–3 ja osuus on 27,1 %.
 
 Alla oleva teksti on kirjoitettu ennen tätä päätöstä; kohdat 1–3 pitävät yhä,
 kohta 4 on tehty. Se on eri tilanne kuin se jossa tämä kohta

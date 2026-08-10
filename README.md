@@ -193,18 +193,20 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 6 LUULAAKSO | hautausmaa keskiyöllä | **LUURANKO**, joka hajoaa jokaisesta osumasta ja kokoaa itsensä |
 | 7 KAASUKEHÄ | pilvikerroksen päällä | **SÄÄHERRA**, joka nousee ilmaan jokaisesta osumasta |
 
-Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: neljä
-maailmaa on kasvanut kahdeksan kentän mittaan ja loput kasvavat. Kentän läpäisy
-avaa siitä lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
+Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: kuusi
+maailmaa kahdeksasta on kasvanut kahdeksan kentän mittaan, ja kaksi viimeistä
+— maailmat 2 ja 8 — kasvavat omilla ehdoillaan. Kentän läpäisy avaa siitä
+lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
 
 Kahdeksan kentän maailman muoto on `W-1`…`W-7` ja `W-F`, ja sen
 vaikeuskäyrässä on **kaksi hengähdyskenttää** yhden sijaan — perustelu on
 [CHANGELOG.md](CHANGELOG.md):ssä ja sääntö on `tools/verify.mjs`:ssä.
 
-Kentät **1-4…1-7, 3-4…3-7 ja 5-1…5-3 ovat generoituja**: rytmi tulee mitatuista
+Kentät **1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7 ja 7-4…7-7 ovat
+generoituja** — 27 kenttää kuudestakymmenestä: rytmi tulee mitatuista
 tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siitä
-onko sen alkuperäisyys tarkistettu korpusta vasten. Linnakkeet ja maailman
-opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.
+onko sen alkuperäisyys tarkistettu korpusta vasten (kaikki 27 on, osumia 0).
+Linnakkeet ja maailman opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.
 
 ## Työkalut
 

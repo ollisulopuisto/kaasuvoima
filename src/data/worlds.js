@@ -234,66 +234,125 @@ const WORLD_DEFS = [
       { a: 'w3-7', b: 'w3-f', path: [[17, 2]] },
     ],
   },
+  /*
+   * PIERUTEHDAS, maailma 4 — ja kahdeksan solmua kahteenkymmeneen sarakkeeseen
+   * kolmatta kertaa.
+   *
+   * **Kartta ei leventynyt, vaikka se nyt saisi.** Vieritys tuli
+   * (v26.08.09.43) ja `mapWidthPx` lukee leveyden datasta, joten tämä ruudukko
+   * voisi olla 26 saraketta ja näkymä seuraisi nappulaa. Se jätettiin
+   * käyttämättä ja syy on mitattu kummastakin suunnasta: kahdeksan solmua
+   * **mahtuu** kahteenkymmeneen — maailmat 1 ja 3 tekivät sen, ja tiukin
+   * solmupari koko pelissä on yhä `w2-3`/`w2-m` 12 pikselillä eli sama väljyys
+   * joka on ollut tuotannossa alusta asti — ja se mitä leventäminen maksaisi on
+   * yksi porteista: *"kapea kartta ei vieri pikseliäkään"* nojaa siihen että
+   * jokainen laivattu kartta on tasan näkymän levyinen, ja juuri se väite
+   * todistaa että vieritys tuli sisään muuttamatta yhtään olemassa olevaa
+   * karttaa. Leveä polku ei jää senkään takia ajamatta: `verify.mjs`:n oma
+   * 30 sarakkeen koemaailma kävelee sen läpi joka ajolla.
+   *
+   * Reitti kutoo rivien 6 ja 4 väliä ja nousee lopuksi riville 2. Se on tahallaan
+   * toisin päin kuin maailmoissa 1 ja 3: tehdas on sisätila, ja sen pomo asuu
+   * ylhäällä eikä laaksossa. Hernetalo roikkuu ensimmäisen kentän yläpuolella,
+   * kolmen ruudun päässä, kuten maailmoissa 1 ja 2.
+   *
+   * Kalusto istutettiin säännön 8 mukaan kuten maailmoissa 6–8: polun raivattu
+   * vyöhyke otettiin ensin pois ja koneisto istutettiin siihen mikä jäi.
+   * **20 pyydettyä, 20 istutettua, nolla hylättyä**, vapaita ruutuja 115.
+   */
   {
     id: 'w4',
     name: 'PIERUTEHDAS',
     theme: 'factory',
     terrain: [
-      'FFFFFFFFFFFFFFFFFFFF',
-      'FFEFFFFFFFFEEFFFFFFF',
-      'FFFFFFEFEFFFFFFFFEFF',
-      'FFFFFFFFFFFFFFFFFFFF',
-      'FFFFFFFFFFFFFFFFFFEF',
-      'FFFFFFFFFFFFFFFFFFFF',
-      'FEFFFEFFFFFFFFEFFFFF',
-      'FFEFFFFEFFFFFFFEFFFF',
       'FFFEFFFFFFFFFFEFFFFF',
+      'FEFEFFFFEFFFFEEFFFFF',
+      'FFFFFFFFFFFEFFFEFFFF',
+      'FEFFFFFFFFFFFFFFFFFF',
+      'FFFFFFFFFFFFFFFFFFFF',
+      'FFFFFFFFFFFFFFFFFFFE',
+      'FFFFFFFFFFFFFFFFFFFF',
+      'FFFFFFFFFFFFFFFFFFFF',
+      'FEFEFFFEFEEFFFFFFEFE',
     ],
     nodes: [
-      { id: 'w4-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
-      { id: 'w4-1', tx: 4, ty: 4, type: 'level', level: '4-1', name: 'HIHNAKULJETIN' },
-      { id: 'w4-h', tx: 4, ty: 1, type: 'house', name: 'HERNETALO' },
-      { id: 'w4-2', tx: 8, ty: 6, type: 'level', level: '4-2', name: 'KAASUPUTKISTO' },
-      { id: 'w4-3', tx: 12, ty: 3, type: 'level', level: '4-3', name: 'PAINEKATTILA' },
-      { id: 'w4-f', tx: 16, ty: 5, type: 'fortress', level: '4-F', name: 'PIERUPRINSSI' },
+      { id: 'w4-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
+      { id: 'w4-1', tx: 3, ty: 6, type: 'level', level: '4-1', name: 'HIHNAKULJETIN' },
+      { id: 'w4-h', tx: 3, ty: 3, type: 'house', name: 'HERNETALO' },
+      { id: 'w4-2', tx: 5, ty: 4, type: 'level', level: '4-2', name: 'KAASUPUTKISTO' },
+      { id: 'w4-3', tx: 7, ty: 6, type: 'level', level: '4-3', name: 'PAINEKATTILA' },
+      { id: 'w4-4', tx: 9, ty: 4, type: 'level', level: '4-4', name: 'VENTTIILISALI' },
+      { id: 'w4-5', tx: 11, ty: 6, type: 'level', level: '4-5', name: 'PAKKAAMO' },
+      { id: 'w4-6', tx: 13, ty: 4, type: 'level', level: '4-6', name: 'TISLAAMO' },
+      { id: 'w4-7', tx: 15, ty: 6, type: 'level', level: '4-7', name: 'YLIPAINE' },
+      { id: 'w4-f', tx: 17, ty: 2, type: 'fortress', level: '4-F', name: 'PIERUPRINSSI' },
     ],
     links: [
       { a: 'w4-s', b: 'w4-1' },
       { a: 'w4-1', b: 'w4-h' },
-      { a: 'w4-1', b: 'w4-2', path: [[8, 4]] },
-      { a: 'w4-2', b: 'w4-3', path: [[12, 6]] },
-      { a: 'w4-3', b: 'w4-f', path: [[16, 3]] },
+      { a: 'w4-1', b: 'w4-2', path: [[5, 6]] },
+      { a: 'w4-2', b: 'w4-3', path: [[7, 4]] },
+      { a: 'w4-3', b: 'w4-4', path: [[9, 6]] },
+      { a: 'w4-4', b: 'w4-5', path: [[11, 4]] },
+      { a: 'w4-5', b: 'w4-6', path: [[13, 6]] },
+      { a: 'w4-6', b: 'w4-7', path: [[15, 4]] },
+      { a: 'w4-7', b: 'w4-f', path: [[17, 6]] },
     ],
   },
+  /*
+   * JÄLKIPYYKKI, maailma 5 — ja ainoa kartta jolla hernetalo on tien alapuolella.
+   *
+   * Sama kahdenkymmenen sarakkeen ruudukko kuin muillakin (perustelu on maailman
+   * 4 kommentissa), mutta tie kulkee rivien 3 ja 5 väliä eli ylempänä, ja talo
+   * roikkuu **alapuolella** rannassa. Se on halvin tapa sanoa että tämä maailma
+   * on eri paikka kuin maailma 1, jonka paletti sillä on: sama ruoho, eri maasto.
+   *
+   * Nimet ovat pyykkiä ja se on maailman nimen seuraus eikä vitsi: jälkipyykki
+   * on se mitä tehdään kun juhlat ovat ohi, ja neljä uutta kenttää ovat pesun
+   * vaiheet — yöpyykki, linkoaminen, kylmä huuhtelu, kuivausrumpu. Teemat
+   * kulkevat samaa listaa: yö, tehdas, jää, tehdas.
+   *
+   * **20 pyydettyä, 20 istutettua**, ja lisäksi kahdeksan tasaista laattaa
+   * (tummaa ruohoa); vapaita ruutuja 97, koska alin rivi on vettä eikä siihen
+   * istuteta.
+   */
   {
     id: 'w5',
     name: 'JÄLKIPYYKKI',
     theme: 'grass',
     terrain: [
-      'MMM.".TT..T...T..MMM',
-      'MM...T..T..TT..T..MM',
-      '..,....T......T...,.',
-      '.T...."........T."..',
-      '..............T...T.',
-      '.,........,.........',
-      '..........".........',
-      '~~..T.....TT.....~~~',
-      '~~~~~~~..~~~~~~~~~~~',
+      '.,...T.T....""T.M...',
+      ',.......M......P..,P',
+      '..T.................',
+      '....................',
+      '....................',
+      '....................',
+      '..,....,............',
+      'T.M,....T..MT.M...M"',
+      '~~~~~~~~~~~~~~~~~~~~',
     ],
     nodes: [
       { id: 'w5-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
-      { id: 'w5-1', tx: 4, ty: 5, type: 'level', level: '5-1', name: 'JÄLKIRUOKA' },
-      { id: 'w5-h', tx: 4, ty: 2, type: 'house', name: 'HERNETALO' },
-      { id: 'w5-2', tx: 8, ty: 3, type: 'level', level: '5-2', name: 'KUIVA KAUSI' },
-      { id: 'w5-3', tx: 12, ty: 6, type: 'level', level: '5-3', name: 'VIIMEINEN VETO' },
-      { id: 'w5-f', tx: 16, ty: 4, type: 'fortress', level: '5-F', name: 'UUSINTAOTTELU' },
+      { id: 'w5-1', tx: 3, ty: 3, type: 'level', level: '5-1', name: 'JÄLKIRUOKA' },
+      { id: 'w5-2', tx: 5, ty: 5, type: 'level', level: '5-2', name: 'KUIVA KAUSI' },
+      { id: 'w5-h', tx: 5, ty: 7, type: 'house', name: 'HERNETALO' },
+      { id: 'w5-3', tx: 7, ty: 3, type: 'level', level: '5-3', name: 'VIIMEINEN VETO' },
+      { id: 'w5-4', tx: 9, ty: 5, type: 'level', level: '5-4', name: 'YÖPYYKKI' },
+      { id: 'w5-5', tx: 11, ty: 3, type: 'level', level: '5-5', name: 'LINKOAMINEN' },
+      { id: 'w5-6', tx: 13, ty: 5, type: 'level', level: '5-6', name: 'KYLMÄ HUUHTELU' },
+      { id: 'w5-7', tx: 15, ty: 3, type: 'level', level: '5-7', name: 'KUIVAUSRUMPU' },
+      { id: 'w5-f', tx: 17, ty: 6, type: 'fortress', level: '5-F', name: 'UUSINTAOTTELU' },
     ],
     links: [
-      { a: 'w5-s', b: 'w5-1' },
-      { a: 'w5-1', b: 'w5-h' },
-      { a: 'w5-1', b: 'w5-2', path: [[8, 5]] },
-      { a: 'w5-2', b: 'w5-3', path: [[12, 3]] },
-      { a: 'w5-3', b: 'w5-f', path: [[16, 6]] },
+      { a: 'w5-s', b: 'w5-1', path: [[3, 5]] },
+      { a: 'w5-1', b: 'w5-2', path: [[5, 3]] },
+      { a: 'w5-2', b: 'w5-h' },
+      { a: 'w5-2', b: 'w5-3', path: [[7, 5]] },
+      { a: 'w5-3', b: 'w5-4', path: [[9, 3]] },
+      { a: 'w5-4', b: 'w5-5', path: [[11, 5]] },
+      { a: 'w5-5', b: 'w5-6', path: [[13, 3]] },
+      { a: 'w5-6', b: 'w5-7', path: [[15, 5]] },
+      { a: 'w5-7', b: 'w5-f', path: [[17, 3]] },
     ],
   },
   /*
@@ -315,30 +374,38 @@ const WORLD_DEFS = [
     name: 'LUULAAKSO',
     theme: 'bone',
     terrain: [
-      'KbbbbbbbbbbbbKbbbbKb',
-      'bbRbbbKbbbKbbbbbbbbK',
-      'RbbbbbbbbRbbbbbbbbbb',
+      'bbbbbbbbKbbbbbbbbbbb',
+      'bbKbbbbbbKRbbKRbKbbR',
+      'bbKbbbbbbbbbbbbbbKbb',
       'bbbbbbbbbbbbbbbbbbbb',
-      'bbbbbbbbbbbbbbbbbbbR',
       'bbbbbbbbbbbbbbbbbbbb',
-      'bbbKbbRbbbbbbbbbbbKb',
-      'bKRbbbbbbbbbbbKbbRbb',
-      'bbbbbbKbbKbRbbbRbbbb',
+      'KbbbbbbbbbbbbbbbbbbR',
+      'bbbbbbbbbbbbbbbbbbbb',
+      'bbbbbbbbbbbbRbbbbbbb',
+      'bbbbbRbbbbRRbbbbbbbb',
     ],
     nodes: [
-      { id: 'w6-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
-      { id: 'w6-1', tx: 4, ty: 4, type: 'level', level: '6-1', name: 'HAUTAUSMAA' },
-      { id: 'w6-h', tx: 4, ty: 1, type: 'house', name: 'HERNETALO' },
-      { id: 'w6-2', tx: 8, ty: 6, type: 'level', level: '6-2', name: 'KUUN ALLA' },
-      { id: 'w6-3', tx: 12, ty: 3, type: 'level', level: '6-3', name: 'LUUTANSSI' },
-      { id: 'w6-f', tx: 16, ty: 5, type: 'fortress', level: '6-F', name: 'LUURANKO' },
+      { id: 'w6-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
+      { id: 'w6-1', tx: 3, ty: 4, type: 'level', level: '6-1', name: 'HAUTAUSMAA' },
+      { id: 'w6-2', tx: 5, ty: 6, type: 'level', level: '6-2', name: 'KUUN ALLA' },
+      { id: 'w6-3', tx: 7, ty: 4, type: 'level', level: '6-3', name: 'LUUTANSSI' },
+      { id: 'w6-h', tx: 7, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w6-4', tx: 9, ty: 6, type: 'level', level: '6-4', name: 'KYLKILUUT' },
+      { id: 'w6-5', tx: 11, ty: 4, type: 'level', level: '6-5', name: 'HAUTAHOLVI' },
+      { id: 'w6-6', tx: 13, ty: 6, type: 'level', level: '6-6', name: 'KALLOKENTTÄ' },
+      { id: 'w6-7', tx: 15, ty: 4, type: 'level', level: '6-7', name: 'VIIMEINEN LEPO' },
+      { id: 'w6-f', tx: 17, ty: 7, type: 'fortress', level: '6-F', name: 'LUURANKO' },
     ],
     links: [
-      { a: 'w6-s', b: 'w6-1' },
-      { a: 'w6-1', b: 'w6-h' },
-      { a: 'w6-1', b: 'w6-2', path: [[8, 4]] },
-      { a: 'w6-2', b: 'w6-3', path: [[12, 6]] },
-      { a: 'w6-3', b: 'w6-f', path: [[16, 3]] },
+      { a: 'w6-s', b: 'w6-1', path: [[3, 6]] },
+      { a: 'w6-1', b: 'w6-2', path: [[5, 4]] },
+      { a: 'w6-2', b: 'w6-3', path: [[7, 6]] },
+      { a: 'w6-3', b: 'w6-h' },
+      { a: 'w6-3', b: 'w6-4', path: [[9, 4]] },
+      { a: 'w6-4', b: 'w6-5', path: [[11, 6]] },
+      { a: 'w6-5', b: 'w6-6', path: [[13, 4]] },
+      { a: 'w6-6', b: 'w6-7', path: [[15, 6]] },
+      { a: 'w6-7', b: 'w6-f', path: [[17, 4]] },
     ],
   },
   /*
@@ -360,30 +427,38 @@ const WORLD_DEFS = [
     name: 'KAASUKEHÄ',
     theme: 'cloud',
     terrain: [
-      'ccUccccUcccccUccccUc',
-      'ccccUcccicUcccccccUc',
-      'UccccccccccccccccccU',
-      'cccccccccciccccccccc',
-      'UcccccccccccccicccUc',
-      'ccUccccccccccccccccU',
-      'ccccccUccccccccUcicc',
-      'cUccccccccccUccccccc',
-      'cccUcciccUccccccUccc',
+      'ccccccccccccccicUcUU',
+      'icUcccccccccccUUcccc',
+      'cccccciccccccccccccc',
+      'cccccccccccccccccccc',
+      'cccccccccccccccccccU',
+      'cccccccccccccccccccc',
+      'ccccccccccUccccciccc',
+      'icicccUUcUcccccccUci',
+      'cccUccccccUccccccccc',
     ],
     nodes: [
       { id: 'w7-s', tx: 1, ty: 3, type: 'start', name: 'ALKU' },
-      { id: 'w7-1', tx: 4, ty: 3, type: 'level', level: '7-1', name: 'NOUSUVIRTAUS' },
-      { id: 'w7-h', tx: 4, ty: 6, type: 'house', name: 'HERNETALO' },
-      { id: 'w7-2', tx: 8, ty: 5, type: 'level', level: '7-2', name: 'MATALAPAINE' },
-      { id: 'w7-3', tx: 12, ty: 2, type: 'level', level: '7-3', name: 'ALASIN' },
-      { id: 'w7-f', tx: 16, ty: 4, type: 'fortress', level: '7-F', name: 'SÄÄHERRA' },
+      { id: 'w7-1', tx: 3, ty: 5, type: 'level', level: '7-1', name: 'NOUSUVIRTAUS' },
+      { id: 'w7-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w7-2', tx: 5, ty: 3, type: 'level', level: '7-2', name: 'MATALAPAINE' },
+      { id: 'w7-3', tx: 7, ty: 5, type: 'level', level: '7-3', name: 'ALASIN' },
+      { id: 'w7-4', tx: 9, ty: 3, type: 'level', level: '7-4', name: 'SUMUVERHO' },
+      { id: 'w7-5', tx: 11, ty: 5, type: 'level', level: '7-5', name: 'KORKEAPAINE' },
+      { id: 'w7-6', tx: 13, ty: 3, type: 'level', level: '7-6', name: 'UKKOSPILVI' },
+      { id: 'w7-7', tx: 15, ty: 5, type: 'level', level: '7-7', name: 'MYRSKYN SILMÄ' },
+      { id: 'w7-f', tx: 17, ty: 2, type: 'fortress', level: '7-F', name: 'SÄÄHERRA' },
     ],
     links: [
-      { a: 'w7-s', b: 'w7-1' },
+      { a: 'w7-s', b: 'w7-1', path: [[1, 5]] },
       { a: 'w7-1', b: 'w7-h' },
-      { a: 'w7-1', b: 'w7-2', path: [[8, 3]] },
-      { a: 'w7-2', b: 'w7-3', path: [[12, 5]] },
-      { a: 'w7-3', b: 'w7-f', path: [[16, 2]] },
+      { a: 'w7-1', b: 'w7-2', path: [[5, 5]] },
+      { a: 'w7-2', b: 'w7-3', path: [[7, 3]] },
+      { a: 'w7-3', b: 'w7-4', path: [[9, 5]] },
+      { a: 'w7-4', b: 'w7-5', path: [[11, 3]] },
+      { a: 'w7-5', b: 'w7-6', path: [[13, 5]] },
+      { a: 'w7-6', b: 'w7-7', path: [[15, 3]] },
+      { a: 'w7-7', b: 'w7-f', path: [[17, 5]] },
     ],
   },
   /*

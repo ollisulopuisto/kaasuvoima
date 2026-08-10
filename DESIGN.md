@@ -249,7 +249,23 @@ Käytännön suojatoimet:
      `VGLC_DIR` asetettuna: korpus luetaan ja jokainen ikkuna verrataan, ja ajo
      kaatuu sekä osumasta että kentästä joka on merkitty `not checked`
      ympäristössä jossa tarkistus olisi ollut mahdollinen. `VGLC_DIR`
-     asettamatta: ajo kaatuu jos jokin kenttä **väittää** olevansa tarkistettu.
+     asettamatta: ajo lukee merkinnät ja tulostaa ne, ja kaatuu vain kentästä
+     jolla ei ole merkintää lainkaan tai jonka merkintä ei ole kumpikaan
+     kahdesta sanasta.
+
+     **Jälkimmäinen puolisko oli 10.8.2026 asti toisin päin, ja se korjattiin
+     sinä päivänä jona tarkistus ensimmäisen kerran ajettiin oikeasti.** Ehto
+     oli *"ajo kaatuu jos jokin kenttä väittää olevansa tarkistettu"*, ja sen
+     perustelu oli että tarkistusta ei ole tehty. Kun korpus saapui ja kaikki
+     27 generoitua kenttää generoitiin `VGLC_DIR` asetettuna, tuo perustelu
+     muuttui epätodeksi: `origin` on **tallenne siitä mitä generointiajossa
+     tapahtui**, ei väite siitä ajosta joka lukee sen. Vanha ehto teki repostä
+     punaisen jokaiselle jolla ei ole korpusta — 27 kaatavaa riviä, eikä
+     yksikään niistä ollut valhe — eli se rankaisi työn tekemisestä ja kumosi
+     tämän saman kohdan oman lauseen "repo saa olla vihreä ilman korpusta".
+     Portti mittaa nyt sen mitä se voi mitata ilman korpusta (merkintä on
+     olemassa ja se on tunnettu sana) eikä sitä mitä se ei voi (onko merkintä
+     ansaittu).
 
    Kaatavaa porttia "tarkistamattomalle sisällölle" ei ole, ja se on harkittu:
    sellainen olisi punainen jokaisessa ympäristössä jossa korpusta ei ole, ja
@@ -286,9 +302,9 @@ kertoo tarkalleen mitä pitäisi säätää.
 
 Nämä eivät ole tyylivalintoja vaan tarkistettavia sääntöjä: `tools/gen-levels.mjs`
 hylkää kentän joka rikkoo niitä. **Tarkistus koskee vain generoituja kenttiä**
-(1-4…1-7, 3-4…3-7, 5-1…5-3); käsintehdyissä säännöt ovat suunnitteluohje, ja jos
-ne joskus halutaan taata koko pelille, sama validaattori pitää ajaa
-`tools/verify.mjs`:stä.
+(1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7, 7-4…7-7 — 27 kenttää 60:stä);
+käsintehdyissä säännöt ovat suunnitteluohje, ja jos ne joskus halutaan taata
+koko pelille, sama validaattori pitää ajaa `tools/verify.mjs`:stä.
 
 Sen lisäksi jokainen generoitu kenttä on **oman teemansa mittainen**: luussa
 taivas on auki eikä mikään roiku, pilvessä mikään ei seiso maassa eikä lauta
