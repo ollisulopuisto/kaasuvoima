@@ -7,6 +7,109 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.55 — AIKA-AJO: kello jota vastaan ajetaan on oma ennätys
+
+Omistaja valitsi tämän pelitilaksi kahdeksan ehdotuksen joukosta. Peruste oli
+että **peli pitää jo nopeutta pointtina muttei sano sitä ääneen**: maali maksaa
+`jäljellä oleva aika × 50`, eli pisteytyksellä on tästä jo mielipide.
+
+Tila avataan alkuvalikosta. Kentän oma ennätysaika, elävä ero kahdeksassa
+välipisteessä, tilalatausten kieltäminen, kello joka käy taukovalikossa, ja
+`5` nollaa ajat vahvistuksen kanssa.
+
+### Pitchin oma väite ei kestänyt mittausta
+
+Sanoin ehdotusta esitellessäni että *"par-aika on jo laskettu jokaiselle 60
+kentälle"*. **Se ei pidä paikkaansa.** `defaultTime` antaa 1,3 yksikköä
+(31,2 framea) saraketta kohden, kun täysillä juostu kierros maksaa 6,4 framea
+saraketta kohden. Kenttäkello on siis **4,8–4,9-kertainen** täysillä juostuun
+kierrokseen nähden kaikissa 60 kentässä (pienin 4,8× kentässä 4-6, portissa
+pysyvänä mittauksena).
+
+Se on **määräaika, ei tavoiteaika**: jokainen pelaaja istuisi minuutin sen
+edellä joka kentässä, eikä sellaista vastaan aja kukaan. Vertailukohta on siis
+pelaajan **oma** ennätys, ja "ei ennätystä" on suunniteltu tila eikä
+reunatapaus — himmeä `--.-` täsmälleen niissä pikseleissä joissa oikea lukema
+tulee olemaan, ja maalin jälkeen `AIKA KIRJATTU 1:20.4`, jottei ensimmäinen
+läpäisy ole hiljainen.
+
+### HUD, mitattuna eikä silmämääräisesti
+
+Ero mahtuu nauhan ainoaan aukkoon: elämät loppuvat sarakkeeseen 153, `MAAILMA`
+alkaa 196:sta, ja levein ero (nuoli 5 px + väli 2 + `+9999` 29 px) on 156–192.
+
+```
+ok  aika-ajon lukema ei peitä yhtään olemassa olevaa HUD-pikseliä
+    [uutta mustetta 471 px, peitettyä 0 px, laatikko x 155-185 y 5-13,
+     lähin vanha muste 3 px]
+```
+
+**Kulunutta aikaa ei piirretä lainkaan**, koska se on `AIKA` väärinpäin:
+kaava täsmää **900/900 framella**. Kohta 8 kieltää kaksi samaa asiaa sanovaa
+merkkiä, ja tässä toinen niistä olisi ollut sama luku toisin päin. Itse ero ei
+ole kellon kopio: sama `AIKA 440` antaa `+4.7` tai `+3.7` riippuen vain
+tallennetusta ennätyksestä.
+
+Rakennuksen aikana löytyi toinen punainen, mittaamalla eikä katsomalla:
+maalirivi peitti läpäisybannerin. **`drawBanner` käyttää mittakaavaa 3
+ensimmäiset 8 framea**, joten näennäisesti tyhjä väli on 7 px matalampi kuin
+miltä näyttää. `uutta mustetta 1434 px, peitettyä 2304 px` → `peitettyä 0 px`.
+
+### Tauko: ajokello käy, kenttäkello seisoo
+
+Mitattu: 120 framea taukoa → ajokello 0→120, `AIKA` 460→460. Perustelu oli jo
+kirjoitettuna `updateTimer`issa: kello joka voi tappaa pelaajan paikassa jossa
+hän ei voi tehdä mitään. Valikko on täsmälleen se paikka. **Tauko maksaa eron,
+ei koskaan henkeä**, ja valikko sanoo sen itse (`TAUKO - KELLO KÄY`).
+
+**Alt-tab on kirjattu aukko eikä korjattu.** Taustalla oleva välilehti ei aja
+frameja, eikä seinäkelloon siirtyminen sulje sitä halvalla: `Game.frame`
+kaventaa yli 250 ms:n askeleen yhdeksi, ja ilman sitäkin silmukka ajaa
+korkeintaan viisi askelta framessa. Seinäkelloon siirtyminen olisi
+aika-askeleen uudelleenrakennus, joka tekisi hitaasta koneesta häviäjän samalla
+pelaamisella.
+
+### Tavallinen kierros ei liikkunut — todistettuna
+
+- Sama kenttä, sama syöte, sama siemen, tila päällä vs pois: **600 framea, 0
+  eroa** sijainnissa, nopeudessa, kellossa, pisteissä, kolikoissa, kamerassa.
+- Käännösten välillä (`3d84e77` vs tämä): 5 kenttää × 2 voimatasoa × 600 framea
+  + 30 koko ruudun tiivistettä + molemmat vanhat valikkopituudet →
+  md5 **identtinen**.
+- `difficulty.mjs` ja `playable.mjs` tavulleen samat, `src/data/difficulty.js`
+  ei liikkunut riviäkään.
+
+### Tallennusyhteensopivuus molempiin suuntiin
+
+`bestTimes` menee sisään ilman versionostoa, `secrets`/`continues`-ennakkotapauksella.
+Vanha tallennus → uusi käännös: 12/12 vanhaa kenttää ehjänä. Uusi → vanha
+lataaja: sama. **Rehellinen hinta kirjattuna `save.js`:ään:** vanha käännös
+jättää avaimen lukematta ja pudottaa sen kirjoittaessaan, eli vanhalla
+käännöksellä pelaaminen pyyhkii ajat. Se on ainoa kenttä jonka menetys ei maksa
+etenemistä.
+
+### Tähtimerkintää ei kahdennettu
+
+`usedSaveState` asetetaan yhä vain `quickLoad`in onnistumishaarassa, johon
+aika-ajo ei koskaan pääse — merkintä ei siis voi syntyä eikä sitä tarvinnut
+vaimentaa. Myös pikatallennus kieltäydytään: tilannekuva jonka peli lupaa ottaa
+mutta kieltäytyy palauttamasta on lupaus jota se ei pidä.
+
+### Löydetty, ei korjattu
+
+- Alkuvalikossa ei ollut tilaa neljännelle riville: 13 px riviltä olisi vienyt
+  vihjerivin y-koordinaattiin 244 eli ruudun ulkopuolelle. Korjattu
+  `panelY = Math.min(184, 240 − 11 − panelH)`, joka on tavulleen sama kahdella
+  ja kolmella rivillä. Neljällä rivillä paneeli tummentaa kävelevän hahmon
+  kaksi alinta riviä — kosmeettista, hyväksytty, katsottava jos viides rivi
+  joskus tulee.
+- Nollausnäppäin `5` on toimeton tilan ulkopuolella ja dokumentoitu vain tilan
+  sisällä.
+- Pystykentät ottavat y-akselin `raceProgress`issa, kirjoitettuna ja
+  perusteltuna muttei ajettuna: yksikään toimitettu kenttä ei vielä ole pysty.
+
+---
+
 ## v26.08.10.54 — luulinnake ei ole pilvilinnake: kahdeksan linnakesanastoa
 
 `tools/variety.mjs` mittasi eilen illalla asian jota kukaan ei ollut etsimässä:
