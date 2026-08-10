@@ -8,6 +8,7 @@ import { Music, Sfx } from '../core/audio.js';
 import { clamp, hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
 import { secretTally } from '../core/secrets.js';
+import { MODE_NAME, SPLIT_COLORS } from '../core/timeattack.js';
 
 const MAP_Y = 14;
 const MAP_H = 144;
@@ -1180,6 +1181,14 @@ export class WorldMapScene {
       color: '#8fe04a',
     });
     drawText(ctx, padNum(this.game.state.score, 7), 314, 3, { color: '#ffffff', align: 'right' });
+    /* Tila näkyy siinä ruudussa jossa kenttä valitaan, koska sieltä siihen
+     * mennään. Paikka on mitattu eikä arvattu: pisin maailmannimi on
+     * `MAAILMA 8  VIIMEINEN LINNAKE` eli 28 merkkiä = 167 px kuudesta
+     * alkaen, ja pisteet vievät oikean reunan 273:sta. Kahdeksan merkkiä
+     * oikeaan reunustettuna 268:aan mahtuu väliin 48 pikselin marginaalilla. */
+    if (this.game.timeAttack) {
+      drawText(ctx, MODE_NAME, 268, 3, { color: SPLIT_COLORS.ahead, align: 'right' });
+    }
   }
 
   drawPanel(ctx) {

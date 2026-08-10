@@ -1013,6 +1013,17 @@ const SFX = {
   },
   cursor: () => tone({ from: 620, dur: 0.05, gain: 0.14, hold: 0.4 }),
   select: () => tone({ from: 700, to: 1050, dur: 0.13, gain: 0.18, detune: 10 }),
+  /*
+   * AIKA-AJON välipiste. Kuva ilman ääntä jää huomaamatta juuri silloin kun
+   * katse on kuilussa — ja jako vaihtuu nimenomaan silloin (DESIGN.md kohta 8).
+   *
+   * Ero on **suunnassa eikä sävyssä**: edellä nousee, jäljessä laskee, samalla
+   * tavalla kuin nuoli osoittaa ylös tai alas. Molemmat ovat lyhyempiä ja
+   * hiljaisempia kuin `coin` ja `select`, koska tämä on kertojan kuiskaus eikä
+   * tapahtuma maailmassa: HUD ei ole ikkuna huoneeseen.
+   */
+  edella: () => tone({ from: 760, to: 1140, dur: 0.07, gain: 0.12, hold: 0.3 }),
+  jaljessa: () => tone({ type: 'triangle', from: 600, to: 360, dur: 0.1, gain: 0.13, hold: 0.3 }),
   pipe: () => tone({ type: 'sawtooth', from: 400, to: 80, dur: 0.36, gain: 0.18, vibrato: 8 }),
   /**
    * Luurangon nauru, ja sen kaksi puoliskoa.

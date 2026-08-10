@@ -14,6 +14,10 @@ import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY } from '../level/physics.js';
+import {
+  RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
+  bestFor, setBest, formatTime, formatDelta,
+} from '../core/timeattack.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 
 export const VIEW_W = 320;
@@ -23,6 +27,30 @@ export const HUD_H = 32;
 const GOAL_HEIGHT = 6 * TILE;
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
+
+/*
+ * AIKA-AJON JAKO HUD-NAUHASSA. Nauhassa on jo viisi lukemaa — varaesine,
+ * P-mittari ja voimapallot vasemmalla, elämät ja kolikot niiden oikealla,
+ * maailma ja aika keskellä oikealla, pisteet reunassa — eikä yhtään vapaata
+ * riviä. Jako on kuudes, ja sille on tasan yksi aukko:
+ *
+ *   rivi y+6:  elämärivi `SFB *N` alkaa 100:sta ja on 6-9 merkkiä leveä,
+ *              eli loppuu viimeistään 153:een; `MAAILMA X-Y` alkaa 196:sta.
+ *   levein jako: nuoli 5 px + väli 2 px + `+9999` 29 px = 36 px, eli
+ *              156...192, ja käänteisenä vilkkuessaan 155...193.
+ *
+ * Kolme pikseliä jää molemmin puolin. `tools/verify.mjs` piirtää nauhan
+ * pahimmalla mahdollisella tilalla (9999 elämää, 99 kolikkoa, seitsennumeroiset
+ * pisteet, tähti päällä) tila päällä ja pois, ja vaatii nollaa peitettyä
+ * pikseliä — mitattu, ei silmämääräinen.
+ *
+ * Kulunutta aikaa **ei** piirretä, vaikka se on juuri se luku jota ajetaan.
+ * Se on jo nauhassa: `AIKA` on sama luku toisin päin, `def.time -
+ * floor((ajokello - putkiframet) / 24)`, ja portti mittaa kaavan framelleen.
+ * Kaksi lukemaa samasta luvusta on juuri se virhe jota DESIGN.md kohta 8
+ * varoo.
+ */
+const SPLIT_X = 156;
 
 /*
  * MAAHANISKUN OSUMA. The dive itself lives in player.js; these are the numbers
@@ -757,6 +785,110 @@ export class LevelScene {
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
     this.centerCamera();
+
+    /*
+     * AIKA-AJO on tila johon mennään erikseen, eikä tavallinen kierros saa
+     * maksaa siitä mitään. Siksi `race` on `null` aina kun tilaa ei ole
+     * valittu: jokainen alla oleva kysely on silloin yksi vertailu eikä
+     * mitään lasketa, mitata tai piirretä. Portti ajaa saman kentän saman
+     * syötteen samalla arvontasiemenellä tila päällä ja pois, ja vaatii
+     * framejonot identtisiksi.
+     */
+    this.race = null;
+    this.raceResult = null;
+    if (game.timeAttack) this.startRace();
+  }
+
+  /* ------------------------------ aika-ajo ----------------------------- */
+
+  /**
+   * Radan alku ja loppu. Vaakakentässä akseli on x ja maali lipputanko;
+   * pomokentässä lippua ei ole, joten loppu on kentän oikea reuna, koska ovi
+   * aukeaa siellä. Pystykentässä akseli on y ja etumerkki hoitaa suunnan:
+   * ylöspäin kiipeävässä `raceTo < raceFrom`, ja osamäärä kääntyy itsestään.
+   */
+  startRace() {
+    const p = this.player;
+    this.raceFrom = this.vertical ? p.cy : p.cx;
+    this.raceTo = this.vertical
+      ? (this.goal ? this.goal.y : 0)
+      : (this.goal ? this.goal.x : (this.w - 2) * TILE);
+    if (this.raceTo === this.raceFrom) this.raceTo = this.raceFrom + TILE;
+    this.race = {
+      /** Framea kentän alusta. Kasvaa myös taukovalikossa — ks. `tickPaused`. */
+      frames: 0,
+      /** Millä framella kukin välipiste ohitettiin, 0 = ei vielä. */
+      marks: new Array(RACE_SPLITS).fill(0),
+      /** Seuraava ohittamaton välipiste. */
+      next: 0,
+      /** Ero ennätykseen viimeisellä välipisteellä, null = ei vertailukohtaa. */
+      delta: null,
+      /** Framea käänteisenä sen jälkeen kun lukema vaihtui. */
+      flash: 0,
+      best: bestFor(this.game.state, this.id),
+    };
+  }
+
+  /** Kuljettu osuus radasta, 0...1. */
+  raceProgress() {
+    const cur = this.vertical ? this.player.cy : this.player.cx;
+    const span = this.raceTo - this.raceFrom;
+    if (!span) return 0;
+    return clamp((cur - this.raceFrom) / span, 0, 1);
+  }
+
+  /**
+   * Ajokello ja jako.
+   *
+   * Jako liikkuu **vain välipisteillä**, ei joka framella. Jatkuvasti laskettu
+   * ero olisi kohinaa: se hyppäisi joka kerta kun pelaaja pysähtyy hetkeksi
+   * tähtäämään, ja lukema jota ei ehdi lukea ei ole lukema. Välipisteellä
+   * kysymys on täsmällinen — *tässä kohdassa rataa olin viimeksi tällä
+   * framella* — ja vastaus pysyy ruudulla siihen asti kun seuraava saapuu.
+   *
+   * Ääni tulee kuvan kanssa (DESIGN.md kohta 8): kuva yksin jää huomaamatta
+   * silloin kun katse on kuilussa, ja juuri silloin jako vaihtuu.
+   */
+  updateRace() {
+    const r = this.race;
+    r.frames++;
+    if (r.flash > 0) r.flash--;
+    while (r.next < RACE_SPLITS && this.raceProgress() >= (r.next + 1) / RACE_SPLITS) {
+      r.marks[r.next] = r.frames;
+      if (r.best && r.best.marks[r.next] > 0) {
+        r.delta = r.frames - r.best.marks[r.next];
+        r.flash = SPLIT_FLASH;
+        Sfx.play(r.delta <= 0 ? 'edella' : 'jaljessa');
+      }
+      r.next++;
+    }
+  }
+
+  /**
+   * Kello käy myös taukovalikossa, ja se on tilan koko lupaus: aikaa ei saa
+   * ostaa pysäyttämällä peli ja katsomalla kenttä rauhassa.
+   *
+   * **Kenttäkello ei käy.** Se on eri kello ja se tappaa, ja `updateTimer`
+   * sanoo jo miksi sellaista ei tehdä: kello joka voi tappaa pelaajan
+   * paikassa jossa asialle ei voi tehdä mitään. Taukovalikko on täsmälleen
+   * sellainen paikka. Tauko maksaa siis jaossa muttei hengessä, ja
+   * `TAUKO - KELLO KÄY` lukee valikossa, koska sääntö jota ei kerrota on ansa.
+   */
+  tickPaused() {
+    if (!this.race || this.state !== 'play') return;
+    this.race.frames++;
+    if (this.race.flash > 0) this.race.flash--;
+  }
+
+  /** Maali: aika talteen, jos se oli nopeampi. */
+  recordRace() {
+    const r = this.race;
+    if (!r) return;
+    const before = r.best;
+    const record = setBest(this.game.state, this.id, { frames: r.frames, marks: r.marks });
+    if (record) this.game.persist();
+    this.raceResult = { frames: r.frames, best: before ? before.frames : null, record };
+    if (record && before) Sfx.play('yeah');
   }
 
   /* ------------------------------ building ----------------------------- */
@@ -1632,6 +1764,7 @@ export class LevelScene {
       this.tryWarp(input);
       this.updateTransit();
       this.updateProgress();
+      if (this.race) this.updateRace();
     } else if (this.state === 'clear') {
       this.player.update(input);
       this.stateTimer++;
@@ -2308,6 +2441,7 @@ export class LevelScene {
     this.player.autoWalk = true;
     this.player.ducking = false;
     this.awardScore(Math.max(0, this.time) * 50);
+    this.recordRace();
     Music.stop();
     Ambience.stop();
     Sfx.play('clear');
@@ -2537,6 +2671,76 @@ export class LevelScene {
     });
   }
 
+  /**
+   * Jako. Nuoli ja etumerkillinen luku, ks. SPLIT_X yllä laatikkolaskusta.
+   *
+   * Kaksi kanavaa samasta signaalista, ei kahta signaalia: nuoli osoittaa ylös
+   * kun ollaan edellä ja alas kun jäljessä, ja luvun etumerkki sanoo saman.
+   * Väri on kolmas, ja se on valittu etäisyydellä muihin HUDin väreihin.
+   *
+   * **Ei ennätystä on oikea tila eikä puuttuva arvo**, ja se on uuden pelaajan
+   * tavallisin tila — 60 kentästä 59 on ajamatta. Silloin paikalla lukee
+   * `--.-` himmeänä: se varaa saman tilan kuin oikea lukema, joten mitään ei
+   * ilmesty tyhjästä sillä hetkellä kun ensimmäinen ennätys syntyy, ja se
+   * sanoo suoraan ettei vertailukohtaa ole. Kellon jäännöstä tai kulunutta
+   * aikaa ei laiteta tilalle, koska kumpikin on jo nauhassa toisin päin.
+   */
+  drawSplit(ctx, y) {
+    const r = this.race;
+    const ty = y + 6;
+    const has = r.delta !== null;
+    const ahead = has && r.delta <= 0;
+    const color = has ? (ahead ? SPLIT_COLORS.ahead : SPLIT_COLORS.behind) : SPLIT_COLORS.none;
+    const text = formatDelta(has ? r.delta : null);
+    const flash = has && r.flash > 0;
+    if (flash) {
+      ctx.fillStyle = color;
+      ctx.fillRect(SPLIT_X - 1, ty - 1, 8 + textWidth(text), 9);
+    }
+    const ink = flash ? '#101018' : color;
+    if (has) this.drawSplitArrow(ctx, SPLIT_X, ty, ahead, ink);
+    drawText(ctx, text, SPLIT_X + 7, ty, { color: ink });
+  }
+
+  /** Viiden pikselin kärki ja varsi, samassa 7 pikselin rivissä kuin teksti. */
+  drawSplitArrow(ctx, x, y, up, color) {
+    ctx.fillStyle = color;
+    if (up) {
+      ctx.fillRect(x + 2, y, 1, 1);
+      ctx.fillRect(x + 1, y + 1, 3, 1);
+      ctx.fillRect(x, y + 2, 5, 1);
+      ctx.fillRect(x + 2, y + 3, 1, 4);
+    } else {
+      ctx.fillRect(x + 2, y, 1, 4);
+      ctx.fillRect(x, y + 4, 5, 1);
+      ctx.fillRect(x + 1, y + 5, 3, 1);
+      ctx.fillRect(x + 2, y + 6, 1, 1);
+    }
+  }
+
+  /**
+   * Maalin jälkeen yksi rivi, koska ensimmäisen kentän jälkeen jaon paikalla on
+   * lukenut `--.-` koko ajan eikä pelaaja muuten näe mitä hän juuri kirjasi.
+   *
+   * Rivi on **korttikuvan alapuolella**, ei sen yläpuolella. Väli lipputekstin
+   * ja kortin välissä näyttää tyhjältä mutta ei ole: `drawBanner` piirtää
+   * alareunaviivansa kohtaan `y + scale*7 + 4`, ja `scale` on ensimmäiset
+   * kahdeksan framea 3 eikä 2 — eli se rako on kahdeksan framen ajan 7
+   * pikseliä matalampi kuin miltä se näyttää. Kortti loppuu 100:aan, joten
+   * 104 on ensimmäinen rivi joka ei ole kenenkään.
+   */
+  drawRaceResult(ctx) {
+    const r = this.raceResult;
+    const line = r.best === null
+      ? `${FIRST_TIME}  ${formatTime(r.frames)}`
+      : (r.record
+        ? `${NEW_RECORD}  ${formatTime(r.frames)}`
+        : `${RUN_LABEL} ${formatTime(r.frames)}   ${BEST_LABEL} ${formatTime(r.best)}`);
+    drawText(ctx, line, VIEW_W / 2, 104, {
+      color: r.record ? SPLIT_COLORS.ahead : '#ffffff', align: 'center', shadow: '#101018',
+    });
+  }
+
   drawHud(ctx) {
     const th = THEMES[this.theme] || THEMES.grass;
     const y = VIEW_H;
@@ -2586,6 +2790,7 @@ export class LevelScene {
     drawText(ctx, `MAAILMA ${this.id}`, 196, y + 6, { color: '#8fe04a' });
     const timeColor = this.time <= 100 ? (Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff') : '#ffffff';
     drawText(ctx, `AIKA ${padNum(this.time, 3)}`, 196, y + 17, { color: timeColor });
+    if (this.race) this.drawSplit(ctx, y);
 
     drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
       color: '#ffffff', align: 'right',
@@ -2618,6 +2823,7 @@ export class LevelScene {
       this.drawBanner(ctx, 'KENTTÄ SELVÄ!', 54, ['#ffd048', '#ffffff', '#8fe04a']);
       drawItem(ctx, this.wonCard, VIEW_W / 2 - 8, 84, this.tick);
     }
+    if (this.state === 'clear' && this.raceResult) this.drawRaceResult(ctx);
     if (this.state === 'dead') {
       this.drawBanner(ctx, 'VOI EI!', 74, ['#ff6060', '#ffffff', '#ffb040']);
     }

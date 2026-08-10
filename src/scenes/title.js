@@ -3,6 +3,7 @@ import { drawPlayer, drawWalker, drawGasPuff, WALK_FRAMES } from '../gfx/sprites
 import { Music, Sfx } from '../core/audio.js';
 import { Save } from '../core/save.js';
 import { challengeLine } from '../core/challenge.js';
+import { MODE_NAME } from '../core/timeattack.js';
 
 /*
  * Silence this long and the cabinet starts playing by itself. Twenty seconds is
@@ -24,9 +25,12 @@ export class TitleScene {
 
   enter() {
     Music.play('title');
+    /* AIKA-AJO on valikkorivi eikä salainen näppäin, koska tila johon
+     * mennään vahingossa ei ole tila johon mennään erikseen. Se on listalla
+     * myös ilman tallennusta: aika-ajo alkaa 1-1:stä siinä missä uusi peli. */
     this.options = Save.exists()
-      ? ['JATKA PELIÄ', 'UUSI PELI', 'PARHAAT PIERUT']
-      : ['UUSI PELI', 'PARHAAT PIERUT'];
+      ? ['JATKA PELIÄ', 'UUSI PELI', MODE_NAME, 'PARHAAT PIERUT']
+      : ['UUSI PELI', MODE_NAME, 'PARHAAT PIERUT'];
     this.cursor = 0;
     this.idle = 0;
   }
@@ -66,6 +70,7 @@ export class TitleScene {
       Sfx.play('select');
       const choice = this.options[this.cursor];
       if (choice === 'JATKA PELIÄ') this.game.continueGame();
+      else if (choice === MODE_NAME) this.game.startTimeAttack();
       else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
       else this.game.newGame();
     }
@@ -136,7 +141,12 @@ export class TitleScene {
     // The menu grows with the number of options, so its box is measured rather
     // than hard-coded — that is how it ended up under the control hints before.
     const panelH = this.options.length * 13 + 6;
-    const panelY = 184;
+    /* Valikko kasvaa **ylöspäin** vasta kun se muuten valuisi ruudun ali.
+     * Ohjerivi on osa valikkoa eikä koristetta — se on ainoa paikka jossa
+     * hyppy- ja juoksunäppäin lukevat — joten se ei saa pudota pois ruudulta
+     * siksi että listalle tuli neljäs rivi. Kahdella ja kolmella rivillä tämä
+     * on tasan entinen 184: 240 - 11 - 45 = 184. */
+    const panelY = Math.min(184, 240 - 11 - panelH);
     ctx.fillStyle = 'rgba(8,8,16,0.65)';
     ctx.fillRect(72, panelY, 176, panelH);
     this.options.forEach((option, i) => {
