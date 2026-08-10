@@ -7,6 +7,170 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.58 — maailma 8 kahdeksaan: seitsemän uusintaa ja PIERUKUNINGAS
+
+Omistajan muotoilu kuukausi sitten: *"shouldn't we have 7 bosses in worlds 1-7,
+so repeating them would bring us to 7 bosses in world 8? and then you just add
+one final MEGABOSS"* — ja pomovalikoimasta kysyttäessä: **seitsemän linnaketta
+uusintoina, ja megapomo on kuningas.**
+
+**8-1…8-7 ovat maailmojen 1–7 seitsemän linnakepomoa siinä järjestyksessä jossa
+linnake ne lähetti** (variantit 0 1 2 3 3 4 5), ja **8-F on PIERUKUNINGAS**,
+variantti 6, salissa `VALTAISTUINSALI`. Uudet kentät ovat **8-4 KONEHOLVI** ja
+**8-5 SULATTO**; vanhat 8-4 ja 8-5 ovat nyt 8-6 ja 8-7 **tavu tavulta
+ennallaan** ja pitivät tarkat pisteensä.
+
+Peli on nyt **62 kenttää**, ja jäljellä on vain maailma 2.
+
+### Seitsemän eikä kuusi, ja miksi vanha portti oli väärässä
+
+Jättiläinen on **kahden** linnakkeen pomo (4-F ja 5-F), joten *varianttien
+joukko* ja *linnakkeiden jono* ovat eri olioita — ne osuivat yksiin vain niin
+kauan kuin maailmassa 8 oli kuusi kenttää. Vanha väite *"jokainen pomovariantti
+kerran"* olisi kieltänyt tasan sen toiston joka on tämän maailman koko lause.
+Se mittaa nyt jonoa jonoa vasten.
+
+### Mitä megapomo tekee, mitä yksikään muu ei tee
+
+Jokainen tämän pelin pomo vastaa tallaukseen **nostamalla jotakin omaa
+numeroaan** — nopeus +0,35, luuranko ja sääherra +0,2, jättiläinen puoli kokoa.
+Sama tappelu, nopeampana.
+
+**Kuningas vastaa muuttumalla joksikin toiseksi.** Jokainen osuma antaa hänelle
+seuraavan linnakkeen liikevalikoiman, joten **jokainen numero jonka hän
+kantaa on jonkun toisen numero** eikä yhtäkään uutta mekaniikkaa ole. Pelaajan
+tehtävä lakkaa olemasta "toista oppimasi rytmi" ja muuttuu siksi että
+tunnistat kesken tappelun **kuka juuri saapui** — mikä on täsmälleen se mitä
+seitsemän uusintaa opetti. Toteutus on yksi `form`-kenttä: `update()` osasi jo
+kaikki kuusi valikoimaa.
+
+Yhtä asiaa hän **ei** lainaa: kokoa. Koko on ainoa pomon ominaisuus tässä
+pelissä joka vaatii eri huoneen — jättiläisen kannet ovat olemassa koska hänen
+päänsä on voimatason 0 ulottumattomissa. Kuningas joka kasvaisi kesken
+valikoiman olisi saavuttamaton tai kutistuisi takaisin.
+
+**Väite hylkäsi kaksi ensimmäistä muotoaan, ja molemmat ovat kirjattuna
+porttiin.** Nollahypoteesi *"jokainen muu pomo kiihtyy"* on epätosi — jättiläiset
+eivät kiihdy (1,2 → 1,2), ne kasvavat. Ja *"kuningas ei kiihdy"* on
+saavuttamaton, koska `speed = 0.75 + variantti·0.15` tekee maailmajärjestyksestä
+nopeusjärjestyksen. Jäljelle jäi vahvempi väite: **yksikään numero jonka hän
+kantaa ei ole hänen omansa**, eikä yksikään muu pomo koskaan vaihda muotoa.
+
+### Yksitoikkoisuus mitattuna — ja löydös jota ei etsitty
+
+Seitsemän uusintaa **ei** mitannut yksitoikkoiseksi (maailman uutuus 27,1 % →
+31,2 %, ja 8-4 on 60,4 % omalle maailmalleen uutta). Mutta ensimmäinen versio
+mittasi, ja odottamattomassa paikassa: **8-5 avautui alun perin `keep_forge`lla,
+ja se pudotti 8-6:n — kentän jonka oma ensimmäinen lause on ahjo — 23,8 %:sta
+5,9 %:iin**, eli pelin toistavimmaksi kentäksi.
+
+Kaksi uutta kenttää voi siis **ontota vanhan kentän ilman että siihen
+kirjoitetaan riviäkään**, ja se tapahtuu sen *parhaan* palikan kautta. Suihkut
+ovat nyt 8-6:n omat.
+
+### Käyrä
+
+`112,8 · 132,5 · 180,7 · 191,3 · 233,2 · 251,2 · 253,7 · 283,5`. w7 → w8
+marginaali **+29,8**, ja pelin ohuin askel w6 → w7 **+2,5** on koskematon.
+Maailman muoto `245 → 117 → 302 → 169 → 354 → 378 → 386`: kaksi notkoa, ei
+vierekkäin, pisin nousu 3 — sama muoto joka maailmalla 8 jo oli.
+`src/data/difficulty.js` muuttui neljältä riviltä, kaikki maailmaa 8; **54 muuta
+kenttää tavu tavulta ennallaan**.
+
+### Jäi tekemättä
+
+Maailma 8 on yhä pelin vähiten uusi maailma (31,2 % vastaan w5:n 82,1 %), ja
+sen "mykkien" määrä nousi 0 → 2: 8-6 ja 8-7 eivät enää esittele mitään mitä
+maailma ei ole näyttänyt, koska uudet kentät tulevat ennen niitä. Niiden
+**muodon** uutuus on ennallaan. Korjaus tarkoittaisi uutta sanastoa kentille
+joiden perustelut ovat jo päätetyt, eli eri muutosta.
+
+---
+
+## v26.08.10.59 — kamera hyllyllä, ja neljä ääntä jotka tarkoittivat kahta asiaa
+
+### Kamera 2-1:ssä: vika joka oli pelaajan tavoitettavissa
+
+```
+punainen  2-1 taso 3 (227,9): 2.73 px/frame, pää 16.10 px    (katto 2.5, lattia 16)
+vihreä    2-1 taso 3 (227,9): 2.17 px/frame, pää 16.18 px
+```
+
+**Mikä oli vialla.** `CAM_TOP_LEAD` kumoaa pehmennyksen *viiveen* eikä mitään
+muuta, joten vauhtiin päästyään näkymä istuu tasan kohdassa
+`pää − CAM_TOP_MARGIN` ja liikkuu kehon omalla nousuvauhdilla. Se on
+vaaratonta kun pää saavuttaa marginaalin vasta lähellä lakipistettä, jossa se
+vauhti on ~0 — ja se on nykäisy kun pää saavuttaa sen aikaisin. Ja **missä
+kohtaa kaarta se tapahtuu, päättää rajaus eikä hyppy**: 2-1:n aavikkolattialla
+`rest` haluaa 94 px ilmaa pään päälle ja kentän pohja pinnittää näkymän ennen
+kuin se ehtii ottaa siitä takaisin, mutta sarakkeen 228 tiilihyllyllä pelaaja
+saa ne 80 px jotka `CAM_EYE` oikeasti pyytää. Ne 14 px siirtävät ylityksen
+78 px:n kohdalta 64:ään, jossa keho nousee vielä 3,9 px/frame.
+
+Korjaus: näkymä kuluttaa kuvaa **jalkojen alta** aikaisin
+(`CAM_GROUND_MARGIN`, kaksi laattaa eli tasan se paksuus josta jokaisen kentän
+lattia on tehty, joten kentän omalla lattialla väljyyttä ei ole ja mekanismi on
+aritmeettisesti poissa), ja se vapautuu sekä siitä miten pitkälle pää on tullut
+ikkunan yläosaan että siitä **työnnetäänkö hyppyä yhä**. Jälkimmäinen on
+kantava: saman kentän hylly sarakkeessa 38 on rajattu identtisesti ja tulee
+45,8 px:n päähän kehyksen ylälaidasta tarvitsematta mitään — mutta se saapuu
+sinne lakipisteessään, paikallaan. **Sijainti ei erota näitä kahta tapausta,
+vauhti erottaa.**
+
+Kaksi vaihtoehtoa rakennettiin ja mitattiin ennen tätä, ja molemmat ovat
+kirjattuna vakion viereen: pidempi lead (mitattuna huonompi, 1,95 → 2,88) ja
+katto näkymän omalle vauhdille — joka korjaa kehyksen (2,20) ja maksaa sen
+toisesta lupauksesta (pelivara 16,10 → **15,29**).
+
+### Kattavuus joka ei voi hiljaa lakata
+
+Tämä oli vian tärkeämpi puolisko. Vanha kamerafikstuuri ei ollut koskaan
+napannut tätä koska **sen botti kuolee 2-1:ssä aiemmin** — pääseekö se hyllylle
+on palikkajärjestyksen sattuma. Uusi lohko ei aja bottia lainkaan: se **etsii**
+kentästä sen hyllyn jonka pään päällä on vähiten kuvaa, asettaa pelaajan siihen
+ja käsikirjoittaa hypyn. Se löysi `(227,9)`:n itse. Jos kenttädata liikkuu,
+haku löytää uuden pahimman paikan; jos paikkaa ei löydy, jos rivi ei koskaan
+ollut ilmassa tai jos näkymä ei liikkunut, väite kaatuu sen sijaan että
+vihertäisi hiljaa.
+
+**Sivunvaihto on koskematon rakenteeltaan** (pystykenttä palaa `cameraY()`stä
+ennen leania) ja kaikki viisi sivunvaihto- ja kiipeilyriviä tulostavat
+identtiset luvut. Neljä riviä tulostaa muuttuneet luvut, **jokainen kynnys
+ennallaan ja kaikki läpi**; kolme niistä on parannuksia.
+
+### Neljä ääntä, neljä tuomiota
+
+- **`door` — jaettu.** Oven aukeaminen pitää `door`in; siitä sisään käveleminen
+  sai `doorin`.
+- **`onBossDefeated` — purettiin, mutta vain lainattu puolisko.** `clear`
+  poistettiin: se on **kentän läpäisyjingle** ja se soi uudelleen 55 framea
+  myöhemmin kun kenttä oikeasti päättyy. `door` jää, koska se on sen hetken oma
+  ääni ja sillä on kuva. Hetki ei ohene — se mikä lähtee kuului toiseen hetkeen.
+- **`powerup` — yksi merkitys.** Lohkon maksu → `payout` (mikä korjasi samalla
+  `?`-lohkon, joka soitti `bump`ia eli sitä ääntä jonka tiili antaa kun se ei
+  anna **mitään**); kytkin → `kytkin`; kasvaminen pitää `powerup`in. Valikot ja
+  kartta pitävät omansa — kertojan puoli, kohta 8.
+- **`SFX.land` — poistettu**, ja tilalle portti joka vaatii jokaiselle
+  määritellylle äänelle kutsupaikan. Se löysi heti toisen, `SFX.card`, myös
+  poistettu. Tiedostolista kävellään `main.js`:stä moduuligraafia pitkin
+  (65 tiedostoa) eikä kirjoiteta käsin.
+
+Huiput samasta ajosta: `payout` 0,260, `kytkin` 0,321, `doorin` 0,161 — vasten
+`pipe` 0,168, `coin` 0,322, `powerup` 0,587. Melupohja jälkeen **0,000**.
+
+### Löydetty, ei korjattu
+
+- `powerup` soi yhä **kartalla** kun esine menee varastoon — tasan se vika joka
+  kentän puolella korjattiin aamulla `reserve`llä.
+- `powerup` soi yhä kahdessa esineenpudotuskohdassa `entities/enemies.js`:ssä.
+- `LETTERBOX_BAR`:n kommentti väittää korkeimman hypyn nousevan 100 px; mitattu
+  budjetti sanoo 174 juoksevalle pieruhypylle. **Vanhentunut väite.**
+- 2-3:n hyllyllä rivillä 6 kamera on jo alarajassaan, joten pieruhyppy vie pään
+  kehyksen reunaan (0,00 px). Kentän korkeus, ei moottorin korjattavissa —
+  väitetty sellaisena.
+
+---
+
 ## v26.08.10.57 — päivän pieru: generaattori selaimeen, ja tuhat kenttää tarkistettuna etukäteen
 
 Omistajan valitsema toinen pelitila: **yksi generoitu kenttä päivässä, sama

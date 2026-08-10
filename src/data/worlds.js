@@ -462,13 +462,26 @@ const WORLD_DEFS = [
     ],
   },
   /*
-   * VIIMEINEN LINNAKE, maailma 8 — ja tämä kartta on kuusi solmua eikä kolme.
+   * VIIMEINEN LINNAKE, maailma 8 — ja tämä kartta on kahdeksan solmua.
    *
    * The road is the one place the finale's shape is visible before a level
-   * loads. Every other map in this file is start, three levels and a fortress,
-   * laid out in four hops; this one is six, and a player looking at it can
-   * count them. That is the cheapest and the most honest way to say "this is
-   * longer than what you have been doing", and it costs one row of data.
+   * loads. Kartta oli kuusi solmua niin kauan kuin maailman väite oli
+   * "jokainen pomovariantti kerran"; omistajan päätös 10.8.2026 vaihtoi
+   * laskutavan linnakkeisiin — seitsemän linnaketta, seitsemän uusintaa ja
+   * kuningas — ja kartta seuraa perässä, koska se on ainoa paikka jossa muodon
+   * näkee ennen kuin yksikään kenttä on latautunut. Pelaaja voi laskea ovet
+   * ruudulta.
+   *
+   * Solmut ovat nyt siksakissa parillisilla sarakkeilla (1, 3, 5, … 17) niin
+   * kuin maailmoissa 6 ja 7, eivätkä epätasaisin välein niin kuin kuuden
+   * solmun versiossa. Syy on että kahdeksan solmua ei mahdu kahteenkymmeneen
+   * sarakkeeseen väljemmällä jaolla — sama mittaus joka pakotti maailmat 1 ja
+   * 3 samaan ruudukkoon — ja **jokaisella mutkalla on kulmapiste**
+   * (`path: [[kohdesarake, lähtörivi]]`). Se ei ole tyyliseikka: `tryMove`
+   * vaatii että askel on tasan yksi nuoli, joten kulmapisteetön siksak on
+   * solmu josta ei pääse pois millään näppäimellä. Maailmoissa 1 ja 3 se
+   * jätti pelaajan ensimmäiselle kentälle, ja `verify.mjs` väittää sen nyt
+   * jokaisesta linkinpäästä molempiin suuntiin.
    *
    * **The pea house is outside the gate.** It hangs off the start node rather
    * than off the first level, which is where every other world puts it, and the
@@ -481,7 +494,12 @@ const WORLD_DEFS = [
    * of them was placed the way world 6's and 7's were: rule 8 in
    * `worldProblems` refuses anything tall on the road or beside it, so the
    * road's clear zone was taken out first and the towers planted into what was
-   * left. Sixteen asked for, sixteen placed, none refused.
+   * left. Kun tie kasvoi kuudesta solmusta kahdeksaan, sen vapaa vyöhyke
+   * siirtyi ja **rivi 6 istutettiin uudelleen** samalla menetelmällä eikä
+   * silmämääräisesti: 83 vapaata ruutua, seitsemäntoista pyydettyä,
+   * seitsemäntoista asetettua, ei yhtään hylättyä. Kaksi vanhaa tornia (6,8 ja
+   * 6,15) jäi uuden tien viereen, ja ne siirtyivät — ei siksi että ne
+   * näyttäisivät huonolta vaan siksi että `worldProblems` ei pidä niitä.
    */
   {
     id: 'w8',
@@ -494,28 +512,32 @@ const WORLD_DEFS = [
       'wwwwwwwwwwwwwwwwwwww',
       'wwwwwwwwwwwwwwwwwwww',
       'wwwwwwwwwwwwwwwwwwww',
-      'AwwwAwwwAwwwwwwAwwww',
+      'AwwwAwwwwwAwwwAwwwAw',
       'wwAwwwAwwwwAwwwwwAww',
       'wwwwwwwwwAwwwwwwwwww',
     ],
     nodes: [
       { id: 'w8-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
       { id: 'w8-h', tx: 1, ty: 1, type: 'house', name: 'HERNETALO' },
-      { id: 'w8-1', tx: 4, ty: 4, type: 'level', level: '8-1', name: 'PORTTIHOLVI' },
-      { id: 'w8-2', tx: 7, ty: 2, type: 'level', level: '8-2', name: 'VARTIOKÄYTÄVÄ' },
-      { id: 'w8-3', tx: 10, ty: 5, type: 'level', level: '8-3', name: 'TYRMÄ' },
-      { id: 'w8-4', tx: 13, ty: 2, type: 'level', level: '8-4', name: 'AHJO' },
-      { id: 'w8-5', tx: 16, ty: 5, type: 'level', level: '8-5', name: 'MYRSKYKAMMIO' },
-      { id: 'w8-f', tx: 18, ty: 2, type: 'fortress', level: '8-F', name: 'VALTAISTUINSALI' },
+      { id: 'w8-1', tx: 3, ty: 4, type: 'level', level: '8-1', name: 'PORTTIHOLVI' },
+      { id: 'w8-2', tx: 5, ty: 2, type: 'level', level: '8-2', name: 'VARTIOKÄYTÄVÄ' },
+      { id: 'w8-3', tx: 7, ty: 5, type: 'level', level: '8-3', name: 'TYRMÄ' },
+      { id: 'w8-4', tx: 9, ty: 2, type: 'level', level: '8-4', name: 'KONEHOLVI' },
+      { id: 'w8-5', tx: 11, ty: 5, type: 'level', level: '8-5', name: 'SULATTO' },
+      { id: 'w8-6', tx: 13, ty: 2, type: 'level', level: '8-6', name: 'AHJO' },
+      { id: 'w8-7', tx: 15, ty: 5, type: 'level', level: '8-7', name: 'MYRSKYKAMMIO' },
+      { id: 'w8-f', tx: 17, ty: 2, type: 'fortress', level: '8-F', name: 'VALTAISTUINSALI' },
     ],
     links: [
       { a: 'w8-s', b: 'w8-h' },
       { a: 'w8-s', b: 'w8-1' },
-      { a: 'w8-1', b: 'w8-2', path: [[7, 4]] },
-      { a: 'w8-2', b: 'w8-3', path: [[10, 2]] },
-      { a: 'w8-3', b: 'w8-4', path: [[13, 5]] },
-      { a: 'w8-4', b: 'w8-5', path: [[16, 2]] },
-      { a: 'w8-5', b: 'w8-f', path: [[18, 5]] },
+      { a: 'w8-1', b: 'w8-2', path: [[5, 4]] },
+      { a: 'w8-2', b: 'w8-3', path: [[7, 2]] },
+      { a: 'w8-3', b: 'w8-4', path: [[9, 5]] },
+      { a: 'w8-4', b: 'w8-5', path: [[11, 2]] },
+      { a: 'w8-5', b: 'w8-6', path: [[13, 5]] },
+      { a: 'w8-6', b: 'w8-7', path: [[15, 2]] },
+      { a: 'w8-7', b: 'w8-f', path: [[17, 5]] },
     ],
   },
 ];

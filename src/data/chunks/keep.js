@@ -22,9 +22,9 @@
  * paljastui tämän maailman oma vika, joka on eri vika kuin muilla: 8-F mittasi
  * **0,0 %** koko pelille uutta, koska se toisti *näitä* palikoita — pelaaja on
  * nähnyt `keep_vault`in, `keep_teeth`in, `keep_watch`in ja `keep_croak`in
- * kentissä 8-1…8-5 ennen kuin linnakkeen ovi aukeaa. Finaalilla on siksi oma
+ * kentissä 8-1…8-7 ennen kuin linnakkeen ovi aukeaa. Finaalilla on siksi oma
  * sanastonsa (`throne_*`) erillään maailman omasta, ja tämä tiedosto on nyt
- * kenttien 8-1…8-5 sanasto eikä 8-F:n.
+ * kenttien 8-1…8-7 sanasto eikä 8-F:n.
  *
  * ## Three rules, and every one of them is measured in `verify.mjs`
  *
@@ -59,7 +59,8 @@
  *      stops being advice: the shared `fort_gap` brings only four columns of
  *      floor with it, so two of them in a row is a jump nobody can take. Nine
  *      is `keep_hole`'s own profile — the same profile kaasukehä cut its holes
- *      to — and in this world it is the composition rule for all six playlists.
+ *      to — and in this world it is the composition rule for all eight
+ *      playlists.
  *
  * ## What is deliberately NOT here
  *
@@ -68,9 +69,17 @@
  * floors and no sand in it* — and a rule that is abandoned the moment it is
  * inconvenient was never a rule. The tile stays in the desert.
  *
- * **A new boss.** The finale's fights are the game's own six, one per level,
- * and that is the argument (see `levels/world8.js`): the last castle has
- * nothing new to send, it sends everything it has already sent.
+ * **A new boss** *näissä kentissä*. Maailman 8 seitsemän numeroitua kenttää
+ * ovat uusintoja ja vain uusintoja: jokainen tappelu on tappelu jonka pelaaja
+ * on jo kerran voittanut, siinä järjestyksessä kuin linna ne lähetti. Se on
+ * argumentti (ks. `levels/world8.js`): linnalla ei ole mitään uutta
+ * lähetettävää, se lähettää kaiken minkä se on jo lähettänyt.
+ *
+ * **Kahdeksas ovi on eri asia, ja se on eri tiedostossa.** Pierukuningas
+ * (`Boss`, variantti 6) on olemassa, mutta hän ei ole tämän sanaston asukas
+ * eikä hänen huoneensa ole täällä: valtaistuinsali on `throne_*`. Ja hänkin
+ * pitää tämän kohdan lupauksen kirjaimellisesti — hänen jokainen liikkeensä
+ * on jonkun näistä seitsemästä, eikä yhtään uutta mekaniikkaa synny.
  *
  * **A second arena.** `boss_arena` and `boss_arena_big` live in `fortress.js`
  * because they are shared, and six more copies of them in the keep's palette
@@ -328,5 +337,120 @@ export const KEEP_CHUNKS = {
     12: '            k',
     13: G,
     14: G,
+  }),
+
+  /* ===================== seitsemän uusintaa, 10.8.2026 ===================== */
+  /*
+   * Kolme palikkaa lisää, ja ne ovat tässä siksi että maailma kasvoi kuudesta
+   * kentästä kahdeksaan (ROADMAPin avoin kysymys 1). Kaksi uutta käytävää
+   * olisi voitu koota näistä yhdeksästä, ja se olisi ollut halvin tapa tehdä
+   * työ väärin: `tools/variety.mjs` mittasi maailman 8 uutuudeksi **27,1 %**,
+   * koko pelin huonoimman, ja luvun syy on juuri se että sen kentät ovat
+   * saman kourallisen palikoita eri järjestyksessä. Kaksi kenttää lisää samasta
+   * kourallisesta olisi vienyt luvun alaspäin — eli maailma olisi kasvanut ja
+   * *sanonut vähemmän*.
+   *
+   * Uusi lause on se mitä `keep.js` ei vielä sanonut: **kattoon voi koskea.**
+   * Yhdeksän vanhaa palikkaa käyttävät kattoa kahdella tavalla, ja molemmat
+   * ovat väitteitä eivätkä esteitä — `keep_start` todistaa että ulkopuolta ei
+   * ole ja `keep_gate` roikuttaa portin rivillä 5 juuri korkeimman hypyn
+   * yläpuolelle. Katto on siis ollut tässä maailmassa asia jonka *näkee*.
+   * Nyt siihen törmää.
+   */
+
+  /**
+   * Ies: kaksi kattoon pultattua kivimassaa, eri syvyyksillä.
+   *
+   * Vasen laskeutuu riville 6 ja oikea riville 9, eikä kumpikaan ylety maahan:
+   * huoneen läpi pääsee kävelemällä koko matkan. Mikä muuttuu on **missä saa
+   * hypätä** — ja koska tämän pelin jokainen vastaus on hyppy, se on kysymys
+   * jota maailma 8 ei ole vielä kertaakaan esittänyt.
+   *
+   * Lohkorivi on massojen välissä eikä kummankaan alla, ja se on mitta eikä
+   * sommittelu. Lohkon päälle noustaan, ja `HEAD` (rules.js) vaatii kolme
+   * vapaata riviä sen yllä; vasemman massan alla rivillä 9 seisova saisi kaksi.
+   * Sama vika on kirjattu ROADMAPiin `fort_blocks`ista kuudessa paikassa, eikä
+   * sitä tehdä seitsemättä kertaa vapaaehtoisesti.
+   *
+   * Kivi eikä tiili, ja se on sääntö 2 eikä maku: massa kiinnittyy kattoon,
+   * jonka kanssa se on samaa kiveä, ja tiili kiinni kivessä on juuri se pari
+   * jota paletti ei erota (7,9 %).
+   */
+  keep_yoke: ck(16, {
+    0: G,
+    1: G,
+    2: '  XXX      XXXX',
+    3: '  XXX      XXXX',
+    4: '  XXX      XXXX',
+    5: '  XXX      XXXX',
+    6: '  XXX      XXXX',
+    7: '           XXXX',
+    8: '           XXXX',
+    9: '      B?B  XXXX',
+    12: '         g',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * Kita: kaksi massaa riville 9 asti ja niiden välissä närästyssuihku.
+   *
+   * Kolme riviä jalansijaa on `HEAD`in tarkka mitta — 48 px ilmaa 43 px:n
+   * kroppaa vasten — eli massojen alla kävellään eikä hypätä. Ainoa kohta
+   * jossa hyppy mahtuu on niiden välissä, ja siinä seisoo suihku.
+   *
+   * Se on koko huone: **ainoa paikka jossa saisit hypätä on se paikka jossa et
+   * halua seistä.** Suihku on tämän pelin halvin rehellinen vaikeus — se on
+   * pultattu yhteen sarakkeeseen ja lähtee kiinteällä jaksolla, eli sen voi
+   * odottaa paikaltaan — ja se on tässä ensimmäistä kertaa jonkin *ali*
+   * kulkemisen hinta eikä kuilun yli hyppäämisen.
+   *
+   * Ei yhtään vihollista massojen alle. Se on botin mittaama eikä maun asia:
+   * `tools/verify.mjs`:n botti hyppää kun se näkee vihollisen 48 px:n päässä,
+   * ja matalan katon alla hyppy on kolautus kattoon. Vaara on siksi se joka
+   * pysäyttää eikä se joka nostaa.
+   */
+  keep_grind: ck(16, {
+    0: G,
+    1: G,
+    2: '  XXXX     XXXX',
+    3: '  XXXX     XXXX',
+    4: '  XXXX     XXXX',
+    5: '  XXXX     XXXX',
+    6: '  XXXX     XXXX',
+    7: '  XXXX     XXXX',
+    8: '  XXXX     XXXX',
+    9: '  XXXX     XXXX',
+    12: '        H',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * Valukouru: neljä ruutua laavaa ja mureneva huuli **laskeutumispuolella**.
+   *
+   * `throne_moat` panee murenevan lavan lähtöpuolelle, jolloin se muuttaa
+   * lähtöhetkeä. Tässä se on toisella puolella, ja se muuttaa eri asiaa: hyppy
+   * on jo tehty kun lattia alkaa mennä, joten kysymys ei ole *milloin lähdet*
+   * vaan *pysähdytkö laskeuduttuasi*. Sama laatta, toinen kysymys — ja se on
+   * täsmälleen se tapa jolla tämä maailma on aina puhunut (`keep_hole` ja
+   * `keep_croak` ovat sama viisi ruutua).
+   *
+   * Yhdeksän saraketta kiveä ennen laavaa, sääntö 3, eikä mitään
+   * vauhdinottopuolella lukuun ottamatta kävelijää sarakkeessa 2 — sama
+   * sarake kuin `keep_hole`illa, eli sama mitattu etäisyys huulesta.
+   *
+   * Sääntö 3 laskee murenevan lavan jalansijaksi, ja se on oikein: se kantaa
+   * siihen asti kunnes sille astuu. Tässä palikassa se on ainoa jalansija
+   * laavan yllä, joten seuraava kuilu saa vauhtinsa vasta seuraavasta
+   * palikasta — mikä on syy siihen että tätä ei koskaan seuraa toinen kouru.
+   */
+  keep_pour: ck(16, {
+    0: G,
+    1: G,
+    9: '          o o',
+    12: '  g',
+    13: '#########    %##',
+    14: '#########WWWWW##',
   }),
 };

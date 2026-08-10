@@ -193,18 +193,27 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
 | 5 JÄLKIPYYKKI | sekateema | uusintaottelu prinssin kanssa |
 | 6 LUULAAKSO | hautausmaa keskiyöllä | **LUURANKO**, joka hajoaa jokaisesta osumasta ja kokoaa itsensä |
 | 7 KAASUKEHÄ | pilvikerroksen päällä | **SÄÄHERRA**, joka nousee ilmaan jokaisesta osumasta |
+| 8 VIIMEINEN LINNAKE | linnake, ei ulkopuolta | seitsemän uusintaa ja **PIERUKUNINGAS**, joka vastaa osumaan ottamalla seuraavan linnakkeen liikesarjan |
 
-Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: kuusi
-maailmaa kahdeksasta on kasvanut kahdeksan kentän mittaan, ja kaksi viimeistä
-— maailmat 2 ja 8 — kasvavat omilla ehdoillaan. Kentän läpäisy avaa siitä
+Maailmassa on hernetalo, linnake ja **kolme tai seitsemän kenttää**: seitsemän
+maailmaa kahdeksasta on kasvanut kahdeksan kentän mittaan, ja viimeinen
+— maailma 2 — kasvaa omilla ehdoillaan. Kentän läpäisy avaa siitä
 lähtevät polut; linnakkeen pomon kaato avaa seuraavan maailman.
+
+**Maailma 8 on eri muotoinen kuin muut, ja se on tarkoitus.** Siinä ei ole
+yhtään lippua: jokainen kahdeksasta kentästä päättyy oveen, ja seitsemän
+ensimmäistä ovat uusintoja maailmojen 1–7 linnakepomoja vastaan siinä
+järjestyksessä kuin ne tulivat — jättiläinen kahdesti, koska linna lähetti
+hänet kahdesti. Kahdeksas on pelin ainoa megapomo, eikä hän ole isompi vaan
+**eri**: jokainen muu pomo vastaa osumaan kasvattamalla yhtä omaa lukuaan,
+kuningas vaihtamalla itsensä joksikin toiseksi.
 
 Kahdeksan kentän maailman muoto on `W-1`…`W-7` ja `W-F`, ja sen
 vaikeuskäyrässä on **kaksi hengähdyskenttää** yhden sijaan — perustelu on
 [CHANGELOG.md](CHANGELOG.md):ssä ja sääntö on `tools/verify.mjs`:ssä.
 
 Kentät **1-4…1-7, 3-4…3-7, 4-4…4-7, 5-1…5-7, 6-4…6-7 ja 7-4…7-7 ovat
-generoituja** — 27 kenttää kuudestakymmenestä: rytmi tulee mitatuista
+generoituja** — 27 kenttää kuudestakymmenestäkahdesta: rytmi tulee mitatuista
 tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siitä
 onko sen alkuperäisyys tarkistettu korpusta vasten (kaikki 27 on, osumia 0).
 Linnakkeet ja maailman opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.

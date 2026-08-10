@@ -206,6 +206,28 @@ function bossRank(r, bx, py, variant) {
     r(bx + 15, py + 27, 2, 2, goldDark);            // akseli
     r(bx + 13, py + 28, 2, 1, goldDark);            // neula alas vasemmalle
     r(bx + 14, py + 29, 1, 1, goldDark);
+    return;
+  }
+  if (variant === 6) {
+    /*
+     * Hermeliiniviitta, ja se on **valkoinen eikä kultaa**.
+     *
+     * Kuningas on ainoa pomo jonka arvo on itse asia eikä sen merkki, joten
+     * hänellä ei ole mitalia, valtikkaa eikä kelloa — hänellä on se puku josta
+     * kuninkaan tunnistaa. Valkoinen on tässä sama luettavuuspäätös kuin
+     * vartalon värissä: kruunu on kultaa, ja mitä vähemmän muuta kultaa
+     * ruudulla on, sitä varmemmin kruunu luetaan.
+     *
+     * Olkapäillä eikä rinnalla, koska rinta on jo varattu: `drawStandardBoss`
+     * piirtää suun riville py+18. Ja pysyy pään alapuolella niin kuin jokainen
+     * muu arvomerkki tässä tiedostossa.
+     */
+    for (const ex of [1, 25]) {
+      r(bx + ex, py + 8, 6, 9, '#f0ece4');
+      r(bx + ex, py + 15, 6, 2, '#c0b8ac');
+      r(bx + ex + 1, py + 10, 1, 2, C.ink);
+      r(bx + ex + 3, py + 13, 1, 2, C.ink);
+    }
   }
 }
 
@@ -270,8 +292,17 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
    * luettavuuspäätös eikä makuasia, ja se on sama päätös kuin maailman
    * paletissa toisin päin.
    */
-  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc', '#3a4472'];
-  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88', '#1e2444'];
+  /*
+   * Ja seitsemäs on kuningas (6), **tumma viininpunainen eikä kultainen**.
+   *
+   * Kulta on tässä pelissä varattu: kruunu on ainoa kultainen asia pomossa, ja
+   * se on se yksi merkki jonka pelaajan on luettava. Kultainen kuningas
+   * kultaisella kruunulla olisi kuningas jonka kruunua ei näe — sama päätös
+   * kuin sääherralla (5), joka on tumma vaikka hänen maailmansa on valkoinen,
+   * ja samasta syystä.
+   */
+  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc', '#3a4472', '#8c1830'];
+  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88', '#1e2444', '#54101e'];
   const flashing = hurt && Math.floor(frame / 2) % 2 === 1;
   const body = flashing ? '#e07070' : bodyColors[variant % bodyColors.length];
   const dark = flashing ? body : darkColors[variant % darkColors.length];

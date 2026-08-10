@@ -13,7 +13,7 @@ import { Music, Sfx, Ambience } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
-import { GRAVITY } from '../level/physics.js';
+import { GRAVITY, GRAVITY_HELD_CUTOFF } from '../level/physics.js';
 import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, formatTime, formatDelta,
@@ -276,6 +276,87 @@ const CAM_TOP_MARGIN = 16;
  * after.
  */
 const CAM_TOP_LEAD = 3;
+
+/*
+ * ...and the one thing three frames of warning cannot buy: a rise that is
+ * bigger than the warning.
+ *
+ * `CAM_TOP_LEAD` cancels the ease's *lag* and nothing else. Three frames of lead
+ * against an ease of 0.25 means that once the view is up to speed it sits
+ * exactly on `head - CAM_TOP_MARGIN`, and therefore **matches the body's own
+ * rise speed** — which is nothing at all when the head only reaches the margin
+ * near the apex, and is nearly four pixels a frame when it reaches it early.
+ *
+ * **And where in the arc the head reaches the margin is decided by the framing,
+ * not by the jump.** A player standing on the desert floor of 2-1 is framed with
+ * 94 px of headroom, because `rest` wants 94 and the bottom of the level pins
+ * the view before it can take any of it back. A player standing on the brick
+ * shelf at column 228 of the same level — chunk 14, row 9, in the shipped game
+ * and reachable — gets the 80 px `CAM_EYE` actually asks for. Fourteen pixels of
+ * difference, and they land in the worst possible place: the margin is crossed
+ * 64 px into the jump instead of 78, with the body still climbing at 3.9
+ * px/frame instead of coasting into its apex. Measured there, power level 3, one
+ * running fart jump: **2.73 px on a single frame**, against a gate that calls
+ * 2.5 a snap — and the gate never saw it, because its bot dies in 2-1 long
+ * before column 228.
+ *
+ * **Two obvious repairs were measured and both are dead ends, which is why this
+ * one is shaped the way it is.**
+ *
+ *   - *A longer lead* was already measured above and rejected: 1.95 → 2.88 going
+ *     from three frames to eight, because a longer lead starts the view earlier
+ *     in the arc where the body is faster and the view still ends up matching
+ *     it. A lead moves the event; it cannot shrink it.
+ *   - *A ceiling on the view's own speed* fixes the number and pays for it out
+ *     of the other promise. Capped at 2.2 px/frame the same jump reads 2.20 —
+ *     and the head goes from 16.10 px of clearance to **15.29**, because slowing
+ *     the view is the same thing as letting the head catch up. The two gate
+ *     assertions pull in opposite directions, and anything that only ever
+ *     removes speed can satisfy one of them.
+ *
+ * The way out is to spend the travel **before** the margin is reached, and the
+ * budget for that is stated as a picture rather than as a taste: `slack` is what
+ * is left under the player's feet, and `CAM_GROUND_MARGIN` is how much of it has
+ * to stay. Two tiles, which is exactly the thickness of the ground every shipped
+ * level's floor is built from — so on a level's own floor there is no slack at
+ * all and this whole mechanism is arithmetically absent, which is why every
+ * number the gate measured down there comes out unchanged to the pixel. On the
+ * shelf there are 46 px of picture under the feet and 14 of them are spendable.
+ *
+ * That slack is then released by two factors, and the second one is the whole
+ * reason this is safe:
+ *
+ *   - `near`, how far into the top of the window the head has actually come,
+ *     ramped from `CAM_AIR_MARGIN` (three tiles) down to `CAM_TOP_MARGIN` (one).
+ *     A ramp and not a threshold, because a threshold would hand the view the
+ *     whole 14 px in one step and that is the snap again, one tile earlier.
+ *   - `push`, whether the jump is **still being pushed**. Zero at
+ *     `GRAVITY_HELD_CUTOFF`, the speed the physics itself calls the end of a
+ *     held jump, and full at twice it, which is TERMINAL. This is not a taste
+ *     either, it is the only thing that separates the two cases: the ledge at
+ *     column 38 of the same level is framed exactly like the shelf, and an
+ *     ordinary power-0 jump off it comes within **45.8 px** of the top of the
+ *     frame while needing nothing from the camera — but it arrives there at its
+ *     apex, at a standstill. The shelf's fart jump passes the same line at 3.9
+ *     px/frame. Position alone cannot tell them apart, and the gate already
+ *     promises that jump 0.00 px of movement (*"the view does not creep upward
+ *     during a fall"*). Speed tells them apart exactly.
+ *
+ * Measured at column 228, power 3, one running fart jump: worst frame **2.73 →
+ * 2.17** and the head **16.10 → 16.18**, so the smoothness is bought out of the
+ * picture under the feet and not out of the headroom. The take-off shelf stays
+ * 32 px above the bottom edge for the whole jump, the view settles 0.08 px over
+ * 4 frames after touchdown (unchanged), and the same jump at power 0 — which
+ * needs none of this — moves the view 0.07 px instead of 0.00. Every ledge in
+ * the fall fixture still reads 0.00.
+ *
+ * What this is **not** is `CAM_SNAP` coming back. That was a rule about the size
+ * of an error and it *created* cuts; this is a limit in the same `Math.min` as
+ * `CAM_TOP_MARGIN`, continuous in both directions, and it cannot move the view
+ * anywhere the view could not already go. It only decides *when*.
+ */
+const CAM_AIR_MARGIN = 48;
+const CAM_GROUND_MARGIN = 32;
 
 /*
  * ...and the same trick going the other way, which is the half that was left.
@@ -1299,11 +1380,49 @@ export class LevelScene {
     return clamp((this.tick - this.bossDefeated) / DOOR_OPEN_FRAMES, 0, 1);
   }
 
+  /**
+   * Pomo kaatui, ja tämä on pelin suurin hetki — joten sen merkit on päätetty
+   * eikä kasattu.
+   *
+   * Tässä soi `clear` ja `door` samalla framella, päälle musiikin
+   * uudelleenkäynnistys, tärähdys ja pistepomppu. Se raportoitiin aamulla
+   * kohdan 8 liikamerkitsemiseksi eikä siihen koskettu, koska purkaminen
+   * muuttaisi juuri tätä hetkeä. Nyt se on mitattu, ja mittaus sanoo eri asian
+   * kuin "liikaa merkkejä": **kaksi näistä merkeistä oli lainassa muualta ja
+   * molemmat soivat uudestaan sekunnin sisällä.** Sama ajo kaikissa kolmessa
+   * linnakkeessa (1-F, 2-F, 8-F), pomo kaadettuna framella 10 ja pelaaja
+   * ovelle asti:
+   *
+   *     f10  stomp + clear + door        f47  door        f65  clear
+   *
+   * `door` uudestaan 37 framen päästä, kun ovesta kävellään sisään, ja `clear`
+   * uudestaan 55 framen päästä, kun kenttä oikeasti päättyy. Jälkimmäiset ovat
+   * 0,5 s ja 0,72 s pitkiä, joten kumpikin pari melkein koskettaa toisiaan.
+   * Pelaaja kuulee siis saman jinglen kahdesti ja saman oven kahdesti, ja
+   * kahdesta parista kumpikaan ei tarkoita samaa asiaa kummallakin kerralla.
+   * Se ei ole kerroksellisuutta vaan juuri se väärään lukemiseen opettava
+   * merkki jota kohta 8 varoo.
+   *
+   * Ratkaisu on siis vähentäminen eikä lisääminen, ja se koskee **vain
+   * lainattua puoliskoa**:
+   *
+   *   - `clear` on kentän loppumisen jingle. Kenttä ei lopu tässä — pelaajan on
+   *     vielä käveltävä ovesta sisään — joten se lähtee pois täältä ja jää
+   *     `completeLevel`iin, missä se tarkoittaa yhtä asiaa.
+   *   - `door` **jää**, koska se on nimenomaan tämän hetken oma ääni: pitkä
+   *     pehmeästi avautuva kohina, ja sen kuva on olemassa (`doorOpen`, lehdet
+   *     kääntyvät). Sisään kävelemiselle tehtiin oma äänensä (`doorin`).
+   *
+   * Mitä hetkelle jää: `stomp` (isku joka kaatoi hänet), `door` (tie ulos
+   * aukeaa), tärähdys, pistepomppu OVI AUKI, kääntyvät lehdet ja musiikin
+   * uudelleenkäynnistys. Kaksi ääntä, ja ne ovat kahdesta eri tilanvaihdoksesta
+   * — yksi merkki kutakin kohti, mikä on koko sääntö. Hetki ei siis ohene:
+   * siitä lähtee se merkki joka kuului toiselle hetkelle.
+   */
   onBossDefeated() {
     // The tick, not `true`. Still truthy for every existing reader.
     this.bossDefeated = this.tick + 1;
     Music.play(this.def.music || 'fortress');
-    Sfx.play('clear');
     Sfx.play('door');
     this.shake(4);
     this.addScorePop(this.player.cx, this.player.y - 12, 'OVI AUKI');
@@ -1491,7 +1610,11 @@ export class LevelScene {
       hide: dirX > 0 ? p.x + p.w : p.x,
       hideDir: dirX,
     });
-    Sfx.play('door');
+    /* `doorin` eikä `door`: oven aukeaminen ja siitä sisään käveleminen olivat
+     * sama ääni, ja mitattuna ne soivat 37 framen välein samassa kentässä. Sama
+     * vika ja sama korjaus kuin putkella aamulla — ks. `onBossDefeated` ja
+     * audio.js. */
+    Sfx.play('doorin');
   }
 
   /* -------------------------------- transit ---------------------------- */
@@ -1734,7 +1857,12 @@ export class LevelScene {
         // A star block promises a star; everything else rolls.
         const kind = meta.question === 'star' ? 'star' : this.rollPowerup(player);
         this.add(new Item(this, tx * TILE, ty * TILE - TILE, kind));
-        Sfx.play('bump');
+        /* Tämä soitti `bump`ia, joka on se ääni jonka pieni pelaaja saa kun
+         * tiili **ei** anna mitään. Kaksi vastakkaista tapahtumaa samalla
+         * merkillä on sama vika kuin lainattu `powerup` alempana, ja korjaus on
+         * yksi ääni yhdelle tilanvaihdokselle: lohko antoi jotain -> `payout`,
+         * lohko ei antanut -> `bump`. */
+        Sfx.play('payout');
       }
       return;
     }
@@ -1752,7 +1880,10 @@ export class LevelScene {
           this.addCoin(tx * TILE + 8, ty * TILE);
         } else {
           this.add(new Item(this, tx * TILE, ty * TILE - TILE, this.rollPowerup(player)));
-          Sfx.play('powerup');
+          /* `payout` eikä `powerup`: lohko antoi jotain, mutta kukaan ei vielä
+           * kasvanut. Sama ääni molemmissa tarkoitti että yhden mansikan
+           * kohdalla soi sama merkki kahdesti — ks. audio.js. */
+          Sfx.play('payout');
         }
         return;
       }
@@ -1987,7 +2118,11 @@ export class LevelScene {
   startSwitch() {
     this.switchTimer = SWITCH_FRAMES;
     this.shake(2);
-    Sfx.play('powerup');
+    /* `kytkin` eikä `powerup`: kytkin ei kasvata ketään, se muuttaa huoneen
+     * määräajaksi. Kuva on jo kolminkertainen — jokainen tiili ruudulla
+     * vaihtuu, ruutu tärähtää ja pistepomppu lukee sen ääneen — joten tästä
+     * puuttui vain se ääni joka sanoo saman asian. Ks. audio.js. */
+    Sfx.play('kytkin');
     this.addScorePop(this.player.cx, this.player.y - 12, 'TIILET KOLIKOIKSI');
   }
 
@@ -2271,6 +2406,7 @@ export class LevelScene {
     if (!p.dying && !p.transit) {
       this.cam.y = this.clampCamY(Math.min(this.cam.y, p.y - CAM_TOP_MARGIN));
     }
+
   }
 
   /**
@@ -2304,15 +2440,28 @@ export class LevelScene {
       return this.clampCamY(this.camAnchor
         - (climbing ? this.viewH - CAM_PAGE_LAND : CAM_PAGE_LAND));
     }
-    /* The settled line, then the one thing allowed to override it: the head
-     * must not leave the top of the window. Frozen bodies get the line alone —
-     * a dying player flies upwards and a travelling one is not in the room. */
+    /* The settled line, then the two things allowed to override it: the head
+     * must not leave the top of the window, and a jump that is still being
+     * pushed into that window is leaned into rather than met at the last tile.
+     * Frozen bodies get the line alone — a dying player flies upwards and a
+     * travelling one is not in the room. */
     const rest = this.camAnchor - this.viewH * CAM_EYE - CAM_STAND;
     /* The head, or where it is heading. A rise is aimed three frames ahead so
      * the ease is already up to speed by the time the margin matters; anything
      * else is aimed at the body itself. See CAM_TOP_LEAD. */
     const head = p.vy < 0 ? p.y + p.vy * CAM_TOP_LEAD : p.y;
-    const target = p.dying || p.transit ? rest : Math.min(rest, head - CAM_TOP_MARGIN);
+    /* ...and the lean: the picture under the feet, spent early. Three factors
+     * and each answers a different question — how much is there to spend, how
+     * far in has the head come, and is this jump still going somewhere. Aimed at
+     * the body itself and not at `head`, because this one is about where you
+     * *are*; the anticipation is the line above. See CAM_AIR_MARGIN. */
+    const slack = Math.max(0, rest - (this.camAnchor + CAM_GROUND_MARGIN - this.viewH));
+    const near = clamp((CAM_AIR_MARGIN - (p.y - rest))
+      / (CAM_AIR_MARGIN - CAM_TOP_MARGIN), 0, 1);
+    const push = clamp((-p.vy + GRAVITY_HELD_CUTOFF) / -GRAVITY_HELD_CUTOFF, 0, 1);
+    const lean = rest - slack * near * push;
+    const target = p.dying || p.transit
+      ? rest : Math.min(rest, lean, head - CAM_TOP_MARGIN);
     // The view holds still while you die: following the body down would pan it
     // straight through whatever is under the pit you just fell into.
     if (p.dying && this.def.bands) return this.cam.y;

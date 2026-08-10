@@ -18,10 +18,13 @@ geometrian, `node tools/difficulty.mjs` vaikeuskäyrän, ja kaksi uutta mittaria
 — `node tools/curriculum.mjs` (milloin asia opetetaan) ja `node tools/variety.mjs`
 (kuinka usein se sanotaan uudelleen) — eivät ole portteja vaan mittareita.
 
-**Kahdeksan kentän muoto: kuusi maailmaa kahdeksasta.** Maailmat 1 ja 3–7 ovat
-kahdeksan kentän mittaisia. Jäljellä **maailma 2** (haara: kahdeksan kenttää on
-siellä kuusi tai seitsemän askelta) ja **maailma 8** (pomo joka kentässä, eikä
-generaattorissa ole areenapalikkaa), eli **neljä kenttää** tavoitteesta 64.
+**Kahdeksan kentän muoto: seitsemän maailmaa kahdeksasta.** Maailmat 1, 3–7 ja
+nyt myös **8** ovat kahdeksan kentän mittaisia. Maailma 8 tuli mittaan
+10.8.2026: seitsemän uusintaa ja megapomo, eli kaksi kenttää lisää
+(**8-4 KONEHOLVI** ja **8-5 SULATTO**), ja vanhat 8-4 ja 8-5 numeroituina
+8-6:ksi ja 8-7:ksi tavu tavulta ennallaan. Jäljellä on vain **maailma 2**
+(haara: kahdeksan kenttää on siellä kuusi tai seitsemän askelta), eli
+**kaksi kenttää** tavoitteesta 64.
 
 **Kaksi pelitilaa on olemassa.** `AIKA-AJO` (v26.08.10.55): kentän oma ennätys,
 elävä ero kahdeksassa välipisteessä, tilalataus kielletty. `PÄIVÄN PIERU`
@@ -386,9 +389,9 @@ samannäköistä "jotain tapahtui" -signaalia opettavat lukemaan väärää.
 
 ### Kahdeksan maailmaa, kahdeksan kenttää kussakin
 
-Nyt on **8 maailmaa ja 60 kenttää**, eli maailmat ovat kasassa, muoto on
-päätetty, kuusi maailmaa on siinä mitassa ja kenttiä puuttuu **neljä**:
-maailmat 2 ja 8. Tavoite on 64.
+Nyt on **8 maailmaa ja 62 kenttää**, eli maailmat ovat kasassa, muoto on
+päätetty, seitsemän maailmaa on siinä mitassa ja kenttiä puuttuu **kaksi**:
+maailma 2. Tavoite on 64.
 
 **Muoto ei ole enää auki (v26.08.09.46), ja se on portissa eikä tässä.**
 Kahdeksan kenttää on `W-1`…`W-7` ja `W-F`, ja seitsemän askelen kävelyssä on
@@ -409,9 +412,15 @@ koskee tekemättä olevia maailmoja:
   lataa vaikeusmittarin, joka kävelee koko pelin, eli se kaatuu jos kartalla on
   solmu kenttään jota ei vielä ole. Aja `--world wN`, niin muut maailmat eivät
   liiku.
-- **Maailma 8 on eri työ kuin muut.** Neljä kenttää lisää, ja jokaisen niistä on
-  oltava pomohuone (ei lippua, katto joka sarakkeen yllä). Generaattorissa **ei
-  ole areenapalikkaa**; se on nimetty puute eikä yllätys.
+- ✔ **Maailma 8 oli eri työ kuin muut** — tehty 10.8.2026. Kaksi kenttää lisää,
+  molemmat pomohuoneita (ei lippua, katto joka sarakkeen yllä), ja ne tehtiin
+  käsin: generaattorissa **ei ole areenapalikkaa**, ja se on yhä nimetty puute
+  eikä yllätys. Kaksi asiaa jäi kirjatuksi: **uusintoja on seitsemän eikä
+  kuusi**, koska linnakkeita on seitsemän ja jättiläinen on niistä kahden pomo
+  (4-F ja 5-F) — vanha portti "jokainen variantti kerran" oli tosi vain
+  sattumalta — ja **megapomo vaihtaa verbin eikä numeroa**: pierukuningas
+  (variantti 6) vastaa osumaan ottamalla seuraavan linnakkeen liikesarjan, eli
+  jokainen numero jonka hän kantaa on jonkun toisen numero.
 - ✔ **Maailma 4 oli ahtain paikka kahdesta suunnasta** — tehty (v26.08.10.49).
   Käyrässä sen ylä- ja alapuolella oli +17,5 ja +66,8, ja molemmat varoitukset
   osuivat. Katto-osuus: generoitu tehdaskenttä **kattoi rivin 0** (`ceilingPass`

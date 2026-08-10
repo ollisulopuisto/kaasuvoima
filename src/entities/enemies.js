@@ -1570,16 +1570,80 @@ const DUST_EVERY = 4;
 /** How far along the deck the thump is felt, in tiles either side of him. */
 const DUST_REACH = 14;
 
+/*
+ * PIERUKUNINGAS — variantti 6, ja pelin ainoa megapomo.
+ *
+ * ## Mikä tässä on eri kuin isommassa pomossa
+ *
+ * Ilmeinen megapomo on isompi sprite ja enemmän osumia, ja se on väärä siitä
+ * yksinkertaisesta syystä että se on **sama tappelu pidempänä**. Jokainen pomo
+ * tässä pelissä vastaa osumaan kasvattamalla yhtä omaa lukuaan: nopeus +0,35,
+ * luurangolla ja sääherralla +0,2, jättiläisellä koko +0,5. Numero nousee,
+ * liikesarja pysyy, ja pelaajan työ on tehdä sama asia uudestaan hieman
+ * nopeammin. Kuningas on ainoa jonka vastaus **ei ole numero**:
+ *
+ *     osuma ei kiihdytä häntä — se vaihtaa hänet joksikin toiseksi.
+ *
+ * Hän ottaa vuorollaan jokaisen seitsemän linnakkeen liikesarjan siinä
+ * järjestyksessä kuin linna ne lähetti (maailmat 1–7, `KING_FORMS`), ja
+ * seitsemäs osuma kaataa hänet. Pelaajan työ ei siis ole toistaa yhtä
+ * opittua rytmiä loppuun asti vaan **tunnistaa kesken tappelun kuka juuri
+ * saapui** — ja se on ainoa taito jonka maailma 8 on seitsemässä huoneessaan
+ * opettanut. Maailman lause on että linnalla ei ole mitään uutta lähetettävää,
+ * ja tämä on se lause yhdessä ruumiissa: **jokainen numero jonka kuningas
+ * kantaa on jonkun toisen numero**, ei yhtään uutta mekaniikkaa.
+ *
+ * ## Se ainoa asia jota hän ei lainaa
+ *
+ * **Koko.** Jättiläisen liikkeen hän ottaa — nopeuden ja tiheämmän hyppykellon
+ * — mutta ei puoltakaan kokoa, ja se on päätös eikä unohdus: koko on se ainoa
+ * pomon ominaisuus tässä pelissä joka vaatii *toisen huoneen*. Jättiläisen
+ * kannet ovat olemassa siksi että hänen päänsä karkaa voimatason 0 hypyn
+ * ulottuvilta (ks. `boss_arena_big`), ja kuningas joka kasvaisi kesken
+ * seitsemän muodon sarjan olisi joko saavuttamaton tai kutistuisi takaisin.
+ * Hän pysyy yhden kokoisena koko tappelun, ja siksi lupaus voimatasosta 0
+ * pysyy sillä mitalla jolla se on kaikille muillekin annettu.
+ *
+ * ## Miksi hän ei kiristä ikkunaansa
+ *
+ * `openFrames` kapenee jokaisella osumalla kaikilla muilla — se on niiden
+ * toinen numero. Kuninkaalla se ei kapene, koska tappelu vaikeutuu jo
+ * muuttumalla, ja kaksi kiristystä yhdestä osumasta on yksi liikaa (sama
+ * perustelu kuin luurangon ja sääherran +0,2:lla).
+ */
+const KING = 6;
+/**
+ * Seitsemän linnaketta, maailmat 1–7, siinä järjestyksessä kuin linna ne
+ * lähetti — jättiläinen kahdesti, koska linna lähetti hänet kahdesti (4-F ja
+ * 5-F). Tämä taulu on kuninkaan osumapisteiden määrä: yksi muoto per osuma.
+ *
+ * Toisto ei ole huolimattomuutta vaan väitteen ainoa rehellinen muoto. Jos
+ * tässä lukisi `[0,1,2,3,4,5]`, kuningas olisi *variantit* eikä *linnakkeet*,
+ * ja maailma 8:n lause on nimenomaan että linna lähettää sen mitä se on jo
+ * lähettänyt — ei sen sanaston josta se on koottu.
+ */
+const KING_FORMS = [0, 1, 2, 3, 3, 4, 5];
+
 /**
  * Fortress boss. `variant` picks the move set:
  *   0 walk + jump, 1 landing shockwaves, 2 charges, 3 the giant that inflates,
  *   4 the skeleton that comes apart, 5 the weather lord who answers a hit by
- *   taking off.
+ *   taking off, 6 the king who answers a hit by becoming one of the six.
+ *
+ * `variant` on se **kuka tämä on** ja `form` se **miten tämä liikkuu**. Kaikille
+ * muille ne ovat sama luku alusta loppuun; kuninkaalle `variant` pysyy kuutena
+ * (väri, arvomerkki, pisteet) ja `form` kiertää `KING_FORMS`in läpi.
  */
 export class Boss extends Enemy {
   constructor(level, x, y, variant = 0) {
     super(level, x, y, 30, 32);
     this.variant = variant;
+    this.king = variant === KING;
+    /* Liikesarja. Ei-kuninkaalle sama luku kuin `variant`, joten jokainen
+     * `this.form`-haara alla lukee muille täsmälleen sen mitä `this.variant`
+     * luki ennen tätä muutosta. */
+    this.form = this.king ? KING_FORMS[0] : variant;
+    this.formIndex = 0;
     /*
      * Health per variant, and the two special cases are special for opposite
      * reasons. The giant (3) has five because every hit makes him bigger and
@@ -1587,12 +1651,19 @@ export class Boss extends Enemy {
      * than five because his own answer to a hit — coming apart, see `stomp` —
      * already costs the player a couple of seconds of getting off the floor,
      * so a fifth window would be padding rather than a fight.
+     *
+     * Kuninkaalla luku ei ole valittu vaan **johdettu**: yksi osuma per muoto,
+     * eli seitsemän, koska linnakkeita on seitsemän. Jos joku joskus lisää
+     * kahdeksannen linnakkeen, tämä luku seuraa perässä itsestään — ja se on
+     * tarkoitus, koska käsin kirjoitettu seitsemän olisi juuri se numero joka
+     * jää jälkeen.
      */
-    this.hp = variant === 3 ? 5 : variant === 4 ? 4 : 3 + Math.min(1, variant);
+    this.hp = this.king ? KING_FORMS.length
+      : variant === 3 ? 5 : variant === 4 ? 4 : 3 + Math.min(1, variant);
     this.score = 5000 + variant * 1000;
     this.invuln = 0;
     this.jumpTimer = 90;
-    this.speed = 0.75 + variant * 0.15;
+    this.speed = 0.75 + this.form * 0.15;
     this.chargeTimer = 220;
     this.charging = 0;
     this.scale = 1;
@@ -1631,8 +1702,15 @@ export class Boss extends Enemy {
    */
   get sinks() { return false; }
 
-  /** How long the vulnerable window is at the current health. */
+  /**
+   * How long the vulnerable window is at the current health.
+   *
+   * Kuninkaalla se ei kapene: hänen tappelunsa vaikeutuu vaihtumalla eikä
+   * kiristymällä, ja kaksi kiristystä yhdestä osumasta on yksi liikaa — sama
+   * perustelu kuin luurangon ja sääherran pienemmällä kiihdytyksellä.
+   */
   get openFrames() {
+    if (this.king) return SPIKE_OPEN;
     return Math.max(SPIKE_OPEN_MIN, SPIKE_OPEN - (this.maxHp - this.hp) * SPIKE_OPEN_STEP);
   }
 
@@ -1677,7 +1755,7 @@ export class Boss extends Enemy {
        * ilkkuminen: "tässä olen, tule hakemaan". Se on tieto jonka pelaaja
        * saisi muutenkin kuvasta, ja siksi ääni saa olla luonnetta eikä ohjetta.
        */
-      if (this.variant === 4) Sfx.play('luuranko');
+      if (this.form === 4) Sfx.play('luuranko');
     }
   }
 
@@ -1763,10 +1841,10 @@ export class Boss extends Enemy {
     const fallSpeed = this.onGround ? 0 : this.vy;
     if (this.onGround && --this.jumpTimer <= 0) {
       this.vy = -5.6;
-      this.jumpTimer = (this.giant ? 60 : 80) + Math.floor(Math.random() * 60);
+      this.jumpTimer = (this.form === 3 ? 60 : 80) + Math.floor(Math.random() * 60);
       Sfx.play('boss');
     }
-    if (this.variant >= 2 && this.onGround && !this.spiky && --this.chargeTimer <= 0) {
+    if (this.form >= 2 && this.onGround && !this.spiky && --this.chargeTimer <= 0) {
       this.charging = 45;
       this.chargeTimer = 200 + Math.floor(Math.random() * 120);
     }
@@ -1787,7 +1865,7 @@ export class Boss extends Enemy {
     // A hard landing sends shockwaves out along the floor. Only after a real
     // fall, and never more than a couple of pairs at a time.
     const live = this.level.entities.filter((e) => e instanceof Shockwave && !e.remove).length;
-    if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.variant >= 1 || this.scale > 1.5)) {
+    if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.form >= 1 || this.scale > 1.5)) {
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
       this.level.shake(2 + this.scale);
@@ -1801,7 +1879,32 @@ export class Boss extends Enemy {
     this.invuln = 70;
     this.charging = 0;
     Sfx.play('stomp');
-    if (this.giant) {
+    if (this.king) {
+      /*
+       * KUNINGAS VAIHTUU.
+       *
+       * Koko megapomo on tässä yhdessä haarassa, ja se on tarkoituksella
+       * lyhyt: `update()` osaa jo jokaisen kuuden liikesarjan, joten ainoa
+       * asia joka tässä tapahtuu on että `form` siirtyy seuraavaan. Uutta
+       * mekaniikkaa ei synny riviäkään, mikä on koko väite — linnalla ei ole
+       * mitään uutta lähetettävää, ja tämä on se lause koodina.
+       *
+       * Nopeus luetaan uudesta muodosta samalla kaavalla kuin
+       * konstruktorissa, eli se voi myös **laskea**. Se on ero jokaiseen
+       * muuhun pomoon: heillä numero vain nousee.
+       *
+       * Signaali on kuva ja ääni yhdessä (DESIGN.md kohta 8), ja molemmat ovat
+       * pelissä jo: ruskea pilvi hänen omaa kaasuaan ja `fart`. Kolmatta
+       * pomoääntä ei tehdä — se olisi neljäs asia opeteltavaksi.
+       */
+      this.formIndex = Math.min(this.formIndex + 1, KING_FORMS.length - 1);
+      this.form = KING_FORMS[this.formIndex];
+      this.speed = 0.75 + this.form * 0.15;
+      this.chargeTimer = 200;
+      this.level.spawnPuff(this.cx, this.cy, true);
+      this.level.shake(2);
+      Sfx.play('fart');
+    } else if (this.giant) {
       // Puffs up half a size with every hit, all the way to three times over.
       const before = this.targetScale;
       this.targetScale = Math.min(3, this.targetScale + 0.5);
