@@ -997,78 +997,69 @@ kenttiä joita luetaan joka framessa.
 
 ## Avoimet kysymykset
 
-### Auki 10.8.2026, työjärjestyksessä
+### Tilanne 10.8.2026 illalla: kymmenen avointa kysymystä, kaikki suljettu
 
-Nämä ovat tiedossa ja kirjattu; ✔ merkitsee tehdyn.
+`MEGABOSS`, `maailma 2 kahdeksaan`, `pystykenttä maailmaan 7`, `kaivautuva
+kenttä luumaailmaan`, `kamera 2-1:ssä`, `4-3 voimatasolla 0`, `kuollut
+fort_*-sanasto`, `äänten kaksoismerkitykset`, `neljä vihollista
+kontrastikynnyksen alla` ja `oneup joka ei ilmesty` — kaikki tehty samana
+päivänä, kukin omalla punaisellaan. Perustelut ovat muutoslokin merkinnöissä
+v26.08.10.58 … .62.
 
-1. **MEGABOSS ja maailma 8 kahdeksaan.** Omistajan muotoilu: seitsemän
-   linnakepomoa uusintaotteluina ja PIERUKUNINGAS palanneena finaaliksi
-   `VALTAISTUINSALI`ssa. Odotti maailmojen 4–7 vapautumista, jotka ovat nyt
-   vapaita — tämä on suurin yksittäinen jäljellä oleva sisältötyö.
-2. ✔ **Maailma 2 kahdeksaan** — tehty 10.8.2026 (**2-4 SAVIKUOPPA**, **2-5
-   PAAHDE**). Haarautuva kartta teki tästä eri tehtävän kuin muista, ja se
-   ratkesi kolmeen väitteeseen portissa: kahdeksan **solmua** kartalla, jokainen
-   **reitti** vähintään kuusi kenttää ja reittien ero korkeintaan yksi (6 ja 7),
-   ja muoto mitattuna **kävelystä** eikä litistetystä rivistä. Kaksi asiaa jäi
-   kirjatuksi: uudet kentät tulivat risteyksen jälkeen koska ennen sitä
-   LAAVATIEn kävely ei olisi noussut (päättyisi 2-M:ään, 110,7 < 2-1:n 118,6),
-   ja haaran mitatut luvut eivät liikkuneet lainkaan (159,3 vastaan 124,2),
-   koska kumpikaan uusi kenttä ei ole kummankaan reitin oma. Muutosloki on
-   velkaa merkinnän.
-3. **Oikea pystykenttä maailmaan 7.** Työkalut ovat olemassa (v26.08.10.52) ja
-   niiden mukana kahdeksan kohdan ohje: `vertical: true` + `rows`, **tasan 20
-   saraketta** (21 kytkee vaakakameran takaisin), peruskallio alimmalle riville,
-   puolat ≤ 4 laattaa erillään. Fikstuurin mitta-asteikko on 104,3 ≈ maailman 1
-   kenttä, joten maailman 7 kiipeily haluaa selvästi sen yli.
-4. **Kaivautuva kenttä luumaailmaan** ([IDEAS.md](IDEAS.md) kohta I). Halpa jos
-   sivutus on suuntaneutraali, ja se on — mutta rangaistus pitää rakentaa
-   maastoon eikä putoamiseen, koska alaspäin virhe vie *eteenpäin* väärään
-   paikkaan.
-5. **Kamera 2-1:ssä.** Pelaajan tavoitettavissa oleva vika toimitetussa
-   kentässä: voimatasolla 3, tiilillä sarakkeessa 228, pieruhyppy nostaa kuvaa
-   **2,85 px yhdellä framella** (katto 2,5) ja pää on tasan **16,00 px** ylhäällä
-   (lattia 16). Kamerafikstuuri ei ole napannut sitä koska sen botti kuolee 2-1:ssä
-   aiemmin — pääseekö se tiilille asti on palikkajärjestyksen sattuma.
-6. **4-3 ei ole läpäistävissä voimatasolla 0** eikä tuplahypylläkään.
-   `playable.mjs` on raportoinut tämän pitkään; botti ei osaa kellulavoja, joten
-   osa siitä voi olla botin rajoite eikä kentän vika — mutta sitä ei ole
-   selvitetty, ja se on ainoa kenttä jonka kohdalla lupausta ei ole todistettu.
-7. **Kuollut `fort_*`-sanasto.** `fort_hall`, `fort_gap`, `fort_spikes`,
-   `fort_blocks`, `fort_pillars`, `fort_burn` ja `fort_trench` eivät ole enää
-   yhdenkään linnakkeen käytössä. Poisto on oma muutoksensa oman punaisensa
-   kanssa.
-8. **Äänten kaksoismerkitykset.** `door` tarkoittaa oven aukeamista ja siitä
-   sisään kävelemistä; `onBossDefeated` soittaa `clear`in **ja** `door`in samalla
-   framella; `powerup` on 12 kutsupaikassa; `SFX.land` on määritelty muttei
-   koskaan soiteta. Kohdan 8 mittarilla nämä ovat vikoja, mutta suurimman
-   hetken purkaminen on oma harkintansa.
-9. **Neljä vihollista on kontrastikynnyksen alla** taustaansa vasten: piikkiukko
-   3,3 %, papuparooni 3,3 %, korkkiukko 7,2 %, löyhkäpilvi 7,4 %.
-10. **`oneup` piirretään ja se on kerättävissä muttei koskaan ilmesty.**
+**Peli on siis valmis siinä mielessä että sillä ei ole enää velkaa.** Kaikki
+alla oleva on lisäystä eikä korjausta.
 
+### Jäljelle jääneet rippeet, kaikki pieniä ja kaikki mitattuja
 
-- ✔ **Putken suunta korjattu kenttiin asti 9.8.2026** (v26.08.09.23).
-  `WARP_COMPAT` on poistettu; kaikki suut ovat rivillä 9, koska kolme tyhjää
-  riviä lattian yllä on ainoa korkeus jota jokainen kuudesta koosta voi käyttää.
-  `rules.js` osaa nyt suunnan ja kattoputki piirtyy oikein päin. Viisi
-  bonushuonetta × kuusi kokoa todistettu ajamalla.
+Nämä löytyivät päivän töiden sivutuotteina, eikä yksikään ole rikki — ne ovat
+epäsiisteyksiä joilla on numero.
 
+1. **Neljä orpoa palikkaa** `src/data/chunks/fortresses.js`:ssä
+   (`pyre_ledge`, `crypt_ossuary`, `crypt_stair`, `spire_squall`) — samaa
+   velkaa kuin `fort_blocks`/`fort_trench`, jotka poistettiin. Portti nimeää ne
+   yksitellen, joten viides orpo punastuttaa heti.
+2. **`powerup` soi yhä kahdessa väärässä paikassa:** kartalla kun esine menee
+   varastoon (kentän puolella sama korjattiin `reserve`llä), ja kahdessa
+   esineenpudotuskohdassa `entities/enemies.js`:ssä (molemmat ovat `payout`).
+3. **`LETTERBOX_BAR`:n kommentti väittää korkeimman hypyn nousevan 100 px.**
+   Mitattu budjetti sanoo **174** juoksevalle pieruhypylle. Vanhentunut väite
+   kantavan vakion vieressä.
+4. **`gen-levels.mjs`:n reseptiproosa siteeraa `6-3`:a ja `7-2`:ta** niinä
+   käsintehtyinä ankkureina joista maailmojen 6 ja 7 `density`, `maxGap` ja
+   `aim` on mitattu. Kumpikaan ei enää toimiteta (ne korvattiin pystykentillä).
+   Mikään ei ole rikki tänään, mutta generaattorin uusinta-ajo mittaisi
+   olemattomasta.
+5. **Maailmat 2 ja 8 eivät esittele uusia asioita loppupäässään** (`MYKKIÄ` 2
+   kummassakin). Rakenteellista: kummankin sanasto on jo täynnä, joten uusi
+   mekaniikka olisi lainattava toisesta maailmasta ja rikkoisi
+   opetusjärjestyksen.
+6. **Notko `2-4 → 2-5` on 13,1 pistettä** ja portti lukee etumerkin, joten
+   kumman tahansa kentän muokkaus voi kääntää sen.
+7. **Päivän pierun todistettu ikkuna päättyy 9.8.2029.** Portti varoittaa alle
+   90 päivässä; uusiminen on yksi komento.
 
-- **Vaikeusheuristiikka ei näe pomon liikesarjaa** (`b` on aina 5,0) eikä
-  rytmiä. Suurin mallintamaton termi.
-- ✔ **Kuusi kohtaa joissa isoin koko ei mahdu seisomaan — poistui 10.8.2026.**
-  Ne olivat kaikki `fort_blocks`in tiilihyllyä (rivi 9) ja sen yllä olevaa
-  holvia (rivi 6), ja ne ratkesivat poistamalla eivätkä myöntämällä: 1-F, 2-F
-  ja 3-F rakentavat linnakkeensa omista sanastoistaan, joten `fort_blocks` oli
-  palikka jota mikään kenttä ei enää asettanut. Se lähti kuolleena koodina, ja
-  `verify.mjs` vaatii nyt ettei taulussa ole yhtään sellaista palikkaa.
-- ✔ **Yön tiili ja maa erotettu 9.8.2026** (v26.08.09.40). Pari oli mitattuna
-  0,4 % — heikoin koko pelissä — ja korjaus tuli sieltä mistä oli ennustettukin,
-  paletista eikä muodosta. Omistajan päätöksellä liikkui **vain** `night.brick`
-  (`#7a5a30` → `#c88a62`), joten 2-N:n lattia näyttää entiseltä; ero maahan on
-  nyt 17,8 %. Ylärajan antaa uusi mitattu väite `verify.mjs`:ssä: kova palikka
-  on jokaisen kahdeksan teeman kirkkain kiinteä ruutu, koska kirkkain on se jota
-  ei voi rikkoa. Yön tiilelle jää sen alle 2,9 luminanssia pelivaraa.
+### Päätetty muttei aikataulutettu
+
+Nämä ovat päätöksiä siitä *mitä* rakennetaan jos rakennetaan, ja ne ovat
+omissa kohdissaan ylempänä: **emergenssin ensimmäinen erä** (neljä lakia:
+jää kaikille, murenevat lavat vihollisen alta lankku palautuen, tuuli kantaa
+kuoria, potkaistu kuori tappaa) ja **kaistan vilkaisu** (vain näkeminen, hinta
+täysi vauhtimittari, aina luolakaista alaspäin).
+
+[IDEAS.md](IDEAS.md):ssä on lisäksi omistajan tuomiot kaikkiin kahteentoista
+lainattavaan verbiin: **kyllä** kohdille 1 (vauhti korkeudeksi), 6 (syö
+vihollinen, saat kyvyn) ja 10 (putoavat lohkot yhdelle laattatyypille), ja
+**harkintaan** kohdalle 11 (ammuksen voi ratsastaa).
+
+### Kuusi pelitilaa jotka on suunniteltu muttei rakennettu
+
+Kaksi kahdeksasta on tehty (`AIKA-AJO`, `PÄIVÄN PIERU`). Loput kuusi
+kortteineen ja työarvioineen: **PIKKUINEN** (koko peli voimatasolla 0, työ 1 —
+ainoa jonka läpäistävyys on jo todistettu, koska `playable.mjs` ajaa juuri
+sen joka ajolla), **YHDELLÄ HENGELLÄ** (työ 1), **POMOKIERROS** (kahdeksan
+pomoa peräkkäin, työ 2), **AARTEENETSINTÄ** (työ 2), **ARVOTTU MATKA**
+(kartta arvotaan joka ajolle mitatusta vaikeudesta, työ 3) ja
+**PIERUMARATONI** (loputon, työ 5).
 
 ## Myöhemmin
 
