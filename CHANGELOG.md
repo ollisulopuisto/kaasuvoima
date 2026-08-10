@@ -7,6 +7,76 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.50 — maailmoissa 1 ja 3 ei päässyt ensimmäistä kenttää pidemmälle
+
+Omistajan pelitesti: *"I just did a playtest where I completed the first world
+and then couldn't move anywhere on the main map. I warped to world six, the bone
+place, and thereafter completing their first world, I could move to the first
+level, I could move to the second level."*
+
+Havainto oli tarkka ja osoitti suoraan vikaan: maailma 6 toimi, maailma 1 ei.
+
+### Vika
+
+`WorldMapScene.tryMove` lukee suunnan linkin **ensimmäisestä laatta-askeleesta**
+ja vaatii että askel on tasan yksi nuolista — eli että toinen komponentti on
+nolla. Kun maailmat 1 ja 3 kasvatettiin kahdeksaan kenttään, solmut aseteltiin
+siksakkiin (rivit 7-5-7-5) **ilman kulmapistettä**, jolloin joka linkin
+ensimmäinen askel on vinottain: (1,-1) tai (1,1). Yksikään nuoli ei osu
+sellaiseen, joten `tryMove` kävi silmukkansa läpi ja palasi tekemättä mitään.
+
+Maailmoissa 4 ja 5 sama siksak toimii, koska niiden linkeissä on kulmapiste
+(`path: [[8, 4]]`). Kahdeksaan kasvatettuihin ei kirjoitettu yhtään.
+
+**Mitattuna: 26 linkinpäätä 106:sta oli sellaisia joihin mikään nuoli ei osu**,
+kaikki maailmoissa 1 ja 3. Pelaaja pääsi maailmassa 1 ensimmäiselle kentälle ja
+siihen se loppui.
+
+### Miksi portti ei huomannut
+
+Tämä on merkinnän tärkein osa. Portissa **oli jo** testi joka ajaa `tryMove`n
+joka linkille — se päättelee suunnan linkin omasta askeleesta ja mittaa
+kävelijän poikkeaman piirretystä käyrästä. Mutta tulos oli kääritty ehtoon:
+
+```js
+m.tryMove(dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
+if (m.mode === 'walk' && m.targetNode && m.targetNode.id === link.b) { … }
+```
+
+Linkki jota mikään nuoli ei osu ei siis kaada mitään: `tryMove` palaa hiljaa,
+`if` ei aukea, eikä yksikään väite jää kertomatta. Testi mittasi mutkan syvyyden
+**niistä linkeistä joita pitkin pääsi kulkemaan** ja oli täysin sokea niille
+joita pitkin ei päässyt.
+
+Se on sama muoto kuin alkuperäistarkistuksen nolla korpustiedostoa kaksi
+merkintää aiemmin: mittaus joka vastaa kysymykseen jota ei kysytty, ja näyttää
+vihreältä. Kaksi samaa vikaa kahdessa päivässä on kuvio eikä sattuma —
+**ehtoon kääritty väite ei ole väite.**
+
+### Korjaus
+
+**Data**, ei moottori: kaikille siksak-linkeille kulmapiste muodossa
+`[kohteen sarake, lähdön rivi]`, sama kuin maailmoissa 4 ja 5. Yksi luku tekee
+kaksi asiaa — eteenpäin lähdetään aina vaakasuoraan (oikealle) ja takaisin aina
+pystysuoraan — joten oikea on koko maailman läpi "eteenpäin" eikä kaksi linkkiä
+samalta solmulta koskaan vaadi samaa nuolta.
+
+**Portti** sai kaksi uutta väitettä, joita ei voi ohittaa hiljaa:
+
+1. jokaiselta linkiltä, **kummastakin päästä**, jokin nuoli vie perille
+   — `106 linkinpäätä, kaikki nuolen päässä`
+2. eikä kaksi linkkiä samalta solmulta vaadi samaa nuolta — muuten "oikealle"
+   tarkoittaisi kahta paikkaa ja valinnan ratkaisisi kirjoitusjärjestys
+   — `106 suuntaa, ei päällekkäisyyksiä`
+
+Punainen ennen vihreää: väitteet kirjoitettiin ensin, ja ne nimesivät kaikki 26
+umpikujaa askelineen ennen kuin dataan koskettiin.
+
+Tallennuksia ei tarvitse nollata — vika oli kartan geometriassa, ei
+tallennetussa tilassa, joten kesken jäänyt peli jatkuu siitä mihin se jäi.
+
+---
+
 ## v26.08.10.49 — vaihtelumittari: uusi muoto, ei uusi mekaniikka
 
 Uusi `tools/variety.mjs` vastaa kysymykseen jota kentien generointi synnytti:
