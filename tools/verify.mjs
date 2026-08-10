@@ -16580,6 +16580,417 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- emergenssi: loppu ---- */
+/* ---- möykky kentissä ---- */
+/*
+ * MÖYKKY ON KENTISSÄ, JA SE ON TÄMÄN LOHKON KOKO AIHE.
+ *
+ * `T.LUMP` rakennettiin 10.8.2026 fysiikkoineen, kolmine portteineen ja
+ * tallennuksineen, eikä sitä asetettu yhteenkään kenttään. Laatta jota ei ole
+ * missään on koodia joka esittää ominaisuutta: jokainen edellinen väite siitä
+ * on tosi tyhjästä joukosta, ja tyhjä joukko läpäisee mitä tahansa.
+ *
+ * Tämä lohko mittaa neljä asiaa jotka kaikki lakkasivat olemasta triviaaleja
+ * sinä hetkenä kun ensimmäinen `C` kirjoitettiin palikkaan:
+ *
+ *   1. **niitä on.** Ei yhtään on eri asia kuin nolla ongelmaa.
+ *   2. **rules.js:n kolme sääntöä kysytään pelin omilta möykyiltä.**
+ *      `validateLevel` ajetaan generoiduille kentille; käsintehdyille se on
+ *      DESIGN.md kohdan 5 mukaan suunnitteluohje. `checkFalling` ei ole
+ *      suunnitteluohje vaan turvaehto, joten se luetaan täältä jokaisesta
+ *      kentästä johon möykky on asetettu.
+ *   3. **möykyn alla oleva tiili oikeasti hajoaa.** Tämä on se ehto jota
+ *      `rules.js` **ei voi** kysyä eikä kysy, ja se on se joka olisi mennyt
+ *      hiljaa pieleen: salaisuutta kätkevä tiili ei hajoa millään koolla
+ *      (`bumpTile`) eikä potkaistulle kuorelle (`smashAhead`) — se muuttuu
+ *      käytetyksi lohkoksi. Sen päällä möykky ei voi koskaan pudota, eli se
+ *      olisi koriste. Mitattu 4-F:n omasta rivistä: neljästä tiilestä
+ *      **kolme kätkee jotain**, joten oikeita sarakkeita oli yksi.
+ *   4. **kanonisointi lukee sen kiinteänä.** `tools/originality.mjs` taittaa
+ *      tuntemattoman merkin ilmaksi, joten `C`:n sisältävä kenttä
+ *      verrattaisiin korpukseen reikä keskellä. Väite on käyttäytymisestä eikä
+ *      rivin sisällöstä: rakennetaan ikkuna jossa on yksi `C` ja kysytään
+ *      osuuko se ikkunaan jossa samassa kohdassa on kiveä.
+ *
+ * Ja lopuksi kaksi mittausta moottorista, oikeista kentistä eikä koekentästä,
+ * koska sijoituksen arvo on juuri siinä että se on kentässä: ensiesittely
+ * jossa kuori tekee työn ja pelaaja katsoo vierestä (4-2), ja toinen
+ * kohtaaminen jossa pelaaja tekee sen itse ja maksaa siitä jos jää seisomaan
+ * (4-F). Jälkimmäinen on pari eikä yksi väite — sama puski, kaksi eri
+ * jatkoa — koska "ehtii pois jos lähtee heti" ei tarkoita mitään ilman sitä
+ * toista puoliskoa.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const { getLevel, levelIds } = await import('../src/data/levels.js');
+  const { brickHides } = await import('../src/core/secrets.js');
+  const { validateLevel } = await import('../src/data/rules.js');
+  const jump = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+
+  /* Jokainen möykky pelissä: kenttä, sarake, rivi ja se merkki jonka päällä se
+   * seisoo. Luetaan kootusta ruudukosta eikä palikkatiedostosta, koska palikan
+   * sarake ei ole kentän sarake ja ehto 3 on kentän sarakkeesta. */
+  const lumps = [];
+  for (const id of levelIds()) {
+    const rows = getLevel(id).rows;
+    for (let y = 0; y < rows.length; y++) {
+      for (let x = 0; x < rows[y].length; x++) {
+        if (rows[y][x] !== 'C') continue;
+        lumps.push({
+          id,
+          x,
+          y,
+          below: y + 1 < rows.length ? rows[y + 1][x] : '#',
+          above: y > 0 ? rows[y - 1][x] : ' ',
+        });
+      }
+    }
+  }
+  const inLevels = [...new Set(lumps.map((l) => l.id))];
+
+  expect('möykky on jossain kentässä',
+    lumps.length > 0,
+    lumps.length
+      ? `${lumps.length} kpl ${inLevels.length} kentässä: `
+        + lumps.map((l) => `${l.id}@${l.x},${l.y}`).join(' ')
+      : `0 kpl ${levelIds().length} kentässä — laatta on olemassa muttei missään`);
+
+  /* Ehdot 1-3 luetaan rules.js:n omasta koodista eikä kirjoiteta uudestaan:
+   * `checkFalling`in huomautukset alkavat aina sanoilla "falling tile". */
+  {
+    const problems = [];
+    for (const id of inLevels) {
+      for (const p of validateLevel(getLevel(id).rows, jump)) {
+        if (/falling tile/i.test(p)) problems.push(`${id}: ${p}`);
+      }
+    }
+    expect('rules.js:n kolme sääntöä pitävät jokaisesta pelin möykystä',
+      problems.length === 0,
+      problems.length ? problems.join(' — ')
+        : `${lumps.length} möykkyä, ${inLevels.length} kenttää, 0 huomautusta `
+          + `(tuet: ${lumps.map((l) => JSON.stringify(l.below)).join(' ')})`);
+  }
+
+  /* Ehto 4: tuki on tiili joka hajoaa. `brickHides` on paikan puhdas funktio,
+   * joten tämä on kentän sarakkeesta eikä palikan. */
+  {
+    const stuck = lumps.filter((l) => l.below === 'B' && brickHides(l.x, l.y + 1));
+    const brickLumps = lumps.filter((l) => l.below === 'B');
+    expect('möykyn alla oleva tiili on tiili joka oikeasti hajoaa',
+      stuck.length === 0 && brickLumps.length > 0,
+      stuck.length
+        ? stuck.map((l) => `${l.id}@${l.x},${l.y}: tuki kätkee "${brickHides(l.x, l.y + 1)}"`).join(' — ')
+        : brickLumps.length
+          ? `${brickLumps.length}/${lumps.length} möykkyä tiilen päällä, 0 salaisuuden päällä`
+          : 'yksikään möykky ei seiso tiilen päällä — mikään ei voi pudottaa sitä');
+  }
+
+  /* Ja se toinen puolisko samasta ehdosta: että mittaus osaisi huomata vian.
+   * Punainen ilman että mitään rikotaan — luetaan sama rivi 4-F:stä ja
+   * kysytään mitä sen muut tiilet kätkevät. */
+  {
+    const lump = lumps.find((l) => l.id === '4-F');
+    const rows = getLevel('4-F').rows;
+    const row = lump ? rows[lump.y + 1] : '';
+    const bricks = [];
+    for (let x = 0; x < row.length; x++) if (row[x] === 'B') bricks.push(x);
+    const near = bricks.filter((x) => Math.abs(x - (lump ? lump.x : -99)) <= 4);
+    const hiding = near.filter((x) => brickHides(x, lump.y + 1));
+    expect('salaisuutta kätkevä tiili tunnistetaan, eli ehto ei ole tyhjä',
+      !!lump && near.length > 1 && hiding.length > 0,
+      lump
+        ? `4-F rivi ${lump.y + 1}: `
+          + `${near.map((x) => `${x}=${brickHides(x, lump.y + 1) ? 'kätkee' : 'hajoaa'}`).join(' ')}`
+          + ` — möykky on sarakkeessa ${lump.x}`
+        : '4-F:ssä ei ole möykkyä');
+  }
+
+  /* Ehto 5: kanonisointi. Käyttäytyminen eikä rivin sisältö — rakennetaan
+   * yksi 8 sarakkeen ikkuna jossa on möykky, ja korpuksen puolelta sama ikkuna
+   * jossa samassa kohdassa on kiveä. Jos `C` taittuisi ilmaksi, avaimet eivät
+   * osuisi ja luku olisi 0. */
+  {
+    const { hitsAgainst, WINDOW } = await import('./originality.mjs');
+    const H = 14;
+    const at = (ch) => {
+      const rows = [];
+      for (let y = 0; y < H; y++) {
+        rows.push(y === 5 ? `   ${ch}    ` : ' '.repeat(WINDOW));
+      }
+      return rows;
+    };
+    /* Korpuksen kanonisointi: kiinteä on 'X', kaikki muu '-'. Avain on
+     * `windows()`in muoto — sarakkeet pystyssä, putkella eroteltuina. */
+    const cols = [];
+    for (let x = 0; x < WINDOW; x++) {
+      let col = '';
+      for (let y = 0; y < H; y++) col += (y === 5 && x === 3) ? 'X' : '-';
+      cols.push(col);
+    }
+    const index = { keys: new Set([cols.join('|')]), files: 1 };
+    const solid = hitsAgainst(index, at('C'));
+    const air = hitsAgainst(index, at(' '));
+    expect('möykky kanonisoituu kiinteäksi eikä ilmaksi alkuperäisyystarkistuksessa',
+      solid === 1 && air === 0,
+      `möykyllä ${solid} osumaa, ilmalla ${air} — kiveä vastaan, ${WINDOW} sarakkeen ikkuna`);
+  }
+
+  /* Kolme kopiota `SOLID`ista, verrattuna merkkijonoina — sama järjestely kuin
+   * `SINK`illa, ja tämä on se portti joka olisi huomannut aukon itse. Kopio
+   * `generator.js`:ssä on nykyään kuollutta koodia (nimeä ei lueta siellä),
+   * mikä tekee siitä puhtaan väitteen ja siis juuri sellaisen jota portin
+   * kuuluu vahtia. */
+  {
+    /* Koko rivi rivin alusta puolipisteeseen, eikä `[^\]]*` niin kuin `SINK`in
+     * vieressä: `SOLID`in jäsenistä yksi **on** `']'`, joten hakasulkeen
+     * kieltävä luokka katkaisee osuman kesken joukon ja vertaisi kahden
+     * tiedoston alkupäitä toisiinsa. Se olisi vihreä portti joka ei mittaa
+     * loppua — ja loppu on juuri se pää johon uusi merkki lisätään. */
+    const line = /^const SOLID = new Set\(.+\);$/m;
+    const read = async (f) => ((await readFile(join(ROOT, f), 'utf8')).match(line) || [])[0] || '';
+    const files = ['src/data/rules.js', 'src/data/generator.js', 'tools/originality.mjs'];
+    const found = await Promise.all(files.map(read));
+    const same = found.every((s) => s && s === found[0]);
+    const missing = files.filter((f, i) => !found[i].includes("'C'"));
+    expect('SOLIDin kolme kopiota ovat sanasanaisesti samat ja tuntevat möykyn',
+      same && missing.length === 0,
+      same && !missing.length
+        ? `${files.length} kopiota, ${found[0].length} merkkiä, sisältää 'C'`
+        : `${missing.length ? `'C' puuttuu: ${missing.join(', ')}` : ''}`
+          + `${same ? '' : ` — rivit eroavat: ${files.filter((f, i) => found[i] !== found[0]).join(', ')}`}`);
+  }
+
+  /* --- ja sitten moottorista, oikeista kentistä --- */
+  /*
+   * KOLME MITTAUSTA, JA NE MITATAAN NIISTÄ KENTISTÄ JOTKA PELI TOIMITTAA.
+   *
+   * Koekenttä vastaa kysymykseen "toimiiko laatta". Tämä lohko kysyy
+   * "toimiiko *sijoitus*", ja se on eri kysymys: se koskee sitä riviä, sitä
+   * saraketta ja sitä lattiaa jonka pelaaja oikeasti kohtaa.
+   */
+  const M = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { ShellGuy } = await import('/src/entities/enemies.js');
+    const { MAX_WALK } = await import('/src/entities/player.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const game = window.sfb3;
+
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const scene = (id, level) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: level ? { type: 'shroom', level } : null,
+        reserve: null, world: 3, node: 'w4-2', cleared: {}, worldsOpen: 8, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      /* Viholliset ja vaarat pois: mitattava on möykky eikä se mikä sattuu
+       * seisomaan viereisessä sarakkeessa. */
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+    const findLump = (s) => {
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) if (s.grid[y][x] === T.LUMP) return { x, y };
+      }
+      return null;
+    };
+    /* Lattiarivi luetaan ruudukosta eikä kirjoiteta tähän: kaksi kenttää, kaksi
+     * eri riviä (4-2 on kolmikaistainen), ja sama koe molemmille. */
+    const floorUnder = (s, at) => {
+      let y = at.y + 1;
+      while (y < s.h && !'#X'.includes(s.grid[y][at.x])) y++;
+      return y;
+    };
+    const stand = (s, at, x) => {
+      const p = s.player;
+      p.x = x * 16;
+      p.y = floorUnder(s, at) * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      return p;
+    };
+    const out = {};
+
+    /* --- 1. ensiesittely 4-2: puski, putoaminen, paluu ------------------ */
+    {
+      const s = scene('4-2', 1);
+      const i = mkInput();
+      const at = findLump(s);
+      const p = stand(s, at, at.x);
+      const floor = floorUnder(s, at);
+      s.bumpTile(at.x, at.y + 1, p);
+      const broke = s.tileAt(at.x, at.y + 1) !== T.BRICK;
+      let left = 0;
+      let landed = 0;
+      for (let n = 0; n < 120; n++) {
+        s.update(i);
+        if (!left && s.tileAt(at.x, at.y) !== T.LUMP) left = n + 1;
+        if (!landed && s.tileAt(at.x, floor - 1) === T.LUMP) landed = n + 1;
+      }
+      let home = 0;
+      for (let n = 0; n < 400 && !home; n++) {
+        s.update(i);
+        if (s.tileAt(at.x, at.y) === T.LUMP && s.tileAt(at.x, floor - 1) !== T.LUMP) home = n + 1;
+      }
+      out.intro = {
+        at: `${at.x},${at.y}`, floor, broke, left, landed, home,
+      };
+    }
+
+    /* --- 2. pieni pelaaja ei voi pudottaa sitä itselleen ---------------- */
+    /* Tämä on koko ensiesittelyn turvaperuste rakenteena: `bumpTile` hajottaa
+     * tiilen vain kun `player.big`, joten voimatasolla 0 möykky ei liiku, ja
+     * osuma maksaa siis aina koon eikä koskaan henkeä. */
+    {
+      const s = scene('4-2', 0);
+      const i = mkInput();
+      const at = findLump(s);
+      const p = stand(s, at, at.x);
+      const big = !!p.big;
+      s.bumpTile(at.x, at.y + 1, p);
+      for (let n = 0; n < 90; n++) s.update(i);
+      out.small = {
+        big,
+        power: p.powerLevel,
+        brick: s.tileAt(at.x, at.y + 1),
+        lump: s.tileAt(at.x, at.y),
+      };
+    }
+
+    /* --- 3. toinen kohtaaminen 4-F: sama puski, kaksi jatkoa ------------ */
+    /*
+     * Ero näiden kahden ajon välillä on **yksi luku**: se vauhti jolla pelaaja
+     * on lohkorivin alla sillä hetkellä kun tiili hajoaa. Nolla on se joka jää
+     * seisomaan; `MAX_WALK` on pelin oma kävelykatto, eli hitain mahdollinen
+     * "oli jo matkalla" — juoksukatto olisi tehnyt väitteestä helpomman.
+     */
+    {
+      const bump = (vx) => {
+        const s = scene('4-F', 1);
+        const i = mkInput();
+        const at = findLump(s);
+        const p = stand(s, at, at.x);
+        p.vx = vx;
+        const before = p.powerLevel;
+        s.bumpTile(at.x, at.y + 1, p);
+        const broke = s.tileAt(at.x, at.y + 1) !== T.BRICK;
+        for (let n = 0; n < 90; n++) {
+          if (vx) {
+            i.held = blank();
+            i.held.right = true;
+            i.pressed = blank();
+          }
+          s.update(i);
+        }
+        return {
+          at: `${at.x},${at.y}`,
+          broke,
+          before,
+          after: p.powerLevel,
+          moved: Math.round((p.x / 16 - at.x) * 10) / 10,
+        };
+      };
+      out.stay = bump(0);
+      out.leave = bump(MAX_WALK);
+      out.walk = MAX_WALK;
+    }
+
+    /* --- 4. potkaistun kuoren suunta, mitattuna ------------------------- */
+    /*
+     * Kolmas keino irrottaa möykky on potkaistu kuori, ja se on mitattu tässä
+     * eikä oletettu. Koekenttä eikä kenttä: yhdessäkään toimitetussa
+     * kentässä ei ole kuorta möykyn vieressä, ja syy siihen on tämän
+     * mittauksen tulos.
+     */
+    {
+      const dir = (d) => {
+        const s = scene('4-2', 1);
+        const i = mkInput();
+        const at = findLump(s);
+        const floor = floorUnder(s, at);
+        /* Oma pilari kaukana kaikesta: tiili lattialla ja möykky sen päällä,
+         * eli tasan se korkeus jolla liukuva kuori kulkee. */
+        const px = at.x + 20;
+        s.setTile(px, floor - 1, T.BRICK);
+        s.setTile(px, floor - 2, T.LUMP);
+        s.player.x = (px - 12 * d) * 16;
+        s.player.y = (floor - 1) * 16 - s.player.h;
+        const sh = new ShellGuy(s, (px - 6 * d) * 16, (floor - 1) * 16 - 24);
+        sh.active = true;
+        sh.alwaysActive = true;
+        s.entities.push(sh);
+        sh.kick(d);
+        let broke = 0;
+        for (let n = 0; n < 120; n++) {
+          s.update(i);
+          if (!broke && s.tileAt(px, floor - 1) !== T.BRICK) broke = n + 1;
+        }
+        return broke;
+      };
+      out.shell = { right: dir(1), left: dir(-1) };
+    }
+    return out;
+  });
+
+  expect('ensiesittely 4-2: tiili hajoaa, möykky lähtee ja se palaa kotiin',
+    M.intro.broke && M.intro.left > 0 && M.intro.landed > 0 && M.intro.home > 0,
+    `möykky ${M.intro.at}, lattia rivillä ${M.intro.floor}: tiili hajosi ${M.intro.broke}, `
+    + `lähti framella ${M.intro.left}, laskeutui framella ${M.intro.landed}, `
+    + `kotona ${M.intro.home} framea myöhemmin`);
+
+  expect('voimatasolla 0 möykkyä ei saa liikkeelle, eli se ei voi maksaa henkeä',
+    !M.small.big && M.small.brick === 'B' && M.small.lump === 'C' && M.small.power === 0,
+    `pieni pelaaja: iso ${M.small.big}, tiili "${M.small.brick}", möykky "${M.small.lump}", `
+    + `voima ${M.small.power} — 90 framea puskun jälkeen`);
+
+  expect('toinen kohtaaminen 4-F: paikallaan jäänyt maksaa, jo liikkeellä ollut ei',
+    M.stay.broke && M.stay.after < M.stay.before
+      && M.leave.broke && M.leave.after === M.leave.before,
+    `möykky ${M.stay.at}: paikallaan ${M.stay.before} → ${M.stay.after}, `
+    + `kävelyvauhdissa (${M.walk} px/frame) ${M.leave.before} → ${M.leave.after} `
+    + `ja ${M.leave.moved} laattaa sivuun`);
+
+  /*
+   * LÖYDETTY, EI KORJATTU — ja se on tässä numerona eikä muistiinpanona.
+   *
+   * `ShellGuy.smashAhead` lukee suuntansa `this.vx`:stä, mutta se kutsutaan
+   * vasta kun `moveSideways()` on osunut seinään — ja `moveX` **nollaa
+   * vauhdin osumassa** (`src/level/physics.js`, sama rivi jonka kimmokkeen
+   * kommentti `enemies.js`:ssä jo mainitsee). Nolla ei ole suurempi kuin
+   * nolla, joten haara on aina se vasen: oikealle liukuva kuori tutkii sen
+   * sarakkeen josta se juuri tuli. Vasemmalle liukuva osuu oikeaan
+   * sarakkeeseen vahingossa, koska `x - 1` on törmäyksen jälkeen seinän oma
+   * sarake.
+   *
+   * Korjaus on yksi merkki `src/entities/enemies.js`:ssä (`this.facing`
+   * `this.vx`:n sijaan), ja **se tiedosto kuuluu tässä erässä toiselle**.
+   * Siksi tämä on väite siitä mitä mitattiin eikä siitä mitä toivotaan: se
+   * pysyy vihreänä myös sen jälkeen kun oikea suunta alkaa toimia, ja
+   * yksityiskohta kertoo kumpi suunta oli mitä.
+   */
+  expect('potkaistu kuori pudottaa möykyn, ja suunta on mitattu eikä oletettu',
+    M.shell.left > 0 || M.shell.right > 0,
+    `oikealle ${M.shell.right ? `framella ${M.shell.right}` : 'ei koskaan'}, `
+    + `vasemmalle ${M.shell.left ? `framella ${M.shell.left}` : 'ei koskaan'} `
+    + '— smashAhead lukee suunnan vx:stä, jonka moveX on juuri nollannut');
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- möykky kentissä: loppu ---- */
 
 await browser.close();
 server.close();

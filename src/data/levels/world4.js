@@ -9,8 +9,15 @@
  * chunks/factory.js. One mechanic per level, and no level carries two:
  *
  *   4-1  the crumbling catwalk (already here) and the star
- *   4-2  the hidden bands: the cellar below and the loft on the roof
+ *   4-2  the hidden bands: the cellar below and the loft on the roof, and —
+ *        since 10.8.2026 — the möykky, whose reasoning is written at the level
+ *        itself. Two mechanics in one level is a break with the line above and
+ *        it is a stated one: the world has three hand-made levels, 4-3 is the
+ *        world's peak, and a new verb has to be introduced where there is
+ *        attention to spare. The same sentence that bought this level the
+ *        hidden bands buys it the möykky.
  *   4-3  the switch
+ *   4-F  the möykky again, and this time it costs something
  */
 
 import { GENERATED_LEVELS } from '../generated.js';
@@ -60,11 +67,41 @@ export const WORLD4_LEVELS = {
    * the mouth you enter, so the picture and the journey have to agree. Neither
    * is on the way to the flag: the ground route through this level is exactly
    * the route it was, one chunk longer.
+   *
+   * ## MÖYKKY, ja miksi juuri hengähdyskenttä esittelee sen (10.8.2026)
+   *
+   * `fac_lump` korvaa `fac_floor`in ja `fort_power` vaihtoi paikkaa sen
+   * kanssa. Kenttä on **saman mittainen ja samat palikat** yhtä lukuun
+   * ottamatta, eli molemmat putket ovat yhä sarakkeissa 128 ja 240.
+   *
+   * Kaksi perustelua, ja kumpikin on tämän tiedoston omaa argumenttia
+   * jatkettuna:
+   *
+   *   - **Hengähdyskenttä on se paikka jossa uteliaisuus on varaa.** Sama
+   *     lause osti tälle kentälle piilokaistat kaksi kappaletta ylempänä. Uusi
+   *     verbi tarvitsee saman: möykky pitää nähdä putoamassa tyhjässä
+   *     huoneessa ennen kuin sama liike tehdään 4-F:n suihkujen välissä, ja
+   *     4-3 on maailman huippu (226,5) eikä siellä ole tarkkaavaisuutta
+   *     liikaa. Pahin mahdollinen lopputulos täällä on yksi voimataso: mitään
+   *     mihin pudota ei ole, eikä lattiassa ole reikää neljän sarakkeen
+   *     päässä kumpaankaan suuntaan (turvaproxyn POHJA).
+   *   - **Tehostuslohko meni möykyn eteen, koska pieni pelaaja ei voi rikkoa
+   *     tiiltä.** `bumpTile` hajottaa tiilen vain kun `player.big`, joten
+   *     möykky ennen kentän ensimmäistä `!`-lohkoa olisi oppitunti jota
+   *     pelaaja ei voi ottaa vastaan. Vaihto ei muuta DESIGN.md kohdan 5
+   *     lupausta — lohko oli ja on ensimmäisen neljänneksen sisällä — eikä se
+   *     muuta yhtään mitattua lukua: kuivuus (pisin `!`-tön pätkä) on 170
+   *     saraketta ennen ja jälkeen, koska se mitataan kentän lopusta.
+   *
+   * Mitattuna kenttä pysyy **tavun tarkkuudella samana**: 141,2 ennen ja
+   * jälkeen. Se ei ole sattuma vaan se mitä vaikeusmittari sanoo itsestään —
+   * se mittaa lähtötilan, eikä möykky ole lähtötilassa mitään muuta kuin
+   * kiinteä laatta tiilen päällä. Notko pysyy notkona.
    */
   '4-2': {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
-      'start', 'fac_floor', 'fort_power', 'fac_belt', 'heartburn_pair', 'fac_shaft',
+      'start', 'fort_power', 'fac_lump', 'fac_belt', 'heartburn_pair', 'fac_shaft',
       'corks', 'fac_press', 'fac_duct_down', 'fac_gap', 'soup_stop', 'fac_vents',
       'fac_belt', 'clouds', 'fac_shaft', 'fac_duct_up', 'heartburn', 'steps_down',
       'run_up', 'goal', 'goal_end',
@@ -92,11 +129,23 @@ export const WORLD4_LEVELS = {
   },
   /* `4-4`…`4-7`, generated; the spread's position is the play order. */
   ...generated,
+  /*
+   * MYLLYLINNA, ja möykyn toinen kohtaaminen.
+   *
+   * Jälkimmäinen `mill_duct` on `mill_lump`, ei ensimmäinen, ja järjestys on
+   * koko idea: sama huone kahdesti, ja toisella kerralla sen katossa on
+   * jotain. Pelaaja on jo kulkenut tämän rivin ali sarakkeessa 32 eikä siellä
+   * ollut mitään; sarakkeessa 112 rivi on sama ja `?` on samassa kohdassa,
+   * mutta sen vasemmalla naapurilla istuu möykky.
+   *
+   * Kenttä on saman mittainen ja samat suihkut samoissa sarakkeissa, joten
+   * mitään mitattua ei liikkunut: 4-F pysyy 214,1:ssä.
+   */
   '4-F': {
     theme: 'factory', bg: 'factory', music: 'fortress', boss: true, bossVariant: 3,
     chunks: [
       'start', 'mill_gate', 'mill_duct', 'mill_press', 'mill_gap', 'mill_belt',
-      'mill_press', 'mill_duct', 'boss_arena_big',
+      'mill_press', 'mill_lump', 'boss_arena_big',
     ],
   },
 };

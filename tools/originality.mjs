@@ -53,8 +53,22 @@ export const WINDOW = 8;
  * character missing from here is folded into air, and then the comparison is
  * looking at a grid with a hole where the tile is. `tools/verify.mjs` compares
  * the two lines as strings.
+ *
+ * `'C'` — möykky — joined it on 10.8.2026, the day the tile was first placed in
+ * a level, and the gap it closed is worth stating because it was the harmless
+ * kind. `canonOurs` folds anything it does not know into `'-'`, i.e. air, so a
+ * level containing a möykky would have been compared against the corpus **with
+ * a hole where the tile is** — a comparison that answers a question about a
+ * level nobody plays. It cost nothing while no level had one, which is exactly
+ * why it had to be fixed in the same change that gave the tile a home rather
+ * than left as a note.
+ *
+ * The tile is `X` here like every other solid, and that is the whole point of
+ * canonicalising: the question is "is this the same arrangement", and in the
+ * starting state — which is what is committed and what is compared — a möykky
+ * is a solid tile standing on something.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
 /** Juoksuhiekka: not air and not rock, so it folds to a letter of its own. */
 const SINK = new Set(['~']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'x', 'P', 'U', 'b']);

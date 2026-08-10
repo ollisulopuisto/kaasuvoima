@@ -71,8 +71,14 @@ const { ROWS, FLOOR, HEAD } = RULE_CONSTANTS;
  * exporting it would widen a validator's surface for the sake of a tool that
  * only prints things. If a fourth copy ever appears, that is the moment to move
  * the set into `src/gfx/tiles.js` where `TILE_INFO` already knows the answer.
+ *
+ * `'C'` — möykky — is in it for the same reason rules.js has it: **it is solid
+ * in the level's starting state**, and the starting state is what every grid
+ * this file reads is written in. The one detector that would have got it wrong
+ * is `pound`, which asks whether a body can stand somewhere: a möykky left out
+ * of the set is a ledge the tool cannot see and a ceiling it will not count.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
 const SEMI = new Set(['-']);
 
 /**
@@ -226,6 +232,22 @@ const FEATURES = [
   { key: 'star', name: 'supertähti (tähtilohko)', chars: '*' },
   { key: 'switch', name: 'kytkinruutu', chars: 'S' },
   { key: 'crumble', name: 'mureneva lava', chars: '%' },
+  /*
+   * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`).
+   *
+   * **Ei `hazard: true`, ja se on väite eikä unohdus.** `hazard` löysentää
+   * POHJAa: se lakkaa mittaamasta ominaisuuden omia sarakkeita, koska laavassa
+   * seisominen *on* se ominaisuus eikä yllätys lattiasta. Möykky on
+   * lähtötilassa kiinteä laatta jonka päällä seisotaan, ja se satuttaa vasta
+   * kun pelaaja on itse rikkonut sen tuen (`LevelScene.lumpImpact`,
+   * `CHANGELOG` v26.08.10.64: "vain pelaajan aloittama ketju saa satuttaa
+   * häntä"). Merkitseminen vaaraksi antaisi sille anteeksi juuri sen mitä
+   * ensiesittelyltä pitää vaatia — että alla on lattia jolle astua sivuun.
+   *
+   * Merkki on myös perussanaston ulkopuolella (`core` pois), koska se on
+   * mekaniikka eikä aakkonen: se on pelin ensimmäinen laatta joka liikkuu.
+   */
+  { key: 'lump', name: 'möykky (putoava laatta)', chars: 'C' },
   { key: 'vine', name: 'pavunvarsi', chars: 'v' },
   { key: 'warp', name: 'warp-putki', chars: '()' },
   { key: 'note', name: 'nuottipalikka', chars: 'N' },

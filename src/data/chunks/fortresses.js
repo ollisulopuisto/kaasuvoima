@@ -549,6 +549,42 @@ const MILL_CHUNKS = {
   }),
 
   /**
+   * Sama poistoputki, ja siihen on jäänyt möykky (`T.LUMP`).
+   *
+   * Toinen kohtaaminen ja se joka maksaa. Ensimmäinen on `fac_lump` 4-2:ssa:
+   * täsmälleen sama `BB?BB`-rivi ja sama möykky sen päällä, mutta tyhjässä
+   * huoneessa tasaisella lattialla. Täällä sama liike tehdään kolmen
+   * närästyssuihkun välissä, ja huoneen kysymys on yhä sama lause: *tästä
+   * rivistä haluat yhden lohkon, ja yksi niistä ei ole lohko.*
+   *
+   * **Möykky on sarakkeen 4 tiilen päällä, ja se on mitattu eikä valittu.**
+   * `LevelScene.brickSecret` on paikan puhdas funktio, ja salaisuutta kätkevä
+   * tiili ei hajoa millään koolla — se muuttuu käytetyksi lohkoksi. Tämä
+   * palikka asetetaan 4-F:ssä sarakkeeseen 112, jolloin rivin 9 neljä tiiltä
+   * ovat 115, 116, 118 ja 119: niistä **115 kätkee kolikon ja 118 ja 119
+   * tehostuksen**, eli kolme neljästä on kiveä möykyn kannalta. Vain 116 —
+   * palikan sarake 4 — hajoaa. Möykky muun päällä olisi laatta joka ei voi
+   * pudota, eli tarkalleen se koriste jota tämä työ vastustaa, ja
+   * `verify.mjs` mittaa ehdon jokaisesta pelin möykystä.
+   *
+   * Sarake 4 on myös `?`-lohkon vasen naapuri, ja se on se mitä huone opettaa:
+   * se lohko jonka pelaaja haluaa **ei** ole se joka tulee alas.
+   *
+   * Rivi 7 on tyhjä möykyn yllä (sääntö 2) ja teräslaatta on rivillä 5, joten
+   * huoneen oma lause — lohkot saa vain alhaalta — pitää ennallaan.
+   */
+  mill_lump: ck(16, {
+    0: G,
+    1: G,
+    5: '   XXXXXXX',
+    8: '    C',
+    9: '   BB?BB',
+    12: '  H    H    H',
+    13: G,
+    14: G,
+  }),
+
+  /**
    * Kuilu: viisi ruutua laavaa, mureneva huuli ja yhdeksän saraketta vauhtia.
    *
    * Huuli on murtuvaa lavaa eikä kiveä, eli vauhdinoton viimeinen askel on
