@@ -68,7 +68,7 @@ export const WINDOW = 8;
  * starting state — which is what is committed and what is compared — a möykky
  * is a solid tile standing on something.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 /** Juoksuhiekka: not air and not rock, so it folds to a letter of its own. */
 const SINK = new Set(['~']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'x', 'P', 'U', 'b']);

@@ -78,7 +78,7 @@ const { ROWS, FLOOR, HEAD } = RULE_CONSTANTS;
  * is `pound`, which asks whether a body can stand somewhere: a möykky left out
  * of the set is a ledge the tool cannot see and a ceiling it will not count.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 const SEMI = new Set(['-']);
 
 /**
@@ -248,6 +248,23 @@ const FEATURES = [
    * mekaniikka eikä aakkonen: se on pelin ensimmäinen laatta joka liikkuu.
    */
   { key: 'lump', name: 'möykky (putoava laatta)', chars: 'C' },
+  /*
+   * JÄÄ (`T.ICE`).
+   *
+   * **Ei `hazard: true`, ja se on sama väite kuin möykyllä mutta vahvempi.**
+   * `hazard` löysentää POHJAa — se lakkaa vaatimasta lattiaa ominaisuuden omilta
+   * sarakkeilta, koska laavassa seisominen *on* se ominaisuus. Jäällä
+   * seisominen ei satuta lainkaan: jää on tavallinen kiinteä laatta jonka päällä
+   * voi olla loputtomiin. Vaaraksi merkitseminen antaisi anteeksi juuri sen mitä
+   * ensiesittelyltä on vaadittava — että alla ja ympärillä on maata jolle
+   * liukua, eikä kuilua.
+   *
+   * Perussanaston ulkopuolella (`core` pois) samasta syystä kuin möykky: se on
+   * mekaniikka eikä aakkonen. Se on pelin ensimmäinen laatta joka muuttaa sitä
+   * mitä pelaaja *pystyy* tekemään sen sijaan että muuttaisi sitä missä hän voi
+   * seistä.
+   */
+  { key: 'ice', name: 'jää (liukas laatta)', chars: 'I' },
   { key: 'vine', name: 'pavunvarsi', chars: 'v' },
   { key: 'warp', name: 'warp-putki', chars: '()' },
   { key: 'note', name: 'nuottipalikka', chars: 'N' },

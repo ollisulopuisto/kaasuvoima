@@ -152,6 +152,34 @@ laskeutumisen jälkeen jarrutukseen menee 24 px. Eli **87 % reaktiomatkasta on
 ilmassa** — "maahantulon jälkeinen liuku" ei ole se mikä maksaa, vaan se ettei
 kaaren aikana saanut tehdä mitään.
 
+**Jarrutus jäällä** (`T.ICE`, `SURFACES.ice.grip` 0,4). Sama runway, sama
+vauhdinotto, yksi merkki eri lattiassa — `node tools/measure-braking.mjs`
+osa 1b. Taso 0, eli se joka liukuu pisimpään:
+
+| vauhti | irrota ote | käänny vastaan |
+| --- | --- | --- |
+| 1.5 kävely | 96 f / 71 px (4,4 laattaa) | 30 f / 22 px (1,4) |
+| 2.5 juoksu | 160 f / 199 px (12,4) | 39 f / 40 px (2,5) |
+| 3.5 P | 224 f / 390 px (24,4) | 49 f / 68 px (**4,3**) |
+
+Kaksi lukua kannattaa lukea rinnakkain, koska ne ovat koko mekaniikka:
+
+**Otteen irrottaminen maksaa 2,5-kertaisesti**, eli P-nopeudella liu'un loppu on
+390 px — reilusti yli sen mitä eteen näkyy. Se on se tuntuma jota jäältä
+haetaan: passiivinen pelaaja menee sinne minne oli menossa.
+
+**Vastaan kääntyminen maksaa enimmillään 68 px**, mikä on 39 % siitä ~176
+pikselistä jonka eteensä näkee. Eli **jäällä ei ole vaaraa jota ei ehtisi
+väistää**, kunhan on jotain minkä päällä jarruttaa — ja juuri se ehto on se mitä
+`checkIce` (`src/data/rules.js`) vartioi: kelluva jäälautta kuilun päällä on
+ainoa paikka jossa jarrutusmatkaa ei ole, joten sellaisen on oltava vähintään
+`ICE_BRAKE` = 5 laattaa leveä. Viisi on tuo 4,3 pyöristettynä ylöspäin.
+
+Kiihtyvyys (`ACC`) **ei** ole jäällä eri, ja se on päätös eikä puute: koko
+mitattu hyppybudjetti johtuu siitä luvusta, joten jään lähellä oleva kuilu on
+mitoitettu sillä vauhdinotolla joka siinä oikeasti on. Perustelu kokonaisuudessaan
+on `SURFACES`in kommentissa.
+
 **Näkyvyys.** 320 px:n ikkuna, pelaaja hieman keskustan takana, katse kallistuu
 vauhdissa 31–34 px eteenpäin: eteen näkyy **~176 px juostessa** ja ~179 px
 P-nopeudella. Vihollinen ilmestyy ruudun reunaan sillä etäisyydellä.

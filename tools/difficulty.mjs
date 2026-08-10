@@ -226,7 +226,36 @@ const LUMP = 'C';
  */
 const HAZARD_COST = { ...LETHAL_TILE, [LUMP]: LUMP_COST };
 
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+/*
+ * JÄÄ (`T.ICE`, `'I'`) — eikä yhtään riviä `HAZARD_COST`iin, ja se on väite.
+ *
+ * Jää ei satuta. Se ei satuta kosketuksesta niin kuin piikki, eikä pelaajan
+ * aloittaman ketjun päätteeksi niin kuin möykky: sen päällä voi seistä
+ * loputtomiin eikä mitään tapahdu. Vaaralistalla se olisi lisäksi väärässä
+ * paikassa mekaanisesti, koska `HAZARD_COST` luetaan sarakkeen **pahimpana**
+ * (`Math.max`) — jään ja piikin jakava sarake hinnoittelisi vain piikin, eli
+ * jää olisi ilmaista tasan siellä missä se eniten maksaa.
+ *
+ * Se mitä jää oikeasti tekee on **poistaa tähtäyksen jalansijalta**, ja tälle
+ * mittarilla on jo termi: `precision`. Kapea jalansija on vaikea siinä suhteessa
+ * kuinka vähän sitä on, ja kolme laattaa on se leveys jolla laskeutuminen
+ * lakkaa vaatimasta tähtäystä. Jäällä se leveys ei ole kolme vaan `ICE_BRAKE`,
+ * ja se luku on mitattu eikä arvattu (`tools/measure-braking.mjs`, ks.
+ * `src/data/rules.js`): P-nopeudesta vastaan kääntyminen syö 68 px eli 4,25
+ * laattaa, ylöspäin viisi.
+ *
+ * Eli jää ei ole uusi termi vaan vanhan termin toinen kynnys, ja se on koko
+ * hinnoittelu: viiden laatan jäälautta maksaa saman kuin kolmen laatan lankku,
+ * ja kymmenen laatan jääkenttä maksaa puolet siitä. Kertoimet — kuolema alla
+ * 2,5x, mureneva 1,5x — pätevät jäähän sellaisenaan, koska ne kertovat mitä
+ * ohi ampuminen maksaa eivätkä sitä kuinka vaikea on olla ampumatta ohi.
+ */
+const ICE = 'I';
+const ICE_BRAKE = 5;
+/** Kuinka leveä jalansija on ennen kuin laskeutuminen lakkaa vaatimasta tähtäystä. */
+const aimWidth = (chars) => (chars.includes(ICE) ? ICE_BRAKE : 3);
+
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 
 /**
  * Same band rule as src/data/rules.js: the route is the band the player starts
@@ -399,17 +428,17 @@ function measureClimb(rows) {
    * floor row that does not exist here. */
   let precision = 0;
   for (const p of tops) {
-    if (!Array.from({ length: p.x1 - p.x0 + 1 }, (_, i) => at(p.x0 + i, p.y))
-      .some((ch) => ch === '-' || ch === '%')) continue;
     const width = p.x1 - p.x0 + 1;
+    const chars = Array.from({ length: width }, (_, i) => at(p.x0 + i, p.y));
+    if (!chars.some((ch) => ch === '-' || ch === '%' || ch === ICE)) continue;
     let over = false;
     for (let x = p.x0; x <= p.x1; x++) {
       let d = 1;
       while (p.y + d < h && !SOLID.has(at(x, p.y + d)) && at(x, p.y + d) !== '-') d++;
       if (d > SCREEN_ROWS) over = true;
     }
-    const crumbles = Array.from({ length: width }, (_, i) => at(p.x0 + i, p.y) === '%').some(Boolean);
-    precision += Math.min(1, 3 / width) * (over ? 2.5 : 1) * (crumbles ? 1.5 : 1);
+    const crumbles = chars.includes('%');
+    precision += Math.min(1, aimWidth(chars) / width) * (over ? 2.5 : 1) * (crumbles ? 1.5 : 1);
   }
 
   const per100 = (n) => (n / h) * 100;
@@ -526,12 +555,16 @@ function measure(rows, opts = {}) {
    * more (2.5x): missing a plank over grass costs a climb, missing one over a
    * pit costs a life. Crumbling tiles get a further 1.5x because the platform
    * is leaving whether or not you aimed well.
+   *
+   * Jää on mukana samalla termillä mutta omalla kynnyksellään: sillä "riittävän
+   * leveä" ei ole kolme laattaa vaan mitattu `ICE_BRAKE`. Ks. `aimWidth`.
    */
   let precision = 0;
-  for (const r of runs(route, new Set(['-', '%']))) {
+  for (const r of runs(route, new Set(['-', '%', ICE]))) {
+    const chars = Array.from({ length: r.w }, (_, i) => at(r.from + i, r.y));
     const overDeath = Array.from({ length: r.w }, (_, i) => lethalCol[r.from + i]).some(Boolean);
-    const crumbles = Array.from({ length: r.w }, (_, i) => at(r.from + i, r.y) === '%').some(Boolean);
-    precision += Math.min(1, 3 / r.w) * (overDeath ? 2.5 : 1) * (crumbles ? 1.5 : 1);
+    const crumbles = chars.includes('%');
+    precision += Math.min(1, aimWidth(chars) / r.w) * (overDeath ? 2.5 : 1) * (crumbles ? 1.5 : 1);
   }
 
   const per100 = (n) => (n / w) * 100;
@@ -874,10 +907,20 @@ console.log('  liikesarjasta eikä siitä miltä hyppy tuntuu.');
  * putoamisen välissä: **laatta on lähtötilaa** ja siitä maksetaan
  * (`LUMP_COST`), koska se on ruudukossa ennen kuin kukaan koskee mihinkään.
  * Putoaminen on lopputulos — mihin se päätyy, minkä se tukkii, kenet se
- * osuessaan kaataa — ja se on yhä ulkopuolella niin kuin jää ja tuuli.
+ * osuessaan kaataa — ja se on yhä ulkopuolella niin kuin tuuli.
+ *
+ * JA JÄÄ ON NYT SAMASSA RAJASSA, samasta syystä ja samalla korjauksella. Kun
+ * jää oli teeman ominaisuus, se oli kokonaan tämän rivin ulkopuolella: koko
+ * maailma 3 oli liukas eikä yksikään merkki ruudukossa sanonut niin, joten
+ * mitattavaa ei ollut. `T.ICE` siirsi puolet siitä sisään. **Laatta on
+ * lähtötilaa** ja siitä maksetaan (`aimWidth`: jäisellä jalansijalla "riittävän
+ * leveä" on viisi laattaa kolmen sijaan), koska se on ruudukossa ennen kuin
+ * kukaan koskee mihinkään. Liukuminen itse — kuinka pitkälle kukin pelaaja
+ * kullakin vauhdilla oikeasti liukuu — on lopputulos ja yhä ulkopuolella.
  */
-console.log('  Se mittaa myös vain LÄHTÖTILAN: emergentit lopputulokset — jää,');
-console.log('  tuuli, murtuva lauta, putoavan möykyn matka, kuoriketju — ovat');
-console.log('  tämän mittauksen ulkopuolella. Möykky itse on lähtötilaa ja');
-console.log('  maksaa 0,6 sarakkeeltaan; sen putoaminen ei maksa mitään.\n');
+console.log('  Se mittaa myös vain LÄHTÖTILAN: emergentit lopputulokset — tuuli,');
+console.log('  murtuva lauta, putoavan möykyn matka, liu\'un pituus, kuoriketju —');
+console.log('  ovat tämän mittauksen ulkopuolella. Möykky itse on lähtötilaa ja');
+console.log('  maksaa 0,6 sarakkeeltaan; jäälaatta on lähtötilaa ja maksaa');
+console.log('  tarkkuutena. Kumpikaan ei maksa siitä mitä se sitten tekee.\n');
 }

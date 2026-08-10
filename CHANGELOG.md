@@ -7,6 +7,125 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.68 — JÄÄ on laatta, ei teema
+
+`SURFACES` on ollut olemassa siitä asti kun emergenssin ensimmäinen erä tuli
+sisään, ja sen laki 1 kuuluu *"jää on liukas kaikille"*. Se oli tosi puolittain:
+**pelaaja ei lukenut taulua lainkaan.** Koko maailma 3 oli liukas kävelijälle ja
+kuorelle, ja pelaajalle se oli tavallista maata.
+
+Sen rivin perustelu oli oikea eikä sitä kumota tässä: maailman 3 kahdeksan
+kenttää on mitoitettu tavallisen kitkan varaan, joten pelaajan kitkan
+pudottaminen *teeman* perusteella olisi muuttanut kahdeksan kenttää yhdellä
+committilla ja syönyt juuri sen marginaalin jonka DESIGN.md kohta 5 lupaa.
+
+Tässä erässä se tehtiin toisin päin: **jää on laatta (`T.ICE`, `'I'`), jonka saa
+ladota mihin tahansa maailmaan.** Teemana se olisi muuttanut kahdeksan kenttää
+kerralla; laattana se ei muuta yhtäkään ennen kuin joku ladotaan jonnekin — ja
+se kantaa maailmaa 3 pidemmälle, jäiselle kielekkeelle luumaailmassa ja liukkaalle
+kulkusillalle tehtaassa.
+
+### Se yksi luku, ja mitä se **ei** koske
+
+`SURFACES` sai kolmannen sarakkeen `grip`in, joka on kerroin kehon **omalle
+jarrutusvallalle** — `FRICTION_SMALL`, `FRICTION_BIG` ja `SKID`. Jäällä se on
+0,4. Mitattu `tools/measure-braking.mjs`:n uudella osalla 1b, voimataso 0:
+
+| vauhti | irrota ote | käänny vastaan |
+| --- | --- | --- |
+| 1.5 kävely | 71 px (4,4 laattaa) | 22 px (1,4) |
+| 2.5 juoksu | 199 px (12,4) | 40 px (2,5) |
+| 3.5 P | 390 px (24,4) | 68 px (**4,3**) |
+
+**`ACC` ei ole listalla, ja se on tämän erän tärkein päätös.** Koko mitattu
+hyppybudjetti johtuu siitä luvusta, joten jään lähellä oleva kuilu on mitoitettu
+sillä vauhdinotolla joka siinä oikeasti on. Se on myös oikea tuntuma — jäällä ei
+ole vaikeaa lähteä vaan pysähtyä — ja se on se lause joka pitää
+`tools/playable.mjs`:n todistuksen voimassa: botti pitää oikeaa pohjassa eikä
+jarruta kertaakaan, joten se mittaa jään päällä framelleen saman kuin ilman.
+
+Se on kirjoitettu myös `level-bot.js`:ään ääneen, koska se leikkaa molempiin
+suuntiin: **botin LÄPI ei ole todiste siitä että jäinen kohta on reilu.** Se on
+todiste siitä että sen läpi pääsee pysähtymättä.
+
+### Sääntö on kapea, ja kapeus on mittaustulos
+
+Ensimmäinen luonnos oli reunasääntö juoksuhiekan malliin. Mittaus tappoi sen:
+pahin *tahallinen* pysähdys jäällä on 68 px, ja eteen näkyy juostessa ~176 px,
+eli **jäällä ei ole vaaraa jota ei ehtisi väistää** — kunhan on jotain minkä
+päällä jarruttaa. Tavallista maata pitkin jäälle saapuva voi jarruttaa jo ennen
+jäätä, ja jään jälkeinen kuoppa on hypättävissä kuten mikä tahansa kuoppa.
+
+Jäljelle jää tasan yksi asetelma jota **mikään muu sääntö ei näe**: kelluva
+lautta kuilun päällä. Sille tullaan kaaressa, sillä vauhdilla jonka hyppy vaati,
+eikä ennen sitä ole mitään millä hidastaa. `checkGaps` on tyytyväinen, koska
+kuilu on hypättävissä molemmilta puolilta — ja juuri se hyppy on se joka tappaa.
+`checkIce` vaatii sellaiselta saarelta `ICE_BRAKE` = 5 laattaa, eli tuon 4,3
+pyöristettynä ylöspäin.
+
+Portti koettelee myös sen ettei sääntö ole kielto: **viiden laatan lautta menee
+läpi**, kolmen ei.
+
+### Hinta on tarkkuudessa eikä vaaralistalla
+
+Jää ei satuta — sen päällä voi seistä loputtomiin. Se vie *tähtäyksen*, ja
+mittarilla on jo termi sille: `precision`. Kolme laattaa on se leveys jolla
+laskeutuminen lakkaa vaatimasta tähtäystä; jäällä se leveys on `ICE_BRAKE`.
+Uusi laatta ei siis ole uusi termi vaan vanhan termin toinen kynnys.
+
+Vaaralistalla se olisi myös mekaanisesti väärässä paikassa: `HAZARD_COST`
+luetaan sarakkeen **pahimpana**, joten jään ja piikin jakava sarake olisi
+hinnoitellut vain piikin — jää olisi ollut ilmaista tasan siellä missä se maksaa
+eniten.
+
+### Ja se mitä silmä ei nähnyt: 2,7 %
+
+Jään ensimmäinen väritys oli vaaleansininen ja **näytti hyvältä**. Mitattuna se
+oli jäämaailman omaa maata vastaan **2,7 %** — huonompi kuin yön tiili ennen
+korjaustaan (0,4 % oli pelin pahin, ja kynnykseksi asetettiin silloin 17 %), ja
+tasan siinä maailmassa johon ensiesittely oli juuri sijoitettu. Liukas laatta
+jota ei erota lumesta on mekaniikka jota ei ole.
+
+Toinen löytö oli pahempi ja tuli vasta kun halkeama otettiin mittaan: **jää vs.
+halkeama 14,8 %.** Turvallinen laatta ja tappava laatta jakoivat saman vaalean
+yläreunan — ja se on tasan se sekaannus jota tässä pelissä ei saa olla. Se on
+sama ehto joka juoksuhiekalle on kirjattu ("ei saa lukea laavana"), nyt
+maksettuna toisen kerran.
+
+Nykyinen turkoosi on molempien mittausten tulos, ei makuasia: syvä kylläinen
+sinivihreä, jonka *kansi* on turkoosi eikä valkoinen, koska valkoinen yläreuna
+on halkeaman allekirjoitus. Ja koska jään saa ladota mihin tahansa, kynnys ei
+ole yhdessä teemassa vaan **kaikissa kahdeksassa kertaa neljä naapuria** (maa,
+kova palikka, laava/halkeama, piikki), huonoin luku ratkaisee: nyt 17,9 %.
+
+### Ensiesittely: 3-1, sarake 52
+
+`ice_first`: kahdeksan laattaa jäätä yhtenäisen maan päällä, kolikot sen yllä,
+neljä laattaa tavallista maata ja sitten yksi tiili. Tiili on se seinä johon
+liu'un loppu näkyy, ja se on tiili eikä piikki koska **hinta on nolla** —
+kylkeen törmääminen pysäyttää eikä satuta. Se on tämän maailman versio 2-1:n
+matalasta juoksuhiekasta: mekaniikka opetetaan siellä missä sen kohtaaminen on
+ilmaista.
+
+Neljä laattaa run-offia on mitattu eikä silmämääräinen: jäältä tavalliselle
+maalle tullut voimatason 0 pelaaja pysähtyy juoksuvauhdista 4,9 laatassa, joten
+täyttä vauhtia tullut *osuu* tiileen ja kävellen tullut ei. Kumpikin on oikea
+lopputulos ja kumpikaan ei maksa mitään.
+
+`curriculum.mjs`: POHJA, SEURA ja YKSIN kaikki läpi. 3-1 vaikeus 161,6 → 156,3,
+maailman muoto 156 → 130 → 187 eli yhä yksi notko.
+
+### Mitä tässä ei ole
+
+**Maailmaa 3 ei ole jäädytetty.** `ice_crumble`in 12 laatan run-off on mitoitettu
+tavallisen maan 9,7 laatan liu'ulle; jäällä sama liuku on 24,4, joten jään
+latominen siihen chunkkiin on eri työ ja se on mitattava erikseen. Sama koskee
+`ice_pit`iä ja `ice_twin`iä — ne on kirjoitettu ikään kuin lattia olisi liukas,
+mikä ei ole koskaan ollut pelaajalle totta. Nyt se voidaan tehdä todeksi yksi
+kenttä kerrallaan ja mitaten, mikä oli koko syy tehdä tämä laattana.
+
+---
+
 ## v26.08.10.67 — möykylle hinta, ja portti joka kysyy sitä jokaiselta vaaralaatalta
 
 Möykky asetettiin kahteen kenttään eikä `src/data/difficulty.js` muuttunut

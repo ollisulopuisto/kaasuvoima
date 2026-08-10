@@ -14,7 +14,7 @@ import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
-import { T } from '../gfx/tiles.js';
+import { T, surfaceUnder } from '../gfx/tiles.js';
 
 /*
  * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
@@ -508,7 +508,25 @@ export class Player extends Entity {
     /* ------------------------------ horizontal ------------------------ */
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
     const cap = this.pFull ? MAX_P : run ? MAX_RUN : MAX_WALK;
-    const friction = this.big ? FRICTION_BIG : FRICTION_SMALL;
+    /*
+     * JÄÄ, pelaajan puolelta: maa kertoo kuinka paljon jarrua on jäljellä.
+     *
+     * **Laatta ja vain laatta.** `Enemy.surface` putoaa teemaan kun jalkojen
+     * alla ei ole nimettyä ainetta; tämä ei putoa. Ero on tahallinen ja se on
+     * koko syy siihen että jää on laatta: maailman 3 kahdeksan kenttää on
+     * mitoitettu tavallisen kitkan varaan (`chunks/ice.js` laskee
+     * `ice_crumble`n pysähtymismatkan luvuista 0,0391 ja 0,0547), joten teema
+     * joka liu'uttaisi pelaajaa muuttaisi ne kaikki kerralla ja söisi juuri sen
+     * marginaalin jonka DESIGN.md kohta 5 lupaa. Jää muuttaa ne kentät silloin
+     * kun jäätä ladotaan niihin, ei ennen.
+     *
+     * Vain maassa, ja se on toinen puoli samaa lausetta: ilmassa `grip` on 1,
+     * joten jäältä ponnistettu hyppy ohjautuu täsmälleen kuten mikä tahansa
+     * hyppy. Ilmassa ei ole jäätä jota vasten liukua.
+     */
+    const ground = this.onGround ? surfaceUnder(this.level, this) : null;
+    const grip = ground ? ground.grip : 1;
+    const friction = (this.big ? FRICTION_BIG : FRICTION_SMALL) * grip;
 
     if (this.ducking) {
       this.vx = approach(this.vx, 0, friction * 1.4);
@@ -528,7 +546,11 @@ export class Player extends Entity {
        * less than half the authority the same player has with his feet down.
        */
       const skidding = Math.sign(this.vx) === -dir && Math.abs(this.vx) > 0.2;
-      this.vx = approach(this.vx, cap * dir, skidding ? SKID : ACC);
+      /* `SKID` on jarru ja `ACC` ei, joten `grip` koskee vain edellistä. Se on
+       * `SURFACES`in oma sääntö kirjoitettuna siihen yhteen kohtaan jossa
+       * molemmat luvut ovat näkyvissä: jäällä ei ole vaikeaa lähteä vaan
+       * kääntyä, ja kääntyminen on juuri tämä haara. */
+      this.vx = approach(this.vx, cap * dir, skidding ? SKID * grip : ACC);
       if (Math.abs(this.vx) > cap && this.onGround) this.vx = approach(this.vx, cap * dir, 0.06);
       this.facing = dir;
     } else if (this.onGround) {

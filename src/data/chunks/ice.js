@@ -25,6 +25,47 @@ export const ICE_CHUNKS = {
   }),
 
   /**
+   * JÄÄ, ensimmäinen kerta — ja se on rakennettu niin ettei se voi tappaa.
+   *
+   * Tämä chunk on `T.ICE`:n ensiesittely koko pelissä, ja ensiesittelyltä
+   * vaaditaan kolme asiaa (`tools/curriculum.mjs`, POHJA): alla on lattiaa,
+   * ympärillä ei ole kuilua, eikä samalla ruudulla ole toista uutta asiaa.
+   * Kaikki kolme ovat tässä rakenteessa eivätkä lupauksessa — rivi 14 on
+   * yhtenäistä maata reunasta reunaan, joten jäältä ei voi pudota mihinkään.
+   *
+   * **Miksi jäätä on kahdeksan laattaa eikä kolme.** Kolmen laatan jäätä ei
+   * huomaa: juoksuvauhdilla sen yli menee kuudessa framessa, eikä kuudessa
+   * framessa ehdi tapahtua mitään joka olisi opetus. Kahdeksan laattaa on 51
+   * framea juosten, mikä on pidempään kuin otteen irrottaminen kestää — eli se
+   * on ensimmäinen paikka jossa pelaaja voi *kokeilla* mitä irrottaminen tekee
+   * ja nähdä vastauksen ennen kuin jää loppuu.
+   *
+   * **Miksi lopussa on tiilipari.** Liukas lattia jolla ei ole mitään mihin
+   * liukua on tyhjä väite: pelaaja kävelee sen yli eikä huomaa mitään. Tiili on
+   * se seinä johon liu'un loppu näkyy, ja se on tiili eikä piikki juuri siksi
+   * että **hinta on nolla** — kylkeen törmääminen pysäyttää (`moveX` nollaa
+   * `vx`:n) eikä satuta. Se on tämän maailman oma versio siitä mitä 2-1:n matala
+   * juoksuhiekka tekee: mekaniikka opetetaan tilanteessa jossa sen kohtaaminen
+   * on ilmaista, ja hinta peritään vasta myöhemmin.
+   *
+   * Neljä laattaa tavallista maata jään jälkeen ennen tiiltä, ja se on mitattu
+   * eikä silmämääräinen: `tools/measure-braking.mjs` sanoo että jäältä
+   * tavalliselle maalle tullut voimatason 0 pelaaja pysähtyy juoksuvauhdista
+   * 4,9 laatassa. Eli neljä on juuri sen verran vähän että täyttä vauhtia tullut
+   * *osuu* tiileen — mikä on koko opetus — ja kävellen tullut pysähtyy ennen
+   * sitä. Kumpikin lopputulos on oikea, ja kumpikaan ei maksa mitään.
+   *
+   * Kolikot jään päällä eivätkä sen jälkeen: palkinto on ylityksestä, ei
+   * pysähtymisestä. Ei vihollisia, koska tällä ruudulla on jo yksi uusi asia.
+   */
+  ice_first: ck(18, {
+    9: '     o o o o',
+    12: '                B',
+    13: '####IIIIIIII######',
+    14: '##################',
+  }),
+
+  /**
    * The spiky walker, on open flat ground on purpose.
    *
    * The lesson is "reach for another tool", not "die to a surprise": there is

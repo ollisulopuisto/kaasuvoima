@@ -157,7 +157,7 @@ const SMALL_HEAD = 1;
  * not. That mattered nowhere while the rules only measured floors; it matters
  * now that they ask whether a body fits somewhere, so the two lists agree.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 const SEMI = new Set(['-']);
 /*
  * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`, `src/gfx/tiles.js`).
@@ -222,6 +222,25 @@ const DEADLY = new Set(['W']);
  * drifted.
  */
 const SINK = new Set(['~']);
+/*
+ * JÄÄ (`T.ICE`, `src/gfx/tiles.js`). `SOLID`in jäsen, koska se **on** tavallinen
+ * kiinteä laatta: sen päällä seistään, sen läpi ei mennä, ja se kelpaa
+ * lattiaksi, askelmaksi ja katoksi kuten mikä tahansa kivi. Ainoa mitä se tekee
+ * eri tavalla on se mitä *sen päällä oleva keho* pystyy tekemään, eikä yksikään
+ * tämän tiedoston sääntö mittaa sitä — ne mittaavat muotoa. Siksi jää on
+ * `SOLID`issa eikä omassa joukossaan juoksuhiekan tapaan, ja siksi sillä on
+ * silti oma sääntönsä (`checkIce`): tasan yksi asetelma jonka muut sivuuttavat.
+ */
+const ICE = new Set(['I']);
+/**
+ * Kuinka monta saraketta jäistä jalansijaa tarvitaan pysähtymiseen, laattoina.
+ *
+ * Mitattu eikä valittu: `tools/measure-braking.mjs` ajaa pelaajan jäärunwaylla
+ * ja vastaan kääntyminen pysäyttää voimatasolla 0 juoksuvauhdista 40 pikselissä
+ * ja P-nopeudesta 68:ssa. 68 px on 4,25 laattaa, ylöspäin viisi. P-nopeuden luku
+ * eikä juoksun, koska lautalle voi saapua kummalla tahansa vauhdilla.
+ */
+const ICE_BRAKE = 5;
 
 /* -------------------------------- bands ---------------------------------- */
 
@@ -550,6 +569,62 @@ function checkFalling(rows, w, problems) {
         problems.push(`falling tile at ${x},${y} has "${above}" on top of it: nothing may stand`
           + ' on a tile that can leave, or the route can leave with it');
       }
+    }
+  }
+}
+
+/**
+ * JÄÄ, ja **vain se yksi asetelma jota mikään muu sääntö ei näe.**
+ *
+ * Mittaus ensin, koska se rajaa säännön eikä toisin päin. `measure-braking.mjs`
+ * ajaa pelaajan jäärunwaylla: vastaan kääntyminen pysäyttää voimatasolla 0
+ * juoksuvauhdista 40 pikselissä ja P-nopeudesta 68:ssa, ja eteen näkyy
+ * juostessa ~176 px (PHYSICS.md). Pahin *tahallinen* pysähdys on siis 39 %
+ * siitä mitä ehtii nähdä. **Jäällä ei ole vaaraa jota ei ehtisi väistää** —
+ * kunhan on jotain minkä päällä jarruttaa.
+ *
+ * Siksi tämä ei ole reunasääntö juoksuhiekan tapaan, ja se on kielto eikä
+ * unohdus. Reunasääntö olisi keksitty vaatimus kahdesta syystä: tavallista maata
+ * pitkin jäälle saapuva pelaaja voi jarruttaa jo ennen jäätä, ja jään jälkeen
+ * tuleva kuoppa on hypättävissä kuten mikä tahansa kuoppa — `checkGaps` mittaa
+ * sen, eikä jää muuta kiihdytystä (ks. `SURFACES`in `grip`), joten vauhdinotto
+ * on täsmälleen se jolla kuilu on mitoitettu.
+ *
+ * Se mitä jäljelle jää on **ilmasta saapuminen**. Kelluva lautta kuilun päällä
+ * on ainoa paikka jossa pelaaja ei voi jarruttaa ennen jäätä: hän tulee sille
+ * kaaressa, laskeutuu sillä vauhdilla jonka hyppy vaati, ja jos lautta on
+ * lyhyempi kuin jarrutusmatka, hän liukuu sen yli. Mikään muu sääntö ei näe
+ * sitä — `checkGaps` on tyytyväinen, koska kuilu on hypättävissä molemmilta
+ * puolilta, ja juuri se hyppy on se joka tappaa.
+ *
+ * Saari on tässä *jalansijan* maksimaalinen jakso yhdellä rivillä, ei jään:
+ * `IIII##` on kuuden laatan saari eikä neljän, koska ne kaksi kiveä ovat
+ * jarrutusmatkaa siinä missä jääkin — ja parempaa. Kentän reuna ei avaa saarta
+ * kummallakaan puolella, koska reuna on seinä (`moveX`) eikä sen yli liu'uta.
+ *
+ * **Sääntö on hitusen liian tiukka ja se on tiedossa:** saari jossa on yksi
+ * jäälaatta viiden kiven joukossa mitataan samalla mitalla kuin läpijäinen.
+ * Erottaminen vaatisi simuloinnin — jarrutusmatka riippuu siitä missä kohtaa
+ * saarta jää on — ja hinta väärään suuntaan on kaksi laattaa suunnittelijalle,
+ * kun taas väärään suuntaan toisin päin se on henki.
+ */
+function checkIce(rows, w, problems) {
+  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!footing(x, y)) continue;
+      let end = x;
+      while (end + 1 < w && footing(end + 1, y)) end++;
+      const open = (a) => a >= 0 && a < w && !footing(a, y);
+      const island = open(x - 1) && open(end + 1);
+      let ice = false;
+      for (let i = x; i <= end; i++) if (ICE.has(rows[y][i])) ice = true;
+      const width = end - x + 1;
+      if (island && ice && width < ICE_BRAKE) {
+        problems.push(`ice island at ${x},${y} is ${width} wide: a body landing on it at speed`
+          + ` needs ${ICE_BRAKE} tiles to stop, and there is nothing either side to stop on`);
+      }
+      x = end;
     }
   }
 }
@@ -1188,6 +1263,7 @@ export function validateLevel(rows, budget, opts = {}) {
     checkEnemyFooting(rows, w, problems);
     checkVines(rows, w, problems);
     checkFalling(rows, w, problems);
+    checkIce(rows, w, problems);
     const graph = climbGraph(rows, budget);
     checkClimb(rows, w, graph, budget, problems);
     checkClimbPower(rows, w, problems);
@@ -1211,10 +1287,11 @@ export function validateLevel(rows, budget, opts = {}) {
   const bandName = (b) => (b === routeIndex ? 'route band' : b < routeIndex ? 'sky band' : 'cave band');
   const where = (b) => (b === routeIndex ? '' : ` in the ${bandName(b)}`);
 
-  /* Universal, whole grid: a beanstalk is a beanstalk in any band, and a tile
-   * that can fall is one wherever it is put. */
+  /* Universal, whole grid: a beanstalk is a beanstalk in any band, a tile that
+   * can fall is one wherever it is put, and so is a tile you cannot stop on. */
   checkVines(rows, w, problems);
   checkFalling(rows, w, problems);
+  checkIce(rows, w, problems);
 
   /* Universal, per band: headroom over the ground of whatever band it is, and
    * what a quicksand pool has to be wherever one is dug. */
@@ -1269,4 +1346,6 @@ export function validateLevel(rows, budget, opts = {}) {
   return problems;
 }
 
-export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS };
+export const RULE_CONSTANTS = {
+  ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS, ICE_BRAKE,
+};
