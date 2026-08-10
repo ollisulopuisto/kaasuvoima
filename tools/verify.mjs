@@ -1685,6 +1685,46 @@ const report = await page.evaluate(async () => {
         homes.length >= 2 && bad.length === 0,
         bad.length ? bad.join('; ')
           : `${homes.length} kpl: ${homes.map((h) => `${h.id} sarake ${h.x} kuilu ${h.span}`).join(', ')}`);
+
+      /*
+       * JARRUTUSIKKUNA ON KOKONAAN MAATA.
+       *
+       * Ylempi väite mittaa kuilun leveyden, eli sen pääseekö yli. Se ei mittaa
+       * pääseekö **pysähtymään**, ja juuri se oli rikki: merkki oli kuilun
+       * keskellä kolmessa palikassa, ja voimatason 0 jarrutusmatka on 4 laattaa,
+       * joten ikkunan `[merkki−4, merkki−1]` kaksi viimeistä saraketta olivat jo
+       * ilman päällä. Pelaaja joka näki olennon ja päästi napista irti oikealla
+       * hetkellä ei silti ehtinyt pysähtyä.
+       *
+       * Se oli tosi kuudessa kentässä ja löytyi vasta kun opetusmittari sai
+       * kurnuttajalle rivin — eli **kertaalleen, vahingossa, kolmannen työkalun
+       * sivutuotteena**. Tämä väite tekee siitä pysyvän: se ei kysy mistä
+       * palikasta kuoppa tuli, vaan mittaa jokaisen merkin oman ympäristön.
+       * Korjaus joka ei kanna mukanaan väitettä ehtii regressoitua ennen kuin
+       * kukaan huomaa.
+       */
+      const BRAKE = 4;                       // laattaa, voimataso 0 (PHYSICS.md)
+      const solid = (c) => '#XB?!*uN[]{}%()S'.includes(c);
+      const shortWindow = [];
+      for (const id of levelIds()) {
+        const rows = getLevel(id).rows;
+        for (let y = 0; y < rows.length; y++) {
+          for (let x = 0; x < rows[y].length; x++) {
+            if (rows[y][x] !== 'U') continue;
+            let ground = 0;
+            for (let c = x - BRAKE; c <= x - 1; c++) {
+              if (c >= 0 && solid(rows[y][c])) ground++;
+            }
+            if (ground < BRAKE) {
+              shortWindow.push(`${id} @${x}: ikkuna [${x - BRAKE}, ${x - 1}] ${ground}/${BRAKE} maata`);
+            }
+          }
+        }
+      }
+      expect('kurnuttajan eteen mahtuu koko jarrutusmatka maata',
+        homes.length >= 2 && shortWindow.length === 0,
+        shortWindow.length ? shortWindow.join('; ')
+          : `${homes.length} kuoppaa, jokaisen edessä ${BRAKE}/${BRAKE} laattaa maata`);
     }
   } catch (e) {
     expect('kurnuttaja-testit pääsevät ajoon asti', false, String(e && e.message));

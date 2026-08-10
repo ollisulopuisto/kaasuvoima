@@ -170,7 +170,13 @@ export const KEEP_CHUNKS = {
   keep_croak: ck(16, {
     0: G,
     1: G,
-    13: '#########  U  ##',
+    /* Merkki kuilun lähireunalla, samasta mitatusta syystä kuin `pit_croak`in:
+     * voimatason 0 jarrutusmatka on 4 laattaa, joten ikkuna on
+     * `[merkki−4, merkki−1]`. Keskeltä (sarake 11) laskettuna ikkuna 7–10 oli
+     * **2/4 maata** — pelaaja joka reagoi oikein ei ehtinyt pysähtyä.
+     * Lähireunalta (sarake 9) ikkuna 5–8 on 4/4. Kuilu on yhä viisi laattaa,
+     * eikä yksikään sarake liikkunut. */
+    13: '#########U    ##',
     14: '#########     ##',
   }),
 

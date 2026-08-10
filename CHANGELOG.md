@@ -7,6 +7,102 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.53 — kurnuttaja opetusmittariin, ja kuusi kuoppaa joista ei ehtinyt pysähtyä
+
+Omistajan ratkaisu riitaan oli **korjaa 2-1, pidä sääntö ehdottomana** — ei
+poikkeusta, ei kirjattua varausta. Tämä merkintä on se työ, ja se paljasti
+vian joka oli kuudessa kentässä.
+
+### Riita oli proosaa, ei koodia
+
+Portissa ei ollut `disputed`-lippua eikä RIITA-osiota siinä puussa jossa työ
+tehtiin: riita oli **25 rivin kommentti** `ENEMY_NAMES`in yllä, joka perusteli
+miksi riviä ei saa lisätä. Rivin lisääminen oli siis koko purkaminen.
+`U: 'kurnuttaja'` on nyt tavallinen rivi, ja kommentti on kirjoitettu
+uudelleen muotoon *mitä uskottiin, mitä mitattiin, mikä muuttui* — vanhaa
+päättelyä ei poistettu, koska se on osa sitä miksi tässä on nyt näin.
+
+### Punainen, kun rivi lisättiin eikä muuta
+
+```
+FAIL kahta ensiesittelyä ei ole saman 20 laatan ruudun sisällä
+     [3/27: enemy_p@2-1:101 enemy_H@2-1:134 enemy_U@2-1:119]
+FAIL yksikään kenttä ei esittele yli kolmea uutta asiaa
+     [2-1 4: enemy_p enemy_A enemy_H enemy_U]
+```
+
+**Levittäminen yksin ei riittänyt.** Kolmen raja tarkoitti että yhden neljästä
+oli lähdettävä 2-1:stä. Närästysliekki oli ainoa siirrettävä — aurinkoa ei ole
+missään muualla, kasvin luovutti juuri 1-2, ja kurnuttaja on koko pointti — ja
+se laskeutui 2-2:een, joka seuraa **molemmilla reiteillä**, joten se siirtyi
+yhden kentän eikä yhtä haaraa.
+
+| | aurinko | kasvi | kurnuttaja | liekki | välit |
+|---|---|---|---|---|---|
+| ennen | 71 | 101 | 119 | 134 | 30, **18**, **15** |
+| nyt | 71 | 101 | 197 | → 2-2 | 30, 96 |
+
+### Ja sitten se oikea löydös: jarrutusikkuna
+
+Voimatason 0 jarrutusmatka on **56 px eli 4 laattaa**, joten ikkuna jossa
+pelaaja voi vielä pysähtyä on `[merkki−4, merkki−1]`. Merkki oli kuilun
+**keskellä**, ja keskeltä laskettuna ikkunan kaksi viimeistä saraketta olivat
+jo ilman päällä:
+
+| | merkki | kuilu | ikkuna | maata ikkunassa |
+|---|---|---|---|---|
+| `pit_croak` ennen | 7 | 5–10 | 3–6 | **2 / 4** |
+| `pit_croak` nyt | 5 | 5–10 | 1–4 | **4 / 4** |
+| `keep_croak` ennen | 11 | 9–13 | 7–10 | **2 / 4** |
+| `keep_croak` nyt | 9 | 9–13 | 5–8 | **4 / 4** |
+
+Pelaaja joka näki olennon ja päästi napista irti oikealla hetkellä **ei silti
+ehtinyt pysähtyä**. Se ei ole vaikeus vaan virhe, ja se oli tosi kuudessa
+kentässä: 2-1, 3-3, 8-3, 8-4, 8-5 ja 8-F.
+
+Korjaus siirtää **merkin, ei kuiluja**: kuilut ovat yhä kuusi ja viisi laattaa,
+yksikään sarake ei liikkunut, joten `pit_s`:n kanssa mitattu vaikeusvastaavuus
+säilyy ja olento on yhä lattiattomassa sarakkeessa. `difficulty.js` ei muuttunut
+yhdeltäkään riviltä.
+
+Se on myös parempaa peliä. Loikka on pystysuora, joten vaara on tasan **yksi
+sarake**; lähireunalla se sarake osuu ponnistukseen, jota pelaaja yhä ohjaa,
+eikä lakipisteeseen, jota kukaan ei ohjaa.
+
+### Uusi väite, koska tämä löytyi vahingossa
+
+Vika löytyi vasta kun opetusmittari sai kurnuttajalle rivin — eli
+**kertaalleen, kolmannen työkalun sivutuotteena**. Vanha portti mittasi kuilun
+**leveyden** (pääseekö yli) muttei koskaan sitä pääseekö **pysähtymään**.
+
+```
+ok  kurnuttajan eteen mahtuu koko jarrutusmatka maata
+    [6 kuoppaa, jokaisen edessä 4/4 laattaa maata]
+```
+
+Väite ei kysy mistä palikasta kuoppa tuli, vaan mittaa jokaisen merkin oman
+ympäristön. Todistettu punaiseksi palauttamalla vanha palikka:
+`2-1 @199: ikkuna [195, 198] 2/4 maata; 3-3 @304: 2/4 maata`.
+
+### Väliaikainen palikka eli tasan sen elinkaaren jonka se lupasi
+
+Työ tehtiin haarassa jossa `chunks/common.js` oli toisen agentin hallussa,
+joten 2-1 sai hetkeksi oman `pit_croak_rim`-palikan ja oman koostajan. Korjaus
+on nyt siellä minne se kuuluu, joten palikka, koostaja ja `rows:`-poikkeus on
+poistettu ja 2-1 on taas tavallinen soittolista. Väliaikaisen ratkaisun arvo on
+nolla jos kukaan ei tiedä milloin se saa poistua.
+
+### Löydetty, ei korjattu: kamera 2-1:ssä
+
+Pelaajan tavoitettavissa oleva vika, joka **ei** ole tästä työstä ja joka on
+toimitetussa 2-1:ssä nytkin: voimatasolla 3 tiilillä sarakkeessa 228 seisten
+pieruhyppy nostaa kuvaa **2.85 px yhdellä framella** (katto 2.5) ja pää on
+tasan **16.00 px** ylhäällä (lattia 16). Portin kamerafikstuuri ei ole
+napannut sitä koska sen botti kuolee 2-1:ssä aiemmin — se pääseekö tiilille
+asti on palikkajärjestyksen sattuma. Kuuluu tiedostoon `src/scenes/level.js`.
+
+---
+
 ## v26.08.10.52 — ylös on suunta: sivuttain vaihtuva kamera, ja kolme työkalua jotka oppivat kiipeämään
 
 Omistaja pyysi pilvimaailmaan **pystykentän**: kiivetään tasanteelta toiselle,

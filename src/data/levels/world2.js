@@ -45,67 +45,18 @@
  * omissa kommenteissa.
  */
 
-import { CHUNKS } from '../chunks.js';
-import { ck, CHUNK_ROWS } from '../chunks/common.js';
 
-/**
- * TÄMÄN TIEDOSTON OMA PALIKKA, JA MIKSI SELLAINEN ON OLEMASSA.
+/*
+ * KURNUTTAJAN KUOPPA ON NYT JAETTU PALIKKA, EIKÄ TÄMÄN TIEDOSTON OMA.
  *
- * `pit_croak` (chunks/common.js) panee kurnuttajan merkin kuilun **keskelle**,
- * sarakkeeseen 7 kuudentoista levyisessä palikassa jonka kuilu on sarakkeet
- * 5–10. Se luki pitkään hyvältä — "keskellä kuoppaa" on se mitä silmä palikasta
- * lukee — mutta mitattuna se on kaksi saraketta liian pitkällä:
+ * Tässä oli hetken oma `pit_croak_rim` ja oma `assembleLocal`, koska merkki oli
+ * siirrettävä kuilun keskeltä sen lähireunalle mutta `chunks/common.js` oli
+ * toisen työn alla. Korjaus on nyt siellä minne se kuuluu, joten sekä palikka
+ * että koostaja on poistettu ja 2-1 on taas tavallinen soittolista.
  *
- *   jarrutusmatka voimatasolla 0 on 56 px eli 4 laattaa (PHYSICS.md,
- *   `tools/measure-braking.mjs`), ja ikkuna [merkki−4, merkki−1] on silloin
- *   sarakkeet 3–6 — joista **5 ja 6 ovat jo ilmaa**.
- *
- * Eli pelaaja joka näkee olion ja päästää napista irti oikealla hetkellä ei
- * silti ehdi pysähtyä ennen kuin maa loppuu. Se ei ole vaikeus vaan virhe, ja
- * `tools/curriculum.mjs`:n POHJA sanoo sen numerona.
- *
- * Korjaus on siirtää **merkki**, ei kuilua: kuilu on yhä kuusi laattaa, palikka
- * on yhä sarake sarakkeelta `pit_s`, ja se on koko `pit_croak`in idea (sama
- * reikä, uusi asukas). Merkki on nyt kuilun **etureunassa**, jolloin ikkuna
- * 1–4 on kokonaan maata — neljä laattaa, tasan jarrutusmatka.
- *
- * Ja tämä on parempi paikka myös pelinä eikä vain mittarina. Kurnuttajan oma
- * kommentti (`src/entities/enemies.js`) sanoo että kuilun yllä oleva ilma on
- * se paikka jossa pelaajalla ei ole enää mitään hallintaa — ja loikka on
- * pystysuora, eli vaara on **täsmälleen yksi sarake**. Kuilun keskellä se
- * sarake osuu hypyn lakipisteeseen, jossa mitään ei voi enää tehdä; etureunassa
- * se osuu ponnistukseen, joka on vielä pelaajan omissa käsissä. Reunalla
- * seisominen on turvallista kummassakin tapauksessa.
- *
- * **Miksi palikka on täällä eikä chunks/common.js:ssä.** Se kuuluisi sinne, ja
- * sinne se pitää viedä: sama vika on `pit_croak`issa yhä, ja 3-3 käyttää sitä
- * (mittari ei näe sitä, koska mittari mittaa vain ensiesittelyn). Ehdotettu
- * muutos on täsmälleen nämä kaksi riviä `pit_croak`in tilalle. Kun se on tehty,
- * tämä palikka ja `assembleLocal` poistetaan ja 2-1 palaa tavalliseksi
- * soittolistaksi — se on koko tämän kohdan elinkaari.
+ * Se oli koko kohdan elinkaari, ja se on kirjattu tähän siksi että väliaikaisen
+ * ratkaisun arvo on nolla jos kukaan ei tiedä milloin se saa poistua.
  */
-const LOCAL_CHUNKS = {
-  pit_croak_rim: ck(16, {
-    13: '#####U     #####',
-    14: '#####      #####',
-  }),
-};
-
-/**
- * `assemble()` (chunks.js) mutta omat palikat nimetään ensin. Kuusi riviä
- * kopiota siksi, että vaihtoehto olisi ollut antaa kentälle valmis ruudukko
- * käsin — ja silloin 2-1 lakkaisi olemasta luettava soittolista, joka on koko
- * tapa jolla tämän pelin kentät on kirjoitettu.
- */
-function assembleLocal(names) {
-  const rows = Array.from({ length: CHUNK_ROWS }, () => '');
-  for (const name of names) {
-    const chunk = LOCAL_CHUNKS[name] || CHUNKS[name];
-    if (!chunk) throw new Error(`unknown chunk: ${name}`);
-    for (let y = 0; y < CHUNK_ROWS; y++) rows[y] += chunk.rows[y];
-  }
-  return rows;
-}
 
 export const WORLD2_LEVELS = {
   /*
@@ -163,7 +114,7 @@ export const WORLD2_LEVELS = {
   /*
    * KURNUTTAJA TULEE TÄHÄN, JA VAIN TÄHÄN KOKO MAAILMASSA.
    *
-   * Chunk 12 is `pit_croak_rim`, which is the same six-tile hole with something
+   * Chunk 12 is `pit_croak`, which is the same six-tile hole with something
    * living at the bottom of it. Three reasons this pit and not another:
    *
    *   - **World 1 has to keep its promise first.** Every bare pit in world 1
@@ -237,7 +188,7 @@ export const WORLD2_LEVELS = {
    *            on juuri se `coins` jonka `dune_sink` aikanaan syrjäytti, eli
    *            kenttä sai takaisin oman kolikkorivinsä.
    *
-   * Ja `pit_croak` on nyt `pit_croak_rim`, eli sama kuilu jossa merkki on kuilun
+   * Ja `pit_croak`in merkki on nyt kuilun lähireunalla, eli sama kuilu jossa merkki on kuilun
    * etureunassa eikä keskellä. Se on POHJAn korjaus eikä kosmetiikkaa, ja koko
    * perustelu on palikan omassa kommentissa tämän tiedoston alussa: mitattu
    * jarrutusikkuna 193–196 on nyt kokonaan maata, ennen se oli kaksi saraketta
@@ -264,15 +215,12 @@ export const WORLD2_LEVELS = {
    */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
-    /* `rows` eikä `chunks`, koska chunk 12 on tämän tiedoston oma palikka —
-     * `assembleLocal` on tiedoston alussa ja kertoo miksi. Lista luetaan
-     * muuten kuten kaikkien muidenkin kenttien. */
-    rows: assembleLocal([
+    chunks: [
       'start', 'pipe_short', 'power', 'walkers', 'sun', 'corks',
       'pipe_plant', 'pit_l', 'coins', 'dune_sink', 'shell', 'plat_steps',
-      'pit_croak_rim', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
+      'pit_croak', 'flyer', 'bricks', 'ledge', 'pit_plat', 'star_block',
       'power', 'steps_up', 'run_up', 'goal', 'goal_end',
-    ]),
+    ],
   },
   /*
    * World 2's hidden level, and the only one in the world. The beanstalk at
