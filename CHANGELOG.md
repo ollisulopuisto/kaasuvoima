@@ -7,6 +7,97 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.64 — emergenssin ensimmäinen erä: neljä lakia ja yksi laatta joka putoaa
+
+Omistajan päätös 10.8.2026 (ROADMAP, *"emergenssi ulottuu olioiden välille,
+muttei maastoon"*) toteutettuna. Neljä lakia, kukin omalla punaisellaan.
+
+| laki | punainen | vihreä |
+| --- | --- | --- |
+| jää on liukas | `ruoho 33 px, jää 33 px — 100 % ruohosta` | `jää 18.1 px — 55 % ruohosta` |
+| lauta murenee vihollisen alta | `ajastin framella 0, poissa false` | `poissa true, **palasi true**` |
+| tuuli kantaa kuoria | `puuskassa 30 px, tyynellä 30 px — ero 0.0` | `ero 46.9 px` |
+| potkaistu kuori tappaa | `papupommi jäi koskematta` | `kävelijä kuoli, papupommi räjähti` |
+
+### Löydös joka on tärkeämpi kuin laki jota se koski
+
+**Tässä pelissä ei ole jään kitkaa eikä ole koskaan ollut.** `player.js` lukee
+`FRICTION_SMALL`/`FRICTION_BIG` eikä mitään muuta; **yksikään koodirivi ei lue
+teemaa fysiikkaa varten.** Neljä kommenttia väittää toisin (`chunks/ice.js`,
+`generator.js` kahdesti, `gen-levels.mjs`), ja maailman 3 generaattorin
+`minIntro` 48 saraketta **ostettiin sillä väitteellä**.
+
+Pelaajalle ei annettu jään kitkaa, ja syy on mitattu eikä varovainen:
+`chunks/ice.js` laskee `ice_crumble`n 12 laatan liu'un luvuista 0,0391 ja
+0,0547 — voimataso 0 liukuu 154,9 px, pysähtyy sarakkeeseen 262 ja liuku
+päättyy 264:ään. **Kaksi laattaa pelivaraa.** Pelaajan kitkan laskeminen kuluttaa
+tasan sen pelivaran, ja se pelivara on kohta 5. Mikä tahansa tuntuva liukkaus
+(pito ≤ 0,83) syö sen. Se on oma muutoksensa joka pitää maksaa maailman 3
+kenttädatasta, ja perustelu asuu `SURFACES`-taulussa eikä vain commitissa.
+
+Laki toimitettiin siis **tasan niin kuin päätös sen nimeää** — kävelijät ja
+kuoret — yhden jaetun taulun kautta jota pelaajakin voi joskus lukea. Muut
+seitsemän maailmaa ovat tavu tavulta ennallaan, koska tavallisella maalla
+`steer` on 8 px/frame² eli todistetusti välitön.
+
+### Putoava laatta on uusi laatta, ja se perustellaan
+
+Yksikään vanha laatta ei ansaitse pudota: maa, kovaa, tiili, lankku,
+palkintolohko ja putki ovat kaikki jossain lattia, seinä, askelma tai katto, ja
+kaikki kolme porttia lukevat ne pysyviksi. `T.CRUMBLE` oli lähinnä — se katoaa
+ja palaa jo — mutta **putoava lankku laskeutuu jonnekin muualle**, ja laatta
+uudessa paikassa muokkaa kenttää yhtä lailla kuin puuttuva: se voi tukkia
+käytävän tai luoda askelman jota lähtötilassa ei ollut.
+
+Siksi `T.LUMP` (`'C'`), **möykky** — kalkkeutunut massa, ummetuskorkin sukua,
+pelin omassa suolistorekisterissä. Se ei voi poistaa reittiä koska `rules.js`
+kieltää kolmella portilla: sen on lähtötilassa seisottava kiinteän päällä (tai
+kenttä muokkaisi itseään framella 1 ja jokainen portti mittaisi kenttää jota
+kukaan ei pelaa), sen päällä ei saa olla mitään, eikä sen tuki saa olla
+mureneva lankku. Ja se palaa kotiin, joten tukos on aina tilapäinen.
+
+Putoaminen on **tapahtumavetoista** (`setTile` → `dropAbove`) eikä
+framekohtaista pyyhkäisyä: kotiin palannut möykky ei saa heti lähteä uudelleen
+siksi että sen tuki on yhä poissa. Jatkuva tukitarkistus tekisi "palaa itse"
+-lupauksesta silmukan, ja silmukka ei lupaa mitään.
+
+**Möykkyä ei ole vielä yhdessäkään kentässä.** Sen sijoittaminen muuttaisi
+kenttää ja siten `difficulty.js`:ää. Velkaa.
+
+### Reiluus ilman kirjanpitoa
+
+Päätöksen sääntö oli että pelaajaa saa satuttaa vain ketju jonka hän itse
+aloitti, **eikä ruudun ulkopuolen kirjanpitoa saa tarvita**. Kolme osaa: emergentit
+iskut iteroivat vain `enemy`/`hazard`, joten pelaaja on niiden ulottumattomissa
+**rakenteellisesti**; ainoa laatta jonka vihollinen voi poistaa on mureneva
+lankku, eikä möykky saa levätä sellaisen päällä, joten jäljelle jäävät
+pääntökkäys, potkaistu kuori ja kytkin — kaikki pelaajan tekoja; ja pelaajan
+aloittama ketju **omistaa seurauksensa** (mitattu: voima 1 → 0 kun hän rikkoo
+tuen ja seisoo alla). Se osuu iskuna eikä paikkana, joten **tähti suojaa** —
+sama raja jonka piikki ja närästysliekki vetävät.
+
+### Determinismi ja mitattu ennallaan
+
+Ei uutta `Math.random()`:ia. Pikatallennus kesken putoamisen palauttaa laatan
+samalle riville samalla ajastimella, ja 60 framea myöhemmin sarake on merkki
+merkiltä sama. `src/data/difficulty.js` ja `src/data/generated.js` **ennallaan**,
+`playable.mjs` yhä `Jokainen kenttä on läpäistävissä pienimmällä koolla` (64/64).
+
+Mukana kaksi rippettä: kaksi `powerup` → `payout` esineenpudotuksessa, ja
+`LETTERBOX_BAR`in kommentti korjattu 100 px → **174 px**, mikä **kääntää sen oman
+johtopäätöksen** (lakipiste ei mahdu paikallaan; kamera kantaa sen), joten palkki
+pysyy 24 px:nä uudella perustelulla.
+
+### Löydetty, ei korjattu
+
+- **Neljä vanhentunutta "jää on liukas" -kommenttia** muualla repossa.
+- `tools/originality.mjs` taittaa tuntemattomat merkit ilmaksi, joten `'C'`:n
+  sisältävä kenttä verrattaisiin korpukseen reikä keskellä. Vaaraton tänään,
+  todellinen aukko sinä päivänä kun möykky sijoitetaan.
+- `Heartburn` ja `BeanBaron` kutsuvat yhä `Math.random()`:ia konstruktorissaan.
+
+---
+
 ## v26.08.10.63 — kolme ripettä mitattaviksi, ja kaksi poikkeuslistaa nollaan
 
 Pelillä ei ollut enää velkaa, joten nämä kolme ovat epäsiisteyksiä joilla on

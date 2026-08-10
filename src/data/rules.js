@@ -157,8 +157,18 @@ const SMALL_HEAD = 1;
  * not. That mattered nowhere while the rules only measured floors; it matters
  * now that they ask whether a body fits somewhere, so the two lists agree.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
 const SEMI = new Set(['-']);
+/*
+ * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`, `src/gfx/tiles.js`).
+ *
+ * Se on `SOLID`issa koska se **on** kiinteä lähtötilassa, ja lähtötila on se
+ * jota jokainen tämän tiedoston sääntö mittaa: kuilu jonka päällä möykky on ei
+ * ole kuilu, ja pää joka ei mahdu sen alle ei mahdu. Se on samalla ainoa
+ * `SOLID`in jäsen joka voi liikkua, ja siksi se on myös oma joukkonsa —
+ * `checkFalling` kysyy siltä kolme asiaa joita muilta ei kysytä.
+ */
+const FALLING = new Set(['C']);
 const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 /* The two halves of a warp pipe's mouth. `{}` below them is ordinary pipe. */
@@ -499,6 +509,51 @@ function climbCarry(reach) {
  * it, because you pass up through one. That asymmetry is the whole reason a
  * climb can be built out of them.
  */
+/**
+ * Universal. **Kolme ehtoa jotka pitävät putoavan laatan rajan sisällä.**
+ *
+ * ROADMAP 10.8.2026 sallii maaston liikkua vain silloin kun liike ei voi
+ * poistaa reittiä. Möykky palaa kotiruutuunsa, mikä hoitaa puolet; toinen
+ * puoli on se ettei sitä saa sijoittaa paikkaan jossa sen lähtö tai sen paluu
+ * tarkoittaisi jotain. Nämä ovat portteja eivätkä ohjeita, koska laatta jota
+ * ei ole vielä yhdessäkään kentässä on täsmälleen se laatta jonka säännöt
+ * unohtuvat ensimmäisen sijoituksen kohdalla.
+ *
+ *   1. **Se ei roiku.** Alla on kiinteä ruutu lähtötilassa. Muuten kenttä
+ *      muokkaa itseään ensimmäisellä framella, ja `playable.mjs`,
+ *      `validateLevel` ja `difficulty.mjs` mittaisivat kaikki kolme kenttää
+ *      jota kukaan ei pelaa.
+ *   2. **Sen tuki ei ole mureneva lauta.** Lauta on ainoa ruutu jonka
+ *      *vihollinen* voi poistaa (laki 2), ja reiluussääntö sanoo että vain
+ *      pelaajan aloittama ketju saa satuttaa häntä. Kaikki muut tuen
+ *      poistajat — päänpuski, potkaistu kuori, kytkin — ovat pelaajan tekoja,
+ *      joten tämä yksi kielto tekee säännöstä rakenteellisen eikä
+ *      muistettavan: ruudun ulkopuolista kirjanpitoa ei tarvita.
+ *   3. **Sen päällä ei ole mitään.** Ei kolikkoa, ei lohkoa, ei lavaa, ei
+ *      vihollista. Palkinto laatan päällä on syy seistä sillä, ja reitti joka
+ *      voi kadota on täsmälleen se asia jota tämä koko raja on vastaan.
+ */
+function checkFalling(rows, w, problems) {
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!FALLING.has(rows[y][x])) continue;
+      const below = y + 1 < rows.length ? rows[y + 1][x] : '#';
+      if (!SOLID.has(below)) {
+        problems.push(`falling tile at ${x},${y} has "${below}" under it: it would drop on the`
+          + ' first frame, and every gate measures the level as it starts');
+      } else if (below === '%') {
+        problems.push(`falling tile at ${x},${y} rests on a crumbling plank: an enemy could drop`
+          + ' it, and only a chain the player started may hurt him');
+      }
+      const above = y > 0 ? rows[y - 1][x] : ' ';
+      if (above !== ' ') {
+        problems.push(`falling tile at ${x},${y} has "${above}" on top of it: nothing may stand`
+          + ' on a tile that can leave, or the route can leave with it');
+      }
+    }
+  }
+}
+
 export function platformsOf(rows, w) {
   const h = rows.length;
   const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
@@ -1132,6 +1187,7 @@ export function validateLevel(rows, budget, opts = {}) {
     }
     checkEnemyFooting(rows, w, problems);
     checkVines(rows, w, problems);
+    checkFalling(rows, w, problems);
     const graph = climbGraph(rows, budget);
     checkClimb(rows, w, graph, budget, problems);
     checkClimbPower(rows, w, problems);
@@ -1155,8 +1211,10 @@ export function validateLevel(rows, budget, opts = {}) {
   const bandName = (b) => (b === routeIndex ? 'route band' : b < routeIndex ? 'sky band' : 'cave band');
   const where = (b) => (b === routeIndex ? '' : ` in the ${bandName(b)}`);
 
-  /* Universal, whole grid: a beanstalk is a beanstalk in any band. */
+  /* Universal, whole grid: a beanstalk is a beanstalk in any band, and a tile
+   * that can fall is one wherever it is put. */
   checkVines(rows, w, problems);
+  checkFalling(rows, w, problems);
 
   /* Universal, per band: headroom over the ground of whatever band it is, and
    * what a quicksand pool has to be wherever one is dug. */

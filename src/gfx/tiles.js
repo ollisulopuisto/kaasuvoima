@@ -29,6 +29,7 @@ export const T = {
   VINE: 'v',
   WARP_L: '(',
   WARP_R: ')',
+  LUMP: 'C',
 };
 
 const S = { solid: true };
@@ -86,6 +87,48 @@ export const TILE_INFO = {
    * So it carries its own flag and `Player` owns the behaviour — see
    * `quicksandSurface` there, which is the only reader of this line.
    */
+  /*
+   * MÖYKKY — se yksi laatta joka tottelee painovoimaa.
+   *
+   * IDEAS.md kohta 10 (Boulder Dash) hyväksyttiin **yhdelle laattatyypille**,
+   * ja se mikä laatta se on, on tämän työn koko suunnittelupäätös. Ehto tulee
+   * ROADMAPin 10.8.2026 rajasta: putoava laatta on maastoa joka liikkuu, joten
+   * se saa olla vain sellainen laatta jonka katoaminen ei voi poistaa reittiä.
+   *
+   * **Yksikään olemassa oleva laatta ei kelvannut, ja se on mittaustulos eikä
+   * mieltymys.** Maa, kova palikka, tiili, puulava, palkintolohko ja putki
+   * ovat kaikki lattiaa, seinää, askelmaa tai kattoa jossakin kentässä, ja
+   * `playable.mjs`, `validateLevel` ja `difficulty.mjs` lukevat ne kaikki
+   * pysyvinä. Mureneva lauta (`%`) oli lähimpänä — se katoaa jo nyt ja kasvaa
+   * takaisin — mutta putoava lauta **laskeutuisi jonnekin muualle**, ja
+   * laatta uudessa paikassa on kentän muokkaus siinä missä laatta poissa
+   * paikastaan: se voi tukkia käytävän tai tehdä askelman jota lähtötilassa ei
+   * ollut. Siksi tämä on uusi merkki eikä vanha uudessa virassa.
+   *
+   * Kolme ehtoa tekee siitä turvallisen, ja kaikki kolme ovat portteja
+   * (`src/data/rules.js`, `checkFalling`) eivätkä lupauksia:
+   *
+   *   1. **Se ei roiku.** Lähtötilassa sen alla on kiinteä ruutu, joten kenttä
+   *      ei muokkaa itseään ensimmäisellä framella — muuten jokainen portti
+   *      mittaisi kenttää jota ei enää ole.
+   *   2. **Sen päällä ei ole mitään.** Ei palkintoa, ei lavaa, ei reittiä.
+   *      Laatan päälle rakennettu reitti on reitti joka voi kadota.
+   *   3. **Sen tuki ei ole mureneva lauta.** Mureneva lauta on ainoa ruutu
+   *      jonka *vihollinen* voi poistaa (laki 2), ja reiluussääntö sanoo että
+   *      vain pelaajan aloittama ketju saa satuttaa häntä. Kielto tekee
+   *      säännöstä rakenteellisen: kaikki muut tuen poistajat — päänpuski,
+   *      potkaistu kuori, kytkin — ovat pelaajan tekoja.
+   *
+   * Ja se palaa kotiruutuunsa (`LevelScene.updateFalls`), samasta syystä kuin
+   * mureneva lauta kasvaa takaisin: palautuva muutos on tilapäinen tapahtuma
+   * staattisessa kentässä, palautumaton olisi olio joka muokkaa kenttää.
+   *
+   * Nimi on tämän pelin sanastoa eikä lainaa: kaasu, ruoansulatus, ummetus.
+   * Möykky on kalkkeutunut möhkäle joka on juuttunut suolen seinään, ja
+   * ummetuskorkin sukua — se ei ole kivi eikä lohkare, koska tässä pelissä ei
+   * ole vuoria vaan sisuskaluja.
+   */
+  [T.LUMP]: { ...S, falls: true },
   [T.QUICKSAND]: { quicksand: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
@@ -109,6 +152,48 @@ export const SWITCH_MAP = { [T.BRICK]: T.COIN };
 export const info = (ch) => TILE_INFO[ch] || {};
 export const isSolid = (ch) => !!info(ch).solid;
 export const isSemi = (ch) => !!info(ch).semi;
+
+/**
+ * MITÄ MAA ANTAA SEN PÄÄLLÄ OLEVALLE — yksi taulu, ja kaikki lukevat sen.
+ *
+ * ROADMAP 10.8.2026, laki 1: *jää on liukas kaikille*. Laki on yksisuuntainen
+ * (maasto → olio) ja siksi turvallinen: kenttä ei muutu, vain se mitä sen
+ * päällä oleva keho pystyy tekemään.
+ *
+ *   `steer`  kuinka kovaa keho voi muuttaa omaa vauhtiaan omilla jaloillaan,
+ *            px/framea². Tavallisella maalla se on **8**, mikä on enemmän kuin
+ *            mikään tässä pelissä koskaan pyytää (nopein tavoite on kuoren 3,4),
+ *            eli tavoite saavutetaan yhdellä framella ja mikään ruohon,
+ *            aavikon, tehtaan, luun, pilven tai linnakkeen päällä ei muuttunut.
+ *            Se ei ole arvio vaan mitattu: `verify.mjs` ajaa kävelijän 60
+ *            framea ruoholla ja saa täsmälleen `speed * 60`.
+ *   `drift`  kuinka nopeasti *ulkopuolinen* työntö — tuuli, laki 3 — vaimenee
+ *            jalkojen alla. Tavallisella maalla 0,05 px/framea², eli suunnilleen
+ *            pelaajan oma kitka (`FRICTION_SMALL` 0,0391, `FRICTION_BIG`
+ *            0,0547): maassa seisova keho vastustaa puuskaa yhtä hyvin kuin
+ *            pelaaja vastustaa sitä paikallaan seistessä. Ilmassa se ei vaimene
+ *            lainkaan, koska ilmassa ei ole mitään mitä vasten työntää — se on
+ *            se lause joka tekee "tuuli kantaa" -laista lain eikä koristeen.
+ *
+ * **Jään luku on `steer` 0,01 ja `drift` 0,01**: neljäsosa pelin pienimmästä
+ * kitkasta. Kävelijä tarvitsee 55 framea päästäkseen vauhtiinsa ja liukuu
+ * käännöksensä yli, ja jäälle työnnetty asia ei pysähdy jalkoihinsa.
+ *
+ * **Mitä tässä EI ole, ja se on tämän erän tärkein löydös:** pelaaja ei lue
+ * tätä taulua. Syy ei ole unohdus vaan mittaus — ks. `Enemy.steer` ja
+ * commit-viesti. Koko maailma 3 on suunniteltu tavallisen kitkan varaan
+ * (`chunks/ice.js` laskee `ice_crumble`n 12 laatan pysähtymismatkan luvuista
+ * 0,0391 ja 0,0547 ja jättää kaksi laattaa pelivaraa), joten pelaajan kitkan
+ * pudottaminen kuluttaisi juuri sen marginaalin jota DESIGN.md kohta 5
+ * lupaa. Se on eri muutos, ja se pitää maksaa maailman 3 layouteista.
+ */
+export const SURFACES = {
+  default: { steer: 8, drift: 0.05 },
+  ice: { steer: 0.01, drift: 0.01 },
+};
+
+/** The surface a body standing in this theme is standing on. */
+export const surfaceOf = (themeName) => SURFACES[themeName] || SURFACES.default;
 
 /**
  * `surface` picks how ground tiles are dressed (blades, ripples, rivets…),
@@ -1353,6 +1438,65 @@ function drawCrumble(ctx, x, y, th, tx, ty, progress) {
   }
 }
 
+/**
+ * MÖYKKY, ja jokainen veto siinä vastaa kysymykseen "miksei se ole tiili".
+ *
+ * Se on pelin ainoa laatta joka voi lähteä liikkeelle, joten sen on erotuttava
+ * kolmesta naapuristaan yhdellä silmäyksellä ja täydessä vauhdissa:
+ *
+ *   - **tiilestä**, joka on kehystetty laatikko ja jonka syy on pystysuora
+ *     lankku. Tässä ei ole kehystä eikä lankkua: kulmat on syöty pois, joten
+ *     silhuetti on pyöreä siinä missä kaikki muu kiinteä tässä pelissä on
+ *     suorakulmainen. Pyöreä on se muoto joka lukee irrallisena — se ei ole
+ *     kiinni missään, ja juuri siksi se voi pudota.
+ *   - **kovasta palikasta**, joka on teemansa kirkkain kiinteä ruutu. Tämä on
+ *     tummempi kuin maansa ja kantaa oman varjonsa alareunassa, eli se lukee
+ *     kappaleena joka **lepää** jonkin päällä eikä pintana joka jatkuu.
+ *   - **maasta**, jonka kuvio on aina joko vaaka (hiekka, metalli, kivi) tai
+ *     luun pysty. Tämä on rakeinen ja suunnaton: kalkkeutunutta kamaa, ei
+ *     kerroksia.
+ *
+ * Värit ovat teeman omat mutta väärin päin — `brickDark` runkona ja `ground`
+ * kuorena — koska möykky on samaa ainetta kuin se maailma jossa se on, mutta
+ * pakkautuneena. Yksi laatta, joka toimii kahdeksassa paletissa.
+ *
+ * `wobble` on 0…1 sen ajan minkä möykky roikkuu ennen ensimmäistä askeltaan.
+ * Se ei ole koristetta: **mikä voi satuttaa, sen pitää näkyä** (DESIGN.md
+ * kohta 7), ja tämä on koko varoitus. Sama liike kuin murenevalla laudalla ja
+ * tarkoituksella, koska pelaaja on jo oppinut lukemaan sen.
+ */
+function drawLump(ctx, x, y, th, tx, ty, wobble) {
+  const shake = wobble > 0 ? Math.round(Math.sin(wobble * 44) * wobble * 1.8) : 0;
+  const px = x + shake;
+
+  ctx.fillStyle = th.brickDark;
+  ctx.fillRect(px + 1, y, TILE - 2, TILE);
+  ctx.fillRect(px, y + 1, TILE, TILE - 2);
+
+  // The crust, one row in, so the dark body reads as an outline all round.
+  ctx.fillStyle = th.ground;
+  ctx.fillRect(px + 2, y + 1, TILE - 4, TILE - 3);
+  ctx.fillRect(px + 1, y + 2, TILE - 2, TILE - 5);
+
+  // Grit: no direction at all, unlike every ground surface in the game.
+  ctx.fillStyle = th.groundDark;
+  for (let i = 0; i < 6; i++) {
+    const n = hashNoise(tx * 5 + i, ty * 11 + i * 3);
+    const gx = px + 2 + Math.floor(n * 11);
+    const gy = y + 3 + Math.floor(hashNoise(ty + i, tx - i) * 9);
+    ctx.fillRect(gx, gy, 2, 1);
+  }
+  ctx.fillStyle = th.groundTop;
+  ctx.fillRect(px + 4, y + 3, 4, 1);
+  ctx.fillRect(px + 3, y + 4, 2, 1);
+
+  // The shadow it casts on itself: it is resting on something, not built in.
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.fillRect(px + 2, y + TILE - 3, TILE - 4, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(px + 1, y + TILE - 4, TILE - 2, 1);
+}
+
 /** The switch block itself: a big button that stays pressed once it is hit. */
 function drawSwitch(ctx, x, y, th, tick, pressed) {
   const drop = pressed ? 4 : 0;
@@ -1418,6 +1562,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
+    case T.LUMP: drawLump(ctx, x, y, th, tx, ty, opts.fall || 0); break;
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
