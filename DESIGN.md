@@ -556,6 +556,18 @@ lukemaan väärää signaalia.
   vanhenee hitaimmin ja jota diff ei kerro.
 - **Punainen ennen vihreää.** Bugikorjaus alkaa testistä joka toistaa bugin ja
   epäonnistuu nykyisellä koodilla. `tools/verify.mjs` ajaa kaikki.
+- **`[skip ci]` yhdistämiskommenttiin kun muutos ei koske buildia.** Pelkkä
+  dokumentti — muutosloki, ROADMAP, IDEAS, tämä tiedosto — ei muuta sitä mitä
+  selain lataa, joten sen ei kuulu kuluttaa deployta.
+
+  **Merkintä kuuluu siihen committiin jonka `main` saa**, eli PR:ää
+  yhdistettäessä yhdistämiskommentin otsikkoon. Haaran omissa committeissa se ei
+  auta mitään: deploy laukeaa `main`in kärjestä, ja se on yhdistämiskommitti.
+
+  Ja se koskee **vain** puhtaita dokumenttimuutoksia. Sekamuutos (dokumentti ja
+  koodi samassa) ei saa merkintää, koska sama merkintä ohittaa myös GitHub
+  Pagesin työnkulun — ja silloin koodimuutos jäisi julkaisematta molemmissa
+  paikoissa. **Epäilyttävässä tapauksessa deployataan.**
 - **Mitattu, ei muistettu.** Hyppybudjetti mitataan (`tools/measure-jump.mjs`),
   ei kirjata muistiin. Käsin kirjattu luku vanhenee ensimmäisessä muutoksessa.
 - **Ei build-vaihetta, ei ajonaikaisia riippuvuuksia.** Kaikki grafiikka
