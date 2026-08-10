@@ -103,6 +103,46 @@ päivästä. **Tämä on halvin kohta listalla, koska se on suunta eikä ominais
 
 ---
 
+## Omistajan tuomiot, 10.8.2026
+
+Kaikki kaksitoista käytiin läpi yksitellen. **Tämä taulukko on se mikä tässä
+tiedostossa on nyt päätettyä** — loput on yhä harkintaa, ja se mikä etenee
+siirtyy [ROADMAP.md](ROADMAP.md):hen.
+
+| # | verbi | lähde | tuomio |
+| --- | --- | --- | --- |
+| 1 | vauhti korkeudeksi | Sonic | **kyllä, vahvin** |
+| 2 | ammus joka on lava | Rainbow Islands | ei |
+| 3 | maailman vaihto lennossa | Giana Sisters | ei |
+| 4 | litteä maailma käännetään | Super Paper Mario | harkintaan — lisätiedot alla |
+| 5 | vahinko muuttaa muotoa | Wario Land | epävarma |
+| 6 | syö vihollinen, saat kyvyn | Kirby | **kyllä** |
+| 7 | syöksy jolla on lataus | Celeste | ehkä |
+| 8 | tartu ja heilahda | Bionic Commando | **harkittu, ei oteta** |
+| 9 | painovoiman kääntö | VVVVVV | ei |
+| 10 | putoavat lohkot | Boulder Dash | **kyllä, yhdelle laattatyypille** |
+| 11 | ammuksen voi ratsastaa | Mr. Gimmick | harkintaan |
+| 12 | kaikki reagoi kaikkeen | Spelunky | harkintaan — läpiajo alla |
+
+### Miksi kohta 1 on vahvin, omistajan sanoin
+
+*"Slopes turn into speed is a VERY good idea, because Mario does sliding on
+slopes and this would be different."*
+
+Se on tarkka erottelu ja se kannattaa kirjata, koska se ratkaisee koko idean.
+Mariossa rinne on **liikkeen laatu** — luiskahdus, jolla tapetaan vihollisia ja
+joka on itsessään palkinto. Tässä rinne olisi **muunnin**: vaakavauhti
+vaihdetaan korkeudeksi, ja korkeus on pääsy ylemmälle reitille. Sama laatta,
+eri verbi, ja se ero on juuri se raja jonka [DESIGN.md](DESIGN.md) kohta 2
+vetää — konventio on vapaa, toteutus on omaa.
+
+Hinta ei muutu miksikään: moottorissa ei ole rinteitä lainkaan, `moveX`/`moveY`
+ovat ruudukkotörmäystä, ja tämä on fysiikkamuutos eikä kenttädataa. Se on
+kuitenkin nyt tiedossa oleva hinta tunnetusta syystä, mikä on eri asia kuin
+epämääräinen "korkea".
+
+---
+
 ## Synteesit: kahdeksan jotka olisivat meidän
 
 Lainattu verbi + tämän pelin sanasto. Nämä ovat se osa jota ei voi googlata.
@@ -206,9 +246,129 @@ pystytukea vasta rakennetaan.
 
 ---
 
-## Kaksi jotka pitää hylätä, ja miksi
+## Kaksi läpiajoa, koska niitä pyydettiin
+
+### Kohta 4 tarkemmin: mitä "litteä maailma käännetään" olisi täällä
+
+**Se ei ole 3D eikä sen pitäisi olla.** Tämä peli on kolmessa kaistassa —
+taivas, reitti, luola — jotka ovat 15 riviä kukin, päällekkäin, ja `bandAt`
+kertoo jo kumpaan jalat osuvat. Käännös on siis **naapurikaista**, ei kolmas
+ulottuvuus, ja se on ainoa versio jonka tämä moottori voi tehdä rehellisesti.
+
+**Mitä pelaaja tekee.** Täysi vauhtimittari + alas: viereinen kaista näkyy
+hetken läpikuultavana, ja **niissä sarakkeissa joissa molemmissa on lattia**
+voit astua läpi. Ei ovea, ei putkea, ei animaatiota — pelkkä hetki jolloin
+maailma on kaksikerroksinen.
+
+Neljä asiaa jotka pitää ratkaista ennen kuin tämän voi luvata:
+
+1. **Ylös vai alas?** Kolme kaistaa tarkoittaa että reittikaistalta on kaksi
+   naapuria. Yksi nappi ei voi tarkoittaa kahta paikkaa — sama ongelma kuin
+   kartan nuolissa, joka juuri tänään jätti pelaajan jumiin. Vaihtoehdot ovat
+   *aina alas* (yksinkertainen, ja luolakaista on se jossa salaisuudet ovat),
+   tai *sen mukaan mitä painat*, jolloin ylös ja alas ovat eri liikkeitä.
+   Suositus: **aina alas**, ja jos se osoittautuu liian rajaavaksi, se on
+   halvempi laajentaa kuin peruuttaa.
+
+2. **Mikä sen maksaa.** Tämä on se kohta joka tekee tai kaataa idean.
+   Salaisuusrakenne perustuu siihen että kartta kertoo *että* salaisuuksia on
+   muttei *missä*; läpinäkyvä naapurikaista kertoo missä. Jos tämä ei maksa
+   mitään, se ei ole kyky vaan tutka, ja koko löytämisen ilo katoaa
+   kertakäytöllä. Vauhtimittari on oikea hinta juuri siksi että se on jo
+   varattu kahteen asiaan (nopeuskatto, kaasulehden lento) — sen polttaminen
+   näkemiseen on aito valinta eikä ilmainen lisä.
+
+3. **Validointi on tämän oikea hinta, ei piirtäminen.** Läpikuultavan kaistan
+   piirtäminen on tunnin työ. Sen todistaminen ettei läpiastuminen riko kenttää
+   ei ole. Tällä hetkellä `rules.js` todistaa **reittikaistan**: että maareitti
+   on läpäistävissä voimatasolla 0. Jos jokainen sarake jossa molemmissa
+   kaistoissa on lattia on ovi, validaattorin pitää yhtäkkiä todistaa
+   **kaistojen välinen graafi**, ei yhtä kaistaa — ja vastata kysymykseen
+   "voiko pelaaja pudota paikkaan josta ei pääse pois". Se on sama ongelma kuin
+   areenaa muokkaavalla pomolla, jonka roadmap on jo merkinnyt vaikeimmaksi
+   kohdaksi.
+
+4. **Kohta 5 pysyy voimassa.** Maareitin on oltava läpäistävissä voimatasolla 0
+   **ilman käännöstä**. Käännös saa siis olla oikaisu, ei reitti — täsmälleen
+   sama ehto kuin synteesin A pieruhyllyllä, ja samasta syystä.
+
+**Hinta-arvio tarkennettuna:** piirto ja syöte matala, validointi korkea. Ja
+juuri siksi tämä kannattaa tehdä *jälkeen* kohdan 10, joka on pienempi versio
+samasta validointiongelmasta — kenttä joka muuttuu pelin aikana.
+
+### Kohta 12 läpiajettuna: mitä "kaikki reagoi kaikkeen" tarkoittaisi, ja mikä siinä on vaarallista
+
+Tämä ei ole ominaisuus vaan **suunta**, ja siksi se on sekä halvin että
+vaarallisin listalla. Läpiajo neljässä osassa.
+
+**1. Mitä se konkreettisesti on.** Erikoistapausten korvaaminen laeilla joita
+jokainen olio noudattaa. Meillä on jo kaksi lakia joita ei kirjoitettu laeiksi
+vaan jotka syntyivät jaetusta koodista, ja ne ovat parasta mitä tässä pelissä
+on tapahtunut: **viholliset uppoavat juoksuhiekkaan**, ja **potkaistu kuori
+päätyy lammikkoon**. Kumpaakaan ei suunniteltu. Molemmat ovat hauskempia kuin
+mikään suunniteltu vuorovaikutus samassa kentässä.
+
+**2. Mistä jatkaa, halvimmasta päästä.** Maasto vaikuttaa kaikkeen, ei vain
+pelaajaan. Jää on liukas myös kävelijälle. Tuuli kantaa myös kuorta. Murenevat
+lavat murenevat myös vihollisen alta. Laava tappaa myös sen mikä siihen putoaa.
+Nämä ovat **yksisuuntaisia** (maasto → olio) ja siksi testattavia yksi
+laattatyyppi kerrallaan. Kohta 10 on tämän ensimmäinen askel eikä erillinen
+idea: putoava laatta on maasto joka tottelee samaa painovoimaa kuin oliot.
+
+**3. Missä se kaatuu, ja tämä on koko asian ydin.** Spelunky voi antaa
+kaiken vaikuttaa kaikkeen koska **Spelunky on roguelike**: jos ketjureaktio
+tekee kentästä läpäisemättömän, se on tarina, ja seuraava ajo on uusi. Tämä
+peli on kiinteiden kenttien tasohyppely, jossa **kentän on aina oltava
+läpäistävissä** — se on kohta 5, se on `playable.mjs`, ja se on ainoa lupaus
+jonka tämä projekti on antanut pelaajalle joka ei ole hyvä.
+
+Emergenssi ja tuo lupaus ovat suoraan ristiriidassa, ja ristiriita on
+täsmällinen: **kaikki nykyiset portit olettavat että kenttä on staattinen.**
+`playable.mjs` ajaa botin läpi lähtötilan. `validateLevel` lukee ruudukkoa.
+`difficulty.mjs` mittaa layoutin. Jos vihollinen voi rikkoa lohkon jota reitti
+tarvitsee, jokainen näistä mittaa kenttää jota ei enää ole.
+
+**4. Ehto jolla tämän voi ottaa.** Yksi sääntö, ja se on kirjoitettavissa
+portiksi:
+
+> **Emergenssi saa koskea vain sitä mikä ei ole reitti.**
+> Vuorovaikutus joka voi poistaa maareitin osan on kielletty, ellei se ole
+> palautuva (lohko kasvaa takaisin, olio syntyy uudelleen) tai ellei poistettu
+> osa ole valinnainen.
+
+Se on testattavissa samalla tavalla kuin kohta 5 nyt: aja kenttä, anna
+emergenssin tapahtua, aja `playable.mjs` **lopputilalle** eikä lähtötilalle.
+Sama korjaus jota synteesi E (hiekka tottelee painovoimaa) jo tarvitsee, mikä
+tarkoittaa että molemmat kannattaa tehdä yhdessä.
+
+**Suositus:** ottakaa suunta, älkää ottako lupausta. Konkreettisesti: laajenna
+maasto→olio-lakeja laattatyyppi kerrallaan, jokainen omalla punaisellaan, ja
+kirjoita yllä oleva ehto porttiin **ennen** ensimmäistä olio→maasto-lakia.
+Järjestys on tässä koko riski: yksisuuntaiset lait ovat ilmaista hauskuutta,
+ja kaksisuuntaiset ovat se kohta jossa peli voi rikkoutua tavalla jota mikään
+nykyinen mittari ei näe.
+
+---
+
+## Kolme jotka pitää hylätä, ja miksi
 
 Nämä ovat tässä siksi että perustelu on arvokkaampi kuin idea.
+
+### ✘ Tartu ja heilahda (Bionic Commando, Umihara Kawase)
+Koukku joka korvaa hypyn tai täydentää sitä. **Omistaja: "very cool, but maybe
+not — kirjaa se harkituksi mutta ei otetuksi."** Merkintä on tässä siksi että
+hylkäys ilman perustelua palaa takaisin kuuden kuukauden päästä samana
+ideana.
+
+Perustelu on sama kuin kohdalla 7, ja se on tämän pelin oma eikä yleinen:
+**ilmassa oleva hetki on jo varattu.** Pierupomppu, kaasulehden liito ja
+maahanisku ovat kaikki ilmaverbejä, ja maahanisku yksin maksaa 47 framea
+ohjaamatonta aikaa. Neljäs ilmaverbi ei kilpailisi napista vaan siitä
+sekunnista, ja se tekisi kolmesta olemassa olevasta epäselvempiä. Köysifysiikka
+olisi lisäksi oma maailmansa moottorissa jossa ei ole rinteitäkään.
+
+Jos tämä joskus otetaan, ehto on kirjattu tässä: **jonkin kolmesta on
+lähdettävä.**
 
 ### ✘ Nouseva vesi bonushuoneessa
 Klassikko: luolaan tulee vettä, eli älä jää. **Mutta luolakaista sanoo sen jo**
