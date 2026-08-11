@@ -217,7 +217,7 @@ class Game {
     this.timeAttack = false;
     this.state = {
       lives: 1, coins: 0, score: 0, power: makePower(), reserve: null,
-      world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+      world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [], secrets: {}, doors: {},
       continues: 0, usedSaveState: false,
     };
     this.setScene(new InterludeScene(this, level.def.id, () => {

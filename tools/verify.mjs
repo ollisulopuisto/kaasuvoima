@@ -86,6 +86,7 @@ const report = await page.evaluate(async () => {
   const { levelIds } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
   const { WORLDS } = await import('/src/data/worlds.js');
+  const { DEFAULT_SAVE } = await import('/src/core/save.js');
   const game = window.sfb3;
 
   const blank = () => ({
@@ -95,10 +96,23 @@ const report = await page.evaluate(async () => {
   const mkInput = () => ({
     held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
   });
+  /*
+   * Pelitila rakennetaan `DEFAULT_SAVE`sta eikä käsin, ja se on korjaus.
+   *
+   * Tässä lueteltiin kentät nimeltä, eli portti piti **omaa kopiotaan
+   * tallennuksen muodosta**. Seuraus ei ole että testi kaatuu vaan että se ei
+   * näe uutta kenttää lainkaan: `secrets`, `continues`, `bestTimes` ja nyt
+   * `doors` puuttuivat jokaisesta testistä, ja koodi joka lukee niitä sai
+   * `undefined`in siellä missä pelaajalla on `{}`. Ero on juuri se jossa
+   * puuttuvan kentän käsittely jää testaamatta.
+   *
+   * Ylikirjoitukset ovat testiharnessin omia: enemmän elämiä kuin oletus, ja
+   * solmu jotta karttaan palaaminen ei ole erikoistapaus.
+   */
   const reset = (power = { type: null, level: 0 }) => {
     game.state = {
-      lives: 5, coins: 0, score: 0, power, reserve: null, world: 0,
-      node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      ...DEFAULT_SAVE(),
+      lives: 5, power, world: 0, node: 'w1-1', cards: [],
     };
     game.finishLevel = () => {};
   };
@@ -7063,6 +7077,48 @@ const report = await page.evaluate(async () => {
       expect('the boss keeps its place in the cycle across a save state',
         !!back && back.spikePhase === 'telegraph' && back.spikeTimer === 10,
         back ? `${back.spikePhase}/${back.spikeTimer}` : 'ei pomoa');
+    }
+
+    /*
+     * LINNAKKEEN OVI: kuolema vie karttaan, ja karttaan palaaminen vie ovelle.
+     *
+     * Kolme väitettä, ja kolmas on se joka pitää sen rehellisenä:
+     *   1. ovi avautuu kun areenalle astutaan, ei aiemmin,
+     *   2. avattu ovi siirtää seuraavan yrityksen aloituspaikan sinne,
+     *   3. **tavallinen kenttä ei saa ovea koskaan** — sääntö on linnakkeen
+     *      toistolle eikä kentän pituudelle, ja jos se vuotaa muualle se on
+     *      lakannut olemasta se sääntö.
+     */
+    {
+      reset();
+      const s0 = new LevelScene(game, '3-F');
+      game.setScene(s0);
+      const arena = s0.arenaCol;
+      const idle = mkInput();
+      for (let f = 0; f < 30; f++) s0.update(idle);
+      const beforeWalk = !!game.state.doors['3-F'];
+
+      // Walk in: put the body past the arena's first column and let it tick.
+      s0.player.x = arena * 16 + 8;
+      s0.update(idle);
+      const afterWalk = !!game.state.doors['3-F'];
+
+      // Re-enter: the next attempt starts at the door, not at the level start.
+      const s1 = new LevelScene(game, '3-F');
+      const spawnTile = Math.round(s1.spawn.x / 16);
+      const freshStart = new LevelScene(game, '3-1').spawn.x;
+
+      // An ordinary level has no arena and never records one.
+      const plain = new LevelScene(game, '3-1');
+      plain.player.x = plain.w * 16 - 32;
+      plain.update(idle);
+      const leaked = Object.keys(game.state.doors).filter((k) => !k.endsWith('-F'));
+
+      expect('linnakkeen ovi avautuu areenalle astuttaessa ja siirtää aloituspaikan',
+        !beforeWalk && afterWalk && spawnTile >= arena && spawnTile <= arena + 4
+        && freshStart === 2 * 16 && leaked.length === 0,
+        `ennen ${beforeWalk}, jälkeen ${afterWalk}, areena ${arena}, `
+        + `aloitus ${spawnTile}, tavallinen ${freshStart / 16}, vuoto [${leaked}]`);
     }
 
     /* The promise the lead designer set himself: a powerless player can beat

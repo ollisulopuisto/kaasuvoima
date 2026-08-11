@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.74 — linnakkeen ovi, ja portti joka piti omaa kopiotaan tallennuksesta
+
+Kysymys oli "pitäisikö kenttiin lisätä välipisteitä". Mitattuna vastaus oli ei,
+mutta mittaus osoitti toiseen suuntaan kuin odotin.
+
+### Pituus ei ole ongelma, toisto on
+
+Parhaan mahdollisen juoksun mitta, ilman hyppyjä ja vihollisia:
+
+| | paras tapaus |
+| --- | --- |
+| keskimääräinen kenttä | 31 s |
+| pisin (3-2, 1-2, 3-3) | 41–43 s |
+| linnakkeen käytävä | 19–24 s |
+
+Välipiste säästäisi 15–30 s, mikä ei yksin oikeuta uutta mekaniikkaa — SMB3:ssa
+ei ole välipisteitä juuri siksi ettei tämänmittainen kenttä niitä tarvitse.
+
+**Mutta linnakkeen käytävä kävellään uudelleen joka kerta kun pomo voittaa**, ja
+se on pelin toistetuin matka. Ero ei ole pituus vaan toisto, ja siksi ovi on
+vain linnakkeissa.
+
+Kuolema vie karttaruutuun eikä suoraan takaisin kenttään, joten ovi ei ole
+"kentän sisäinen tarkistuspiste" vaan **se kohta josta kenttä alkaa kun siihen
+astuu uudelleen**. Siksi se on tallennuksessa (`doors`) eikä kohtauksen
+muistissa. Kello ei nollaudu eikä voimataso palaudu: ovi säästää kävelyn, ei
+kenttää, joten aika-ajo ei muutu.
+
+Areenan sarake **lasketaan palikoiden leveyksistä** eikä kirjoiteta kenttädataan
+(`arenaColumn`), koska kirjoitettu luku vanhenee heti kun joku lisää palikan
+areenan eteen. Tässä erässä on kolme esimerkkiä siitä mitä se maksaa.
+
+### Ja portti piti omaa kopiotaan tallennuksen muodosta
+
+`verify.mjs`:n `reset()` rakensi pelitilan luettelemalla kentät nimeltä. Seuraus
+ei ollut kaatuva testi vaan **testi joka ei näe uutta kenttää lainkaan**:
+`secrets`, `continues`, `bestTimes` ja nyt `doors` puuttuivat jokaisesta
+testistä, ja niitä lukeva koodi sai `undefined`in siellä missä pelaajalla on
+`{}`. Tila rakennetaan nyt `DEFAULT_SAVE`sta.
+
+Neljäs kerta tässä erässä samalle läksylle.
+
+### Kaksi omaa virhettä matkan varrella
+
+- **`doorOpen` oli jo varattu** ja tarkoitti *uloskäyntiä* joka aukeaa pomon
+  kaaduttua. Kaksi eri ovea samalla nimellä; oma on nyt `arenaReached`.
+- **Ovi kirjoitettiin `spawn`iin ennen `scanGrid`iä**, joka lukee aloitusmerkin
+  ruudukosta ja kirjoittaa sen yli. Ovi on viimeinen sana eikä ensimmäinen.
+
+---
+
 ## v26.08.11.73 — osoite vaihtui, ja sen kopiot eivät olisi kaatuneet mihinkään
 
 Vercel-projekti ja GitHub-repo nimettiin `kaasuvoima`ksi, joten

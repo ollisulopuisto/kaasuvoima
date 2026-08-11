@@ -1,4 +1,4 @@
-import { getLevel } from '../data/levels.js';
+import { arenaColumn, getLevel } from '../data/levels.js';
 import {
   TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP, themeTint,
 } from '../gfx/tiles.js';
@@ -941,6 +941,30 @@ export class LevelScene {
     this.wonCard = null;
     this.spawn = { x: 2 * TILE, y: 12 * TILE };
 
+    /*
+     * LINNAKKEEN OVI — mistä kuolema palauttaa, kun areenalle on kerran päästy.
+     *
+     * Kuolema vie karttaruutuun eikä suoraan takaisin kenttään, joten tämä ei
+     * ole "kentän sisäinen tarkistuspiste" vaan **se kohta josta kenttä alkaa
+     * kun siihen astuu uudelleen**. Siksi se on `game.state`issa ja
+     * tallennuksessa eikä kohtauksen omassa muistissa.
+     *
+     * Vain linnakkeissa, ja se on koko idea. Tavallinen kenttä kestää mitattuna
+     * ~31 s parhaimmillaan, ja SMB3-idiomissa se on lyhyt tarpeeksi ilman
+     * välipisteitä. Linnakkeen käytävä on 19–24 s, ja se kävellään uudelleen
+     * *joka kerta kun pomo voittaa* — eli useammin kuin mikään muu matka
+     * pelissä. Ero ei ole pituus vaan toisto.
+     *
+     * Kello ei nollaudu eikä voimataso palaudu: ovi säästää kävelyn, ei
+     * kenttää. Aika-ajo ei siis muutu, koska se mittaa yhtä yhtäjaksoista
+     * juoksua eikä sitä montako kertaa siihen on yritetty.
+     */
+    this.arenaCol = this.def.boss ? arenaColumn(this.def) : null;
+    /* `arenaReached` eikä `doorOpen`: `doorOpen` on jo varattu, ja se tarkoittaa
+     * *uloskäyntiä* joka aukeaa pomon kaaduttua. Kaksi eri ovea. */
+    this.arenaReached = this.arenaCol !== null
+      && !!(game.state.doors && game.state.doors[this.id]);
+
     // Playtest telemetry, tracked per attempt. `bestX` is the furthest the
     // player has got; `stallFrames` counts how long it has stood still.
     this.bestX = 0;
@@ -949,6 +973,10 @@ export class LevelScene {
     this.telemetryDone = false;
 
     this.scanGrid();
+    /* Vasta `scanGrid`in jälkeen, ja se on koko vika ensimmäisessä yrityksessä:
+     * `scanGrid` lukee aloitusmerkin ruudukosta ja kirjoittaa `spawn`in yli.
+     * Ovi on siis viimeinen sana eikä ensimmäinen. */
+    if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
     this.plantVines();
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
@@ -2122,6 +2150,19 @@ export class LevelScene {
       if (this.stateTimer > 140) {
         this.game.finishLevel({ died: true });
         return;
+      }
+    }
+
+    /* Ovi aukeaa saapumisesta eikä pomon näkemisestä: raja on areenapalikan
+     * ensimmäinen sarake, ja se ylitetään kävellen. `state === 'play'` sulkee
+     * pois kuolinanimaation, jonka aikana pelaaja voi liukua rajan yli. */
+    if (this.arenaCol !== null && !this.arenaReached && this.state === 'play'
+        && this.player.x >= this.arenaCol * TILE) {
+      this.arenaReached = true;
+      const st = this.game.state;
+      if (st.doors) {
+        st.doors[this.id] = true;
+        if (this.game.persist) this.game.persist();
       }
     }
 

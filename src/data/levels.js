@@ -1,4 +1,4 @@
-import { assemble, assembleTall, CHUNK_ROWS } from './chunks.js';
+import { assemble, assembleTall, CHUNK_ROWS, CHUNKS } from './chunks.js';
 import { normalizeRows } from '../core/utils.js';
 import { WORLD1_LEVELS } from './levels/world1.js';
 import { WORLD2_LEVELS } from './levels/world2.js';
@@ -113,4 +113,26 @@ export const levelIds = () => Object.keys(LEVEL_DEFS);
 export function registerLevel(def) {
   cache.set(def.id, def);
   return def;
+}
+
+/**
+ * Missä linnakkeen areena alkaa, laattoina — eli mihin ovi vie.
+ *
+ * Laskettu palikoiden leveyksistä eikä kirjoitettu kenttädataan, koska
+ * kirjoitettu luku vanhenee sillä hetkellä kun joku lisää yhden palikan
+ * areenan eteen. Tässä erässä on kolme esimerkkiä siitä mitä se maksaa.
+ *
+ * `null` kun kenttä ei ole linnake tai sillä ei ole areenapalikkaa: kutsuja
+ * päättää mitä se siitä ajattelee, eikä tämä keksi sijaintia jota ei ole.
+ */
+export function arenaColumn(def) {
+  if (!def || !Array.isArray(def.chunks)) return null;
+  let col = 0;
+  for (const name of def.chunks) {
+    if (name.startsWith('boss_arena')) return col;
+    const chunk = CHUNKS[name];
+    if (!chunk) return null;
+    col += chunk.w;
+  }
+  return null;
 }

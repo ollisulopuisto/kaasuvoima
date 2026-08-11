@@ -39,6 +39,22 @@ export const DEFAULT_SAVE = () => ({
    * vie pelaajalta etenemistä.
    */
   bestTimes: {},
+  /*
+   * levelId -> true, kun linnakkeen areenalle on kerran päästy.
+   *
+   * Sisään samalla perusteella kuin `secrets`, `continues` ja `bestTimes`, eli
+   * **ilman versionostoa**: vanhassa tallennuksessa ei ole `doors`-kenttää,
+   * levitys antaa sille `{}`, ja `{}` on totuus eikä arvaus — kukaan ei ollut
+   * päässyt yhdellekään ovelle pelissä jossa ovia ei ollut. Yksikään olemassa
+   * oleva kenttä ei muuta merkitystään.
+   *
+   * Toiseen suuntaan hinta on sama kuin `bestTimes`illa ja se on kirjattava:
+   * vanha build lukee tallennuksen, jättää tuntemattoman avaimen huomiotta
+   * eikä kirjoita sitä takaisin. Vanhalla buildilla pelaaminen siis unohtaa
+   * avatut ovet — ei muuta, ja unohtunut ovi maksaa yhden kävelyn eikä
+   * etenemistä.
+   */
+  doors: {},
 });
 
 export const Save = {
