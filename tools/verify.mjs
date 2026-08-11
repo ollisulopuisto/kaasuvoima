@@ -4603,7 +4603,14 @@ const report = await page.evaluate(async () => {
       boss.spikeTimer = openWindow;
       const p = s.player;
       p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - 90;
+      /* Approach measured from the boss's **edge**, not its centre. Both numbers
+       * below were tuned when every boss was 30 px wide, so a centre distance
+       * quietly meant "75 px of run-up and take off 25 px clear of him". The
+       * moment a boss became 76 wide the same centre distance put the player
+       * 2 px from its flank — he jumped straight up into the side of it, and
+       * four fortresses failed a test about stomping rather than about size.
+       * `w / 2 + k` reproduces the old numbers exactly at w = 30. */
+      p.x = boss.cx - (boss.w / 2 + 75);
       p.vx = 0; p.vy = 0;
       s.centerCamera();
       const i = mkInput();
@@ -4619,7 +4626,7 @@ const report = await page.evaluate(async () => {
           if (p.vx < want - 0.15) i.held.right = true;
           else if (p.vx > want + 0.15) i.held.left = true;
           if (p.vy < 0) i.held.jump = true;
-        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+        } else if (adx > boss.w / 2 + 25 + Math.abs(boss.vx) * 12) {
           i.held[dx > 0 ? 'right' : 'left'] = true;
           i.held.run = true;
         } else {
