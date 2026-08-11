@@ -1,5 +1,5 @@
 {
-  "name": "sfb3",
+  "name": "kaasuvoima",
   "private": true,
   "description": "Kaasuvoima — a static browser game. Nothing here is needed to run or deploy the game; these are the dev-time tools for tools/verify.mjs.",
   "type": "module",

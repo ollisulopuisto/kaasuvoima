@@ -4,9 +4,9 @@
 
 **Deployaa usein** — omistaja pelaa peliä ja muutos jota ei voi pelata ei ole
 vielä valmis. Mutta **Vercelin ilmaistaso sallii sata deployta vuorokaudessa**,
-ja se katto tuli vastaan kesken työn 10.8.2026: `sfb3.vercel.app` jäi
+ja se katto tuli vastaan kesken työn 10.8.2026: `kaasuvoima.vercel.app` jäi
 vanhentuneeksi tunneiksi juuri sinä iltana kun uusia kenttiä olisi pitänyt
-päästä kokeilemaan. GitHub Pages (`ollisulopuisto.github.io/sfb3/`) jatkoi
+päästä kokeilemaan. GitHub Pages (`ollisulopuisto.github.io/kaasuvoima/`) jatkoi
 julkaisemista, ja se on varareitti — mutta se on varareitti eikä ratkaisu.
 
 Käytännön säännöt, tärkeimmästä alkaen:
