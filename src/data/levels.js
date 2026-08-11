@@ -81,7 +81,13 @@ export function getLevel(id) {
      * and stop the climb dead at the first seam. So a climb takes the plain
      * branch, which is the one that says "this level is as tall as it is".
      */
-    bands: !def.vertical && rows.length > CHUNK_ROWS ? BANDS : null,
+    /* ...ja osioitu kenttä ottaa saman haaran samasta syystä. Kaistat ovat
+     * kolme erillistä huonetta joiden välillä kamera ei saa nähdä, ja se on
+     * oikein salaisuudelle mutta väärin reitille: osioidussa kentässä ylös
+     * meneminen **on** reitti, ja kaistarajaus pysäyttäisi kameran ensimmäiseen
+     * saumaan. Kenttä joka ilmoittaa osionsa on siis yksi korkea huone kuten
+     * kiipeilykin, ei kolme päällekkäistä. */
+    bands: !def.vertical && !def.segments && rows.length > CHUNK_ROWS ? BANDS : null,
     rows,
   };
   cache.set(id, level);

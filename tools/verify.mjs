@@ -7364,6 +7364,52 @@ const report = await page.evaluate(async () => {
         + `pikselit ${before} -> ${after}`);
     }
 
+    /*
+     * OSIOITU KENTTÄ: KAMERA VAIHTAA KIELTÄ, JA KÄÄNNE ON SIVUNVAIHDON LYÖNTI.
+     *
+     * Kaksi kameratilaa puhuvat tarkoituksella vastakkaista kieltä: vaaka
+     * seuraa pehmeästi ja liikkuu koko ajan, pysty seisoo paikallaan ja
+     * leikkaa. Yhdistäminen tuottaisi kameran joka liukuu sivulle ja nykii
+     * ylös, mikä lukee rikkinäisenä. Osio kerrallaan kumpikin kieli säilyy
+     * omanaan, ja **käänne saa sen beatin joka pystykentillä jo on**.
+     *
+     * Kolme väitettä:
+     *   1. raja ylitettäessä `vertical` vaihtuu,
+     *   2. vaihto laukaisee sivunvaihdon (`camPage` > 0), eli kello ja
+     *      viholliset seisovat sen ajan — sama ele kuin sivunvaihdossa,
+     *   3. osioitu kenttä **ei ole kaistoitettu**: kaistat ovat kolme erillistä
+     *      huonetta joiden välillä kamera ei saa nähdä, ja se pysäyttäisi
+     *      nousun ensimmäiseen saumaan.
+     */
+    {
+      const levels = await import('/src/data/levels.js');
+      levels.registerLevel({
+        id: 'TEST-SEG',
+        theme: 'grass',
+        bg: 'none',
+        time: 400,
+        segments: [{ toCol: 20, vertical: false }, { toCol: 999, vertical: true }],
+        rows: Array.from({ length: 45 }, (_, y) => (y === 13 || y === 28 || y === 43
+          ? '#'.repeat(40) : ' '.repeat(40))),
+      });
+      reset();
+      const sg = new LevelScene(game, 'TEST-SEG');
+      game.setScene(sg);
+      const idle = mkInput();
+      const startVertical = sg.vertical;
+      const banded = !!sg.bands;
+      sg.camPageFrames = 60;
+      sg.player.x = 30 * 16;
+      sg.player.y = 27 * 16 - sg.player.h;
+      sg.update(idle);
+      const turned = sg.vertical;
+      const paged = sg.camPage > 0;
+      expect('osioitu kenttä vaihtaa kameran kielen rajalla, ja käänne on sivunvaihto',
+        startVertical === false && turned === true && paged && !banded,
+        `alku pysty=${startVertical}, rajan jälkeen pysty=${turned}, `
+        + `sivunvaihto=${sg.camPage}, kaistat=${banded}`);
+    }
+
     /* The promise the lead designer set himself: a powerless player can beat
      * every boss. Taken apart into the two things it needs — one window is long
      * enough to walk up and land a stomp at its tightest, and the clock holds

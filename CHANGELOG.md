@@ -7,6 +7,42 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.79 — kamera osaa kääntyä, ja käänne on sivunvaihdon lyönti
+
+Kysymys oli kentästä jossa mennään vuorotellen oikealle ja ylös. Se ei ole
+kenttä vaan **kolmas kameratila**, koska nykyiset kaksi puhuvat tarkoituksella
+vastakkaista kieltä:
+
+| | leveys | kameran kieli |
+| --- | --- | --- |
+| vaakakenttä | monta ruutua | pehmeä seuranta, liikkuu koko ajan |
+| pystykenttä | tasan 20 saraketta | seisoo paikallaan ja **leikkaa** |
+
+Jos ne vain yhdistäisi, tulos olisi kamera joka liukuu sivulle ja nykii ylös —
+rikkinäinen eikä tyylikäs.
+
+Kenttä ilmoittaa siis osionsa (`segments`), ja **käänne saa sen beatin joka
+pystykentillä jo on**: kello ja viholliset seisovat, musiikki ei. Se ele on jo
+maksettu ja jo pyydetty, joten käänteestä tulee tapahtuma eikä saumaa, ja
+kumpikin kieli säilyy omanaan.
+
+**Ja osioitu kenttä ei ole kaistoitettu.** Kaistat ovat kolme erillistä
+huonetta joiden välillä kamera ei saa nähdä, mikä on oikein salaisuudelle ja
+väärin reitille: osioidussa kentässä ylös meneminen *on* reitti, ja
+kaistarajaus olisi pysäyttänyt kameran ensimmäiseen saumaan. Sama haara kuin
+kiipeilykentällä, samasta syystä.
+
+### Mitä tässä ei ole
+
+**Valmista kenttää.** Koneisto on olemassa ja portti todistaa käänteen
+synteettisellä kentällä, mutta suunniteltu kenttä on sisältötyötä joka
+ansaitsee oman erän: validaattorin säännöt, vaikeusmittari ja molemmat botit
+on ajettava **osio kerrallaan**, ja se on se työ jonka osiointi tekee
+mahdolliseksi mutta ei tee itse. Puolivalmis kenttä olisi huonompi kuin ei
+kenttää.
+
+---
+
 ## v26.08.11.78 — raaja katkeaa, ja kruunu vastaa koko koosteesta
 
 Raajoilla oli osumalaatikko; nyt niillä on myös **kohtalo**. Avoimen ikkunan

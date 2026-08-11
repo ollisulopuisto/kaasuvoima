@@ -906,7 +906,25 @@ export class LevelScene {
     /** How far ahead of the feet that line is aimed — see CAM_FALL_LEAD. */
     this.camLead = 0;
     /** A climb, and therefore a paging camera. See CAM_PAGE_EDGE. */
-    this.vertical = !!this.def.vertical;
+    /*
+     * OSIOITU KENTTÄ: KAMERAN KIELI VAIHTUU MATKAN VARRELLA.
+     *
+     * Kaksi kameratilaa puhuvat tarkoituksella vastakkaista kieltä —
+     * vaakakenttä seuraa pehmeästi ja liikkuu koko ajan, pystykenttä seisoo
+     * paikallaan ja **leikkaa** sivun kerrallaan. Jos ne vain yhdistäisi,
+     * tulos olisi kamera joka liukuu sivulle ja nykii ylös, ja se lukee
+     * rikkinäisenä eikä tyylikkäänä.
+     *
+     * Siksi kenttä ilmoittaa osionsa (`segments`), ja **käänne on sivunvaihdon
+     * lyönti**: se beat on jo olemassa ja se on jo maksettu — omistaja pyysi
+     * sen pystykenttiin, kello pysähtyy sen ajaksi eikä musiikki. Käänteestä
+     * tulee siis tapahtuma eikä saumaa, ja kumpikin kieli säilyy omanaan.
+     *
+     * `vertical` pysyy tavallisena kenttänä koska koko muu tiedosto lukee
+     * sitä; osioitu kenttä vain kirjoittaa sen uudelleen rajan ylittyessä.
+     */
+    this.segments = Array.isArray(this.def.segments) ? this.def.segments : null;
+    this.vertical = this.segments ? !!this.segments[0].vertical : !!this.def.vertical;
     /** Frames a page takes, 0 for a cut. See CAM_PAGE_FRAMES. */
     this.camPageFrames = CAM_PAGE_FRAMES;
     /** Frames left of a page in flight; while it runs the player is frozen. */
@@ -2105,6 +2123,38 @@ export class LevelScene {
     }
   }
 
+  /**
+   * Missä osiossa keho on, ja mitä se tarkoittaa kameralle.
+   *
+   * Raja on sarake, koska kenttä etenee sarakkeittain myös silloin kun se
+   * nousee: pystyosio on yhtä leveä kuin ruutu, joten sen sisällä sarake ei
+   * juuri muutu ja vaihto tapahtuu vasta kun siitä kävellään ulos.
+   */
+  segmentAt(col) {
+    const segs = this.segments;
+    for (const seg of segs) if (col < seg.toCol) return seg;
+    return segs[segs.length - 1];
+  }
+
+  updateSegment() {
+    const seg = this.segmentAt(Math.floor(this.player.cx / TILE));
+    const want = !!seg.vertical;
+    if (want === this.vertical) return;
+    this.vertical = want;
+    /* Käänne saa saman lyönnin kuin sivunvaihto: kello ja viholliset seisovat,
+     * musiikki ei. `camPageFrames` on sama luku molemmille, koska se on sama
+     * ele — kuva vaihtuu, pelaaja odottaa. */
+    if (this.camPageFrames <= 0) return;
+    /* Sama kohdelinja kuin pystykentän omalla sivunvaihdolla, eikä uutta
+     * kaavaa: nouseva keho kehystetään alareunaan ja laskeutuva yläreunaan,
+     * jotta se maa johon ollaan menossa on jo ruudulla kun sinne saavutaan. */
+    const climbing = this.camAnchor > this.heightPx / 2;
+    const line = this.camAnchor - (climbing ? this.viewH - CAM_PAGE_LAND : CAM_PAGE_LAND);
+    this.camPageFrom = this.camPageY;
+    this.camPageTo = this.clampCamY(line);
+    this.camPage = this.camPageFrames;
+  }
+
   /* -------------------------------- update ----------------------------- */
 
   update(input) {
@@ -2128,6 +2178,10 @@ export class LevelScene {
       this.updateCameraPage();
       return;
     }
+
+    /* Osioidun kentän käänne. Tarkistus on ennen pelaajan päivitystä, jotta
+     * lyönti alkaa siitä framesta jolla raja ylittyy eikä yhtä myöhemmin. */
+    if (this.segments && this.state === 'play') this.updateSegment();
 
     if (this.state === 'play') {
       this.updateTimer();
