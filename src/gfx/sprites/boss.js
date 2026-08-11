@@ -201,6 +201,57 @@ export const BOSS_PLANS = [
   'figure',      // 6 pierukuningas
 ];
 
+/**
+ * RAAJAT: METASPRITE-ULOKKEET, JA MIKSI NE OVAT ERI TAULUKKO KUIN `BOSS_SIZES`.
+ *
+ * NES-sprite oli 8x8 tai 8x16, kahdeksan juovaa kohti ja 64 ruudulla, joten
+ * pomo **ei koskaan ollut yksi piirros** vaan metasprite: joukko laitteistön
+ * spriteja jotka kasattiin joka framella. Ja kun pomo on jo osista, yhden osan
+ * liikuttaminen omalla kellollaan on ilmaista — sieltä tulevat ketjunyrkit,
+ * jaksotetut selkärangat ja kädet jotka heiluvat rungon ohi. Rajoite synnytti
+ * idiomin, ja idiomi jäi eloon rajoitteen jälkeen.
+ *
+ * Meillä ei ole sitä rajoitetta, ja noudatimme hiljaa pahempaa: `BOSS_SIZES`
+ * oli sekä osumalaatikko **että** piirros, joten mikään ei voinut ulottua
+ * itsensä ulkopuolelle.
+ *
+ * Nyt ne ovat eri asiat. `BOSS_SIZES` on se laatikko jolle tallotaan ja jota
+ * `FLOOR_REACH` rajaa; `BOSS_LIMBS` saa ulottua minne tahansa. Mitattuna
+ * läsnäolo kasvaa 1,4–2,9-kertaiseksi ilman että tallottava laatikko kasvaa
+ * pikseliäkään.
+ *
+ * Kaksi sääntöä pitävät sen rehellisenä, ja molemmat ovat portissa:
+ *
+ *   1. **Raaja satuttaa.** Piirretty raaja jonka läpi kävelee on sama valhe
+ *      kuin piikki joka ei satuta, ja tämä peli kieltäytyy jo siitä. Raajat
+ *      ovat osa vahinkoaluetta, eivät koristetta.
+ *   2. **Raaja ei tule laskeutumiskaistalle.** Pään yläpuolinen sarake on
+ *      kruunun, koska kruunu on se yksi asia joka pelaajan on luettava ennen
+ *      hyppyä. Heiluva nyrkki siellä olisi toinen vastaus kysymykseen jolla
+ *      saa olla tasan yksi.
+ *
+ * Koordinaatit ovat laatikon vasemmasta yläkulmasta, ja negatiiviset ovat
+ * tarkoitus: ne ulottuvat sen vasemmalle puolelle.
+ */
+export const BOSS_LIMBS = [
+  // 0 nyrkkeilijä — jab, joka vihdoin saa sanoa ulottuvansa
+  [[30, 12, 11, 9]],
+  // 1 jyskyttäjä — junttamännät, alaspäin: ainoa jonka raajat menevät alas
+  [[-14, 44, 14, 10], [60, 44, 14, 10]],
+  // 2 syöksyjä — sarvet eteen ja pöly taakse
+  [[64, 15, 26, 7], [64, 26, 20, 6], [-18, 30, 16, 8]],
+  // 3 pöhö — venttiili ja sen suihku
+  [[40, 15, 28, 8]],
+  // 4 luuranko — irralliset luunpalat: metasprite kirjaimellisimmillaan
+  [[-12, 26, 8, 5], [-22, 30, 8, 5], [-31, 35, 9, 6],
+    [40, 26, 8, 5], [50, 30, 8, 5], [59, 35, 9, 6]],
+  // 5 sääherra — kaksi satelliittipilveä pitkissä köysissä
+  [[-20, 24, 16, 10], [72, 24, 16, 10]],
+  // 6 pierukuningas — ketjunyrkit, ja tämä on se jota varten koko idea on
+  [[-14, 24, 6, 4], [-24, 26, 6, 4], [-40, 22, 16, 14],
+    [58, 24, 6, 4], [68, 26, 6, 4], [74, 22, 16, 14]],
+];
+
 /** The box a variant fights in, before its own `scale`. */
 export const bossSize = (variant) => BOSS_SIZES[variant] || BOSS_SIZES[0];
 
@@ -738,6 +789,28 @@ function drawKingBoss(r, bx, py, body, dark, frame, pose) {
 }
 
 /**
+ * Raajat piirrettynä, kukin omalla vaiheellaan.
+ *
+ * Vaihe tulee raajan indeksistä eikä yhdestä kellosta, koska juuri se on
+ * metasprite-idiomin koko etu: osat jotka eivät koskaan olleet yksi piirros
+ * eivät myöskään liiku yhtenä. Luurangon kolme luunpalaa ajautuvat eri tahtiin
+ * ja se on hänen luonteensa, ei satunnaisuutta.
+ */
+function drawLimbs(r, bx, py, body, dark, frame, variant) {
+  const limbs = BOSS_LIMBS[variant] || [];
+  limbs.forEach(([lx, ly, lw, lh], i) => {
+    const drift = Math.floor(frame / 7 + i * 1.6) % 3 - 1;
+    const x = bx + lx + drift;
+    /* Tumma runko, valoisa yläreuna, musta alareuna: kolme kaistaa tekee
+     * tasaisesta suorakaiteesta esineen. Yhden värin palkki luki lavasteena. */
+    r(x, py + ly, lw, lh, dark);
+    r(x, py + ly, lw, 1, body);
+    r(x, py + ly + lh - 2, lw, 2, C.ink);
+    if (lw >= 8 && lh >= 6) r(x + 1, py + ly + 2, 2, 2, body);
+  });
+}
+
+/**
  * Which drawing is which boss, and the one thing they all share.
  *
  * **The hands go on twice, and that is the fix rather than a trick.** At rest
@@ -750,6 +823,10 @@ function drawKingBoss(r, bx, py, body, dark, frame, pose) {
  */
 function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose) {
   const hands = HANDS[variant] || HANDS[6];
+  /* Raajat rungon **taakse**: runko on se joka omistaa ääriviivan, ja
+   * runkotyyppiportti mittaa nimenomaan sitä. Raaja joka peittäisi kaulan
+   * kumoaisi juuri sen mittauksen. */
+  drawLimbs(r, bx, py, body, dark, frame, variant);
   bossHands(r, bx, py, pose, hands);
   if (variant === 1) drawStomperBoss(r, bx, py, body, dark, frame, pose);
   else if (variant === 2) drawChargerBoss(r, bx, py, body, dark, frame, pose);
@@ -819,7 +896,15 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
    * about 32 lands 44 px from where it should. */
   flip(ctx, px, size.w * S, facing < 0, (bx) => {
     ctx.translate(bx - bx * S, py - py * S);   // scale about the sprite origin
-    if (variant === 0) drawBoxerBoss(r, bx, py, body, dark, frame, pose);
+    if (variant === 0) {
+      /* Nyrkkeilijä piirretään omalla funktiollaan eikä `drawStandardBoss`in
+       * kautta, ja siksi hän jäi ilman raajapiirrosta samalla kun hänellä oli
+       * raajan osumalaatikko. Se on sama valhe toisin päin: vahinkoa ilman
+       * mitään näkyvää. Portti mittasi laatikoita eikä pikseleitä, eikä siksi
+       * nähnyt sitä — nyt mittaa molempia. */
+      drawLimbs(r, bx, py, body, dark, frame, variant);
+      drawBoxerBoss(r, bx, py, body, dark, frame, pose);
+    }
     else drawStandardBoss(r, bx, py, body, dark, frame, variant, pose);
   });
   ctx.restore();

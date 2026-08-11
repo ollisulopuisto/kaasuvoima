@@ -2953,6 +2953,23 @@ export class LevelScene {
         continue;
       }
 
+      /*
+       * RAAJA SATUTTAA, EIKÄ SEN PÄÄLLE VOI LASKEUTUA.
+       *
+       * Piirretty raaja jonka läpi kävelee on sama valhe kuin piikki joka ei
+       * satuta, ja tämä peli kieltäytyy jo siitä. Raajat ovat siis osa
+       * vahinkoaluetta — mutta **vain vahinkoa**: laskeutuminen on rungon ja
+       * kruunun asia, ja kruunu on se yksi merkki jonka pelaajan on luettava
+       * ennen hyppyä. Tallottava nyrkki tekisi siitä kaksi kysymystä.
+       *
+       * Tähti suojaa, kuten kaikelta muultakin joka osuu sinuun, ja kupla
+       * ohittaa tämän kokonaan ylempänä.
+       */
+      if (e.limbBoxes && p.star <= 0 && !p.invuln) {
+        const hit = e.limbBoxes().some((b) => b.h > 0 && b.w > 0 && overlaps(p.box, b));
+        if (hit) { p.hurt('enemy'); continue; }
+      }
+
       if (e.harmless) continue;
 
       if (spin && overlaps(spin, e.box)) {

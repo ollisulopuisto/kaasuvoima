@@ -12,8 +12,7 @@ import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss, bossSize,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
-  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
-} from '../gfx/sprites.js';
+  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -1917,6 +1916,25 @@ export class Boss extends Enemy {
    * tallennuksen kelvollisena kun taulukko muuttuu. `applyScale` säilyttää
    * jalkojen tason ja keskilinjan, joten pomo ei hyppää palautuksessa.
    */
+  /**
+   * Raajojen osumalaatikot maailman koordinaateissa, peilaus ja `scale` mukana.
+   *
+   * Nämä ovat **vahinkoa eivätkä alustoja**: raajaan koskeminen sattuu kuten
+   * kylkeen koskeminen, eikä sen päälle voi laskeutua. Laskeutuminen on rungon
+   * ja kruunun asia, ja kruunu on se yksi merkki jonka pelaajan on luettava —
+   * toinen tallottava pinta tekisi siitä kaksi kysymystä.
+   */
+  limbBoxes() {
+    const limbs = BOSS_LIMBS[this.variant] || [];
+    const S = this.scale;
+    return limbs.map(([lx, ly, lw, lh]) => {
+      /* Peilaus oman leveyden ympäri, samoin kuin piirroksessa: vasemmalle
+       * katsova pomo heiluttaa nyrkkiään vasemmalle. */
+      const x = this.facing < 0 ? this.baseW - lx - lw : lx;
+      return { x: this.x + x * S, y: this.y + ly * S, w: lw * S, h: lh * S };
+    });
+  }
+
   rehydrate() {
     const size = bossSize(this.variant);
     this.baseW = size.w;

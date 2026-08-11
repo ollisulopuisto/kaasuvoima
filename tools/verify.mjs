@@ -7174,6 +7174,100 @@ const report = await page.evaluate(async () => {
         bad.length ? bad.join(' | ') : `raja ${FLOOR_REACH} px, korkeat tarkistettu`);
     }
 
+    /*
+     * RAAJAT: LÄSNÄOLOA ILMAN ETTÄ TALLOTTAVA LAATIKKO KASVAA.
+     *
+     * Kolme väitettä, ja kaksi niistä on sellaisia jotka hiljaa pettäisivät:
+     *   1. raaja **satuttaa** — piirretty raaja jonka läpi kävelee on sama
+     *      valhe kuin piikki joka ei satuta,
+     *   2. raaja **ei tule laskeutumiskaistalle** eli pään yläpuoliseen
+     *      sarakkeeseen, joka on kruunun ja jolla saa olla yksi vastaus,
+     *   3. raajat **kasvattavat läsnäoloa** — raaja joka ei muuta siluettia on
+     *      koriste jolla on kello, mikä on huonompi kuin ei raajaa.
+     */
+    {
+      const bad = [];
+      const grew = [];
+      for (const id of BOSS_LEVELS) {
+        reset();
+        const s3 = new LevelScene(game, id);
+        game.setScene(s3);
+        const boss = s3.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s3.update(idle);
+        const boxes = boss.limbBoxes();
+        if (!boxes.length) { bad.push(`${id}: ei raajoja lainkaan`); continue; }
+
+        // 2. landing strip: nothing may sit above the head inside its columns.
+        for (const b of boxes) {
+          const overX = b.x < boss.x + boss.w && b.x + b.w > boss.x;
+          if (overX && b.y < boss.y + 4) {
+            bad.push(`${id}: raaja laskeutumiskaistalla (y ${Math.round(b.y)} vs pää ${Math.round(boss.y)})`);
+          }
+        }
+
+        // 3. presence: the union of body+limbs against the body alone.
+        const bodyArea = boss.w * boss.h;
+        const minX = Math.min(boss.x, ...boxes.map((b) => b.x));
+        const maxX = Math.max(boss.x + boss.w, ...boxes.map((b) => b.x + b.w));
+        const minY = Math.min(boss.y, ...boxes.map((b) => b.y));
+        const maxY = Math.max(boss.y + boss.h, ...boxes.map((b) => b.y + b.h));
+        const reach = (maxX - minX) * (maxY - minY);
+        grew.push(`${id} ${(reach / bodyArea).toFixed(2)}x`);
+        if (reach / bodyArea < 1.2) bad.push(`${id}: raajat kasvattavat vain ${(reach / bodyArea).toFixed(2)}x`);
+
+        // 1. a limb hurts: stand the player in one and require the hit.
+        const p = s3.player;
+        const far = boxes.reduce((a, b) => (Math.abs(b.x - boss.cx) > Math.abs(a.x - boss.cx) ? b : a));
+        p.x = far.x + far.w / 2 - p.w / 2;
+        p.y = far.y + far.h / 2 - p.h / 2;
+        p.vx = 0; p.vy = 0; p.invuln = 0; p.star = 0; p.dying = false;
+        const power0 = s3.player.powerLevel;
+        s3.update(idle);
+        const hurt = p.dying || p.invuln > 0 || s3.player.powerLevel < power0;
+        if (!hurt) bad.push(`${id}: raajan sisällä seisominen ei satuttanut`);
+      }
+      /*
+       * JA JOKAISESSA OSUMALAATIKOSSA ON OLTAVA PIKSELEITÄ.
+       *
+       * Yllä oleva mittasi laatikoita, ja se päästi läpi tasan sen vian jonka
+       * kuvalevy paljasti: nyrkkeilijä piirretään omalla funktiollaan eikä
+       * `drawStandardBoss`in kautta, joten hänellä oli raajan **osumalaatikko
+       * ilman raajaa**. Vahinko tyhjästä on sama valhe kuin raaja jonka läpi
+       * kävelee, vain toisin päin.
+       *
+       * Laatikko ja piirros ovat kaksi eri asiaa, joten ne on mitattava
+       * kahdesti — juuri se on tämän erän toistuva läksy.
+       */
+      const gfx = await import('/src/gfx/sprites.js');
+      const drawn = gfx.BOSS_LIMBS.map((limbs, v) => {
+        if (!limbs.length) return `${v}: ei raajoja`;
+        const M = 96;
+        const size = gfx.bossSize(v);
+        const c = document.createElement('canvas');
+        c.width = size.w + M * 2;
+        c.height = size.h + M * 2;
+        const g = c.getContext('2d');
+        gfx.drawBoss(g, M, M, 12, 1, false, v, 1, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const empty = limbs.filter(([lx, ly, lw, lh]) => {
+          let n = 0;
+          for (let y = ly + M; y < ly + lh + M; y++) {
+            for (let x = lx + M; x < lx + lw + M; x++) {
+              if (x < 0 || y < 0 || x >= c.width || y >= c.height) continue;
+              if (d[(y * c.width + x) * 4 + 3] > 8) n++;
+            }
+          }
+          return n < lw * lh * 0.25;
+        });
+        return empty.length ? `${v}: ${empty.length} raajaa ilman pikseleitä` : null;
+      }).filter(Boolean);
+      drawn.forEach((d) => bad.push(d));
+
+      expect('raajat kasvattavat läsnäoloa, satuttavat, näkyvät, eivätkä tule laskeutumiskaistalle',
+        bad.length === 0, bad.length ? bad.join(' | ') : grew.join(', '));
+    }
+
     /* The promise the lead designer set himself: a powerless player can beat
      * every boss. Taken apart into the two things it needs — one window is long
      * enough to walk up and land a stomp at its tightest, and the clock holds

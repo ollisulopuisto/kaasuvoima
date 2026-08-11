@@ -7,6 +7,43 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.77 — raajat, ja laatikko joka lupasi vahinkoa ilman piirrosta
+
+NES-sprite oli 8x8 tai 8x16, kahdeksan juovaa kohti ja 64 ruudulla, joten pomo
+**ei koskaan ollut yksi piirros** vaan metasprite. Ja kun pomo on jo osista,
+yhden osan liikuttaminen omalla kellollaan on ilmaista — sieltä tulevat
+ketjunyrkit ja jaksotetut selkärangat. Rajoite synnytti idiomin.
+
+Meillä ei ole sitä rajoitetta, ja noudatimme hiljaa pahempaa: `BOSS_SIZES` oli
+sekä osumalaatikko **että** piirros, joten mikään ei voinut ulottua itsensä
+ulkopuolelle. Nyt `BOSS_LIMBS` on eri taulukko ja saa ulottua minne tahansa.
+
+Mitattu läsnäolo, ilman että tallottava laatikko kasvaa pikseliäkään:
+
+| | 1-F | 2-F | 3-F | 4-F/5-F | 6-F | 7-F |
+| --- | --- | --- | --- | --- | --- | --- |
+| kasvu | 1,37× | 1,47× | 1,69× | 1,70× | **2,75×** | 1,59× |
+
+Kolme sääntöä, kaikki portissa: **raaja satuttaa** (piirretty raaja jonka läpi
+kävelee on sama valhe kuin piikki joka ei satuta), **raaja ei tule
+laskeutumiskaistalle** (pään yläpuolinen sarake on kruunun, ja sillä saa olla
+yksi vastaus), ja **raaja kasvattaa läsnäoloa** vähintään 1,2× tai se on
+koriste jolla on kello.
+
+### Ja neljäs sääntö, jonka kuvalevy paljasti ja portti ei
+
+Ensimmäinen versio mittasi **laatikoita eikä pikseleitä**, ja päästi läpi tasan
+sen mitä sillä tavalla pääsee: nyrkkeilijä piirretään omalla funktiollaan eikä
+`drawStandardBoss`in kautta, joten hänellä oli **raajan osumalaatikko ilman
+raajaa**. Vahinko tyhjästä on sama valhe kuin raaja jonka läpi kävelee, vain
+toisin päin.
+
+Portti piirtää nyt pomon ja vaatii että jokaisessa raajalaatikossa on
+pikseleitä. Laatikko ja piirros ovat kaksi eri asiaa, joten ne mitataan
+kahdesti — sama läksy kuin koko erän ajan.
+
+---
+
 ## v26.08.11.76 — kansi nostaa katon, ja katto on nyt nimetty luku
 
 52 px oli se korkeus jonka yli voimataso 0 pääsee **areenan lattialta**, ja
