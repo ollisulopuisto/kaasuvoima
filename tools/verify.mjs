@@ -4596,21 +4596,24 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       const boss = s.entities.find((e) => e instanceof K.Boss);
       const idle = mkInput();
-      for (let f = 0; f < 90; f++) s.update(idle);
+      /* Settle him rather than let him pace — see the same loop in the
+       * `BOSS_LEVELS` sweep for what the other seventy-five frames were doing
+       * to where the player got put down. */
+      for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s.update(idle);
       boss.hp = 1;
       boss.spikePhase = 'open';
       const openWindow = boss.openFrames;
       boss.spikeTimer = openWindow;
       const p = s.player;
       p.y = boss.y + boss.h - p.h;
-      /* Approach measured from the boss's **edge**, not its centre. Both numbers
-       * below were tuned when every boss was 30 px wide, so a centre distance
-       * quietly meant "75 px of run-up and take off 25 px clear of him". The
-       * moment a boss became 76 wide the same centre distance put the player
-       * 2 px from its flank — he jumped straight up into the side of it, and
-       * four fortresses failed a test about stomping rather than about size.
-       * `w / 2 + k` reproduces the old numbers exactly at w = 30. */
-      p.x = boss.cx - (boss.w / 2 + 75);
+      /* Approach measured from the boss's **edge and top**, not from a constant.
+       * The numbers here were tuned when every boss was 30x32, and per-boss
+       * sizes broke both halves: 40 px from a wide boss's centre is inside his
+       * flank, and a tall boss needs a boss-height of extra run-up or the
+       * player arrives over him still rising, which is a collision and not a
+       * stomp. Derived in full at the `BOSS_LEVELS` sweep. */
+      const clearance = boss.w / 2 + 25 + boss.h;
+      p.x = boss.cx - (clearance + 50);
       p.vx = 0; p.vy = 0;
       s.centerCamera();
       const i = mkInput();
@@ -4626,7 +4629,7 @@ const report = await page.evaluate(async () => {
           if (p.vx < want - 0.15) i.held.right = true;
           else if (p.vx > want + 0.15) i.held.left = true;
           if (p.vy < 0) i.held.jump = true;
-        } else if (adx > boss.w / 2 + 25 + Math.abs(boss.vx) * 12) {
+        } else if (adx > clearance + Math.abs(boss.vx) * 12) {
           i.held[dx > 0 ? 'right' : 'left'] = true;
           i.held.run = true;
         } else {
@@ -7025,16 +7028,52 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       const boss = s.entities.find((e) => e instanceof E.Boss);
       const idle = mkInput();
-      for (let f = 0; f < 90; f++) s.update(idle);
+      /*
+       * Settle the boss, do not let him go for a walk.
+       *
+       * This was a flat 90 frames, which is about seventy more than the job
+       * needs: a boss spawns a little above the floor and is standing on it
+       * inside fifteen. The other seventy-five were him pacing, and at ~1.5 px
+       * a frame that carried him a hundred and thirty pixels off his mark —
+       * far enough that the player, who is placed *relative to him*, was being
+       * set down outside the arena entirely. In 7-F that landed a power-0
+       * player on the spike bed of the corridor before it, and the fortress
+       * failed a test about stomping because of where the test stood him.
+       *
+       * `boss.onGround` is the actual precondition, so it is the actual loop.
+       */
+      for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s.update(idle);
 
       boss.hp = 1;
       boss.spikePhase = 'open';
       const openWindow = boss.openFrames;
       boss.spikeTimer = openWindow;
 
+      /*
+       * Where a power-0 player has to leave the ground, and why it is measured
+       * off **both** of the boss's dimensions.
+       *
+       * The old number was a bare 40 px from his centre. That was written when
+       * every boss was 30x32, where it quietly meant "take off 25 px clear of
+       * his flank, with a whole boss-height of air to climb". Per-boss sizes
+       * broke both halves of that at once: 40 px from the centre of a 68-wide
+       * storm is 6 px from his side, and a body twenty pixels taller needs the
+       * extra time in the air to get over it.
+       *
+       * Measured, that second half is the one that actually failed. A stomp
+       * only counts while descending, so arriving over a 52 px boss on the way
+       * *up* is not a stomp, it is walking into him — which is exactly what the
+       * trace showed at 8-F, contact at his flank with `vy` still negative.
+       * At power 0 the rise and the run are within a factor of two of each
+       * other in px/frame, so one boss-height of extra run-up is the honest
+       * term, and adding it turns all seven fortresses green without touching
+       * the power level, the window, or the boss.
+       */
+      const clearance = boss.w / 2 + 25 + boss.h;
+
       const p = s.player;
       p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - 90;
+      p.x = boss.cx - (clearance + 50);
       p.vx = 0; p.vy = 0;
       s.centerCamera();
 
@@ -7051,7 +7090,7 @@ const report = await page.evaluate(async () => {
           if (p.vx < want - 0.15) i.held.right = true;
           else if (p.vx > want + 0.15) i.held.left = true;
           if (p.vy < 0) i.held.jump = true;
-        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+        } else if (adx > clearance + Math.abs(boss.vx) * 12) {
           i.held[dx > 0 ? 'right' : 'left'] = true;
           i.held.run = true;
         } else {

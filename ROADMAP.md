@@ -771,6 +771,53 @@ Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa
 vihollisen alta eikä palaa olisi olio joka muokkaa kenttää, ja silloin reitti
 voisi kadota. Palautuvana se on tilapäinen tapahtuma staattisessa kentässä.
 
+### Päätetty 11.8.2026: pomon laatikko on pomokohtainen, ja katto on 52 px (v26.08.11.70)
+
+Kaikki seitsemän pomoa olivat 30x32 eli kaksi laattaa, ja pelkkä siluetti ei sitä
+korjaa: seitsemän muotoa samassa laatikossa on seitsemän samankokoista asiaa.
+`BOSS_SIZES` on nyt pomokohtainen ja piirrokset on kirjoitettu siihen.
+
+**Katto on 52 px, ja se on mitattu eikä arvattu.** Voimatason 0 jalat nousevat
+71 px paikaltaan ja 100 px vauhdista; ensimmäinen luonnos laittoi luurangon
+64:ään ja kuninkaan 60:een, ja molemmat kaatoivat portin. Tätä korkeampi pomo
+vaatii areenalta kannen, mikä on `boss_arena_big`in tehtävä.
+
+**Ja 1,6:1 on levein sallittu suhde.** Ensimmäinen kokoluonnos venytti leveydet
+72:een ja 76:een korkeuksien pysyessä 30:ssä ja 44:ssä, ja palaute oli oikea:
+venytetty. Arcade-pomo on massaa, ja massa tarvitsee molemmat mitat. Kolme
+erillistä havaintoa samasta asiasta, kaikki säilytettäviä:
+
+- **tasakorkea palkki on ajoneuvo** millä tahansa suhteella — syöksyjän selkä on
+  siksi portaikko eikä laatikko;
+- **kaksi vaaleaa silmää rinnakkain tummalla rungolla on valaistut ikkunat**, eli
+  bussi; sääherralla on siksi yksi valtava silmä, ja arvomerkki siirtyi pois
+  silmän korkeudelta ettei siitä tule toista;
+- **täysleveä vaakaviiva leikkaa siluetin kahdeksi laatikoksi** — kuninkaan
+  vaippa on siksi olkapanssarit eikä mantteli.
+
+Siluettiportin marginaali kapeni 0,771:stä 0,802:een (kynnys 0,82). Se pitää,
+mutta se on ohut, ja seuraava pomomuutos mittaa sen ensimmäisenä.
+
+### Löydetty 11.8.2026: talloportti mittasi hyppyä vain leveydestä (v26.08.11.70)
+
+Pomokoot kaatoivat seitsemän linnaketta kahdeksasta testissä *"voimatason 0
+talloo yhden avoimen ikkunan sisällä"*, ja kumpikaan syy ei ollut koko sinänsä.
+
+**Lämmittely oli 90 framea ja työ vaatii viisitoista.** Loput 75 pomo käveli, ja
+koska pelaaja asetetaan suhteessa pomoon, pelaaja asetettiin areenan
+ulkopuolelle — 7-F:ssä edeltävän käytävän piikkipenkkiin. Ehto on nyt
+`boss.onGround`.
+
+**Ja lähestymismatka luettiin vain leveydestä.** Tärkeämpi puolikas oli korkeus:
+**tallominen lasketaan vain laskeutuessa**, joten korkean pomon kohdalle
+saapuminen nousevassa liikkeessä on törmäys eikä tallominen. Matka on nyt
+`w / 2 + 25 + h`, joka palauttaa vanhat luvut 30x32:lla.
+
+Yleistys jonka tämä ansaitsee: **portin apuluvut vanhenevat hiljaa.** Kumpikaan
+näistä ei ollut väärin kirjoitettu — molemmat olivat oikein sille ainoalle
+koolle joka pelissä silloin oli. Kun vakio kuvaa jotain mitattavaa, se
+kirjoitetaan mitasta eikä luvusta.
+
 ### Löydetty 10.8.2026: pystykentän portit todistivat väärää asiaa (v26.08.10.69)
 
 Molemmat pystykentät olivat ratkaistavissa **liikkumatta sivuun** — 6-K

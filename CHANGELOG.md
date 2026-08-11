@@ -7,6 +7,83 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.70 — pomoilla on vihdoin koko, ja portti mittasi hyppyä väärältä puolelta
+
+Omistaja katsoi pomojen kuvalevyä kolme kertaa ja sanoi joka kerta saman asian
+eri sanoin: *"ne ovat edelleen kutakuinkin samankokoisia"*, ja lopulta
+*"nyt ne näyttävät venytetyiltä — haluan ISOJA ja JÄREITÄ, kuten
+arcade-pelien pomot"*. Molemmat pitivät paikkansa ja ne olivat eri vika.
+
+### 1. Koko: laatikko per pomo, katto 52 px ja mitattu
+
+Kaikki seitsemän mahtuivat 30x32:een, eli kahteen laattaan, ja pelkkä muoto ei
+sitä korjaa: seitsemän siluettia samassa laatikossa on edelleen seitsemän
+samankokoista asiaa. Nyt laatikko on pomokohtainen (`BOSS_SIZES`) ja piirrokset
+on kirjoitettu siihen.
+
+**Katto on 52 px ja se on mitattu kahdesti.** Voimatason 0 pelaajan *jalat*
+nousevat 71 px paikaltaan hypätessä ja 100 px vauhdista. Ensimmäinen luonnos
+laittoi luurangon 64:ään ja kuninkaan 60:een — molemmat alle 71:n, molemmat
+kaatoivat portin. Seitsemän pikselin marginaali on marginaali jonka pomon oma
+hengitys syö.
+
+### 2. Muoto: massa eikä mitta
+
+Ensimmäinen kokoluonnos venytti leveydet 72:een ja 76:een ja jätti korkeudet
+30:een ja 44:ään. 2,4:1-vartalo jonka toisessa päässä on naama on bussi, ei
+pomo. Nyt **1,6:1 on levein sallittu suhde** ja korkeusbudjetti käytetään:
+syöksyjä 72x30 → 64x40, sääherra 76x44 → 68x46.
+
+Se ei vielä riittänyt, ja kolme korjausta olivat kaikki samaa sukua:
+
+- **Syöksyjä oli veturi**, koska tasakorkea palkki jonka päässä on pää on
+  veturi millä tahansa suhteella. Nyt selkä on **portaikko** — kolme askelmaa,
+  kukin kahdeksan pikseliä edellistä korkeammalla — ja pää roikkuu kyhmyn
+  *alla* eikä sen päässä.
+- **Sääherra oli bussi kahdesti.** Ensin suhde, sitten — suhteen korjaamisen
+  jälkeenkin — **kaksi vaaleaa silmää rinnakkain tummalla rungolla, eli
+  valaistut ikkunat**. Ratkaisu on se johon isot pomot aina turvautuvat: *yksi
+  valtava silmä keskellä*. Yksisilmäinen ei ole ajoneuvo. Ilmapuntari siirtyi
+  alemmas ja pienemmäksi, koska kultakehyksinen vaalea neliö silmän korkeudella
+  oli se toinen silmä.
+- **Kuningas oli kaappi**, koska vaippa oli yhtä leveä kuin hän: vaakaviiva
+  siluetin poikki leikkaa sen kahdeksi laatikoksi. Nyt olkapanssarit työntyvät
+  ulos, vyötärö kapenee 18 pikseliin ja turkis on vain panssarien päällä.
+
+Luuranko sai päinvastaisen hoidon: pääkallo lähes koko leveydeltä ja
+reisiluut kuusi pikseliä korkeat. Iso pää lyhyillä paksuilla jaloilla on se
+mittasuhde josta jokainen arcade-järkäle on piirretty.
+
+Siluettiportti (`jokainen pomo on oman muotoinen`) pitää: pahin pari 0,802
+kynnyksen 0,82 alla. Marginaali on ohut ja se on tässä sanottu ääneen.
+
+### 3. Ja portti mittasi hyppyä väärältä puolelta
+
+Seitsemän linnaketta kahdeksasta kaatui testiin *"voimatason 0 talloo yhden
+avoimen ikkunan sisällä"*, ja kumpikaan syy ei ollut pomon koko sinänsä.
+
+**Lämmittely oli 90 framea, ja työ vaatii viisitoista.** Pomo syntyy hieman
+lattian yläpuolelle ja seisoo sillä ennen framea 15; loput 75 se käveli, ja
+1,5 px/frame kantoi sen 130 px pois paikaltaan. Pelaaja asetetaan *suhteessa
+pomoon*, joten pelaaja asetettiin areenan ulkopuolelle — 7-F:ssä sitä edeltävän
+käytävän piikkipenkkiin. Linnake kaatui testissä siihen mihin testi hänet
+laittoi. Silmukan ehto on nyt `boss.onGround`, eli se asia jota se odottaa.
+
+**Ja lähestymismatka luettiin vain leveydestä.** Vakio 40 px keskustasta
+tarkoitti 30x32-pomolla "irtoa 25 px kyljestä ja nouse yhden pomonkorkeuden
+verran". 68 leveän sääherran keskustasta 40 px on 6 px kyljen sisällä — mutta
+tärkeämpi puolikas oli korkeus: **tallominen lasketaan vain laskeutuessa**,
+joten 52 px korkean pomon kohdalle saapuminen *nousevassa* liikkeessä ei ole
+tallominen vaan törmäys. Juuri sen jälki näkyi 8-F:n framedumpissa, osuma
+kylkeen `vy` yhä negatiivisena. Matka on nyt `w / 2 + 25 + h`, ja se palauttaa
+vanhat luvut 30x32:lla.
+
+Kumpikaan korjaus ei koske voimatasoa, ikkunan pituutta eikä pomoa. Kokeiltiin
+myös kolmatta (botti jarruttaisi ennen kylkeä noustessaan) — se ei muuttanut
+yhtäkään tulosta, joten sitä ei jätetty koodiin.
+
+---
+
 ## v26.08.10.69 — molemmat pystykentät olivat ratkaistavissa liikkumatta sivuun
 
 Omistaja pelasi 6-K:n ja raportoi kaksi asiaa. Molemmat pitivät paikkansa, ja
