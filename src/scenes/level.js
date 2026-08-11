@@ -556,18 +556,31 @@ const CAM_PAGE_LAND = 112;
  * page only ever happens on a landing or during a fall, never while a jump is
  * rising — so the freeze is paid for and delivers nothing, twice over: the new
  * ground is on screen a whole page *earlier* without it, and a second of the
- * climb is given back. A second of a level in which the player is holding a
- * direction and cannot use it, at the exact moments the level is asking them
- * to aim, is the same complaint this camera has already answered twice today,
- * and it is not worth paying for something already owned.
+ * climb is given back.
  *
- * The number stays a field on the scene (`camPageFrames`) rather than being
- * folded away, because the table above is a measurement and a measurement has
- * to be repeatable: `verify.mjs` runs the same climb at 0 and at 12 and prints
- * both rows. If a later vertical level wants the beat back — a boss climb, a
- * scripted moment — it is one number and the freeze is fully implemented.
+ * ## JA OMISTAJA KATSOI SITÄ, JA SE OLI VÄÄRIN
+ *
+ * Se mittaus on yhä tuossa yllä ja se on yhä totta. Mitä se **ei** mitannut on
+ * se mitä leikkaus tekee silmälle: 6-K:ta pelatessa raportti kuului *"the
+ * vertical camera scroll is too fast; it needs to feel deliberate"*. Nollan
+ * framen sivu ei ole nopea vaan **olematon** — kuva vaihtuu kokonaan yhdellä
+ * framella, eikä mikään kerro että liikuttiin. Mittarit sanoivat sen hinnaksi
+ * nolla, koska ne mittasivat hallinnan menetystä ja uuden maan näkymistä,
+ * eivätkä kumpikaan näe leikkausta.
+ *
+ * **Kuusikymmentä framea, eli sekunti, ja se on omistajan päätös.** Se maksaa
+ * täsmälleen sen mitä taulukko sanoo sen maksavan, ja se hinta hyväksytään:
+ * pystykenttä on kentän muoto jossa liikkeen suunta on se asia jota pelaaja
+ * lukee, ja sivu joka kestää on se joka kertoo suunnan. Kello ei käy sivun
+ * aikana (`updateTimer` on freezen takana), joten beat ei maksa aikaa — vain
+ * hallintaa, ja vain silloin kun kuva vaihtuu.
+ *
+ * Musiikki jatkuu, ja se on osa pyyntöä eikä sattuma: `Music` on omalla
+ * kellollaan eikä sitä ajeta `update`sta, joten pysähtyvä kuva liikkuvan
+ * musiikin päällä lukee kameratyönä eikä kaatuneena pelinä. Sama syy kuin
+ * `tick`illä, joka on tarkoituksella freezen ulkopuolella.
  */
-const CAM_PAGE_FRAMES = 0;
+const CAM_PAGE_FRAMES = 60;
 
 /*
  * Cinemascope, for the levels that ask for it (`letterbox: true`).
@@ -2550,7 +2563,14 @@ export class LevelScene {
     if (this.camPage > 0) {
       this.camPage--;
       const t = 1 - this.camPage / this.camPageFrames;
-      this.camPageY = this.camPageFrom + (this.camPageTo - this.camPageFrom) * t;
+      /* Kiihtyvä ja hidastuva, ei tasainen. Tasainen sivu sekunnin mitassa
+       * lukee hissiltä: se lähtee ja pysähtyy ilman että kumpikaan hetki
+       * tarkoittaa mitään. Smoothstep antaa liikkeelle alun ja lopun, ja juuri
+       * se tekee siitä *harkitun* eikä hitaan — mikä oli se sana jolla tätä
+       * pyydettiin. Kaava on sama `t*t*(3-2t)` jota `postfx` käyttää
+       * häivytyksiinsä, eikä uusi käyrä ansaitse omaa toteutustaan. */
+      const e = t * t * (3 - 2 * t);
+      this.camPageY = this.camPageFrom + (this.camPageTo - this.camPageFrom) * e;
       this.applyPageView();
       return this.camPage > 0;
     }

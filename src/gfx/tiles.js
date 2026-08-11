@@ -30,6 +30,7 @@ export const T = {
   WARP_L: '(',
   WARP_R: ')',
   LUMP: 'C',
+  ICE: 'I',
 };
 
 const S = { solid: true };
@@ -129,6 +130,27 @@ export const TILE_INFO = {
    * ole vuoria vaan sisuskaluja.
    */
   [T.LUMP]: { ...S, falls: true },
+  /*
+   * JÄÄ — se laatta joka päättää kuinka hyvin sen päällä seisova pysähtyy.
+   *
+   * `SURFACES` oli 10.8.2026 asti **teemakohtainen**: koko maailma 3 oli
+   * liukas, mutta vain vihollisille, koska pelaaja ei lukenut taulua lainkaan.
+   * Sen rivin perustelu on yhä `SURFACES`in kommentissa ja se pitää yhä:
+   * maailman 3 kahdeksan kenttää on mitoitettu tavallisen kitkan varaan, joten
+   * pelaajan kitkan pudottaminen *teeman* perusteella kuluttaisi juuri sen
+   * marginaalin jonka DESIGN.md kohta 5 lupaa.
+   *
+   * Siksi jää on laatta eikä teeman ominaisuus, ja ero on muutoksen hinnassa:
+   * teemana se muuttaisi kahdeksan kenttää yhdellä committilla, laattana se ei
+   * muuta yhtäkään ennen kuin joku ladotaan jonnekin. Samalla se kantaa
+   * maailmaa 3 pidemmälle — jäinen kieleke luumaailmassa, liukas kulkusilta
+   * tehtaassa — ja se on koko syy tehdä se näin päin.
+   *
+   * `surface` **nimeää** rivin `SURFACES`ista eikä kopioi sen lukuja. Laatta
+   * sanoo mitä ainetta se on, taulu sanoo mitä se aine tekee, ja kumpaakin on
+   * siksi tasan yksi.
+   */
+  [T.ICE]: { ...S, surface: 'ice' },
   [T.QUICKSAND]: { quicksand: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
@@ -179,21 +201,74 @@ export const isSemi = (ch) => !!info(ch).semi;
  * kitkasta. Kävelijä tarvitsee 55 framea päästäkseen vauhtiinsa ja liukuu
  * käännöksensä yli, ja jäälle työnnetty asia ei pysähdy jalkoihinsa.
  *
- * **Mitä tässä EI ole, ja se on tämän erän tärkein löydös:** pelaaja ei lue
- * tätä taulua. Syy ei ole unohdus vaan mittaus — ks. `Enemy.steer` ja
- * commit-viesti. Koko maailma 3 on suunniteltu tavallisen kitkan varaan
- * (`chunks/ice.js` laskee `ice_crumble`n 12 laatan pysähtymismatkan luvuista
- * 0,0391 ja 0,0547 ja jättää kaksi laattaa pelivaraa), joten pelaajan kitkan
- * pudottaminen kuluttaisi juuri sen marginaalin jota DESIGN.md kohta 5
- * lupaa. Se on eri muutos, ja se pitää maksaa maailman 3 layouteista.
+ *   `grip`   kuinka suuri osa kehon **omasta jarrutusvallasta** on jäljellä.
+ *            Kerroin eikä kiihtyvyys, koska jarruja on pelaajalla kolme
+ *            (`FRICTION_SMALL` 0,0391, `FRICTION_BIG` 0,0547, `SKID` 0,125)
+ *            eikä yksi, ja kerroin pitää niiden keskinäiset suhteet ennallaan.
+ *
+ *            **Vain jarrutus, ei kiihdytys, ja se on tämän erän tärkein
+ *            päätös.** `ACC` (0,0547) on se luku josta koko mitattu
+ *            hyppybudjetti johtuu (`tools/jump-budget.json`,
+ *            `tools/measure-jump.mjs`): jos jää hidastaisi kiihtymistä, jokainen
+ *            jään lähellä oleva kuilu olisi mitoitettu vauhdinotolla jota siinä
+ *            ei ole, eikä sitä huomaisi mistään. Se on myös oikea tuntuma —
+ *            jäällä ei ole vaikeaa lähteä vaan pysähtyä — ja se on se lause
+ *            joka pitää `tools/playable.mjs`:n todistuksen voimassa: botti
+ *            pitää oikeaa pohjassa eikä koskaan jarruta, joten se mittaa jään
+ *            päällä täsmälleen saman kuin ilman jäätä.
+ *
+ * **Jään luvut ovat `steer` 0,01, `drift` 0,01 ja `grip` 0,4.** Kaksi
+ * ensimmäistä ovat neljäsosa pelin pienimmästä kitkasta: kävelijä tarvitsee 55
+ * framea päästäkseen vauhtiinsa ja liukuu käännöksensä yli, ja jäälle työnnetty
+ * asia ei pysähdy jalkoihinsa. Kolmas on mitattu eikä valittu, ja mitta on
+ * `tools/measure-braking.mjs`: ks. PHYSICS.md, jossa molemmat sarakkeet ovat
+ * rinnakkain.
+ *
+ * **Mitä tässä ei enää ole:** teema ei liu'uta pelaajaa. Se rivi luki tässä
+ * 10.8.2026 asti, ja `T.ICE`:n kommentti kertoo miksi se vaihtoi paikkaa
+ * laatalle — lyhyesti: maailman 3 kahdeksan kenttää on mitoitettu tavallisen
+ * kitkan varaan, ja teema muuttaisi ne kaikki kerralla. Vihollisille teema on
+ * yhä voimassa (`Enemy.surface`), koska ne on mitattu sen kanssa.
  */
 export const SURFACES = {
-  default: { steer: 8, drift: 0.05 },
-  ice: { steer: 0.01, drift: 0.01 },
+  default: { steer: 8, drift: 0.05, grip: 1 },
+  ice: { steer: 0.01, drift: 0.01, grip: 0.4 },
 };
 
 /** The surface a body standing in this theme is standing on. */
 export const surfaceOf = (themeName) => SURFACES[themeName] || SURFACES.default;
+
+/**
+ * Se maa jonka päällä tämä keho **seisoo**, tai null jos mikään sen jalkojen
+ * alla oleva laatta ei nimeä ainetta.
+ *
+ * Sama rivi ja samat sarakkeet kuin `moveY`:n jalansijahaulla, ja tahallaan:
+ * jos "mitä minun alla on" vastattaisiin eri ruuduista kuin "seisonko minä
+ * jollakin", ne kaksi erkanisivat juuri reunalla, joka on ainoa paikka jossa
+ * kysymyksellä on väliä.
+ *
+ * **Pienin pito voittaa.** Jalka jää laatalla on jalka jäällä, vaikka toinen
+ * olisi kivellä — se on sama valinta kuin `quicksandSurface`in "ylin rivi
+ * voittaa": laatta väittää itsestään, eikä naapuri kumoa sitä. Käytännössä se
+ * tarkoittaa että pito palaa vasta kun koko keho on ohittanut viimeisen
+ * jäälaatan, eli noin laatan myöhemmin kuin silmä odottaa — ja siksi
+ * `checkIce`in reunavara mitataan viimeisestä jääsarakkeesta.
+ *
+ * Palauttaa null eikä oletusta, koska kutsujia on kaksi ja ne haluavat eri
+ * varapaikan: vihollinen putoaa teemaan, pelaaja ei. Se ero on päätös ja se on
+ * kirjoitettu auki kummallekin kutsupaikalle.
+ */
+export function surfaceUnder(level, body) {
+  const ty = Math.floor((body.y + body.h) / TILE);
+  const x0 = Math.floor(body.x / TILE);
+  const x1 = Math.floor((body.x + body.w - 1) / TILE);
+  let found = null;
+  for (let tx = x0; tx <= x1; tx++) {
+    const named = SURFACES[info(level.tileAt(tx, ty)).surface];
+    if (named && (!found || named.grip < found.grip)) found = named;
+  }
+  return found;
+}
 
 /**
  * `surface` picks how ground tiles are dressed (blades, ripples, rivets…),
@@ -1571,6 +1646,65 @@ function drawHazardEdge(ctx, x, y, side) {
   for (let i = 0; i < 3; i++) ctx.fillRect(sx + (side > 0 ? i * 2 : i * 2 + 1), y, 1, 3);
 }
 
+/**
+ * JÄÄ, ja se on kiinteä laatta joka näyttää siltä että sen päällä luistaa.
+ *
+ * Kiinteät värit eivätkä teeman omat, ja samasta syystä kuin juoksuhiekalla ne
+ * ovat: jää on mekaniikka jota saa ladata mihin tahansa maailmaan, ja teeman
+ * paletilla maalattu jää olisi luumaailmassa luunvärinen ja tehtaassa
+ * teräksenvärinen — eli täsmälleen se laatta jonka pelaaja lakkaa näkemästä.
+ * Se mitä laatta *tekee* on sama kaikkialla, joten sen on myös näytettävä
+ * samalta kaikkialla.
+ *
+ * Muoto on valittu erottumaan niistä neljästä joita se muuten muistuttaisi, ja
+ * jokainen ero on väite:
+ *
+ *   - **kova palikka lumiteemassa** (`drawHard`, `surface === 'snow'`) on
+ *     läpinäkymätön ja tasainen, yksi pieni kimallus kulmassa. Tässä on
+ *     pystyjuovat ja kirkas yläreuna, eli se lukee lasilta eikä kiveltä.
+ *   - **halkeama** (`drawCrevasse`, jäämaailman `W`) on reikä: tumma, ja sillä
+ *     on liikkuva harja. Tämä on vaalea ja **liikkumaton**. Liike on tässä
+ *     pelissä varattu sille mikä on nestettä tai tappavaa, joten paikallaan
+ *     pysyminen on se yksi ominaisuus joka sanoo "tämä on maastoa".
+ *   - **puulava** (`drawPlatform`) on ohut ja sen alta mennään läpi. Tämä
+ *     täyttää ruudun reunasta reunaan, koska se on kiinteä.
+ *   - **juoksuhiekka** tummenee reunaansa kohti eikä sillä ole kantta. Tällä on
+ *     kansi ja se on ruudun kirkkain rivi: se on se pinta jolla seistään.
+ *
+ * `above` ratkaisee kannen samalla tavalla kuin ruoho ratkaistaan maalaatalla —
+ * jään sisällä oleva jää ei kiillä, vain se pinta joka on ilmaa vasten.
+ */
+function drawIce(ctx, x, y, capped, tx, ty) {
+  ctx.fillStyle = '#12a0b4';
+  ctx.fillRect(x, y, TILE, TILE);
+
+  /* Pystyjuovat: jäätynyt vesi on kerroksissa, ja pystysuora juova on se mitä
+   * vaakasuora harja ei ole. Vaihe laatasta, ei tikistä — kuvio ei liiku. */
+  ctx.fillStyle = '#22c0d0';
+  const phase = Math.floor(hashNoise(tx, ty) * 4);
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + ((phase + i * 5) % TILE), y + 1, 2, TILE - 1);
+
+  bevel(ctx, x, y, TILE, TILE, '#5ce0e8', '#0a5c68');
+
+  if (capped) {
+    // Se pinta jolla seistään, ja ruudun kirkkain rivi.
+    ctx.fillStyle = '#7cf0ec';
+    ctx.fillRect(x, y, TILE, 1);
+    ctx.fillStyle = '#38ccd4';
+    ctx.fillRect(x, y + 1, TILE, 1);
+  }
+
+  /* Yksi vino kiilto per laatta, arvottuna mutta pysyvänä. Vino siksi että
+   * kaikki muu tässä ruudussa on joko pysty tai vaaka: se on ainoa viiva jota
+   * ei voi lukea rakenteeksi, joten se lukee heijastukseksi. */
+  if (hashNoise(tx + 7, ty) > 0.45) {
+    const gx = x + 3 + Math.floor(hashNoise(tx, ty + 3) * 7);
+    const gy = y + 5 + Math.floor(hashNoise(tx + 1, ty) * 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    for (let i = 0; i < 3; i++) ctx.fillRect(gx + i, gy - i, 1, 1);
+  }
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
@@ -1602,6 +1736,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
     case T.LUMP: drawLump(ctx, x, y, th, tx, ty, opts.fall || 0); break;
+    case T.ICE: drawIce(ctx, x, y, !isSolid(above), tx, ty); break;
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;

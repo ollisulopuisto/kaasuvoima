@@ -14,7 +14,7 @@ import {
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
 } from '../gfx/sprites.js';
-import { TILE, T, surfaceOf } from '../gfx/tiles.js';
+import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
 import { Item } from './items.js';
@@ -100,8 +100,18 @@ export class Enemy extends Entity {
    * kaksi mahdollisuutta lukea sama sääntö eri tavalla.
    */
 
-  /** Se maa jonka päällä tämä keho seisoo — teema on aine, ks. `SURFACES`. */
-  get surface() { return surfaceOf(this.level.theme); }
+  /**
+   * Se maa jonka päällä tämä keho seisoo, ks. `SURFACES`.
+   *
+   * Laatta ensin, teema vasta jos laatta ei sano mitään — ja **teema on yhä
+   * tässä**, toisin kuin pelaajalla. Syy on mittaus eikä symmetria: nämä oliot
+   * on mitattu jäämaailman `steer`in kanssa siitä asti kun taulu tuli
+   * olemaan, ja koko maailma 3 on ajettu läpi sen ehdoilla. Teeman poistaminen
+   * täältä muuttaisi kahdeksan kentän vihollisia ilman että kukaan pyysi;
+   * pelaajalle sen *lisääminen* olisi tehnyt saman. Kummassakin tapauksessa
+   * sääntö on sama: mitattu käytös ei muutu vahingossa.
+   */
+  get surface() { return surfaceUnder(this.level, this) || surfaceOf(this.level.theme); }
 
   /**
    * Laji kertoo mihin se pyrkii, maa kertoo kuinka nopeasti se pääsee siihen.

@@ -56,7 +56,14 @@ try {
   process.exit(2);
 }
 
-const browser = await chromium.launch({ headless: true });
+/* `PW_BROWSER` on sama pakotie kuin `tools/playable.mjs`:ssä ja samasta syystä:
+ * ympäristössä jossa selain on valmiina asennettuna eri versiona kuin mitä
+ * `playwright` odottaa, tämä on ero sen välillä että mittarin voi ajaa ja ettei
+ * voi — ja mittaamaton luku on tämän tiedoston ainoa oikea virhe. */
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.PW_BROWSER ? { executablePath: process.env.PW_BROWSER } : {}),
+});
 const page = await browser.newPage();
 await page.goto(`http://127.0.0.1:${PORT}`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(300);
@@ -77,7 +84,7 @@ const data = await page.evaluate(async () => {
   });
 
   /** A flat, empty runway so nothing but the test is in the way. */
-  function runway(level) {
+  function runway(level, floor = '#') {
     game.state = {
       lives: 5, coins: 0, score: 0, power: { type: 'shroom', level },
       reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
@@ -85,7 +92,7 @@ const data = await page.evaluate(async () => {
     if (level === 0) game.state.power = { type: null, level: 0 };
     const s = new LevelScene(game, '1-1');
     for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
-    for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => '#');
+    for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => floor);
     s.entities = s.entities.filter((e) => e.kind === 'player');
     s.goal = null;
     // The clock is irrelevant here and a timeout would end the run mid-measure.
@@ -96,8 +103,8 @@ const data = await page.evaluate(async () => {
   const step = (s, i) => { s.update(i); i.pressed = blank(); };
 
   /** Winds the player up to the cap `mode` asks for, and hands back the scene. */
-  function windUp(level, mode) {
-    const s = runway(level);
+  function windUp(level, mode, floor = '#') {
+    const s = runway(level, floor);
     const p = s.player;
     const i = mkInput();
     for (let f = 0; f < 40; f++) step(s, i);
@@ -116,8 +123,8 @@ const data = await page.evaluate(async () => {
   /* ------------------------------------------------------------------ *
    * 1. Braking on the ground.
    * ------------------------------------------------------------------ */
-  function groundBrake(level, mode, action) {
-    const w = windUp(level, mode);
+  function groundBrake(level, mode, action, floor = '#') {
+    const w = windUp(level, mode, floor);
     if (!w) return null;
     const { s, p, i } = w;
     const v0 = p.vx;
@@ -317,6 +324,26 @@ const data = await page.evaluate(async () => {
     }
   }
 
+  /*
+   * 1b. THE SAME BRAKING, ON JÄÄ.
+   *
+   * Same runway, same wind-up, one character different in the floor — which is
+   * the whole claim `T.ICE` makes, so measuring it any other way would be
+   * measuring something else. This is where `ICE_BRAKE` in `src/data/rules.js`
+   * and `aimWidth` in `tools/difficulty.mjs` come from, and both of them name
+   * this file, so a changed `grip` shows up as a changed rule rather than as a
+   * level that quietly stopped being clearable.
+   */
+  const ice = [];
+  for (const level of levels) {
+    for (const mode of modes) {
+      for (const action of ['release', 'reverse', 'duck']) {
+        const r = groundBrake(level, mode, action, 'I');
+        if (r) ice.push({ level, mode, action, ...r });
+      }
+    }
+  }
+
   const air = [];
   for (const level of [0, 1, 5]) {
     for (const mode of modes) {
@@ -353,7 +380,7 @@ const data = await page.evaluate(async () => {
     }
   }
 
-  return { ground, air, sight, stomp, avoid };
+  return { ground, ice, air, sight, stomp, avoid };
 });
 
 await browser.close();
@@ -367,6 +394,16 @@ console.log(`  ${padR('POWER', 7)}${padR('SPEED', 7)}${padR('ACTION', 9)}${pad('
 for (const r of data.ground) {
   console.log(`  ${padR(r.level, 7)}${padR(r.mode, 7)}${padR(r.action, 9)}${pad(r.v0, 6)}`
     + `${pad(`${r.frames}f`, 8)}${pad(`${r.px}px`, 7)}${pad((r.px / 16).toFixed(1), 7)}`);
+}
+
+console.log('\n=== 1b. The same braking, on ice (T.ICE, SURFACES.ice.grip) ===');
+console.log('  RATIO is the ice distance over the same run on ordinary ground.\n');
+console.log(`  ${padR('POWER', 7)}${padR('SPEED', 7)}${padR('ACTION', 9)}${pad('vx', 6)}${pad('FRAMES', 8)}${pad('PX', 7)}${pad('TILES', 7)}${pad('RATIO', 8)}`);
+for (const r of data.ice) {
+  const dry = data.ground.find((g) => g.level === r.level && g.mode === r.mode && g.action === r.action);
+  const ratio = dry && dry.px ? `${(r.px / dry.px).toFixed(1)}x` : '—';
+  console.log(`  ${padR(r.level, 7)}${padR(r.mode, 7)}${padR(r.action, 9)}${pad(r.v0, 6)}`
+    + `${pad(`${r.frames}f`, 8)}${pad(`${r.px}px`, 7)}${pad((r.px / 16).toFixed(1), 7)}${pad(ratio, 8)}`);
 }
 
 console.log('\n=== 2. Reacting to something you are falling towards ===');

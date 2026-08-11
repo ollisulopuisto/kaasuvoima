@@ -157,7 +157,7 @@ const SMALL_HEAD = 1;
  * not. That mattered nowhere while the rules only measured floors; it matters
  * now that they ask whether a body fits somewhere, so the two lists agree.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 const SEMI = new Set(['-']);
 /*
  * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`, `src/gfx/tiles.js`).
@@ -222,6 +222,25 @@ const DEADLY = new Set(['W']);
  * drifted.
  */
 const SINK = new Set(['~']);
+/*
+ * JÄÄ (`T.ICE`, `src/gfx/tiles.js`). `SOLID`in jäsen, koska se **on** tavallinen
+ * kiinteä laatta: sen päällä seistään, sen läpi ei mennä, ja se kelpaa
+ * lattiaksi, askelmaksi ja katoksi kuten mikä tahansa kivi. Ainoa mitä se tekee
+ * eri tavalla on se mitä *sen päällä oleva keho* pystyy tekemään, eikä yksikään
+ * tämän tiedoston sääntö mittaa sitä — ne mittaavat muotoa. Siksi jää on
+ * `SOLID`issa eikä omassa joukossaan juoksuhiekan tapaan, ja siksi sillä on
+ * silti oma sääntönsä (`checkIce`): tasan yksi asetelma jonka muut sivuuttavat.
+ */
+const ICE = new Set(['I']);
+/**
+ * Kuinka monta saraketta jäistä jalansijaa tarvitaan pysähtymiseen, laattoina.
+ *
+ * Mitattu eikä valittu: `tools/measure-braking.mjs` ajaa pelaajan jäärunwaylla
+ * ja vastaan kääntyminen pysäyttää voimatasolla 0 juoksuvauhdista 40 pikselissä
+ * ja P-nopeudesta 68:ssa. 68 px on 4,25 laattaa, ylöspäin viisi. P-nopeuden luku
+ * eikä juoksun, koska lautalle voi saapua kummalla tahansa vauhdilla.
+ */
+const ICE_BRAKE = 5;
 
 /* -------------------------------- bands ---------------------------------- */
 
@@ -554,6 +573,62 @@ function checkFalling(rows, w, problems) {
   }
 }
 
+/**
+ * JÄÄ, ja **vain se yksi asetelma jota mikään muu sääntö ei näe.**
+ *
+ * Mittaus ensin, koska se rajaa säännön eikä toisin päin. `measure-braking.mjs`
+ * ajaa pelaajan jäärunwaylla: vastaan kääntyminen pysäyttää voimatasolla 0
+ * juoksuvauhdista 40 pikselissä ja P-nopeudesta 68:ssa, ja eteen näkyy
+ * juostessa ~176 px (PHYSICS.md). Pahin *tahallinen* pysähdys on siis 39 %
+ * siitä mitä ehtii nähdä. **Jäällä ei ole vaaraa jota ei ehtisi väistää** —
+ * kunhan on jotain minkä päällä jarruttaa.
+ *
+ * Siksi tämä ei ole reunasääntö juoksuhiekan tapaan, ja se on kielto eikä
+ * unohdus. Reunasääntö olisi keksitty vaatimus kahdesta syystä: tavallista maata
+ * pitkin jäälle saapuva pelaaja voi jarruttaa jo ennen jäätä, ja jään jälkeen
+ * tuleva kuoppa on hypättävissä kuten mikä tahansa kuoppa — `checkGaps` mittaa
+ * sen, eikä jää muuta kiihdytystä (ks. `SURFACES`in `grip`), joten vauhdinotto
+ * on täsmälleen se jolla kuilu on mitoitettu.
+ *
+ * Se mitä jäljelle jää on **ilmasta saapuminen**. Kelluva lautta kuilun päällä
+ * on ainoa paikka jossa pelaaja ei voi jarruttaa ennen jäätä: hän tulee sille
+ * kaaressa, laskeutuu sillä vauhdilla jonka hyppy vaati, ja jos lautta on
+ * lyhyempi kuin jarrutusmatka, hän liukuu sen yli. Mikään muu sääntö ei näe
+ * sitä — `checkGaps` on tyytyväinen, koska kuilu on hypättävissä molemmilta
+ * puolilta, ja juuri se hyppy on se joka tappaa.
+ *
+ * Saari on tässä *jalansijan* maksimaalinen jakso yhdellä rivillä, ei jään:
+ * `IIII##` on kuuden laatan saari eikä neljän, koska ne kaksi kiveä ovat
+ * jarrutusmatkaa siinä missä jääkin — ja parempaa. Kentän reuna ei avaa saarta
+ * kummallakaan puolella, koska reuna on seinä (`moveX`) eikä sen yli liu'uta.
+ *
+ * **Sääntö on hitusen liian tiukka ja se on tiedossa:** saari jossa on yksi
+ * jäälaatta viiden kiven joukossa mitataan samalla mitalla kuin läpijäinen.
+ * Erottaminen vaatisi simuloinnin — jarrutusmatka riippuu siitä missä kohtaa
+ * saarta jää on — ja hinta väärään suuntaan on kaksi laattaa suunnittelijalle,
+ * kun taas väärään suuntaan toisin päin se on henki.
+ */
+function checkIce(rows, w, problems) {
+  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!footing(x, y)) continue;
+      let end = x;
+      while (end + 1 < w && footing(end + 1, y)) end++;
+      const open = (a) => a >= 0 && a < w && !footing(a, y);
+      const island = open(x - 1) && open(end + 1);
+      let ice = false;
+      for (let i = x; i <= end; i++) if (ICE.has(rows[y][i])) ice = true;
+      const width = end - x + 1;
+      if (island && ice && width < ICE_BRAKE) {
+        problems.push(`ice island at ${x},${y} is ${width} wide: a body landing on it at speed`
+          + ` needs ${ICE_BRAKE} tiles to stop, and there is nothing either side to stop on`);
+      }
+      x = end;
+    }
+  }
+}
+
 export function platformsOf(rows, w) {
   const h = rows.length;
   const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
@@ -641,6 +716,124 @@ function landsOn(graph, x, y) {
     if (!best || p.y < best.y) best = p;
   }
   return best;
+}
+
+/**
+ * KUINKA LEVEÄ REIÄN ON OLTAVA, JA MIKSI SE EI OLE YKSI.
+ *
+ * Kaksi laattaa, ja luku tulee `PLAYER_SIZES`ista eikä mausta: pienin keho on
+ * 12 px leveä ja **suurin 21**. Yhden laatan aukko on 16 px, eli se päästää
+ * läpi voimatasot 0–2 ja pysäyttää tasot 3–5. Kyykistyminen ei auta, koska se
+ * madaltaa eikä kavenna.
+ *
+ * Se on pahempi vika kuin miltä kuulostaa, ja pahempi kuin liian vaikea kohta:
+ * pelaaja ei voi kutistua omasta tahdostaan, joten isona saapuminen on ansa
+ * josta ei pääse takaisin. **Ja jokainen tämän tiedoston ja `playable.mjs`:n
+ * portti mittaa voimatasoa 0**, eli tasan sitä kokoa joka mahtuu — mikä on syy
+ * siihen ettei tätä huomannut mikään ennen kuin joku pelasi kentän isona.
+ *
+ * Kopio `PLAYER_SIZES`ista samassa hengessä kuin `BEAN_BLOCK_OVER_FLOOR`:
+ * validaattori ei saa importoida piirtoa, ja `verify.mjs` vertaa lukuja.
+ */
+const WIDEST_BODY_TILES = 2;
+
+/**
+ * Universal pystykentille: **jokaisesta rivistä on päästävä läpi isonakin.**
+ *
+ * Rivi jossa on jalansijaa on rivi joka jakaa kentän ylä- ja alapuoleen, ja
+ * aukot siinä ovat ne paikat joista kuljetaan. Jos rivin jokainen aukko on
+ * kapeampi kuin `WIDEST_BODY_TILES`, rivi on läpäisemätön suurimmalle keholle
+ * ja kenttä loppuu siihen.
+ *
+ * Rivit joissa ei ole yhtään aukkoa jätetään rauhaan, ja se on rajaus eikä
+ * unohdus: umpinainen rivi on joko kentän pohja (6-K:n alin rivi) tai
+ * saavuttamattomuus, ja jälkimmäisen huomaa `checkClimb`in kulkukelpoisuus
+ * paremmin kuin tämä. Tämä sääntö vastaa täsmälleen yhteen kysymykseen —
+ * *mahtuuko siitä* — eikä esitä sitä kysymystä paikoista joissa ei ole reikää.
+ */
+function checkClimbWidth(rows, w, problems) {
+  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  for (let y = 0; y < rows.length; y++) {
+    let any = false;
+    let widest = 0;
+    let run = 0;
+    for (let x = 0; x < w; x++) {
+      if (footing(x, y)) { any = true; run = 0; continue; }
+      run++;
+      if (run > widest) widest = run;
+    }
+    if (!any || widest === 0) continue;
+    if (widest < WIDEST_BODY_TILES) {
+      problems.push(`row ${y} is only passable through a ${widest}-tile gap: the widest body`
+        + ` is ${WIDEST_BODY_TILES} tiles, so a player who arrives big is stuck here`);
+    }
+  }
+}
+
+/**
+ * Universal pystykentille: **kulkeminen sivusuunnassa on pakollista.**
+ *
+ * Tämä on se sääntö jota ei ollut, ja sen puuttuminen näkyi molemmissa pelin
+ * pystykentissä yhtä aikaa — vastakkaisina vikoina, mikä on juuri se syy miksi
+ * yksi sääntö kattaa molemmat:
+ *
+ *   - **6-K meni alas.** Sarake 3 oli auki riviltä 5 riville 43 ja maali oli
+ *     sen pohjalla. Kävele vasemmalle, pidä alas, olet perillä.
+ *   - **7-T meni ylös.** Lankut olivat `########---` ja `---########`, ja ne
+ *     menivät päällekkäin sarakkeissa 9–10 — eli oli sarake jolla oli
+ *     jalansija joka ikisellä tasolla. Hyppää paikallasi, olet perillä.
+ *
+ * `checkClimb` on tyytyväinen kumpaankin, ja aivan oikein: se todistaa että
+ * reitti on **olemassa**, ei että se on ainoa. Tämä todistaa toisen puolen.
+ *
+ * Suunta luetaan maalista eikä nimestä, koska kumpikin kysymys on toisen
+ * peilikuva: laskeutuvalta kentältä kielletään **vapaa sarake** (ei jalansijaa
+ * lainkaan koko matkalla), nousevalta **tikapuusarake** (jalansija joka
+ * askelmalla, ja askelmat mitatun hypyn sisällä). Molemmissa vika on sama
+ * lause: kenttä on ratkaistavissa liikkumatta sivuun.
+ */
+function checkClimbTraverse(rows, w, budget, problems) {
+  const h = rows.length;
+  const footing = (x, y) => y >= 0 && y < h && (SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]));
+  const find = (ch) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === ch) return { x, y };
+    return null;
+  };
+  const start = find('1');
+  const goal = find('F');
+  if (!start || !goal) return;
+  const top = Math.min(start.y, goal.y);
+  const bottom = Math.max(start.y, goal.y);
+
+  if (goal.y > start.y) {
+    // Laskeutuva kenttä: sarake jossa ei ole mitään pysäyttämässä.
+    for (let x = 0; x < w; x++) {
+      let clear = true;
+      for (let y = top; y <= bottom && clear; y++) if (footing(x, y)) clear = false;
+      if (clear) {
+        problems.push(`column ${x} is open the whole way from the start at row ${start.y} to the`
+          + ` goal at row ${goal.y}: the climb is solved by holding one direction and falling`);
+        return;
+      }
+    }
+    return;
+  }
+
+  // Nouseva kenttä: sarake jonka varassa pääsee ylös pysähtymättä sivuun.
+  for (let x = 0; x < w; x++) {
+    const rungs = [];
+    for (let y = bottom; y >= top; y--) if (footing(x, y) && !footing(x, y - 1)) rungs.push(y);
+    if (rungs.length < 2) continue;
+    let ladder = rungs[0] >= bottom - budget.wallTiles;
+    for (let i = 1; i < rungs.length && ladder; i++) {
+      if (rungs[i - 1] - rungs[i] > budget.wallTiles) ladder = false;
+    }
+    if (ladder && rungs[rungs.length - 1] <= top + budget.wallTiles) {
+      problems.push(`column ${x} has footing at every rung from row ${rungs[0]} to row`
+        + ` ${rungs[rungs.length - 1]}: the climb is solved by jumping in place`);
+      return;
+    }
+  }
 }
 
 /**
@@ -1188,6 +1381,9 @@ export function validateLevel(rows, budget, opts = {}) {
     checkEnemyFooting(rows, w, problems);
     checkVines(rows, w, problems);
     checkFalling(rows, w, problems);
+    checkIce(rows, w, problems);
+    checkClimbWidth(rows, w, problems);
+    checkClimbTraverse(rows, w, budget, problems);
     const graph = climbGraph(rows, budget);
     checkClimb(rows, w, graph, budget, problems);
     checkClimbPower(rows, w, problems);
@@ -1211,10 +1407,11 @@ export function validateLevel(rows, budget, opts = {}) {
   const bandName = (b) => (b === routeIndex ? 'route band' : b < routeIndex ? 'sky band' : 'cave band');
   const where = (b) => (b === routeIndex ? '' : ` in the ${bandName(b)}`);
 
-  /* Universal, whole grid: a beanstalk is a beanstalk in any band, and a tile
-   * that can fall is one wherever it is put. */
+  /* Universal, whole grid: a beanstalk is a beanstalk in any band, a tile that
+   * can fall is one wherever it is put, and so is a tile you cannot stop on. */
   checkVines(rows, w, problems);
   checkFalling(rows, w, problems);
+  checkIce(rows, w, problems);
 
   /* Universal, per band: headroom over the ground of whatever band it is, and
    * what a quicksand pool has to be wherever one is dug. */
@@ -1269,4 +1466,6 @@ export function validateLevel(rows, budget, opts = {}) {
   return problems;
 }
 
-export const RULE_CONSTANTS = { ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS };
+export const RULE_CONSTANTS = {
+  ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS, ICE_BRAKE,
+};

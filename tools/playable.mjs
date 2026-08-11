@@ -139,6 +139,7 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
       input.held.left = want.left;
       input.held.right = want.right;
       input.held.jump = want.jump;
+      input.held.run = want.run;
       input.pressed.jump = want.press;
       scene.update(input);
 

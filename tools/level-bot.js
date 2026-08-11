@@ -15,6 +15,29 @@
  * se ei osaa kyykistyä, mennä putkeen, potkaista kuorta eikä odottaa liikkuvaa.
  * Sen "EI LÄPI" on siksi syy avata kenttä eikä tuomio siitä.
  *
+ * ## Jää, ja mitä tämän botin LÄPI *ei* siitä sano
+ *
+ * Botti pitää oikeaa ja juoksua pohjassa joka ikinen frame. Se ei irrota otetta
+ * eikä paina vastaan kertaakaan, eli **se ei jarruta koskaan** — ja jarrutus on
+ * tasan se ja ainoa asia jonka jää muuttaa (`SURFACES`in `grip` koskee
+ * `FRICTION_*`:ää ja `SKID`iä, ei `ACC`:tä).
+ *
+ * Kaksi seurausta, ja ne osoittavat eri suuntiin:
+ *
+ *   - **Hyvä:** jää ei voi rikkoa tätä todistusta. Kiihdytys on ennallaan, joten
+ *     jäälattian päällä botti mittaa framelleen saman kuin kivilattian päällä,
+ *     eikä yhdenkään vanhan kentän LÄPI muutu siksi että jokin muualla muuttui.
+ *   - **Ja se hinta:** tämän botin LÄPI **ei ole todiste siitä että jäinen
+ *     kohta on reilu.** Se on todiste siitä että sen läpi pääsee juoksemalla
+ *     pysähtymättä. Kysymys "ehtiikö tuolle laatalle pysähtyä" on mitattu
+ *     muualla ja se on mitattu numerona eikä pelaamalla: `ICE_BRAKE`
+ *     (`src/data/rules.js`) tulee `tools/measure-braking.mjs`:n jäätaulusta, ja
+ *     `checkIce` on se portti joka sitä vaatii.
+ *
+ * Tämä on kirjoitettu auki siksi että botin puolikas sanasto on kerran jo
+ * alkanut määrätä sisältöä (ks. astinkivi alempana). Toista kertaa ei tarvita
+ * sitä että joku lukee LÄPI-sarakkeen lupaukseksi jota se ei anna.
+ *
  * ## Astinkivi, ja miksi se on nyt tässä eikä puuttuvien listalla
  *
  * Tuolla listalla luki 10.8.2026 asti myös *"ei osaa hypätä kelluvalta lavalta

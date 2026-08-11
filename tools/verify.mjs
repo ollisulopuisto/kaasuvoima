@@ -11415,7 +11415,12 @@ const report = await page.evaluate(async () => {
         const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
         put(3, '              F     ');
         [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
-          put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+          /* Lankut eivät saa mennä päällekkäin, ja se on nyt sääntö eikä maku
+           * (`checkClimbTraverse`): jaettu sarake tarkoittaa saraketta jolla on
+           * jalansija joka askelmalla, eli kiipeilyn voi ratkaista hyppimällä
+           * paikallaan. Tämä koekenttä oli 7-T:n vian näköinen siihen asti kun
+           * sääntö kirjoitettiin ja kaatoi molemmat samalla lauseella. */
+          put(y, i % 2 === 0 ? '          --------- ' : ' ---------          ');
         });
         put(39, '     !              ');
         put(42, '  1                 ');
@@ -11473,6 +11478,7 @@ const report = await page.evaluate(async () => {
           input.held.left = want.left;
           input.held.right = want.right;
           input.held.jump = want.jump;
+          input.held.run = want.run;
           input.pressed.jump = want.press;
           s.update(input);
           if (!playing) continue;
@@ -11906,6 +11912,7 @@ const report = await page.evaluate(async () => {
             input.held.left = want.left;
             input.held.right = want.right;
             input.held.jump = want.jump;
+            input.held.run = want.run;
             input.pressed.jump = want.press;
             s.update(input);
             const feet = s.player.y + s.player.h;
@@ -13417,6 +13424,49 @@ const report = await page.evaluate(async () => {
         + `aavikon maa vs tiili ${sandGap.toFixed(1)} %`);
 
       /*
+       * JÄÄ, JA MIKSI SEN KYNNYS ON JOKA TEEMASSA EIKÄ YHDESSÄ.
+       *
+       * Juoksuhiekka on aavikon asia ja se mitataan aavikkoa vasten. Jää ei ole
+       * minkään maailman asia: se on laatta jonka saa ladota mihin tahansa, ja
+       * juuri se on koko syy siihen että se on laatta eikä teema. Siksi ehto on
+       * kaikki kahdeksan teemaa kertaa neljä naapuria, ja **huonoin luku on se
+       * joka ratkaisee**.
+       *
+       * Kynnys 17 % on sama luku ja sama perustelu kuin yön tiilellä: kaksi
+       * kertaa pelin heikoin selviytynyt pari. Se ei ole makuasia vaan
+       * kalibrointi jonka tämä tiedosto on jo kerran tehnyt.
+       *
+       * **Ja tämä testi löysi oikean vian.** Ensimmäinen jää oli vaaleansinistä
+       * ja mitattiin jäämaailman omaa maata vastaan **2,7 %** — huonompi kuin yön
+       * tiili ennen korjaustaan, ja tasan siinä maailmassa johon ensiesittely oli
+       * juuri sijoitettu. Silmällä katsottuna se näytti hyvältä. Toinen löytö oli
+       * pahempi ja tuli vasta kun halkeama otettiin mukaan: **jää vs. halkeama
+       * 14,8 %**, eli turvallinen laatta ja tappava laatta jakoivat saman
+       * vaalean yläreunan. Nykyinen turkoosi on kummankin mittauksen tulos.
+       */
+      const iceThemes = Object.keys(THEMES).map((theme) => {
+        const ice = meanOf(T.ICE, theme);
+        return {
+          theme,
+          ground: sep(ice, meanOf(T.GROUND, theme)),
+          hard: sep(ice, meanOf(T.HARD, theme)),
+          lava: sep(ice, meanOf(T.LAVA, theme)),
+          spike: sep(ice, meanOf(T.SPIKE, theme)),
+        };
+      });
+      const iceWorst = iceThemes.reduce((worst, t) => {
+        const low = Math.min(t.ground, t.hard, t.lava, t.spike);
+        return !worst || low < worst.low ? { theme: t.theme, low, t } : worst;
+      }, null);
+      expect('jää erottuu joka teemassa maasta, kovasta palikasta ja tappavista',
+        !!iceWorst && iceWorst.low >= 17,
+        iceWorst
+          ? `huonoin ${iceWorst.theme} ${iceWorst.low.toFixed(1)} %, kynnys 17 % — `
+            + `maa ${iceWorst.t.ground.toFixed(1)}, kova ${iceWorst.t.hard.toFixed(1)}, `
+            + `laava/halkeama ${iceWorst.t.lava.toFixed(1)}, piikki ${iceWorst.t.spike.toFixed(1)}`
+          : 'jäälaattaa ei saatu piirrettyä');
+
+      /*
        * Ja pilviteema on juuri se teema joka tämän testin kuuluisi kaataa.
        *
        * Valkoista valkoisella on koko maailman lähtökohta, ja se on samalla se
@@ -13603,7 +13653,11 @@ const report = await page.evaluate(async () => {
         sprites.drawBeanBomb(g, 20, 40, 12);
         check('beanbomb');
       }
-      for (const v of [0, 1, 2, 3, 4]) {
+      /* Kaikki seitsemän, ei viisi. Lista oli `[0,1,2,3,4]` siihen asti kun
+       * pomot piirrettiin uusiksi, eli sääherra ja kuningas — ne kaksi jotka
+       * tulivat viimeisenä ja joita kukaan ei ollut katsonut — olivat ainoat
+       * joiden piirtoa tämä ei koskaan ajanut. */
+      for (const v of [0, 1, 2, 3, 4, 5, 6]) {
         sprites.drawBoss(g, 20, 40, 12, 1, false, v, 1, 1);
         check(`boss ${v} spiny`);
       }
@@ -13618,6 +13672,63 @@ const report = await page.evaluate(async () => {
       }
       expect('drawing a sprite leaves the canvas state as it found it',
         leaks.length === 0, leaks.join(', '));
+
+      /*
+       * JOKAINEN POMO ON OMAN MUOTOINEN, JA SE MITATAAN VÄRIT POIS OTETTUINA.
+       *
+       * Pomot olivat vuoteen asti yksi piirros ja seitsemän väriä: sama neliöpää,
+       * sama silmäpari, sama suu, samat valkoiset kädet, ja erona hattu ja sävy.
+       * Sen huomasi vasta kun ne pani vierekkäin — eli juuri sellainen vika jota
+       * silmä ei löydä koodia lukemalla, ja jota mikään portti ei kysynyt.
+       *
+       * Väite on siksi **siluetista eikä väristä**: jokainen pomo piirretään
+       * läpinäkyvälle pohjalle, alfa pelkistetään maskiksi, ja jokainen pari
+       * verrataan leikkaus/yhdiste-suhteella. Väri ei osallistu mittaukseen
+       * lainkaan, koska väri on se puolustus jonka takana vanha muoto piileskeli
+       * — ja koska pelaaja lukee hahmon muodosta ennen kuin ehtii lukea sävyn.
+       *
+       * Kynnys 0,82. Mitattu pahin pari on nyrkkeilijä vs. pöhö **0,771**, eli
+       * varaa on 0,05; vanha jaettu vartalo olisi ollut lähellä ykköstä, joten
+       * tämä ei ole raja joka menee läpi vahingossa. Jos joku joskus piirtää
+       * kaksi pomoa samasta rungosta, tämä kaatuu ennen kuin se on kentässä.
+       */
+      {
+        const W = 40;
+        const H = 40;
+        const maskOf = (v) => {
+          const c = document.createElement('canvas');
+          c.width = W;
+          c.height = H;
+          const gg = c.getContext('2d');
+          sprites.drawBoss(gg, 4, 4, 12, 1, false, v, 1, 0);
+          const d = gg.getImageData(0, 0, W, H).data;
+          const m = new Uint8Array(W * H);
+          for (let i = 0; i < W * H; i++) m[i] = d[i * 4 + 3] > 8 ? 1 : 0;
+          return m;
+        };
+        const masks = [0, 1, 2, 3, 4, 5, 6].map(maskOf);
+        let worst = { a: -1, b: -1, iou: 0 };
+        for (let a = 0; a < masks.length; a++) {
+          for (let b = a + 1; b < masks.length; b++) {
+            let inter = 0;
+            let uni = 0;
+            for (let i = 0; i < W * H; i++) {
+              const x = masks[a][i];
+              const y = masks[b][i];
+              if (x && y) inter++;
+              if (x || y) uni++;
+            }
+            const iou = uni ? inter / uni : 1;
+            if (iou > worst.iou) worst = { a, b, iou };
+          }
+        }
+        const empty = masks.findIndex((m) => m.reduce((s, v) => s + v, 0) < 100);
+        expect('jokainen pomo on oman muotoinen, väri pois otettuna',
+          empty < 0 && worst.iou < 0.82,
+          empty >= 0
+            ? `pomo ${empty} on käytännössä tyhjä — piirto ei tuottanut siluettia`
+            : `pahin pari ${worst.a} vs ${worst.b}: ${worst.iou.toFixed(3)}, kynnys 0,82`);
+      }
     }
   }
 
@@ -17002,6 +17113,117 @@ const report = await page.evaluate(async () => {
 }
 /* ---- möykky kentissä: loppu ---- */
 
+/*
+ * JÄÄ MOOTTORISSA, JA SE SOLMU JOKA PITÄÄ SÄÄNNÖN TOTENA.
+ *
+ * `ICE_BRAKE` (`src/data/rules.js`) on luku joka on kopioitu mittauksesta:
+ * `tools/measure-braking.mjs` sanoo että jäällä vastaan kääntyminen syö
+ * P-nopeudesta 68 px eli 4,25 laattaa, ja sääntö pyöristää sen viiteen. Kopioitu
+ * luku on luku joka voi vanhentua, ja tämä on se tarkistus joka ei anna sen
+ * vanhentua hiljaa: jos joku säätää `SURFACES.ice.grip`iä, liukumatka muuttuu
+ * moottorissa ja `ICE_BRAKE` lakkaa kattamasta sitä — **ja silloin kaatuu tämä
+ * eikä kenttä.**
+ *
+ * Mitataan samalla runwaylla ja samalla vauhdinotolla kuin `measure-braking`,
+ * koska kaksi eri tapaa mitata sama asia on kaksi eri lukua odottamassa
+ * erkanemistaan. Voimataso 0, koska sillä on pienin kitka eli pisin liuku — se
+ * on se tapaus jota säännön on katettava.
+ */
+{
+  const ICE = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const game = window.sfb3;
+    game.finishLevel = () => {};
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const step = (s, i) => { s.update(i); i.pressed = blank(); };
+
+    /** Tasainen runway yhdestä merkistä, voimataso 0. */
+    const runway = (floor) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: null, level: 0 },
+        reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      const s = new LevelScene(game, '1-1');
+      for (let y = 0; y < s.h - 2; y++) s.grid[y] = s.grid[y].map(() => ' ');
+      for (let y = s.h - 2; y < s.h; y++) s.grid[y] = s.grid[y].map(() => floor);
+      s.entities = s.entities.filter((e) => e.kind === 'player');
+      s.goal = null;
+      s.time = 400;
+      return s;
+    };
+    /** Vauhtiin, sitten `action`, ja kuinka pitkälle se vielä vei. */
+    const brake = (floor, action, pSpeed) => {
+      const s = runway(floor);
+      const p = s.player;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) step(s, i);
+      i.held.right = true;
+      i.held.run = true;
+      for (let f = 0; f < (pSpeed ? 420 : 90); f++) step(s, i);
+      const v0 = p.vx;
+      const x0 = p.x;
+      i.held.right = false;
+      i.held.run = false;
+      if (action === 'reverse') i.held.left = true;
+      let f = 0;
+      while (p.vx > 0.0001 && f < 3000) { step(s, i); f++; }
+      return { v0: +v0.toFixed(2), px: Math.round(p.x - x0) };
+    };
+    return {
+      stoneRun: brake('#', 'release', false),
+      iceRun: brake('I', 'release', false),
+      iceReverseP: brake('I', 'reverse', true),
+      stoneReverseP: brake('#', 'reverse', true),
+    };
+  });
+
+  const { RULE_CONSTANTS } = await import('../src/data/rules.js');
+  const brakeTiles = ICE.iceReverseP.px / 16;
+
+  /* 1. Jää liu'uttaa oikeasti, eli laatta ei ole pelkkä kuva. */
+  const slides = ICE.iceRun.px > ICE.stoneRun.px * 1.5;
+  report.checks.push({
+    name: 'jäälaatta liu\'uttaa pelaajaa, kivilaatta ei',
+    ok: slides,
+    detail: `voimataso 0, juoksuvauhti ${ICE.iceRun.v0}: jäällä ${ICE.iceRun.px} px, `
+      + `kivellä ${ICE.stoneRun.px} px (${(ICE.iceRun.px / ICE.stoneRun.px).toFixed(1)}x)`,
+  });
+  if (!slides) report.failures.push('jäälaatan päällä liukuu yhtä vähän kuin kivellä');
+
+  /* 2. Ja se luku jonka validaattori uskoo, kattaa sen mitä moottori tekee. */
+  const covers = brakeTiles <= RULE_CONSTANTS.ICE_BRAKE;
+  report.checks.push({
+    name: 'ICE_BRAKE kattaa mitatun jarrutusmatkan jäällä',
+    ok: covers,
+    detail: `P-nopeudesta vastaan kääntyminen ${ICE.iceReverseP.px} px = `
+      + `${brakeTiles.toFixed(2)} laattaa, ICE_BRAKE ${RULE_CONSTANTS.ICE_BRAKE}`,
+  });
+  if (!covers) {
+    report.failures.push(`ICE_BRAKE ${RULE_CONSTANTS.ICE_BRAKE} on pienempi kuin mitattu `
+      + `${brakeTiles.toFixed(2)} laattaa — aja tools/measure-braking.mjs ja korjaa rules.js`);
+  }
+
+  /* 3. Kiihdytys ei ole jäällä eri — se on `SURFACES`in `grip`in koko rajaus, ja
+   *    se on se lause jonka varassa `tools/playable.mjs`:n todistus on. Mitataan
+   *    siitä päästä josta se näkyy: vauhdinoton jälkeen vauhdin on oltava sama. */
+  const sameSpeed = Math.abs(ICE.iceRun.v0 - ICE.stoneRun.v0) < 0.01;
+  report.checks.push({
+    name: 'jää ei hidasta kiihtymistä, vain pysähtymistä',
+    ok: sameSpeed,
+    detail: `90 framea oikeaa pohjassa: jäällä ${ICE.iceRun.v0}, kivellä ${ICE.stoneRun.v0}`,
+  });
+  if (!sameSpeed) {
+    report.failures.push('jää muuttaa kiihtyvyyttä — hyppybudjetti ja botin todistus '
+      + 'on mitoitettu sillä oletuksella ettei se muuta');
+  }
+}
+
 await browser.close();
 server.close();
 
@@ -17358,11 +17580,19 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
  *   EI SATUTA
  *     `solid` `semi` `breakable` `bumpable` `question` `note` `pipe` `warp`
  *     `climb` `coin` `goal` `door` `switch` — maastoa, palkintoja ja ovia.
- *     `crumble` on näistä ainoa jonka kohdalla on jotain sanottavaa: mureneva
- *     lauta ei satuta, se vie jalansijan — ja se hinta on jo mittarissa
- *     kuiluina ja tarkkuutena (`stands` ei lue sitä maaksi, `precision`
- *     kertoo sen 1,5:llä). Kahteen kertaan laskettu vaara on yhtä väärin kuin
- *     laskematta jätetty.
+ *     `crumble` ja `surface` ovat näistä ne joiden kohdalla on jotain
+ *     sanottavaa, ja sanottava on sama. Mureneva lauta ei satuta, se vie
+ *     jalansijan — ja se hinta on jo mittarissa kuiluina ja tarkkuutena
+ *     (`stands` ei lue sitä maaksi, `precision` kertoo sen 1,5:llä). Jää ei
+ *     satuta, se vie *tähtäyksen*, ja sekin hinta on jo tarkkuudessa
+ *     (`aimWidth` nostaa "riittävän leveän" jalansijan kolmesta laatasta
+ *     viiteen). Kahteen kertaan laskettu vaara on yhtä väärin kuin laskematta
+ *     jätetty.
+ *
+ *     Jää olisi vaaralistalla lisäksi mekaanisesti väärässä paikassa:
+ *     `HAZARD_COST` luetaan sarakkeen **pahimpana** (`Math.max`), joten jään ja
+ *     piikin jakava sarake hinnoittelisi vain piikin — eli jää olisi ilmaista
+ *     tasan siellä missä se maksaa eniten.
  *
  * **Ja luokittelu itse on portti.** Jos `TILE_INFO`iin ilmestyy lippu jota
  * kumpikaan lista ei tunne, tämä kaatuu ja kysyy kummalle listalle se kuuluu.
@@ -17389,7 +17619,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 
   const HURTS = ['hazard', 'quicksand', 'falls'];
   const HARMLESS = ['solid', 'semi', 'breakable', 'bumpable', 'question', 'note',
-    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door'];
+    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door', 'surface'];
 
   /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
   const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]
@@ -17793,6 +18023,96 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   }
 
   /*
+   * JÄÄ, JA SE MITÄ SEN SÄÄNTÖ EI SANO.
+   *
+   * `checkIce` on tarkoituksella kapea: yksi asetelma, ei reunasääntöä. Kapea
+   * sääntö on helppo koetella väärin — jos testataan vain että se laukeaa, ei
+   * ole mitattu mitään siitä ettei se laukea joka paikassa. Siksi tässä on
+   * kolme koetta eikä yksi, ja keskimmäinen on se tärkein:
+   *
+   *   1. tavallinen jäätasanko kiinteän maan päällä on puhdas
+   *   2. **riittävän leveä kelluva jäälautta on puhdas** — eli sääntö ei ole
+   *      "jää kuilun päällä on kielletty" vaan "sen päällä on mahduttava
+   *      pysähtymään", ja se ero on koko sääntö
+   *   3. liian kapea kelluva jäälautta raportoidaan
+   */
+  {
+    const iceFix = (over = {}) => {
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+      const put = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
+      put(9, '      !');
+      put(12, '  1                         F   ');
+      put(13, '#########IIIIIIII###############');
+      put(14, '################################');
+      for (const [y, s] of Object.entries(over)) put(Number(y), s);
+      return rows;
+    };
+    const iceProblems = (list) => list.filter((p) => /ice island/i.test(p));
+
+    const flat = validateLevel(iceFix(), budget);
+    report.checks.push({
+      name: 'jäätasanko kiinteän maan päällä ei ole validaattorille ongelma',
+      ok: flat.length === 0,
+      detail: flat.length ? flat.join('; ') : '32 saraketta, 8 laattaa jäätä, ei huomautuksia',
+    });
+    if (flat.length) report.failures.push(...flat.map((p) => `jääkoekenttä: ${p}`));
+
+    /* Viiden laatan lautta kuilun päällä: tasan `ICE_BRAKE`, eli se saa mennä
+     * läpi. Jos tämä alkaa raportoida, sääntö on lakannut olemasta mitta ja
+     * muuttunut kielloksi. */
+    const wideRaft = validateLevel(iceFix({
+      13: '######   IIIII   ###############',
+      14: '######   #####   ###############',
+    }), budget);
+    report.checks.push({
+      name: 'kyllin leveä kelluva jäälautta kelpaa — sääntö on mitta eikä kielto',
+      ok: iceProblems(wideRaft).length === 0,
+      detail: iceProblems(wideRaft)[0]
+        || `5 laattaa jäätä kuilun päällä, ICE_BRAKE ${RULE_CONSTANTS.ICE_BRAKE} — ei huomautusta`,
+    });
+    if (iceProblems(wideRaft).length) {
+      report.failures.push('validaattori hylkää jäälautan joka on kyllin leveä pysähtyä');
+    }
+
+    /* Kolmen laatan lautta: sille laskeudutaan kaaressa eikä sen päällä ehdi
+     * pysähtyä, ja se on tasan se asetelma jota mikään muu sääntö ei näe. */
+    const narrowRaft = validateLevel(iceFix({
+      13: '######   III     ###############',
+      14: '######   ###     ###############',
+    }), budget);
+    report.checks.push({
+      name: 'liian kapea kelluva jäälautta raportoidaan',
+      ok: iceProblems(narrowRaft).length > 0,
+      detail: iceProblems(narrowRaft)[0]
+        || `ei huomautusta (${narrowRaft.join('; ') || 'ei mitään'})`,
+    });
+    if (!iceProblems(narrowRaft).length) {
+      report.failures.push('validaattori siunaa jäälautan jolta liu\'utaan kuiluun');
+    }
+
+    /* Ja sama koe kuin hiekalla ja piikkikävelijällä: uhka jota mittari ei näe
+     * on uhka joka vääristää maailman käyrän. Jään hinta on tarkkuudessa, joten
+     * vertailukenttä on sama tasanko kivenä. */
+    const withIce = scoreRows(iceFix({
+      13: '######   IIIII   ###############',
+      14: '######   #####   ###############',
+    }));
+    const withoutIce = scoreRows(iceFix({
+      13: '######   #####   ###############',
+      14: '######   #####   ###############',
+    }));
+    report.checks.push({
+      name: 'vaikeusmittari näkee jään',
+      ok: withIce > withoutIce + 0.5,
+      detail: `sama lautta jäänä ${withIce.toFixed(1)}, kivenä ${withoutIce.toFixed(1)} `
+        + `(+${(withIce - withoutIce).toFixed(1)})`,
+    });
+    if (!(withIce > withoutIce + 0.5)) {
+      report.failures.push('vaikeusmittari pisteyttää jään nollaksi');
+    }
+  }
+
+  /*
    * PYSTYKENTTÄ, JA KOLME TYÖKALUA JOTKA EIVÄT TIENNEET ETTÄ YLÖS ON SUUNTA.
    *
    * Sama kuria kuin hiekalla yllä: yksi koekenttä, yksi vika kerrallaan, ja
@@ -17818,7 +18138,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
       const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
       put(3, '              F     ');
       [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
-        put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+        /* Ei jaettua saraketta, ks. `checkClimbTraverse`. Tämä koekenttä oli
+         * kirjoitettu samalla päällekkäisellä lankulla kuin 7-T, ja kun sääntö
+         * tuli, se kaatoi molemmat — mikä on juuri se mitä koekentän kuuluu
+         * tehdä: se on kelvollisen kiipeilyn määritelmä, joten sen on täytettävä
+         * jokainen sääntö jonka kelvollisen kiipeilyn on täytettävä. */
+        put(y, i % 2 === 0 ? '          --------- ' : ' ---------          ');
       });
       put(39, '     !              ');
       put(42, '  1                 ');

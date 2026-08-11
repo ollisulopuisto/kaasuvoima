@@ -1290,7 +1290,7 @@ export function buildLevel({
  *
  * Päivän pierun sormenjälki laskettiin uudestaan tämän jälkeen ja se on sama.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 /*
  * Juoksuhiekka, and it is here for the reason the comment above gives about
  * `SOLID`: `canonOurs` below folds every character it does not recognise into

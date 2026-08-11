@@ -76,7 +76,7 @@ export const WORLD3_LEVELS = {
   '3-1': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
-      'start', 'spike_walk', 'power', 'walkers', 'ice_pit', 'qrow',
+      'start', 'spike_walk', 'power', 'ice_first', 'walkers', 'ice_pit', 'qrow',
       'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
       'spikes', 'ice_star', 'cork_gap', 'sky_run', 'pit_plat', 'power_hi',
       'plat_steps', 'steps_up', 'run_up', 'goal', 'goal_end',

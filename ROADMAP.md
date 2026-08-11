@@ -761,6 +761,7 @@ kertoo että emergentit lopputulokset ovat sen mittauksen ulkopuolella.
 | laki | mitä muuttuu |
 | --- | --- |
 | jää on liukas kaikille | maailman 3 kitka koskee myös kävelijää ja kuorta |
+| ↑ **täydennetty 10.8.2026** | ks. alla: *jää on nyt laatta* |
 | murenevat lavat murenevat vihollisen alta | luumaailman lankku ei enää kanna ketä tahansa |
 | tuuli kantaa kuoria ja vihollisia | pilvimaailman tuuli koskee kaikkea |
 | potkaistu kuori tappaa sen mihin osuu | puhdas olio ↔ olio, ei maastoa |
@@ -769,6 +770,49 @@ kertoo että emergentit lopputulokset ovat sen mittauksen ulkopuolella.
 Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa
 vihollisen alta eikä palaa olisi olio joka muokkaa kenttää, ja silloin reitti
 voisi kadota. Palautuvana se on tilapäinen tapahtuma staattisessa kentässä.
+
+### Löydetty 10.8.2026: pystykentän portit todistivat väärää asiaa (v26.08.10.69)
+
+Molemmat pystykentät olivat ratkaistavissa **liikkumatta sivuun** — 6-K
+putoamalla yhtä avointa saraketta, 7-T hyppimällä paikallaan päällekkäisten
+lankkujen sarakkeessa — ja 6-K oli lisäksi voimatasolla 3–5 läpäisemätön, koska
+sen ainoa reitti alas oli yhden laatan levyinen ja levein keho on 21 px.
+
+Kaksi uutta sääntöä (`checkClimbTraverse`, `checkClimbWidth`) kattaa molemmat, ja
+ne kaatoivat kolme kenttää samalla lauseella — myös `verify.mjs`:n oman
+koekentän. **Kiipeilybotti oli kuitenkin läpäissyt kentät täsmälleen niillä
+vioilla:** se ei osannut astua reiästä alas, hypätä sivuun ylöspäin eikä väistää
+piikkejä, joten se tarvitsi avoimen sarakkeen, päällekkäiset lankut ja piikittömän
+kävelylinjan. Kaikki kolme korjattiin bottiin eikä kenttiin.
+
+**Jäljelle jäi tiedossa oleva rajaus:** `measureClimb` hinnoittelee nousut myös
+laskeutuvassa kentässä, eli se mittaa kiipeämistä jota kukaan ei tee. 6-K
+pidettiin neljän rivin kerroksissa osittain siksi, ja se on kierto eikä korjaus —
+oikea korjaus on mitata laskeutuminen laskeutumisena.
+
+### Päätetty 10.8.2026: jää on laatta eikä teema (v26.08.10.68)
+
+Laki 1 kuului *"jää on liukas kaikille"* ja se oli tosi puolittain: pelaaja ei
+lukenut `SURFACES`ia lainkaan, joten maailma 3 oli liukas vain vihollisille.
+Vaihtoehtoja oli kaksi ja ne erosivat hinnaltaan, eivät vaikeudeltaan:
+
+- **teemana** — pelaaja lukee teeman kuten vihollinen. Yksi rivi, ja maailman 3
+  kahdeksan kenttää muuttuu kerralla. Ne on mitoitettu tavallisen kitkan varaan,
+  joten se olisi ollut kahdeksan kentän uudelleensäätö yhdessä committissa.
+- **laattana** — `T.ICE`, jonka saa ladota mihin tahansa. Enemmän koneistoa,
+  mutta se ei muuta yhtäkään olemassa olevaa kenttää ennen kuin jäätä ladotaan
+  jonnekin, ja se kantaa maailmaa 3 pidemmälle.
+
+**Valittiin laatta.** Koneisto on sama muoto kuin juoksuhiekalla ja möykyllä:
+laatta, sääntö (`checkIce`), hinta mittarissa (`precision`in toinen kynnys),
+opetuspaikka opetussuunnitelmassa. Teema jäi voimaan vihollisille, koska ne on
+mitattu sen kanssa — mitattu käytös ei muutu vahingossa kumpaankaan suuntaan.
+
+**Yhä tekemättä ja tahallaan:** maailmaa 3 ei ole jäädytetty. `ice_crumble`,
+`ice_pit` ja `ice_twin` on kirjoitettu ikään kuin lattia olisi liukas, mikä ei
+ole koskaan ollut pelaajalle totta — ja niiden luvut on mitoitettu tavallisen
+maan liu'ulle, joten jään latominen niihin on eri työ ja mitattava erikseen.
+Nyt se voidaan tehdä yksi kenttä kerrallaan, mikä oli koko syy valita laatta.
 
 ### Päätetty 10.8.2026: kaistan vilkaisu on katsomista, ei kulkemista
 
