@@ -68,6 +68,19 @@ export const Save = {
     }
   },
 
+  /*
+   * Kenttälista on käsin kirjoitettu, ja se on tämän tiedoston ansa.
+   *
+   * `doors` lisättiin `DEFAULT_SAVE`en muttei tänne, ja seuraus oli että ovi
+   * toimi istunnon sisällä ja katosi jokaisesta latauksesta — eli ominaisuus
+   * oli olemassa vain niin kauan kuin kukaan ei sulkenut välilehteä. Sama laji
+   * vikaa kuin `verify.mjs`:n `reset()`issa: kaksi paikkaa jotka kuvaavat
+   * samaa muotoa, ja vain toinen päivittyy.
+   *
+   * Portti vaatii nyt että jokainen `DEFAULT_SAVE`n avain selviää kierroksesta
+   * `write` → `load`, joten seuraava lisäys kaatuu tähän eikä pelaajan
+   * tallennukseen.
+   */
   write(state) {
     try {
       localStorage.setItem(KEY, JSON.stringify({
@@ -84,6 +97,7 @@ export const Save = {
         continues: state.continues || 0,
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
+        doors: state.doors || {},
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */

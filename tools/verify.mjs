@@ -83,7 +83,7 @@ const report = await page.evaluate(async () => {
   const { LevelScene } = await import('/src/scenes/level.js');
   const { PLAYER_SIZES, FLOOR_REACH } = await import('/src/gfx/sprites.js');
   const { isSolid, isSemi } = await import('/src/gfx/tiles.js');
-  const { levelIds } = await import('/src/data/levels.js');
+  const { levelIds, getLevel: getLevelDef } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
   const { WORLDS } = await import('/src/data/worlds.js');
   const { DEFAULT_SAVE } = await import('/src/core/save.js');
@@ -6923,7 +6923,14 @@ const report = await page.evaluate(async () => {
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
-    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F', '7-F'];
+    /* Luettu kenttädatasta eikä kirjoitettu tähän. Käsin kirjoitettuna se
+     * pysähtyi 7-F:ään, joten maailman 8 seitsemän pomokenttää olivat jokaisen
+     * pomoportin ulkopuolella — ja juuri sinne jäi kaksi pomoa jotka kasvoivat
+     * kannettoman areenan sisällä. Kuudes kerta tässä erässä sille että portin
+     * oma kopio jostain luettavasta vanhenee. */
+    const BOSS_LEVELS = levelIds().filter((id) => {
+      try { return !!getLevelDef(id).boss; } catch { return false; }
+    });
 
     const arena = (power) => {
       reset(power);
@@ -7127,16 +7134,18 @@ const report = await page.evaluate(async () => {
      * portti kieltää korkealta pomolta.
      */
     const deckAbove = (scene, boss) => {
+      /* **Lankku, ei seinä.** Ensimmäinen versio hyväksyi minkä tahansa
+       * kiinteän ruudun, ja areenan reunapilarit (`XX`) ovat kiinteitä — joten
+       * portti löysi "kannen" jokaisesta areenasta ja hyväksyi myös sellaiset
+       * joissa kantta ei ole. `isSemi` on se mitä kansi oikeasti on:
+       * yksisuuntainen taso jolle pudotaan ylhäältä. */
       const col = Math.floor(boss.cx / 16);
-      let best = null;
       for (let row = 2; row < 13; row++) {
-        for (let c = Math.max(0, col - 14); c < Math.min(scene.w, col + 15); c++) {
-          const ch = scene.tileAt(c, row);
-          if (isSolid(ch) || isSemi(ch)) { best = best === null ? row * 16 : best; break; }
+        for (let c = Math.max(0, col - 16); c < Math.min(scene.w, col + 17); c++) {
+          if (isSemi(scene.tileAt(c, row))) return { y: row * 16, col: c };
         }
-        if (best !== null) break;
       }
-      return best;
+      return null;
     };
 
     /*
@@ -7162,11 +7171,11 @@ const report = await page.evaluate(async () => {
         const idle = mkInput();
         for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s2.update(idle);
         if (boss.h <= FLOOR_REACH) continue;
-        const deckY = deckAbove(s2, boss);
-        if (deckY === null) { bad.push(`${id}: ${boss.h} px korkea eikä kantta`); continue; }
-        if (deckY > boss.y) bad.push(`${id}: kansi ${deckY} on pään (${Math.round(boss.y)}) alapuolella`);
+        const deck = deckAbove(s2, boss);
+        if (!deck) { bad.push(`${id}: ${boss.h} px korkea eikä kantta`); continue; }
+        if (deck.y > boss.y) bad.push(`${id}: kansi ${deck.y} on pään (${Math.round(boss.y)}) alapuolella`);
         // Reachable: a stack of standing jumps from the floor, 64 px a step.
-        const rise = 208 - deckY;
+        const rise = 208 - deck.y;
         if (rise > 64 * 2) bad.push(`${id}: kansi ${rise} px lattiasta, yli kahden askelman`);
       }
       expect('jokainen lattiaa korkeampi pomo tappelee areenassa jossa on kansi',
@@ -7478,9 +7487,13 @@ const report = await page.evaluate(async () => {
        */
       const tall = boss.h > FLOOR_REACH;
       if (tall) {
-        const deckY = deckAbove(s, boss);
-        p.y = deckY - p.h;
-        p.x = boss.cx - (boss.w / 2 + 40);
+        /* Kannen **päälle**, sen omaan sarakkeeseen. Ensimmäinen versio asetti
+         * pelaajan pomon viereen kannen korkeudelle, eli ilmaan jossa kantta ei
+         * ole — sama vika kuin kiipeilyaskelmakokeessa, ja kolmas kerta tässä
+         * erässä. */
+        const deck = deckAbove(s, boss);
+        p.x = deck.col * 16 + 2;
+        p.y = deck.y - p.h;
       } else {
         p.y = boss.y + boss.h - p.h;
         p.x = boss.cx - (clearance + 50);
@@ -14331,6 +14344,30 @@ const report = await page.evaluate(async () => {
       `tavallinen [${menu.normal}], aika-ajo [${menu.attack}]`);
   }
 
+  /*
+   * JOKAINEN TALLENNETTAVA KENTTÄ SELVIÄÄ KIERROKSESTA write -> load.
+   *
+   * `Save.write` luettelee kentät käsin, ja `doors` lisättiin `DEFAULT_SAVE`en
+   * muttei sinne. Ovi toimi siis istunnon sisällä ja katosi jokaisesta
+   * latauksesta — ominaisuus joka on olemassa vain kunnes välilehti suljetaan,
+   * eikä mikään sanonut mitään.
+   *
+   * Tämä on **kuudes kerta tässä erässä** samalle vialle: kaksi paikkaa jotka
+   * kuvaavat samaa muotoa, ja vain toinen päivittyy. Portti vertaa nyt
+   * avainjoukkoja, joten seuraava lisäys kaatuu tähän eikä pelaajan
+   * tallennukseen.
+   */
+  {
+    const { Save } = await import('/src/core/save.js');
+    const want = DEFAULT_SAVE();
+    Save.write({ ...want, doors: { '3-F': true }, secrets: { '1-1': ['a'] } });
+    const back = Save.load();
+    const roundTrip = Object.keys(want).filter((k) => back[k] === undefined);
+    expect('jokainen tallennuksen kenttä selviää kierroksesta write -> load',
+      roundTrip.length === 0,
+      roundTrip.length ? `katosi: ${roundTrip.join(', ')}` : 'kaikki kentät');
+  }
+
   /* ---- kamera ja äänten merkitykset ---- */
   /*
    * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.
@@ -16503,7 +16540,7 @@ const report = await page.evaluate(async () => {
     const rows = await page.evaluate(async () => {
       const { LevelScene } = await import('/src/scenes/level.js');
       const { isSolid } = await import('/src/gfx/tiles.js');
-      const { levelIds } = await import('/src/data/levels.js');
+      const { levelIds, getLevel: getLevelDef } = await import('/src/data/levels.js');
       const { runGround } = await import('/tools/level-bot.js');
       const { isClimb } = await import('/tools/climb-bot.js');
       const game = window.sfb3;

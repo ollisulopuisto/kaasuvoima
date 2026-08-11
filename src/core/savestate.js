@@ -146,6 +146,13 @@ export function restoreState(game, snap) {
   const data = snap.level;
   scene.grid = data.grid.map((row) => row.split(''));
   scene.entities = data.entities.map((e) => entityFromJSON(scene, e)).filter(Boolean);
+  /* Osioidussa kentässä `vertical` on muuttuva eikä kentän ominaisuus, joten
+   * se on johdettava takaisin sijainnista. Ilman tätä lataus pystyosion
+   * sisällä korjaisi itsensä vasta laukaisemalla turhan 60 framen
+   * sivunvaihdon — eli kuva nykäisisi ilman että mitään tapahtui. */
+  if (scene.segments && scene.player) {
+    scene.vertical = !!scene.segmentAt(Math.floor(scene.player.cx / 16)).vertical;
+  }
   scene.player = entityFromJSON(scene, data.player);
   scene.cam = { ...data.cam };
   // An older snapshot has no page line; the view it was taken at is the honest

@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.80 — katselmointi löysi kaksi asiaa jotka olisivat menneet tuotantoon
+
+### Ovi ei tallentunut lainkaan
+
+`doors` lisättiin `DEFAULT_SAVE`en muttei `Save.write`in käsin kirjoitettuun
+kenttälistaan. Ovi toimi siis istunnon sisällä ja katosi jokaisesta
+latauksesta — ominaisuus joka on olemassa vain kunnes välilehti suljetaan.
+
+**Kuudes kerta tässä erässä samalle vialle:** kaksi paikkaa jotka kuvaavat
+samaa muotoa, ja vain toinen päivittyy. Portti vertaa nyt `DEFAULT_SAVE`n
+avaimia siihen mitä `write` → `load` palauttaa.
+
+### Ja kaksi pomoa kasvoi kannettoman areenan sisällä
+
+Korkeudet nostettiin varianteille 1 ja 5 olettaen että ne tappelevat
+`boss_arena_big`issa. Maailmassa 8 on **jokainen pomo**, ja `8-2` (variantti 1)
+ja `8-7` (variantti 5) käyttivät kannetonta `boss_arena`a. Ne olisivat olleet
+voittamattomia voimatasolla 0.
+
+Portti ei nähnyt sitä, koska `BOSS_LEVELS` oli käsin kirjoitettu lista joka
+pysähtyi `7-F`:ään — eli maailman 8 seitsemän pomokenttää olivat jokaisen
+pomoportin ulkopuolella. Lista luetaan nyt kenttädatasta.
+
+8-7:n pituus piti kompensoida kahdella lisäpalikalla, koska isompi areena
+laimensi sen alle 8-6:n ja teki maailmaan kolmannen notkon. Ensimmäinen yritys
+**poisti** palikan ja laski vaikeutta lisää — `fort_gap` on kuilu, eli vaikea.
+
+### Neljä pienempää
+
+- **Ovi ei ollut linnakekohtainen** vaan `def.boss`-kohtainen, ja maailmassa 8
+  jokainen kenttä on pomokenttä: ovi olisi ohittanut ~144 saraketta tavallista
+  kenttää. Ehto on nyt linnaketunnus.
+- **Ovi ei ollut poissa aika-ajosta.** Uusinta olisi alkanut pomon vierestä ja
+  kirjoittanut kentän rehellisen ennätyksen yli kymmenen sekunnin ajalla.
+- **`deckAbove` hyväksyi areenan seinäpilarit kanneksi**, joten kansiportti
+  löysi "kannen" myös sieltä missä kantta ei ole. Kansi on `isSemi`, ei mikä
+  tahansa kiinteä ruutu — ja korkean pomon talloportti asetti pelaajan
+  kannen korkeudelle *pomon viereen*, eli ilmaan. Kolmas kerta tässä erässä
+  sille että itse asetettu koe asettaa kappaleen paikkaan jota ei ole.
+- **Taukovalikko luki tallennuspaikan joka framella** (`readSlot` jäsentää koko
+  tilannekuvan) yhden `(TYHJÄ)`-sulkulausekkeen takia, ja **kursori muisti
+  valintansa**: START+hyppy olisi ollut vahvistamaton pikalataus.
+
+---
+
 ## v26.08.11.79 — kamera osaa kääntyä, ja käänne on sivunvaihdon lyönti
 
 Kysymys oli kentästä jossa mennään vuorotellen oikealle ja ylös. Se ei ole

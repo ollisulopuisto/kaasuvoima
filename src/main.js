@@ -793,6 +793,10 @@ class Game {
     if (pausable && Input.pressed.start) {
       Input.consume('start');
       this.paused = !this.paused;
+      /* Kursori alkaa aina JATKAsta. Muistettu LATAA tekisi START+hypystä
+       * vahvistamattoman ja tuhoavan pikalatauksen. */
+      this.pauseIndex = 0;
+      this.pauseSlotFilled = this.paused ? !!readSlot(this.slot) : false;
       Sfx.play('cursor');
     }
     /* Kello käy taukovalikossa, ja tämä rivi on koko toteutus: kohtaus ei
@@ -827,7 +831,10 @@ class Game {
     const items = [{ id: 'resume', label: 'JATKA' }];
     if (!this.timeAttack) {
       items.push({ id: 'save', label: 'TALLENNA' });
-      items.push({ id: 'load', label: `LATAA${readSlot(this.slot) ? '' : ' (TYHJÄ)'}` });
+      /* Luettu kerran taukoa avattaessa eikä joka framella: `readSlot`
+       * jäsentää koko tilannekuvan, ja `render` kutsuu tätä 60 kertaa
+       * sekunnissa yhden sulkulausekkeen takia. */
+      items.push({ id: 'load', label: `LATAA${this.pauseSlotFilled ? '' : ' (TYHJÄ)'}` });
       items.push({ id: 'slot', label: `PAIKKA ${this.slot}` });
     }
     return items;
@@ -854,6 +861,7 @@ class Game {
     if (pick === 'slot') {
       this.slot = (this.slot % SLOT_COUNT) + 1;
       this.toast(`TALLENNUSPAIKKA ${this.slot}`);
+      this.pauseSlotFilled = !!readSlot(this.slot);
       Sfx.play('cursor');
     }
   }

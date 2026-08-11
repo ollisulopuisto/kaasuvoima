@@ -923,7 +923,10 @@ export class LevelScene {
      * `vertical` pysyy tavallisena kenttänä koska koko muu tiedosto lukee
      * sitä; osioitu kenttä vain kirjoittaa sen uudelleen rajan ylittyessä.
      */
-    this.segments = Array.isArray(this.def.segments) ? this.def.segments : null;
+    /* Tyhjä lista ei ole osiointi: `Array.isArray([])` on tosi, ja
+     * `segments[0].vertical` kaatuisi siihen. */
+    this.segments = Array.isArray(this.def.segments) && this.def.segments.length
+      ? this.def.segments : null;
     this.vertical = this.segments ? !!this.segments[0].vertical : !!this.def.vertical;
     /** Frames a page takes, 0 for a cut. See CAM_PAGE_FRAMES. */
     this.camPageFrames = CAM_PAGE_FRAMES;
@@ -977,7 +980,21 @@ export class LevelScene {
      * kenttää. Aika-ajo ei siis muutu, koska se mittaa yhtä yhtäjaksoista
      * juoksua eikä sitä montako kertaa siihen on yritetty.
      */
-    this.arenaCol = this.def.boss ? arenaColumn(this.def) : null;
+    /*
+     * Vain linnake, ja vain kun kelloa ei mitata.
+     *
+     * `def.boss` ei ole "linnake": maailmassa 8 **jokainen** kenttä 8-1…8-7 on
+     * pomokenttä, ja ovi olisi ohittanut niistä ~144 saraketta tavallista
+     * kenttää. Perustelu koski linnakkeen toistuvaa käytävää, ei jokaista
+     * kenttää jossa sattuu olemaan pomo, joten ehto on linnaketunnus.
+     *
+     * Ja aika-ajossa ovea ei ole lainkaan: uusinta alkaisi pomon vierestä,
+     * `startRace` ankkuroisi lähdön sinne ja `recordRace` kirjoittaisi kentän
+     * rehellisen ennätyksen yli kymmenen sekunnin ajalla. Sama päätös kuin
+     * taukovalikon tallennuksella, ja samasta syystä.
+     */
+    const fortress = this.def.boss && /-F$/.test(levelId);
+    this.arenaCol = fortress && !game.timeAttack ? arenaColumn(this.def) : null;
     /* `arenaReached` eikä `doorOpen`: `doorOpen` on jo varattu, ja se tarkoittaa
      * *uloskäyntiä* joka aukeaa pomon kaaduttua. Kaksi eri ovea. */
     this.arenaReached = this.arenaCol !== null
