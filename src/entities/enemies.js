@@ -1795,7 +1795,10 @@ export class Boss extends Enemy {
     this.active = true;
     /* Per boss, from the drawing's own table: the picture decides how big the
      * thing is and the hitbox follows, never the other way round. See
-     * `BOSS_SIZES` for why 64 px is the ceiling. */
+     * `BOSS_SIZES` for why **52 px** is the height ceiling — 64 was the number
+     * in the first draft, and it is in that table as one of the two heights
+     * that *failed* the power-0 stomp gate. A comment quoting a rejected draft
+     * next to the constant that rejected it is worse than no comment. */
     this.baseW = bossSize(variant).w;
     this.baseH = bossSize(variant).h;
     this.spawnX = x;
@@ -1904,6 +1907,21 @@ export class Boss extends Enemy {
         this.level.spawnPuff(tx * TILE + TILE / 2, (ty + 1) * TILE + 2);
       }
     }
+  }
+
+  /**
+   * Koko luetaan uudelleen `BOSS_SIZES`ista pikatallennusta purettaessa.
+   *
+   * Osumalaatikko on johdettu piirroksesta, ei tallennettu tosiasia: sama
+   * sääntö kuin konstruktorissa, ja tässä se on se sääntö joka pitää vanhan
+   * tallennuksen kelvollisena kun taulukko muuttuu. `applyScale` säilyttää
+   * jalkojen tason ja keskilinjan, joten pomo ei hyppää palautuksessa.
+   */
+  rehydrate() {
+    const size = bossSize(this.variant);
+    this.baseW = size.w;
+    this.baseH = size.h;
+    this.applyScale();
   }
 
   applyScale() {

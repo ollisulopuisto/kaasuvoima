@@ -7,6 +7,46 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.72 — katselmointi löysi vanhentuvan pikatallennuksen
+
+Erän katselmointi, ja se löysi neljä asiaa joista kolme olivat omia ja yksi
+vanha. Kaikki neljä oli helppo tarkistaa mittaamalla, ja kaksi niistä ei ollut
+sitä miltä ne ensin näyttivät.
+
+### Vanha pikatallennus toi takaisin vanhan osumalaatikon
+
+Tämä on niistä ainoa oikea vika. `entityToJSON` kopioi jokaisen oman kentän ja
+`entityFromJSON` herättää olion **ilman konstruktoria**, joten tallennettu
+`w/h/baseW/baseH` palasi sellaisenaan. Niin kauan kuin `BOSS_SIZES` ei
+muuttunut, se oli sama asia — ja tässä erässä se muuttui. Ennen päivitystä
+otettu pikatallennus herätti pomon **vanhalla osumalaatikolla uuden piirroksen
+alla**: 36x52 luuranko jonka päätä ei voi tallata. Tallennusversio on yhä
+`v: 1`, joten mikään ei hylännyt sitä.
+
+Korjaus ei ole version nosto — se heittäisi pelaajien pikatallennukset menemään
+— vaan `rehydrate()`: olio kertoo mikä sen tilasta on **johdettua** ja johtaa
+sen uudelleen purettaessa. Osumalaatikko on johdettu piirroksesta, ei
+tallennettu tosiasia.
+
+**Ja ensimmäinen testi tästä oli väärin.** Se vaihtoi tallennukseen vanhan
+korkeuden mutta jätti uuden `y`:n, eli väärensi tilan jota ei ole koskaan ollut
+olemassa, ja kaatui siihen eikä korjaukseen. Uskottava väärennös on
+johdonmukainen: vanha korkeus *ja* sitä vastaava `y`, jalat samalla lattialla.
+
+### Kolme kirjanpitovirhettä
+
+- Portin loppubanneri sanoi yhä `Super Fart Bros 3 — verify`. Nimenvaihdon
+  haku oli rajattu `src/`:ään eikä kattanut `tools/`:ia.
+- `Boss`-konstruktorin kommentti sanoi että **64 px on katto**, vaikka
+  `BOSS_SIZES` sanoo 52 ja kirjaa 64:n yhdeksi niistä kahdesta korkeudesta
+  jotka *kaatuivat* portista. Hylättyä luonnosta lainaava kommentti sen vakion
+  vieressä joka hylkäsi sen on huonompi kuin ei kommenttia lainkaan.
+- ROADMAP väitti että `w / 2 + 25 + h` palauttaa vanhat luvut 30x32:lla. Ei
+  palauta: 15 + 25 + 32 = 72 vanhan vakion 40 sijaan. Testi menee silti läpi,
+  mutta *"tämä ei muuta vanhaa käytöstä"* on eri väite kuin *"tämä toimii"*.
+
+---
+
 ## v26.08.11.71 — pomot piirrettiin siluetti edellä, ja viisi seitsemästä oli päätöntä
 
 Omistaja katsoi kokoja ja sanoi että mittasuhteet ovat yhä pielessä, ja pyysi

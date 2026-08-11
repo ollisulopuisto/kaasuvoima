@@ -798,6 +798,38 @@ erillistä havaintoa samasta asiasta, kaikki säilytettäviä:
 Siluettiportin marginaali kapeni 0,771:stä 0,802:een (kynnys 0,82). Se pitää,
 mutta se on ohut, ja seuraava pomomuutos mittaa sen ensimmäisenä.
 
+### Löydetty 11.8.2026: jättiläinen täyttää oman kiipeilyaskelmansa (ei korjattu)
+
+Katselmoinnissa löytynyt, mitattu molemmilta puolilta ja **jätetty tähän
+kirjatuksi eikä korjatuksi**, koska se ei ole tämän erän aiheuttama.
+
+`boss_arena_big`in rivin 9 lankut ovat askelma rivin 6 kannelle. Kun pöhö on
+kasvanut kyllin isoksi, hän täyttää sen askelman, ja sillä seisova pelaaja
+**ottaa osuman** sen sijaan että talloisi:
+
+| scale | main (30x32 pohja) | tämä haara (40x40 pohja) |
+| --- | --- | --- |
+| 1 | turvassa | tallaa |
+| 1,5–2 | tallaa | **2: osuma** |
+| 2,5–3 | **osuma** | **osuma** |
+
+Eli vika on olemassa jo `main`issa scale 2,5:stä ylöspäin; uudet koot siirtävät
+rajan yhden kasvuaskelen aikaisemmaksi. **Rivin 6 kansi on turvassa joka
+koolla** molemmilla puolilla, eli se reitti johon suunnittelu nojaa (kaksi
+viimeistä osumaa tulevat kannelta) toimii. Askelma on silti se jota pitkin
+kannelle noustaan, joten se on korjattava — oikea korjaus on joko siirtää
+askelma ulommas jättiläisen leveydestä tai antaa sille oma korkeus, ja
+kummassakin tapauksessa portin on mitattava *seisominen* eikä vain pudotus:
+nykyinen kansiportti pudottaa pelaajan framella 1 eikä siksi näe tätä.
+
+### Tiedossa: puhetesti on ajoittain epävakaa
+
+`a spoken line is loud enough to hear` kaatui kerran lukemalla ääni 0.000,
+tausta 0.000, ja meni läpi heti seuraavalla ajolla lukemalla 0.566. Mittaus on
+aikariippuvainen eikä liity muutoksiin sen ympärillä. Ei korjattu, mutta
+kirjattu, koska satunnaisesti kaatuva portti on portti jonka lopettaa
+lukemasta.
+
 ### Löydetty 11.8.2026: talloportti mittasi hyppyä vain leveydestä (v26.08.11.70)
 
 Pomokoot kaatoivat seitsemän linnaketta kahdeksasta testissä *"voimatason 0
@@ -811,7 +843,14 @@ ulkopuolelle — 7-F:ssä edeltävän käytävän piikkipenkkiin. Ehto on nyt
 **Ja lähestymismatka luettiin vain leveydestä.** Tärkeämpi puolikas oli korkeus:
 **tallominen lasketaan vain laskeutuessa**, joten korkean pomon kohdalle
 saapuminen nousevassa liikkeessä on törmäys eikä tallominen. Matka on nyt
-`w / 2 + 25 + h`, joka palauttaa vanhat luvut 30x32:lla.
+`w / 2 + 25 + h`.
+
+**Ja tämä kohta sanoi ensin että kaava palauttaa vanhat luvut 30x32:lla, mikä ei
+pidä paikkaansa:** 15 + 25 + 32 = 72, kun vanha vakio oli 40. Ponnistus on siis
+32 px aikaisemmin *myös* pienimmällä pomolla. Testi menee silti läpi, ja sekin
+on tulos: 40 px ei ollut alaraja vaan yksi toimiva arvo, ja aikaisempi ponnistus
+toimii yhtä lailla. Väite \"tämä ei muuta vanhaa käytöstä\" on kuitenkin eri
+väite kuin \"tämä toimii\", eikä ensimmäinen ollut totta.
 
 Yleistys jonka tämä ansaitsee: **portin apuluvut vanhenevat hiljaa.** Kumpikaan
 näistä ei ollut väärin kirjoitettu — molemmat olivat oikein sille ainoalle

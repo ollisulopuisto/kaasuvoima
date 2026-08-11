@@ -7012,6 +7012,43 @@ const report = await page.evaluate(async () => {
     }
 
     {
+      /*
+       * VANHA PIKATALLENNUS, UUSI KOKOTAULUKKO.
+       *
+       * `entityToJSON` kopioi jokaisen oman kentän ja `entityFromJSON` herättää
+       * olion ilman konstruktoria, joten tallennettu `w/h/baseW/baseH` palasi
+       * sellaisenaan — ja kun `BOSS_SIZES` muuttui 30x32:sta seitsemään eri
+       * kokoon, ennen päivitystä otettu tallennus herätti pomon **vanhalla
+       * osumalaatikolla uuden piirroksen alla**. Tallennusversio on yhä `v: 1`,
+       * joten mikään ei hylännyt sitä.
+       *
+       * Testi väärentää juuri sen: pakottaa tallennukseen vanhat mitat ja
+       * vaatii että purku johtaa ne uudelleen taulukosta.
+       */
+      reset();
+      const s0 = new LevelScene(game, '6-F');
+      game.setScene(s0);
+      const live = s0.entities.find((e) => e instanceof E.Boss);
+      const want = { w: live.w, h: live.h };
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      const saved = snap.level.entities.find((e) => e.t === 'Boss');
+      /* Väärennös on uskottava vasta kun se on **johdonmukainen**: vanhassa
+       * tallennuksessa oli vanha korkeus *ja* sitä vastaava `y`, eli jalat
+       * samalla lattialla. Ensimmäinen yritys vaihtoi vain korkeuden ja jätti
+       * uuden `y`:n, jolloin syntyi tila jota ei ole koskaan ollut olemassa —
+       * ja testi kaatui siihen eikä korjaukseen. */
+      const feet = saved.y + saved.h;
+      saved.w = 30; saved.h = 32; saved.baseW = 30; saved.baseH = 32;
+      saved.y = feet - 32;
+      restoreState(game, snap);
+      const back = game.scene.entities.find((e) => e.constructor.name === 'Boss');
+      expect('vanhentunut pikatallennus ei tuo takaisin vanhaa osumalaatikkoa',
+        !!back && back.w === want.w && back.h === want.h
+        && back.y + back.h === live.y + live.h,
+        back ? `${back.w}x${back.h}, odotettu ${want.w}x${want.h}` : 'ei pomoa');
+    }
+
+    {
       reset();
       const s = new LevelScene(game, '3-F');
       game.setScene(s);
@@ -13893,7 +13930,7 @@ const report = await page.evaluate(async () => {
     }
   }
 
-  /* ---- kamera ja äänten merkitykset ---- */  /* ---- kamera ja äänten merkitykset ---- */
+  /* ---- kamera ja äänten merkitykset ---- */
   /*
    * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.
    *
@@ -18633,7 +18670,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);
-console.log(`\nSuper Fart Bros 3 — verify   (${report.worlds} worlds, ${report.levels.length} levels)\n`);
+console.log(`\nKaasuvoima — verify   (${report.worlds} worlds, ${report.levels.length} levels)\n`);
 console.log(`  ${pad('LEVEL', 8)}${pad('BOT', 10)}${pad('REACH', 8)}STOPPED BY`);
 for (const l of report.levels) {
   console.log(`  ${pad(l.id, 8)}${pad(l.result, 10)}${pad(`${l.progress ?? '-'}%`, 8)}${l.cause || ''}`);
