@@ -142,6 +142,41 @@ function chevrons(r, x, y, w, h, color) {
   for (let i = 0; i < w; i += 6) r(x + i, y, 3, h, color);
 }
 
+/**
+ * WHAT KIND OF THING EACH BOSS IS, AND WHY THAT IS DATA RATHER THAN AN OPINION.
+ *
+ * Stripped of colour, six of the seven used to be a hill, a locomotive, an egg,
+ * a splat and an archway. The fault was one thing in five of them: **the head
+ * was not in the silhouette.** It was drawn inside the body outline and marked
+ * with colour, and colour is the first thing lost at the distance this is
+ * played from, so at silhouette level they had no head at all. The skeleton was
+ * the only readable one and the only one with a neck gap.
+ *
+ * The obvious fix — "every boss must have a neck" — is wrong, and trying it is
+ * how this table happened. A neck would have made the storm lord a man in a
+ * cloud suit and given the balloon a chin. But the opposite move, an OR over
+ * every clause, passes literally anything.
+ *
+ * So **each boss declares what it is, and `verify.mjs` checks it delivered
+ * that**. A figure owes a pinch at the neck, a wedge owes an outline that never
+ * reverses, a quadruped owes a step down in its top contour, a blob owes a
+ * curved outline, and an anvil owes mass held low over a wide base — *and still
+ * owes the neck*, because nothing gets to skip the head.
+ *
+ * "This should be a figure" is a design opinion anyone may argue with. "This
+ * drawing is not the thing it says it is" is a fact, and facts are what a gate
+ * can hold.
+ */
+export const BOSS_PLANS = [
+  'figure',      // 0 nyrkkeilijä
+  'anvil',       // 1 jyskyttäjä — bottom-heavy on purpose; he lands on you
+  'quadruped',   // 2 syöksyjä   — his neck runs forward, so no row ever pinches
+  'blob',        // 3 pöhö       — the round one, and roundness is his identity
+  'figure',      // 4 luuranko
+  'wedge',       // 5 sääherra   — an anvil cloud, standing on nothing
+  'figure',      // 6 pierukuningas
+];
+
 /** The box a variant fights in, before its own `scale`. */
 export const bossSize = (variant) => BOSS_SIZES[variant] || BOSS_SIZES[0];
 
@@ -188,35 +223,43 @@ function drawBoxerBoss(r, bx, py, body, dark, frame, pose) {
   const carryY = pose.y + HAND_GRIP_DY;
 
   // stance: knees bent, one foot back
-  r(bx + (jab ? 4 : 6), py + 27, 9, 5, body);
-  r(bx + (jab ? 19 : 17), py + 27, 9, 5, body);
+  r(bx + (jab ? 3 : 5), py + 27, 10, 5, body);
+  r(bx + (jab ? 18 : 16), py + 27, 10, 5, body);
 
-  r(bx + 5, py + 8, 22, 20, body);          // torso
-  r(bx + 8, py + 1, 16, 9, body);           // head, no crown — this one fights for it
+  r(bx + 4, py + 13, 23, 14, body);         // torso
+  r(bx + 11, py + 11, 9, 3, dark);          // neck — see below
+  r(bx + 8, py + 0, 15, 11, body);          // head, no crown: he fights for it
 
   // championship belt, the only gold on him
   const gold = '#f0c040';
-  r(bx + 5, py + 21, 22, 4, gold);
+  r(bx + 4, py + 20, 23, 4, gold);
 
   // brows down, eyes narrowed: he is not pleased to see you
-  r(bx + 10, py + 4, 5, 4, '#ffffff');
-  r(bx + 17, py + 4, 5, 4, '#ffffff');
-  r(bx + 12, py + 5, 3, 3, '#101018');
-  r(bx + 18, py + 5, 3, 3, '#101018');
-  r(bx + 9, py + 2, 7, 2, dark);
-  r(bx + 16, py + 2, 7, 2, dark);
+  r(bx + 10, py + 3, 5, 4, '#ffffff');
+  r(bx + 16, py + 3, 5, 4, '#ffffff');
+  r(bx + 12, py + 4, 3, 3, '#101018');
+  r(bx + 17, py + 4, 3, 3, '#101018');
+  r(bx + 9, py + 1, 6, 2, dark);
+  r(bx + 15, py + 1, 6, 2, dark);
 
   // mouthguard
-  r(bx + 12, py + 9, 8, 3, '#e8e0c0');
+  r(bx + 12, py + 8, 7, 3, '#e8e0c0');
 
-  // Gloves, and the wrists that follow them. Both slide to the rim of the crown
-  // as `grip` comes up, so there is one pair of hands rather than a spare pair
-  // that appear only for the animation.
-  const leadX = lerp(jab ? 26 : 22, 24, g);
-  const leadY = lerp(py + 10, py + carryY, g);
-  const rearY = lerp(py + 15, py + carryY, g);
+  /*
+   * Hanskat lepäävät **kaulan alapuolella**, ja se on mitta eikä maku.
+   *
+   * Ne olivat riveillä 10 ja 15, eli ylempi täytti tasan sen kahden pikselin
+   * raon jonka takia päätä ylipäänsä näkee: siluettina kurouma oli 1,00 ja
+   * portti sanoi suoraan ettei kaulaa ole. Kaksi riviä alemmas ja sama piirros
+   * lukee mieheksi. Muotoportti löysi tämän maailman 1 pomosta, joka on ainoa
+   * jota ei tässä erässä piirretty uusiksi — eli juuri siitä johon kukaan ei
+   * katsonut.
+   */
+  const leadX = lerp(jab ? 25 : 21, 24, g);
+  const leadY = lerp(py + 13, py + carryY, g);
+  const rearY = lerp(py + 16, py + carryY, g);
 
-  r(bx + lerp(jab ? 25 : 21, 23, g), leadY + 3, 4, 4, '#e8e0c0');
+  r(bx + lerp(jab ? 24 : 20, 23, g), leadY + 3, 4, 4, '#e8e0c0');
   r(bx + 2, rearY + 2, 4, 4, '#e8e0c0');
 
   const glove = '#e03828';
@@ -224,9 +267,9 @@ function drawBoxerBoss(r, bx, py, body, dark, frame, pose) {
   r(bx + leadX, leadY, 7, 8, glove);
   r(bx + leadX, leadY + 6, 7, 2, gloveDark);
   r(bx + leadX + 1, leadY + 1, 3, 2, '#f07868');
-  r(bx + 1, rearY, 7, 8, glove);
-  r(bx + 1, rearY + 6, 7, 2, gloveDark);
-  r(bx + 2, rearY + 1, 3, 2, '#f07868');
+  r(bx + 0, rearY, 7, 8, glove);
+  r(bx + 0, rearY + 6, 7, 2, gloveDark);
+  r(bx + 1, rearY + 1, 3, 2, '#f07868');
 }
 
 /**
@@ -245,26 +288,34 @@ function bossRank(r, bx, py, variant) {
   const gold = '#f0c040';
   const goldDark = '#8c6410';
   if (variant === 1) {
-    // A medal on a ribbon, flat on the stomper's broad chest.
-    r(bx + 24, py + 14, 3, 4, '#a01820');
-    r(bx + 31, py + 14, 3, 4, '#a01820');
-    r(bx + 22, py + 17, 14, 8, goldDark);
-    r(bx + 23, py + 18, 12, 6, gold);
-    r(bx + 27, py + 20, 4, 3, goldDark);
+    /* Mitali nauhassa, ja se roikkuu ikeen alta rintaan eikä ikeen päälle:
+     * uusi kaula on 8 px leveä ja vanha nauha olisi peittänyt sen, eli juuri
+     * sen kohdan jonka takia päätä ylipäänsä näkee. */
+    r(bx + 25, py + 26, 3, 4, '#a01820');
+    r(bx + 30, py + 26, 3, 4, '#a01820');
+    r(bx + 22, py + 29, 14, 8, goldDark);
+    r(bx + 23, py + 30, 12, 6, gold);
+    r(bx + 27, py + 32, 4, 3, goldDark);
     return;
   }
   if (variant === 2) {
-    /* The sceptre, planted at the charger's trailing side. Round on top and
-     * below the line of his own back, which is the rule it always obeyed. */
-    r(bx + 5, py + 9, 3, 15, goldDark);
-    r(bx + 5, py + 9, 2, 15, gold);
-    r(bx + 4, py + 5, 5, 5, gold);
-    r(bx + 5, py + 6, 3, 2, '#fff0a0');
+    /*
+     * Satulalaatta kyljessä, eikä enää valtikkaa selässä.
+     *
+     * Valtikka seisoi pystyssä matalan takapään päällä, ja se on savupiipun
+     * paikka ja savupiipun muoto: siluettina koko eläin luki veturina, ja se
+     * luki veturina vielä senkin jälkeen kun runko oli piirretty uusiksi.
+     * Arvomerkki ei saa olla se yksi pystysuora asia matalimman kohdan päällä.
+     */
+    r(bx + 6, py + 16, 16, 6, goldDark);
+    r(bx + 7, py + 17, 14, 4, gold);
+    r(bx + 10, py + 18, 3, 2, goldDark);
+    r(bx + 16, py + 18, 3, 2, goldDark);
     return;
   }
   if (variant === 3) {
     // Epaulettes with fringe, on the curve where shoulders would be.
-    for (const ex of [0, 29]) {
+    for (const ex of [0, 33]) {
       r(bx + ex, py + 11, 7, 4, gold);
       r(bx + ex, py + 14, 7, 2, goldDark);
       for (let i = 0; i < 3; i++) r(bx + ex + i * 3, py + 16, 1, 4, gold);
@@ -297,12 +348,11 @@ function bossRank(r, bx, py, variant) {
      * kuin se silmä**, koska vaalea neliö kultakehyksessä silmän korkeudella on
      * toinen silmä, ja kaksisilmäisyys oli juuri se mikä teki hänestä bussin.
      */
-    r(bx + 7, py + 28, 10, 10, goldDark);          // kehys
-    r(bx + 8, py + 29, 8, 8, '#e8eef8');           // kellotaulu
-    r(bx + 10, py + 31, 4, 1, gold);
-    r(bx + 11, py + 32, 2, 2, goldDark);           // akseli
-    r(bx + 9, py + 34, 3, 1, goldDark);            // neula alas vasemmalle
-    r(bx + 10, py + 35, 1, 2, goldDark);
+    r(bx + 28, py + 28, 9, 9, goldDark);           // kehys
+    r(bx + 29, py + 29, 7, 7, '#e8eef8');          // kellotaulu
+    r(bx + 31, py + 31, 3, 1, gold);
+    r(bx + 32, py + 32, 2, 2, goldDark);           // akseli
+    r(bx + 30, py + 34, 3, 1, goldDark);           // neula alas vasemmalle
     return;
   }
   if (variant === 6) {
@@ -311,10 +361,10 @@ function bossRank(r, bx, py, variant) {
      * arvo on itse asia eikä sen merkki; kaulus on jo piirretty, tämä on se
      * mikä tekee siitä hermeliiniä eikä valkoista kangasta. Kulta on kruunun.
      */
-    r(bx + 3, py + 20, 2, 3, C.ink);
-    r(bx + 9, py + 20, 2, 3, C.ink);
-    r(bx + 39, py + 20, 2, 3, C.ink);
-    r(bx + 45, py + 20, 2, 3, C.ink);
+    r(bx + 3, py + 22, 2, 3, C.ink);
+    r(bx + 9, py + 22, 2, 3, C.ink);
+    r(bx + 39, py + 22, 2, 3, C.ink);
+    r(bx + 45, py + 22, 2, 3, C.ink);
   }
 }
 
@@ -351,50 +401,61 @@ function bossHands(r, bx, py, pose, spec) {
  */
 const HANDS = {
   1: { xs: [0, 50], restY: 18 },
-  2: { xs: [20, 36], restY: 33 },
-  3: { xs: [0, 30], restY: 17 },
+  2: { xs: [22, 38], restY: 32 },
+  3: { xs: [0, 34], restY: 15 },
   4: { xs: [0, 30], restY: 33, light: '#e8e0cc', dark: '#7c7a88' },
-  5: { xs: [4, 58], restY: 22, light: '#c8d4f0', dark: '#7a86a8' },
-  6: { xs: [2, 42], restY: 36, light: '#d8c8a0', dark: '#8c7850' },
+  5: { xs: [12, 50], restY: 19, light: '#c8d4f0', dark: '#7a86a8' },
+  6: { xs: [3, 41], restY: 32, light: '#d8c8a0', dark: '#8c7850' },
 };
 /**
  * 2-F, JYSKYTTÄJÄ — 56x48, the one who answers with the floor.
  *
- * A brick with feet. The plating is the point: a hull band across the chest, a
- * dark undercarriage, and bolts along both seams, so the mass reads as
- * *assembled* rather than as a filled rectangle. The face is small and set into
- * the hull the way a cockpit is.
+ * Built to the armature: **a small head on a visible neck, a yoke three times
+ * the head's width, a narrow torso, and feet wider than anything above them.**
+ *
+ * The neck is the whole repair. The old drawing sank his head into the
+ * shoulders and marked it with colour, and colour is the first thing the eye
+ * loses at playing distance — as a mask he was a hill. Four pixels of gap turn
+ * the same head into a shape the outline can show.
+ *
+ * He is the one boss whose mass belongs **low** (`plan: 'anvil'`), because
+ * landing on you is his whole character, and the gate measures that claim
+ * rather than exempting him from the usual one.
  */
 function drawStomperBoss(r, bx, py, body, dark, frame, pose) {
-  const squash = Math.floor(frame / 8) % 2 === 0 ? 0 : 1;
-  const top = py + 2 + squash * 2;
+  const t = Math.floor(frame / 8) % 2 === 0 ? 0 : 1;
 
-  // Feet: the widest thing on him and the part that lands.
-  r(bx + 0, py + 36, 24, 12, dark);
-  r(bx + 32, py + 36, 24, 12, dark);
+  // Feet: the widest thing he owns, and the part that arrives.
+  /* 24 leveät eivätkä 22, koska `anvil` lupaa jalustan joka on vähintään 0,8
+   * leveimmästä kohdasta — ja leveimmäksi kohdaksi osoittautui *kädet*, jotka
+   * kurkottavat ikeen ohi. 22 px jalat antoivat 0,79 ja portti oli oikeassa:
+   * se jonka koko luonne on laskeutua päällesi ei saa olla kapeampi alhaalta
+   * kuin ylhäältä. */
+  r(bx + 0, py + 35, 24, 13, dark);
+  r(bx + 32, py + 35, 24, 13, dark);
   r(bx + 0, py + 45, 24, 3, C.ink);
   r(bx + 32, py + 45, 24, 3, C.ink);
-  chevrons(r, bx + 2, py + 39, 20, 4, C.ink);
-  chevrons(r, bx + 34, py + 39, 20, 4, C.ink);
+  chevrons(r, bx + 2, py + 38, 20, 4, C.ink);
+  chevrons(r, bx + 34, py + 38, 20, 4, C.ink);
 
-  // Hull, widening down.
-  r(bx + 10, top + 10, 36, 10, body);
-  r(bx + 4, top + 18, 48, 10, body);
-  r(bx + 1, top + 26, 54, 8, body);
-  r(bx + 1, py + 30, 54, 6, dark);               // undercarriage
-  rivets(r, bx + 4, top + 20, 8, 6, dark);
-  rivets(r, bx + 4, py + 32, 8, 6, C.ink);
+  // Torso, narrow enough that the yoke above and the feet below both overhang.
+  r(bx + 13, py + 26 + t, 30, 10, body);
+  r(bx + 13, py + 32 + t, 30, 4, dark);
 
-  // Head sunk into the shoulders.
-  r(bx + 19, top, 18, 16, body);
-  r(bx + 19, top + 1, 18, 4, dark);
-  r(bx + 22, top + 6, 5, 6, C.white);
-  r(bx + 30, top + 6, 5, 6, C.white);
-  r(bx + 23, top + 7, 4, 5, C.ink);
-  r(bx + 31, top + 7, 4, 5, C.ink);
-  r(bx + 23, top + 13, 10, 3, C.ink);
-  r(bx + 8, top + 12, 10, 9, body);              // shoulders
-  r(bx + 38, top + 12, 10, 9, body);
+  // The yoke.
+  r(bx + 2, py + 16 + t, 52, 10, body);
+  r(bx + 2, py + 23 + t, 52, 3, dark);
+  rivets(r, bx + 5, py + 18 + t, 8, 6, dark);
+
+  // Neck, then head.
+  r(bx + 24, py + 13 + t, 8, 4, dark);
+  r(bx + 20, py + 0 + t, 16, 14, body);
+  r(bx + 20, py + 1 + t, 16, 4, dark);
+  r(bx + 22, py + 5 + t, 5, 6, C.white);
+  r(bx + 29, py + 5 + t, 5, 6, C.white);
+  r(bx + 23, py + 6 + t, 4, 5, C.ink);
+  r(bx + 30, py + 6 + t, 4, 5, C.ink);
+  r(bx + 24, py + 11 + t, 8, 2, C.ink);
 
   bossRank(r, bx, py, 1);
 }
@@ -402,59 +463,44 @@ function drawStomperBoss(r, bx, py, body, dark, frame, pose) {
 /**
  * 3-F, SYÖKSYJÄ — 64x40, the one who charges.
  *
- * Twice reported as elongated, and the second report was right even after the box
- * had been squared up, because **the box was never what was wrong**. A body drawn
- * as one even-height bar with a face bolted to the end reads as a vehicle at any
- * ratio. What arcade chargers do instead is *taper*: everything piles up at the
- * front and falls away behind, so the shape itself says which way it is going.
+ * `plan: 'quadruped'`, and the plan exists because **row widths cannot see this
+ * animal at all.** His neck runs forward rather than upward, so no row anywhere
+ * pinches; measured by the figure test he scores nothing, and he is not a
+ * figure. What separates a bull from a locomotive lives entirely in the *top
+ * contour* — a hump, a step down, then the head — so that is what is measured,
+ * and the gate calls it `crest`.
  *
- * So he is a wedge now, built back to front in three rising blocks — low rump,
- * higher back, tallest shoulder hump — with the head hung off the front under a
- * brow that overhangs it. The neck between them is a dark bolted piston, which
- * is the joint that makes the hump and the head read as two masses rather than
- * as one long one.
- *
- * No horns. A ram wants them and the crown rule will not have them: pointed
- * things at the top of a boss mean one thing in this game. The brow does the
- * work instead, which is what it is for.
+ * Three attempts at this body all failed the same way, and the last two failed
+ * after the box had been fixed: **a top edge that runs flat is a vehicle at any
+ * ratio.** The head therefore hangs eleven pixels below the hump line, and the
+ * sceptre that used to stand up out of his back is gone — a vertical thing
+ * above the lowest part of him is a smokestack, whatever it is drawn as.
  */
 function drawChargerBoss(r, bx, py, body, dark, frame, pose) {
   const open = Math.floor(frame / 5) % 2 === 0;
   const step = open ? 1 : 0;
 
-  // Hind quarters: small, low, right at the back. Everything about him is at
-  // the other end, and the back end being *undersized* is what says so.
-  r(bx + 4 + step, py + 30, 13, 10, dark);
-  r(bx + 4 + step, py + 37, 13, 3, C.ink);
-  r(bx + 2, py + 22, 20, 10, body);
+  r(bx + 6 + step, py + 30, 14, 10, dark);
+  r(bx + 44 - step, py + 30, 16, 10, dark);
+  r(bx + 6 + step, py + 36, 14, 4, C.ink);
+  r(bx + 44 - step, py + 36, 16, 4, C.ink);
 
-  /* The hump, built as a staircase rather than a block: each step further
-   * forward and eight pixels higher, so the back *slopes* instead of roofing
-   * over. A flat top edge across thirty pixels is a locomotive no matter what
-   * is drawn under it, and that is the shape he kept coming back as. */
-  r(bx + 14, py + 16, 22, 16, body);
-  r(bx + 24, py + 9, 24, 23, body);
-  r(bx + 34, py + 2, 22, 30, body);
-  r(bx + 14, py + 16, 22, 2, dark);              // the tread of each step
-  r(bx + 24, py + 9, 24, 2, dark);
-  r(bx + 34, py + 2, 22, 2, dark);
-  r(bx + 14, py + 28, 42, 4, dark);              // underside in shadow
-  rivets(r, bx + 37, py + 7, 3, 6, dark);
+  // Rump low at the back, hump high over the shoulders.
+  r(bx + 4, py + 13, 20, 17, body);
+  r(bx + 20, py + 2, 26, 28, body);
+  r(bx + 20, py + 2, 26, 3, dark);
+  r(bx + 4, py + 26, 42, 4, dark);
+  rivets(r, bx + 24, py + 8, 4, 6, dark);
 
-  // Forelegs: the ones that do the charging, so they are the heavy pair.
-  r(bx + 44 - step, py + 30, 17, 10, dark);
-  r(bx + 44 - step, py + 37, 17, 3, C.ink);
-
-  // Head slung low and forward, *under* the hump rather than on top of it.
-  r(bx + 44, py + 16, 20, 18, body);
-  r(bx + 40, py + 12, 24, 6, dark);              // brow, out past the face
-  r(bx + 46, py + 28, 18, 6, dark);              // jaw
-
-  r(bx + 46, py + 19, 7, 7, C.white);
-  r(bx + 56, py + 19, 7, 7, C.white);
-  r(bx + 49, py + 21, 4, 5, C.ink);
-  r(bx + 59, py + 21, 4, 5, C.ink);
-  for (let i = 0; i < 3; i++) r(bx + 49 + i * 5, py + 28, 3, 4, C.white);   // tusks
+  // Head, forward and low. The step between hump and head is the crest.
+  r(bx + 40, py + 13, 6, 9, dark);               // the joint back to the hump
+  r(bx + 44, py + 13, 20, 21, body);
+  r(bx + 44, py + 28, 20, 6, dark);
+  r(bx + 46, py + 16, 7, 7, C.white);
+  r(bx + 55, py + 16, 7, 7, C.white);
+  r(bx + 49, py + 18, 4, 5, C.ink);
+  r(bx + 58, py + 18, 4, 5, C.ink);
+  for (let i = 0; i < 3; i++) r(bx + 48 + i * 5, py + 28, 3, 4, C.white);
 
   bossRank(r, bx, py, 2);
 }
@@ -462,35 +508,40 @@ function drawChargerBoss(r, bx, py, body, dark, frame, pose) {
 /**
  * 4-F and 5-F, PÖHÖ — 40x40, the one who inflates.
  *
- * A bolted sphere with limbs too small for it, and the only square box in the
- * seven. Small on purpose: `scale` takes him to three times this.
+ * `plan: 'blob'`, and what a blob owes is **roundness**, measured as the number
+ * of distinct widths in its outline. A box changes width twice. The first
+ * version of him was two big rectangles and scored four, which is to say he was
+ * an egg-shaped box; six bands take him to eight and the outline curves.
+ *
+ * Small on purpose: `scale` takes him to three times this, and his arena's
+ * decks are measured against `baseH * 3`.
  */
 function drawBalloonBoss(r, bx, py, body, dark, frame, pose) {
-  const puff = Math.floor(frame / 10) % 2 === 0 ? 0 : 1;
+  const p = Math.floor(frame / 10) % 2 === 0 ? 0 : 1;
 
-  r(bx + 8, py + 34, 8, 6, dark);
-  r(bx + 24, py + 34, 8, 6, dark);
+  r(bx + 8, py + 33, 9, 7, dark);
+  r(bx + 23, py + 33, 9, 7, dark);
 
-  r(bx + 12 - puff, py + 2, 16 + puff * 2, 4, body);
-  r(bx + 6 - puff, py + 5, 28 + puff * 2, 6, body);
-  r(bx + 2 - puff, py + 10, 36 + puff * 2, 16, body);
-  r(bx + 5 - puff, py + 25, 30 + puff * 2, 6, body);
-  r(bx + 11, py + 30, 18, 5, body);
-  r(bx + 5 - puff, py + 27, 30 + puff * 2, 4, dark);
-  rivets(r, bx + 6, py + 11, 5, 7, dark);        // bolts round the equator
-  rivets(r, bx + 6, py + 22, 5, 7, dark);
+  r(bx + 12, py + 1, 16, 4, body);
+  r(bx + 7 - p, py + 5, 26 + p * 2, 4, body);
+  r(bx + 3 - p, py + 9, 34 + p * 2, 6, body);
+  r(bx + 2 - p, py + 15, 36 + p * 2, 8, body);
+  r(bx + 4 - p, py + 23, 32 + p * 2, 6, body);
+  r(bx + 9, py + 29, 22, 4, body);
+  r(bx + 4 - p, py + 25, 32 + p * 2, 4, dark);
+  rivets(r, bx + 7, py + 11, 5, 6, dark);
+  rivets(r, bx + 7, py + 20, 5, 6, dark);
 
-  r(bx + 8 - puff, py + 10, 1, 16, dark);
-  r(bx + 31 + puff, py + 10, 1, 16, dark);
+  r(bx + 0, py + 14, 6, 8, dark);                // arms too small for him
+  r(bx + 34, py + 14, 6, 8, dark);
 
-  r(bx + 11, py + 9, 7, 7, C.white);
-  r(bx + 22, py + 9, 7, 7, C.white);
-  r(bx + 13, py + 10, 5, 5, C.ink);
-  r(bx + 22, py + 10, 5, 5, C.ink);
-  r(bx + 11, py + 6, 7, 3, dark);
-  r(bx + 22, py + 6, 7, 3, dark);
-
-  r(bx + 37 + puff, py + 17, 5, 6, dark);        // the valve
+  r(bx + 11, py + 10, 7, 7, C.white);
+  r(bx + 22, py + 10, 7, 7, C.white);
+  r(bx + 13, py + 11, 5, 5, C.ink);
+  r(bx + 22, py + 11, 5, 5, C.ink);
+  r(bx + 11, py + 7, 7, 3, dark);
+  r(bx + 22, py + 7, 7, 3, dark);
+  r(bx + 16, py + 20, 8, 3, C.ink);
 
   bossRank(r, bx, py, 3);
 }
@@ -551,63 +602,49 @@ function drawSkeletonBoss(r, bx, py, body, dark, frame, pose) {
 /**
  * 7-F, SÄÄHERRA — 68x46, the one who leaves the ground.
  *
- * He has been a bus twice. The first time it was the ratio; the second time the
- * ratio was fixed and he was still a bus, because **two pale eyes side by side
- * on a wide dark hull are windows** no matter how deep the brow over them is.
- * Two-of-a-thing at that spacing is what a vehicle looks like, and a heavier
- * brow only makes the roof look sturdier.
+ * `plan: 'wedge'`, and he is an **anvil cloud**: widest at the very top,
+ * narrowing every band down to a keel, ending in vapour instead of feet. An
+ * inverted triangle is the one outline none of the other six has, and it is
+ * also the only shape here that says "this is not standing on anything".
  *
- * The fix is the one big-boss designs reach for when a shape has to read as a
- * creature and not a machine: **one enormous eye, dead centre.** Nothing with a
- * single eye is a vehicle. Around it the mass is stacked top-heavy — a domed
- * thunderhead overhanging a hull that narrows all the way down to a keel — so
- * the silhouette is a wedge standing on its point, which is also the least
- * stable shape available and therefore the most threatening.
- *
- * **He still has no feet.** The underside is ragged vapour that ends in nothing,
- * and he is the only one of the seven with no flat base.
+ * He was reported as a bus twice, and the second time was *after* the ratio had
+ * been fixed, which is the useful half of the story: **two pale eyes side by
+ * side on a wide dark hull are lit windows**, and no amount of brow over them
+ * changes that. One enormous eye, dead centre. Nothing with one eye is a
+ * vehicle. The barometer went with it — a pale square in a gold frame at eye
+ * height was the second eye — and now hangs small under the keel.
  */
 function drawStormBoss(r, bx, py, body, dark, frame, pose) {
-  const bob = Math.floor(frame / 12) % 2 === 0 ? 0 : 1;
-  const top = py + 2 + bob;
+  const t = py + (Math.floor(frame / 12) % 2 === 0 ? 0 : 1);
 
-  // Stacked top-heavy: dome, canopy, then the overhang that shades everything.
-  r(bx + 20, top, 28, 5, body);
-  r(bx + 10, top + 4, 48, 7, body);
-  r(bx + 4, top + 10, 60, 11, body);
-  r(bx + 4, top + 18, 60, 3, dark);              // the lip of the overhang
-  rivets(r, bx + 6, top + 6, 3, 6, C.ink);       // clear of the eye on both sides
-  rivets(r, bx + 46, top + 6, 3, 6, C.ink);
+  r(bx + 2, t + 0, 64, 9, body);
+  r(bx + 2, t + 0, 64, 3, dark);                 // lit crown of the thunderhead
+  r(bx + 9, t + 9, 50, 9, body);
+  r(bx + 9, t + 15, 50, 3, dark);
+  r(bx + 19, t + 18, 30, 10, body);
+  r(bx + 25, t + 28, 18, 7, dark);               // keel
+  rivets(r, bx + 6, t + 4, 4, 6, C.ink);
+  rivets(r, bx + 46, t + 4, 4, 6, C.ink);
 
-  // Lightning rods out of the flanks, level: the only things that break the
-  // outline sideways, and horizontal because upward is the crown's alone.
-  r(bx + 0, top + 13, 6, 4, dark);
-  r(bx + 62, top + 13, 6, 4, dark);
-
-  // Hull tapering to a keel — every band narrower than the one above it.
-  r(bx + 12, top + 20, 44, 10, body);
-  r(bx + 20, top + 28, 28, 6, dark);
-
-  /* The underside: vapour, not a hem. Tongues on their own phase so it boils
-   * rather than swings — a hem that swung would read as a cloak, and a cloak is
-   * something a standing thing wears. */
-  for (let i = 0; i < 5; i++) {
+  /* Vapour, boiling on its own phase rather than swinging: a hem that swings is
+   * a cloak, and a cloak is worn by something that stands. */
+  for (let i = 0; i < 3; i++) {
     const phase = Math.floor(frame / 6 + i * 1.7) % 3;
-    r(bx + 18 + i * 7, top + 32, 6, 4 + phase * 2, dark);
-    r(bx + 19 + i * 7, top + 35 + phase * 2, 4, 3, body);
+    r(bx + 27 + i * 5, t + 35, 5, 6 + phase * 2, dark);
   }
 
-  // The one eye, centred and huge, sunk into the hull.
-  r(bx + 24, top + 12, 20, 16, C.ink);
-  r(bx + 26, top + 13, 16, 14, '#dfe8ff');
-  r(bx + 31, top + 17, 8, 9, '#2a3a6a');
-  r(bx + 32, top + 18, 3, 3, C.white);           // one catchlight, so it is wet
-  r(bx + 24, top + 10, 20, 3, dark);             // lid
-
-  // The bolt — white rather than gold, so it never competes with the crown.
-  // On the hull's right, because the hull's left is where the barometer hangs.
-  r(bx + 46, top + 21, 5, 4, '#eaf2ff');
-  r(bx + 42, top + 24, 5, 4, '#eaf2ff');
+  r(bx + 24, t + 4, 20, 3, dark);                // lid
+  /* Kulmat sisään: täysi neliö kultakehyksettäkin luki ruutuna, ja ruutu on
+   * yhtä lailla ajoneuvon osa kuin ikkunakin. Kaksi pikseliä joka kulmasta
+   * riittää tekemään siitä silmän. */
+  r(bx + 24, t + 6, 20, 14, C.ink);
+  r(bx + 26, t + 7, 16, 12, '#dfe8ff');
+  r(bx + 26, t + 7, 2, 2, C.ink);
+  r(bx + 40, t + 7, 2, 2, C.ink);
+  r(bx + 26, t + 17, 2, 2, C.ink);
+  r(bx + 40, t + 17, 2, 2, C.ink);
+  r(bx + 31, t + 10, 8, 8, '#2a3a6a');
+  r(bx + 32, t + 11, 3, 3, C.white);             // one catchlight, so it is wet
 
   bossRank(r, bx, py, 5);
 }
@@ -615,53 +652,46 @@ function drawStormBoss(r, bx, py, body, dark, frame, pose) {
 /**
  * 8-F, PIERUKUNINGAS — 50x52, the one who is all of them.
  *
- * The last thing in the game, and he kept reading as a cabinet: a red rectangle
- * with a white shelf across it. Two things did that. The mantle ran the full
- * width, which draws a horizontal line right through the middle of a silhouette
- * and cuts it into two boxes; and the body had the same width top to bottom, so
- * there was nothing for the eye to climb.
+ * As a mask he was an **archway**: two rectangles and a doorway between the
+ * legs. Three things did that, and all three are fixed here — the mantle ran
+ * the full width and cut the silhouette into two boxes, the head sat straight
+ * on the shoulders with nothing to separate it, and the boots were level so the
+ * gap under him had a flat lintel.
  *
- * Now he is **top-heavy and tapered**: pauldrons out past everything at the
- * shoulders, a chest, a waist narrower than the head, and boots that flare back
- * out at the floor. 50 wide at the shoulders down to 18 at the belt is a real
- * taper, and the fur is only on the pauldron tops so no line ever crosses him.
- *
- * The head is 22 px on a 50 px frame — nearly half his width. That is the
- * proportion arcade finales are drawn in, and it is the opposite of the
- * realistic one on purpose.
+ * Now: head nearly half his width, a neck you can see, pauldrons out past
+ * everything, a waist of 16 px, and boots offset by two rows.
  */
 function drawKingBoss(r, bx, py, body, dark, frame, pose) {
   const sway = Math.floor(frame / 9) % 2 === 0 ? 0 : 1;
 
-  r(bx + 0 - sway, py + 26, 8, 24, dark);        // cape behind everything
-  r(bx + 42 + sway, py + 26, 8, 24, dark);
+  r(bx + 0 - sway, py + 30, 8, 20, dark);        // cape behind everything
+  r(bx + 42 + sway, py + 30, 8, 20, dark);
 
-  r(bx + 9, py + 44, 14, 8, dark);               // boots, flaring back out
-  r(bx + 27, py + 44, 14, 8, dark);
-  r(bx + 9, py + 49, 14, 3, C.ink);
-  r(bx + 27, py + 49, 14, 3, C.ink);
+  r(bx + 5, py + 44, 19, 8, dark);               // boots, staggered
+  r(bx + 28, py + 46, 18, 6, dark);
+  r(bx + 5, py + 49, 19, 3, C.ink);
+  r(bx + 28, py + 49, 18, 3, C.ink);
 
-  r(bx + 16, py + 34, 18, 12, body);             // waist, the narrow point
-  r(bx + 13, py + 24, 24, 12, body);             // chest
-  rivets(r, bx + 17, py + 28, 3, 6, dark);
+  r(bx + 17, py + 38, 16, 8, body);              // waist, the narrow point
+  r(bx + 12, py + 22, 26, 16, body);             // chest
+  rivets(r, bx + 16, py + 27, 4, 6, dark);
 
-  r(bx + 0, py + 21, 15, 13, body);              // pauldrons, out past the chest
-  r(bx + 35, py + 21, 15, 13, body);
-  r(bx + 0, py + 31, 15, 3, dark);
-  r(bx + 35, py + 31, 15, 3, dark);
-  r(bx + 0, py + 19, 15, 4, '#f0ece4');          // fur on the tops only
-  r(bx + 35, py + 19, 15, 4, '#f0ece4');
+  r(bx + 0, py + 22, 16, 11, body);              // pauldrons, out past the chest
+  r(bx + 34, py + 22, 16, 11, body);
+  r(bx + 0, py + 30, 16, 3, dark);
+  r(bx + 34, py + 30, 16, 3, dark);
+  r(bx + 0, py + 21, 16, 4, '#f0ece4');          // fur on the tops only
+  r(bx + 34, py + 21, 16, 4, '#f0ece4');
 
-  r(bx + 11, py + 12, 5, 12, '#f0ece4');         // collar standing up behind
-  r(bx + 34, py + 12, 5, 12, '#f0ece4');
+  r(bx + 21, py + 18, 9, 5, dark);               // neck: the pinch
 
-  r(bx + 14, py + 0, 22, 22, body);              // head, half his width
-  r(bx + 14, py + 1, 22, 5, dark);
-  r(bx + 17, py + 7, 6, 8, C.white);
-  r(bx + 27, py + 7, 6, 8, C.white);
-  r(bx + 19, py + 9, 4, 6, C.ink);
-  r(bx + 28, py + 9, 4, 6, C.ink);
-  r(bx + 18, py + 17, 14, 5, C.ink);             // a jaw wide enough to mean it
+  r(bx + 15, py + 0, 20, 18, body);
+  r(bx + 15, py + 1, 20, 5, dark);
+  r(bx + 18, py + 6, 6, 7, C.white);
+  r(bx + 27, py + 6, 6, 7, C.white);
+  r(bx + 20, py + 8, 4, 5, C.ink);
+  r(bx + 28, py + 8, 4, 5, C.ink);
+  r(bx + 18, py + 14, 14, 4, C.ink);             // a jaw wide enough to mean it
 
   bossRank(r, bx, py, 6);
 }

@@ -7,6 +7,70 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.71 — pomot piirrettiin siluetti edellä, ja viisi seitsemästä oli päätöntä
+
+Omistaja katsoi kokoja ja sanoi että mittasuhteet ovat yhä pielessä, ja pyysi
+tekemään sen oikein päin: **ensin armatuuri ja siluetti, vasta sitten
+yksityiskohdat.** Se oli oikea neuvo ja se paljasti vian jota kolme
+kokokierrosta ei ollut löytänyt.
+
+### Väri pois, ja kuusi seitsemästä oli huonekalu
+
+Maskeina ne olivat **mäki, veturi, muna, läiskä ja porttikäytävä**. Veturi oli
+kirjaimellinen: valtikka seisoi pystyssä matalan takapään päällä, eli savupiipun
+paikalla ja savupiipun muotoisena.
+
+Yhteinen vika oli viidessä sama: **päätä ei ollut siluetissa.** Se oli piirretty
+vartalon ääriviivan sisään ja merkitty värillä, ja väri on ensimmäinen asia joka
+katoaa siltä etäisyydeltä jolta peliä pelataan. Luuranko oli ainoa luettava, ja
+ainoa jolla oli kaularako.
+
+### Runkotyyppi on ilmoitus, ja portti mittaa sen
+
+"Jokaisella pomolla pitää olla kaula" olisi tehnyt sääherrasta miehen
+pilviasussa ja antanut pöhölle leuan. TAI-ehto joka hyväksyy minkä tahansa
+lausekkeen taas hyväksyy kaiken. Siksi **jokainen pomo ilmoittaa itse mikä se
+on** (`BOSS_PLANS`), ja portti tarkistaa että se toimitti sen:
+
+| runkotyyppi | kuka | mitä on velkaa |
+| --- | --- | --- |
+| `figure` | nyrkkeilijä, luuranko, kuningas | kurouma kaulan kohdalla ≥ 1,5 |
+| `anvil` | jyskyttäjä | massa **alhaalla**, jalusta ≥ 0,8 leveimmästä, ja silti kaula |
+| `quadruped` | syöksyjä | harja yläreunassa ≥ 0,18 |
+| `wedge` | sääherra | ääriviiva ei käänny, monotonisuus ≥ 0,78 |
+| `blob` | pöhö | ≥ 6 eri leveyttä, eli ääriviiva kaartuu |
+
+Kaksi mittaria kirjoitettiin ensin väärin ja korjattiin mittaamalla:
+
+**Ensimmäinen pään mittari kysyi "onko pää pieni"**, mikä on täsmälleen väärin
+päin — haettu mittasuhde on *iso* pää, ja luuranko, seitsemästä paras, sai
+nollan koska sen kallo on 88 % leveimmästä rivistä. Pään tekee luettavaksi
+**kurouma**, ei koko.
+
+**Ja jyskyttäjä kaatoi korkean massakeskipisteen sääntöön 0,415:llä — ja hän oli
+oikeassa ja sääntö väärässä.** Hänen koko luonteensa on laskeutua päällesi.
+Vapautus olisi ollut helppo ja epärehellinen liike; vapautus on tarkistus jonka
+lakkasi ajamasta. Nyt hän ilmoittaa päinvastaisen väitteen ja häntä mitataan
+sitä vasten.
+
+### Ja portti löysi kaksi asiaa joita kukaan ei etsinyt
+
+**Siluettiportin kehys oli 40x40 ajalta jolloin jokainen pomo oli 30x32.** Kun
+koot erosivat, 68 leveä sääherra **rajautui 36 pikseliin** ja 52 korkea kuningas
+katkesi — eli portti vertaili typistettyjä siluetteja ja piti niitä kokonaisina.
+Se meni läpi, mikä on juuri se tapa jolla tällainen vika jää huomaamatta.
+Kehyksen korjaaminen paransi mittausta: pahin pari 0,802 → **0,547**.
+
+**Ja nyrkkeilijän hanskat täyttivät hänen kaulansa.** Ne lepäsivät riveillä 10
+ja 15, ja ylempi peitti tasan sen kahden pikselin raon jonka takia päätä
+ylipäänsä näkee. Kurouma 1,00. Maailman 1 pomo oli ainoa jota tässä erässä ei
+piirretty uusiksi — eli juuri se johon kukaan ei katsonut.
+
+Jyskyttäjän jalat levenivät 22:sta 24:ään samasta syystä: `anvil` lupaa jalustan
+joka on 0,8 leveimmästä, ja leveimmäksi kohdaksi paljastui *kädet*.
+
+---
+
 ## v26.08.11.70 — pomoilla on vihdoin koko, ja portti mittasi hyppyä väärältä puolelta
 
 Omistaja katsoi pomojen kuvalevyä kolme kertaa ja sanoi joka kerta saman asian

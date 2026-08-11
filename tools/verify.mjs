@@ -13746,14 +13746,21 @@ const report = await page.evaluate(async () => {
        * kaksi pomoa samasta rungosta, tämä kaatuu ennen kuin se on kentässä.
        */
       {
-        const W = 40;
-        const H = 40;
+        /* Kehys mitoitetaan `BOSS_SIZES`ista eikä kirjoiteta käsin, ja se on
+         * korjaus eikä siistiminen: tässä luki `W = 40, H = 40` siltä ajalta
+         * jolloin jokainen pomo oli 30x32. Kun koot erosivat, 68 leveä sääherra
+         * **rajautui 36 pikseliin** ja 52 korkea kuningas katkesi — eli portti
+         * vertaili typistettyjä siluetteja ja piti niitä kokonaisina. Se meni
+         * läpi, mikä on juuri se tapa jolla tällainen vika jää huomaamatta. */
+        const PAD = 4;
+        const W = Math.max(...sprites.BOSS_SIZES.map((b) => b.w)) + PAD * 2;
+        const H = Math.max(...sprites.BOSS_SIZES.map((b) => b.h)) + PAD * 2;
         const maskOf = (v) => {
           const c = document.createElement('canvas');
           c.width = W;
           c.height = H;
           const gg = c.getContext('2d');
-          sprites.drawBoss(gg, 4, 4, 12, 1, false, v, 1, 0);
+          sprites.drawBoss(gg, PAD, PAD, 12, 1, false, v, 1, 0);
           const d = gg.getImageData(0, 0, W, H).data;
           const m = new Uint8Array(W * H);
           for (let i = 0; i < W * H; i++) m[i] = d[i * 4 + 3] > 8 ? 1 : 0;
@@ -13781,11 +13788,112 @@ const report = await page.evaluate(async () => {
           empty >= 0
             ? `pomo ${empty} on käytännössä tyhjä — piirto ei tuottanut siluettia`
             : `pahin pari ${worst.a} vs ${worst.b}: ${worst.iou.toFixed(3)}, kynnys 0,82`);
+
+        /*
+         * JA SE MITÄ ERILAISUUS EI TODISTA: ETTÄ MUOTO ON HAHMON MUOTO.
+         *
+         * Yllä oleva portti vertaa pomoja toisiinsa, ja seitsemän erilaista
+         * huonekalua läpäisee sen vaivatta. Väriltä riisuttuna ne olivatkin
+         * mäki, veturi, muna, läiskä ja porttikäytävä — ja jokainen niistä oli
+         * eri muotoinen kuin muut. Ero ei ole luettavuus.
+         *
+         * Yhteinen vika oli viidessä seitsemästä sama: **päätä ei ollut
+         * siluetissa.** Se oli piirretty vartalon ääriviivan sisään ja merkitty
+         * värillä, ja väri on ensimmäinen asia joka katoaa siltä etäisyydeltä
+         * jolta tätä peliä pelataan.
+         *
+         * Portti lukee kunkin pomon oman `BOSS_PLANS`-ilmoituksen ja mittaa
+         * juuri sen väitteen. Ilmoitus on datana `boss.js`:ssä, koska portin
+         * oma kopio siitä vanhenee — kaksi muuta vakiota tässä samassa
+         * tiedostossa vanheni jo tällä viikolla.
+         */
+        const shape = (mask) => {
+          const rows = [];
+          for (let y = 0; y < H; y++) {
+            let n = 0;
+            for (let x = 0; x < W; x++) n += mask[y * W + x];
+            rows.push(n);
+          }
+          const first = rows.findIndex((n) => n > 0);
+          const last = rows.length - 1 - [...rows].reverse().findIndex((n) => n > 0);
+          const widths = rows.slice(first, last + 1);
+          const maxW = Math.max(...widths);
+          const area = widths.reduce((a, b) => a + b, 0);
+          let cy = 0;
+          widths.forEach((n, y) => { cy += n * y; });
+          cy = area ? cy / area : 0;
+
+          // notch: the deepest pinch in the top 60 % — a neck, in other words.
+          let notch = 1;
+          for (let y = 1; y < Math.floor(widths.length * 0.6); y++) {
+            if (!widths[y]) continue;
+            const above = Math.max(...widths.slice(0, y));
+            const below = Math.max(...widths.slice(y + 1));
+            notch = Math.max(notch, Math.min(above, below) / widths[y]);
+          }
+          // monotone: how consistently the outline goes one way.
+          const steps = widths.slice(1)
+            .map((n, k) => Math.sign(n - widths[k])).filter(Boolean);
+          const down = steps.filter((v) => v < 0).length;
+          const monotone = steps.length
+            ? Math.max(down, steps.length - down) / steps.length : 1;
+          // crest: the biggest drop in the top contour, for heads carried in
+          // front rather than on top. Row widths cannot see those at all.
+          const tops = [];
+          for (let x = 0; x < W; x++) {
+            let y = 0;
+            while (y < H && !mask[y * W + x]) y++;
+            if (y < H) tops.push(y);
+          }
+          let crest = 0;
+          for (let k = 1; k < tops.length; k++) {
+            crest = Math.max(crest, tops[k] - tops[k - 1]);
+          }
+          return {
+            fill: area / (maxW * widths.length),
+            top: 1 - cy / Math.max(1, widths.length - 1),
+            taper: maxW / Math.min(...widths.filter((n) => n > 0)),
+            notch,
+            monotone,
+            crest: crest / widths.length,
+            rounds: new Set(widths).size,
+            baseFrac: widths[widths.length - 1] / maxW,
+          };
+        };
+        const HIGH = (m) => [m.top >= 0.40, `massa liian alhaalla, ${m.top.toFixed(2)} < 0,40`];
+        const NECK = (m) => [m.notch >= 1.5, `kaulaa ei näy, kurouma ${m.notch.toFixed(2)} < 1,5`];
+        const PLANS = {
+          figure: (m) => [NECK(m), HIGH(m)],
+          wedge: (m) => [[m.monotone >= 0.78,
+            `ääriviiva kääntyy liikaa, ${m.monotone.toFixed(2)} < 0,78`], HIGH(m)],
+          quadruped: (m) => [[m.crest >= 0.18,
+            `yläreuna on tasainen, harja ${m.crest.toFixed(2)} < 0,18`], HIGH(m)],
+          blob: (m) => [[m.rounds >= 6,
+            `ääriviivassa ${m.rounds} eri leveyttä, alle kuuden se on laatikko`], HIGH(m)],
+          anvil: (m) => [
+            [m.top <= 0.46, `ei sittenkään alapainoinen, ${m.top.toFixed(2)} > 0,46`],
+            [m.baseFrac >= 0.8, `jalusta ${m.baseFrac.toFixed(2)} leveimmästä, liian kapea`],
+            NECK(m),
+          ],
+        };
+        const planBad = [];
+        const planShown = [];
+        masks.forEach((mask, v) => {
+          const plan = sprites.BOSS_PLANS[v];
+          const m = shape(mask);
+          planShown.push(`${v}=${plan} kurouma ${m.notch.toFixed(1)} täyttö ${m.fill.toFixed(2)}`);
+          if (!PLANS[plan]) { planBad.push(`pomo ${v}: tuntematon runkotyyppi "${plan}"`); return; }
+          if (m.fill > 0.80) planBad.push(`pomo ${v}: täyttö ${m.fill.toFixed(2)} > 0,80, se on laatikko`);
+          if (m.taper < 2.0) planBad.push(`pomo ${v}: kavennus ${m.taper.toFixed(2)} < 2,0, se on palkki`);
+          PLANS[plan](m).forEach(([ok, why]) => { if (!ok) planBad.push(`pomo ${v} (${plan}): ${why}`); });
+        });
+        expect('jokainen pomo on sen muotoinen minkä se itse ilmoittaa olevansa',
+          planBad.length === 0, planBad.length ? planBad.join(' | ') : planShown.join(', '));
       }
     }
   }
 
-  /* ---- kamera ja äänten merkitykset ---- */
+  /* ---- kamera ja äänten merkitykset ---- */  /* ---- kamera ja äänten merkitykset ---- */
   /*
    * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.
    *
