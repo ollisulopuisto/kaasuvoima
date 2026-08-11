@@ -1,5 +1,5 @@
 /**
- * Headless smoke + playability check for Super Fart Bros 3.
+ * Headless smoke + playability check for Kaasuvoima.
  *
  *   npm i -D playwright && npx playwright install chromium
  *   node tools/verify.mjs
@@ -4851,9 +4851,16 @@ const report = await page.evaluate(async () => {
 
     const brag = share.shareText({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
     const plain = share.shareText(null);
-    expect('jaettava rivi kertoo pisteet ja kentän, ja tyhjä taulu ei keksi tulosta',
-      brag.includes('12345') && brag.includes('2-3') && brag.includes('Super Fart Bros 3')
-      && !/\d{3}/.test(plain), `${brag} | ${plain}`);
+    /* Pelin nimi luetaan `share.js`:stä eikä kirjoiteta tähän uudelleen.
+     * Kirjoitettuna se olisi kolmas paikka jossa nimi lukee — index.html ja
+     * alkuruutu ovat kaksi muuta — ja nimenvaihdon jälkeen portti kaatuisi
+     * väittäen että jakorivi on rikki, vaikka rikki olisi portin oma muisti
+     * vanhasta nimestä. Testi kysyy siis "kantaako rivi pelin nimen", joka on
+     * se asia jonka se on aina tarkoittanut. */
+    const title = share.SHARE_TITLE;
+    expect('jaettava rivi kertoo pisteet, kentän ja pelin nimen, ja tyhjä taulu ei keksi tulosta',
+      !!title && brag.includes('12345') && brag.includes('2-3') && brag.includes(title)
+      && plain.includes(title) && !/\d{3}/.test(plain), `${brag} | ${plain}`);
 
     const combos = [
       [() => Promise.resolve(), () => Promise.resolve(), 'share'],

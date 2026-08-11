@@ -31,7 +31,9 @@ import { appendChallenge } from '../core/challenge.js';
 const W = 320;
 
 /** Sama nimi kuin `og:title`. Tämä on se mitä jakovalikko näyttää otsikkona. */
-const SHARE_TITLE = 'Super Fart Bros 3';
+/** Pelin nimi jaetussa rivissä. Vietynä, jotta portti voi lukea sen sen
+ *  sijaan että kirjoittaisi nimen kolmanteen paikkaan omasta muistista. */
+export const SHARE_TITLE = 'Kaasuvoima';
 const TAGLINE = 'Tasohyppely selaimessa. Ei asennusta, pelaa heti.';
 
 /**

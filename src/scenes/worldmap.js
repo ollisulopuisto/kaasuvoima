@@ -1258,7 +1258,7 @@ export class WorldMapScene {
     ctx.fillRect(309, PANEL_Y + 6, 1, 24);
     if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 290, PANEL_Y + 10, this.tick);
 
-    drawText(ctx, `SFB *${this.game.state.lives}`, 208, PANEL_Y + 10, { color: '#ffffff' });
+    drawText(ctx, `KV *${this.game.state.lives}`, 208, PANEL_Y + 10, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 208, PANEL_Y + 20, { color: '#ffd048' });
     this.drawSecretCount(ctx);
 

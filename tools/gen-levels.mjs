@@ -34,7 +34,7 @@
  * bricks — arranged by rules written against this game's *measured* jump budget
  * (tools/jump-budget.json, produced by tools/measure-jump.mjs), so the geometry
  * follows the physics instead of a number somebody wrote down once. A generated
- * level should read as a Super Fart Bros level that happens to breathe at a
+ * level should read as a Kaasuvoima level that happens to breathe at a
  * classic tempo, not as a copy of anything.
  *
  * That distinction is the whole licence argument (DESIGN.md §3 point 3), so it

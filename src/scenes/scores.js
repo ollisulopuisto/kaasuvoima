@@ -54,7 +54,7 @@ export class NameEntryScene {
   }
 
   get name() {
-    return this.letters.join('').trimEnd() || 'SFB';
+    return this.letters.join('').trimEnd() || 'KAASU';
   }
 
   step(delta) {

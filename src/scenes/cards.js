@@ -4,7 +4,7 @@ import { Music, Sfx } from '../core/audio.js';
 import { hashNoise } from '../core/utils.js';
 import { normalizePower, POWER_NAMES } from '../entities/player.js';
 
-/** The "MAAILMA 1-1 / SFB x 4" card shown before every level. */
+/** The "MAAILMA 1-1 / KV x 4" card shown before every level. */
 export class InterludeScene {
   /**
    * @param {string} [label] mitä kortissa lukee, kun "MAAILMA <tunnus>" ei ole

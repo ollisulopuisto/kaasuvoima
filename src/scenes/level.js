@@ -39,7 +39,7 @@ const HURRY_TIME = 100;
  * maailma ja aika keskellä oikealla, pisteet reunassa — eikä yhtään vapaata
  * riviä. Jako on kuudes, ja sille on tasan yksi aukko:
  *
- *   rivi y+6:  elämärivi `SFB *N` alkaa 100:sta ja on 6-9 merkkiä leveä,
+ *   rivi y+6:  elämärivi `KV *N` alkaa 100:sta ja on 5-8 merkkiä leveä,
  *              eli loppuu viimeistään 153:een; `MAAILMA X-Y` alkaa 196:sta.
  *   levein jako: nuoli 5 px + väli 2 px + `+9999` 29 px = 36 px, eli
  *              156...192, ja käänteisenä vilkkuessaan 155...193.
@@ -3358,7 +3358,7 @@ export class LevelScene {
         ctx.fillRect(bx, y + 18, 5, 1);
       }
     }
-    drawText(ctx, `SFB *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
+    drawText(ctx, `KV *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
 
     /* Päivän kenttä ei ole missään maailmassa, joten se kertoo nimensä. Mitattu
