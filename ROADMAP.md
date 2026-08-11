@@ -798,29 +798,38 @@ erillistä havaintoa samasta asiasta, kaikki säilytettäviä:
 Siluettiportin marginaali kapeni 0,771:stä 0,802:een (kynnys 0,82). Se pitää,
 mutta se on ohut, ja seuraava pomomuutos mittaa sen ensimmäisenä.
 
-### Löydetty 11.8.2026: jättiläinen täyttää oman kiipeilyaskelmansa (ei korjattu)
+### Peruttu 11.8.2026: "jättiläinen täyttää kiipeilyaskelmansa" oli mittausvirhe
 
-Katselmoinnissa löytynyt, mitattu molemmilta puolilta ja **jätetty tähän
-kirjatuksi eikä korjatuksi**, koska se ei ole tämän erän aiheuttama.
+Katselmoinnissa raportoitu, tähän kirjattu mittauksineen — ja **väärin**. Se on
+kirjattu tänne perumisena eikä poistettu, koska virheellinen mittaus jonka
+jälki katoaa on virheellinen mittaus joka tehdään uudelleen.
 
-`boss_arena_big`in rivin 9 lankut ovat askelma rivin 6 kannelle. Kun pöhö on
-kasvanut kyllin isoksi, hän täyttää sen askelman, ja sillä seisova pelaaja
-**ottaa osuman** sen sijaan että talloisi:
+Väite oli että pöhö täyttää `boss_arena_big`in rivin 9 lankun kasvaessaan, ja
+että sillä seisova pelaaja ottaa osuman. Koetin sitä molemmilla puolilla ja sain
+taulukon jossa raja oli mainissa scale 2,5 ja haarassa 2,0. Taulukko oli tosi;
+se vain ei mitannut lankulla seisomista.
 
-| scale | main (30x32 pohja) | tämä haara (40x40 pohja) |
-| --- | --- | --- |
-| 1 | turvassa | tallaa |
-| 1,5–2 | tallaa | **2: osuma** |
-| 2,5–3 | **osuma** | **osuma** |
+**Koe asetti pelaajan pomon omaan keskisarakkeeseen** rivin 9 korkeudelle. Siellä
+ei ole lankkua — siellä on pomon merkki `b`. Pelaaja siis pantiin ilmaan pomon
+sisään ja hän putosi siihen, mikä on oikea lopputulos väärästä asetelmasta.
 
-Eli vika on olemassa jo `main`issa scale 2,5:stä ylöspäin; uudet koot siirtävät
-rajan yhden kasvuaskelen aikaisemmaksi. **Rivin 6 kansi on turvassa joka
-koolla** molemmilla puolilla, eli se reitti johon suunnittelu nojaa (kaksi
-viimeistä osumaa tulevat kannelta) toimii. Askelma on silti se jota pitkin
-kannelle noustaan, joten se on korjattava — oikea korjaus on joko siirtää
-askelma ulommas jättiläisen leveydestä tai antaa sille oma korkeus, ja
-kummassakin tapauksessa portin on mitattava *seisominen* eikä vain pudotus:
-nykyinen kansiportti pudottaa pelaajan framella 1 eikä siksi näe tätä.
+Oikeat luvut, kun lankut haetaan `isSemi`illä eikä `isSolid`illa (lankku on
+yksisuuntainen, joten `isSolid` ei löydä sitä lainkaan — se oli kokeen toinen
+vika, ja se sai ensimmäisen korjausyrityksen seisomaan kentän muilla kiinteillä
+ruuduilla kaukana areenasta):
+
+| | sarake | pomon sarake | tulos scale 1/2/3 |
+| --- | --- | --- | --- |
+| rivin 6 kansi | 140 | 148 | turvassa / turvassa / turvassa |
+| rivin 9 askelma | 135 | 148 | turvassa / turvassa / turvassa |
+
+Pomo on 120 px eli 7,5 laattaa leveä täydessä koossa, eli sarakkeet 144–152.
+Molemmat lankut ovat sen ulkopuolella joka koolla. **Vikaa ei ole.**
+
+Läksy on se joka toistuu tässä tiedostossa: koe joka asettaa kappaleen itse on
+koe joka voi asettaa sen paikkaan jota pelissä ei ole olemassa. Kaksi kertaa
+tässä erässä — ensin talloportin pelaaja piikkipenkkiin, nyt tämä — ja
+molemmilla kerroilla tulos näytti uskottavalta vialta.
 
 ### Tiedossa: puhetesti on ajoittain epävakaa
 
