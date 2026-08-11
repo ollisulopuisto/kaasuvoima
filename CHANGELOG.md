@@ -7,6 +7,41 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.73 — osoite vaihtui, ja sen kopiot eivät olisi kaatuneet mihinkään
+
+Vercel-projekti ja GitHub-repo nimettiin `kaasuvoima`ksi, joten
+`sfb3.vercel.app` → `kaasuvoima.vercel.app` ja `github.io/sfb3` →
+`github.io/kaasuvoima`.
+
+Koodissa vaihdettavia oli neljä: `index.html`:n `og:url`, `og:image` ja
+`twitter:image`, sekä `challenge.js`:n esimerkkiosoite. **`og:url` on niistä
+ainoa jolla on ajonaikainen merkitys** — `share.js` lukee juuri sen metatagin
+eikä `location.href`:iä, jotta jaettu linkki on aina se osoite jolla on
+esikatselukuva.
+
+Ja juuri siksi vika ei olisi ollut siinä tagissa vaan sen **kopioissa**:
+README:n pelilinkki, CLAUDE.md:n julkaisuohje ja `challenge.js`:n esimerkki
+eivät ole koodia, eivät aja mitään eivätkä siksi kaadu mihinkään. Kaikki kolme
+olisivat jääneet osoittamaan kuolleeseen domainiin hiljaa.
+
+Portti vertaa nyt jokaisen kopion `og:url`:n isäntänimeen ja Pages-polun repon
+nimeen. Kokeiltu rikkinäisellä syötteellä: README takaisin vanhaan osoitteeseen
+→ `README.md: sfb3.vercel.app != kaasuvoima.vercel.app`.
+
+**CHANGELOGin vanha julkaisurivi jätettiin ennalleen.** Se kertoo missä peli
+*oli* 8.8.2026, ja historian korjaaminen nykyhetkeen tekisi lokista valheen.
+
+Kolmas kerta tässä erässä samalle läksylle: jakorivi piti omaa kopiotaan pelin
+nimestä, talloportti omaa kopiotaan pomon koosta, ja nyt kolme dokumenttia omaa
+kopiotaan osoitteesta.
+
+**localStorage-avaimet eivät liiku**, mutta osoitteen vaihtuminen tekee saman
+asian toista kautta: `localStorage` on origin-kohtainen, joten
+`sfb3.vercel.app`iin tallennettu edistyminen jää sinne. Pages-polun muutos on
+turvallinen, koska origin (`ollisulopuisto.github.io`) pysyy samana.
+
+---
+
 ## v26.08.11.72 — katselmointi löysi vanhentuvan pikatallennuksen
 
 Erän katselmointi, ja se löysi neljä asiaa joista kolme olivat omia ja yksi

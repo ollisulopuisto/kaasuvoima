@@ -14,7 +14,8 @@ mukaan ei tule äänitettä eikä nuottilaitosta, jotka ovat omine oikeuksineen 
 teoksia kuin vapautunut sävellys. Koko lista ja perustelu ovat
 [DESIGN.md](DESIGN.md):n kohdassa 1 b.
 
-**Pelattavissa: <https://sfb3.vercel.app>**
+**Pelattavissa: <https://kaasuvoima.vercel.app>**
+(varareitti: <https://ollisulopuisto.github.io/kaasuvoima/>)
 
 | Dokumentti | Sisältö |
 | --- | --- |

@@ -64,6 +64,9 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage();
 
+/* Pages julkaisee repon nimen alle, joten tämä on repon nimi eikä maku. */
+const REPO_SLUG = 'kaasuvoima';
+
 const errors = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
@@ -16307,6 +16310,46 @@ const report = await page.evaluate(async () => {
       `piirrettyjä ${drawable.length} (${drawable.join(' ')}), `
       + `tuotettuja ${spawned.size} (${[...spawned].join(' ')})`
       + (ghosts.length ? ` — kuvia ilman lähdettä: ${ghosts.join(', ')}` : ''));
+  }
+
+  /*
+   * YKSI OSOITE, JA KAIKKI MUUT VIITTAAVAT SIIHEN.
+   *
+   * `og:url` on ajonaikainen totuus: `share.js` lukee juuri sen metatagin eikä
+   * `location.href`:iä, jotta jaettu linkki on aina se osoite jolla on
+   * esikatselukuva. Ongelma ei ole se tagi vaan sen **kopiot** — README:n
+   * pelilinkki, `challenge.js`:n esimerkki, CLAUDE.md:n julkaisuohje — jotka
+   * eivät ole koodia eivätkä siksi kaadu mihinkään kun osoite vaihtuu.
+   *
+   * Ja se vaihtui: `sfb3.vercel.app` → `kaasuvoima.vercel.app` ja
+   * `github.io/sfb3` → `github.io/kaasuvoima`. Kaikki kolme kopiota olisivat
+   * jääneet osoittamaan kuolleeseen domainiin, eikä yksikään portti olisi
+   * sanonut mitään. Sama vika kuin jakorivin nimessä ja talloportin
+   * apuluvuissa: vakio joka kuvaa jotain luettavaa on luettava eikä
+   * kirjoitettava uudelleen — ja kun se on pakko kirjoittaa (Markdown ei osaa
+   * lukea metatagia), portti vertaa kopiot alkuperäiseen.
+   *
+   * CHANGELOG on tarkoituksella ulkopuolella: se kertoo missä peli **oli**
+   * 8.8.2026, ja historian korjaaminen nykyhetkeen tekisi lokista valheen.
+   */
+  {
+    const html = await readFile(join(ROOT, 'index.html'), 'utf8');
+    const og = /<meta\s+property="og:url"\s+content="([^"]+)"/.exec(html);
+    const canonical = og ? new URL(og[1]).host : null;
+    const COPIES = ['README.md', 'CLAUDE.md', 'src/core/challenge.js', 'index.html'];
+    const bad = [];
+    for (const f of COPIES) {
+      const text = await readFile(join(ROOT, f), 'utf8');
+      for (const m of text.matchAll(/([a-z0-9-]+\.vercel\.app)/g)) {
+        if (m[1] !== canonical) bad.push(`${f}: ${m[1]} != ${canonical}`);
+      }
+      for (const m of text.matchAll(/github\.io\/([a-z0-9-]+)/gi)) {
+        if (m[1] !== REPO_SLUG) bad.push(`${f}: github.io/${m[1]} != github.io/${REPO_SLUG}`);
+      }
+    }
+    expect('jokainen osoitteen kopio osoittaa samaan paikkaan kuin og:url',
+      !!canonical && bad.length === 0,
+      bad.length ? bad.join(' | ') : `og:url ${canonical}, pages /${REPO_SLUG}, ${COPIES.length} tiedostoa`);
   }
 
   report.checks.push(...checks);

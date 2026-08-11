@@ -1,7 +1,7 @@
 /**
  * Haaste: kaverin tulos kulkee jakolinkin osoiteparametreissa.
  *
- *     https://sfb3.vercel.app/?s=45200&n=OLLI&l=2-3
+ *     https://kaasuvoima.vercel.app/?s=45200&n=OLLI&l=2-3
  *
  * Tämä on se mitä ROADMAPin "pistetaulu ei mene palvelimelle, tulos menee
  * linkkiin" tarkoittaa käytännössä. Ei palvelinta, ei päätepistettä, ei
