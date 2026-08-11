@@ -771,6 +771,25 @@ Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa
 vihollisen alta eikä palaa olisi olio joka muokkaa kenttää, ja silloin reitti
 voisi kadota. Palautuvana se on tilapäinen tapahtuma staattisessa kentässä.
 
+### Löydetty 10.8.2026: pystykentän portit todistivat väärää asiaa (v26.08.10.69)
+
+Molemmat pystykentät olivat ratkaistavissa **liikkumatta sivuun** — 6-K
+putoamalla yhtä avointa saraketta, 7-T hyppimällä paikallaan päällekkäisten
+lankkujen sarakkeessa — ja 6-K oli lisäksi voimatasolla 3–5 läpäisemätön, koska
+sen ainoa reitti alas oli yhden laatan levyinen ja levein keho on 21 px.
+
+Kaksi uutta sääntöä (`checkClimbTraverse`, `checkClimbWidth`) kattaa molemmat, ja
+ne kaatoivat kolme kenttää samalla lauseella — myös `verify.mjs`:n oman
+koekentän. **Kiipeilybotti oli kuitenkin läpäissyt kentät täsmälleen niillä
+vioilla:** se ei osannut astua reiästä alas, hypätä sivuun ylöspäin eikä väistää
+piikkejä, joten se tarvitsi avoimen sarakkeen, päällekkäiset lankut ja piikittömän
+kävelylinjan. Kaikki kolme korjattiin bottiin eikä kenttiin.
+
+**Jäljelle jäi tiedossa oleva rajaus:** `measureClimb` hinnoittelee nousut myös
+laskeutuvassa kentässä, eli se mittaa kiipeämistä jota kukaan ei tee. 6-K
+pidettiin neljän rivin kerroksissa osittain siksi, ja se on kierto eikä korjaus —
+oikea korjaus on mitata laskeutuminen laskeutumisena.
+
 ### Päätetty 10.8.2026: jää on laatta eikä teema (v26.08.10.68)
 
 Laki 1 kuului *"jää on liukas kaikille"* ja se oli tosi puolittain: pelaaja ei

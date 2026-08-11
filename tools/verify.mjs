@@ -11415,7 +11415,12 @@ const report = await page.evaluate(async () => {
         const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
         put(3, '              F     ');
         [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
-          put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+          /* Lankut eivät saa mennä päällekkäin, ja se on nyt sääntö eikä maku
+           * (`checkClimbTraverse`): jaettu sarake tarkoittaa saraketta jolla on
+           * jalansija joka askelmalla, eli kiipeilyn voi ratkaista hyppimällä
+           * paikallaan. Tämä koekenttä oli 7-T:n vian näköinen siihen asti kun
+           * sääntö kirjoitettiin ja kaatoi molemmat samalla lauseella. */
+          put(y, i % 2 === 0 ? '          --------- ' : ' ---------          ');
         });
         put(39, '     !              ');
         put(42, '  1                 ');
@@ -11473,6 +11478,7 @@ const report = await page.evaluate(async () => {
           input.held.left = want.left;
           input.held.right = want.right;
           input.held.jump = want.jump;
+          input.held.run = want.run;
           input.pressed.jump = want.press;
           s.update(input);
           if (!playing) continue;
@@ -11906,6 +11912,7 @@ const report = await page.evaluate(async () => {
             input.held.left = want.left;
             input.held.right = want.right;
             input.held.jump = want.jump;
+            input.held.run = want.run;
             input.pressed.jump = want.press;
             s.update(input);
             const feet = s.player.y + s.player.h;
@@ -18131,7 +18138,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
       const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
       put(3, '              F     ');
       [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
-        put(y, i % 2 === 0 ? '         ---------- ' : ' ----------         ');
+        /* Ei jaettua saraketta, ks. `checkClimbTraverse`. Tämä koekenttä oli
+         * kirjoitettu samalla päällekkäisellä lankulla kuin 7-T, ja kun sääntö
+         * tuli, se kaatoi molemmat — mikä on juuri se mitä koekentän kuuluu
+         * tehdä: se on kelvollisen kiipeilyn määritelmä, joten sen on täytettävä
+         * jokainen sääntö jonka kelvollisen kiipeilyn on täytettävä. */
+        put(y, i % 2 === 0 ? '          --------- ' : ' ---------          ');
       });
       put(39, '     !              ');
       put(42, '  1                 ');

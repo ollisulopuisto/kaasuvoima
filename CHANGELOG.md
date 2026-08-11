@@ -7,6 +7,94 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.10.69 — molemmat pystykentät olivat ratkaistavissa liikkumatta sivuun
+
+Omistaja pelasi 6-K:n ja raportoi kaksi asiaa. Molemmat pitivät paikkansa, ja
+niiden alta löytyi kolmas joka oli pahempi kuin kumpikaan.
+
+### Kolme vikaa, joista yksikään ei näkynyt yhdessäkään portissa
+
+**1. 6-K:n läpi meni yksi avoin sarake.** Sarake 3 oli auki riviltä 5 riville 43
+ja maali oli sen pohjalla: kävele vasemmalle, pidä alas, olet perillä. Kaikki
+kahdeksan käytävää olivat koristetta.
+
+**2. Ja se sarake oli yhden laatan levyinen.** Tämä on se jota ei raportoitu ja
+joka on pahempi: aukko on 16 px ja levein keho **21** (`PLAYER_SIZES`), joten
+voimatasolla 3–5 kentästä ei päässyt alas **lainkaan**. Kyykky ei auta — se
+madaltaa eikä kavenna — eikä pelaaja voi kutistua omasta tahdostaan, joten
+isona saapuminen oli ansa. Syy siihen ettei tätä nähnyt mikään on yhdellä
+rivillä: **jokainen portti mittaa voimatasoa 0**, eli tasan sitä kokoa joka
+mahtui.
+
+**3. Ja 7-T:ssä oli sama vika toisin päin.** Sen puolat olivat `########---` ja
+`---########`, ja ne jakoivat sarakkeet 9–10 — eli oli sarake jolla oli
+jalansija joka ikisellä askelmalla. Kentän saattoi läpäistä hyppimällä
+paikallaan.
+
+### Yksi sääntö, kaksi peilikuvaa
+
+`checkClimbTraverse` kieltää laskeutuvalta kentältä **vapaan sarakkeen** ja
+nousevalta **tikapuusarakkeen**, ja molemmissa vika on sama lause: kenttä on
+ratkaistavissa liikkumatta sivuun. `checkClimb` on tyytyväinen kumpaankin, ja
+aivan oikein — se todistaa että reitti on *olemassa*, ei että se on ainoa.
+
+`checkClimbWidth` vaatii jokaiselta riviltä aukon joka päästää läpi leveimmän
+kehon. Kaksi laattaa, ja luku tulee `PLAYER_SIZES`ista eikä mausta.
+
+Uudet säännöt kaatoivat kolme kenttää samalla lauseella: 6-K:n, 7-T:n ja
+`verify.mjs`:n **oman koekentän**, joka oli kirjoitettu samalla päällekkäisellä
+lankulla. Se on niiden paras suositus.
+
+### Ja botti oli läpäissyt molemmat *täsmälleen niillä vioilla*
+
+Tämä on erän epämukavin löydös. Kiipeilybotti ei osannut kolmea asiaa, ja
+jokainen puute vastasi tasan yhtä kentän vikaa:
+
+| botti ei osannut | siksi se tarvitsi |
+| --- | --- |
+| astua reiästä alas (se tähtäsi *lähimpään* sarakkeeseen, joka on jalkojen alla) | yhden avoimen sarakkeen koko matkalta |
+| hypätä sivuun ylöspäin (hyppy lähti vain kun kohde oli suoraan yllä) | päällekkäiset lankut |
+| väistää piikkejä (se ei tuntenut tappavia ruutuja lainkaan) | ettei kävelylinjalla ole piikkejä |
+
+Eli botti läpäisi kentät sillä vialla jota sen oli tarkoitus mitata, ja kun viat
+korjattiin, se jäi ensimmäiselle lattialle. Kaikki kolme on nyt korjattu
+bottiin — ei kenttiin — koska tämän repon oma sääntö on että botin puolikas
+sanasto ei saa määrätä sisältöä (ks. `level-bot.js`, astinkivi).
+
+Neljäs korjaus on mitta eikä puute: botti **juoksee viisi laattaa ennen
+piikkiä**. Kävelykatosta juoksukattoon menee `ACC`:llä noin 18 framea, joten
+ponnistusframella syttyvä juoksu jättää kehon ilmaan kävelyvauhtia — mitattuna
+ponnistus sarakkeesta 7, laskeutuminen sarakkeeseen 9, piikki sarakkeessa 9.
+
+### Kamera sai lyöntinsä
+
+`CAM_PAGE_FRAMES` **0 → 60**, ja se on omistajan päätös joka kumoaa mittauksen.
+Mittaus on yhä oikeassa siitä mitä se mittasi (hallinnan menetys, uuden maan
+näkyminen); se ei mitannut sitä mitä leikkaus tekee silmälle. Nollan framen sivu
+ei ole nopea vaan **olematon** — kuva vaihtuu kokonaan yhdellä framella.
+
+Sekunti, smoothstepillä eikä tasaisesti (tasainen sekunti lukee hissiltä), kello
+pysähtyy sivun ajaksi mutta **musiikki ei** — `Music` on omalla kellollaan eikä
+sitä ajeta `update`sta, ja juuri se tekee pysähtyneestä kuvasta kameratyötä eikä
+kaatunutta peliä.
+
+### Mitä kentille tehtiin
+
+6-K on piirretty uudelleen: kerrokset neljän rivin välein, **kolmen laatan aukko
+joka vaihtaa puolta**, eli reitti alas on sahalaita. Ensimmäinen huone on rivin
+korkeampi koska `!` tarvitsee neljä vapaata riviä ollakseen puskettava. Piikit
+ovat yhden laatan levyisiä ja vähintään seitsemän saraketta laskeutumispaikasta:
+molemmat mitattu **kävelyhypystä**, samalla perusteella kuin `ice_pit`in kuilut —
+pystykentässä laskeudutaan ja lähdetään kävelemään, vauhtia ei ehdi ottaa.
+
+7-T:n pankit erotettiin: sivusiirtymä on nyt **yksi sarake eikä nolla**. Yksi
+eikä kaksi, ja sekin on mitattu — neljän ruudun nousulla hyppy kantaa tasan
+yhden, ja ensimmäinen yritys kahdella kaatui `checkClimb`iin heti.
+
+Vaikeus: 6-K 247,3 → 245,9 (muoto säilyi), 7-T 202,5 → 214,3.
+
+---
+
 ## v26.08.10.68 — JÄÄ on laatta, ei teema
 
 `SURFACES` on ollut olemassa siitä asti kun emergenssin ensimmäinen erä tuli

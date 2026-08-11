@@ -126,87 +126,90 @@ export const WORLD6_LEVELS = {
    * matkassa. Kaivautuessa painovoima on *puolellasi* ja vie sinut eteenpäin
    * joka tapauksessa — pudotus ei siis maksa mitään, ellei maasto maksata.
    * Siksi tämän kentän rangaistus on maastossa eikä putoamisessa, ja se on
-   * mitattavissa: **7 riviä piikkejä** siellä minne väärä pudotus vie, kun
-   * pilvikentässä on nolla tappavaa ruutua.
+   * mitattavissa: **4 riviä piikkejä** siellä minne kuljetaan, kun
+   * pilvikentässä on nolla tappavaa ruutua (`verify.mjs` vaatii kummankin).
    *
-   * Ja luulaaksolla oli tähän sanasto valmiina. **Alaspäin mureneva lauta on
-   * ovi eikä ansa**: `%` kahdessa käytävän lattiassa (rivit 25 ja 33) on
-   * oikotie alempaan käytävään — sille astutaan tahallaan. Vaakakentässä sama
-   * lauta on se joka pettää alta.
+   * ## Muoto: kaksi kuilua jotka eivät ole sama kuilu
    *
-   * ## Muoto: kuilu on reitti, käytävät ovat kenttä
+   * Kerrokset ovat neljän rivin välein, ja jokaisessa lattiassa on **kolmen
+   * laatan aukko joka vaihtaa puolta**: oikea seinä, vasen seinä, oikea, vasen.
+   * Reitti alas on siis sahalaita — putoat, kävelet kerroksen poikki, putoat —
+   * ja se kävely on kentän koko sisältö: siellä ovat kolikot, hampaat ja se
+   * yksi piikki jonka yli on hypättävä.
    *
-   * Sarake 3 on kuilu ja se on auki koko matkan; sarakkeet 0–2 ovat länsiseinää
-   * (`X`), ja sen alla, pohjalla, on maalikammio. Massa on sarakkeista 4–19
-   * yhtenä luuna pohjakallioon asti, ja siihen on louhittu kahdeksan käytävää
-   * itään. **Reitti alas on astua kuilun puoleiselta reunalta** — se on tämän
-   * kentän maareitti, ja se on se jonka botti todistaa voimatasolla 0
-   * (`tools/playable.mjs`). Käytävät ovat vapaaehtoisia täsmälleen kuten
-   * vaakakentän ylätasot ovat: siellä ovat kolikot, ovet ja hampaat.
+   * Neljän rivin väli ei ole sisustusta vaan kaksi mitattua ehtoa yhdessä:
+   * käytävän on oltava kolme riviä korkea (isoin keho on kolme riviä, `HEAD`),
+   * ja neljän ruudun askelma on tasan se mitä mitattu hyppy nousee
+   * (`wallTiles`). **Jokaisesta kerroksesta pääsee siis vielä takaisin
+   * ylempään**, mikä on koko rangaistus sanottuna geometriana: väärä pudotus ei
+   * maksa kenttää vaan kiipeämisen takaisin. Ainoa poikkeus on ensimmäinen
+   * huone, joka on rivin korkeampi — `!` tarvitsee neljä vapaata riviä
+   * lattiansa yllä ollakseen puskettava (`BEAN_BLOCK_OVER_FLOOR`), eikä kolmen
+   * rivin käytävään mahdu lohkoa jonka alta iso keho kävelee.
    *
-   * Kerrokset ovat neljän rivin välein, eikä se ole sisustusta vaan kaksi
-   * mitattua ehtoa yhdessä: käytävän on oltava kolme riviä korkea (isoin keho
-   * on kolme riviä, `HEAD`), ja neljän ruudun askelma on tasan se mitä mitattu
-   * hyppy nousee (`wallTiles`). **Jokaisesta käytävästä pääsee siis vielä
-   * takaisin ylempään** — juoksuhypyllä, ei paikaltaan — ja se on koko
-   * rangaistus sanottuna geometriana: väärä pudotus ei maksa kenttää vaan
-   * kiipeämisen takaisin. Vaikeusmittari laskee saman asian: neljän ruudun
-   * askelma vaatii vauhdin, ja tämän kentän pisteistä puolet tulee siitä.
+   * ## KAKSI VIKAA JOTKA OLIVAT TÄSSÄ KENTÄSSÄ TUOTANNOSSA
    *
-   * `!` on ensimmäisen käytävän katossa, riviltä 6, eli korkeuden
-   * ensimmäisessä neljänneksessä lähdöstä kulkusuuntaan mitattuna. Se on myös
-   * se palkinto joka maksaa pinnan: pinnalta pääsee alas mutta ei takaisin
-   * ylös (viisi riviä, budjetti neljä), joten pinta on umpiperä ja
-   * DESIGN.md kohdan 5 pystymuoto vaatii siltä jotain. Kolikko rivillä 3
-   * maksaa saman seinän harjalle.
+   * Molemmat löytyivät pelaamalla, kumpaakaan ei nähnyt yksikään portti, ja ne
+   * ovat syy siihen että tämä kenttä on piirretty uudelleen.
+   *
+   *   1. **Kentän läpi meni yksi avoin sarake.** Sarake 3 oli auki riviltä 5
+   *      riville 43 ja maali oli sen pohjalla: kävele vasemmalle, pidä alas,
+   *      olet perillä. Kaikki kahdeksan käytävää olivat koristetta.
+   *   2. **Ja se sarake oli yhden laatan levyinen.** Aukko on 16 px ja levein
+   *      keho on 21 (`PLAYER_SIZES`), joten voimatasolla 3–5 kentästä **ei
+   *      päässyt alas lainkaan**. Kyykky ei auta: se madaltaa eikä kavenna.
+   *      Jokainen portti mittaa voimatasoa 0 — tasan sitä kokoa joka mahtui.
+   *
+   * Kummallekin on nyt sääntö (`checkClimbTraverse`, `checkClimbWidth`), ja
+   * molemmat säännöt kaatoivat myös 7-T:n ja `verify.mjs`:n oman koekentän
+   * samalla lauseella. Se on niiden paras suositus: vika ei ollut tämän kentän
+   * oma vaan pystykenttien, eikä sitä nähnyt kukaan ennen kuin se mitattiin.
+   *
+   * `!` on ensimmäisen huoneen katossa rivillä 6, eli korkeuden ensimmäisessä
+   * neljänneksessä lähdöstä kulkusuuntaan mitattuna. Kolikko rivillä 2 maksaa
+   * saman lähtötasanteen harjalle.
    */
   '6-K': {
-    theme: 'bone', bg: 'bones', music: 'bone', vertical: true,
+    theme: 'bone', bg: 'bones', music: 'bone', vertical: true, time: 400,
     rows: [
       '                    ',
       '                    ',
+      '   oo               ',
       '                    ',
-      '   o                ',
-      '        1           ',
-      'XXX ################',
-      'XXX     !    #######',
-      'XXX        o #######',
-      'XXX      ^^^ #######',
-      'XXX ################',
-      'XXX      ###########',
-      'XXX      ###########',
-      'XXX   ^^ ###########',
-      'XXX ################',
-      'XXX              ###',
-      'XXX           oo ###',
-      'XXX     ^^^^g    ###',
-      'XXX ################',
-      'XXX       ##########',
-      'XXX       ##########',
-      'XXX    ^^ ##########',
-      'XXX ################',
-      'XXX            #####',
-      'XXX          o #####',
-      'XXX       ^^g  #####',
-      'XXX ##%%%###########',
-      'XXX      ###########',
-      'XXX      ###########',
-      'XXX      ###########',
-      'XXX ################',
-      'XXX               ##',
-      'XXX             oo##',
-      'XXX     ^^^ x ^^^ ##',
-      'XXX #########%%%####',
-      'XXX             ####',
-      'XXX  o          ####',
-      '      ^^        ####',
-      '    ################',
+      '  1                 ',
+      '#################   ',
+      '      !             ',
       '                    ',
+      '           o        ',
       '                    ',
+      '   #################',
       '                    ',
-      '    ################',
-      '    ################',
-      ' F  ################',
+      '        oo          ',
+      '         ^          ',
+      '#################   ',
+      '                    ',
+      '      oo            ',
+      '        g           ',
+      '   #################',
+      '                    ',
+      '            o       ',
+      '          ^         ',
+      '#################   ',
+      '                    ',
+      '       oo           ',
+      '           g        ',
+      '   #################',
+      '                    ',
+      '         o          ',
+      '          ^         ',
+      '#################   ',
+      '                    ',
+      '        oo          ',
+      '         ^          ',
+      '   #################',
+      '                    ',
+      '       o            ',
+      '                F   ',
       '####################',
       '####################',
     ],

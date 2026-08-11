@@ -719,6 +719,124 @@ function landsOn(graph, x, y) {
 }
 
 /**
+ * KUINKA LEVEÄ REIÄN ON OLTAVA, JA MIKSI SE EI OLE YKSI.
+ *
+ * Kaksi laattaa, ja luku tulee `PLAYER_SIZES`ista eikä mausta: pienin keho on
+ * 12 px leveä ja **suurin 21**. Yhden laatan aukko on 16 px, eli se päästää
+ * läpi voimatasot 0–2 ja pysäyttää tasot 3–5. Kyykistyminen ei auta, koska se
+ * madaltaa eikä kavenna.
+ *
+ * Se on pahempi vika kuin miltä kuulostaa, ja pahempi kuin liian vaikea kohta:
+ * pelaaja ei voi kutistua omasta tahdostaan, joten isona saapuminen on ansa
+ * josta ei pääse takaisin. **Ja jokainen tämän tiedoston ja `playable.mjs`:n
+ * portti mittaa voimatasoa 0**, eli tasan sitä kokoa joka mahtuu — mikä on syy
+ * siihen ettei tätä huomannut mikään ennen kuin joku pelasi kentän isona.
+ *
+ * Kopio `PLAYER_SIZES`ista samassa hengessä kuin `BEAN_BLOCK_OVER_FLOOR`:
+ * validaattori ei saa importoida piirtoa, ja `verify.mjs` vertaa lukuja.
+ */
+const WIDEST_BODY_TILES = 2;
+
+/**
+ * Universal pystykentille: **jokaisesta rivistä on päästävä läpi isonakin.**
+ *
+ * Rivi jossa on jalansijaa on rivi joka jakaa kentän ylä- ja alapuoleen, ja
+ * aukot siinä ovat ne paikat joista kuljetaan. Jos rivin jokainen aukko on
+ * kapeampi kuin `WIDEST_BODY_TILES`, rivi on läpäisemätön suurimmalle keholle
+ * ja kenttä loppuu siihen.
+ *
+ * Rivit joissa ei ole yhtään aukkoa jätetään rauhaan, ja se on rajaus eikä
+ * unohdus: umpinainen rivi on joko kentän pohja (6-K:n alin rivi) tai
+ * saavuttamattomuus, ja jälkimmäisen huomaa `checkClimb`in kulkukelpoisuus
+ * paremmin kuin tämä. Tämä sääntö vastaa täsmälleen yhteen kysymykseen —
+ * *mahtuuko siitä* — eikä esitä sitä kysymystä paikoista joissa ei ole reikää.
+ */
+function checkClimbWidth(rows, w, problems) {
+  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  for (let y = 0; y < rows.length; y++) {
+    let any = false;
+    let widest = 0;
+    let run = 0;
+    for (let x = 0; x < w; x++) {
+      if (footing(x, y)) { any = true; run = 0; continue; }
+      run++;
+      if (run > widest) widest = run;
+    }
+    if (!any || widest === 0) continue;
+    if (widest < WIDEST_BODY_TILES) {
+      problems.push(`row ${y} is only passable through a ${widest}-tile gap: the widest body`
+        + ` is ${WIDEST_BODY_TILES} tiles, so a player who arrives big is stuck here`);
+    }
+  }
+}
+
+/**
+ * Universal pystykentille: **kulkeminen sivusuunnassa on pakollista.**
+ *
+ * Tämä on se sääntö jota ei ollut, ja sen puuttuminen näkyi molemmissa pelin
+ * pystykentissä yhtä aikaa — vastakkaisina vikoina, mikä on juuri se syy miksi
+ * yksi sääntö kattaa molemmat:
+ *
+ *   - **6-K meni alas.** Sarake 3 oli auki riviltä 5 riville 43 ja maali oli
+ *     sen pohjalla. Kävele vasemmalle, pidä alas, olet perillä.
+ *   - **7-T meni ylös.** Lankut olivat `########---` ja `---########`, ja ne
+ *     menivät päällekkäin sarakkeissa 9–10 — eli oli sarake jolla oli
+ *     jalansija joka ikisellä tasolla. Hyppää paikallasi, olet perillä.
+ *
+ * `checkClimb` on tyytyväinen kumpaankin, ja aivan oikein: se todistaa että
+ * reitti on **olemassa**, ei että se on ainoa. Tämä todistaa toisen puolen.
+ *
+ * Suunta luetaan maalista eikä nimestä, koska kumpikin kysymys on toisen
+ * peilikuva: laskeutuvalta kentältä kielletään **vapaa sarake** (ei jalansijaa
+ * lainkaan koko matkalla), nousevalta **tikapuusarake** (jalansija joka
+ * askelmalla, ja askelmat mitatun hypyn sisällä). Molemmissa vika on sama
+ * lause: kenttä on ratkaistavissa liikkumatta sivuun.
+ */
+function checkClimbTraverse(rows, w, budget, problems) {
+  const h = rows.length;
+  const footing = (x, y) => (y >= 0 && y < h && SOLID.has(rows[y][x])) || (y >= 0 && y < h && SEMI.has(rows[y][x]));
+  const find = (ch) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === ch) return { x, y };
+    return null;
+  };
+  const start = find('1');
+  const goal = find('F');
+  if (!start || !goal) return;
+  const top = Math.min(start.y, goal.y);
+  const bottom = Math.max(start.y, goal.y);
+
+  if (goal.y > start.y) {
+    // Laskeutuva kenttä: sarake jossa ei ole mitään pysäyttämässä.
+    for (let x = 0; x < w; x++) {
+      let clear = true;
+      for (let y = top; y <= bottom && clear; y++) if (footing(x, y)) clear = false;
+      if (clear) {
+        problems.push(`column ${x} is open the whole way from the start at row ${start.y} to the`
+          + ` goal at row ${goal.y}: the climb is solved by holding one direction and falling`);
+        return;
+      }
+    }
+    return;
+  }
+
+  // Nouseva kenttä: sarake jonka varassa pääsee ylös pysähtymättä sivuun.
+  for (let x = 0; x < w; x++) {
+    const rungs = [];
+    for (let y = bottom; y >= top; y--) if (footing(x, y) && !footing(x, y - 1)) rungs.push(y);
+    if (rungs.length < 2) continue;
+    let ladder = rungs[0] >= bottom - budget.wallTiles;
+    for (let i = 1; i < rungs.length && ladder; i++) {
+      if (rungs[i - 1] - rungs[i] > budget.wallTiles) ladder = false;
+    }
+    if (ladder && rungs[rungs.length - 1] <= top + budget.wallTiles) {
+      problems.push(`column ${x} has footing at every rung from row ${rungs[0]} to row`
+        + ` ${rungs[rungs.length - 1]}: the climb is solved by jumping in place`);
+      return;
+    }
+  }
+}
+
+/**
  * Route-only, and the vertical half of "the route works at the smallest size".
  *
  * Three questions, and each is the climb's version of one the horizontal rules
@@ -1264,6 +1382,8 @@ export function validateLevel(rows, budget, opts = {}) {
     checkVines(rows, w, problems);
     checkFalling(rows, w, problems);
     checkIce(rows, w, problems);
+    checkClimbWidth(rows, w, problems);
+    checkClimbTraverse(rows, w, budget, problems);
     const graph = climbGraph(rows, budget);
     checkClimb(rows, w, graph, budget, problems);
     checkClimbPower(rows, w, problems);

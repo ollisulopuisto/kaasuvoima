@@ -132,6 +132,10 @@ export function makeClimber(scene, rows, budget) {
   let plan = null;
   let planFrom = -1;
   let hold = false;
+  /* Pidetäänkö tähtäys sellaisenaan ilmassa. Ks. `keepAim` alempana. */
+  let keepAim = false;
+  /* Ollaanko juuri nyt hyppäämässä jonkin tappavan yli. Ks. `run` alempana. */
+  let hazardJump = false;
   let aimX = goalX * TILE + TILE / 2;
   let aimTop = goalY * TILE;
 
@@ -155,12 +159,52 @@ export function makeClimber(scene, rows, budget) {
         hold = false;
       }
 
+      if (p.onGround) { keepAim = false; hazardJump = false; }
+
       const next = plan && plan.length > 1 ? graph.platforms[plan[1]] : goalPlat;
-      if (next && !(p.onGround && here && next.i === here.i)) {
+      /*
+       * **Ilmassa tähtäystä ei lasketa uudelleen, kun ollaan matkalla alas.**
+       *
+       * `standingOn` palauttaa nollan heti kun jalat irtoavat, ja ilman tätä
+       * ehtoa alaspäin-haara (`next.y > here.y`) lakkasi silloin pätemästä
+       * kesken hypyn: sarake putosi takaisin siihen "lähimpään" arvoon, joka on
+       * suoraan kehon alla, `dx` meni nollaan ja botti lakkasi ohjaamasta
+       * ilmalennon puolivälissä. Mitattuna se oli 6-K:n frame 499 — hyppy
+       * piikkien yli lähti oikein ja pysähtyi ilmaan sarakkeeseen 7, ja
+       * seuraavalla framella se laskeutui piikkiin sarakkeessa 8.
+       */
+      if (next && !keepAim && !(p.onGround && here && next.i === here.i)) {
         /* Aim at the end of the target nearest the body: over an overlap you
          * go straight up, off to one side you go to the edge you can reach. */
         const cx = Math.floor(p.cx / TILE);
-        const col = Math.max(next.x0, Math.min(next.x1, cx));
+        let col = Math.max(next.x0, Math.min(next.x1, cx));
+        /*
+         * ALASPÄIN MENNÄÄN REIÄSTÄ, EI KOHTISUORAAN ALAS.
+         *
+         * Tämä puuttui, ja sen puuttuminen oli syy siihen että 6-K oli
+         * ratkaistavissa putoamalla: botti tähtäsi *lähimpään* sarakkeeseen
+         * kohdetasanteella, ja laskeutuvassa kentässä se sarake on melkein aina
+         * suoraan jalkojen alla — sen lattian alla jolla botti seisoo. Se käveli
+         * sinne, seisoi kiinteän laatan päällä ja jäi siihen.
+         *
+         * Vanhassa 6-K:ssa se ei haitannut, koska koko kentän läpi meni yksi
+         * avoin sarake: botti tarvitsi vain suunnan. Toisin sanoen **botti
+         * läpäisi kentän täsmälleen sillä vialla jota se oli tarkoitettu
+         * mittaamaan** — ja kun vika korjattiin, se jäi ensimmäiselle lattialle.
+         *
+         * Kun kohde on alempana, kelvollisia sarakkeita ovat ne jotka ovat
+         * kohteen päällä mutta **eivät** sen tasanteen päällä jolla nyt seistään.
+         * Ne ovat ne paikat joista oikeasti putoaa. Lähin niistä voittaa, koska
+         * lyhin kävely on se jonka pelaajakin ottaisi.
+         */
+        if (here && next.y > here.y) {
+          let bestCol = -1;
+          for (let c = next.x0; c <= next.x1; c++) {
+            if (c >= here.x0 && c <= here.x1) continue;
+            if (bestCol < 0 || Math.abs(c - cx) < Math.abs(bestCol - cx)) bestCol = c;
+          }
+          if (bestCol >= 0) { col = bestCol; keepAim = true; }
+        }
         aimX = col * TILE + TILE / 2;
         aimTop = next.y * TILE;
       } else if (here && goalPlat && here.i === goalPlat.i) {
@@ -175,10 +219,64 @@ export function makeClimber(scene, rows, budget) {
       const right = dx > 6;
 
       const above = aimTop < feet - 2;
-      /* Jump when there is something above to get to and the body is under it.
-       * `press` is the edge the engine reads; `jump` held is what buys height,
-       * and it is let go the moment the feet clear the target. */
-      const press = p.onGround && above && Math.abs(dx) <= TILE;
+      /*
+       * YLÖS PÄÄSTÄÄN MYÖS SIVUUN, JA SE PUUTTUI.
+       *
+       * Ehto oli `|dx| <= TILE`, eli **hyppy lähti vain kun kohde oli suoraan
+       * pään päällä.** Se toimi 7-T:ssä täsmälleen siksi että sen lankut menivät
+       * päällekkäin sarakkeissa 9–10: oli sarake joka kuului molempiin
+       * tasanteisiin, joten jokainen nousu oli pystyhyppy. Se on sama lause kuin
+       * "kentän voi läpäistä hyppimällä paikallaan" — eli botti läpäisi kentän
+       * sillä vialla jota sen piti mitata, ja kun lankut erotettiin, se käveli
+       * reunan yli ja putosi.
+       *
+       * Nyt hyppy lähtee myös **tasanteen reunalta** kun kohde on ylhäällä ja
+       * sivussa: kaari kantaa sivuun, ja `climbGraph` on jo todennut että se
+       * kantaa tarpeeksi (`across` mahtuu mitattuun `carry`yn tuolla nousulla).
+       * Reunaa mitataan siitä tasanteesta jolla seistään eikä kohteesta, koska
+       * ponnistuspaikka on se joka ratkaisee milloin irrotaan.
+       */
+      const dir = right ? 1 : left ? -1 : 0;
+      let atEdge = false;
+      if (here && dir !== 0) {
+        const edgePx = dir > 0 ? (here.x1 + 1) * TILE : here.x0 * TILE;
+        atEdge = Math.abs(p.cx - edgePx) <= TILE;
+      }
+
+      /*
+       * PIIKIT OVAT MAASTOA, JA TÄMÄ BOTTI EI TUNTENUT NIITÄ LAINKAAN.
+       *
+       * `playable.mjs` suodattaa viholliset ja vaarat pois ennen ajoa, mutta
+       * piikki ja laava ovat **ruudukossa** eivätkä olioita: ne jäävät. Vaakabotti
+       * on osannut väistää ne alusta asti (`lethal`, ks. `level-bot.js`); tämä ei,
+       * ja niin kauan kuin pystykentissä ei ollut piikkejä kävelylinjalla, sitä ei
+       * huomannut kukaan.
+       *
+       * Kaksi laattaa eteenpäin sillä rivillä jolla jalat ovat, ja hyppy jos
+       * siellä on jotain tappavaa. Vaakabotti katsoo viisi, ja **tämä ei saa**:
+       * se kulkee kävelyvauhtia, jolloin kaari kantaa mitattuna 3–4 laattaa, ja
+       * kolmen laatan varoitus vei ponnistuksen niin aikaisin että laskeutuminen
+       * osui täsmälleen piikkiin. Kahdella ponnistus lähtee piikin vierestä ja
+       * kaari tuo alas sen taakse. Luku on siis kaaren pituuden funktio eikä
+       * varovaisuutta — ja se on syy siihen että pystykentän piikit mitoitetaan
+       * *kävelyhypyn* mukaan, samalla perusteella kuin `ice_pit`in kuilut.
+       */
+      let hazardAhead = false;
+      let hazardNear = false;
+      if (p.onGround && dir !== 0) {
+        const standRow = Math.floor(feet / TILE);
+        const cxT = Math.floor(p.cx / TILE);
+        for (let d = 1; d <= 5; d++) {
+          if (!'^W'.includes(at(cxT + dir * d, standRow - 1))) continue;
+          hazardNear = true;
+          if (d <= 2) hazardAhead = true;
+        }
+      }
+      /* Jump when there is something above to get to and the body is under it —
+       * or at the lip it has to leave from. `press` is the edge the engine
+       * reads; `jump` held is what buys height, and it is let go the moment the
+       * feet clear the target. */
+      const press = p.onGround && (hazardAhead || (above && (Math.abs(dx) <= TILE || atEdge)));
       /* The release is asked only on the frames after the press, and that is
        * not tidiness. `vy` is not yet negative on the frame the button goes
        * down — the engine applies the jump inside the update that follows — so
@@ -187,9 +285,43 @@ export function makeClimber(scene, rows, budget) {
        * rise against the 71 px a held standing jump gives, which is short of
        * the three-tile rung the climb is built at, and the bot spent the whole
        * run bouncing under the first platform. */
+      /*
+       * Irrotus vain kun kohde on **ylhäällä**, ja se puuttui.
+       *
+       * `feet <= aimTop - 2` kysyy "ovatko jalat jo kohteen pinnan yläpuolella",
+       * ja se on oikea kysymys nousussa. Laskeutuvalla kohteella `aimTop` on
+       * kaukana alhaalla, joten ehto on tosi heti — hyppy irtosi seuraavalla
+       * framella ja jokainen piikkien yli otettu ponnistus oli näpäytys. Kun
+       * kohde ei ole ylhäällä, ainoa oikea irrotushetki on huippu.
+       */
+      if (press && hazardAhead) hazardJump = true;
       if (press) hold = true;
-      else if (hold && (feet <= aimTop - 2 || p.vy > 0)) hold = false;
-      return { left, right, jump: hold || press, press };
+      else if (hold && ((above && feet <= aimTop - 2) || p.vy > 0)) hold = false;
+      /*
+       * **JUOKSU, JA VAIN PIIKIN YLI.**
+       *
+       * Tämä botti ei ole koskaan juossut, ja se oli sen kaaren mitta: 1,5
+       * px/framea kantaa mitattuna 3–3,5 laattaa, joten yhden laatan piikki
+       * kahden laatan päässä kuitattiin *juuri ja juuri* — laskeutuminen osui
+       * piikin sarakkeeseen sillä puolikkaalla laatalla jolla keho vielä
+       * roikkui sen päällä. Ihminen painaa juoksua eikä edes huomaa kohtaa.
+       *
+       * **Juoksu alkaa viisi laattaa ennen, hyppy kaksi.** Nämä ovat eri lukuja
+       * eivätkä epähuomiossa: `ACC` on 0,0547, joten kävelykatosta 1,5
+       * juoksukattoon 2,5 menee noin 18 framea, ja jos juoksu syttyisi vasta
+       * ponnistusframella keho olisi ilmassa yhä kävelyvauhtia. Mitattuna se oli
+       * tasan tämä vika — ponnistus sarakkeesta 7, laskeutuminen sarakkeeseen 9
+       * ja piikki sarakkeessa 9. Viisi laattaa on vaakabotin oma katse, ja se on
+       * juuri se matka jolla vauhti ehtii nousta ennen ponnistusta.
+       *
+       * Juostaan silti vain silloin kun edessä on jotain tappavaa, eikä aina.
+       * Syy on tämän tiedoston oma: kiipeilykaaret pidetään pieninä jotta
+       * sivuava kamera pitää pään ruudussa (ks. `CAM_PAGE_EDGE`), ja jos botti
+       * juoksisi joka hypyn se mittaisi kameraa eikä kenttää. Piikin yli
+       * hypättäessä sitä kysymystä ei ole: se hyppy on vaakasuora eikä nouse
+       * tasanteelle.
+       */
+      return { left, right, jump: hold || press, press, run: hazardNear || hazardJump };
     },
   };
 }

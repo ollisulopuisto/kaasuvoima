@@ -165,11 +165,26 @@ export const WORLD7_LEVELS = {
    * sarake on lähtösarake, joten sen jokainen sarake on ohut.
    *
    * Askelmat ovat 3 ja 4 ruutua (korpuksen mediaani 4, p90 6; meidän mitattu
-   * `wallTiles` 4), eikä yksikään sivusiirtymä ylitä sitä mitä nouseva hyppy
-   * kantaa — päällekkäiset pankit tekevät sivusiirtymästä nollan. **Kolmen
-   * ruudun askelma otetaan paikaltaan, neljän vaatii vauhdin**, ja juuri sen
-   * eron vaikeusmittari laskee: neljän ruudun askelmia on neljä, ja ne ovat
-   * tämän kentän vaikeus.
+   * `wallTiles` 4). **Kolmen ruudun askelma otetaan paikaltaan, neljän vaatii
+   * vauhdin**, ja juuri sen eron vaikeusmittari laskee: neljän ruudun askelmia
+   * on neljä, ja ne ovat tämän kentän vaikeus.
+   *
+   * ## PANKIT EIVÄT ENÄÄ MENE PÄÄLLEKKÄIN, JA SE OLI VIKA EIKÄ TYYLI
+   *
+   * Tässä luki *"päällekkäiset pankit tekevät sivusiirtymästä nollan"*, ja se
+   * oli totta: puolat olivat `########---` ja `---########`, ja ne jakoivat
+   * sarakkeet 9–10. Se tarkoitti sitä että **oli sarake jolla oli jalansija
+   * joka ikisellä askelmalla** — eli kentän saattoi läpäistä hyppimällä
+   * paikallaan, koskematta ohjaimen sivusuuntiin kertaakaan. Raportoitu
+   * pelaamalla, ei mistään portista.
+   *
+   * Nyt vasen pankki loppuu sarakkeeseen 9 ja oikea alkaa sarakkeesta 11, eli
+   * **sivusiirtymä on yksi sarake eikä nolla**. Yksi eikä kaksi, ja se on
+   * mitattu eikä valittu: neljän ruudun nousulla mitattu hyppy kantaa tasan
+   * yhden sarakkeen (`climbCarry`), joten kaksi olisi tehnyt joka toisesta
+   * askelmasta mahdottoman — ensimmäinen yritys teki, ja `checkClimb` sanoi sen
+   * heti. Sääntö on nyt `checkClimbTraverse`, ja se kaatoi tämän kentän,
+   * 6-K:n ja `verify.mjs`:n oman koekentän samalla lauseella.
    *
    * **Rivin 44 hylly on umpiperä, ja se on siellä tarkoituksella.** Kolmen
    * ruudun lauta pohjapankin yllä, josta ei pääse ylemmäs — lähin lava on
@@ -198,44 +213,44 @@ export const WORLD7_LEVELS = {
       '                    ',
       '                    ',
       '    F               ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '            oo      ',
-      '         ---########',
+      '           ---######',
       '                    ',
       '                r   ',
       '   oo               ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '                    ',
-      '         ---########',
+      '           ---######',
       '                    ',
       '                    ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '                    ',
       '            oo      ',
-      '         ---########',
+      '           ---######',
       '                    ',
       '                    ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '                    ',
-      '         ---########',
+      '           ---######',
       '                    ',
       '    f               ',
       '   oo               ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '                    ',
-      '         ---########',
+      '           ---######',
       '                    ',
       '                    ',
-      '########---         ',
+      '#######---          ',
       '                    ',
       '                    ',
       '                    ',
-      '         ---########',
+      '           ---######',
       '  ooo               ',
       '  ---         !     ',
       '-----------         ',
