@@ -9,7 +9,7 @@ import { moveX, moveY, applyGravity, footingAhead, GRAVITY } from '../level/phys
  * that is about a Pieruprinssi. */
 import { QUICKSAND_SINK, QUICKSAND_WADE, QUICKSAND_GRACE } from './player.js';
 import {
-  drawWalker, drawShell, drawFlyer, drawPlant, drawBoss,
+  drawWalker, drawShell, drawFlyer, drawPlant, drawBoss, bossSize,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
@@ -1759,7 +1759,7 @@ const KING_FORMS = [0, 1, 2, 3, 3, 4, 5];
  */
 export class Boss extends Enemy {
   constructor(level, x, y, variant = 0) {
-    super(level, x, y, 30, 32);
+    super(level, x, y, bossSize(variant).w, bossSize(variant).h);
     this.variant = variant;
     this.king = variant === KING;
     /* Liikesarja. Ei-kuninkaalle sama luku kuin `variant`, joten jokainen
@@ -1793,8 +1793,14 @@ export class Boss extends Enemy {
     this.targetScale = 1;
     this.alwaysActive = true;
     this.active = true;
-    this.baseW = 30;
-    this.baseH = 32;
+    /* Per boss, from the drawing's own table: the picture decides how big the
+     * thing is and the hitbox follows, never the other way round. See
+     * `BOSS_SIZES` for why **52 px** is the height ceiling — 64 was the number
+     * in the first draft, and it is in that table as one of the two heights
+     * that *failed* the power-0 stomp gate. A comment quoting a rejected draft
+     * next to the constant that rejected it is worse than no comment. */
+    this.baseW = bossSize(variant).w;
+    this.baseH = bossSize(variant).h;
     this.spawnX = x;
     this.spawnY = y;
     this.maxHp = this.hp;
@@ -1901,6 +1907,21 @@ export class Boss extends Enemy {
         this.level.spawnPuff(tx * TILE + TILE / 2, (ty + 1) * TILE + 2);
       }
     }
+  }
+
+  /**
+   * Koko luetaan uudelleen `BOSS_SIZES`ista pikatallennusta purettaessa.
+   *
+   * Osumalaatikko on johdettu piirroksesta, ei tallennettu tosiasia: sama
+   * sääntö kuin konstruktorissa, ja tässä se on se sääntö joka pitää vanhan
+   * tallennuksen kelvollisena kun taulukko muuttuu. `applyScale` säilyttää
+   * jalkojen tason ja keskilinjan, joten pomo ei hyppää palautuksessa.
+   */
+  rehydrate() {
+    const size = bossSize(this.variant);
+    this.baseW = size.w;
+    this.baseH = size.h;
+    this.applyScale();
   }
 
   applyScale() {
@@ -2517,7 +2538,26 @@ export const ENEMY_CHARS = {
   x: (level, tx, ty) => new SpikeGuy(level, tx * TILE, ty * TILE),
   A: (level, tx, ty) => new AngrySun(level, tx * TILE, ty * TILE),
   H: (level, tx, ty) => new Heartburn(level, tx * TILE, (ty + 1) * TILE),
-  b: (level, tx, ty, variant) => new Boss(level, tx * TILE, ty * TILE, variant),
+  /*
+   * The marker says **a boss stands here**, and that has to mean the same thing
+   * whatever size the boss is.
+   *
+   * This used to place the sprite's top-left corner on the marker tile, which
+   * was indistinguishable from "stands here" only while every boss was the same
+   * 30x32. The moment the sizes became per boss, a 44-tall one reached twelve
+   * pixels deeper and spawned **inside the arena floor**, and a 76-wide one
+   * spilled out of the room to the right. Measured: every fortress whose boss
+   * had changed size failed its power-0 stomp, and none of them failed for the
+   * reason it looked like — they were sunk into the ground, not out of reach.
+   *
+   * So the feet are pinned to where a 30x32 boss's feet were, and the body is
+   * centred on the same column. Every arena in the game keeps its meaning and
+   * not one of them had to move.
+   */
+  b: (level, tx, ty, variant) => {
+    const { w, h } = bossSize(variant);
+    return new Boss(level, tx * TILE + 15 - w / 2, ty * TILE + 32 - h, variant);
+  },
   O: (level, tx, ty) => new Moon(level, tx * TILE, ty * TILE),
   /* The baron is taller than a tile, so its marker is the square it *stands
    * in*: the body is hung from the bottom of that square rather than dropped

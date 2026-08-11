@@ -31,7 +31,12 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 const { chromium } = await import(process.env.PW_MODULE || 'playwright');
-const browser = await chromium.launch();
+/* `PW_BROWSER` for the same reason `verify.mjs` has it: on a machine where the
+ * browsers were installed somewhere other than Playwright's default, the launch
+ * fails with an install prompt that does not apply. This tool needed it the
+ * first time the title art changed and the card had to be rebuilt. */
+const browser = await chromium.launch(
+  process.env.PW_BROWSER ? { executablePath: process.env.PW_BROWSER } : {});
 const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
 await page.goto(`http://127.0.0.1:${PORT}`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);

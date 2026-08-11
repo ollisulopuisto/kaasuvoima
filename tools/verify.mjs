@@ -1,5 +1,5 @@
 /**
- * Headless smoke + playability check for Super Fart Bros 3.
+ * Headless smoke + playability check for Kaasuvoima.
  *
  *   npm i -D playwright && npx playwright install chromium
  *   node tools/verify.mjs
@@ -4596,14 +4596,24 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       const boss = s.entities.find((e) => e instanceof K.Boss);
       const idle = mkInput();
-      for (let f = 0; f < 90; f++) s.update(idle);
+      /* Settle him rather than let him pace — see the same loop in the
+       * `BOSS_LEVELS` sweep for what the other seventy-five frames were doing
+       * to where the player got put down. */
+      for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s.update(idle);
       boss.hp = 1;
       boss.spikePhase = 'open';
       const openWindow = boss.openFrames;
       boss.spikeTimer = openWindow;
       const p = s.player;
       p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - 90;
+      /* Approach measured from the boss's **edge and top**, not from a constant.
+       * The numbers here were tuned when every boss was 30x32, and per-boss
+       * sizes broke both halves: 40 px from a wide boss's centre is inside his
+       * flank, and a tall boss needs a boss-height of extra run-up or the
+       * player arrives over him still rising, which is a collision and not a
+       * stomp. Derived in full at the `BOSS_LEVELS` sweep. */
+      const clearance = boss.w / 2 + 25 + boss.h;
+      p.x = boss.cx - (clearance + 50);
       p.vx = 0; p.vy = 0;
       s.centerCamera();
       const i = mkInput();
@@ -4619,7 +4629,7 @@ const report = await page.evaluate(async () => {
           if (p.vx < want - 0.15) i.held.right = true;
           else if (p.vx > want + 0.15) i.held.left = true;
           if (p.vy < 0) i.held.jump = true;
-        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+        } else if (adx > clearance + Math.abs(boss.vx) * 12) {
           i.held[dx > 0 ? 'right' : 'left'] = true;
           i.held.run = true;
         } else {
@@ -4841,9 +4851,16 @@ const report = await page.evaluate(async () => {
 
     const brag = share.shareText({ name: 'TESTI', score: 12345, world: 2, level: '2-3' });
     const plain = share.shareText(null);
-    expect('jaettava rivi kertoo pisteet ja kentän, ja tyhjä taulu ei keksi tulosta',
-      brag.includes('12345') && brag.includes('2-3') && brag.includes('Super Fart Bros 3')
-      && !/\d{3}/.test(plain), `${brag} | ${plain}`);
+    /* Pelin nimi luetaan `share.js`:stä eikä kirjoiteta tähän uudelleen.
+     * Kirjoitettuna se olisi kolmas paikka jossa nimi lukee — index.html ja
+     * alkuruutu ovat kaksi muuta — ja nimenvaihdon jälkeen portti kaatuisi
+     * väittäen että jakorivi on rikki, vaikka rikki olisi portin oma muisti
+     * vanhasta nimestä. Testi kysyy siis "kantaako rivi pelin nimen", joka on
+     * se asia jonka se on aina tarkoittanut. */
+    const title = share.SHARE_TITLE;
+    expect('jaettava rivi kertoo pisteet, kentän ja pelin nimen, ja tyhjä taulu ei keksi tulosta',
+      !!title && brag.includes('12345') && brag.includes('2-3') && brag.includes(title)
+      && plain.includes(title) && !/\d{3}/.test(plain), `${brag} | ${plain}`);
 
     const combos = [
       [() => Promise.resolve(), () => Promise.resolve(), 'share'],
@@ -6995,6 +7012,43 @@ const report = await page.evaluate(async () => {
     }
 
     {
+      /*
+       * VANHA PIKATALLENNUS, UUSI KOKOTAULUKKO.
+       *
+       * `entityToJSON` kopioi jokaisen oman kentän ja `entityFromJSON` herättää
+       * olion ilman konstruktoria, joten tallennettu `w/h/baseW/baseH` palasi
+       * sellaisenaan — ja kun `BOSS_SIZES` muuttui 30x32:sta seitsemään eri
+       * kokoon, ennen päivitystä otettu tallennus herätti pomon **vanhalla
+       * osumalaatikolla uuden piirroksen alla**. Tallennusversio on yhä `v: 1`,
+       * joten mikään ei hylännyt sitä.
+       *
+       * Testi väärentää juuri sen: pakottaa tallennukseen vanhat mitat ja
+       * vaatii että purku johtaa ne uudelleen taulukosta.
+       */
+      reset();
+      const s0 = new LevelScene(game, '6-F');
+      game.setScene(s0);
+      const live = s0.entities.find((e) => e instanceof E.Boss);
+      const want = { w: live.w, h: live.h };
+      const snap = JSON.parse(JSON.stringify(captureState(game)));
+      const saved = snap.level.entities.find((e) => e.t === 'Boss');
+      /* Väärennös on uskottava vasta kun se on **johdonmukainen**: vanhassa
+       * tallennuksessa oli vanha korkeus *ja* sitä vastaava `y`, eli jalat
+       * samalla lattialla. Ensimmäinen yritys vaihtoi vain korkeuden ja jätti
+       * uuden `y`:n, jolloin syntyi tila jota ei ole koskaan ollut olemassa —
+       * ja testi kaatui siihen eikä korjaukseen. */
+      const feet = saved.y + saved.h;
+      saved.w = 30; saved.h = 32; saved.baseW = 30; saved.baseH = 32;
+      saved.y = feet - 32;
+      restoreState(game, snap);
+      const back = game.scene.entities.find((e) => e.constructor.name === 'Boss');
+      expect('vanhentunut pikatallennus ei tuo takaisin vanhaa osumalaatikkoa',
+        !!back && back.w === want.w && back.h === want.h
+        && back.y + back.h === live.y + live.h,
+        back ? `${back.w}x${back.h}, odotettu ${want.w}x${want.h}` : 'ei pomoa');
+    }
+
+    {
       reset();
       const s = new LevelScene(game, '3-F');
       game.setScene(s);
@@ -7018,16 +7072,52 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       const boss = s.entities.find((e) => e instanceof E.Boss);
       const idle = mkInput();
-      for (let f = 0; f < 90; f++) s.update(idle);
+      /*
+       * Settle the boss, do not let him go for a walk.
+       *
+       * This was a flat 90 frames, which is about seventy more than the job
+       * needs: a boss spawns a little above the floor and is standing on it
+       * inside fifteen. The other seventy-five were him pacing, and at ~1.5 px
+       * a frame that carried him a hundred and thirty pixels off his mark —
+       * far enough that the player, who is placed *relative to him*, was being
+       * set down outside the arena entirely. In 7-F that landed a power-0
+       * player on the spike bed of the corridor before it, and the fortress
+       * failed a test about stomping because of where the test stood him.
+       *
+       * `boss.onGround` is the actual precondition, so it is the actual loop.
+       */
+      for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s.update(idle);
 
       boss.hp = 1;
       boss.spikePhase = 'open';
       const openWindow = boss.openFrames;
       boss.spikeTimer = openWindow;
 
+      /*
+       * Where a power-0 player has to leave the ground, and why it is measured
+       * off **both** of the boss's dimensions.
+       *
+       * The old number was a bare 40 px from his centre. That was written when
+       * every boss was 30x32, where it quietly meant "take off 25 px clear of
+       * his flank, with a whole boss-height of air to climb". Per-boss sizes
+       * broke both halves of that at once: 40 px from the centre of a 68-wide
+       * storm is 6 px from his side, and a body twenty pixels taller needs the
+       * extra time in the air to get over it.
+       *
+       * Measured, that second half is the one that actually failed. A stomp
+       * only counts while descending, so arriving over a 52 px boss on the way
+       * *up* is not a stomp, it is walking into him — which is exactly what the
+       * trace showed at 8-F, contact at his flank with `vy` still negative.
+       * At power 0 the rise and the run are within a factor of two of each
+       * other in px/frame, so one boss-height of extra run-up is the honest
+       * term, and adding it turns all seven fortresses green without touching
+       * the power level, the window, or the boss.
+       */
+      const clearance = boss.w / 2 + 25 + boss.h;
+
       const p = s.player;
       p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - 90;
+      p.x = boss.cx - (clearance + 50);
       p.vx = 0; p.vy = 0;
       s.centerCamera();
 
@@ -7044,7 +7134,7 @@ const report = await page.evaluate(async () => {
           if (p.vx < want - 0.15) i.held.right = true;
           else if (p.vx > want + 0.15) i.held.left = true;
           if (p.vy < 0) i.held.jump = true;
-        } else if (adx > 40 + Math.abs(boss.vx) * 12) {
+        } else if (adx > clearance + Math.abs(boss.vx) * 12) {
           i.held[dx > 0 ? 'right' : 'left'] = true;
           i.held.run = true;
         } else {
@@ -13693,14 +13783,21 @@ const report = await page.evaluate(async () => {
        * kaksi pomoa samasta rungosta, tämä kaatuu ennen kuin se on kentässä.
        */
       {
-        const W = 40;
-        const H = 40;
+        /* Kehys mitoitetaan `BOSS_SIZES`ista eikä kirjoiteta käsin, ja se on
+         * korjaus eikä siistiminen: tässä luki `W = 40, H = 40` siltä ajalta
+         * jolloin jokainen pomo oli 30x32. Kun koot erosivat, 68 leveä sääherra
+         * **rajautui 36 pikseliin** ja 52 korkea kuningas katkesi — eli portti
+         * vertaili typistettyjä siluetteja ja piti niitä kokonaisina. Se meni
+         * läpi, mikä on juuri se tapa jolla tällainen vika jää huomaamatta. */
+        const PAD = 4;
+        const W = Math.max(...sprites.BOSS_SIZES.map((b) => b.w)) + PAD * 2;
+        const H = Math.max(...sprites.BOSS_SIZES.map((b) => b.h)) + PAD * 2;
         const maskOf = (v) => {
           const c = document.createElement('canvas');
           c.width = W;
           c.height = H;
           const gg = c.getContext('2d');
-          sprites.drawBoss(gg, 4, 4, 12, 1, false, v, 1, 0);
+          sprites.drawBoss(gg, PAD, PAD, 12, 1, false, v, 1, 0);
           const d = gg.getImageData(0, 0, W, H).data;
           const m = new Uint8Array(W * H);
           for (let i = 0; i < W * H; i++) m[i] = d[i * 4 + 3] > 8 ? 1 : 0;
@@ -13728,6 +13825,107 @@ const report = await page.evaluate(async () => {
           empty >= 0
             ? `pomo ${empty} on käytännössä tyhjä — piirto ei tuottanut siluettia`
             : `pahin pari ${worst.a} vs ${worst.b}: ${worst.iou.toFixed(3)}, kynnys 0,82`);
+
+        /*
+         * JA SE MITÄ ERILAISUUS EI TODISTA: ETTÄ MUOTO ON HAHMON MUOTO.
+         *
+         * Yllä oleva portti vertaa pomoja toisiinsa, ja seitsemän erilaista
+         * huonekalua läpäisee sen vaivatta. Väriltä riisuttuna ne olivatkin
+         * mäki, veturi, muna, läiskä ja porttikäytävä — ja jokainen niistä oli
+         * eri muotoinen kuin muut. Ero ei ole luettavuus.
+         *
+         * Yhteinen vika oli viidessä seitsemästä sama: **päätä ei ollut
+         * siluetissa.** Se oli piirretty vartalon ääriviivan sisään ja merkitty
+         * värillä, ja väri on ensimmäinen asia joka katoaa siltä etäisyydeltä
+         * jolta tätä peliä pelataan.
+         *
+         * Portti lukee kunkin pomon oman `BOSS_PLANS`-ilmoituksen ja mittaa
+         * juuri sen väitteen. Ilmoitus on datana `boss.js`:ssä, koska portin
+         * oma kopio siitä vanhenee — kaksi muuta vakiota tässä samassa
+         * tiedostossa vanheni jo tällä viikolla.
+         */
+        const shape = (mask) => {
+          const rows = [];
+          for (let y = 0; y < H; y++) {
+            let n = 0;
+            for (let x = 0; x < W; x++) n += mask[y * W + x];
+            rows.push(n);
+          }
+          const first = rows.findIndex((n) => n > 0);
+          const last = rows.length - 1 - [...rows].reverse().findIndex((n) => n > 0);
+          const widths = rows.slice(first, last + 1);
+          const maxW = Math.max(...widths);
+          const area = widths.reduce((a, b) => a + b, 0);
+          let cy = 0;
+          widths.forEach((n, y) => { cy += n * y; });
+          cy = area ? cy / area : 0;
+
+          // notch: the deepest pinch in the top 60 % — a neck, in other words.
+          let notch = 1;
+          for (let y = 1; y < Math.floor(widths.length * 0.6); y++) {
+            if (!widths[y]) continue;
+            const above = Math.max(...widths.slice(0, y));
+            const below = Math.max(...widths.slice(y + 1));
+            notch = Math.max(notch, Math.min(above, below) / widths[y]);
+          }
+          // monotone: how consistently the outline goes one way.
+          const steps = widths.slice(1)
+            .map((n, k) => Math.sign(n - widths[k])).filter(Boolean);
+          const down = steps.filter((v) => v < 0).length;
+          const monotone = steps.length
+            ? Math.max(down, steps.length - down) / steps.length : 1;
+          // crest: the biggest drop in the top contour, for heads carried in
+          // front rather than on top. Row widths cannot see those at all.
+          const tops = [];
+          for (let x = 0; x < W; x++) {
+            let y = 0;
+            while (y < H && !mask[y * W + x]) y++;
+            if (y < H) tops.push(y);
+          }
+          let crest = 0;
+          for (let k = 1; k < tops.length; k++) {
+            crest = Math.max(crest, tops[k] - tops[k - 1]);
+          }
+          return {
+            fill: area / (maxW * widths.length),
+            top: 1 - cy / Math.max(1, widths.length - 1),
+            taper: maxW / Math.min(...widths.filter((n) => n > 0)),
+            notch,
+            monotone,
+            crest: crest / widths.length,
+            rounds: new Set(widths).size,
+            baseFrac: widths[widths.length - 1] / maxW,
+          };
+        };
+        const HIGH = (m) => [m.top >= 0.40, `massa liian alhaalla, ${m.top.toFixed(2)} < 0,40`];
+        const NECK = (m) => [m.notch >= 1.5, `kaulaa ei näy, kurouma ${m.notch.toFixed(2)} < 1,5`];
+        const PLANS = {
+          figure: (m) => [NECK(m), HIGH(m)],
+          wedge: (m) => [[m.monotone >= 0.78,
+            `ääriviiva kääntyy liikaa, ${m.monotone.toFixed(2)} < 0,78`], HIGH(m)],
+          quadruped: (m) => [[m.crest >= 0.18,
+            `yläreuna on tasainen, harja ${m.crest.toFixed(2)} < 0,18`], HIGH(m)],
+          blob: (m) => [[m.rounds >= 6,
+            `ääriviivassa ${m.rounds} eri leveyttä, alle kuuden se on laatikko`], HIGH(m)],
+          anvil: (m) => [
+            [m.top <= 0.46, `ei sittenkään alapainoinen, ${m.top.toFixed(2)} > 0,46`],
+            [m.baseFrac >= 0.8, `jalusta ${m.baseFrac.toFixed(2)} leveimmästä, liian kapea`],
+            NECK(m),
+          ],
+        };
+        const planBad = [];
+        const planShown = [];
+        masks.forEach((mask, v) => {
+          const plan = sprites.BOSS_PLANS[v];
+          const m = shape(mask);
+          planShown.push(`${v}=${plan} kurouma ${m.notch.toFixed(1)} täyttö ${m.fill.toFixed(2)}`);
+          if (!PLANS[plan]) { planBad.push(`pomo ${v}: tuntematon runkotyyppi "${plan}"`); return; }
+          if (m.fill > 0.80) planBad.push(`pomo ${v}: täyttö ${m.fill.toFixed(2)} > 0,80, se on laatikko`);
+          if (m.taper < 2.0) planBad.push(`pomo ${v}: kavennus ${m.taper.toFixed(2)} < 2,0, se on palkki`);
+          PLANS[plan](m).forEach(([ok, why]) => { if (!ok) planBad.push(`pomo ${v} (${plan}): ${why}`); });
+        });
+        expect('jokainen pomo on sen muotoinen minkä se itse ilmoittaa olevansa',
+          planBad.length === 0, planBad.length ? planBad.join(' | ') : planShown.join(', '));
       }
     }
   }
@@ -18472,7 +18670,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 
 /* --------------------------------- output -------------------------------- */
 const pad = (s, n) => String(s).padEnd(n);
-console.log(`\nSuper Fart Bros 3 — verify   (${report.worlds} worlds, ${report.levels.length} levels)\n`);
+console.log(`\nKaasuvoima — verify   (${report.worlds} worlds, ${report.levels.length} levels)\n`);
 console.log(`  ${pad('LEVEL', 8)}${pad('BOT', 10)}${pad('REACH', 8)}STOPPED BY`);
 for (const l of report.levels) {
   console.log(`  ${pad(l.id, 8)}${pad(l.result, 10)}${pad(`${l.progress ?? '-'}%`, 8)}${l.cause || ''}`);

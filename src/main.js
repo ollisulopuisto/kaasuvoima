@@ -844,7 +844,7 @@ class Game {
     const lines = [
       // Which build is on screen. Asked more than once, and guessing from
       // which features are visible is a poor way to answer it.
-      `SFB v${GAME_VERSION}`,
+      `KV v${GAME_VERSION}`,
       `FPS ${this.fps}  FRAME ${n(this.frameMs)}MS  WORK ${n(this.workMs)}MS  STEPS ${this.stepsThisFrame}`,
       `SCENE ${(scene ? scene.constructor.name : 'NONE').replace('SCENE', '')}`
         + `${scene && scene.id ? ` ${scene.id}` : ''}  TICK ${scene ? scene.tick || 0 : 0}`,

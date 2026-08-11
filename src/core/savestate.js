@@ -47,6 +47,26 @@ function entityFromJSON(scene, data) {
   Object.assign(entity, data);
   delete entity.t;
   entity.level = scene;
+  /*
+   * JOHDETTU TILA JOHDETAAN UUDELLEEN, EI PALAUTETA.
+   *
+   * `entityToJSON` kopioi jokaisen oman kentän, eikä tässä kutsuta konstruktoria
+   * — `Object.create` + `Object.assign` — joten kaikki mitä olio tiesi itsestään
+   * tallennushetkellä palaa sellaisenaan, myös se mikä oli *laskettu* jostain
+   * taulukosta. Niin kauan kuin taulukko ei muutu, se on sama asia.
+   *
+   * Pomojen koot muuttuivat (30x32 → seitsemän eri kokoa), ja siinä hetkessä ne
+   * kaksi lakkasivat olemasta sama asia: ennen päivitystä otettu pikatallennus
+   * herättää pomon **vanhalla osumalaatikolla uuden piirroksen alla**, eli
+   * 36x52 luuranko jonka päätä ei voi tallata. Tallennusversio on yhä `v: 1`,
+   * joten mikään ei hylkää sitä.
+   *
+   * Ratkaisu ei ole version nosto (se heittäisi pelaajan tallennukset menemään)
+   * vaan se että olio saa kertoa mikä sen tilasta on johdettua ja johtaa sen
+   * uudelleen. `rehydrate` on valinnainen, joten tämä koskee vain niitä joilla
+   * on jotain johdettavaa.
+   */
+  if (typeof entity.rehydrate === 'function') entity.rehydrate();
   return entity;
 }
 

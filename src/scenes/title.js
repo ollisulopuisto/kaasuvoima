@@ -113,13 +113,22 @@ export class TitleScene {
     ctx.fillRect(20, 26, 280, 2);
     ctx.fillRect(20, 110, 280, 2);
 
-    drawText(ctx, 'SUPER', 160, 34, { color: '#ffffff', align: 'center', shadow: '#2c5c2c', scale: 2 });
-    drawText(ctx, 'FART BROS', 160, 54, { color: '#8fe04a', align: 'center', shadow: '#204020', scale: 3 });
-    ctx.fillStyle = '#ffd048';
-    ctx.fillRect(140, 80, 40, 26);
-    ctx.fillStyle = '#101018';
-    ctx.fillRect(143, 83, 34, 20);
-    drawText(ctx, '3', 160, 85, { color: '#ffd048', align: 'center', scale: 2 });
+    /*
+     * KAASUVOIMA, kahdella rivillä ja isompana kuin edeltäjänsä.
+     *
+     * Vanha logo oli kolmiosainen — pieni SUPER, iso FART BROS ja keltainen
+     * kolmoslaatta — koska se jäljitteli erästä toista logoa. Uusi nimi ei
+     * jäljittele mitään, joten se saa oman rakenteensa, ja rakenne on tässä
+     * onnenkantamoinen: **KAASU ja VOIMA ovat molemmat viisi merkkiä**, eli
+     * kirjaimet asettuvat sarakkeisiin ilman että kumpaakaan riviä tarvitsee
+     * harventaa. 5 merkkiä * (5 + 1) - 1 = 29 px kerrottuna neljällä = 116 px,
+     * ja laatikko on 280 leveä, joten molemmin puolin jää 82 px.
+     *
+     * Kolmonen jäi pois eikä kadonnut vahingossa: se oli osa vanhaa vitsiä,
+     * eikä ole olemassa Kaasuvoima 1:tä eikä 2:ta joiden jatko-osa tämä olisi.
+     */
+    drawText(ctx, 'KAASU', 160, 34, { color: '#ffffff', align: 'center', shadow: '#2c5c2c', scale: 4 });
+    drawText(ctx, 'VOIMA', 160, 70, { color: '#8fe04a', align: 'center', shadow: '#204020', scale: 4 });
 
     // strolling cast
     const walkX = ((this.tick * 0.6 + 120) % 400) - 40;

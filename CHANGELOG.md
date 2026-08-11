@@ -7,6 +7,187 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.72 — katselmointi löysi vanhentuvan pikatallennuksen
+
+Erän katselmointi, ja se löysi neljä asiaa joista kolme olivat omia ja yksi
+vanha. Kaikki neljä oli helppo tarkistaa mittaamalla, ja kaksi niistä ei ollut
+sitä miltä ne ensin näyttivät.
+
+### Vanha pikatallennus toi takaisin vanhan osumalaatikon
+
+Tämä on niistä ainoa oikea vika. `entityToJSON` kopioi jokaisen oman kentän ja
+`entityFromJSON` herättää olion **ilman konstruktoria**, joten tallennettu
+`w/h/baseW/baseH` palasi sellaisenaan. Niin kauan kuin `BOSS_SIZES` ei
+muuttunut, se oli sama asia — ja tässä erässä se muuttui. Ennen päivitystä
+otettu pikatallennus herätti pomon **vanhalla osumalaatikolla uuden piirroksen
+alla**: 36x52 luuranko jonka päätä ei voi tallata. Tallennusversio on yhä
+`v: 1`, joten mikään ei hylännyt sitä.
+
+Korjaus ei ole version nosto — se heittäisi pelaajien pikatallennukset menemään
+— vaan `rehydrate()`: olio kertoo mikä sen tilasta on **johdettua** ja johtaa
+sen uudelleen purettaessa. Osumalaatikko on johdettu piirroksesta, ei
+tallennettu tosiasia.
+
+**Ja ensimmäinen testi tästä oli väärin.** Se vaihtoi tallennukseen vanhan
+korkeuden mutta jätti uuden `y`:n, eli väärensi tilan jota ei ole koskaan ollut
+olemassa, ja kaatui siihen eikä korjaukseen. Uskottava väärennös on
+johdonmukainen: vanha korkeus *ja* sitä vastaava `y`, jalat samalla lattialla.
+
+### Kolme kirjanpitovirhettä
+
+- Portin loppubanneri sanoi yhä `Super Fart Bros 3 — verify`. Nimenvaihdon
+  haku oli rajattu `src/`:ään eikä kattanut `tools/`:ia.
+- `Boss`-konstruktorin kommentti sanoi että **64 px on katto**, vaikka
+  `BOSS_SIZES` sanoo 52 ja kirjaa 64:n yhdeksi niistä kahdesta korkeudesta
+  jotka *kaatuivat* portista. Hylättyä luonnosta lainaava kommentti sen vakion
+  vieressä joka hylkäsi sen on huonompi kuin ei kommenttia lainkaan.
+- ROADMAP väitti että `w / 2 + 25 + h` palauttaa vanhat luvut 30x32:lla. Ei
+  palauta: 15 + 25 + 32 = 72 vanhan vakion 40 sijaan. Testi menee silti läpi,
+  mutta *"tämä ei muuta vanhaa käytöstä"* on eri väite kuin *"tämä toimii"*.
+
+---
+
+## v26.08.11.71 — pomot piirrettiin siluetti edellä, ja viisi seitsemästä oli päätöntä
+
+Omistaja katsoi kokoja ja sanoi että mittasuhteet ovat yhä pielessä, ja pyysi
+tekemään sen oikein päin: **ensin armatuuri ja siluetti, vasta sitten
+yksityiskohdat.** Se oli oikea neuvo ja se paljasti vian jota kolme
+kokokierrosta ei ollut löytänyt.
+
+### Väri pois, ja kuusi seitsemästä oli huonekalu
+
+Maskeina ne olivat **mäki, veturi, muna, läiskä ja porttikäytävä**. Veturi oli
+kirjaimellinen: valtikka seisoi pystyssä matalan takapään päällä, eli savupiipun
+paikalla ja savupiipun muotoisena.
+
+Yhteinen vika oli viidessä sama: **päätä ei ollut siluetissa.** Se oli piirretty
+vartalon ääriviivan sisään ja merkitty värillä, ja väri on ensimmäinen asia joka
+katoaa siltä etäisyydeltä jolta peliä pelataan. Luuranko oli ainoa luettava, ja
+ainoa jolla oli kaularako.
+
+### Runkotyyppi on ilmoitus, ja portti mittaa sen
+
+"Jokaisella pomolla pitää olla kaula" olisi tehnyt sääherrasta miehen
+pilviasussa ja antanut pöhölle leuan. TAI-ehto joka hyväksyy minkä tahansa
+lausekkeen taas hyväksyy kaiken. Siksi **jokainen pomo ilmoittaa itse mikä se
+on** (`BOSS_PLANS`), ja portti tarkistaa että se toimitti sen:
+
+| runkotyyppi | kuka | mitä on velkaa |
+| --- | --- | --- |
+| `figure` | nyrkkeilijä, luuranko, kuningas | kurouma kaulan kohdalla ≥ 1,5 |
+| `anvil` | jyskyttäjä | massa **alhaalla**, jalusta ≥ 0,8 leveimmästä, ja silti kaula |
+| `quadruped` | syöksyjä | harja yläreunassa ≥ 0,18 |
+| `wedge` | sääherra | ääriviiva ei käänny, monotonisuus ≥ 0,78 |
+| `blob` | pöhö | ≥ 6 eri leveyttä, eli ääriviiva kaartuu |
+
+Kaksi mittaria kirjoitettiin ensin väärin ja korjattiin mittaamalla:
+
+**Ensimmäinen pään mittari kysyi "onko pää pieni"**, mikä on täsmälleen väärin
+päin — haettu mittasuhde on *iso* pää, ja luuranko, seitsemästä paras, sai
+nollan koska sen kallo on 88 % leveimmästä rivistä. Pään tekee luettavaksi
+**kurouma**, ei koko.
+
+**Ja jyskyttäjä kaatoi korkean massakeskipisteen sääntöön 0,415:llä — ja hän oli
+oikeassa ja sääntö väärässä.** Hänen koko luonteensa on laskeutua päällesi.
+Vapautus olisi ollut helppo ja epärehellinen liike; vapautus on tarkistus jonka
+lakkasi ajamasta. Nyt hän ilmoittaa päinvastaisen väitteen ja häntä mitataan
+sitä vasten.
+
+### Ja portti löysi kaksi asiaa joita kukaan ei etsinyt
+
+**Siluettiportin kehys oli 40x40 ajalta jolloin jokainen pomo oli 30x32.** Kun
+koot erosivat, 68 leveä sääherra **rajautui 36 pikseliin** ja 52 korkea kuningas
+katkesi — eli portti vertaili typistettyjä siluetteja ja piti niitä kokonaisina.
+Se meni läpi, mikä on juuri se tapa jolla tällainen vika jää huomaamatta.
+Kehyksen korjaaminen paransi mittausta: pahin pari 0,802 → **0,547**.
+
+**Ja nyrkkeilijän hanskat täyttivät hänen kaulansa.** Ne lepäsivät riveillä 10
+ja 15, ja ylempi peitti tasan sen kahden pikselin raon jonka takia päätä
+ylipäänsä näkee. Kurouma 1,00. Maailman 1 pomo oli ainoa jota tässä erässä ei
+piirretty uusiksi — eli juuri se johon kukaan ei katsonut.
+
+Jyskyttäjän jalat levenivät 22:sta 24:ään samasta syystä: `anvil` lupaa jalustan
+joka on 0,8 leveimmästä, ja leveimmäksi kohdaksi paljastui *kädet*.
+
+---
+
+## v26.08.11.70 — pomoilla on vihdoin koko, ja portti mittasi hyppyä väärältä puolelta
+
+Omistaja katsoi pomojen kuvalevyä kolme kertaa ja sanoi joka kerta saman asian
+eri sanoin: *"ne ovat edelleen kutakuinkin samankokoisia"*, ja lopulta
+*"nyt ne näyttävät venytetyiltä — haluan ISOJA ja JÄREITÄ, kuten
+arcade-pelien pomot"*. Molemmat pitivät paikkansa ja ne olivat eri vika.
+
+### 1. Koko: laatikko per pomo, katto 52 px ja mitattu
+
+Kaikki seitsemän mahtuivat 30x32:een, eli kahteen laattaan, ja pelkkä muoto ei
+sitä korjaa: seitsemän siluettia samassa laatikossa on edelleen seitsemän
+samankokoista asiaa. Nyt laatikko on pomokohtainen (`BOSS_SIZES`) ja piirrokset
+on kirjoitettu siihen.
+
+**Katto on 52 px ja se on mitattu kahdesti.** Voimatason 0 pelaajan *jalat*
+nousevat 71 px paikaltaan hypätessä ja 100 px vauhdista. Ensimmäinen luonnos
+laittoi luurangon 64:ään ja kuninkaan 60:een — molemmat alle 71:n, molemmat
+kaatoivat portin. Seitsemän pikselin marginaali on marginaali jonka pomon oma
+hengitys syö.
+
+### 2. Muoto: massa eikä mitta
+
+Ensimmäinen kokoluonnos venytti leveydet 72:een ja 76:een ja jätti korkeudet
+30:een ja 44:ään. 2,4:1-vartalo jonka toisessa päässä on naama on bussi, ei
+pomo. Nyt **1,6:1 on levein sallittu suhde** ja korkeusbudjetti käytetään:
+syöksyjä 72x30 → 64x40, sääherra 76x44 → 68x46.
+
+Se ei vielä riittänyt, ja kolme korjausta olivat kaikki samaa sukua:
+
+- **Syöksyjä oli veturi**, koska tasakorkea palkki jonka päässä on pää on
+  veturi millä tahansa suhteella. Nyt selkä on **portaikko** — kolme askelmaa,
+  kukin kahdeksan pikseliä edellistä korkeammalla — ja pää roikkuu kyhmyn
+  *alla* eikä sen päässä.
+- **Sääherra oli bussi kahdesti.** Ensin suhde, sitten — suhteen korjaamisen
+  jälkeenkin — **kaksi vaaleaa silmää rinnakkain tummalla rungolla, eli
+  valaistut ikkunat**. Ratkaisu on se johon isot pomot aina turvautuvat: *yksi
+  valtava silmä keskellä*. Yksisilmäinen ei ole ajoneuvo. Ilmapuntari siirtyi
+  alemmas ja pienemmäksi, koska kultakehyksinen vaalea neliö silmän korkeudella
+  oli se toinen silmä.
+- **Kuningas oli kaappi**, koska vaippa oli yhtä leveä kuin hän: vaakaviiva
+  siluetin poikki leikkaa sen kahdeksi laatikoksi. Nyt olkapanssarit työntyvät
+  ulos, vyötärö kapenee 18 pikseliin ja turkis on vain panssarien päällä.
+
+Luuranko sai päinvastaisen hoidon: pääkallo lähes koko leveydeltä ja
+reisiluut kuusi pikseliä korkeat. Iso pää lyhyillä paksuilla jaloilla on se
+mittasuhde josta jokainen arcade-järkäle on piirretty.
+
+Siluettiportti (`jokainen pomo on oman muotoinen`) pitää: pahin pari 0,802
+kynnyksen 0,82 alla. Marginaali on ohut ja se on tässä sanottu ääneen.
+
+### 3. Ja portti mittasi hyppyä väärältä puolelta
+
+Seitsemän linnaketta kahdeksasta kaatui testiin *"voimatason 0 talloo yhden
+avoimen ikkunan sisällä"*, ja kumpikaan syy ei ollut pomon koko sinänsä.
+
+**Lämmittely oli 90 framea, ja työ vaatii viisitoista.** Pomo syntyy hieman
+lattian yläpuolelle ja seisoo sillä ennen framea 15; loput 75 se käveli, ja
+1,5 px/frame kantoi sen 130 px pois paikaltaan. Pelaaja asetetaan *suhteessa
+pomoon*, joten pelaaja asetettiin areenan ulkopuolelle — 7-F:ssä sitä edeltävän
+käytävän piikkipenkkiin. Linnake kaatui testissä siihen mihin testi hänet
+laittoi. Silmukan ehto on nyt `boss.onGround`, eli se asia jota se odottaa.
+
+**Ja lähestymismatka luettiin vain leveydestä.** Vakio 40 px keskustasta
+tarkoitti 30x32-pomolla "irtoa 25 px kyljestä ja nouse yhden pomonkorkeuden
+verran". 68 leveän sääherran keskustasta 40 px on 6 px kyljen sisällä — mutta
+tärkeämpi puolikas oli korkeus: **tallominen lasketaan vain laskeutuessa**,
+joten 52 px korkean pomon kohdalle saapuminen *nousevassa* liikkeessä ei ole
+tallominen vaan törmäys. Juuri sen jälki näkyi 8-F:n framedumpissa, osuma
+kylkeen `vy` yhä negatiivisena. Matka on nyt `w / 2 + 25 + h`, ja se palauttaa
+vanhat luvut 30x32:lla.
+
+Kumpikaan korjaus ei koske voimatasoa, ikkunan pituutta eikä pomoa. Kokeiltiin
+myös kolmatta (botti jarruttaisi ennen kylkeä noustessaan) — se ei muuttanut
+yhtäkään tulosta, joten sitä ei jätetty koodiin.
+
+---
+
 ## v26.08.10.69 — molemmat pystykentät olivat ratkaistavissa liikkumatta sivuun
 
 Omistaja pelasi 6-K:n ja raportoi kaksi asiaa. Molemmat pitivät paikkansa, ja

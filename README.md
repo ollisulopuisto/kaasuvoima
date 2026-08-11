@@ -1,4 +1,4 @@
-# Super Fart Bros 3
+# Kaasuvoima
 
 Selaimessa pyörivä tasohyppely: oma **maailmankarttamoottori** (solmut, polut,
 avautuvat reitit, hernetalot) ja oma **kenttämoottori** (ruutupohjainen kenttä,
