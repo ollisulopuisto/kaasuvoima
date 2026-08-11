@@ -7,6 +7,43 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.76 — kansi nostaa katon, ja katto on nyt nimetty luku
+
+52 px oli se korkeus jonka yli voimataso 0 pääsee **areenan lattialta**, ja
+kolme asiaa oli liimattu siihen yhteen lukuun. Yksi niistä irtoaa tässä.
+
+`FLOOR_REACH` on nyt nimetty vakio, ja sääntö kuuluu: sen **alle** jäävä pomo
+luvataan tallottavaksi lattialta, sen **ylittävä** kannelta. Lupaus ei
+heikkene vaan vaihtaa reittiä, ja portti vaatii korkealta pomolta areenan
+jossa on kansi, kannen pomon pään yläpuolella ja kannen jolle pääsee
+lattialta kahdella paikaltaan hypyllä.
+
+| pomo | ennen | nyt | areena |
+| --- | --- | --- | --- |
+| 1 jyskyttäjä | 56×48 | **60×80** | `boss_arena_big` |
+| 5 sääherra | 68×46 | **68×88** | `boss_arena_big` |
+
+Kummallekin vaihdettiin areena eikä keksitty uutta: `boss_arena_big` osaa jo
+reitin lattia 208 → askelma rivillä 9 (64 px) → kansi rivillä 6 (48 px).
+Suoraan lattialta kannelle olisi 112 px eikä 100 px juoksuhyppy riitä — juuri
+se teki kansista aikoinaan lavasteita.
+
+### Ja korkeuden nostaminen ei ole yhden luvun muutos
+
+Ensimmäinen yritys nosti vain luvut, ja tulos oli **32 px tyhjää
+osumalaatikkoa jyskyttäjän jalkojen alla**: piirros oli 48 px korkea
+laatikossa joka on 80. Pelaaja olisi ottanut osuman ilmasta.
+
+Molemmat rungot on siis piirretty uusiksi siihen laatikkoon. Ylimääräinen
+korkeus meni jyskyttäjällä **jalkoihin**, koska hän on se joka laskeutuu
+päällesi, ja sääherralla **höyryyn**, koska hän on se joka ei seiso missään.
+Sääherran ääriviiva ei käänny kertaakaan 88 pikselin matkalla, mikä on
+paljon vaikeampi lupaus kuin 46:lla ja siksi vahvempi siluetti.
+
+Siluettien erillisyys parani sivutuotteena: pahin pari 0,547 → **0,521**.
+
+---
+
 ## v26.08.11.75 — turvaverkko oli olemassa vain näppäimistöllä
 
 Taukoruudussa luki `1 TALLENNA  2 LATAA  3 PAIKKA n`, ja se on ohje eikä

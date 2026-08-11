@@ -81,8 +81,8 @@ const booted = await page.evaluate(() => !!window.sfb3);
 
 const report = await page.evaluate(async () => {
   const { LevelScene } = await import('/src/scenes/level.js');
-  const { PLAYER_SIZES } = await import('/src/gfx/sprites.js');
-  const { isSolid } = await import('/src/gfx/tiles.js');
+  const { PLAYER_SIZES, FLOOR_REACH } = await import('/src/gfx/sprites.js');
+  const { isSolid, isSemi } = await import('/src/gfx/tiles.js');
   const { levelIds } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
   const { WORLDS } = await import('/src/data/worlds.js');
@@ -7121,6 +7121,59 @@ const report = await page.evaluate(async () => {
         + `aloitus ${spawnTile}, tavallinen ${freshStart / 16}, vuoto [${leaked}]`);
     }
 
+    /**
+     * Korkein kansi tai askelma pomon yläpuolella, pikseleinä. `null` jos
+     * areenassa ei ole yhtään — ja se on nimenomaan se tapaus jonka alla oleva
+     * portti kieltää korkealta pomolta.
+     */
+    const deckAbove = (scene, boss) => {
+      const col = Math.floor(boss.cx / 16);
+      let best = null;
+      for (let row = 2; row < 13; row++) {
+        for (let c = Math.max(0, col - 14); c < Math.min(scene.w, col + 15); c++) {
+          const ch = scene.tileAt(c, row);
+          if (isSolid(ch) || isSemi(ch)) { best = best === null ? row * 16 : best; break; }
+        }
+        if (best !== null) break;
+      }
+      return best;
+    };
+
+    /*
+     * KORKEA POMO VAATII KANNEN, JA KANNELLE ON PÄÄSTÄVÄ.
+     *
+     * `FLOOR_REACH` (52 px) on se korkeus jonka yli voimataso 0 pääsee areenan
+     * lattialta. Sen ylittävä pomo on tallottavissa vain ylhäältä, joten sen
+     * areenassa **on oltava kansi** — ja kannen on oltava sekä pomon pään
+     * yläpuolella että lattialta saavutettavissa.
+     *
+     * Ilman tätä sääntöä korkeuden nostaminen olisi yhden luvun muutos joka
+     * tekee pomosta voittamattoman ilman että mikään sanoo mitään, ja se on
+     * tasan se vika jonka `boss_arena_big` aikoinaan sai: kannet olivat
+     * olemassa mutta niille ei päässyt, joten ne olivat lavasteita.
+     */
+    {
+      const bad = [];
+      for (const id of BOSS_LEVELS) {
+        reset();
+        const s2 = new LevelScene(game, id);
+        game.setScene(s2);
+        const boss = s2.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s2.update(idle);
+        if (boss.h <= FLOOR_REACH) continue;
+        const deckY = deckAbove(s2, boss);
+        if (deckY === null) { bad.push(`${id}: ${boss.h} px korkea eikä kantta`); continue; }
+        if (deckY > boss.y) bad.push(`${id}: kansi ${deckY} on pään (${Math.round(boss.y)}) alapuolella`);
+        // Reachable: a stack of standing jumps from the floor, 64 px a step.
+        const rise = 208 - deckY;
+        if (rise > 64 * 2) bad.push(`${id}: kansi ${rise} px lattiasta, yli kahden askelman`);
+      }
+      expect('jokainen lattiaa korkeampi pomo tappelee areenassa jossa on kansi',
+        bad.length === 0,
+        bad.length ? bad.join(' | ') : `raja ${FLOOR_REACH} px, korkeat tarkistettu`);
+    }
+
     /* The promise the lead designer set himself: a powerless player can beat
      * every boss. Taken apart into the two things it needs — one window is long
      * enough to walk up and land a stomp at its tightest, and the clock holds
@@ -7175,8 +7228,27 @@ const report = await page.evaluate(async () => {
       const clearance = boss.w / 2 + 25 + boss.h;
 
       const p = s.player;
-      p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - (clearance + 50);
+      /*
+       * Matalalle pomolle lupaus on lattialta, korkealle kannelta.
+       *
+       * `FLOOR_REACH` on se raja, ja se on sama luku joka rajaa `BOSS_SIZES`ia
+       * — luettuna sieltä eikä kirjoitettuna tänne, koska tässä tiedostossa on
+       * tässä erässä neljä esimerkkiä siitä mitä oma kopio maksaa.
+       *
+       * Kannelta lähtevä ei ole löysempi testi vaan **toinen reitti samaan
+       * lupaukseen**: pelaaja on yhä voimatasolla 0, ikkuna on yhä tiukin
+       * mahdollinen, ja alla oleva erillinen portti vaatii että kannelle
+       * ylipäänsä pääsee lattialta samalla voimatasolla.
+       */
+      const tall = boss.h > FLOOR_REACH;
+      if (tall) {
+        const deckY = deckAbove(s, boss);
+        p.y = deckY - p.h;
+        p.x = boss.cx - (boss.w / 2 + 40);
+      } else {
+        p.y = boss.y + boss.h - p.h;
+        p.x = boss.cx - (clearance + 50);
+      }
       p.vx = 0; p.vy = 0;
       s.centerCamera();
 

@@ -95,8 +95,21 @@ import { drawSpines } from './enemies.js';
  * DESIGN.md §5 promises the fight works at the smallest size with no power-up,
  * and that promise is not kept by arithmetic that only just works.
  *
- * Anything taller needs the arena to hand the player a deck, which is what
- * `boss_arena_big` already does for the one that grows.
+ * Anything taller needs the arena to hand the player a deck, and that is no
+ * longer a hypothetical: **jyskyttäjä ja sääherra ovat 80 ja 88 px**, eli
+ * kumpikin yli sen katon, ja molemmat tappelevat `boss_arena_big`issa.
+ *
+ * FLOOR_REACH on se raja. Sen alle jäävä pomo luvataan tallottavaksi
+ * areenan lattialta; sen ylittävä luvataan tallottavaksi **kannelta**, ja
+ * `verify.mjs` vaatii silloin että areenassa on kansi ja että kannelle pääsee
+ * voimatasolla 0. Lupaus ei siis heikkene vaan vaihtaa reittiä, ja kumpikin
+ * reitti on mitattu eikä oletettu.
+ *
+ * Reitti on `boss_arena_big`in oma: lattia 208 → askelma rivillä 9 (144, eli
+ * 64 px, mitattu `wallTiles`-budjetti) → kansi rivillä 6 (96, eli 48 px).
+ * Kumpikin on paikaltaan hypättävä. Suoraan lattialta kannelle olisi 112 px
+ * eikä 100 px juoksuhyppy riitä, ja juuri se teki kansista aikoinaan
+ * lavasteita.
  *
  * ## AND NOTHING IS A SLAB
  *
@@ -115,13 +128,24 @@ import { drawSpines } from './enemies.js';
  * `baseH * 3`. Growing his base would grow that product past the room he fights
  * in. His size is his move set, so it is spent there instead.
  */
+/**
+ * Kuinka korkealle voimataso 0 yltää areenan lattialta, ja siksi mikä on
+ * korkein pomo jonka pään yli pääsee ilman kantta.
+ *
+ * Jalat nousevat 71 px paikaltaan ja 100 px vauhdista. 52 jättää 19 px varaa
+ * pahimpaan tapaukseen, ja se marginaali on ostettu: ensimmäinen luonnos
+ * laittoi luurangon 64:ään ja kuninkaan 60:een, molemmat alle 71:n, ja
+ * molemmat kaatoivat portin.
+ */
+export const FLOOR_REACH = 52;
+
 export const BOSS_SIZES = [
   { w: 30, h: 32 },   // 0 nyrkkeilijä — world 1 stays the gentle one
-  { w: 56, h: 48 },   // 1 jyskyttäjä  — 1.2:1, a brick
+  { w: 60, h: 80 },   // 1 jyskyttäjä  — decked arena, so the floor budget is off
   { w: 64, h: 40 },   // 2 syöksyjä    — 1.6:1, the widest ratio anything gets
   { w: 40, h: 40 },   // 3 pöhö        — square, and small because it triples
   { w: 36, h: 52 },   // 4 luuranko    — 1:1.4, the tall one
-  { w: 68, h: 46 },   // 5 sääherra    — 1.5:1, the big one
+  { w: 68, h: 88 },   // 5 sääherra    — decked arena; he flies, so height is his
   { w: 50, h: 52 },   // 6 pierukuningas — square and heavy
 ];
 /**
@@ -425,37 +449,44 @@ const HANDS = {
 function drawStomperBoss(r, bx, py, body, dark, frame, pose) {
   const t = Math.floor(frame / 8) % 2 === 0 ? 0 : 1;
 
-  // Feet: the widest thing he owns, and the part that arrives.
-  /* 24 leveät eivätkä 22, koska `anvil` lupaa jalustan joka on vähintään 0,8
-   * leveimmästä kohdasta — ja leveimmäksi kohdaksi osoittautui *kädet*, jotka
-   * kurkottavat ikeen ohi. 22 px jalat antoivat 0,79 ja portti oli oikeassa:
-   * se jonka koko luonne on laskeutua päällesi ei saa olla kapeampi alhaalta
-   * kuin ylhäältä. */
-  r(bx + 0, py + 35, 24, 13, dark);
-  r(bx + 32, py + 35, 24, 13, dark);
-  r(bx + 0, py + 45, 24, 3, C.ink);
-  r(bx + 32, py + 45, 24, 3, C.ink);
-  chevrons(r, bx + 2, py + 38, 20, 4, C.ink);
-  chevrons(r, bx + 34, py + 38, 20, 4, C.ink);
+  /*
+   * 60x80, ja piirros on kirjoitettu siihen laatikkoon eikä venytetty siihen.
+   *
+   * Korkeuden nostaminen 48:sta ilman uudelleenpiirtoa jätti **32 px tyhjää
+   * osumalaatikkoa jalkojen alle** — eli pelaaja olisi ottanut osuman ilmasta.
+   * Laatikko seuraa piirrosta, ei toisin päin, ja se sääntö pitää molempiin
+   * suuntiin: myös silloin kun laatikko kasvaa.
+   *
+   * Ylimääräinen korkeus meni **jalkoihin**, koska hän on se joka laskeutuu
+   * päällesi. Pitkät jalat ja leveä jalusta ovat sama väite kahdesti.
+   */
+  r(bx + 2, py + 68, 26, 12, dark);              // jalusta
+  r(bx + 32, py + 68, 26, 12, dark);
+  r(bx + 2, py + 77, 26, 3, C.ink);
+  r(bx + 32, py + 77, 26, 3, C.ink);
+  chevrons(r, bx + 4, py + 71, 22, 4, C.ink);
+  chevrons(r, bx + 34, py + 71, 22, 4, C.ink);
 
-  // Torso, narrow enough that the yoke above and the feet below both overhang.
-  r(bx + 13, py + 26 + t, 30, 10, body);
-  r(bx + 13, py + 32 + t, 30, 4, dark);
+  r(bx + 8, py + 52, 18, 17, dark);              // sääret
+  r(bx + 34, py + 52, 18, 17, dark);
+  rivets(r, bx + 12, py + 57, 3, 5, C.ink);
+  rivets(r, bx + 38, py + 57, 3, 5, C.ink);
 
-  // The yoke.
-  r(bx + 2, py + 16 + t, 52, 10, body);
-  r(bx + 2, py + 23 + t, 52, 3, dark);
-  rivets(r, bx + 5, py + 18 + t, 8, 6, dark);
+  r(bx + 15, py + 30 + t, 30, 23, body);         // runko
+  r(bx + 15, py + 46 + t, 30, 5, dark);
 
-  // Neck, then head.
-  r(bx + 24, py + 13 + t, 8, 4, dark);
-  r(bx + 20, py + 0 + t, 16, 14, body);
-  r(bx + 20, py + 1 + t, 16, 4, dark);
-  r(bx + 22, py + 5 + t, 5, 6, C.white);
-  r(bx + 29, py + 5 + t, 5, 6, C.white);
-  r(bx + 23, py + 6 + t, 4, 5, C.ink);
-  r(bx + 30, py + 6 + t, 4, 5, C.ink);
-  r(bx + 24, py + 11 + t, 8, 2, C.ink);
+  r(bx + 4, py + 18 + t, 52, 12, body);          // ies
+  r(bx + 4, py + 26 + t, 52, 3, dark);
+  rivets(r, bx + 7, py + 21 + t, 8, 6, dark);
+
+  r(bx + 26, py + 14 + t, 8, 5, dark);           // kaula
+  r(bx + 22, py + 0 + t, 16, 15, body);
+  r(bx + 22, py + 1 + t, 16, 4, dark);
+  r(bx + 24, py + 5 + t, 5, 6, C.white);
+  r(bx + 31, py + 5 + t, 5, 6, C.white);
+  r(bx + 25, py + 6 + t, 4, 5, C.ink);
+  r(bx + 32, py + 6 + t, 4, 5, C.ink);
+  r(bx + 26, py + 11 + t, 8, 2, C.ink);
 
   bossRank(r, bx, py, 1);
 }
@@ -617,34 +648,44 @@ function drawSkeletonBoss(r, bx, py, body, dark, frame, pose) {
 function drawStormBoss(r, bx, py, body, dark, frame, pose) {
   const t = py + (Math.floor(frame / 12) % 2 === 0 ? 0 : 1);
 
-  r(bx + 2, t + 0, 64, 9, body);
-  r(bx + 2, t + 0, 64, 3, dark);                 // lit crown of the thunderhead
-  r(bx + 9, t + 9, 50, 9, body);
-  r(bx + 9, t + 15, 50, 3, dark);
-  r(bx + 19, t + 18, 30, 10, body);
-  r(bx + 25, t + 28, 18, 7, dark);               // keel
-  rivets(r, bx + 6, t + 4, 4, 6, C.ink);
-  rivets(r, bx + 46, t + 4, 4, 6, C.ink);
+  /*
+   * 68x88 kannellisessa areenassa, ja korkeus on hänen omansa: hän on se joka
+   * nousee ilmaan, joten alaspäin venyminen on höyryä eikä vartaloa.
+   *
+   * Alasköysi kapenee koko matkan, joten `wedge` pitää — ääriviiva ei käänny
+   * kertaakaan 88 pikselin matkalla, mikä on paljon vaikeampi lupaus kuin
+   * 46:lla ja siksi paljon vahvempi siluetti.
+   */
+  r(bx + 2, t + 0, 64, 11, body);
+  r(bx + 2, t + 0, 64, 3, dark);
+  r(bx + 9, t + 11, 50, 11, body);
+  r(bx + 9, t + 18, 50, 4, dark);
+  rivets(r, bx + 6, t + 5, 4, 6, C.ink);
+  rivets(r, bx + 46, t + 5, 4, 6, C.ink);
 
-  /* Vapour, boiling on its own phase rather than swinging: a hem that swings is
-   * a cloak, and a cloak is worn by something that stands. */
-  for (let i = 0; i < 3; i++) {
+  r(bx + 19, t + 22, 30, 18, body);              // runko
+  r(bx + 25, t + 40, 18, 16, dark);              // köli
+
+  /* Höyry, ja se kapenee portaittain pohjaan asti. Kolme kerrosta, kukin
+   * kapeampi kuin edellinen, kukin omalla vaiheellaan — kiehuu eikä heilu. */
+  for (let i = 0; i < 4; i++) {
     const phase = Math.floor(frame / 6 + i * 1.7) % 3;
-    r(bx + 27 + i * 5, t + 35, 5, 6 + phase * 2, dark);
+    r(bx + 27 + i * 4, t + 56, 4, 10 + phase * 2, dark);
+  }
+  for (let i = 0; i < 3; i++) {
+    const phase = Math.floor(frame / 5 + i * 2.3) % 3;
+    r(bx + 30 + i * 4, t + 70, 3, 10 + phase * 3, dark);
   }
 
-  r(bx + 24, t + 4, 20, 3, dark);                // lid
-  /* Kulmat sisään: täysi neliö kultakehyksettäkin luki ruutuna, ja ruutu on
-   * yhtä lailla ajoneuvon osa kuin ikkunakin. Kaksi pikseliä joka kulmasta
-   * riittää tekemään siitä silmän. */
-  r(bx + 24, t + 6, 20, 14, C.ink);
-  r(bx + 26, t + 7, 16, 12, '#dfe8ff');
-  r(bx + 26, t + 7, 2, 2, C.ink);
-  r(bx + 40, t + 7, 2, 2, C.ink);
-  r(bx + 26, t + 17, 2, 2, C.ink);
-  r(bx + 40, t + 17, 2, 2, C.ink);
-  r(bx + 31, t + 10, 8, 8, '#2a3a6a');
-  r(bx + 32, t + 11, 3, 3, C.white);             // one catchlight, so it is wet
+  r(bx + 24, t + 5, 20, 3, dark);                // luomi
+  r(bx + 22, t + 7, 24, 18, C.ink);              // se yksi silmä, isompana
+  r(bx + 24, t + 8, 20, 16, '#dfe8ff');
+  r(bx + 24, t + 8, 2, 2, C.ink);
+  r(bx + 42, t + 8, 2, 2, C.ink);
+  r(bx + 24, t + 22, 2, 2, C.ink);
+  r(bx + 42, t + 22, 2, 2, C.ink);
+  r(bx + 30, t + 12, 9, 9, '#2a3a6a');
+  r(bx + 31, t + 13, 3, 3, C.white);
 
   bossRank(r, bx, py, 5);
 }
