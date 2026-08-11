@@ -796,9 +796,10 @@ function drawKingBoss(r, bx, py, body, dark, frame, pose) {
  * eivät myöskään liiku yhtenä. Luurangon kolme luunpalaa ajautuvat eri tahtiin
  * ja se on hänen luonteensa, ei satunnaisuutta.
  */
-function drawLimbs(r, bx, py, body, dark, frame, variant) {
+function drawLimbs(r, bx, py, body, dark, frame, variant, broken) {
   const limbs = BOSS_LIMBS[variant] || [];
   limbs.forEach(([lx, ly, lw, lh], i) => {
+    if (broken & (1 << i)) return;   // katkennut raaja ei piirry eikä satuta
     const drift = Math.floor(frame / 7 + i * 1.6) % 3 - 1;
     const x = bx + lx + drift;
     /* Tumma runko, valoisa yläreuna, musta alareuna: kolme kaistaa tekee
@@ -821,12 +822,12 @@ function drawLimbs(r, bx, py, body, dark, frame, variant) {
  * is watching them do it. `pose.grip` is exactly the number that distinguishes
  * the two cases, so it is the number that decides the second pass.
  */
-function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose) {
+function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose, broken) {
   const hands = HANDS[variant] || HANDS[6];
   /* Raajat rungon **taakse**: runko on se joka omistaa ääriviivan, ja
    * runkotyyppiportti mittaa nimenomaan sitä. Raaja joka peittäisi kaulan
    * kumoaisi juuri sen mittauksen. */
-  drawLimbs(r, bx, py, body, dark, frame, variant);
+  drawLimbs(r, bx, py, body, dark, frame, variant, broken);
   bossHands(r, bx, py, pose, hands);
   if (variant === 1) drawStomperBoss(r, bx, py, body, dark, frame, pose);
   else if (variant === 2) drawChargerBoss(r, bx, py, body, dark, frame, pose);
@@ -842,7 +843,7 @@ function drawStandardBoss(r, bx, py, body, dark, frame, variant, pose) {
  * the entity so a boss is one picture — the crown has to scale and travel with
  * the body it belongs to, and the giant scales by three.
  */
-export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1, crown = 0) {
+export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1, crown = 0, broken = 0) {
   const px = Math.round(x);
   const py = Math.round(y);
   /*
@@ -902,10 +903,10 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
        * raajan osumalaatikko. Se on sama valhe toisin päin: vahinkoa ilman
        * mitään näkyvää. Portti mittasi laatikoita eikä pikseleitä, eikä siksi
        * nähnyt sitä — nyt mittaa molempia. */
-      drawLimbs(r, bx, py, body, dark, frame, variant);
+      drawLimbs(r, bx, py, body, dark, frame, variant, broken);
       drawBoxerBoss(r, bx, py, body, dark, frame, pose);
     }
-    else drawStandardBoss(r, bx, py, body, dark, frame, variant, pose);
+    else drawStandardBoss(r, bx, py, body, dark, frame, variant, pose, broken);
   });
   ctx.restore();
   bossCrown(ctx, px, py, S, pose, frame, size.w);

@@ -7,6 +7,47 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.78 — raaja katkeaa, ja kruunu vastaa koko koosteesta
+
+Raajoilla oli osumalaatikko; nyt niillä on myös **kohtalo**. Avoimen ikkunan
+aikana päältä tuleva katkaisee raajan pysyvästi, ja katkennut vie mukanaan oman
+vahinkoalueensa — loppufight on sen verran turvallisempi.
+
+### Yksi merkki, yksi vastaus
+
+Kruunu vastaa **koko koosteesta** eikä pelkästä rungosta: päällä ollessaan
+mihinkään ei saa koskea, pois ollessaan kaikki on tallottavissa. Siksi raajalla
+ei ole omaa varoitustaan — kruunusääntö ostettiin aikoinaan playtestillä jossa
+pelaajat eivät ehtineet erottaa kahta piikkiriviä toisistaan, eikä sitä makseta
+uudelleen.
+
+Valinta on siis ikkunan **sisällä**: runko maksaa osuman, raaja katkeaa. Se on
+vaihtokauppa eikä arvoitus.
+
+**Ja raaja ei ole koskaan pakollinen.** DESIGN.md kohta 5 lupaa että pomon voi
+kaataa voimatasolla 0, ja talloportti todistaa sen käymällä jokaisen pomon läpi
+pelkkää runkoa tallomalla. Katkaisu on oikotie, ei lukko.
+
+`brokenLimbs` on **bittimaski eikä `Set`**, koska pikatallennus sarjallistaa
+jokaisen oman kentän: `Set` katoaisi hiljaa tyhjäksi olioksi ja pelaaja saisi
+rikkomansa nyrkit takaisin latauksesta.
+
+### Kaksi omaa mittausvirhettä, molemmat uskottavia
+
+- **Vanha raajatesti alkoi mitata väärää asiaa** sillä hetkellä kun katkaisu
+  tuli: se seisotti pelaajaa raajassa ja vaati osumaa, mutta kruunu pois päältä
+  sama kosketus katkaisee eikä satuta. Testi ajaa nyt kruunu päällä.
+- **Molemmat vaiheet ajettiin samassa kohtauksessa.** Piikkivaiheen kosketus
+  tappaa voimatason 0 pelaajan, kohtaus siirtyy tilaan `dead`, eikä
+  `collisions` enää aja lainkaan — joten avoimen ikkunan koe ei mitannut
+  katkaisua vaan kuollutta kohtausta, ja epäonnistuminen näytti aidolta.
+  Kumpikin vaihe saa nyt oman kohtauksensa.
+
+Kolmas kerta tässä erässä sille että itse asetettu koe asettaa kappaleen
+paikkaan jota pelissä ei ole.
+
+---
+
 ## v26.08.11.77 — raajat, ja laatikko joka lupasi vahinkoa ilman piirrosta
 
 NES-sprite oli 8x8 tai 8x16, kahdeksan juovaa kohti ja 64 ruudulla, joten pomo

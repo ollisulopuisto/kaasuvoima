@@ -2965,9 +2965,30 @@ export class LevelScene {
        * Tähti suojaa, kuten kaikelta muultakin joka osuu sinuun, ja kupla
        * ohittaa tämän kokonaan ylempänä.
        */
-      if (e.limbBoxes && p.star <= 0 && !p.invuln) {
-        const hit = e.limbBoxes().some((b) => b.h > 0 && b.w > 0 && overlaps(p.box, b));
-        if (hit) { p.hurt('enemy'); continue; }
+      if (e.limbBoxes) {
+        const boxes = e.limbBoxes();
+        const idx = boxes.findIndex((b) => b.h > 0 && b.w > 0 && overlaps(p.box, b));
+        if (idx >= 0) {
+          /*
+           * KRUUNU VASTAA KOKO KOOSTEESTA, EI PELKÄSTÄ RUNGOSTA.
+           *
+           * Kruunu päällä: mihinkään ei saa koskea, ei runkoon eikä raajaan.
+           * Kruunu pois: kaikki on tallottavissa. Yksi merkki, yksi vastaus —
+           * ja juuri se on syy miksi raajalla ei ole omaa varoitustaan.
+           * Kruunusääntö ostettiin aikoinaan playtestillä jossa pelaajat eivät
+           * ehtineet erottaa kahta piikkiriviä toisistaan, eikä sitä makseta
+           * uudelleen.
+           *
+           * Valinta on ikkunan sisällä: runko maksaa osuman, raaja katkeaa.
+           */
+          const open = e.spikePhase === 'open';
+          if (open && fallVy > 0 && e.breakLimb && e.breakLimb(idx)) {
+            p.bounce();
+            Sfx.play('stomp');
+            continue;
+          }
+          if (p.star <= 0 && !p.invuln) { p.hurt('enemy'); continue; }
+        }
       }
 
       if (e.harmless) continue;

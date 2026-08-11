@@ -7216,7 +7216,12 @@ const report = await page.evaluate(async () => {
         grew.push(`${id} ${(reach / bodyArea).toFixed(2)}x`);
         if (reach / bodyArea < 1.2) bad.push(`${id}: raajat kasvattavat vain ${(reach / bodyArea).toFixed(2)}x`);
 
-        // 1. a limb hurts: stand the player in one and require the hit.
+        /* 1. raaja satuttaa — ja tämä on mitattava **kruunu päällä**, koska
+         * kruunu pois päältä sama kosketus katkaisee raajan eikä satuta. Testi
+         * oli oikea siihen asti kun katkaisu tuli, ja se on juuri se hetki
+         * jolloin vanha testi alkaa mitata väärää asiaa. */
+        boss.spikePhase = 'spiky';
+        boss.spikeTimer = 999;
         const p = s3.player;
         const far = boxes.reduce((a, b) => (Math.abs(b.x - boss.cx) > Math.abs(a.x - boss.cx) ? b : a));
         p.x = far.x + far.w / 2 - p.w / 2;
@@ -7266,6 +7271,97 @@ const report = await page.evaluate(async () => {
 
       expect('raajat kasvattavat läsnäoloa, satuttavat, näkyvät, eivätkä tule laskeutumiskaistalle',
         bad.length === 0, bad.length ? bad.join(' | ') : grew.join(', '));
+    }
+
+    /*
+     * RAAJAN KATKAISU ON VALINTA, EI TIE.
+     *
+     * Kruunu vastaa koko koosteesta: päällä ollessaan mihinkään ei saa
+     * koskea, pois ollessaan kaikki on tallottavissa. Yksi merkki, yksi
+     * vastaus — ja siksi raajalla ei ole omaa varoitustaan. Kruunusääntö
+     * ostettiin playtestillä jossa pelaajat eivät ehtineet erottaa kahta
+     * piikkiriviä, eikä sitä makseta uudelleen.
+     *
+     * Kolme väitettä:
+     *   1. avoimessa ikkunassa **päältä** tullessa raaja katkeaa,
+     *   2. piikkivaiheessa sama kosketus satuttaa eikä katkaise,
+     *   3. katkennut raaja **katoaa myös piirroksesta** — muuten jäisi kuva
+     *      josta kävelee läpi, eli sama valhe kolmatta kertaa.
+     *
+     * Ettei se ole tie: talloportti käy kaikki pomot läpi pelkkää runkoa
+     * tallomalla, eli lupaus voimatasosta 0 ei nojaa raajoihin lainkaan.
+     */
+    {
+      /*
+       * Kumpikin vaihe omassa kohtauksessaan, ja se on korjaus eikä varovaisuus.
+       *
+       * Ensimmäinen versio ajoi molemmat samassa: piikkivaiheen kosketus tappaa
+       * voimatason 0 pelaajan, kohtaus siirtyy tilaan `dead`, eikä `collisions`
+       * enää aja lainkaan — joten avoimen ikkunan koe ei mitannut katkaisua
+       * vaan kuollutta kohtausta. Tulos oli uskottava epäonnistuminen.
+       */
+      const dropOnLimb = (phase) => {
+        reset();
+        const sc = new LevelScene(game, '8-F');
+        game.setScene(sc);
+        const boss = sc.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) sc.update(idle);
+        boss.spikePhase = phase;
+        boss.spikeTimer = 999;
+        boss.invuln = 0;
+        /* Suunta lukitaan: `limbBoxes` peilaa `facing`in mukaan, ja jos pomo
+         * kääntyy kokeen aikana, raajat vaihtavat puolta pelaajan alla. */
+        boss.facing = 1;
+        boss.vx = 0;
+        const boxes = boss.limbBoxes();
+        const i2 = boxes.findIndex((b) => b.w > 0);
+        const b = boxes[i2];
+        const p = sc.player;
+        p.x = b.x + b.w / 2 - p.w / 2;
+        p.y = b.y - p.h - 2;
+        p.vx = 0; p.vy = 3; p.invuln = 0; p.star = 0; p.dying = false;
+        const power0 = sc.player.powerLevel;
+        for (let f = 0; f < 10 && !boss.brokenLimbs
+          && !(p.dying || p.invuln > 0); f++) {
+          boss.facing = 1;
+          sc.update(idle);
+        }
+        return {
+          broke: boss.brokenLimbs !== 0,
+          hurt: p.dying || p.invuln > 0 || sc.player.powerLevel < power0,
+          i: i2,
+        };
+      };
+
+      const spiky = dropOnLimb('spiky');
+      const open = dropOnLimb('open');
+
+      const gfx2 = await import('/src/gfx/sprites.js');
+      const pixelsIn = (mask, idx) => {
+        const M = 96;
+        const size = gfx2.bossSize(6);
+        const c = document.createElement('canvas');
+        c.width = size.w + M * 2; c.height = size.h + M * 2;
+        const g = c.getContext('2d');
+        gfx2.drawBoss(g, M, M, 12, 1, false, 6, 1, 0, mask);
+        const [lx, ly, lw, lh] = gfx2.BOSS_LIMBS[6][idx];
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let y = ly + M; y < ly + lh + M; y++) {
+          for (let x = lx + M; x < lx + lw + M; x++) {
+            if (d[(y * c.width + x) * 4 + 3] > 8) n++;
+          }
+        }
+        return n;
+      };
+      const before = open.i >= 0 ? pixelsIn(0, open.i) : 0;
+      const after = open.i >= 0 ? pixelsIn(1 << open.i, open.i) : 1;
+
+      expect('avoimessa ikkunassa raaja katkeaa, piikeissä se satuttaa, ja katkennut katoaa myös kuvasta',
+        open.broke && !spiky.broke && spiky.hurt && before > 0 && after === 0,
+        `avoin katkesi ${open.broke}, piikeissä katkesi ${spiky.broke} satutti ${spiky.hurt}, `
+        + `pikselit ${before} -> ${after}`);
     }
 
     /* The promise the lead designer set himself: a powerless player can beat
