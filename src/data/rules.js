@@ -791,17 +791,23 @@ function checkClimbWidth(rows, w, problems) {
  * lainkaan koko matkalla), nousevalta **tikapuusarake** (jalansija joka
  * askelmalla, ja askelmat mitatun hypyn sisällä). Molemmissa vika on sama
  * lause: kenttä on ratkaistavissa liikkumatta sivuun.
+ *
+ * `span` on osioidun kentän pystypalan vastaus samaan kysymykseen. Palassa ei
+ * ole aloitusmerkkiä eikä lippua, mutta sillä on tulo- ja lähtörivi, ja tämä
+ * sääntö kysyy vain niitä kahta lukua: mistä rivistä mihin. Ilman sitä sääntö
+ * palaisi palasta heti eikä sanoisi mitään — eli olisi juuri sellainen sääntö
+ * joka ei voi laueta.
  */
-function checkClimbTraverse(rows, w, budget, problems) {
+function checkClimbTraverse(rows, w, budget, problems, span = null) {
   const h = rows.length;
   const footing = (x, y) => y >= 0 && y < h && (SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]));
   const find = (ch) => {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === ch) return { x, y };
     return null;
   };
-  const start = find('1');
-  const goal = find('F');
-  if (!start || !goal) return;
+  const start = span ? { x: 0, y: span.from } : find('1');
+  const goal = span ? { x: 0, y: span.to } : find('F');
+  if (!start || !goal || start.y === goal.y) return;
   const top = Math.min(start.y, goal.y);
   const bottom = Math.max(start.y, goal.y);
 
@@ -865,23 +871,25 @@ function checkClimbTraverse(rows, w, budget, problems) {
  *     on it is a detour; a dead end with nothing on it is the stairway to
  *     nothing, wearing the other axis.
  */
-function checkClimb(rows, w, graph, budget, problems) {
+/*
+ * The bottom of the level, before anything else: a climb whose floor has a
+ * hole in it fails every other question for the wrong reason.
+ *
+ * Two halves, and the second is the one that would otherwise be found by
+ * playing. A floor you land on is not a floor if what is resting on it kills
+ * you — a spike bed at the bottom of a climb turns every missed jump into a
+ * life, which is the shape's one promise broken silently. So the tile the
+ * fall actually stops at is the one that is asked, and it is found the way
+ * the body finds it: the first thing down the column, not the last row.
+ *
+ * Erillinen funktio koska **osioidun kentän pystypala tarvitsee sen samoin.**
+ * Lupaus "putoaminen maksaa kiipeämisen eikä henkeä" ei ole kentän ominaisuus
+ * vaan muodon: se on totta siinä hetkessä kun pelaaja kiipeää, eikä sitä
+ * hetkeä muuta se, onko kiipeäminen koko kenttä vai sen keskimmäinen kolmasosa.
+ */
+function checkClimbFloor(rows, w, problems) {
   const h = rows.length;
   const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
-  const find = (ch) => {
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (at(x, y) === ch) return { x, y };
-    return null;
-  };
-
-  /* The bottom of the level, before anything else: a climb whose floor has a
-   * hole in it fails every other question for the wrong reason.
-   *
-   * Two halves, and the second is the one that would otherwise be found by
-   * playing. A floor you land on is not a floor if what is resting on it kills
-   * you — a spike bed at the bottom of a climb turns every missed jump into a
-   * life, which is the shape's one promise broken silently. So the tile the
-   * fall actually stops at is the one that is asked, and it is found the way
-   * the body finds it: the first thing down the column, not the last row. */
   for (let x = 0; x < w; x++) {
     if (!SOLID.has(at(x, h - 1))) {
       problems.push(`column ${x} has no floor at the bottom of the climb: a fall`
@@ -896,6 +904,17 @@ function checkClimb(rows, w, graph, budget, problems) {
         + ' climb: falling may cost the climb, not the life');
     }
   }
+}
+
+function checkClimb(rows, w, graph, budget, problems) {
+  const h = rows.length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
+  const find = (ch) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (at(x, y) === ch) return { x, y };
+    return null;
+  };
+
+  checkClimbFloor(rows, w, problems);
 
   const start = find('1');
   const goal = find('F');
@@ -960,8 +979,29 @@ function checkClimb(rows, w, graph, budget, problems) {
    * at the corpus's median and refuses its top decile, which is what scaling
    * to our own jump budget rather than to theirs means (§3 point 5).
    */
+  checkClimbDeadEnds(rows, w, graph, reachable, to.i, problems);
+}
+
+/**
+ * Ks. `checkClimb`in pitkä perustelu yllä — tämä on sen viimeinen kappale
+ * omana funktionaan, ja samasta syystä kuin `checkClimbFloor`: portaat jotka
+ * eivät johda mihinkään ovat yhtä turhat osioidun kentän nousussa kuin
+ * kokonaisessa kiipeilykentässä.
+ *
+ * `exempt` on niiden tasojen indeksit joiden yläpuolella ei kuulukaan olla
+ * mitään. Kiipeilykentässä se on yksi — lipun taso, koska juuri se tekee siitä
+ * huipun. Palassa niitä on kaksi, ja ne ovat palan **saumat**: se taso jolle
+ * edellisestä osiosta saavutaan ja se jolta seuraavaan poistutaan. Kumpaakaan
+ * ei kiivetty, joten kumpikaan ei ole porras jonka pitäisi ansaita itsensä —
+ * laskeutuvan osion tulotasanne on nimenomaan sellainen että sen yläpuolella
+ * ei ole eikä kuulu olla mitään.
+ */
+function checkClimbDeadEnds(rows, w, graph, reachable, exempt, problems) {
+  const h = rows.length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : rows[y][x]);
+  const spared = new Set(Array.isArray(exempt) ? exempt : [exempt]);
   for (const p of graph.platforms) {
-    if (!reachable.has(p.i) || p.i === to.i) continue;
+    if (!reachable.has(p.i) || spared.has(p.i)) continue;
     if (graph.edges[p.i].some((j) => graph.platforms[j].y < p.y)) continue;
     const paid = [...Array(p.x1 - p.x0 + 3).keys()]
       .some((i) => [1, 2, 3, 4].some((up) => REWARD.has(at(p.x0 - 1 + i, p.y - up))));
@@ -970,6 +1010,111 @@ function checkClimb(rows, w, graph, budget, problems) {
         + ' nothing on it: a stairway to nothing, standing on end');
     }
   }
+}
+
+/**
+ * Pystypalan geometria ilman kentän merkkejä.
+ *
+ * Kiipeilykentässä `checkClimb` aloittaa aloitusmerkistä ja päätyy lippuun.
+ * Palassa kumpaakaan ei ole, ja tilalla on `span`: tuloriviltä lähtöriville,
+ * molemmat luettuina naapuriosioiden lattioista. Siemen on se taso jolle
+ * palaan saavutaan ja vapautettu pää on se jolta siitä poistutaan — palan
+ * viimeisen tason yläpuolella ei kuulukaan olla mitään, koska siitä jatketaan
+ * seuraavaan osioon eikä sitä ylemmäs.
+ *
+ * Itse läpipääsyä ei kysytä täällä vaan koko ruudukosta (`checkSegmentRoute`),
+ * koska palan reuna ei ole reitin loppu vaan sen sauma.
+ */
+function checkClimbSlice(rows, w, budget, span, problems) {
+  /* Lattia kysytään molemmilta suunnilta. Nousevan palan pohja on se johon
+   * epäonnistut takaisin — "putoaminen on takaisku eikä kuolema" — ja
+   * laskeutuvan palan pohja on se maa jolle koko osio on matkalla. Reikä
+   * jälkimmäisessä on tappavampi kuin edellisessä, ei vähemmän. */
+  checkClimbFloor(rows, w, problems);
+  const graph = climbGraph(rows, budget);
+  if (!graph.platforms.length) return;
+  const pick = (row) => {
+    let best = graph.platforms[0];
+    for (const p of graph.platforms) if (Math.abs(p.y - row) < Math.abs(best.y - row)) best = p;
+    return best;
+  };
+  const entry = pick(span.from);
+  const exit = pick(span.to);
+  const reachable = flood(graph.edges, [entry.i]);
+  checkClimbDeadEnds(rows, w, graph, reachable, [entry.i, exit.i], problems);
+}
+
+/**
+ * OSIOIDUN KENTÄN REITTI, KOKO RUUDUKOSTA, YHTENÄ KYSYMYKSENÄ.
+ *
+ * Osioittain tarkastaminen ei riitä, ja se ei riitä juuri siitä syystä miksi
+ * osiointi on kiinnostava muoto: **vika asuu saumassa.** Pala kerrallaan
+ * jokainen osio voi olla moitteeton — vaakaosiossa ei ole liian leveää kuilua,
+ * pystyosiossa on lattia ja sopivan levyiset tasot — ja silti kenttää ei voi
+ * pelata läpi, koska nousun keskeltä puuttuu yksi puola tai koska ylös
+ * päästyään ei pääse seuraavan kaistan lattialle.
+ *
+ * Tämän kirjoittamiseen oli konkreettinen syy. Ensimmäinen versio luotti
+ * pelkkiin palakohtaisiin tarkistuksiin, ja rikkinäinen koekappale — sama
+ * ruudukko yksi puola poistettuna — meni läpi ilman huomautusta. Sääntö joka
+ * ei voi hylätä on pahempi kuin sääntö jota ei ole, koska se lukee suojana.
+ *
+ * Kysymys esitetään `climbGraph`ille koko ruudukosta, ei palasta, ja se on
+ * oikea kysyjä molemmille akseleille: ylöspäin kaari on mitattu hyppy, ja
+ * sivulle ja alas reunat ovat vapaita `gapTiles`in sisällä — mikä on
+ * täsmälleen se mitä vaakaosiossa käveleminen on. Yksi vuo aloituksesta,
+ * ja lipun on oltava siinä.
+ */
+function checkSegmentRoute(rows, w, budget, problems) {
+  const h = rows.length;
+  const find = (ch) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === ch) return { x, y };
+    return null;
+  };
+  const start = find('1');
+  const goal = find('F');
+  if (!start) { problems.push('osioidussa kentässä ei ole aloitusmerkkiä'); return; }
+  if (!goal) { problems.push('osioidussa kentässä ei ole lippua'); return; }
+
+  const graph = climbGraph(rows, budget);
+  const from = landsOn(graph, start.x, start.y);
+  const to = landsOn(graph, goal.x, goal.y);
+  if (!from) { problems.push(`aloitus kohdassa ${start.x},${start.y} putoaa kentästä ulos`); return; }
+  if (!to) { problems.push(`lippu kohdassa ${goal.x},${goal.y} seisoo tyhjän päällä`); return; }
+
+  const reachable = flood(graph.edges, [from.i]);
+  if (reachable.has(to.i)) return;
+
+  /*
+   * Hyödyllinen koordinaatti on se mihin reitti katkeaa, ei se minne oltiin
+   * menossa. Ja katkeamiskohtaa ei saa mitata yhdellä akselilla: osioitu
+   * kenttä etenee vuorotellen sivulle ja ylös, joten "kauimmas päässyt" on
+   * sarakkeissa väärä vastaus nousussa ja riveissä väärä käytävällä.
+   *
+   * Siksi raja luetaan kahdessa askeleessa, molemmat etäisyytenä: se
+   * saavutettu taso joka on lähinnä lippua, ja se saavuttamaton taso joka on
+   * lähinnä sitä. Toinen on missä pelaaja jää seisomaan ja ensimmäinen on
+   * mitä hän katsoo — juuri ne kaksi laattaa jotka kenttää korjaava haluaa
+   * tietää.
+   */
+  const dist = (p, q) => Math.abs(p.y - q.y) + sideways(p, q);
+  let far = from;
+  for (const i of reachable) {
+    if (dist(graph.platforms[i], to) < dist(far, to)) far = graph.platforms[i];
+  }
+  let next = null;
+  for (const p of graph.platforms) {
+    if (reachable.has(p.i)) continue;
+    if (!next || dist(p, far) < dist(next, far)) next = p;
+  }
+  const rise = next ? far.y - next.y : 0;
+  problems.push(`reitti katkeaa tasoon ${far.x0}-${far.x1},${far.y}: `
+    + (next
+      ? `lähin taso jolle ei pääse on ${next.x0}-${next.x1},${next.y}, eli`
+      + ` ${rise} riviä ylempänä ja ${sideways(far, next)} saraketta sivussa,`
+      + ` ja mitattu hyppy nousee ${budget.wallTiles} ja kantaa`
+      + ` ${graph.carry(Math.min(Math.max(rise, 0), budget.wallTiles))} sillä nousulla`
+      : 'sen takana ei ole mitään'));
 }
 
 /**
@@ -1315,6 +1460,90 @@ function checkBonusBand(rows, w, band, b, routeIndex, mouths, seams, reach, prob
   }
 }
 
+/**
+ * OSIOIDUN KENTÄN PALAT, JOHDETTUINA — yksi lähde, kaksi lukijaa.
+ *
+ * Kenttä ilmoittaa osioistaan vain kaksi asiaa: **mihin sarakkeeseen osio
+ * loppuu** ja **onko se pystysuuntainen**. Kaikki muu — mitkä viisitoista riviä
+ * vaakaosio asuu, mille riville pystyosioon saavutaan ja miltä siitä
+ * poistutaan, ja kuinka pitkä matka osio on — luetaan ruudukosta täällä.
+ *
+ * Tämä on funktio eikä `validateLevel`in sisällä oleva lohko, koska lukijoita
+ * on kaksi ja niillä ei saa olla kahta mielipidettä: säännöstö tarkastaa palat
+ * ja `tools/difficulty.mjs` mittaa ne. Mittari joka lukisi osioidun kentän
+ * yhtenä kaistana raportoi kolme neljäsosaa kentästä pohjattomana kuiluna, ja
+ * mittari joka johtaisi kaistan omalla kaavallaan olisi juuri se käsin
+ * ylläpidetty kopio jota tässä projektissa on nyt kuudesti korjattu.
+ *
+ * Palasta kerrotaan `travel`: vaakaosiolla sarakkeita, pystyosiolla rivejä
+ * tulon ja lähdön välissä. Molemmat mittarit normalisoivat lukunsa "sataa
+ * yksikköä kohti", joten `travel` on se paino jolla ne saa laskea yhteen.
+ *
+ * @returns {{error?:string, slices:Array}} `error` kun osiointi itse on väärin
+ *   — silloin `slices` on tyhjä, koska palat olisivat mielivaltaisia.
+ */
+export function segmentSlices(rows, segments) {
+  const w = rows[0].length;
+  const bounds = [];
+  let cut = 0;
+  for (const seg of segments) {
+    const to = Math.min(w, seg.toCol);
+    bounds.push([cut, to]);
+    cut = to;
+  }
+  for (let i = 1; i < bounds.length; i++) {
+    if (bounds[i][1] <= bounds[i - 1][1]) {
+      return { slices: [], error: `osioiden rajat eivät kasva: osio ${i + 1} loppuu sarakkeeseen`
+        + ` ${bounds[i][1]} ja edellinen sarakkeeseen ${bounds[i - 1][1]}` };
+    }
+  }
+  if (!bounds.length || bounds[bounds.length - 1][1] !== w) {
+    return { slices: [], error: `viimeinen osio loppuu sarakkeeseen ${bounds.length ? bounds[bounds.length - 1][1] : 0}`
+      + ` mutta kenttä on ${w} saraketta leveä: loppu jäisi lukematta` };
+  }
+
+  /* Vaakaosion lattia on sen sarakevälin alin kiinteä rivi, ja kaista on ne
+   * viisitoista riviä jotka päättyvät siihen. */
+  const floorRowOf = ([x0, x1]) => {
+    for (let y = rows.length - 1; y >= 0; y--) {
+      for (let x = x0; x < x1; x++) if (SOLID.has(rows[y][x])) return y;
+    }
+    return rows.length - 1;
+  };
+  const floors = segments.map((seg, i) => (seg.vertical ? null : floorRowOf(bounds[i])));
+  const nearestFloor = (i, step) => {
+    for (let j = i + step; j >= 0 && j < segments.length; j += step) if (floors[j] != null) return floors[j];
+    return null;
+  };
+  /* Kentän omat merkit ovat varalla sille tapaukselle että kenttä alkaa tai
+   * loppuu mutkaan: silloin naapuria ei ole, mutta merkki on siinä palassa. */
+  const rowOf = (ch) => {
+    for (let y = 0; y < rows.length; y++) if (rows[y].includes(ch)) return y;
+    return null;
+  };
+
+  const slices = segments.map((seg, i) => {
+    const [from, to] = bounds[i];
+    const vertical = !!seg.vertical;
+    const r0 = vertical ? 0 : Math.max(0, floors[i] - (ROWS - 1));
+    const r1 = vertical ? rows.length : floors[i] + 1;
+    const entryRow = vertical ? (nearestFloor(i, -1) ?? rowOf('1') ?? rows.length - 1) : null;
+    const exitRow = vertical ? (nearestFloor(i, +1) ?? rowOf('F') ?? 0) : null;
+    return {
+      i,
+      from,
+      to,
+      vertical,
+      floorRow: floors[i],
+      entryRow,
+      exitRow,
+      travel: vertical ? Math.abs(exitRow - entryRow) : to - from,
+      rows: rows.slice(r0, r1).map((r) => r.slice(from, to)),
+    };
+  });
+  return { slices };
+}
+
 /* -------------------------------- the rule ------------------------------- */
 
 /**
@@ -1370,10 +1599,74 @@ export function validateLevel(rows, budget, opts = {}) {
    * sideways and the level would be a different shape than the one anybody
    * designed. See VERTICAL_COLS.
    */
+  /*
+   * OSIOITU KENTTÄ: SAMAT SÄÄNNÖT, OSIO KERRALLAAN.
+   *
+   * Vuorotteleva kenttä ei tarvitse kolmatta sääntöjoukkoa vaan **molemmat
+   * olemassa olevat, kumpikin omalla palallaan**. Se on koko syy siihen että
+   * osiointi kannatti tehdä näin: vaakasäännöt osaavat jo lukea vaakapalan ja
+   * kiipeilysäännöt kiipeilypalan, eikä kummankaan tarvitse tietää toisesta.
+   *
+   * Pala on sarakeväli **ja riviväli**, koska molemmat säännöstöt lukevat
+   * riviä 13 lattiana: vaakaosio asuu yhdessä kaistassa, pystyosio koko
+   * korkeudessa. Ilman rivirajausta vaakapala olisi 45 riviä korkea ja
+   * "lattia" olisi jonkun toisen osion katto.
+   *
+   * `standalone: false` kertoo palalle ettei se ole kenttä: aloitusmerkkiä,
+   * lippua ja tehostusta ei vaadita joka palalta, koska ne ovat kentän
+   * ominaisuuksia eivätkä palan. Ne tarkistetaan kerran kokonaisuudesta.
+   */
+  if (Array.isArray(opts.segments) && opts.segments.length) {
+    const cuts = segmentSlices(rows, opts.segments);
+    if (cuts.error) { problems.push(cuts.error); return problems; }
+
+    for (const cut of cuts.slices) {
+      if (!cut.rows.length || !cut.rows[0].length) continue;
+      const climb = cut.vertical ? { entryRow: cut.entryRow, exitRow: cut.exitRow } : null;
+      for (const why of validateLevel(cut.rows, budget,
+        { vertical: cut.vertical, standalone: false, climb })) {
+        problems.push(`osio ${cut.i + 1} (${cut.from}-${cut.to}): ${why}`);
+      }
+    }
+
+    /* Tehostus alkuneljänneksessä on kentän lupaus, ja osioidussa kentässä
+     * "alkuneljännes" on ensimmäinen osio: se on se pala jonka pelaaja näkee
+     * ennen kuin kenttä kääntyy ensimmäisen kerran. */
+    const first = cuts.slices[0];
+    let earlyPower = false;
+    for (const row of rows) for (let x = first.from; x < first.to; x++) if (row[x] === '!') earlyPower = true;
+    if (!earlyPower) problems.push('no power-up in the first quarter');
+
+    checkSegmentRoute(rows, w, budget, problems);
+    checkEnemyFooting(rows, w, problems);
+    checkVines(rows, w, problems);
+    return problems;
+  }
+
   if (opts.vertical) {
     if (w !== VERTICAL_COLS) {
       problems.push(`a climb is ${VERTICAL_COLS} columns wide and this one is ${w}:`
         + ' one screen exactly, or the camera starts scrolling sideways');
+    }
+    /* Pala ei ole kenttä: aloitusmerkki, lippu ja tehostuksen sijainti ovat
+     * kentän ominaisuuksia, ja niitä ei ole jokaisessa palassa. Geometria on,
+     * ja se on se mitä palalta kysytään. */
+    if (opts.standalone === false) {
+      /* Tulo- ja lähtörivi tulevat `segmentSlices`iltä, joka johtaa ne
+       * naapuriosioiden lattioista (tai kentän omista merkeistä, kun kenttä
+       * alkaa tai loppuu mutkaan). Ne ovat ruudukon rivinumeroita, ja pystypala
+       * on koko ruudukon korkuinen, joten muunnosta ei ole. Varalukemat ovat
+       * pohja ja huippu sitä varten että pala voidaan tarkastaa myös suoraan,
+       * ilman osiointia — koekentät tekevät niin. */
+      const span = {
+        from: opts.climb?.entryRow ?? rows.length - 1,
+        to: opts.climb?.exitRow ?? 0,
+      };
+      checkEnemyFooting(rows, w, problems);
+      checkClimbWidth(rows, w, problems);
+      checkClimbTraverse(rows, w, budget, problems, span);
+      checkClimbSlice(rows, w, budget, span, problems);
+      return problems;
     }
     if (rows.length <= ROWS) {
       problems.push(`a climb is taller than one screen and this one is ${rows.length} rows`);
@@ -1433,7 +1726,10 @@ export function validateLevel(rows, budget, opts = {}) {
     for (let y = 0; y < route.length; y++) {
       for (let x = 0; x < quarter; x++) if (at(x, y) === '!') earlyPower = true;
     }
-    if (!earlyPower) problems.push('no power-up in the first quarter');
+    /* Tehostus alkuneljänneksessä on **kentän** lupaus eikä palan: osioidussa
+     * kentässä se on ensimmäisessä osiossa, ja loput osiot eivät saa vaatia
+     * omaa kappalettaan. Kokonaisuus tarkistetaan kerran, ks. `segments`. */
+    if (!earlyPower && opts.standalone !== false) problems.push('no power-up in the first quarter');
 
     for (let y = 0; y < FLOOR; y++) {
       let run = 0;

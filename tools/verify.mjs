@@ -3207,7 +3207,8 @@ const report = await page.evaluate(async () => {
        * ongelmaa joista yksikään ei ole totta (mitattu koekentällä lohkossa
        * "PYSTYKENTTÄ, JA KOLME TYÖKALUA…"). */
       const level = getLevel(id);
-      const problems = validateLevel(level.rows, budget, { vertical: !!level.vertical });
+      const problems = validateLevel(level.rows, budget,
+        { vertical: !!level.vertical, segments: level.segments });
       if (problems.length) perLevel.push({ id, problems });
     }
     // Every level is clean as of v26.08.08.15, so any violation from here on is
@@ -3747,7 +3748,15 @@ const report = await page.evaluate(async () => {
      * niihin täsmälleen yhtä kaatavana, ja se ajetaan kiipeilijällä lohkossa
      * "pystykentät kentissä". Yksikään kenttä ei siis putoa listalta. */
     const { getLevel: levelDef } = await import('/src/data/levels.js');
-    const handmade = levelIds().filter((id) => /^[678]-/.test(id) && !levelDef(id).vertical);
+    const { isClimb } = await import('/tools/climb-bot.js');
+    /* `isClimb` eikä `.vertical`, ja se on korjaus eikä siistiminen: osioitu
+     * kenttä (`7-P`) ei ole pystykenttä mutta sen toinen osio on nousu, ja
+     * oikealle juokseva botti kävelee sen juurelle ja raportoi kentän
+     * loppuneen sinne. Sama yksi rivi päättää asian täällä ja
+     * `playable.mjs`:ssä, koska kaksi mielipidettä siitä kumpi botti ajaa
+     * kenttää on juuri se vika jota tässä tiedostossa on nyt useasti
+     * korjattu. */
+    const handmade = levelIds().filter((id) => /^[678]-/.test(id) && !isClimb(levelDef(id)));
     const rows = [];
     for (const id of handmade) {
       reset({ type: null, level: 0 });
@@ -3827,7 +3836,7 @@ const report = await page.evaluate(async () => {
      * laskisi kahdella ja väite kattaisi hiljaa kaksi kenttää vähemmän. Luku 22
      * on siis edelleen se mitä maailmoissa 6–8 on, ja jakauma sanotaan ääneen.
      */
-    const climbers = levelIds().filter((id) => /^[678]-/.test(id) && levelDef(id).vertical);
+    const climbers = levelIds().filter((id) => /^[678]-/.test(id) && isClimb(levelDef(id)));
     expect('maailmojen 6–8 jokainen kenttä on läpäistävissä voimatasolla 0',
       rows.length === handmade.length && rows.length + climbers.length >= 22
       && stuck.length === 0,
@@ -12418,6 +12427,229 @@ const report = await page.evaluate(async () => {
           runs.length === 2 && runs.every((r) => r.cleared && r.pages >= 3),
           runs.map((r) => `${r.id}: ${r.went} % kuljettu, ${r.pages} sivunvaihtoa, `
             + `${r.frames} framea, maali ${r.cleared ? 'saavutettu' : r.died ? 'kuoli' : 'saavuttamatta'}`)
+            .join(' — ') || 'ei mitattavaa');
+      }
+    }
+
+    /* ---------------------------- osioitu kenttä ------------------------ */
+    /*
+     * OSIOITU KENTTÄ: KENTTÄ JOKA VAIHTAA AKSELIA KESKEN MATKAN.
+     *
+     * Omistaja pyysi kenttää *"jossa on sekä vaaka- että pystysuuntaista
+     * liikettä, vuorotellen"*, ja `7-P` on se kenttä. Kameran puoli siitä
+     * (`LevelScene.updateSegment`) toimitettiin aiemmin; tässä mitataan se mikä
+     * on kenttää eikä kameraa.
+     *
+     * Neljä väitettä, ja jokainen on olemassa siksi että sen vastakohta olisi
+     * mennyt läpi huomaamatta:
+     *
+     *   1. **Säännöt luetaan palasta eikä kentästä, ja ne osaavat hylätä.**
+     *      Ensimmäinen versio osiotarkastuksesta palautti *ei ongelmia*
+     *      ruudukolle josta oli poistettu yksi nousun puola. Se meni läpi
+     *      koska pystypalasta puuttuvat aloitusmerkki ja lippu, jolloin
+     *      kulkukelpoisuustarkastus palasi heti — sääntö joka ei voi laueta.
+     *      Tässä ajetaan viisi rikottua koekappaletta, ja jokaisen on
+     *      valitettava.
+     *   2. **Osiointi kattaa koko leveyden.** Sarakkeet joita mikään osio ei
+     *      omista jäisivät lukematta kokonaan, mikä on hiljainen aukko eikä
+     *      virhe.
+     *   3. **Kaista ja suunta johdetaan, ei kirjoiteta.** `segmentSlices` on
+     *      ainoa paikka jossa ne lasketaan, ja sekä säännöstö että
+     *      `tools/difficulty.mjs` lukevat ne sieltä. Tässä varmistetaan että
+     *      johdetut luvut vastaavat sitä mitä kentässä oikeasti on.
+     *   4. **Botti pelaa sen läpi voimatasolla 0 ja kamera kääntyy.** Sama
+     *      kiipeilijä kuin pystykentillä, koska `isClimb` tuntee osioidun
+     *      kentän. Käänteet lasketaan ajosta: kenttä joka ei vaihda akselia
+     *      kertaakaan on osioitu vain nimeltä.
+     */
+    {
+      const { getLevel } = await import('/src/data/levels.js');
+      const { validateLevel, segmentSlices } = await import('/src/data/rules.js');
+      const { makeClimber, isClimb } = await import('/tools/climb-bot.js');
+      const segBudget = await (await fetch('/tools/jump-budget.json')).json();
+
+      const segIds = levelIds().filter((id) => {
+        const def = getLevel(id);
+        return Array.isArray(def.segments) && def.segments.length;
+      });
+
+      expect('peli toimittaa osioidun kentän, ja kiipeilijä tunnistaa sen omakseen',
+        segIds.length >= 1 && segIds.every((id) => isClimb(getLevel(id)) && !getLevel(id).vertical),
+        segIds.length
+          ? segIds.map((id) => `${id} ${getLevel(id).segments.length} osiota`).join(', ')
+          : 'ei osioituja kenttiä');
+
+      /* Osiointi kattaa koko leveyden, ja palat vuorottelevat akselia — muuten
+       * "vuorotteleva kenttä" olisi nimi eikä muoto. */
+      {
+        const bad = [];
+        for (const id of segIds) {
+          const def = getLevel(id);
+          const { slices, error } = segmentSlices(def.rows, def.segments);
+          if (error) { bad.push(`${id}: ${error}`); continue; }
+          const covered = slices.reduce((a, sl) => a + (sl.to - sl.from), 0);
+          if (covered !== def.rows[0].length) bad.push(`${id}: osiot kattavat ${covered}/${def.rows[0].length}`);
+          for (let i = 1; i < slices.length; i++) {
+            if (slices[i].vertical === slices[i - 1].vertical) {
+              bad.push(`${id}: osiot ${i} ja ${i + 1} ovat samalla akselilla`);
+            }
+          }
+        }
+        expect('osiot kattavat koko kentän ja vuorottelevat akselia',
+          segIds.length > 0 && bad.length === 0,
+          bad.length ? bad.slice(0, 3).join(' / ')
+            : segIds.map((id) => {
+              const def = getLevel(id);
+              return `${id}: ${segmentSlices(def.rows, def.segments).slices
+                .map((sl) => `${sl.from}-${sl.to}${sl.vertical ? '↑' : '→'}`).join(' ')}`;
+            }).join(', '));
+      }
+
+      /* Kaista ja suunta ovat johdettuja lukuja, ja tässä ne verrataan siihen
+       * mitä ruudukossa on: vaakaosion lattiarivillä on oltava kiinteää, ja
+       * pystyosion tulo- ja lähtörivin on oltava naapureiden lattiat. */
+      {
+        const bad = [];
+        for (const id of segIds) {
+          const def = getLevel(id);
+          const { slices } = segmentSlices(def.rows, def.segments);
+          for (const sl of slices) {
+            if (!sl.vertical) {
+              const floor = def.rows[sl.floorRow].slice(sl.from, sl.to);
+              if (!/[#X]/.test(floor)) bad.push(`${id} osio ${sl.i + 1}: johdetulla lattiarivillä ${sl.floorRow} ei ole maata`);
+              if (sl.rows.length !== 15) bad.push(`${id} osio ${sl.i + 1}: kaista on ${sl.rows.length} riviä`);
+            } else {
+              const neighbours = slices.filter((o) => !o.vertical).map((o) => o.floorRow);
+              if (!neighbours.includes(sl.entryRow)) bad.push(`${id} osio ${sl.i + 1}: tulorivi ${sl.entryRow} ei ole minkään vaakaosion lattia`);
+              if (sl.travel < 10) bad.push(`${id} osio ${sl.i + 1}: nousua vain ${sl.travel} riviä`);
+            }
+          }
+        }
+        expect('kaista, suunta ja matka johdetaan ruudukosta ja osuvat siihen mitä siinä on',
+          segIds.length > 0 && bad.length === 0,
+          bad.length ? bad.slice(0, 3).join(' / ')
+            : segIds.map((id) => {
+              const def = getLevel(id);
+              return `${id}: ${segmentSlices(def.rows, def.segments).slices
+                .map((sl) => (sl.vertical ? `${sl.entryRow}→${sl.exitRow}` : `kaista ${sl.floorRow - 14}-${sl.floorRow}`))
+                .join(', ')}`;
+            }).join(' — '));
+      }
+
+      /*
+       * PUNAINEN ENNEN VIHREÄÄ (DESIGN.md 7).
+       *
+       * Koekappale on toimitettu kenttä itse, rikottuna viidellä eri tavalla.
+       * Kenttädatasta rikkominen on tässä oikea tapa eikä oikaisu: se todistaa
+       * että sääntö laukeaa *sillä* geometrialla jota peli oikeasti sisältää,
+       * eikä vain jollain käsin kirjoitetulla ruudukolla joka sattuu
+       * laukaisemaan sen.
+       */
+      {
+        const id = segIds[0];
+        const def = id ? getLevel(id) : null;
+        const bend = (mut) => def.rows.map((row, y) => mut(row, y) ?? row);
+        const cases = [];
+        if (def) {
+          const { slices } = segmentSlices(def.rows, def.segments);
+          const climbSeg = slices.find((sl) => sl.vertical);
+          /* Yksi puola pois nousun keskeltä. */
+          const rungRow = (() => {
+            for (let y = climbSeg.exitRow + 3; y < climbSeg.entryRow - 3; y++) {
+              if (def.rows[y].slice(climbSeg.from, climbSeg.to).includes('-')) return y;
+            }
+            return -1;
+          })();
+          cases.push({
+            why: 'puuttuva puola',
+            rows: bend((row, y) => (y === rungRow
+              ? row.slice(0, climbSeg.from) + ' '.repeat(climbSeg.to - climbSeg.from) + row.slice(climbSeg.to)
+              : null)),
+          });
+          /* Reikä nousun lattiassa. */
+          cases.push({
+            why: 'reikä nousun lattiassa',
+            rows: bend((row, y) => (y >= def.rows.length - 2
+              ? row.slice(0, climbSeg.from + 4) + '   ' + row.slice(climbSeg.from + 7)
+              : null)),
+          });
+          /* Tikapuusarake: jalansija joka askelmalla samassa sarakkeessa. */
+          cases.push({
+            why: 'tikapuusarake',
+            rows: bend((row, y) => ((y > climbSeg.exitRow && y < climbSeg.entryRow && (climbSeg.entryRow - y) % 3 === 0)
+              ? row.slice(0, climbSeg.from + 2) + '--' + row.slice(climbSeg.from + 4)
+              : null)),
+          });
+          /* Osiointi joka ei kata loppua. */
+          cases.push({
+            why: 'vajaa osiointi',
+            rows: def.rows,
+            segments: def.segments.slice(0, -1),
+          });
+          /* Tehostus pois ensimmäisestä osiosta. */
+          cases.push({ why: 'ei tehostusta alussa', rows: bend((row) => row.replace('!', ' ')) });
+        }
+        const missed = cases.filter((c) => validateLevel(c.rows, segBudget,
+          { segments: c.segments || def.segments }).length === 0).map((c) => c.why);
+        const soundProblems = def ? validateLevel(def.rows, segBudget, { segments: def.segments }) : ['ei kenttää'];
+        expect('osiosäännöt hyväksyvät toimitetun kentän ja hylkäävät jokaisen rikotun',
+          !!def && soundProblems.length === 0 && cases.length === 5 && missed.length === 0,
+          missed.length ? `läpi meni: ${missed.join(', ')}`
+            : soundProblems.length ? `ehjä kenttä valitti: ${soundProblems.slice(0, 2).join(' / ')}`
+              : `${cases.length} rikottua koekappaletta, kaikki hylättiin`);
+      }
+
+      /*
+       * JA BOTTI PELAA SEN LÄPI VOIMATASOLLA 0.
+       *
+       * Sama kiipeilijä, sama moottori, viholliset pois (maasto on kysymys).
+       * Käänteet lasketaan ajon aikana `scene.vertical`in vaihdoksina, koska
+       * juuri se on se asia jota tämä kenttä on: kolme käännettä neljälle
+       * osiolle, ja jokainen niistä on sivunvaihdon lyönti.
+       */
+      {
+        const runs = [];
+        for (const id of segIds) {
+          const rows = getLevel(id).rows;
+          reset({ type: null, level: 0 });
+          let finished = null;
+          game.finishLevel = (r) => { finished = r; };
+          const s = new LevelScene(game, id);
+          game.setScene(s);
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const bot = makeClimber(s, rows, segBudget);
+          const input = mkInput();
+          let axis = s.vertical;
+          let turns = 0;
+          let frames = 0;
+          for (let f = 0; f < 9000 && !finished; f++) {
+            frames = f;
+            const want = bot.step();
+            input.held = blank();
+            input.pressed = blank();
+            input.held.left = want.left;
+            input.held.right = want.right;
+            input.held.jump = want.jump;
+            input.held.run = want.run;
+            input.pressed.jump = want.press;
+            s.update(input);
+            if (s.vertical !== axis) { axis = s.vertical; turns++; }
+            if (s.state === 'dead') break;
+          }
+          runs.push({
+            id,
+            cleared: !!(finished && finished.cleared),
+            turns,
+            frames,
+            died: s.state === 'dead',
+            at: `${Math.floor(s.player.cx / 16)},${Math.floor((s.player.y + s.player.h) / 16)}`,
+          });
+        }
+        expect('kiipeilijä pelaa osioidun kentän läpi voimatasolla 0, ja akseli vaihtuu matkalla',
+          runs.length > 0 && runs.every((r) => r.cleared && r.turns >= 3),
+          runs.map((r) => `${r.id}: ${r.turns} käännettä, ${r.frames} framea, maali `
+            + `${r.cleared ? 'saavutettu' : r.died ? `kuoli kohdassa ${r.at}` : `saavuttamatta, jäi kohtaan ${r.at}`}`)
             .join(' — ') || 'ei mitattavaa');
       }
     }
