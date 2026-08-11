@@ -2167,7 +2167,12 @@ export class LevelScene {
      * jotta se maa johon ollaan menossa on jo ruudulla kun sinne saavutaan. */
     const climbing = this.camAnchor > this.heightPx / 2;
     const line = this.camAnchor - (climbing ? this.viewH - CAM_PAGE_LAND : CAM_PAGE_LAND);
-    this.camPageFrom = this.camPageY;
+    /* Lähtölinja on `cam.y` eikä `camPageY`: jälkimmäistä ylläpitää vain
+     * pystykamera, joten vaakaosiosta tultaessa se on siinä missä viimeksi
+     * sivunvaihdettiin — mahdollisesti satoja pikseleitä sitten. Käänne olisi
+     * napsahtanut siihen ensimmäisellä framella. */
+    this.camPageY = this.cam.y;
+    this.camPageFrom = this.cam.y;
     this.camPageTo = this.clampCamY(line);
     this.camPage = this.camPageFrames;
   }
@@ -3052,8 +3057,21 @@ export class LevelScene {
            *
            * Valinta on ikkunan sisällä: runko maksaa osuman, raaja katkeaa.
            */
-          const open = e.spikePhase === 'open';
-          if (open && fallVy > 0 && e.breakLimb && e.breakLimb(idx)) {
+          /*
+           * Sama ehto kuin rungolla, kahdesti.
+           *
+           * **Vaihe:** `!e.spiky` eikä `spikePhase === 'open'`. Runko käyttää
+           * ensimmäistä, ja telegraph-vaiheessa ne erosivat: vartalo oli
+           * tallottavissa mutta raaja satutti, mikä on tasan päinvastoin kuin
+           * yllä oleva lause "kruunu pois: kaikki on tallottavissa".
+           *
+           * **Asento:** jalat raajan yläpuolella. Pelkkä `fallVy > 0` antoi
+           * ilmaisen pompun ja katkaisun myös kyljestä osuvasta kosketuksesta
+           * — sama kosketus vartaloon maksoi osuman.
+           */
+          const b = boxes[idx];
+          const onTop = fallVy > 0 && p.y + p.h - fallVy <= b.y + b.h * 0.6;
+          if (!e.spiky && onTop && e.breakLimb && e.breakLimb(idx)) {
             p.bounce();
             Sfx.play('stomp');
             continue;

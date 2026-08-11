@@ -1,4 +1,6 @@
-const KEY = 'sfb3.save.v2';
+/* Viety, jotta portti voi lukea raa'an tallennuksen. `Save.load` levittää
+ * oletukset päälle, joten sen kautta luettuna puuttuvaa kenttää ei voi nähdä. */
+export const KEY = 'sfb3.save.v2';
 
 export const DEFAULT_SAVE = () => ({
   lives: 4,

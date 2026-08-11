@@ -7133,14 +7133,14 @@ const report = await page.evaluate(async () => {
      * areenassa ei ole yhtään — ja se on nimenomaan se tapaus jonka alla oleva
      * portti kieltää korkealta pomolta.
      */
-    const deckAbove = (scene, boss) => {
+    const deckAbove = (scene, boss, below = 0) => {
       /* **Lankku, ei seinä.** Ensimmäinen versio hyväksyi minkä tahansa
        * kiinteän ruudun, ja areenan reunapilarit (`XX`) ovat kiinteitä — joten
        * portti löysi "kannen" jokaisesta areenasta ja hyväksyi myös sellaiset
        * joissa kantta ei ole. `isSemi` on se mitä kansi oikeasti on:
        * yksisuuntainen taso jolle pudotaan ylhäältä. */
       const col = Math.floor(boss.cx / 16);
-      for (let row = 2; row < 13; row++) {
+      for (let row = Math.max(2, Math.ceil(below / 16)); row < 13; row++) {
         for (let c = Math.max(0, col - 16); c < Math.min(scene.w, col + 17); c++) {
           if (isSemi(scene.tileAt(c, row))) return { y: row * 16, col: c };
         }
@@ -7174,9 +7174,21 @@ const report = await page.evaluate(async () => {
         const deck = deckAbove(s2, boss);
         if (!deck) { bad.push(`${id}: ${boss.h} px korkea eikä kantta`); continue; }
         if (deck.y > boss.y) bad.push(`${id}: kansi ${deck.y} on pään (${Math.round(boss.y)}) alapuolella`);
-        // Reachable: a stack of standing jumps from the floor, 64 px a step.
+        /*
+         * Saavutettavuus on **askelma**, ei summa.
+         *
+         * Ensimmäinen versio hyväksyi minkä tahansa kannen jonka kokonaisnousu
+         * oli alle 128 px, eli myös 112 px korkean kannen jonka alla ei ole
+         * mitään — ja 112 px on enemmän kuin 100 px juoksuhyppy. Se on tasan se
+         * "kannet olivat lavasteita" -areena jonka tämä portti sanoo estävänsä.
+         */
         const rise = 208 - deck.y;
-        if (rise > 64 * 2) bad.push(`${id}: kansi ${rise} px lattiasta, yli kahden askelman`);
+        if (rise > 64) {
+          const step = deckAbove(s2, boss, deck.y + 8);
+          if (!step) bad.push(`${id}: kansi ${rise} px lattiasta ilman askelmaa alla`);
+          else if (208 - step.y > 64) bad.push(`${id}: askelma ${208 - step.y} px lattiasta, yli hypyn`);
+          else if (step.y - deck.y > 64) bad.push(`${id}: askelmalta kannelle ${step.y - deck.y} px`);
+        }
       }
       expect('jokainen lattiaa korkeampi pomo tappelee areenassa jossa on kansi',
         bad.length === 0,
@@ -7492,6 +7504,10 @@ const report = await page.evaluate(async () => {
          * ole — sama vika kuin kiipeilyaskelmakokeessa, ja kolmas kerta tässä
          * erässä. */
         const deck = deckAbove(s, boss);
+        /* Ilman kantta tämä kaatoi koko `page.evaluate`n, eli yksi puuttuva
+         * kansi vei mukanaan jokaisen muun tuloksen. Portin pitää raportoida
+         * eikä räjähtää: kannen puuttumisen sanoo yllä oleva oma testinsä. */
+        if (!deck) { expect(`${id}: korkealla pomolla on kansi jolta tulla`, false, 'ei kantta'); continue; }
         p.x = deck.col * 16 + 2;
         p.y = deck.y - p.h;
       } else {
@@ -14358,11 +14374,20 @@ const report = await page.evaluate(async () => {
    * tallennukseen.
    */
   {
-    const { Save } = await import('/src/core/save.js');
+    /*
+     * Luetaan **raaka localStorage** eikä `Save.load()`.
+     *
+     * Ensimmäinen versio vertasi `load()`in tulosta, ja se ei voinut kaatua
+     * koskaan: `load` levittää `DEFAULT_SAVE()`n ensin, joten `write`istä
+     * pudonnut avain täyttyy oletuksella eikä lue koskaan `undefined`ina.
+     * Portti oli kirjoitettu kiinni ottamaan tasan se vika jonka se päästi
+     * läpi — ja se on huonompi kuin ei porttia, koska se näyttää katetulta.
+     */
+    const { Save, KEY: SAVE_KEY } = await import('/src/core/save.js');
     const want = DEFAULT_SAVE();
     Save.write({ ...want, doors: { '3-F': true }, secrets: { '1-1': ['a'] } });
-    const back = Save.load();
-    const roundTrip = Object.keys(want).filter((k) => back[k] === undefined);
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    const roundTrip = Object.keys(want).filter((k) => raw[k] === undefined);
     expect('jokainen tallennuksen kenttä selviää kierroksesta write -> load',
       roundTrip.length === 0,
       roundTrip.length ? `katosi: ${roundTrip.join(', ')}` : 'kaikki kentät');

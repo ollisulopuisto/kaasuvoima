@@ -7,6 +7,49 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.81 — portti joka ei voinut kaatua, ja seitsemän muuta
+
+Toinen katselmointikierros, ja sen tärkein löydös oli edellisen kierroksen
+korjaus.
+
+### Portti oli kirjoitettu kiinni ottamaan tasan se vika jonka se päästi läpi
+
+`write → load` -kierrostesti vertasi `Save.load()`in tulosta — ja `load`
+levittää `DEFAULT_SAVE()`n ensin, joten `write`istä pudonnut avain täyttyy
+oletuksella eikä lue koskaan `undefined`ina. **Portti ei voinut kaatua.**
+Poistin `doors`-rivin `write`istä kokeeksi ja se meni läpi.
+
+Se on huonompi kuin ei porttia lainkaan, koska se näyttää katetulta. Testi
+lukee nyt raa'an `localStorage`in, ja kokeiltu rikkinäisellä syötteellä:
+`katosi: doors`.
+
+### Kaksi sääntöä jotka erosivat rungon säännöstä
+
+- **Raajan katkaisu ei tarkistanut asentoa.** Pelkkä `fallVy > 0` antoi
+  ilmaisen pompun ja katkaisun myös kyljestä osuvasta kosketuksesta, kun sama
+  kosketus vartaloon maksoi osuman. Nyt sama jalat-yllä-ehto kuin rungolla.
+- **Ja vaihe erosi:** raaja käytti `spikePhase === 'open'`, runko `!spiky`.
+  Telegraph-vaiheessa vartalo oli tallottavissa mutta raaja satutti — tasan
+  päinvastoin kuin sen yläpuolella lukeva lause "kruunu pois: kaikki on
+  tallottavissa".
+
+### Ja neljä muuta
+
+- **Kannen saavutettavuus mitattiin summana eikä askelmana**, joten portti olisi
+  hyväksynyt 112 px korkean kannen jonka alla ei ole mitään — ja 112 px on
+  enemmän kuin 100 px juoksuhyppy. Se on tasan se "kannet olivat lavasteita"
+  -areena jonka portti sanoo estävänsä.
+- **Kannettoman korkean pomon kohdalla portti kaatui** koko `page.evaluate`n
+  mukana, eli yksi puuttuva kansi olisi vienyt jokaisen muun tuloksen.
+- **Pikatallennuksen `vertical`-korjaus luki pelaajaa riviä ennen sen
+  sijoitusta**, eli johti osion aloituspaikasta: no-op joka jätti juuri sen
+  turhan sivunvaihdon jonka se lupasi estää.
+- **Käänteen lähtölinja oli `camPageY`**, jota vain pystykamera ylläpitää —
+  vaakaosiosta tultaessa satoja pikseleitä vanha, eli kuva olisi napsahtanut.
+- **Taukovalikko väitti `(TYHJÄ)` siitä mitä se itse oli juuri tallentanut.**
+
+---
+
 ## v26.08.11.80 — katselmointi löysi kaksi asiaa jotka olisivat menneet tuotantoon
 
 ### Ovi ei tallentunut lainkaan

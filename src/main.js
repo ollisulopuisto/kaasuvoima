@@ -856,7 +856,13 @@ class Game {
     Input.consume('jump');
     const pick = items[this.pauseIndex].id;
     if (pick === 'resume') { this.paused = false; Sfx.play('cursor'); return; }
-    if (pick === 'save') { this.quickSave(); return; }
+    if (pick === 'save') {
+      this.quickSave();
+      /* Paikka jonka juuri kirjoitti ei ole enää tyhjä. Ilman tätä valikko
+       * väitti (TYHJÄ) siitä mitä se itse oli tallentanut. */
+      this.pauseSlotFilled = !!readSlot(this.slot);
+      return;
+    }
     if (pick === 'load') { this.quickLoad(); return; }
     if (pick === 'slot') {
       this.slot = (this.slot % SLOT_COUNT) + 1;
