@@ -81,8 +81,7 @@ const CROWN_SPINES = 0.78;
 /** Where the crown is drawn out, and how high it is lifted. Sprite pixels. */
 const CROWN_REST_Y = 18;
 const CROWN_HIGH_Y = -10;
-/** Hands, at rest and holding the rim from underneath so the band cannot hide them. */
-const HAND_REST_Y = 20;
+/** How far under the crown's rim the hands grip, so the band cannot hide them. */
 const HAND_GRIP_DY = 2;
 
 const lerp = (a, b, u) => a + (b - a) * u;
@@ -100,11 +99,6 @@ function crownPose(t) {
     grip: Math.min(span(t, 0, CROWN_SPREAD), 1 - span(t, CROWN_SEAT, 1)),
     spines: span(t, CROWN_SPINES, 1),
   };
-}
-
-/** Where the hands are this frame — the crown's rim, or back at his sides. */
-function handY(py, pose) {
-  return py + lerp(HAND_REST_Y, pose.y + HAND_GRIP_DY, pose.grip);
 }
 
 /**

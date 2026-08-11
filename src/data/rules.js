@@ -794,7 +794,7 @@ function checkClimbWidth(rows, w, problems) {
  */
 function checkClimbTraverse(rows, w, budget, problems) {
   const h = rows.length;
-  const footing = (x, y) => (y >= 0 && y < h && SOLID.has(rows[y][x])) || (y >= 0 && y < h && SEMI.has(rows[y][x]));
+  const footing = (x, y) => y >= 0 && y < h && (SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]));
   const find = (ch) => {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === ch) return { x, y };
     return null;
