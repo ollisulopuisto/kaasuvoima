@@ -12,8 +12,7 @@ import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss, bossSize,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
-  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak,
-} from '../gfx/sprites.js';
+  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -1799,6 +1798,16 @@ export class Boss extends Enemy {
      * in the first draft, and it is in that table as one of the two heights
      * that *failed* the power-0 stomp gate. A comment quoting a rejected draft
      * next to the constant that rejected it is worse than no comment. */
+    /*
+     * RIKOTUT RAAJAT, BITTIMASKINA.
+     *
+     * Numero eikä `Set`, koska pikatallennus sarjallistaa jokaisen oman kentän
+     * `JSON.stringify`llä: `Set` katoaisi hiljaa tyhjäksi olioksi ja pelaaja
+     * saisi rikkomansa nyrkit takaisin latauksesta. Sama laji vikaa kuin
+     * osumalaatikko joka palasi vanhana — johdettu tila on johdettava, ja
+     * *ansaittu* tila on sarjallistettava.
+     */
+    this.brokenLimbs = 0;
     this.baseW = bossSize(variant).w;
     this.baseH = bossSize(variant).h;
     this.spawnX = x;
@@ -1917,6 +1926,49 @@ export class Boss extends Enemy {
    * tallennuksen kelvollisena kun taulukko muuttuu. `applyScale` säilyttää
    * jalkojen tason ja keskilinjan, joten pomo ei hyppää palautuksessa.
    */
+  /**
+   * Raajojen osumalaatikot maailman koordinaateissa, peilaus ja `scale` mukana.
+   *
+   * Nämä ovat **vahinkoa eivätkä alustoja**: raajaan koskeminen sattuu kuten
+   * kylkeen koskeminen, eikä sen päälle voi laskeutua. Laskeutuminen on rungon
+   * ja kruunun asia, ja kruunu on se yksi merkki jonka pelaajan on luettava —
+   * toinen tallottava pinta tekisi siitä kaksi kysymystä.
+   */
+  limbBoxes() {
+    const limbs = BOSS_LIMBS[this.variant] || [];
+    const S = this.scale;
+    return limbs.map(([lx, ly, lw, lh], i) => {
+      if (this.brokenLimbs & (1 << i)) return { x: 0, y: 0, w: 0, h: 0 };
+      /* Peilaus oman leveyden ympäri, samoin kuin piirroksessa: vasemmalle
+       * katsova pomo heiluttaa nyrkkiään vasemmalle. */
+      const x = this.facing < 0 ? this.baseW - lx - lw : lx;
+      return { x: this.x + x * S, y: this.y + ly * S, w: lw * S, h: lh * S };
+    });
+  }
+
+  /**
+   * Raaja katkeaa, ja se on **valinta eikä pakko**.
+   *
+   * Avoimen ikkunan aikana kruunu on pois, ja silloin koko kooste on
+   * tallottavissa: runko maksaa osuman, raaja katkeaa pysyvästi. Vaihtokauppa
+   * on ikkuna joka ei mennyt vahinkoon — mutta katkennut raaja vie mukanaan
+   * oman vahinkoalueensa, eli loppufight on turvallisempi.
+   *
+   * DESIGN.md kohta 5 lupaa että pomon voi kaataa voimatasolla 0, ja se lupaus
+   * on **vain rungosta**: raaja ei ole koskaan pakollinen, ja talloportti
+   * todistaa sen käymällä läpi pelkän rungon.
+   */
+  breakLimb(i) {
+    if (this.brokenLimbs & (1 << i)) return false;
+    this.brokenLimbs |= (1 << i);
+    /* Hitaampi joka katkenneesta raajasta: palkinto on luettava liikkeestä
+     * eikä vain siitä että jotain katosi ruudulta. */
+    this.speed = Math.max(0.4, this.speed - 0.12);
+    this.level.spawnPuff(this.cx, this.cy, true);
+    this.level.shake(1);
+    return true;
+  }
+
   rehydrate() {
     const size = bossSize(this.variant);
     this.baseW = size.w;
@@ -2146,11 +2198,12 @@ export class Boss extends Enemy {
     const frame = this.tick;
     if (this.dying) {
       this.drawFlipped(ctx, () =>
-        drawBoss(ctx, this.x - 1, this.y, frame, this.facing, false, this.variant, this.scale));
+        drawBoss(ctx, this.x - 1, this.y, frame, this.facing, false, this.variant,
+          this.scale, 0, this.brokenLimbs));
       return;
     }
     drawBoss(ctx, this.x - 1, this.y, frame, this.facing, this.invuln > 0, this.variant,
-      this.scale, this.crownOn);
+      this.scale, this.crownOn, this.brokenLimbs);
   }
 }
 

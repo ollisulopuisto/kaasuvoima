@@ -147,6 +147,15 @@ export function restoreState(game, snap) {
   scene.grid = data.grid.map((row) => row.split(''));
   scene.entities = data.entities.map((e) => entityFromJSON(scene, e)).filter(Boolean);
   scene.player = entityFromJSON(scene, data.player);
+  /* Osioidussa kentässä `vertical` on muuttuva eikä kentän ominaisuus, joten
+   * se on johdettava takaisin sijainnista — ja **vasta kun pelaaja on
+   * palautettu**. Ensimmäinen versio luki `scene.player`ia riviä ennen sen
+   * sijoitusta, eli johti osion aloituspaikasta ja päätyi aina ensimmäiseen
+   * osioon: no-op joka jätti juuri sen turhan sivunvaihdon jonka se lupasi
+   * estää. */
+  if (scene.segments && scene.player) {
+    scene.vertical = !!scene.segmentAt(Math.floor(scene.player.cx / 16)).vertical;
+  }
   scene.cam = { ...data.cam };
   // An older snapshot has no page line; the view it was taken at is the honest
   // fallback, and in a horizontal level nothing ever reads it.

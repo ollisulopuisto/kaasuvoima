@@ -312,8 +312,8 @@ export const WORLD7_LEVELS = {
     theme: 'cloud', bg: 'none', music: 'cloud', boss: true, bossVariant: 5,
     chunks: [
       'start', 'spire_gate', 'spire_climb', 'spire_hail', 'spire_hole', 'spire_hail',
-      'spire_hole', 'spire_lattice', 'spire_hole', 'spire_hail', 'spire_hole', 'spire_hail',
-      'boss_arena',
+      'spire_hole', 'spire_lattice', 'spire_hole', 'spire_hail', 'spire_hole',
+      'boss_arena_big',
     ],
   },
 };

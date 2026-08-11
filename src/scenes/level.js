@@ -1,4 +1,4 @@
-import { getLevel } from '../data/levels.js';
+import { arenaColumn, getLevel } from '../data/levels.js';
 import {
   TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP, themeTint,
 } from '../gfx/tiles.js';
@@ -906,7 +906,28 @@ export class LevelScene {
     /** How far ahead of the feet that line is aimed — see CAM_FALL_LEAD. */
     this.camLead = 0;
     /** A climb, and therefore a paging camera. See CAM_PAGE_EDGE. */
-    this.vertical = !!this.def.vertical;
+    /*
+     * OSIOITU KENTTÄ: KAMERAN KIELI VAIHTUU MATKAN VARRELLA.
+     *
+     * Kaksi kameratilaa puhuvat tarkoituksella vastakkaista kieltä —
+     * vaakakenttä seuraa pehmeästi ja liikkuu koko ajan, pystykenttä seisoo
+     * paikallaan ja **leikkaa** sivun kerrallaan. Jos ne vain yhdistäisi,
+     * tulos olisi kamera joka liukuu sivulle ja nykii ylös, ja se lukee
+     * rikkinäisenä eikä tyylikkäänä.
+     *
+     * Siksi kenttä ilmoittaa osionsa (`segments`), ja **käänne on sivunvaihdon
+     * lyönti**: se beat on jo olemassa ja se on jo maksettu — omistaja pyysi
+     * sen pystykenttiin, kello pysähtyy sen ajaksi eikä musiikki. Käänteestä
+     * tulee siis tapahtuma eikä saumaa, ja kumpikin kieli säilyy omanaan.
+     *
+     * `vertical` pysyy tavallisena kenttänä koska koko muu tiedosto lukee
+     * sitä; osioitu kenttä vain kirjoittaa sen uudelleen rajan ylittyessä.
+     */
+    /* Tyhjä lista ei ole osiointi: `Array.isArray([])` on tosi, ja
+     * `segments[0].vertical` kaatuisi siihen. */
+    this.segments = Array.isArray(this.def.segments) && this.def.segments.length
+      ? this.def.segments : null;
+    this.vertical = this.segments ? !!this.segments[0].vertical : !!this.def.vertical;
     /** Frames a page takes, 0 for a cut. See CAM_PAGE_FRAMES. */
     this.camPageFrames = CAM_PAGE_FRAMES;
     /** Frames left of a page in flight; while it runs the player is frozen. */
@@ -941,6 +962,44 @@ export class LevelScene {
     this.wonCard = null;
     this.spawn = { x: 2 * TILE, y: 12 * TILE };
 
+    /*
+     * LINNAKKEEN OVI — mistä kuolema palauttaa, kun areenalle on kerran päästy.
+     *
+     * Kuolema vie karttaruutuun eikä suoraan takaisin kenttään, joten tämä ei
+     * ole "kentän sisäinen tarkistuspiste" vaan **se kohta josta kenttä alkaa
+     * kun siihen astuu uudelleen**. Siksi se on `game.state`issa ja
+     * tallennuksessa eikä kohtauksen omassa muistissa.
+     *
+     * Vain linnakkeissa, ja se on koko idea. Tavallinen kenttä kestää mitattuna
+     * ~31 s parhaimmillaan, ja SMB3-idiomissa se on lyhyt tarpeeksi ilman
+     * välipisteitä. Linnakkeen käytävä on 19–24 s, ja se kävellään uudelleen
+     * *joka kerta kun pomo voittaa* — eli useammin kuin mikään muu matka
+     * pelissä. Ero ei ole pituus vaan toisto.
+     *
+     * Kello ei nollaudu eikä voimataso palaudu: ovi säästää kävelyn, ei
+     * kenttää. Aika-ajo ei siis muutu, koska se mittaa yhtä yhtäjaksoista
+     * juoksua eikä sitä montako kertaa siihen on yritetty.
+     */
+    /*
+     * Vain linnake, ja vain kun kelloa ei mitata.
+     *
+     * `def.boss` ei ole "linnake": maailmassa 8 **jokainen** kenttä 8-1…8-7 on
+     * pomokenttä, ja ovi olisi ohittanut niistä ~144 saraketta tavallista
+     * kenttää. Perustelu koski linnakkeen toistuvaa käytävää, ei jokaista
+     * kenttää jossa sattuu olemaan pomo, joten ehto on linnaketunnus.
+     *
+     * Ja aika-ajossa ovea ei ole lainkaan: uusinta alkaisi pomon vierestä,
+     * `startRace` ankkuroisi lähdön sinne ja `recordRace` kirjoittaisi kentän
+     * rehellisen ennätyksen yli kymmenen sekunnin ajalla. Sama päätös kuin
+     * taukovalikon tallennuksella, ja samasta syystä.
+     */
+    const fortress = this.def.boss && /-F$/.test(levelId);
+    this.arenaCol = fortress && !game.timeAttack ? arenaColumn(this.def) : null;
+    /* `arenaReached` eikä `doorOpen`: `doorOpen` on jo varattu, ja se tarkoittaa
+     * *uloskäyntiä* joka aukeaa pomon kaaduttua. Kaksi eri ovea. */
+    this.arenaReached = this.arenaCol !== null
+      && !!(game.state.doors && game.state.doors[this.id]);
+
     // Playtest telemetry, tracked per attempt. `bestX` is the furthest the
     // player has got; `stallFrames` counts how long it has stood still.
     this.bestX = 0;
@@ -949,6 +1008,10 @@ export class LevelScene {
     this.telemetryDone = false;
 
     this.scanGrid();
+    /* Vasta `scanGrid`in jälkeen, ja se on koko vika ensimmäisessä yrityksessä:
+     * `scanGrid` lukee aloitusmerkin ruudukosta ja kirjoittaa `spawn`in yli.
+     * Ovi on siis viimeinen sana eikä ensimmäinen. */
+    if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
     this.plantVines();
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
@@ -2077,6 +2140,43 @@ export class LevelScene {
     }
   }
 
+  /**
+   * Missä osiossa keho on, ja mitä se tarkoittaa kameralle.
+   *
+   * Raja on sarake, koska kenttä etenee sarakkeittain myös silloin kun se
+   * nousee: pystyosio on yhtä leveä kuin ruutu, joten sen sisällä sarake ei
+   * juuri muutu ja vaihto tapahtuu vasta kun siitä kävellään ulos.
+   */
+  segmentAt(col) {
+    const segs = this.segments;
+    for (const seg of segs) if (col < seg.toCol) return seg;
+    return segs[segs.length - 1];
+  }
+
+  updateSegment() {
+    const seg = this.segmentAt(Math.floor(this.player.cx / TILE));
+    const want = !!seg.vertical;
+    if (want === this.vertical) return;
+    this.vertical = want;
+    /* Käänne saa saman lyönnin kuin sivunvaihto: kello ja viholliset seisovat,
+     * musiikki ei. `camPageFrames` on sama luku molemmille, koska se on sama
+     * ele — kuva vaihtuu, pelaaja odottaa. */
+    if (this.camPageFrames <= 0) return;
+    /* Sama kohdelinja kuin pystykentän omalla sivunvaihdolla, eikä uutta
+     * kaavaa: nouseva keho kehystetään alareunaan ja laskeutuva yläreunaan,
+     * jotta se maa johon ollaan menossa on jo ruudulla kun sinne saavutaan. */
+    const climbing = this.camAnchor > this.heightPx / 2;
+    const line = this.camAnchor - (climbing ? this.viewH - CAM_PAGE_LAND : CAM_PAGE_LAND);
+    /* Lähtölinja on `cam.y` eikä `camPageY`: jälkimmäistä ylläpitää vain
+     * pystykamera, joten vaakaosiosta tultaessa se on siinä missä viimeksi
+     * sivunvaihdettiin — mahdollisesti satoja pikseleitä sitten. Käänne olisi
+     * napsahtanut siihen ensimmäisellä framella. */
+    this.camPageY = this.cam.y;
+    this.camPageFrom = this.cam.y;
+    this.camPageTo = this.clampCamY(line);
+    this.camPage = this.camPageFrames;
+  }
+
   /* -------------------------------- update ----------------------------- */
 
   update(input) {
@@ -2101,6 +2201,10 @@ export class LevelScene {
       return;
     }
 
+    /* Osioidun kentän käänne. Tarkistus on ennen pelaajan päivitystä, jotta
+     * lyönti alkaa siitä framesta jolla raja ylittyy eikä yhtä myöhemmin. */
+    if (this.segments && this.state === 'play') this.updateSegment();
+
     if (this.state === 'play') {
       this.updateTimer();
       this.player.update(input);
@@ -2122,6 +2226,19 @@ export class LevelScene {
       if (this.stateTimer > 140) {
         this.game.finishLevel({ died: true });
         return;
+      }
+    }
+
+    /* Ovi aukeaa saapumisesta eikä pomon näkemisestä: raja on areenapalikan
+     * ensimmäinen sarake, ja se ylitetään kävellen. `state === 'play'` sulkee
+     * pois kuolinanimaation, jonka aikana pelaaja voi liukua rajan yli. */
+    if (this.arenaCol !== null && !this.arenaReached && this.state === 'play'
+        && this.player.x >= this.arenaCol * TILE) {
+      this.arenaReached = true;
+      const st = this.game.state;
+      if (st.doors) {
+        st.doors[this.id] = true;
+        if (this.game.persist) this.game.persist();
       }
     }
 
@@ -2910,6 +3027,57 @@ export class LevelScene {
           if (fallVy > 0) p.bounce();
         }
         continue;
+      }
+
+      /*
+       * RAAJA SATUTTAA, EIKÄ SEN PÄÄLLE VOI LASKEUTUA.
+       *
+       * Piirretty raaja jonka läpi kävelee on sama valhe kuin piikki joka ei
+       * satuta, ja tämä peli kieltäytyy jo siitä. Raajat ovat siis osa
+       * vahinkoaluetta — mutta **vain vahinkoa**: laskeutuminen on rungon ja
+       * kruunun asia, ja kruunu on se yksi merkki jonka pelaajan on luettava
+       * ennen hyppyä. Tallottava nyrkki tekisi siitä kaksi kysymystä.
+       *
+       * Tähti suojaa, kuten kaikelta muultakin joka osuu sinuun, ja kupla
+       * ohittaa tämän kokonaan ylempänä.
+       */
+      if (e.limbBoxes) {
+        const boxes = e.limbBoxes();
+        const idx = boxes.findIndex((b) => b.h > 0 && b.w > 0 && overlaps(p.box, b));
+        if (idx >= 0) {
+          /*
+           * KRUUNU VASTAA KOKO KOOSTEESTA, EI PELKÄSTÄ RUNGOSTA.
+           *
+           * Kruunu päällä: mihinkään ei saa koskea, ei runkoon eikä raajaan.
+           * Kruunu pois: kaikki on tallottavissa. Yksi merkki, yksi vastaus —
+           * ja juuri se on syy miksi raajalla ei ole omaa varoitustaan.
+           * Kruunusääntö ostettiin aikoinaan playtestillä jossa pelaajat eivät
+           * ehtineet erottaa kahta piikkiriviä toisistaan, eikä sitä makseta
+           * uudelleen.
+           *
+           * Valinta on ikkunan sisällä: runko maksaa osuman, raaja katkeaa.
+           */
+          /*
+           * Sama ehto kuin rungolla, kahdesti.
+           *
+           * **Vaihe:** `!e.spiky` eikä `spikePhase === 'open'`. Runko käyttää
+           * ensimmäistä, ja telegraph-vaiheessa ne erosivat: vartalo oli
+           * tallottavissa mutta raaja satutti, mikä on tasan päinvastoin kuin
+           * yllä oleva lause "kruunu pois: kaikki on tallottavissa".
+           *
+           * **Asento:** jalat raajan yläpuolella. Pelkkä `fallVy > 0` antoi
+           * ilmaisen pompun ja katkaisun myös kyljestä osuvasta kosketuksesta
+           * — sama kosketus vartaloon maksoi osuman.
+           */
+          const b = boxes[idx];
+          const onTop = fallVy > 0 && p.y + p.h - fallVy <= b.y + b.h * 0.6;
+          if (!e.spiky && onTop && e.breakLimb && e.breakLimb(idx)) {
+            p.bounce();
+            Sfx.play('stomp');
+            continue;
+          }
+          if (p.star <= 0 && !p.invuln) { p.hurt('enemy'); continue; }
+        }
       }
 
       if (e.harmless) continue;

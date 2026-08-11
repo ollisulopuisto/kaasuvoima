@@ -22,7 +22,7 @@ export {
   drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawKurnuttaja, drawCroak,
 } from './sprites/enemies.js';
-export { drawBoss, BOSS_SIZES, BOSS_PLANS, bossSize } from './sprites/boss.js';
+export { drawBoss, BOSS_SIZES, BOSS_PLANS, BOSS_LIMBS, FLOOR_REACH, bossSize } from './sprites/boss.js';
 export {
   drawItem, drawFart, drawSprout, drawGasPuff, drawGoal, drawBrickShard, CARD_ICONS,
 } from './sprites/items.js';

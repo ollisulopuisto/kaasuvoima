@@ -7,6 +7,319 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.81 — portti joka ei voinut kaatua, ja seitsemän muuta
+
+Toinen katselmointikierros, ja sen tärkein löydös oli edellisen kierroksen
+korjaus.
+
+### Portti oli kirjoitettu kiinni ottamaan tasan se vika jonka se päästi läpi
+
+`write → load` -kierrostesti vertasi `Save.load()`in tulosta — ja `load`
+levittää `DEFAULT_SAVE()`n ensin, joten `write`istä pudonnut avain täyttyy
+oletuksella eikä lue koskaan `undefined`ina. **Portti ei voinut kaatua.**
+Poistin `doors`-rivin `write`istä kokeeksi ja se meni läpi.
+
+Se on huonompi kuin ei porttia lainkaan, koska se näyttää katetulta. Testi
+lukee nyt raa'an `localStorage`in, ja kokeiltu rikkinäisellä syötteellä:
+`katosi: doors`.
+
+### Kaksi sääntöä jotka erosivat rungon säännöstä
+
+- **Raajan katkaisu ei tarkistanut asentoa.** Pelkkä `fallVy > 0` antoi
+  ilmaisen pompun ja katkaisun myös kyljestä osuvasta kosketuksesta, kun sama
+  kosketus vartaloon maksoi osuman. Nyt sama jalat-yllä-ehto kuin rungolla.
+- **Ja vaihe erosi:** raaja käytti `spikePhase === 'open'`, runko `!spiky`.
+  Telegraph-vaiheessa vartalo oli tallottavissa mutta raaja satutti — tasan
+  päinvastoin kuin sen yläpuolella lukeva lause "kruunu pois: kaikki on
+  tallottavissa".
+
+### Ja neljä muuta
+
+- **Kannen saavutettavuus mitattiin summana eikä askelmana**, joten portti olisi
+  hyväksynyt 112 px korkean kannen jonka alla ei ole mitään — ja 112 px on
+  enemmän kuin 100 px juoksuhyppy. Se on tasan se "kannet olivat lavasteita"
+  -areena jonka portti sanoo estävänsä.
+- **Kannettoman korkean pomon kohdalla portti kaatui** koko `page.evaluate`n
+  mukana, eli yksi puuttuva kansi olisi vienyt jokaisen muun tuloksen.
+- **Pikatallennuksen `vertical`-korjaus luki pelaajaa riviä ennen sen
+  sijoitusta**, eli johti osion aloituspaikasta: no-op joka jätti juuri sen
+  turhan sivunvaihdon jonka se lupasi estää.
+- **Käänteen lähtölinja oli `camPageY`**, jota vain pystykamera ylläpitää —
+  vaakaosiosta tultaessa satoja pikseleitä vanha, eli kuva olisi napsahtanut.
+- **Taukovalikko väitti `(TYHJÄ)` siitä mitä se itse oli juuri tallentanut.**
+
+---
+
+## v26.08.11.80 — katselmointi löysi kaksi asiaa jotka olisivat menneet tuotantoon
+
+### Ovi ei tallentunut lainkaan
+
+`doors` lisättiin `DEFAULT_SAVE`en muttei `Save.write`in käsin kirjoitettuun
+kenttälistaan. Ovi toimi siis istunnon sisällä ja katosi jokaisesta
+latauksesta — ominaisuus joka on olemassa vain kunnes välilehti suljetaan.
+
+**Kuudes kerta tässä erässä samalle vialle:** kaksi paikkaa jotka kuvaavat
+samaa muotoa, ja vain toinen päivittyy. Portti vertaa nyt `DEFAULT_SAVE`n
+avaimia siihen mitä `write` → `load` palauttaa.
+
+### Ja kaksi pomoa kasvoi kannettoman areenan sisällä
+
+Korkeudet nostettiin varianteille 1 ja 5 olettaen että ne tappelevat
+`boss_arena_big`issa. Maailmassa 8 on **jokainen pomo**, ja `8-2` (variantti 1)
+ja `8-7` (variantti 5) käyttivät kannetonta `boss_arena`a. Ne olisivat olleet
+voittamattomia voimatasolla 0.
+
+Portti ei nähnyt sitä, koska `BOSS_LEVELS` oli käsin kirjoitettu lista joka
+pysähtyi `7-F`:ään — eli maailman 8 seitsemän pomokenttää olivat jokaisen
+pomoportin ulkopuolella. Lista luetaan nyt kenttädatasta.
+
+8-7:n pituus piti kompensoida kahdella lisäpalikalla, koska isompi areena
+laimensi sen alle 8-6:n ja teki maailmaan kolmannen notkon. Ensimmäinen yritys
+**poisti** palikan ja laski vaikeutta lisää — `fort_gap` on kuilu, eli vaikea.
+
+### Neljä pienempää
+
+- **Ovi ei ollut linnakekohtainen** vaan `def.boss`-kohtainen, ja maailmassa 8
+  jokainen kenttä on pomokenttä: ovi olisi ohittanut ~144 saraketta tavallista
+  kenttää. Ehto on nyt linnaketunnus.
+- **Ovi ei ollut poissa aika-ajosta.** Uusinta olisi alkanut pomon vierestä ja
+  kirjoittanut kentän rehellisen ennätyksen yli kymmenen sekunnin ajalla.
+- **`deckAbove` hyväksyi areenan seinäpilarit kanneksi**, joten kansiportti
+  löysi "kannen" myös sieltä missä kantta ei ole. Kansi on `isSemi`, ei mikä
+  tahansa kiinteä ruutu — ja korkean pomon talloportti asetti pelaajan
+  kannen korkeudelle *pomon viereen*, eli ilmaan. Kolmas kerta tässä erässä
+  sille että itse asetettu koe asettaa kappaleen paikkaan jota ei ole.
+- **Taukovalikko luki tallennuspaikan joka framella** (`readSlot` jäsentää koko
+  tilannekuvan) yhden `(TYHJÄ)`-sulkulausekkeen takia, ja **kursori muisti
+  valintansa**: START+hyppy olisi ollut vahvistamaton pikalataus.
+
+---
+
+## v26.08.11.79 — kamera osaa kääntyä, ja käänne on sivunvaihdon lyönti
+
+Kysymys oli kentästä jossa mennään vuorotellen oikealle ja ylös. Se ei ole
+kenttä vaan **kolmas kameratila**, koska nykyiset kaksi puhuvat tarkoituksella
+vastakkaista kieltä:
+
+| | leveys | kameran kieli |
+| --- | --- | --- |
+| vaakakenttä | monta ruutua | pehmeä seuranta, liikkuu koko ajan |
+| pystykenttä | tasan 20 saraketta | seisoo paikallaan ja **leikkaa** |
+
+Jos ne vain yhdistäisi, tulos olisi kamera joka liukuu sivulle ja nykii ylös —
+rikkinäinen eikä tyylikäs.
+
+Kenttä ilmoittaa siis osionsa (`segments`), ja **käänne saa sen beatin joka
+pystykentillä jo on**: kello ja viholliset seisovat, musiikki ei. Se ele on jo
+maksettu ja jo pyydetty, joten käänteestä tulee tapahtuma eikä saumaa, ja
+kumpikin kieli säilyy omanaan.
+
+**Ja osioitu kenttä ei ole kaistoitettu.** Kaistat ovat kolme erillistä
+huonetta joiden välillä kamera ei saa nähdä, mikä on oikein salaisuudelle ja
+väärin reitille: osioidussa kentässä ylös meneminen *on* reitti, ja
+kaistarajaus olisi pysäyttänyt kameran ensimmäiseen saumaan. Sama haara kuin
+kiipeilykentällä, samasta syystä.
+
+### Mitä tässä ei ole
+
+**Valmista kenttää.** Koneisto on olemassa ja portti todistaa käänteen
+synteettisellä kentällä, mutta suunniteltu kenttä on sisältötyötä joka
+ansaitsee oman erän: validaattorin säännöt, vaikeusmittari ja molemmat botit
+on ajettava **osio kerrallaan**, ja se on se työ jonka osiointi tekee
+mahdolliseksi mutta ei tee itse. Puolivalmis kenttä olisi huonompi kuin ei
+kenttää.
+
+---
+
+## v26.08.11.78 — raaja katkeaa, ja kruunu vastaa koko koosteesta
+
+Raajoilla oli osumalaatikko; nyt niillä on myös **kohtalo**. Avoimen ikkunan
+aikana päältä tuleva katkaisee raajan pysyvästi, ja katkennut vie mukanaan oman
+vahinkoalueensa — loppufight on sen verran turvallisempi.
+
+### Yksi merkki, yksi vastaus
+
+Kruunu vastaa **koko koosteesta** eikä pelkästä rungosta: päällä ollessaan
+mihinkään ei saa koskea, pois ollessaan kaikki on tallottavissa. Siksi raajalla
+ei ole omaa varoitustaan — kruunusääntö ostettiin aikoinaan playtestillä jossa
+pelaajat eivät ehtineet erottaa kahta piikkiriviä toisistaan, eikä sitä makseta
+uudelleen.
+
+Valinta on siis ikkunan **sisällä**: runko maksaa osuman, raaja katkeaa. Se on
+vaihtokauppa eikä arvoitus.
+
+**Ja raaja ei ole koskaan pakollinen.** DESIGN.md kohta 5 lupaa että pomon voi
+kaataa voimatasolla 0, ja talloportti todistaa sen käymällä jokaisen pomon läpi
+pelkkää runkoa tallomalla. Katkaisu on oikotie, ei lukko.
+
+`brokenLimbs` on **bittimaski eikä `Set`**, koska pikatallennus sarjallistaa
+jokaisen oman kentän: `Set` katoaisi hiljaa tyhjäksi olioksi ja pelaaja saisi
+rikkomansa nyrkit takaisin latauksesta.
+
+### Kaksi omaa mittausvirhettä, molemmat uskottavia
+
+- **Vanha raajatesti alkoi mitata väärää asiaa** sillä hetkellä kun katkaisu
+  tuli: se seisotti pelaajaa raajassa ja vaati osumaa, mutta kruunu pois päältä
+  sama kosketus katkaisee eikä satuta. Testi ajaa nyt kruunu päällä.
+- **Molemmat vaiheet ajettiin samassa kohtauksessa.** Piikkivaiheen kosketus
+  tappaa voimatason 0 pelaajan, kohtaus siirtyy tilaan `dead`, eikä
+  `collisions` enää aja lainkaan — joten avoimen ikkunan koe ei mitannut
+  katkaisua vaan kuollutta kohtausta, ja epäonnistuminen näytti aidolta.
+  Kumpikin vaihe saa nyt oman kohtauksensa.
+
+Kolmas kerta tässä erässä sille että itse asetettu koe asettaa kappaleen
+paikkaan jota pelissä ei ole.
+
+---
+
+## v26.08.11.77 — raajat, ja laatikko joka lupasi vahinkoa ilman piirrosta
+
+NES-sprite oli 8x8 tai 8x16, kahdeksan juovaa kohti ja 64 ruudulla, joten pomo
+**ei koskaan ollut yksi piirros** vaan metasprite. Ja kun pomo on jo osista,
+yhden osan liikuttaminen omalla kellollaan on ilmaista — sieltä tulevat
+ketjunyrkit ja jaksotetut selkärangat. Rajoite synnytti idiomin.
+
+Meillä ei ole sitä rajoitetta, ja noudatimme hiljaa pahempaa: `BOSS_SIZES` oli
+sekä osumalaatikko **että** piirros, joten mikään ei voinut ulottua itsensä
+ulkopuolelle. Nyt `BOSS_LIMBS` on eri taulukko ja saa ulottua minne tahansa.
+
+Mitattu läsnäolo, ilman että tallottava laatikko kasvaa pikseliäkään:
+
+| | 1-F | 2-F | 3-F | 4-F/5-F | 6-F | 7-F |
+| --- | --- | --- | --- | --- | --- | --- |
+| kasvu | 1,37× | 1,47× | 1,69× | 1,70× | **2,75×** | 1,59× |
+
+Kolme sääntöä, kaikki portissa: **raaja satuttaa** (piirretty raaja jonka läpi
+kävelee on sama valhe kuin piikki joka ei satuta), **raaja ei tule
+laskeutumiskaistalle** (pään yläpuolinen sarake on kruunun, ja sillä saa olla
+yksi vastaus), ja **raaja kasvattaa läsnäoloa** vähintään 1,2× tai se on
+koriste jolla on kello.
+
+### Ja neljäs sääntö, jonka kuvalevy paljasti ja portti ei
+
+Ensimmäinen versio mittasi **laatikoita eikä pikseleitä**, ja päästi läpi tasan
+sen mitä sillä tavalla pääsee: nyrkkeilijä piirretään omalla funktiollaan eikä
+`drawStandardBoss`in kautta, joten hänellä oli **raajan osumalaatikko ilman
+raajaa**. Vahinko tyhjästä on sama valhe kuin raaja jonka läpi kävelee, vain
+toisin päin.
+
+Portti piirtää nyt pomon ja vaatii että jokaisessa raajalaatikossa on
+pikseleitä. Laatikko ja piirros ovat kaksi eri asiaa, joten ne mitataan
+kahdesti — sama läksy kuin koko erän ajan.
+
+---
+
+## v26.08.11.76 — kansi nostaa katon, ja katto on nyt nimetty luku
+
+52 px oli se korkeus jonka yli voimataso 0 pääsee **areenan lattialta**, ja
+kolme asiaa oli liimattu siihen yhteen lukuun. Yksi niistä irtoaa tässä.
+
+`FLOOR_REACH` on nyt nimetty vakio, ja sääntö kuuluu: sen **alle** jäävä pomo
+luvataan tallottavaksi lattialta, sen **ylittävä** kannelta. Lupaus ei
+heikkene vaan vaihtaa reittiä, ja portti vaatii korkealta pomolta areenan
+jossa on kansi, kannen pomon pään yläpuolella ja kannen jolle pääsee
+lattialta kahdella paikaltaan hypyllä.
+
+| pomo | ennen | nyt | areena |
+| --- | --- | --- | --- |
+| 1 jyskyttäjä | 56×48 | **60×80** | `boss_arena_big` |
+| 5 sääherra | 68×46 | **68×88** | `boss_arena_big` |
+
+Kummallekin vaihdettiin areena eikä keksitty uutta: `boss_arena_big` osaa jo
+reitin lattia 208 → askelma rivillä 9 (64 px) → kansi rivillä 6 (48 px).
+Suoraan lattialta kannelle olisi 112 px eikä 100 px juoksuhyppy riitä — juuri
+se teki kansista aikoinaan lavasteita.
+
+### Ja korkeuden nostaminen ei ole yhden luvun muutos
+
+Ensimmäinen yritys nosti vain luvut, ja tulos oli **32 px tyhjää
+osumalaatikkoa jyskyttäjän jalkojen alla**: piirros oli 48 px korkea
+laatikossa joka on 80. Pelaaja olisi ottanut osuman ilmasta.
+
+Molemmat rungot on siis piirretty uusiksi siihen laatikkoon. Ylimääräinen
+korkeus meni jyskyttäjällä **jalkoihin**, koska hän on se joka laskeutuu
+päällesi, ja sääherralla **höyryyn**, koska hän on se joka ei seiso missään.
+Sääherran ääriviiva ei käänny kertaakaan 88 pikselin matkalla, mikä on
+paljon vaikeampi lupaus kuin 46:lla ja siksi vahvempi siluetti.
+
+Siluettien erillisyys parani sivutuotteena: pahin pari 0,547 → **0,521**.
+
+---
+
+## v26.08.11.75 — turvaverkko oli olemassa vain näppäimistöllä
+
+Taukoruudussa luki `1 TALLENNA  2 LATAA  3 PAIKKA n`, ja se on ohje eikä
+käyttöliittymä. `input.js` pitää apunäppäimet **tarkoituksella** poissa
+ohjaimelta ("a pad plays the game; a keyboard also administers it"), eikä
+kosketusohjaimessa ole niille paikkaa lainkaan.
+
+Peli siis tarjosi pikatallennuksen — joka on *vahvempi* kuin mikään välipiste,
+koska sen saa mihin tahansa — vain yhdelle kolmesta ohjaustavasta. Se on
+oikea vika, ja se on eri vika kuin "kentät ovat pitkiä": mitattuna kenttä on
+31 s eikä kaipaa välipistettä, mutta puhelimella pelaavalla ei ollut mitään.
+
+Tauko on nyt valikko: **ylös/alas valitsee, hyppy vahvistaa** — ainoat napit
+jotka ovat kaikilla kolmella ohjaustavalla. Vanhat näppäimet toimivat yhä;
+valikko on lisäys niille joilla ei ole näppäimistöä eikä korvaaja niille
+joilla on.
+
+Aika-ajossa listalla ei ole tallennusta eikä latausta, ja se on sama päätös
+kuin ennenkin: kello käy tauon yli, joten ladattu tila tekisi ajasta väitteen
+jota kukaan ei ole juossut.
+
+---
+
+## v26.08.11.74 — linnakkeen ovi, ja portti joka piti omaa kopiotaan tallennuksesta
+
+Kysymys oli "pitäisikö kenttiin lisätä välipisteitä". Mitattuna vastaus oli ei,
+mutta mittaus osoitti toiseen suuntaan kuin odotin.
+
+### Pituus ei ole ongelma, toisto on
+
+Parhaan mahdollisen juoksun mitta, ilman hyppyjä ja vihollisia:
+
+| | paras tapaus |
+| --- | --- |
+| keskimääräinen kenttä | 31 s |
+| pisin (3-2, 1-2, 3-3) | 41–43 s |
+| linnakkeen käytävä | 19–24 s |
+
+Välipiste säästäisi 15–30 s, mikä ei yksin oikeuta uutta mekaniikkaa — SMB3:ssa
+ei ole välipisteitä juuri siksi ettei tämänmittainen kenttä niitä tarvitse.
+
+**Mutta linnakkeen käytävä kävellään uudelleen joka kerta kun pomo voittaa**, ja
+se on pelin toistetuin matka. Ero ei ole pituus vaan toisto, ja siksi ovi on
+vain linnakkeissa.
+
+Kuolema vie karttaruutuun eikä suoraan takaisin kenttään, joten ovi ei ole
+"kentän sisäinen tarkistuspiste" vaan **se kohta josta kenttä alkaa kun siihen
+astuu uudelleen**. Siksi se on tallennuksessa (`doors`) eikä kohtauksen
+muistissa. Kello ei nollaudu eikä voimataso palaudu: ovi säästää kävelyn, ei
+kenttää, joten aika-ajo ei muutu.
+
+Areenan sarake **lasketaan palikoiden leveyksistä** eikä kirjoiteta kenttädataan
+(`arenaColumn`), koska kirjoitettu luku vanhenee heti kun joku lisää palikan
+areenan eteen. Tässä erässä on kolme esimerkkiä siitä mitä se maksaa.
+
+### Ja portti piti omaa kopiotaan tallennuksen muodosta
+
+`verify.mjs`:n `reset()` rakensi pelitilan luettelemalla kentät nimeltä. Seuraus
+ei ollut kaatuva testi vaan **testi joka ei näe uutta kenttää lainkaan**:
+`secrets`, `continues`, `bestTimes` ja nyt `doors` puuttuivat jokaisesta
+testistä, ja niitä lukeva koodi sai `undefined`in siellä missä pelaajalla on
+`{}`. Tila rakennetaan nyt `DEFAULT_SAVE`sta.
+
+Neljäs kerta tässä erässä samalle läksylle.
+
+### Kaksi omaa virhettä matkan varrella
+
+- **`doorOpen` oli jo varattu** ja tarkoitti *uloskäyntiä* joka aukeaa pomon
+  kaaduttua. Kaksi eri ovea samalla nimellä; oma on nyt `arenaReached`.
+- **Ovi kirjoitettiin `spawn`iin ennen `scanGrid`iä**, joka lukee aloitusmerkin
+  ruudukosta ja kirjoittaa sen yli. Ovi on viimeinen sana eikä ensimmäinen.
+
+---
+
 ## v26.08.11.73 — osoite vaihtui, ja sen kopiot eivät olisi kaatuneet mihinkään
 
 Vercel-projekti ja GitHub-repo nimettiin `kaasuvoima`ksi, joten

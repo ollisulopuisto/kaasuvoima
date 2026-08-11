@@ -188,7 +188,7 @@ export const WORLD8_LEVELS = {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 1,
     chunks: [
       'keep_start', 'fort_power', 'keep_watch', 'fort_spikes', 'keep_teeth',
-      'keep_vault', 'fort_pillars', 'fort_spikes', 'keep_watch', 'boss_arena',
+      'keep_vault', 'fort_pillars', 'fort_spikes', 'keep_watch', 'boss_arena_big',
     ],
   },
 
@@ -370,7 +370,7 @@ export const WORLD8_LEVELS = {
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'fort_gap', 'keep_hole',
       'fort_burn', 'keep_teeth', 'fort_gap', 'keep_croak', 'keep_watch',
-      'fort_gap', 'boss_arena',
+      'fort_gap', 'keep_teeth', 'fort_gap', 'boss_arena_big',
     ],
   },
 

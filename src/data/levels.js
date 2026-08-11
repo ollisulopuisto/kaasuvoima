@@ -1,4 +1,4 @@
-import { assemble, assembleTall, CHUNK_ROWS } from './chunks.js';
+import { assemble, assembleTall, CHUNK_ROWS, CHUNKS } from './chunks.js';
 import { normalizeRows } from '../core/utils.js';
 import { WORLD1_LEVELS } from './levels/world1.js';
 import { WORLD2_LEVELS } from './levels/world2.js';
@@ -81,7 +81,13 @@ export function getLevel(id) {
      * and stop the climb dead at the first seam. So a climb takes the plain
      * branch, which is the one that says "this level is as tall as it is".
      */
-    bands: !def.vertical && rows.length > CHUNK_ROWS ? BANDS : null,
+    /* ...ja osioitu kenttä ottaa saman haaran samasta syystä. Kaistat ovat
+     * kolme erillistä huonetta joiden välillä kamera ei saa nähdä, ja se on
+     * oikein salaisuudelle mutta väärin reitille: osioidussa kentässä ylös
+     * meneminen **on** reitti, ja kaistarajaus pysäyttäisi kameran ensimmäiseen
+     * saumaan. Kenttä joka ilmoittaa osionsa on siis yksi korkea huone kuten
+     * kiipeilykin, ei kolme päällekkäistä. */
+    bands: !def.vertical && !def.segments && rows.length > CHUNK_ROWS ? BANDS : null,
     rows,
   };
   cache.set(id, level);
@@ -113,4 +119,26 @@ export const levelIds = () => Object.keys(LEVEL_DEFS);
 export function registerLevel(def) {
   cache.set(def.id, def);
   return def;
+}
+
+/**
+ * Missä linnakkeen areena alkaa, laattoina — eli mihin ovi vie.
+ *
+ * Laskettu palikoiden leveyksistä eikä kirjoitettu kenttädataan, koska
+ * kirjoitettu luku vanhenee sillä hetkellä kun joku lisää yhden palikan
+ * areenan eteen. Tässä erässä on kolme esimerkkiä siitä mitä se maksaa.
+ *
+ * `null` kun kenttä ei ole linnake tai sillä ei ole areenapalikkaa: kutsuja
+ * päättää mitä se siitä ajattelee, eikä tämä keksi sijaintia jota ei ole.
+ */
+export function arenaColumn(def) {
+  if (!def || !Array.isArray(def.chunks)) return null;
+  let col = 0;
+  for (const name of def.chunks) {
+    if (name.startsWith('boss_arena')) return col;
+    const chunk = CHUNKS[name];
+    if (!chunk) return null;
+    col += chunk.w;
+  }
+  return null;
 }

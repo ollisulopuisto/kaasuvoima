@@ -1,4 +1,6 @@
-const KEY = 'sfb3.save.v2';
+/* Viety, jotta portti voi lukea raa'an tallennuksen. `Save.load` levittää
+ * oletukset päälle, joten sen kautta luettuna puuttuvaa kenttää ei voi nähdä. */
+export const KEY = 'sfb3.save.v2';
 
 export const DEFAULT_SAVE = () => ({
   lives: 4,
@@ -39,6 +41,22 @@ export const DEFAULT_SAVE = () => ({
    * vie pelaajalta etenemistä.
    */
   bestTimes: {},
+  /*
+   * levelId -> true, kun linnakkeen areenalle on kerran päästy.
+   *
+   * Sisään samalla perusteella kuin `secrets`, `continues` ja `bestTimes`, eli
+   * **ilman versionostoa**: vanhassa tallennuksessa ei ole `doors`-kenttää,
+   * levitys antaa sille `{}`, ja `{}` on totuus eikä arvaus — kukaan ei ollut
+   * päässyt yhdellekään ovelle pelissä jossa ovia ei ollut. Yksikään olemassa
+   * oleva kenttä ei muuta merkitystään.
+   *
+   * Toiseen suuntaan hinta on sama kuin `bestTimes`illa ja se on kirjattava:
+   * vanha build lukee tallennuksen, jättää tuntemattoman avaimen huomiotta
+   * eikä kirjoita sitä takaisin. Vanhalla buildilla pelaaminen siis unohtaa
+   * avatut ovet — ei muuta, ja unohtunut ovi maksaa yhden kävelyn eikä
+   * etenemistä.
+   */
+  doors: {},
 });
 
 export const Save = {
@@ -52,6 +70,19 @@ export const Save = {
     }
   },
 
+  /*
+   * Kenttälista on käsin kirjoitettu, ja se on tämän tiedoston ansa.
+   *
+   * `doors` lisättiin `DEFAULT_SAVE`en muttei tänne, ja seuraus oli että ovi
+   * toimi istunnon sisällä ja katosi jokaisesta latauksesta — eli ominaisuus
+   * oli olemassa vain niin kauan kuin kukaan ei sulkenut välilehteä. Sama laji
+   * vikaa kuin `verify.mjs`:n `reset()`issa: kaksi paikkaa jotka kuvaavat
+   * samaa muotoa, ja vain toinen päivittyy.
+   *
+   * Portti vaatii nyt että jokainen `DEFAULT_SAVE`n avain selviää kierroksesta
+   * `write` → `load`, joten seuraava lisäys kaatuu tähän eikä pelaajan
+   * tallennukseen.
+   */
   write(state) {
     try {
       localStorage.setItem(KEY, JSON.stringify({
@@ -68,6 +99,7 @@ export const Save = {
         continues: state.continues || 0,
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
+        doors: state.doors || {},
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */

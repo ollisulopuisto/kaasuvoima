@@ -81,11 +81,12 @@ const booted = await page.evaluate(() => !!window.sfb3);
 
 const report = await page.evaluate(async () => {
   const { LevelScene } = await import('/src/scenes/level.js');
-  const { PLAYER_SIZES } = await import('/src/gfx/sprites.js');
-  const { isSolid } = await import('/src/gfx/tiles.js');
-  const { levelIds } = await import('/src/data/levels.js');
+  const { PLAYER_SIZES, FLOOR_REACH } = await import('/src/gfx/sprites.js');
+  const { isSolid, isSemi } = await import('/src/gfx/tiles.js');
+  const { levelIds, getLevel: getLevelDef } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
   const { WORLDS } = await import('/src/data/worlds.js');
+  const { DEFAULT_SAVE } = await import('/src/core/save.js');
   const game = window.sfb3;
 
   const blank = () => ({
@@ -95,10 +96,23 @@ const report = await page.evaluate(async () => {
   const mkInput = () => ({
     held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
   });
+  /*
+   * Pelitila rakennetaan `DEFAULT_SAVE`sta eikä käsin, ja se on korjaus.
+   *
+   * Tässä lueteltiin kentät nimeltä, eli portti piti **omaa kopiotaan
+   * tallennuksen muodosta**. Seuraus ei ole että testi kaatuu vaan että se ei
+   * näe uutta kenttää lainkaan: `secrets`, `continues`, `bestTimes` ja nyt
+   * `doors` puuttuivat jokaisesta testistä, ja koodi joka lukee niitä sai
+   * `undefined`in siellä missä pelaajalla on `{}`. Ero on juuri se jossa
+   * puuttuvan kentän käsittely jää testaamatta.
+   *
+   * Ylikirjoitukset ovat testiharnessin omia: enemmän elämiä kuin oletus, ja
+   * solmu jotta karttaan palaaminen ei ole erikoistapaus.
+   */
   const reset = (power = { type: null, level: 0 }) => {
     game.state = {
-      lives: 5, coins: 0, score: 0, power, reserve: null, world: 0,
-      node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      ...DEFAULT_SAVE(),
+      lives: 5, power, world: 0, node: 'w1-1', cards: [],
     };
     game.finishLevel = () => {};
   };
@@ -6909,7 +6923,14 @@ const report = await page.evaluate(async () => {
   /* --------------------------- piikit / spines -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
-    const BOSS_LEVELS = ['1-F', '2-F', '3-F', '4-F', '5-F', '6-F', '7-F'];
+    /* Luettu kenttädatasta eikä kirjoitettu tähän. Käsin kirjoitettuna se
+     * pysähtyi 7-F:ään, joten maailman 8 seitsemän pomokenttää olivat jokaisen
+     * pomoportin ulkopuolella — ja juuri sinne jäi kaksi pomoa jotka kasvoivat
+     * kannettoman areenan sisällä. Kuudes kerta tässä erässä sille että portin
+     * oma kopio jostain luettavasta vanhenee. */
+    const BOSS_LEVELS = levelIds().filter((id) => {
+      try { return !!getLevelDef(id).boss; } catch { return false; }
+    });
 
     const arena = (power) => {
       reset(power);
@@ -7065,6 +7086,351 @@ const report = await page.evaluate(async () => {
         back ? `${back.spikePhase}/${back.spikeTimer}` : 'ei pomoa');
     }
 
+    /*
+     * LINNAKKEEN OVI: kuolema vie karttaan, ja karttaan palaaminen vie ovelle.
+     *
+     * Kolme väitettä, ja kolmas on se joka pitää sen rehellisenä:
+     *   1. ovi avautuu kun areenalle astutaan, ei aiemmin,
+     *   2. avattu ovi siirtää seuraavan yrityksen aloituspaikan sinne,
+     *   3. **tavallinen kenttä ei saa ovea koskaan** — sääntö on linnakkeen
+     *      toistolle eikä kentän pituudelle, ja jos se vuotaa muualle se on
+     *      lakannut olemasta se sääntö.
+     */
+    {
+      reset();
+      const s0 = new LevelScene(game, '3-F');
+      game.setScene(s0);
+      const arena = s0.arenaCol;
+      const idle = mkInput();
+      for (let f = 0; f < 30; f++) s0.update(idle);
+      const beforeWalk = !!game.state.doors['3-F'];
+
+      // Walk in: put the body past the arena's first column and let it tick.
+      s0.player.x = arena * 16 + 8;
+      s0.update(idle);
+      const afterWalk = !!game.state.doors['3-F'];
+
+      // Re-enter: the next attempt starts at the door, not at the level start.
+      const s1 = new LevelScene(game, '3-F');
+      const spawnTile = Math.round(s1.spawn.x / 16);
+      const freshStart = new LevelScene(game, '3-1').spawn.x;
+
+      // An ordinary level has no arena and never records one.
+      const plain = new LevelScene(game, '3-1');
+      plain.player.x = plain.w * 16 - 32;
+      plain.update(idle);
+      const leaked = Object.keys(game.state.doors).filter((k) => !k.endsWith('-F'));
+
+      expect('linnakkeen ovi avautuu areenalle astuttaessa ja siirtää aloituspaikan',
+        !beforeWalk && afterWalk && spawnTile >= arena && spawnTile <= arena + 4
+        && freshStart === 2 * 16 && leaked.length === 0,
+        `ennen ${beforeWalk}, jälkeen ${afterWalk}, areena ${arena}, `
+        + `aloitus ${spawnTile}, tavallinen ${freshStart / 16}, vuoto [${leaked}]`);
+    }
+
+    /**
+     * Korkein kansi tai askelma pomon yläpuolella, pikseleinä. `null` jos
+     * areenassa ei ole yhtään — ja se on nimenomaan se tapaus jonka alla oleva
+     * portti kieltää korkealta pomolta.
+     */
+    const deckAbove = (scene, boss, below = 0) => {
+      /* **Lankku, ei seinä.** Ensimmäinen versio hyväksyi minkä tahansa
+       * kiinteän ruudun, ja areenan reunapilarit (`XX`) ovat kiinteitä — joten
+       * portti löysi "kannen" jokaisesta areenasta ja hyväksyi myös sellaiset
+       * joissa kantta ei ole. `isSemi` on se mitä kansi oikeasti on:
+       * yksisuuntainen taso jolle pudotaan ylhäältä. */
+      const col = Math.floor(boss.cx / 16);
+      for (let row = Math.max(2, Math.ceil(below / 16)); row < 13; row++) {
+        for (let c = Math.max(0, col - 16); c < Math.min(scene.w, col + 17); c++) {
+          if (isSemi(scene.tileAt(c, row))) return { y: row * 16, col: c };
+        }
+      }
+      return null;
+    };
+
+    /*
+     * KORKEA POMO VAATII KANNEN, JA KANNELLE ON PÄÄSTÄVÄ.
+     *
+     * `FLOOR_REACH` (52 px) on se korkeus jonka yli voimataso 0 pääsee areenan
+     * lattialta. Sen ylittävä pomo on tallottavissa vain ylhäältä, joten sen
+     * areenassa **on oltava kansi** — ja kannen on oltava sekä pomon pään
+     * yläpuolella että lattialta saavutettavissa.
+     *
+     * Ilman tätä sääntöä korkeuden nostaminen olisi yhden luvun muutos joka
+     * tekee pomosta voittamattoman ilman että mikään sanoo mitään, ja se on
+     * tasan se vika jonka `boss_arena_big` aikoinaan sai: kannet olivat
+     * olemassa mutta niille ei päässyt, joten ne olivat lavasteita.
+     */
+    {
+      const bad = [];
+      for (const id of BOSS_LEVELS) {
+        reset();
+        const s2 = new LevelScene(game, id);
+        game.setScene(s2);
+        const boss = s2.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s2.update(idle);
+        if (boss.h <= FLOOR_REACH) continue;
+        const deck = deckAbove(s2, boss);
+        if (!deck) { bad.push(`${id}: ${boss.h} px korkea eikä kantta`); continue; }
+        if (deck.y > boss.y) bad.push(`${id}: kansi ${deck.y} on pään (${Math.round(boss.y)}) alapuolella`);
+        /*
+         * Saavutettavuus on **askelma**, ei summa.
+         *
+         * Ensimmäinen versio hyväksyi minkä tahansa kannen jonka kokonaisnousu
+         * oli alle 128 px, eli myös 112 px korkean kannen jonka alla ei ole
+         * mitään — ja 112 px on enemmän kuin 100 px juoksuhyppy. Se on tasan se
+         * "kannet olivat lavasteita" -areena jonka tämä portti sanoo estävänsä.
+         */
+        const rise = 208 - deck.y;
+        if (rise > 64) {
+          const step = deckAbove(s2, boss, deck.y + 8);
+          if (!step) bad.push(`${id}: kansi ${rise} px lattiasta ilman askelmaa alla`);
+          else if (208 - step.y > 64) bad.push(`${id}: askelma ${208 - step.y} px lattiasta, yli hypyn`);
+          else if (step.y - deck.y > 64) bad.push(`${id}: askelmalta kannelle ${step.y - deck.y} px`);
+        }
+      }
+      expect('jokainen lattiaa korkeampi pomo tappelee areenassa jossa on kansi',
+        bad.length === 0,
+        bad.length ? bad.join(' | ') : `raja ${FLOOR_REACH} px, korkeat tarkistettu`);
+    }
+
+    /*
+     * RAAJAT: LÄSNÄOLOA ILMAN ETTÄ TALLOTTAVA LAATIKKO KASVAA.
+     *
+     * Kolme väitettä, ja kaksi niistä on sellaisia jotka hiljaa pettäisivät:
+     *   1. raaja **satuttaa** — piirretty raaja jonka läpi kävelee on sama
+     *      valhe kuin piikki joka ei satuta,
+     *   2. raaja **ei tule laskeutumiskaistalle** eli pään yläpuoliseen
+     *      sarakkeeseen, joka on kruunun ja jolla saa olla yksi vastaus,
+     *   3. raajat **kasvattavat läsnäoloa** — raaja joka ei muuta siluettia on
+     *      koriste jolla on kello, mikä on huonompi kuin ei raajaa.
+     */
+    {
+      const bad = [];
+      const grew = [];
+      for (const id of BOSS_LEVELS) {
+        reset();
+        const s3 = new LevelScene(game, id);
+        game.setScene(s3);
+        const boss = s3.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s3.update(idle);
+        const boxes = boss.limbBoxes();
+        if (!boxes.length) { bad.push(`${id}: ei raajoja lainkaan`); continue; }
+
+        // 2. landing strip: nothing may sit above the head inside its columns.
+        for (const b of boxes) {
+          const overX = b.x < boss.x + boss.w && b.x + b.w > boss.x;
+          if (overX && b.y < boss.y + 4) {
+            bad.push(`${id}: raaja laskeutumiskaistalla (y ${Math.round(b.y)} vs pää ${Math.round(boss.y)})`);
+          }
+        }
+
+        // 3. presence: the union of body+limbs against the body alone.
+        const bodyArea = boss.w * boss.h;
+        const minX = Math.min(boss.x, ...boxes.map((b) => b.x));
+        const maxX = Math.max(boss.x + boss.w, ...boxes.map((b) => b.x + b.w));
+        const minY = Math.min(boss.y, ...boxes.map((b) => b.y));
+        const maxY = Math.max(boss.y + boss.h, ...boxes.map((b) => b.y + b.h));
+        const reach = (maxX - minX) * (maxY - minY);
+        grew.push(`${id} ${(reach / bodyArea).toFixed(2)}x`);
+        if (reach / bodyArea < 1.2) bad.push(`${id}: raajat kasvattavat vain ${(reach / bodyArea).toFixed(2)}x`);
+
+        /* 1. raaja satuttaa — ja tämä on mitattava **kruunu päällä**, koska
+         * kruunu pois päältä sama kosketus katkaisee raajan eikä satuta. Testi
+         * oli oikea siihen asti kun katkaisu tuli, ja se on juuri se hetki
+         * jolloin vanha testi alkaa mitata väärää asiaa. */
+        boss.spikePhase = 'spiky';
+        boss.spikeTimer = 999;
+        const p = s3.player;
+        const far = boxes.reduce((a, b) => (Math.abs(b.x - boss.cx) > Math.abs(a.x - boss.cx) ? b : a));
+        p.x = far.x + far.w / 2 - p.w / 2;
+        p.y = far.y + far.h / 2 - p.h / 2;
+        p.vx = 0; p.vy = 0; p.invuln = 0; p.star = 0; p.dying = false;
+        const power0 = s3.player.powerLevel;
+        s3.update(idle);
+        const hurt = p.dying || p.invuln > 0 || s3.player.powerLevel < power0;
+        if (!hurt) bad.push(`${id}: raajan sisällä seisominen ei satuttanut`);
+      }
+      /*
+       * JA JOKAISESSA OSUMALAATIKOSSA ON OLTAVA PIKSELEITÄ.
+       *
+       * Yllä oleva mittasi laatikoita, ja se päästi läpi tasan sen vian jonka
+       * kuvalevy paljasti: nyrkkeilijä piirretään omalla funktiollaan eikä
+       * `drawStandardBoss`in kautta, joten hänellä oli raajan **osumalaatikko
+       * ilman raajaa**. Vahinko tyhjästä on sama valhe kuin raaja jonka läpi
+       * kävelee, vain toisin päin.
+       *
+       * Laatikko ja piirros ovat kaksi eri asiaa, joten ne on mitattava
+       * kahdesti — juuri se on tämän erän toistuva läksy.
+       */
+      const gfx = await import('/src/gfx/sprites.js');
+      const drawn = gfx.BOSS_LIMBS.map((limbs, v) => {
+        if (!limbs.length) return `${v}: ei raajoja`;
+        const M = 96;
+        const size = gfx.bossSize(v);
+        const c = document.createElement('canvas');
+        c.width = size.w + M * 2;
+        c.height = size.h + M * 2;
+        const g = c.getContext('2d');
+        gfx.drawBoss(g, M, M, 12, 1, false, v, 1, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const empty = limbs.filter(([lx, ly, lw, lh]) => {
+          let n = 0;
+          for (let y = ly + M; y < ly + lh + M; y++) {
+            for (let x = lx + M; x < lx + lw + M; x++) {
+              if (x < 0 || y < 0 || x >= c.width || y >= c.height) continue;
+              if (d[(y * c.width + x) * 4 + 3] > 8) n++;
+            }
+          }
+          return n < lw * lh * 0.25;
+        });
+        return empty.length ? `${v}: ${empty.length} raajaa ilman pikseleitä` : null;
+      }).filter(Boolean);
+      drawn.forEach((d) => bad.push(d));
+
+      expect('raajat kasvattavat läsnäoloa, satuttavat, näkyvät, eivätkä tule laskeutumiskaistalle',
+        bad.length === 0, bad.length ? bad.join(' | ') : grew.join(', '));
+    }
+
+    /*
+     * RAAJAN KATKAISU ON VALINTA, EI TIE.
+     *
+     * Kruunu vastaa koko koosteesta: päällä ollessaan mihinkään ei saa
+     * koskea, pois ollessaan kaikki on tallottavissa. Yksi merkki, yksi
+     * vastaus — ja siksi raajalla ei ole omaa varoitustaan. Kruunusääntö
+     * ostettiin playtestillä jossa pelaajat eivät ehtineet erottaa kahta
+     * piikkiriviä, eikä sitä makseta uudelleen.
+     *
+     * Kolme väitettä:
+     *   1. avoimessa ikkunassa **päältä** tullessa raaja katkeaa,
+     *   2. piikkivaiheessa sama kosketus satuttaa eikä katkaise,
+     *   3. katkennut raaja **katoaa myös piirroksesta** — muuten jäisi kuva
+     *      josta kävelee läpi, eli sama valhe kolmatta kertaa.
+     *
+     * Ettei se ole tie: talloportti käy kaikki pomot läpi pelkkää runkoa
+     * tallomalla, eli lupaus voimatasosta 0 ei nojaa raajoihin lainkaan.
+     */
+    {
+      /*
+       * Kumpikin vaihe omassa kohtauksessaan, ja se on korjaus eikä varovaisuus.
+       *
+       * Ensimmäinen versio ajoi molemmat samassa: piikkivaiheen kosketus tappaa
+       * voimatason 0 pelaajan, kohtaus siirtyy tilaan `dead`, eikä `collisions`
+       * enää aja lainkaan — joten avoimen ikkunan koe ei mitannut katkaisua
+       * vaan kuollutta kohtausta. Tulos oli uskottava epäonnistuminen.
+       */
+      const dropOnLimb = (phase) => {
+        reset();
+        const sc = new LevelScene(game, '8-F');
+        game.setScene(sc);
+        const boss = sc.entities.find((e) => e instanceof E.Boss);
+        const idle = mkInput();
+        for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) sc.update(idle);
+        boss.spikePhase = phase;
+        boss.spikeTimer = 999;
+        boss.invuln = 0;
+        /* Suunta lukitaan: `limbBoxes` peilaa `facing`in mukaan, ja jos pomo
+         * kääntyy kokeen aikana, raajat vaihtavat puolta pelaajan alla. */
+        boss.facing = 1;
+        boss.vx = 0;
+        const boxes = boss.limbBoxes();
+        const i2 = boxes.findIndex((b) => b.w > 0);
+        const b = boxes[i2];
+        const p = sc.player;
+        p.x = b.x + b.w / 2 - p.w / 2;
+        p.y = b.y - p.h - 2;
+        p.vx = 0; p.vy = 3; p.invuln = 0; p.star = 0; p.dying = false;
+        const power0 = sc.player.powerLevel;
+        for (let f = 0; f < 10 && !boss.brokenLimbs
+          && !(p.dying || p.invuln > 0); f++) {
+          boss.facing = 1;
+          sc.update(idle);
+        }
+        return {
+          broke: boss.brokenLimbs !== 0,
+          hurt: p.dying || p.invuln > 0 || sc.player.powerLevel < power0,
+          i: i2,
+        };
+      };
+
+      const spiky = dropOnLimb('spiky');
+      const open = dropOnLimb('open');
+
+      const gfx2 = await import('/src/gfx/sprites.js');
+      const pixelsIn = (mask, idx) => {
+        const M = 96;
+        const size = gfx2.bossSize(6);
+        const c = document.createElement('canvas');
+        c.width = size.w + M * 2; c.height = size.h + M * 2;
+        const g = c.getContext('2d');
+        gfx2.drawBoss(g, M, M, 12, 1, false, 6, 1, 0, mask);
+        const [lx, ly, lw, lh] = gfx2.BOSS_LIMBS[6][idx];
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let y = ly + M; y < ly + lh + M; y++) {
+          for (let x = lx + M; x < lx + lw + M; x++) {
+            if (d[(y * c.width + x) * 4 + 3] > 8) n++;
+          }
+        }
+        return n;
+      };
+      const before = open.i >= 0 ? pixelsIn(0, open.i) : 0;
+      const after = open.i >= 0 ? pixelsIn(1 << open.i, open.i) : 1;
+
+      expect('avoimessa ikkunassa raaja katkeaa, piikeissä se satuttaa, ja katkennut katoaa myös kuvasta',
+        open.broke && !spiky.broke && spiky.hurt && before > 0 && after === 0,
+        `avoin katkesi ${open.broke}, piikeissä katkesi ${spiky.broke} satutti ${spiky.hurt}, `
+        + `pikselit ${before} -> ${after}`);
+    }
+
+    /*
+     * OSIOITU KENTTÄ: KAMERA VAIHTAA KIELTÄ, JA KÄÄNNE ON SIVUNVAIHDON LYÖNTI.
+     *
+     * Kaksi kameratilaa puhuvat tarkoituksella vastakkaista kieltä: vaaka
+     * seuraa pehmeästi ja liikkuu koko ajan, pysty seisoo paikallaan ja
+     * leikkaa. Yhdistäminen tuottaisi kameran joka liukuu sivulle ja nykii
+     * ylös, mikä lukee rikkinäisenä. Osio kerrallaan kumpikin kieli säilyy
+     * omanaan, ja **käänne saa sen beatin joka pystykentillä jo on**.
+     *
+     * Kolme väitettä:
+     *   1. raja ylitettäessä `vertical` vaihtuu,
+     *   2. vaihto laukaisee sivunvaihdon (`camPage` > 0), eli kello ja
+     *      viholliset seisovat sen ajan — sama ele kuin sivunvaihdossa,
+     *   3. osioitu kenttä **ei ole kaistoitettu**: kaistat ovat kolme erillistä
+     *      huonetta joiden välillä kamera ei saa nähdä, ja se pysäyttäisi
+     *      nousun ensimmäiseen saumaan.
+     */
+    {
+      const levels = await import('/src/data/levels.js');
+      levels.registerLevel({
+        id: 'TEST-SEG',
+        theme: 'grass',
+        bg: 'none',
+        time: 400,
+        segments: [{ toCol: 20, vertical: false }, { toCol: 999, vertical: true }],
+        rows: Array.from({ length: 45 }, (_, y) => (y === 13 || y === 28 || y === 43
+          ? '#'.repeat(40) : ' '.repeat(40))),
+      });
+      reset();
+      const sg = new LevelScene(game, 'TEST-SEG');
+      game.setScene(sg);
+      const idle = mkInput();
+      const startVertical = sg.vertical;
+      const banded = !!sg.bands;
+      sg.camPageFrames = 60;
+      sg.player.x = 30 * 16;
+      sg.player.y = 27 * 16 - sg.player.h;
+      sg.update(idle);
+      const turned = sg.vertical;
+      const paged = sg.camPage > 0;
+      expect('osioitu kenttä vaihtaa kameran kielen rajalla, ja käänne on sivunvaihto',
+        startVertical === false && turned === true && paged && !banded,
+        `alku pysty=${startVertical}, rajan jälkeen pysty=${turned}, `
+        + `sivunvaihto=${sg.camPage}, kaistat=${banded}`);
+    }
+
     /* The promise the lead designer set himself: a powerless player can beat
      * every boss. Taken apart into the two things it needs — one window is long
      * enough to walk up and land a stomp at its tightest, and the clock holds
@@ -7119,8 +7485,35 @@ const report = await page.evaluate(async () => {
       const clearance = boss.w / 2 + 25 + boss.h;
 
       const p = s.player;
-      p.y = boss.y + boss.h - p.h;
-      p.x = boss.cx - (clearance + 50);
+      /*
+       * Matalalle pomolle lupaus on lattialta, korkealle kannelta.
+       *
+       * `FLOOR_REACH` on se raja, ja se on sama luku joka rajaa `BOSS_SIZES`ia
+       * — luettuna sieltä eikä kirjoitettuna tänne, koska tässä tiedostossa on
+       * tässä erässä neljä esimerkkiä siitä mitä oma kopio maksaa.
+       *
+       * Kannelta lähtevä ei ole löysempi testi vaan **toinen reitti samaan
+       * lupaukseen**: pelaaja on yhä voimatasolla 0, ikkuna on yhä tiukin
+       * mahdollinen, ja alla oleva erillinen portti vaatii että kannelle
+       * ylipäänsä pääsee lattialta samalla voimatasolla.
+       */
+      const tall = boss.h > FLOOR_REACH;
+      if (tall) {
+        /* Kannen **päälle**, sen omaan sarakkeeseen. Ensimmäinen versio asetti
+         * pelaajan pomon viereen kannen korkeudelle, eli ilmaan jossa kantta ei
+         * ole — sama vika kuin kiipeilyaskelmakokeessa, ja kolmas kerta tässä
+         * erässä. */
+        const deck = deckAbove(s, boss);
+        /* Ilman kantta tämä kaatoi koko `page.evaluate`n, eli yksi puuttuva
+         * kansi vei mukanaan jokaisen muun tuloksen. Portin pitää raportoida
+         * eikä räjähtää: kannen puuttumisen sanoo yllä oleva oma testinsä. */
+        if (!deck) { expect(`${id}: korkealla pomolla on kansi jolta tulla`, false, 'ei kantta'); continue; }
+        p.x = deck.col * 16 + 2;
+        p.y = deck.y - p.h;
+      } else {
+        p.y = boss.y + boss.h - p.h;
+        p.x = boss.cx - (clearance + 50);
+      }
       p.vx = 0; p.vy = 0;
       s.centerCamera();
 
@@ -13933,6 +14326,73 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /*
+   * TURVAVERKKO KOLMELLA OHJAUSTAVALLA, EI YHDELLÄ.
+   *
+   * Pikatallennus on `1`/`F5`/numpad, ja `input.js` pitää apunäppäimet
+   * tarkoituksella poissa ohjaimelta. Kosketuksessa niitä ei ole lainkaan.
+   * Turvaverkko oli siis olemassa vain näppäimistöllä, ja se on eri vika kuin
+   * "kentät ovat pitkiä" — mitattuna kenttä on 31 s eikä kaipaa välipistettä,
+   * mutta puhelimella pelaavalla ei ollut mitään.
+   *
+   * Testi vaatii että taukovalikossa on tallennus ja lataus, että ne ovat
+   * valittavissa **hypyllä** (ainoa nappi joka on kaikilla kolmella), ja että
+   * aika-ajossa niitä ei ole — kello käy tauon yli, joten ladattu tila tekisi
+   * ajasta väitteen jota kukaan ei ole juossut.
+   */
+  {
+    const ids = (ta) => {
+      const was = game.timeAttack;
+      game.timeAttack = ta;
+      const out = game.pauseItems().map((it) => it.id);
+      game.timeAttack = was;
+      return out;
+    };
+    const menu = {
+      normal: ids(false),
+      attack: ids(true),
+      hasUpdate: typeof game.updatePauseMenu === 'function',
+    };
+    const wantN = ['resume', 'save', 'load', 'slot'];
+    expect('taukovalikossa on turvaverkko myös ilman näppäimistöä',
+      menu.hasUpdate && wantN.every((k) => menu.normal.includes(k))
+      && !menu.attack.includes('save') && !menu.attack.includes('load'),
+      `tavallinen [${menu.normal}], aika-ajo [${menu.attack}]`);
+  }
+
+  /*
+   * JOKAINEN TALLENNETTAVA KENTTÄ SELVIÄÄ KIERROKSESTA write -> load.
+   *
+   * `Save.write` luettelee kentät käsin, ja `doors` lisättiin `DEFAULT_SAVE`en
+   * muttei sinne. Ovi toimi siis istunnon sisällä ja katosi jokaisesta
+   * latauksesta — ominaisuus joka on olemassa vain kunnes välilehti suljetaan,
+   * eikä mikään sanonut mitään.
+   *
+   * Tämä on **kuudes kerta tässä erässä** samalle vialle: kaksi paikkaa jotka
+   * kuvaavat samaa muotoa, ja vain toinen päivittyy. Portti vertaa nyt
+   * avainjoukkoja, joten seuraava lisäys kaatuu tähän eikä pelaajan
+   * tallennukseen.
+   */
+  {
+    /*
+     * Luetaan **raaka localStorage** eikä `Save.load()`.
+     *
+     * Ensimmäinen versio vertasi `load()`in tulosta, ja se ei voinut kaatua
+     * koskaan: `load` levittää `DEFAULT_SAVE()`n ensin, joten `write`istä
+     * pudonnut avain täyttyy oletuksella eikä lue koskaan `undefined`ina.
+     * Portti oli kirjoitettu kiinni ottamaan tasan se vika jonka se päästi
+     * läpi — ja se on huonompi kuin ei porttia, koska se näyttää katetulta.
+     */
+    const { Save, KEY: SAVE_KEY } = await import('/src/core/save.js');
+    const want = DEFAULT_SAVE();
+    Save.write({ ...want, doors: { '3-F': true }, secrets: { '1-1': ['a'] } });
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    const roundTrip = Object.keys(want).filter((k) => raw[k] === undefined);
+    expect('jokainen tallennuksen kenttä selviää kierroksesta write -> load',
+      roundTrip.length === 0,
+      roundTrip.length ? `katosi: ${roundTrip.join(', ')}` : 'kaikki kentät');
+  }
+
   /* ---- kamera ja äänten merkitykset ---- */
   /*
    * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.
@@ -16105,7 +16565,7 @@ const report = await page.evaluate(async () => {
     const rows = await page.evaluate(async () => {
       const { LevelScene } = await import('/src/scenes/level.js');
       const { isSolid } = await import('/src/gfx/tiles.js');
-      const { levelIds } = await import('/src/data/levels.js');
+      const { levelIds, getLevel: getLevelDef } = await import('/src/data/levels.js');
       const { runGround } = await import('/tools/level-bot.js');
       const { isClimb } = await import('/tools/climb-bot.js');
       const game = window.sfb3;
