@@ -13989,6 +13989,40 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /*
+   * TURVAVERKKO KOLMELLA OHJAUSTAVALLA, EI YHDELLÄ.
+   *
+   * Pikatallennus on `1`/`F5`/numpad, ja `input.js` pitää apunäppäimet
+   * tarkoituksella poissa ohjaimelta. Kosketuksessa niitä ei ole lainkaan.
+   * Turvaverkko oli siis olemassa vain näppäimistöllä, ja se on eri vika kuin
+   * "kentät ovat pitkiä" — mitattuna kenttä on 31 s eikä kaipaa välipistettä,
+   * mutta puhelimella pelaavalla ei ollut mitään.
+   *
+   * Testi vaatii että taukovalikossa on tallennus ja lataus, että ne ovat
+   * valittavissa **hypyllä** (ainoa nappi joka on kaikilla kolmella), ja että
+   * aika-ajossa niitä ei ole — kello käy tauon yli, joten ladattu tila tekisi
+   * ajasta väitteen jota kukaan ei ole juossut.
+   */
+  {
+    const ids = (ta) => {
+      const was = game.timeAttack;
+      game.timeAttack = ta;
+      const out = game.pauseItems().map((it) => it.id);
+      game.timeAttack = was;
+      return out;
+    };
+    const menu = {
+      normal: ids(false),
+      attack: ids(true),
+      hasUpdate: typeof game.updatePauseMenu === 'function',
+    };
+    const wantN = ['resume', 'save', 'load', 'slot'];
+    expect('taukovalikossa on turvaverkko myös ilman näppäimistöä',
+      menu.hasUpdate && wantN.every((k) => menu.normal.includes(k))
+      && !menu.attack.includes('save') && !menu.attack.includes('load'),
+      `tavallinen [${menu.normal}], aika-ajo [${menu.attack}]`);
+  }
+
   /* ---- kamera ja äänten merkitykset ---- */
   /*
    * KAKSI AVOINTA KYSYMYSTÄ, JA NIIDEN VÄLILLÄ YKSI YHTEINEN VIKA.

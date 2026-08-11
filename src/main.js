@@ -46,6 +46,8 @@ class Game {
     this.scene = null;
     this.paused = false;
     this.pauseBlink = 0;
+    /* Valittu rivi taukovalikossa. Ks. `pauseItems`. */
+    this.pauseIndex = 0;
     this.accumulator = 0;
     this.lastTime = 0;
     this.slot = 1;
@@ -799,9 +801,61 @@ class Game {
     if (this.paused && this.timeAttack && this.scene instanceof LevelScene) {
       this.scene.tickPaused();
     }
+    if (this.paused && pausable) this.updatePauseMenu();
     if (!this.paused && this.scene) this.scene.update(Input);
     /* Päivän yrityksen eteneminen talteen kentän aikana, ei vasta lopussa. */
     if (!this.paused) this.noteDailyProgress();
+  }
+
+  /**
+   * TAUKOVALIKKO, JA MIKSI SE ON VALIKKO EIKÄ NÄPPÄINLISTA.
+   *
+   * Tässä luki rivi `1 TALLENNA  2 LATAA  3 PAIKKA n`, ja se on ohje eikä
+   * käyttöliittymä: se toimii vain näppäimistöllä. `input.js` pitää
+   * apunäppäimet **tarkoituksella** poissa ohjaimelta ("a pad plays the game;
+   * a keyboard also administers it"), eikä kosketusohjaimessa ole niille
+   * paikkaa lainkaan. Peli siis tarjosi turvaverkon vain yhdelle kolmesta
+   * ohjaustavasta, ja juuri se on todellinen ero eikä kenttien pituus.
+   *
+   * Valikko on lisäys eikä korvaus: kaikki vanhat näppäimet toimivat yhä.
+   *
+   * Aika-ajossa tallennus ja lataus eivät ole listalla, ja se on sama päätös
+   * kuin ennenkin — kello käy tauon yli, joten tilan lataaminen tekisi ajasta
+   * väitteen jota kukaan ei ole juossut.
+   */
+  pauseItems() {
+    const items = [{ id: 'resume', label: 'JATKA' }];
+    if (!this.timeAttack) {
+      items.push({ id: 'save', label: 'TALLENNA' });
+      items.push({ id: 'load', label: `LATAA${readSlot(this.slot) ? '' : ' (TYHJÄ)'}` });
+      items.push({ id: 'slot', label: `PAIKKA ${this.slot}` });
+    }
+    return items;
+  }
+
+  /** Ylös/alas valitsee, hyppy vahvistaa — kolme ohjaustapaa, samat napit. */
+  updatePauseMenu() {
+    const items = this.pauseItems();
+    this.pauseIndex = Math.min(this.pauseIndex, items.length - 1);
+    if (Input.pressed.up) {
+      this.pauseIndex = (this.pauseIndex + items.length - 1) % items.length;
+      Sfx.play('cursor');
+    }
+    if (Input.pressed.down) {
+      this.pauseIndex = (this.pauseIndex + 1) % items.length;
+      Sfx.play('cursor');
+    }
+    if (!Input.pressed.jump) return;
+    Input.consume('jump');
+    const pick = items[this.pauseIndex].id;
+    if (pick === 'resume') { this.paused = false; Sfx.play('cursor'); return; }
+    if (pick === 'save') { this.quickSave(); return; }
+    if (pick === 'load') { this.quickLoad(); return; }
+    if (pick === 'slot') {
+      this.slot = (this.slot % SLOT_COUNT) + 1;
+      this.toast(`TALLENNUSPAIKKA ${this.slot}`);
+      Sfx.play('cursor');
+    }
   }
 
   render() {
@@ -811,18 +865,26 @@ class Game {
     if (this.scene) this.scene.draw(ctx);
 
     if (this.paused) {
+      const items = this.pauseItems();
+      const boxH = 34 + items.length * 11;
       ctx.fillStyle = 'rgba(8,8,16,0.7)';
-      ctx.fillRect(0, 90, W, 48);
+      ctx.fillRect(0, 90, W, boxH);
       /* Aika-ajossa otsikko sanoo sen mikä valikossa yllättää: kello käy.
        * Sääntö jota ei kerroteta siinä paikassa jossa se puree on ansa, ja
        * tämä on se paikka. Näppäinrivi vaihtuu samasta syystä — 1 ja 2 eivät
        * tee siellä mitään, ja 5 tekee. */
       drawText(ctx, this.timeAttack ? PAUSE_TITLE : 'TAUKO', W / 2, 104,
         { color: '#ffffff', align: 'center', shadow: '#303048' });
-      drawText(ctx, 'ENTER JATKA', W / 2, 116, { color: '#8890b0', align: 'center' });
-      drawText(ctx, this.timeAttack ? PAUSE_KEYS
-        : `1 TALLENNA  2 LATAA  3 PAIKKA ${this.slot}  7 EFEKTIT  9 DEBUG`, W / 2, 126,
-      { color: '#8890b0', align: 'center' });
+      items.forEach((it, i) => {
+        const on = i === this.pauseIndex;
+        drawText(ctx, `${on ? '*' : ' '} ${it.label}`, W / 2, 115 + i * 11,
+          { color: on ? '#ffd048' : '#8890b0', align: 'center' });
+      });
+      /* Näppäinrivi jää, koska näppäimistö on yhä nopein tapa: valikko on
+       * lisäys niille joilla ei ole näppäimistöä, ei korvaaja niille joilla on. */
+      drawText(ctx, this.timeAttack ? PAUSE_KEYS : `7 EFEKTIT  9 DEBUG`,
+        W / 2, 115 + items.length * 11 + 3,
+        { color: '#606880', align: 'center' });
     }
     if (this.flashTimer > 0) {
       drawText(ctx, this.flash, W / 2, 6, { color: '#ffd048', align: 'center', shadow: '#101018' });

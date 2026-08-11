@@ -7,6 +7,29 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.11.75 — turvaverkko oli olemassa vain näppäimistöllä
+
+Taukoruudussa luki `1 TALLENNA  2 LATAA  3 PAIKKA n`, ja se on ohje eikä
+käyttöliittymä. `input.js` pitää apunäppäimet **tarkoituksella** poissa
+ohjaimelta ("a pad plays the game; a keyboard also administers it"), eikä
+kosketusohjaimessa ole niille paikkaa lainkaan.
+
+Peli siis tarjosi pikatallennuksen — joka on *vahvempi* kuin mikään välipiste,
+koska sen saa mihin tahansa — vain yhdelle kolmesta ohjaustavasta. Se on
+oikea vika, ja se on eri vika kuin "kentät ovat pitkiä": mitattuna kenttä on
+31 s eikä kaipaa välipistettä, mutta puhelimella pelaavalla ei ollut mitään.
+
+Tauko on nyt valikko: **ylös/alas valitsee, hyppy vahvistaa** — ainoat napit
+jotka ovat kaikilla kolmella ohjaustavalla. Vanhat näppäimet toimivat yhä;
+valikko on lisäys niille joilla ei ole näppäimistöä eikä korvaaja niille
+joilla on.
+
+Aika-ajossa listalla ei ole tallennusta eikä latausta, ja se on sama päätös
+kuin ennenkin: kello käy tauon yli, joten ladattu tila tekisi ajasta väitteen
+jota kukaan ei ole juossut.
+
+---
+
 ## v26.08.11.74 — linnakkeen ovi, ja portti joka piti omaa kopiotaan tallennuksesta
 
 Kysymys oli "pitäisikö kenttiin lisätä välipisteitä". Mitattuna vastaus oli ei,
