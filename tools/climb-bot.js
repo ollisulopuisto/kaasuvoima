@@ -272,11 +272,31 @@ export function makeClimber(scene, rows, budget) {
           if (d <= 2) hazardAhead = true;
         }
       }
+      /*
+       * KUILU EI OLE ILMAINEN, VAIKKA VERKKO SANOO NIIN.
+       *
+       * `climbGraph` antaa samantasoisten tasanteiden välille kaaren ilman
+       * ehtoja `gapTiles`in sisällä, ja se on kiipeilykentässä oikein: siellä
+       * "samalla tasolla ja vieressä" tarkoittaa käytännössä samaa lattiaa.
+       * Osioidussa kentässä se ei tarkoita — 7-P:n ensimmäisessä osiossa on
+       * neljän laatan reikä lattiassa, verkko ylittää sen kaarella eikä botti
+       * hypännyt kertaakaan, koska kohde ei ollut *ylhäällä*. Mitattuna: kuoli
+       * framella 138 sarakkeessa 14, eli ensimmäiseen reikään.
+       *
+       * Ponnistus lähtee siis myös reunalta silloin kun kohde on **samalla
+       * rivillä mutta eri tasanne**. Alaspäin tätä ei kysytä, ja se on rajaus
+       * eikä unohdus: kaivautumiskentässä reunan yli käveleminen on se tapa
+       * jolla edetään, ja tämä ehto siellä estäisi jokaisen pudotuksen.
+       */
+      const gapJump = p.onGround && !!here && !!next
+        && next.i !== here.i && next.y === here.y && atEdge;
+
       /* Jump when there is something above to get to and the body is under it —
        * or at the lip it has to leave from. `press` is the edge the engine
        * reads; `jump` held is what buys height, and it is let go the moment the
        * feet clear the target. */
-      const press = p.onGround && (hazardAhead || (above && (Math.abs(dx) <= TILE || atEdge)));
+      const press = p.onGround
+        && (hazardAhead || gapJump || (above && (Math.abs(dx) <= TILE || atEdge)));
       /* The release is asked only on the frames after the press, and that is
        * not tidiness. `vy` is not yet negative on the frame the button goes
        * down — the engine applies the jump inside the update that follows — so
@@ -294,7 +314,7 @@ export function makeClimber(scene, rows, budget) {
        * framella ja jokainen piikkien yli otettu ponnistus oli näpäytys. Kun
        * kohde ei ole ylhäällä, ainoa oikea irrotushetki on huippu.
        */
-      if (press && hazardAhead) hazardJump = true;
+      if (press && (hazardAhead || gapJump)) hazardJump = true;
       if (press) hold = true;
       else if (hold && ((above && feet <= aimTop - 2) || p.vy > 0)) hold = false;
       /*
@@ -326,5 +346,21 @@ export function makeClimber(scene, rows, budget) {
   };
 }
 
-/** Is this a level the climber should be driving at all? */
-export const isClimb = (def) => !!def.vertical;
+/**
+ * Is this a level the climber should be driving at all?
+ *
+ * **Osioitu kenttä kuuluu tänne, vaikkei se ole pystykenttä**, ja syy on se
+ * mikä tämän tiedoston ensimmäisessä kappaleessa jo lukee: oikealle juokseva
+ * botti kävelee nousun juurelle ja raportoi kentän loppuneen sinne. 7-P:n
+ * ensimmäinen osio on kaksikymmentä saraketta vaakaa, ja se on juuri se pituus
+ * jonka `playable.mjs` ehtii juosta ennen kuin kenttä kääntyy ylöspäin.
+ *
+ * Kiipeilijä ei tarvitse siihen mitään uutta. Se ajaa `climbGraph`ia, joka
+ * lukee koko ruudukkoa eikä osioita: nousut ovat mitattuja hyppyjä ja
+ * vaakapätkät ovat samantasoisia kaaria `gapTiles`in sisällä. Osioitu kenttä
+ * on siis sille tavallinen kenttä joka sattuu olemaan kahdeksankymmentä
+ * saraketta leveä ja neljäkymmentäviisi riviä korkea — ja tämä on yksi rivi
+ * juuri siksi, ettei kukaan päättele akselia kentän nimestä.
+ */
+export const isClimb = (def) => !!def.vertical
+  || (Array.isArray(def.segments) && def.segments.length > 0);

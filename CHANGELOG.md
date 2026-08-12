@@ -165,6 +165,77 @@ joka piilottaa jotain. Koekenttien tiilirivi etsitään `brickSecret`illä eikä
 valita silmällä — muuten kokeen tulos riippuisi siitä mihin kohtaan ruudukkoa se
 sattui kirjoittamaan.
 
+---
+
+## v26.08.11.82 — 7-P POLVI, se kenttä joka kääntyy
+
+Omistaja pyysi tätä näillä sanoilla: *"voisimmeko tehdä kentän, jossa on sekä
+vaaka- että pystysuuntaista liikettä, vuorotellen? ensin mennään oikealle,
+sitten ylös, sitten oikealle, sitten alas."* Kameran puoli siitä toimitettiin
+edellisessä erässä; nyt on kenttä.
+
+`7-P POLVI` on 80×45 ruudukkoa neljässä osiossa — terassi, nousu, harjanne,
+kuilu — ja se korvaa generoidun `7-7`:n maailman seitsemäntenä kenttänä. Käänne
+ei ole sauma vaan sivunvaihdon lyönti: sama beat jonka pystykenttä jo omisti.
+
+### Validaattori joka ei osannut hylätä, ja se huomattiin koekappaleella
+
+Ensimmäinen versio osiotarkastuksesta palautti *ei ongelmia* ruudukolle josta
+oli poistettu yksi nousun puola. Syy: pystypalassa ei ole aloitusmerkkiä eikä
+lippua, joten kulkukelpoisuustarkastus palasi heti — **sääntö joka ei voi
+laueta**, sama vika kuin edellisen erän tallennusportissa ja yhtä hyvin
+piilossa.
+
+Korjaus on kaksiosainen. Reitti kysytään **koko ruudukosta** eikä palasta,
+koska osioidun kentän vika asuu saumassa: pala kerrallaan kaikki neljä voivat
+olla moitteettomia ja kenttä silti pelaamaton. Ja pala saa säännöiltä puuttuvat
+kaksi lukuaan naapureiltaan — tulo- ja lähtörivin — jolloin `checkClimbTraverse`
+ja umpiperäsääntö toimivat siinä samoin kuin kokonaisessa kiipeilykentässä.
+
+Koekappaleita on nyt viisi ja jokainen on rikottu toimitetusta kentästä:
+puuttuva puola, reikä nousun lattiassa, tikapuusarake, vajaa osiointi, puuttuva
+tehostus. Kaikki hylätään; ehjä menee läpi.
+
+### Kaista ja suunta johdetaan, eivät ole kenttädatassa
+
+Osio ilmoittaa vain kaksi asiaa: mihin sarakkeeseen se loppuu ja onko se
+pystysuuntainen. Kaikki muu — mitkä viisitoista riviä vaakaosio asuu, mille
+riville pystyosioon saavutaan, kuinka pitkä matka osio on — luetaan ruudukosta
+yhdessä paikassa (`segmentSlices`), ja **sekä säännöstö että vaikeusmittari
+lukevat sen sieltä**. Ensimmäinen versio otti kaistan `bandTop`-kentästä, mikä
+olisi ollut seitsemäs kerta tässä projektissa jolloin käsin ylläpidetty kopio
+jostakin luettavissa olevasta vanhenee äänettömästi.
+
+Vaikeusmittari mittaa osiot erikseen ja painottaa matkalla: vaakaosion
+sarakkeet ja pystyosion rivit ovat sama valuutta, koska molemmat mittarit ovat
+"sataa yksikköä kohti". Yhtenä kaistana luettuna kolme neljäsosaa kentästä
+olisi raportoitu pohjattomana kuiluna. `7-P` mittaa **293,0**, eli maailman
+seitsemäs kenttä on sen kovin ennen linnaketta (294,6).
+
+### Kiipeilijä ei tuntenut kuilua, ja se oli botin vika eikä kentän
+
+`isClimb` tuntee nyt osioidun kentän, koska oikealle juokseva botti kävelee
+nousun juurelle ja raportoi kentän loppuneen sinne. Ensimmäinen ajo kuoli silti
+framella 138 sarakkeessa 14 — ensimmäiseen reikään.
+
+Syy oli verkossa: `climbGraph` antaa samantasoisten tasanteiden välille kaaren
+ilman ehtoja, ja kiipeilykentässä se on oikein, koska siellä "samalla tasolla ja
+vieressä" tarkoittaa käytännössä samaa lattiaa. Vaakaosiossa se ei tarkoita.
+Ponnistus lähtee nyt myös reunalta kun kohde on samalla rivillä mutta eri
+tasanne — ja **vain silloin**, koska kaivautumiskentässä reunan yli
+käveleminen on se tapa jolla edetään. Ajo: läpi voimatasolla 0, 2983 framea,
+11 sivunvaihtoa.
+
+### Ja yksi velka maksettiin sivutuotteena
+
+`gen-levels.mjs`:ssä luki että maailman 7 tiheysrivin ylin luku 10,1 oli
+poistuneen `7-2`:n perua eikä enää maailman omalta väliltä, mutta ettei sitä
+lasketa alas koska se generoisi toimitetun kentän uudelleen. Se kenttä oli
+`7-7`, ja sen paikalla on nyt `7-P` — joten rivi on poissa eikä yhdenkään
+jäljellä olevan kentän tavu liikahtanut.
+
+---
+
 ## v26.08.11.81 — portti joka ei voinut kaatua, ja seitsemän muuta
 
 Toinen katselmointikierros, ja sen tärkein löydös oli edellisen kierroksen
