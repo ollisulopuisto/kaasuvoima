@@ -9,6 +9,7 @@ import { clamp, hashNoise, padNum } from '../core/utils.js';
 import { normalizePower, powerAfterItem, POWER_NAMES } from '../entities/player.js';
 import { secretTally } from '../core/secrets.js';
 import { MODE_NAME, SPLIT_COLORS } from '../core/timeattack.js';
+import { difficultyLabel } from '../data/scale.js';
 
 /*
  * KARTAN ÄÄNET, LUETTUNA DESIGN.md KOHTAA 8 VASTEN (10.8.2026).
@@ -927,9 +928,15 @@ export class WorldMapScene {
     }
   }
 
-  /** `{ found, total }` for a node that is a level, or null for the rest. */
+  /**
+   * `{ found, total }` for a node that is a level, or null for the rest.
+   *
+   * Vaikeustaso mukana, koska venytetty kenttä on eri ruudukko ja siinä on eri
+   * määrä piilotettuja tiiliä. Kartta lupaa "tässä kentässä on n salaisuutta",
+   * ja se lupaus on tyhjä jos luku on jonkin toisen mittaisen kentän luku.
+   */
   secretsAt(node) {
-    return node.level ? secretTally(this.game.state, node.level) : null;
+    return node.level ? secretTally(this.game.state, node.level, this.game.mode) : null;
   }
 
   /**
@@ -1232,8 +1239,14 @@ export class WorldMapScene {
      * `MAAILMA 8  VIIMEINEN LINNAKE` eli 28 merkkiä = 167 px kuudesta
      * alkaen, ja pisteet vievät oikean reunan 273:sta. Kahdeksan merkkiä
      * oikeaan reunustettuna 268:aan mahtuu väliin 48 pikselin marginaalilla. */
-    if (this.game.timeAttack) {
-      drawText(ctx, MODE_NAME, 268, 3, { color: SPLIT_COLORS.ahead, align: 'right' });
+    /* Yksi paikka ja kaksi ehdokasta, joten järjestys on päätös: AIKA-AJO
+     * voittaa. Se on tila johon mennään erikseen ja jonka säännöt yllättävät
+     * kesken kierroksen; vaikeustaso on valittu tämän kierroksen alussa ja se
+     * lukee myös taukovalikossa. HELPPOa ei näytetä lainkaan — se on se peli
+     * joka tässä on aina ollut, eikä oletus ole uutinen. */
+    const label = this.game.timeAttack ? MODE_NAME : difficultyLabel(this.game.mode);
+    if (label) {
+      drawText(ctx, label, 268, 3, { color: SPLIT_COLORS.ahead, align: 'right' });
     }
   }
 

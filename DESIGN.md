@@ -450,6 +450,32 @@ ole, kenttä hylätään. Tiilipinot eivät kuulu tarkistuksen piiriin.
 Syy: pelaaja oppii nopeasti mitä kannattaa tutkia. Yksikin tyhjä kiipeäminen
 opettaa ohittamaan seuraavatkin.
 
+### Vaikeustaso venyttää kenttää, ei kirjoita sitä
+
+Vaikeustasot (`src/data/scale.js`) pidentävät kenttää **toistamalla sen omia
+tahtejaan**, eivät generoimalla jatketta. Generaattori on olemassa ja se on hyvä,
+mutta sen tuotos on oma kenttänsä eikä toisen kentän jatke: käsintehdyn kentän
+pidentäminen arvotulla maastolla tekisi siitä kaksi kenttää joilla on sama nimi,
+ja rikkoisi kaiken mitä kentästä on mitattu.
+
+Kaksi ehtoa pitävät venytyksen tämän luvun sääntöjen sisällä, ja molemmat ovat
+rakenteellisia eivätkä tarkistuksia jälkikäteen:
+
+- **Sauma on aina kahden merkilleen samanlaisen maasarakkeen väli.** Silloin
+  jokainen liitos asettaa vierekkäin sarakeparin joka on alkuperäisessä kentässä
+  jo vierekkäin, eikä liitoskohtaan voi syntyä kuilua tai seinää jota
+  hyppybudjetti ei kata. Ehto koskee koko saraketta kaikissa kaistoissa, joten
+  sauma ei myöskään voi osua salaiseen huoneeseen eikä sen ja sinne vievän
+  varren väliin.
+- **Avausneljännestä ei toisteta**, joten "perustehostus on aina lähellä alkua"
+  pitää myös uudessa, pidemmässä neljänneksessä: mikään ennen sitä rajaa ei
+  liiku.
+
+Ja koska ne ovat rakenteellisia, ne on silti todistettava: `tools/verify.mjs`
+ajaa `validateLevel`in **jokaiselle kentälle jokaisella vaikeustasolla** ja
+rakentaa jokaisesta kohtauksen. Se on 192 kenttää, ja se on myös se paikka jossa
+tämän luvun säännöt vihdoin koskevat käsintehtyjäkin kenttiä.
+
 ## 6. Moottorin kompastuskivet
 
 Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.

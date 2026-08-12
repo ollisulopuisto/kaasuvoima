@@ -74,7 +74,10 @@ export class TitleScene {
       else if (choice === MODE_NAME) this.game.startTimeAttack();
       else if (choice === 'PARHAAT PIERUT') this.game.toHighScores();
       else if (choice === DAILY_TITLE) this.game.toDaily();
-      else this.game.newGame();
+      /* UUSI PELI kysyy vaikeustason ennen kuin se aloittaa. Ks.
+       * `Game.chooseDifficulty` — valinta on osa kierrosta, ja tämä on se
+       * hetki jolla kierros alkaa. */
+      else this.game.chooseDifficulty();
     }
   }
 

@@ -57,6 +57,21 @@ export const DEFAULT_SAVE = () => ({
    * etenemistä.
    */
   doors: {},
+  /*
+   * VAIKEUSTASO, ks. `src/data/scale.js`.
+   *
+   * Sisään samalla perusteella kuin `secrets`, `bestTimes` ja `doors`, eli
+   * **ilman versionostoa**: vanhassa tallennuksessa ei ole `mode`-kenttää,
+   * levitys antaa sille `'easy'`, ja se on totuus eikä arvaus — HELPPO *on*
+   * täsmälleen se peli jota siinä tallennuksessa on pelattu. Yksikään olemassa
+   * oleva kenttä ei muuta merkitystään.
+   *
+   * Tallennuksessa eikä muistissa, toisin kuin aika-ajo: aika-ajo on tila jonka
+   * valitsee se joka istuu koneen ääressä juuri nyt, mutta vaikeustaso on osa
+   * sitä kierrosta jota JATKA PELIÄ jatkaa. Kesken NORMAALin aloitettu kenttä
+   * ei saa olla HELPPO vain siksi että välilehti suljettiin.
+   */
+  mode: 'easy',
 });
 
 export const Save = {
@@ -100,6 +115,7 @@ export const Save = {
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
         doors: state.doors || {},
+        mode: state.mode || 'easy',
       }));
     } catch {
       /* private mode / storage full — the game just won't persist */

@@ -14,7 +14,7 @@ import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
-import { T, surfaceUnder } from '../gfx/tiles.js';
+import { surfaceUnder } from '../gfx/tiles.js';
 
 /*
  * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
@@ -363,6 +363,32 @@ export class Player extends Entity {
       y: this.y + this.h * 0.4,
       w: reach,
       h: this.h * 0.6,
+    };
+  }
+
+  /**
+   * The same swipe, measured against **tiles** instead of bodies.
+   *
+   * Same side, same reach, and the only difference is the height: an enemy is
+   * caught by the part of the arc that would knock it over, and a wall is hit
+   * by all of it. `spinBox` is deliberately the lower 60 % of the body, which
+   * is right for a creature standing on the floor beside you and wrong for the
+   * brick column you are standing next to — measured, a big player's spin box
+   * covers exactly one row of `brick_wall`'s four, so a tail that used that box
+   * would have taken the wall down one brick per spin and read as a bug.
+   *
+   * Kept as a second getter rather than by widening the first, because widening
+   * it would also have widened what the tail *kills*, and that is a balance
+   * change nobody asked for hiding inside a tile change.
+   */
+  get tailBox() {
+    if (this.spin <= 0) return null;
+    const reach = this.tailReach;
+    return {
+      x: this.facing > 0 ? this.x + this.w - 2 : this.x - reach + 2,
+      y: this.y,
+      w: reach,
+      h: this.h,
     };
   }
 
@@ -991,13 +1017,13 @@ export class Player extends Entity {
     const tx = Math.floor((dir > 0 ? this.x + this.w + 1 : this.x - 1) / 16);
     const y0 = Math.floor(this.y / 16);
     const y1 = Math.floor((this.y + this.h - 1) / 16);
-    let smashed = false;
-    for (let ty = y0; ty <= y1; ty++) {
-      if (this.level.tileAt(tx, ty) !== T.BRICK) continue;
-      if (this.level.brickSecret && this.level.brickSecret(tx, ty)) continue;
-      this.level.smashBrick(tx, ty);
-      smashed = true;
-    }
+    /* The list above is `LevelScene.burstBricks`, and the charge asks it rather
+     * than repeating it: the tail and the ground pound break tiles too now, and
+     * four copies of "which tile is soft" is four chances for one of them to
+     * quietly disagree about a brick with a coin in it. */
+    const tiles = [];
+    for (let ty = y0; ty <= y1; ty++) tiles.push([tx, ty]);
+    const smashed = this.level.burstBricks(tiles) > 0;
     if (smashed) {
       this.vx = dirVx * 0.6;
       // The wall going down is its own event, louder and lower than the single

@@ -158,6 +158,20 @@ tehostus antaa. Osuma pudottaa yhden tason — tasolla 0 osuma tappaa.
 Ilmapierun purkaus kaataa alapuolella olevat viholliset, ja tasolta 4 ylöspäin
 hahmo jyrää tiiliä juoksemalla niiden läpi.
 
+**Kolme liikettä rikkoo tiilen**, ja niillä on sama sopimus: vain tavallinen
+tiili, eikä tiili joka piilottaa jotain — sen palkinto kuuluu sille joka puskee
+sen alta.
+
+| Liike | Mistä suunnasta | Ehto |
+| --- | --- | --- |
+| pusku (ummetuspurkka) | kyljestä juosten | tehostus |
+| **häntäisku** | kyljestä, siltä puolelta jonne häntä osoittaa | kaasulehti |
+| **maahanisku** | jalkojen alta | voimataso 3 ja pudotus vähintään puolet huoneesta |
+
+Maahaniskun tiilireikä on tasan iskun oman säteen levyinen, eli sen kokoinen
+kuin isku näytti olevan — ja siitä putoaa läpi, mikä on liikkeen paras palkinto
+ja samalla sen hinta.
+
 Tehostus ei ole koskaan pakollinen: **maareitti on läpäistävissä pienimmällä
 koolla**, ja pierupomppu avaa korkeat reitit ja palkinnot. Generoiduissa
 kentissä tämä on koneellisesti tarkistettu; käsintehdyissä se on
@@ -227,6 +241,55 @@ tilastoista, palikat pelin omasta sanastosta, ja jokainen kantaa merkinnän siit
 onko sen alkuperäisyys tarkistettu korpusta vasten (kaikki 27 on, osumia 0).
 Linnakkeet ja maailman opettavat kentät ovat käsintehtyjä. Ks. [DESIGN.md](DESIGN.md) kohta 3.
 
+## Vaikeustasot
+
+Alkuruudun **UUSI PELI** kysyy ensin, ja valinta kulkee tallennuksen mukana:
+JATKA PELIÄ jatkaa sitä peliä jota oltiin pelaamassa eikä kysy uudestaan.
+
+| Taso | Kentän pituus | Vihollisia |
+| --- | --- | --- |
+| **HELPPO** | kuten ennen | kuten ennen |
+| **NORMAALI** | kaksinkertainen | kolminkertaisesti |
+| **VAIKEA** | kolminkertainen | noin viisinkertaisesti |
+
+**HELPPO on merkilleen se peli joka datatiedostoissa lukee** — ei yhtä laattaa,
+ei yhtä vihollista eroa. Se on ehto eikä tyylivalinta: kaikki mitattu
+(`src/data/difficulty.js`, `tools/curriculum.mjs`, `tools/variety.mjs`) koskee
+sitä kenttää, ja portti vertaa rivi riviltä että näin on.
+
+Pidempi kenttä **toistaa omia tahtejaan**: ruudukosta etsitään sarakkeet joissa
+on pelkkää maata ja tyhjää ja joiden kummallakin puolella on kuusi saraketta
+samaa maastoa — ensimmäinen ehto pitää liitoksen ehjänä, toinen jättää kuilun
+eteen vauhdinoton — ja niiden väliset pätkät monistetaan paikalleen.
+Uutta maastoa ei generoida — käsintehdyn kentän jatkaminen arvotulla maastolla
+tekisi siitä kaksi kenttää joilla on sama nimi. Rajaukset ovat
+[src/data/scale.js](src/data/scale.js):ssä ja lyhyesti: avausneljännestä ei
+toisteta, ainutkertaista (aloitus, lippu, pomo, ovi, kytkin, papuvarsi,
+lämpöputki, tähtilaatta) ei monisteta, järjestys ei muutu, eivätkä
+kiipeilykentät (6-K, 7-T) veny lainkaan.
+
+Lisäviholliset ovat **niitä lajeja jotka kentässä jo ovat**, eli jäämaailmaan ei
+ilmesty aavikon otusta. Arvonta on siemenetty kentän tunnuksesta ja tason
+nimestä: sama kenttä samalla tasolla on joka kerta sama kenttä.
+
+Kello venyy pituuden mukana (katto 999 aikayksikköä), aika-ajon ennätykset
+kirjataan tasoittain — NORMAALIn 2-3 on eri rata kuin HELPON 2-3 — ja **päivän
+pieru ei veny**: yksi yritys päivässä ja sama kenttä kaikille on eri lupaus kuin
+vaikeustaso.
+
+Jokainen kenttä jokaisella tasolla ajetaan portin läpi samoilla
+kenttäsuunnittelun säännöillä kuin käsintehdyt: `npm run verify`. Maaston
+läpäisyn mittaa erikseen botti, joka ei osaa muuta kuin juosta oikealle ja
+hypätä:
+
+```bash
+node tools/playable.mjs --mode hard   --frames 26000
+node tools/playable.mjs --mode normal --frames 18000
+```
+
+Kolme linnakekäytävää (6-F, 7-F, 8-5) ei veny: niissä ei ole kahtatoista
+saraketta samaa maastoa ennen pomoareenaa. Ne saavat silti lisää vihollisia.
+
 ## Päivän pieru
 
 Alkuruudun kolmas valinta: **yksi generoitu kenttä vuorokaudessa, yksi yritys,
@@ -258,6 +321,7 @@ npm i -D playwright && npx playwright install chromium   # kerran
 
 node tools/verify.mjs        # headless-tarkistus: kaikki kentät + mekaniikat
 node tools/playable.mjs      # pelkkä geometria: onko kentät läpäistävissä ilman tehostuksia
+node tools/playable.mjs --mode hard --frames 26000  # ...ja venytettynä (vaikeustaso)
 node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
 node tools/gen-levels.mjs    # generoi kaikki generoidut kentät tilastoista
 node tools/gen-levels.mjs --world w3               # ...vain yhden maailman
@@ -308,6 +372,12 @@ ympäristö ovat ristiriidassa kumpaan tahansa suuntaan. Ks. DESIGN.md kohta 3.
 viholliset ja vaarat ja ajaa botin läpi kahdesti — kerran voimatasolla 0
 (suunnittelulupaus: maareitin pitää aueta pienimmällä koolla) ja kerran
 tuplahypyllä. Ero näiden välillä kertoo onko kenttä rikki vai vain vaativa.
+
+`--mode` ajaa saman venytetylle kentälle, ja se on työkalun paras yksittäinen
+saalis: vaikeustasojen ensimmäinen versio läpäisi `validateLevel`in jokaisella
+tasolla ja **kaatui tässä viidessä kentässä**, koska ehjä sauma voi silti syödä
+kuilun edestä vauhdinoton. Framebudjetti pitää nostaa mukana — 7000 framea
+riittää 400 sarakkeen kenttään eikä 1200:n.
 
 Se **ei kaada ajoa** ilman `--strict`-lippua, ja syy on tärkeä: botti osaa vain
 juosta oikealle ja hypätä. Se ei osaa hypellä kelluvalta lavalta toiselle, mennä
@@ -458,6 +528,7 @@ src/core/           syöte, kosketus, ääni (WebAudio), tallennus, tilatallennu
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat, kuvaefektit
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
 src/data/generator.js  kenttägeneraattorin ydin — sama koodi työkalulle ja selaimelle
+src/data/scale.js   vaikeustasot: kentän venytys ja lisäviholliset
 src/entities/       pelaaja, viholliset, esineet, efektit
 src/level/          fysiikka ja törmäykset
 src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit, pistetaulu, päivän pieru

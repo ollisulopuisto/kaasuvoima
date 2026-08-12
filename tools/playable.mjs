@@ -27,7 +27,20 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.PORT || 8124);
 const args = process.argv.slice(2);
-const only = args.find((a) => !a.startsWith('--')) || null;
+/*
+ * Kenttätunnus on se ainoa paljas argumentti joka EI ole lipun arvo.
+ *
+ * `--frames 9000` ja `--mode hard` vievät kumpikin seuraavan sanan, ja ilman
+ * tätä `--mode hard` luettiin kenttätunnukseksi `hard` — eli työkalu kaatui
+ * lauseeseen "unknown level: hard" juuri sillä lipulla joka siihen oli äsken
+ * lisätty. Arvot ovat listalla nimeltä eikä "ohita seuraava sana" -sääntönä,
+ * jotta seuraavan lipun lisääjä joutuu sanomaan kumpaa lajia se on.
+ */
+const VALUE_FLAGS = new Set(['--frames', '--mode']);
+const consumed = new Set(args
+  .map((a, i) => (VALUE_FLAGS.has(a) ? i + 1 : -1))
+  .filter((i) => i > 0));
+const only = args.find((a, i) => !a.startsWith('--') && !consumed.has(i)) || null;
 /*
  * Report only, unless asked otherwise. This bot is a heuristic: it runs right,
  * jumps, and that is the whole repertoire. It cannot duck, enter a pipe, kick a
@@ -45,6 +58,22 @@ const only = args.find((a) => !a.startsWith('--')) || null;
  * komento jolla katsotaan miksi.
  */
 const STRICT = args.includes('--strict');
+/*
+ * VAIKEUSTASO, ja oletus on HELPPO koska se on se kenttä joka datatiedostossa
+ * lukee (ks. `src/data/scale.js`).
+ *
+ * Venytetty kenttä on rakenteeltaan sama väite kuin venyttämätön — sauma on
+ * aina kahden merkilleen samanlaisen maasarakkeen väli, joten reitti joka kulki
+ * alkuperäisen läpi kulkee myös jokaisen kopion läpi — mutta "rakenteeltaan
+ * sama väite" on perustelu eikä mittaus, ja tämä työkalu on se jolla sen mittaa:
+ *
+ *   node tools/playable.mjs --mode hard --frames 24000
+ *
+ * Framebudjetti pitää nostaa mukana. 7000 framea riittää 400 sarakkeen kenttään
+ * eikä 1200:n, ja loppuun asti ehtimätön botti raportoi JUMISSA sarakkeessa
+ * jossa mikään ei ole vialla.
+ */
+const MODE = (args.includes('--mode') && args[args.indexOf('--mode') + 1]) || 'easy';
 const FRAMES = Number(args[args.indexOf('--frames') + 1]) || 7000;
 
 const MIME = {
@@ -85,7 +114,7 @@ const page = await browser.newPage();
 await page.goto(`http://127.0.0.1:${PORT}`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(300);
 
-const report = await page.evaluate(async ({ onlyId, frames }) => {
+const report = await page.evaluate(async ({ onlyId, frames, mode }) => {
   const { LevelScene } = await import('/src/scenes/level.js');
   const { isSolid } = await import('/src/gfx/tiles.js');
   const { levelIds } = await import('/src/data/levels.js');
@@ -172,7 +201,7 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
   const run = (id, power) => {
     game.state = {
       lives: 9, coins: 0, score: 0, power, reserve: null,
-      world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], mode,
     };
     let finished = null;
     game.finishLevel = (r) => { finished = r; };
@@ -223,13 +252,14 @@ const report = await page.evaluate(async ({ onlyId, frames }) => {
     });
   }
   return rows;
-}, { onlyId: only, frames: FRAMES });
+}, { onlyId: only, frames: FRAMES, mode: MODE });
 
 await browser.close();
 server.close();
 
 const pad = (s, n) => String(s).padEnd(n);
-console.log('\nGeometrian läpäisytesti — ei vihollisia, ei tehostuksia, voimataso 0\n');
+console.log(`\nGeometrian läpäisytesti — ei vihollisia, ei tehostuksia, voimataso 0`
+  + `  [vaikeustaso ${MODE}, ${FRAMES} framea]\n`);
 console.log(`  ${pad('KENTTÄ', 8)}${pad('TULOS', 10)}${pad('ETENI', 8)}JUMISSA`);
 const broken = [];
 const demanding = [];
