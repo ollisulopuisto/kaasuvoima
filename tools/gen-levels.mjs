@@ -232,6 +232,7 @@ function planTuning(hot, trace) {
  *
  *   POISTUNUT 6-3 -> 6-K
  *   POISTUNUT 7-2 -> 7-T
+ *   POISTUNUT 7-7 -> 7-P
  *
  * `tools/verify.mjs` lukee tämän tiedoston tekstinä, laajentaa välit
  * (`6-1…6-3` on väite jokaisesta päiden välissä olevasta kentästä) ja vaatii
@@ -572,25 +573,22 @@ const WORLD6 = [
  * sanoo sen jo: **jokainen kuoppa hypätään eikä yhtäkään silloiteta.**
  *
  *   density   7-1 ja 7-3 kantavat 9,5 ja 9,4 merkkiä sadalla sarakkeella.
- *             Uudet rivit pyytävät 9,4…10,1, ja **ylin luku on velkaa**: 10,1
- *             oli 7-2:n, eikä 7-2 ole enää pelissä. Kahdesta jäljellä olevasta
- *             mitattu väli on **9,4…9,5**, joten 7-7:n 10,1 ei ole enää
- *             maailman omalta väliltä — se on korkeampi kuin yksikään kenttä
- *             jonka maailma yhä toimittaa.
- *
- *             Sitä ei lasketa alas, ja hinta sanotaan tässä ääneen: 7-7 on
- *             toimitettu, mitattu ja korpustarkistettu kenttä, ja rivin luvun
- *             muuttaminen generoi sen uudelleen. Yhden lauseen tarkkuus ei ole
- *             sen arvoinen että 27 generoidun kentän tavuista tulee liikkuvia.
- *             Velka luetaan siis reseptistä eikä muistilapusta, ja seuraava
- *             joka ajaa generaattorin näkee sen ennen kuin ajaa.
+ *             Uudet rivit pyytävät 9,4…9,8, ja **velka on nyt maksettu.**
+ *             Tässä luki että ylin luku 10,1 oli 7-2:n perua eikä enää
+ *             maailman omalta väliltä, ja että sitä ei lasketa alas koska se
+ *             generoisi toimitetun kentän uudelleen. Se kenttä oli 7-7, ja
+ *             sen paikalla on nyt käsintehty `7-P` — joten rivi ei ole enää
+ *             velkaa vaan poissa, eikä yhdenkään jäljellä olevan kentän
+ *             tavu liikahtanut.
  *   maxGap    viisi. Sama mittaus kuin luussa: 7-1:n ja 7-3:n kuilut ovat
  *             neljä tai viisi ruutua, ei kertaakaan kuutta. **Tämä rivi ei
  *             menettänyt mitään**: se ei koskaan nojannut poistuneeseen
  *             kenttään, ja uudelleen mitattuna se on 15 kuilua kahdessa
  *             kentässä, leveydet 4 ja 5.
  *   minIntro  32.
- *   aim       253 → 203 → 279 → **230 → 262 → 288 → 310**. Sama pakotettu muoto
+ *   aim       253 → 203 → 279 → **230 → 262 → 288**, ja neljäs generoitu
+ *             kenttä on poissa: `7-P` on maailman seitsemäs kenttä, ja sen
+ *             mitattu 293,0 pitää nousun muodon. Sama pakotettu muoto
  *             kolmatta kertaa, ja huippu 310 on maailman oma: se on maailman 8
  *             keskiarvon (301,0) yläpuolella yhtenä kenttänä mutta maailman
  *             keskiarvo jää sen alle, mikä on juuri se ero jonka finaalin pitää
@@ -614,10 +612,6 @@ const WORLD7 = [
   {
     id: '7-6', world: 'w7', theme: 'cloud', music: 'cloud', width: 320,
     enemiesPer100: 9.8, maxGap: 5, aim: 265, minIntro: 32, intensity: 1.6, attempts: SEARCH,
-  },
-  {
-    id: '7-7', world: 'w7', theme: 'cloud', music: 'cloud', width: 350,
-    enemiesPer100: 10.1, maxGap: 5, aim: 273, minIntro: 32, intensity: 1.75, attempts: SEARCH,
   },
 ];
 

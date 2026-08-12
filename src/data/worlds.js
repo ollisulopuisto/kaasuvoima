@@ -518,7 +518,7 @@ const WORLD_DEFS = [
       { id: 'w7-4', tx: 9, ty: 3, type: 'level', level: '7-4', name: 'SUMUVERHO' },
       { id: 'w7-5', tx: 11, ty: 5, type: 'level', level: '7-5', name: 'KORKEAPAINE' },
       { id: 'w7-6', tx: 13, ty: 3, type: 'level', level: '7-6', name: 'UKKOSPILVI' },
-      { id: 'w7-7', tx: 15, ty: 5, type: 'level', level: '7-7', name: 'MYRSKYN SILMÄ' },
+      { id: 'w7-7', tx: 15, ty: 5, type: 'level', level: '7-P', name: 'POLVI' },
       { id: 'w7-f', tx: 17, ty: 2, type: 'fortress', level: '7-F', name: 'SÄÄHERRA' },
     ],
     links: [

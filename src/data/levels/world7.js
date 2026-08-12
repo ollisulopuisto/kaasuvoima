@@ -63,7 +63,7 @@ import { GENERATED_LEVELS } from '../generated.js';
 
 /** Which of the generated levels belong to this world — the file holds them all. */
 const generated = Object.fromEntries(Object.entries(GENERATED_LEVELS)
-  .filter(([id]) => id.startsWith('7-')));
+  .filter(([id]) => id.startsWith('7-') && id !== '7-7'));
 
 export const WORLD7_LEVELS = {
   /*
@@ -306,8 +306,127 @@ export const WORLD7_LEVELS = {
    * `boss` track until the fight ends, so this line only decides what comes
    * back afterwards, and after the weather lord falls the weather should.
    */
-  /* `7-4`…`7-7`, generated; the spread's position is the play order. */
+  /* `7-4`…`7-6`, generated; the spread's position is the play order. */
   ...generated,
+  /*
+   * 7-P POLVI — se kenttä joka kääntyy.
+   *
+   * Omistaja kysyi tätä näillä sanoilla: *"voisimmeko tehdä kentän, jossa on
+   * sekä vaaka- että pystysuuntaista liikettä, vuorotellen? ensin mennään
+   * oikealle, sitten ylös, sitten oikealle, sitten alas."* Tämä on se kenttä,
+   * ja se on neljä osiota juuri siinä järjestyksessä.
+   *
+   * ## MIKSI TÄMÄ ON YKSI RUUDUKKO EIKÄ NELJÄ KENTTÄÄ
+   *
+   * Neljä peräkkäistä kenttää olisi ollut helpompi rakentaa ja se olisi ollut
+   * eri asia: kentän vaihtuessa kello nollautuu, elämät lasketaan ja kuva
+   * mustuu. Käänteestä tulisi tauko. Tässä käänne on **sivunvaihdon lyönti** —
+   * se sama beat jonka pystykenttä jo omistaa, ja joka oli jo maksettu
+   * (`LevelScene.updateSegment`). Kello pysähtyy sen ajaksi eikä musiikki, ja
+   * kentän tapahtuma pysyy kentän sisällä.
+   *
+   * ## MITÄ KUKIN OSIO ON, JA MIKSI JUURI SE
+   *
+   *   1. `0-19`  **terassi.** Tavallista pilvimaailmaa, jotta käänne tulisi
+   *              jostakin tunnistettavasta. Yksi reikä ja yksi hylly, ja
+   *              tehostus ennen kumpaakaan.
+   *   2. `20-39` **nousu.** Puolat vuorottelevat laidasta laitaan kolmen rivin
+   *              välein — mitattu `wallTiles` on 4, joten kolme otetaan
+   *              paikaltaan ja kenttä ei ole hyppytarkkuuskoe. Sivusiirtymä on
+   *              yksi sarake eikä nolla, samasta syystä kuin 7-T:ssä: nolla
+   *              tarkoittaisi että kentän voi läpäistä hyppimällä paikallaan,
+   *              ja `checkClimbTraverse` sanoo sen ääneen.
+   *   3. `40-59` **harjanne.** Sama vaakakieli kuin osiossa 1, mutta reikä on
+   *              nyt kolmekymmentä riviä syvä. Se on koko kentän ainoa väite:
+   *              *sinä nousit tänne, ja se näkyy alaspäin.*
+   *   4. `60-79` **kuilu.** Laskeutuminen ei ole nousu takaperin. Painovoima
+   *              tekee työn, joten vaikeus on siinä mihin osut: lankut menevät
+   *              limittäin niin ettei yksikään sarake ole auki koko matkaa
+   *              (`checkClimbTraverse`in laskeutuva puolisko), ja jokaisen
+   *              päällä on kolikko, joka on samalla se merkki jota kohti
+   *              tähdätään.
+   *
+   * ## MIKÄ TÄSSÄ ON MITATTU EIKÄ VALITTU
+   *
+   * **Osiorajat ovat kaksikymmentä saraketta**, koska pystyosio on ruudun
+   * levyinen — se on sama `VERTICAL_COLS` jota `checkClimbWidth` vartioi, ja
+   * leveämpi pystyosio kytkisi vaakavierityksen päälle keskellä nousua.
+   *
+   * **Kaistaa ei ole kirjoitettu mihinkään.** `rules.js` lukee vaakaosion
+   * lattian sen omasta sarakevälistä ja ottaa ne viisitoista riviä jotka
+   * päättyvät siihen; nousun suunnan se lukee naapuriosioiden lattioista.
+   * Molemmat olisivat voineet olla lukuja tässä tiedostossa, ja molemmat
+   * olisivat vanhentuneet ensimmäisellä rivillä joka pohjaan lisätään.
+   *
+   * **`time: 400` eikä oletus 300.** Oletus tulee leveydestä, ja tämän kentän
+   * leveys valehtelee: kahdeksankymmenestä sarakkeesta neljäkymmentä on
+   * sellaisia joissa edetään pystysuunnassa. Sama korjaus ja sama syy kuin
+   * 7-T:ssä.
+   *
+   * **Kentän läpäisee kiipeilijäbotti eikä vaakabotti**, ja se seuraa
+   * suoraan siitä mitä kenttä on: `isClimb` (`tools/climb-bot.js`) tuntee nyt
+   * osioidun kentän, koska oikealle juokseva botti kävelisi nousun juurelle ja
+   * raportoisi kentän loppuneen sinne. Reitin todistaa sama `climbGraph` jota
+   * validaattori käyttää, eli väite on yksi ja tarkistettu kahdesti.
+   */
+  '7-P': {
+    theme: 'cloud', bg: 'clouds', music: 'cloud', time: 400,
+    /* Neljä osiota, rajat sarakkeina. `vertical` kertoo kameran kielen; kaikki
+     * muu — kaista, suunta, tulo- ja lähtörivi — luetaan ruudukosta. */
+    segments: [
+      { toCol: 20 },
+      { toCol: 40, vertical: true },
+      { toCol: 60 },
+      { toCol: 80, vertical: true },
+    ],
+    rows: [
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                                                                ',
+      '                                            oo                                  ',
+      '                                                                                ',
+      '                                           ----           o                     ',
+      '                                 o                                              ',
+      '                                               g        g                       ',
+      '                              --------  ##########    ##########                ',
+      '                        o               ##########    ##########                ',
+      '                                                                                ',
+      '                     --------                                    o              ',
+      '                                 o                                              ',
+      '                                                            ------------        ',
+      '                              --------                                          ',
+      '                        o                                                       ',
+      '                                                                         o      ',
+      '                     --------                                                   ',
+      '                                 o                                  ------------',
+      '                                                                                ',
+      '                              --------                                          ',
+      '                        o                                        o              ',
+      '                                                                                ',
+      '                     --------                               ------------        ',
+      '                                 o                                              ',
+      '                                                                                ',
+      '                         f    --------                                   o      ',
+      '                        o                                                       ',
+      '                                                                    ------------',
+      '                     --------                                                   ',
+      '                                 o                                              ',
+      '       o                                                         o              ',
+      '                              --------                                          ',
+      '      ----              o                                   ------------        ',
+      '     !                                                                          ',
+      '                     --------                                                   ',
+      '        oo                                                                      ',
+      '  1              r                                                          F   ',
+      '############    ########################                    ####################',
+      '############    ########################                    ####################',
+    ],
+  },
   '7-F': {
     theme: 'cloud', bg: 'none', music: 'cloud', boss: true, bossVariant: 5,
     chunks: [

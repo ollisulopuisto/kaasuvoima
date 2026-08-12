@@ -30,6 +30,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getLevel } from '../src/data/levels.js';
+import { segmentSlices } from '../src/data/rules.js';
 import {
   WORLDS, tiersOf, tierScore, branchesOf, worldProblems, pipsFor, PIPS, REWARDS,
 } from '../src/data/worlds.js';
@@ -459,7 +460,48 @@ function measureClimb(rows) {
   };
 }
 
+/*
+ * OSIOITU KENTTÄ: SAMA MITTARI, OSIO KERRALLAAN, MATKALLA PAINOTETTUNA.
+ *
+ * Osioitu kenttä mitattuna yhtenä kaistana on mittausvirhe eikä epätarkkuus:
+ * `routeBand` ottaa ne viisitoista riviä joilla aloitusmerkki on, ja 7-P:ssä
+ * kolme neljäsosaa kentästä asuu muualla — ne luettaisiin tyhjänä ilmana, eli
+ * yhtenä kuudenkymmenen sarakkeen pohjattomana kuiluna. Luku olisi järjetön ja
+ * mikään ei sanoisi niin.
+ *
+ * Palat tulevat `segmentSlices`iltä, samalta funktiolta jolta säännöstökin
+ * ottaa ne, ja kumpikin mittari mittaa sen palan omalla akselillaan. Ne
+ * lasketaan yhteen `travel`illä painottaen: molemmat mittarit ovat "sataa
+ * yksikköä kohti", joten vaakaosion sarakkeet ja pystyosion rivit ovat sama
+ * valuutta. Kenttä jonka puolet on nousua saa siis puolet luvustaan nousun
+ * mittarilta, mikä on täsmälleen se mitä pelaaja siitä kentästä pelaa.
+ */
+function measureSegments(rows, segments) {
+  const { slices, error } = segmentSlices(rows, segments);
+  if (error || !slices.length) return measure(rows);
+  const parts = slices.map((s) => ({ s, m: measure(s.rows, { vertical: s.vertical }) }));
+  const weight = (p) => Math.max(1, p.s.travel);
+  const total = parts.reduce((a, p) => a + weight(p), 0);
+  const metrics = {};
+  for (const key of Object.keys(WEIGHTS)) {
+    metrics[key] = parts.reduce((a, p) => a + p.m.metrics[key] * weight(p), 0) / total;
+  }
+  const enemies = {};
+  for (const p of parts) {
+    for (const [k, n] of Object.entries(p.m.enemies)) enemies[k] = (enemies[k] || 0) + n;
+  }
+  return {
+    cols: total,
+    rows: rows.length,
+    segmented: true,
+    enemies,
+    spans: parts.flatMap((p) => p.m.spans),
+    metrics,
+  };
+}
+
 function measure(rows, opts = {}) {
+  if (Array.isArray(opts.segments) && opts.segments.length) return measureSegments(rows, opts.segments);
   if (opts.vertical) return measureClimb(rows);
   const route = routeBand(rows);
   const w = route[0].length;
@@ -642,7 +684,7 @@ for (const world of playOrder) {
      * tall room and no grid can tell those apart. Inert for every level in the
      * game today — none of them carries the flag. */
     const def = getLevel(id);
-    const m = measure(def.rows, { vertical: !!def.vertical });
+    const m = measure(def.rows, { vertical: !!def.vertical, segments: def.segments });
     rows.push({
       id, world: world.id, fortress, ...m, ...score(m.metrics),
     });
