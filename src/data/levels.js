@@ -1,5 +1,6 @@
 import { assemble, assembleTall, CHUNK_ROWS, CHUNKS } from './chunks.js';
 import { normalizeRows } from '../core/utils.js';
+import { DEFAULT_MODE, isBaseMode, modeId, scaleLevel, scaleTime } from './scale.js';
 import { WORLD1_LEVELS } from './levels/world1.js';
 import { WORLD2_LEVELS } from './levels/world2.js';
 import { WORLD3_LEVELS } from './levels/world3.js';
@@ -31,6 +32,16 @@ const LEVEL_DEFS = {
 };
 
 const cache = new Map();
+/**
+ * Ajossa rakennetut kentät, omassa taulussaan eikä `cache`ssa.
+ *
+ * Kaksi eri asiaa asuisi muuten samassa avaruudessa: `cache` on
+ * "tämä kenttä tällä vaikeustasolla, rakennettu kerran", ja rekisteröity kenttä
+ * on "tämä kenttä, piste". Kun ne olivat samassa taulussa, HELPOLLA kerran
+ * rakennettu kenttä vastasi myös NORMAALIn kyselyyn, koska tunnus osui ensin.
+ * Ks. `registerLevel`.
+ */
+const registered = new Map();
 
 /**
  * A level's clock is proportional to its length: the classic one-unit-per-24-
@@ -53,12 +64,31 @@ function buildRows(def) {
   return assemble(def.chunks);
 }
 
-/** Returns { id, theme, bg, music, time, boss, bands, rows } with rows padded. */
-export function getLevel(id) {
-  if (cache.has(id)) return cache.get(id);
+/**
+ * Returns { id, theme, bg, music, time, boss, bands, rows } with rows padded.
+ *
+ * `mode` is the difficulty (see `./scale.js`), and it is a **parameter with a
+ * default rather than a global**: everything that reads a level without playing
+ * it — the world map's secret counts, `tools/difficulty.mjs`,
+ * `tools/curriculum.mjs`, `tools/variety.mjs`, the whole of `verify.mjs` — is
+ * asking about the level as the data file wrote it, and gets exactly that by
+ * not asking for anything else. Only `LevelScene` passes a mode, because only
+ * it is building the level somebody is about to play.
+ *
+ * The cache is keyed by both, so the three modes are three entries and not one
+ * that changes meaning when a player picks a different game.
+ */
+export function getLevel(id, mode = DEFAULT_MODE) {
+  /* Ajossa rekisteröity kenttä on aina se joka rekisteröitiin. Ks.
+   * `registerLevel`: päivän pieru rakentaa oman kenttänsä eikä sitä venytetä
+   * — yksi yritys päivässä ja sama kaikille on eri lupaus kuin vaikeustaso. */
+  if (registered.has(id)) return registered.get(id);
+  const key = isBaseMode(mode) ? id : `${modeId(mode)} ${id}`;
+  if (cache.has(key)) return cache.get(key);
   const def = LEVEL_DEFS[id];
   if (!def) throw new Error(`unknown level: ${id}`);
   const rows = buildRows(def);
+  const scaled = scaleLevel(id, def, rows, mode, arenaColumn(def));
   const level = {
     id,
     boss: false,
@@ -90,7 +120,21 @@ export function getLevel(id) {
     bands: !def.vertical && !def.segments && rows.length > CHUNK_ROWS ? BANDS : null,
     rows,
   };
-  cache.set(id, level);
+  /*
+   * Vaikeustason jäljet, ja ne kirjoitetaan levityksen JÄLKEEN samasta syystä
+   * kuin `bands`: määrittelyssä oleva `time` on kentän oma sana omasta
+   * kellostaan, ja venytetyssä kentässä se on väärä sana. Kello skaalautuu
+   * pituuden mukana ja jää entiseen kattoonsa, `arenaCol` kertoo `arenaColumn`
+   * ille minne areena siirtyi, ja `mode` on se mitä tämä kenttä on — sitä
+   * lukee `LevelScene` kun se kysyy salaisuuksia oikealta listalta.
+   */
+  if (scaled) {
+    level.rows = scaled.rows;
+    level.time = scaleTime(level.time, scaled.timeRatio);
+    level.mode = modeId(mode);
+    if (scaled.arenaCol !== null) level.arenaCol = scaled.arenaCol;
+  }
+  cache.set(key, level);
   return level;
 }
 
@@ -115,9 +159,15 @@ export const levelIds = () => Object.keys(LEVEL_DEFS);
  * ja sen ainoa seuraus on että `secrets.js`:n oma avainvälimuisti pitää
  * eilispäivän listan siihen asti kun sivu ladataan — päivän pierussa ei näytetä
  * salatilastoa, joten se ei näy missään.
+ *
+ * Oma taulunsa `cache`n sijaan, ks. `registered`: rekisteröity kenttä on kentän
+ * ainoa muoto eikä yksi kolmesta, joten se vastaa kyselyyn vaikeustasosta
+ * riippumatta. Juuri sitä päivän pierulta halutaan — yksi yritys päivässä ja
+ * sama kenttä kaikille on eri lupaus kuin vaikeustaso, eikä sitä lupausta voi
+ * pitää kolmessa eri pituudessa.
  */
 export function registerLevel(def) {
-  cache.set(def.id, def);
+  registered.set(def.id, def);
   return def;
 }
 
@@ -132,6 +182,10 @@ export function registerLevel(def) {
  * päättää mitä se siitä ajattelee, eikä tämä keksi sijaintia jota ei ole.
  */
 export function arenaColumn(def) {
+  /* Venytetty kenttä kantaa oman lukunsa, ja se voittaa palikkalaskun: palikat
+   * ovat yhä alkuperäiset, ruudukko ei ole, ja niiden leveyksien summa
+   * osoittaisi kohtaan josta areena on siirtynyt pois. Ks. `scale.js`. */
+  if (def && typeof def.arenaCol === 'number') return def.arenaCol;
   if (!def || !Array.isArray(def.chunks)) return null;
   let col = 0;
   for (const name of def.chunks) {

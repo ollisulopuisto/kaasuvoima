@@ -19,7 +19,7 @@ import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY, GRAVITY_HELD_CUTOFF } from '../level/physics.js';
 import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
-  bestFor, setBest, formatTime, formatDelta,
+  bestFor, setBest, raceKey, formatTime, formatDelta,
 } from '../core/timeattack.js';
 import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
@@ -92,6 +92,32 @@ const POUND_WAVE_FLOOR = 0.3;
 const POUND_LIFT = 20;
 const POUND_SHAKE_MIN = 1.5;
 const POUND_SHAKE_RANGE = 4.5;
+
+/*
+ * MAAHANISKU RIKKOO LATTIAN, JA VASTA KUN SE ON ANSAITTU KAHDESTI.
+ *
+ * Kaksi ehtoa, ja ne ovat tarkoituksella eri lajia — toinen on se mitä pelaaja
+ * on kerännyt, toinen se mitä hän juuri teki:
+ *
+ *   - **POUND_BREAK_LEVEL** on voimataso. Tämä on ainoa asia koko liikkeessä
+ *     jonka voimataso *avaa* eikä vain vahvista, ja siksi se on kirjoitettu
+ *     tähän eikä pujahtanut sisään: `poundImpact`in oma lupaus on "voimataso
+ *     vain vahvistaa", ja tämä on siihen poikkeus jonka omistaja pyysi
+ *     ("at least when the character is sufficiently powered up"). Kolme on se
+ *     taso jolla peli muutenkin lakkaa olemasta varovainen — `shotsPerPress`
+ *     nousee kahteen ja pierusta tulee `bigfart` samalla luvulla.
+ *   - **POUND_BREAK_AT** on pudotuksen korkeus, ja se on tasan sama raja kuin
+ *     `POUND_KILL_AT`: se jolla isku muuttuu kaadosta tapoksi. Yksi raja eikä
+ *     kaksi, koska "tämä isku oli tosissaan" on yksi asia, ja pelaajan pitää
+ *     pystyä oppimaan se kerran.
+ *
+ * Ei siis uutta reittiä tiilen läpi ohi sen sopimuksen jonka `burstBricks`
+ * kirjoittaa: mitään muuta kuin `B` tämä ei koske, eikä `B`:tä joka piilottaa
+ * jotain. Leveys on iskun oma `reach`, eli sama luku joka päättää ketkä
+ * kaatuvat — reikä lattiassa on tasan sen levyinen kuin isku näytti olevan.
+ */
+const POUND_BREAK_LEVEL = 3;
+const POUND_BREAK_AT = POUND_KILL_AT;
 
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
@@ -864,7 +890,12 @@ export class LevelScene {
    */
   constructor(game, levelId, def) {
     this.game = game;
-    this.def = def || getLevel(levelId);
+    /* Vaikeustaso luetaan pelistä eikä kentästä, ja se annetaan `getLevel`ille
+     * eikä asetettu mihinkään globaaliin: kartan salaisuuslaskuri ja portti
+     * kysyvät samaa kenttää ilman tasoa ja saavat sen mitä datatiedostossa
+     * lukee. Ks. `src/data/scale.js`. */
+    this.mode = (game && game.mode) || undefined;
+    this.def = def || getLevel(levelId, this.mode);
     this.id = levelId;
     this.theme = this.def.theme;
 
@@ -1056,7 +1087,7 @@ export class LevelScene {
       delta: null,
       /** Framea käänteisenä sen jälkeen kun lukema vaihtui. */
       flash: 0,
-      best: bestFor(this.game.state, this.id),
+      best: bestFor(this.game.state, raceKey(this.id, this.mode)),
     };
   }
 
@@ -1116,7 +1147,8 @@ export class LevelScene {
     const r = this.race;
     if (!r) return;
     const before = r.best;
-    const record = setBest(this.game.state, this.id, { frames: r.frames, marks: r.marks });
+    const record = setBest(this.game.state, raceKey(this.id, this.mode),
+      { frames: r.frames, marks: r.marks });
     if (record) this.game.persist();
     this.raceResult = { frames: r.frames, best: before ? before.frames : null, record };
     if (record && before) Sfx.play('yeah');
@@ -1417,11 +1449,19 @@ export class LevelScene {
    *     you get from an ordinary jump's worth of height: the everyday ground
    *     pound stuns, and the stomp is still the move that kills. Only a fall
    *     with real room above it turns the impact lethal.
-   *   - **the power level only strengthens.** It widens the reach and it lowers
-   *     the bar the shockwave needs, and it never gates anything: at power 0 a
-   *     dive from the ceiling of the room throws the wave exactly as it does at
-   *     power 5, it just has to be earned with the whole height instead of half
-   *     of it.
+   *   - **the power level strengthens, and gates exactly one thing.** It widens
+   *     the reach and it lowers the bar the shockwave needs, and neither of
+   *     those is ever unavailable: at power 0 a dive from the ceiling of the
+   *     room throws the wave exactly as it does at power 5, it just has to be
+   *     earned with the whole height instead of half of it.
+   *
+   *     The one exception is **breaking the floor**, and it is written as an
+   *     exception rather than smuggled in as a stronger version of something:
+   *     under `POUND_BREAK_LEVEL` a lethal dive lands on a brick and stays on
+   *     it. That is the owner's ask — the smash goes through tiles "at least
+   *     when the character is sufficiently powered up" — and it is also the
+   *     only reading that keeps the move from replacing the tail and the
+   *     charge, both of which are power-ups you have to go and find.
    *
    * And spines beat all of it. `e.spiky` is skipped outright rather than merely
    * doing nothing, so a spiky walker under the landing is left standing and the
@@ -1438,6 +1478,7 @@ export class LevelScene {
     const waveAt = Math.max(POUND_WAVE_FLOOR, POUND_WAVE_AT - p.powerLevel * POUND_WAVE_PER_LEVEL);
     const wave = t >= waveAt;
     const shake = POUND_SHAKE_MIN + t * POUND_SHAKE_RANGE;
+    const breaks = p.powerLevel >= POUND_BREAK_LEVEL && t >= POUND_BREAK_AT;
     const feet = p.y + p.h;
 
     /* The numbers, kept where they can be read back. The sound, the shake, the
@@ -1446,7 +1487,7 @@ export class LevelScene {
      * what "mitattu, ei muistettu" is about. */
     this.lastPound = {
       x: p.cx, y: feet, fromY: p.poundFromY, fall: p.y - p.poundFromY, room: p.y,
-      strength: t, reach, kills, wave, shake,
+      strength: t, reach, kills, wave, shake, breaks, broke: 0,
     };
 
     for (let i = 0; i < 6; i++) {
@@ -1477,8 +1518,90 @@ export class LevelScene {
       else e.hitByProjectile(dir);
     }
 
+    /*
+     * Lattia viimeisenä, ja **jalkojen alta** eikä ympäriltä.
+     *
+     * Rivi on se johon jalat juuri osuivat, `feet` on siinä rivissä tai sen
+     * ylärajalla, joten `feet / TILE` osoittaa siihen laattaan jonka päällä
+     * seistään. Reikä syntyy siis siihen mihin isku näyttää osuneen, ja pelaaja
+     * putoaa sen läpi — mikä on koko liikkeen paras palkinto ja samalla sen
+     * hinta, koska alla voi olla mitä tahansa.
+     *
+     * Viimeisenä siksi että viholliset on jo käsitelty: tiilen katoaminen
+     * tiputtaa sen päällä seisovan, ja kaatuminen kuuluu iskuun eikä
+     * putoamiseen.
+     */
+    if (breaks) {
+      const row = Math.floor(feet / TILE);
+      const from = Math.floor((p.cx - reach) / TILE);
+      const to = Math.floor((p.cx + reach) / TILE);
+      const tiles = [];
+      for (let tx = from; tx <= to; tx++) tiles.push([tx, row]);
+      this.lastPound.broke = this.burstBricks(tiles);
+      if (this.lastPound.broke) Sfx.play('burst');
+    }
+
     this.shake(shake);
     Sfx.play('slam');
+  }
+
+  /**
+   * MITÄ PELAAJAN ISKU RIKKOO, YHDESSÄ PAIKASSA.
+   *
+   * Kolme liikettä osuu nyt tiileen kyljestä tai päältä — pusku (`smashThrough`,
+   * `entities/player.js`), hännänpyörähdys (`tailSwipe`) ja maahanisku
+   * (`poundImpact`) — ja ne kysyvät kaikki tästä. Sopimus on se joka
+   * `smashThrough`in yllä on kirjoitettu auki tiili tiileltä, ja se on
+   * lyhyesti: **vain `B`, eikä sellainen `B` joka piilottaa jotain.**
+   *
+   * Yhtenä metodina eikä kolmena kopiona, koska kolme kopiota on kolme tapaa
+   * olla eri mieltä siitä mikä on rikottava tiili — ja se erimielisyys näkyisi
+   * pelaajalle vasta siinä että yksi liike söi salaisuuden jonka toinen jätti.
+   * Piilottava tiili on kaikille sama ei: sen palkinto kuuluu sille joka puskee
+   * sen alta, eikä isku saa olla tapa hävittää asioita.
+   *
+   * @returns montako tiiltä hajosi.
+   */
+  burstBricks(tiles) {
+    let broken = 0;
+    for (const [tx, ty] of tiles) {
+      if (this.tileAt(tx, ty) !== T.BRICK) continue;
+      if (this.brickSecret && this.brickSecret(tx, ty)) continue;
+      this.smashBrick(tx, ty);
+      broken++;
+    }
+    return broken;
+  }
+
+  /**
+   * HÄNNÄNPYÖRÄHDYS RIKKOO TIILEN KYLJESTÄ.
+   *
+   * Häntä oli tähän asti pelkkä ase: se kaatoi vihollisen ja lensi seinän läpi
+   * kuin sitä ei olisi. Se on kolmas tapa rikkoa tiili (`B`) päänpuskun ja
+   * potkaistun kuoren jälkeen, ja se sopii samaan sopimukseen kuin puskukin —
+   * ks. `burstBricks`.
+   *
+   * Kutsutaan `collisions()`ista eikä pelaajan omasta päivityksestä, koska
+   * pyörähdyksen laatikko lasketaan siellä jo kerran ja kaksi lukijaa samalle
+   * geometrialle on kaksi tapaa saada eri vastaus. Kerran pyörähdystä kohti
+   * riittää ilman erillistä lippua: rikottu tiili ei ole enää tiili, joten
+   * seuraava frame ei löydä siitä mitään rikottavaa.
+   */
+  tailSwipe(p) {
+    const box = p.tailBox;
+    if (!box) return;
+    const x0 = Math.floor(box.x / TILE);
+    const x1 = Math.floor((box.x + box.w - 1) / TILE);
+    const y0 = Math.floor(box.y / TILE);
+    const y1 = Math.floor((box.y + box.h - 1) / TILE);
+    const tiles = [];
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) tiles.push([tx, ty]);
+    }
+    if (this.burstBricks(tiles)) {
+      Sfx.play('burst');
+      this.shake(2);
+    }
   }
 
   smashBrick(tx, ty) {
@@ -1946,8 +2069,8 @@ export class LevelScene {
   noteBand(feetY) {
     if (!this.def.bands || !this.game.state) return;
     const band = this.bandAt(feetY);
-    if (band <= 0) noteSecret(this.game.state, this.id, SKY);
-    else if (band >= CAVE_BAND) noteSecret(this.game.state, this.id, CAVE);
+    if (band <= 0) noteSecret(this.game.state, this.id, SKY, this.mode);
+    else if (band >= CAVE_BAND) noteSecret(this.game.state, this.id, CAVE, this.mode);
   }
 
   /**
@@ -2029,7 +2152,7 @@ export class LevelScene {
     const meta = info(ch);
     if (!meta.bumpable) return;
     const raw = this.rawTileAt(tx, ty);
-    const found = () => noteSecret(this.game.state, this.id, tileKey(raw, tx, ty));
+    const found = () => noteSecret(this.game.state, this.id, tileKey(raw, tx, ty), this.mode);
 
     const key = `${tx},${ty}`;
     if (this.bumps.has(key)) return;
@@ -2961,6 +3084,11 @@ export class LevelScene {
     const p = this.player;
     if (p.dying || p.transit) return;
     const spin = p.spinBox;
+    /* Tiilet ensin ja vihollisilta erikseen: sama pyörähdys tekee molemmat, ja
+     * ehto kummallekin on `p.spin > 0` eikä toistensa lopputulos. Seinän takana
+     * seisova vihollinen kaatuu samalla pyörähdyksellä joka seinän avasi, mikä
+     * on juuri se mitä ruudulla näyttää tapahtuvan. */
+    if (spin) this.tailSwipe(p);
     // The stomp test has to use the speed the player *arrived* with. Bouncing
     // off the first enemy flips vy upwards, and without this snapshot every
     // other enemy landed on in the same frame would read as a side-on hit.

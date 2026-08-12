@@ -13,6 +13,8 @@ import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { ShareScene } from './scenes/share.js';
 import { DailyScene } from './scenes/daily.js';
+import { DifficultyScene } from './scenes/difficulty.js';
+import { difficultyLabel, modeId } from './data/scale.js';
 import { dailyBegin, dailyProgress, dailyFinish, DAILY_TITLE } from './core/daily.js';
 import { qualifies, GAME_VERSION } from './core/scores.js';
 import { takeChallenge } from './core/challenge.js';
@@ -96,6 +98,19 @@ class Game {
     this.stepsThisFrame = 0;
     this._fpsFrames = 0;
     this._fpsSince = 0;
+  }
+
+  /**
+   * VAIKEUSTASO, ja se luetaan täältä eikä mistään globaalista.
+   *
+   * Se asuu tallennuksessa (`state.mode`), koska se on osa kierrosta eikä
+   * istunnon valinta — JATKA PELIÄ jatkaa sitä peliä jota oltiin pelaamassa.
+   * Tämä lukija normalisoi puuttuvan ja tuntemattoman arvon oletukseksi, joten
+   * vanha tallennus, esittelytilan tekotila ja päivän pierun tilapäinen tila
+   * ovat kaikki HELPPO ilman että yksikään niistä tietää tästä mitään.
+   */
+  get mode() {
+    return modeId(this.state && this.state.mode);
   }
 
   toast(text, frames = 90) {
@@ -379,9 +394,29 @@ class Game {
     if (typeof this.state.continues !== 'number') this.state.continues = 0;
   }
 
-  newGame() {
+  /**
+   * UUSI PELI kysyy ensin, ja `newGame` ei kysy mitään.
+   *
+   * Jako on tarkoituksellinen ja se on portin takia yhtä paljon kuin pelaajan:
+   * `newGame()` tarkoittaa yhä "aloita kierros nyt", eli sen jälkeen ollaan
+   * kartalla, ja kymmenen väitettä nojaa juuri siihen. Valinta on siis oma
+   * ruutunsa oman napin takana (`scenes/difficulty.js`), ja se päättyy samaan
+   * `newGame`iin johon tämä napin painallus ennenkin päättyi.
+   */
+  chooseDifficulty() {
+    this.setScene(new DifficultyScene(this, (mode) => this.newGame(mode)));
+  }
+
+  /**
+   * `mode` oletuksena se jolla nyt pelataan, ja oletus lasketaan ennen
+   * `Save.clear()`iä — parametrin oletusarvo evaluoituu kutsuhetkellä, runko
+   * vasta sen jälkeen. Ilman sitä järjestystä `newGame()` ilman argumenttia
+   * lukisi juuri tyhjennetyn tallennuksen ja vastaisi aina HELPPO.
+   */
+  newGame(mode = this.mode) {
     Save.clear();
     this.adoptState(Save.load());
+    this.state.mode = modeId(mode);
     this.state.node = startNode(WORLDS[0]).id;
     this.persist();
     this.toWorldMap();
@@ -887,7 +922,18 @@ class Game {
        * Sääntö jota ei kerroteta siinä paikassa jossa se puree on ansa, ja
        * tämä on se paikka. Näppäinrivi vaihtuu samasta syystä — 1 ja 2 eivät
        * tee siellä mitään, ja 5 tekee. */
-      drawText(ctx, this.timeAttack ? PAUSE_TITLE : 'TAUKO', W / 2, 104,
+      /* Vaikeustaso otsikossa, ja tämä on se ruutu jossa se kuuluu lukea:
+       * kartan yläpalkissa on tasan yksi paikka ja AIKA-AJO voittaa sen
+       * (ks. `WorldMapScene.drawTitleBar`), joten tauko on ainoa paikka jossa
+       * molemmat mahtuvat. HELPPO ei lisää mitään — `difficultyLabel` on tyhjä
+       * silloin — eli tavallinen tauko lukee `TAUKO` kuten ennenkin.
+       *
+       * Pisin mahdollinen rivi on `TAUKO - KELLO KÄY  NORMAALI`, 27 merkkiä
+       * = 162 px, keskitettynä 320:een eli 79…241. Laatikko on koko ruudun
+       * levyinen, joten rivi mahtuu siihen kokonaan. */
+      const tier = difficultyLabel(this.mode);
+      const title = `${this.timeAttack ? PAUSE_TITLE : 'TAUKO'}${tier ? `  ${tier}` : ''}`;
+      drawText(ctx, title, W / 2, 104,
         { color: '#ffffff', align: 'center', shadow: '#303048' });
       items.forEach((it, i) => {
         const on = i === this.pauseIndex;

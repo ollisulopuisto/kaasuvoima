@@ -742,6 +742,176 @@ const report = await page.evaluate(async () => {
         + `, pomo rgb(${bossColor.join(',')}) ${bossTilt}`
         + `; eri ruutuja 12 framessa: isku ${waveFrames}, pomo ${bossFrames}`);
     }
+
+    /* 12. MAAHANISKU RIKKOO LATTIAN, ja kolme asiaa siinä voi mennä rikki:
+     *     liike joka ei riko mitään, liike joka rikkoo aina, ja liike joka
+     *     rikkoo sen mitä se ei saa rikkoa.
+     *
+     *     Koekenttä on tässä eikä oikea kenttä, koska ehto on korkeus JA
+     *     voimataso, ja se vaatii tiiliriviä täsmälleen jalkojen alla. Riviä ei
+     *     valita silmällä vaan mitataan: `brickSecret` päättää salaisuuden
+     *     paikan hajautuksesta, joten koe etsii sarakkeen jossa yksikään tiili
+     *     ei piilota mitään — muuten kokeen tulos riippuisi siitä mihin kohtaan
+     *     ruudukkoa se sattui kirjoittamaan.
+     */
+    {
+      const W = 48;
+      const floorRows = (bricksAt) => {
+        const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+        const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+        put(13, 0, '#'.repeat(W));
+        put(14, 0, '#'.repeat(W));
+        put(12, 1, '1');
+        put(9, 6, '!');
+        put(12, 44, 'F');
+        // Tiililattia keskelle, ja sen alle kuilu johon läpi mennään.
+        put(13, bricksAt, 'B'.repeat(6));
+        return rows;
+      };
+      const brickDef = (bricksAt) => ({
+        id: 'bFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows: floorRows(bricksAt),
+      });
+
+      /* Sarake jossa kuudesta lattiatiilestä yksikään ei piilota mitään. */
+      let at = 20;
+      {
+        const probe = new LevelScene(game, 'bFix', brickDef(20));
+        for (let x = 20; x < 34; x++) {
+          let clean = true;
+          for (let i = 0; i < 6; i++) if (probe.brickSecret(x + i, 13)) clean = false;
+          if (clean) { at = x; break; }
+        }
+      }
+
+      const dive = (power, fromAbove) => {
+        reset(power);
+        const s = new LevelScene(game, 'bFix', brickDef(at));
+        game.setScene(s);
+        const i = mkInput();
+        for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+        // Jalat tiilirivin päälle ja sieltä ylös se korkeus jota kokeillaan.
+        s.player.x = (at + 2) * 16;
+        s.player.y = 13 * 16 - s.player.h - fromAbove;
+        s.player.vy = 0;
+        s.player.onGround = false;
+        i.held.down = true; i.pressed.jump = true; i.held.jump = true;
+        s.update(i); i.pressed = blank(); i.held.jump = false;
+        let f = 1;
+        while (f < 400 && !s.lastPound) { s.update(i); f++; }
+        return s;
+      };
+
+      const weak = dive({ type: 'shroom', level: 5 }, 24);
+      const strongLow = dive({ type: 'shroom', level: 1 }, 150);
+      const strong = dive({ type: 'shroom', level: 5 }, 150);
+
+      expect('maahanisku rikkoo tiilen vain korkealta ja vain kyllin vahvana',
+        !!weak.lastPound && !weak.lastPound.broke
+        && !!strongLow.lastPound && !strongLow.lastPound.broke
+        && !!strong.lastPound && strong.lastPound.broke > 0,
+        `matala voima 5: ${weak.lastPound && weak.lastPound.broke} tiiltä`
+        + ` (voima ${weak.lastPound && weak.lastPound.strength.toFixed(2)})`
+        + `, korkea voima 1: ${strongLow.lastPound && strongLow.lastPound.broke} tiiltä`
+        + `, korkea voima 5: ${strong.lastPound && strong.lastPound.broke} tiiltä`);
+
+      /* Ja se ei saa syödä salaisuutta. Sama sopimus kuin puskulla ja
+       * hännällä — `LevelScene.burstBricks` — mitattuna eikä luvattuna.
+       *
+       * Oikeasta kentästä eikä koekentästä, ja se on ehto: `brickSecret` on
+       * paikan hajautus, joten koekentän tiilirivistä tulee salainen vain
+       * sattumalta — ensimmäinen versio tästä kaatui juuri siihen, kuudessa
+       * tiilessä ei ollut yhtään. Peli piilottaa satoja, joten kysytään
+       * peliltä. */
+      {
+        reset({ type: 'shroom', level: 5 });
+        let hidden = [];
+        let where = null;
+        for (const id of levelIds()) {
+          const s = new LevelScene(game, id);
+          const found = [];
+          for (let x = 0; x < s.w && found.length < 8; x++) {
+            for (let y = 0; y < s.h; y++) {
+              if (s.rawTileAt(x, y) === 'B' && s.brickSecret(x, y)) found.push([x, y]);
+            }
+          }
+          if (found.length) { hidden = found; where = { id, s }; break; }
+        }
+        const kept = where
+          && where.s.burstBricks(hidden) === 0
+          && hidden.every(([x, y]) => where.s.tileAt(x, y) === 'B');
+        expect('mikään isku ei riko tiiltä joka piilottaa jotain', !!kept,
+          where ? `${where.id}: ${hidden.length} piilottavaa tiiltä jäi paikalleen`
+            : 'yhdessäkään kentässä ei ollut salaista tiiltä');
+      }
+    }
+
+    /* 13. HÄNNÄNPYÖRÄHDYS RIKKOO TIILEN KYLJESTÄ, ja vain kyljestä johon
+     *     häntä osoittaa. Suunta on koko väite: seinä selän takana ei saa
+     *     hajota, koska muuten liike ei ole isku vaan säde.
+     */
+    {
+      const W = 48;
+      const wallRows = () => {
+        const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+        const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+        put(13, 0, '#'.repeat(W));
+        put(14, 0, '#'.repeat(W));
+        put(12, 1, '1');
+        put(9, 6, '!');
+        put(12, 44, 'F');
+        /* Rivit 11 ja 12, koska juuri ne kaksi häntä yltää: pelaajan jalat
+         * ovat rivin 13 päällä ja `tailBox` on koko vartalon korkuinen, eli
+         * voimatasolla 2 (h 30 px) se kattaa y 178…207 = rivit 11 ja 12.
+         * Rivi 10 olisi väite hännästä joka yltää pään yli. */
+        for (const y of [11, 12]) { put(y, 20, 'B'); put(y, 16, 'B'); }
+        return rows;
+      };
+      const tailDef = () => ({
+        id: 'tFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows: wallRows(),
+      });
+
+      const swipe = (facing) => {
+        reset({ type: 'leaf', level: 2 });
+        const s = new LevelScene(game, 'tFix', tailDef());
+        game.setScene(s);
+        const i = mkInput();
+        for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+        /* Kylki kiinni siinä seinässä johon häntä osoittaa, ja toinen seinä
+         * neljän sarakkeen päässä — kauempana kuin hännän ulottuvuus (14 px)
+         * kummallakaan puolella. */
+        s.player.x = facing > 0 ? 20 * 16 - s.player.w : 17 * 16;
+        s.player.y = 13 * 16 - s.player.h;
+        s.player.vy = 0;
+        s.player.facing = facing;
+        // Juoksunappi pyöräyttää hännän; suunta pidetään käsin, koska
+        // kävelemään lähtevä pelaaja kääntyisi ja koe mittaisi kävelyä.
+        i.pressed.run = true;
+        for (let f = 0; f < 24; f++) {
+          s.player.facing = facing;
+          s.update(i);
+          i.pressed = blank();
+        }
+        return s;
+      };
+
+      const right = swipe(1);
+      const left = swipe(-1);
+      const gone = (s, x) => [11, 12].filter((y) => s.tileAt(x, y) !== 'B').length;
+      /* Salaiset tiilet eivät hajoa, joten mittari on "vähintään yksi hajosi
+       * sillä puolella jonne häntä osoitti, eikä yhtään toisella" — ja
+       * salaisten määrä luetaan kentästä, jotta koe ei vaadi kuutta hajonnutta
+       * tiiltä silloin kun yksi niistä on pyhä. */
+      const holy = (s, x) => [11, 12].filter((y) => s.brickSecret(x, y)).length;
+      expect('hännänpyörähdys rikkoo tiilen siltä puolelta jonne häntä osoittaa',
+        gone(right, 20) === 2 - holy(right, 20) && gone(right, 16) === 0
+        && gone(left, 16) === 2 - holy(left, 16) && gone(left, 20) === 0,
+        `oikealle: ${gone(right, 20)}/${2 - holy(right, 20)} oikealta, ${gone(right, 16)} vasemmalta`
+        + `; vasemmalle: ${gone(left, 16)}/${2 - holy(left, 16)} vasemmalta, ${gone(left, 20)} oikealta`);
+    }
   } catch (e) {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
   }
@@ -3240,6 +3410,91 @@ const report = await page.evaluate(async () => {
     }
     expect('at least one level is tall enough to have a hidden band', !!tall,
       tall ? `${tall.rows.length} riviä` : 'ei korkeita kenttiä');
+
+    /* ---------------------------- vaikeustasot --------------------------- */
+    /*
+     * VAIKEUSTASOT, ks. `src/data/scale.js`.
+     *
+     * Kolme väitettä, ja ensimmäinen on niistä tärkein: **HELPPO on merkilleen
+     * se peli joka datatiedostoissa lukee.** Kaikki mitattu — `difficulty.js`,
+     * `curriculum.mjs`, `variety.mjs` ja jokainen tämän tiedoston 60 kentän
+     * kierros — koskee sitä kenttää, joten jos oletustaso poikkeaisi siitä
+     * yhdenkin merkin verran, jokainen niistä luvuista olisi mitattu kentästä
+     * jota kukaan ei pelaa. Vertailu on tehty rivi riviltä eikä leveyksinä.
+     *
+     * Loput kaksi ovat se mitä venytys lupaa (`stretch`, `crowd`) ja se mitä se
+     * ei saa rikkoa. Jälkimmäinen on lista koska juuri niin nämä viat
+     * ilmenisivät: kaksi lippua, kadonnut aloitusruutu, nelinumeroinen kello
+     * joka ei mahdu nauhaan, venynyt kiipeily, vihollinen seinän sisällä. Ne
+     * ovat kaikki hiljaisia — peli käynnistyy ja näyttää oikealta.
+     */
+    {
+      const { MODES } = await import('/src/data/scale.js');
+      const foes = (rows) => (rows.join('').match(/[gkfprcxAOPH]/g) || []).length;
+      const marks = (rows, re) => (rows.join('').match(re) || []).length;
+
+      expect('HELPPO on merkilleen se kenttä joka datatiedostossa lukee',
+        levelIds().every((id) => getLevel(id, 'easy').rows.join('\n') === getLevel(id).rows.join('\n')),
+        `${levelIds().length} kenttää`);
+
+      const broken = [];
+      const shape = [];
+      const savedMode = game.state.mode;
+      for (const m of MODES) {
+        let base = 0; let grown = 0; let crowdBase = 0; let crowd = 0;
+        for (const id of levelIds()) {
+          const b = getLevel(id);
+          const l = getLevel(id, m.id);
+          const say = (why) => broken.push(`${m.id} ${id}: ${why}`);
+          const problems = validateLevel(l.rows, budget, { vertical: !!l.vertical });
+          if (problems.length) say(problems[0]);
+          const starts = marks(l.rows, /1/g);
+          const exits = marks(l.rows, /F/g) + marks(l.rows, /b/g);
+          if (starts !== 1) say(`${starts} aloitusruutua`);
+          if (exits !== 1) say(`${exits} uloskäyntiä`);
+          if (!(l.time > 0) || l.time > 999) say(`kello ${l.time} ei mahdu nauhaan`);
+          if (l.vertical && l.rows[0].length !== b.rows[0].length) say('kiipeily venyi');
+          base += b.rows[0].length; grown += l.rows[0].length;
+          crowdBase += foes(b.rows); crowd += foes(l.rows);
+
+          /* Ja se rakentuu kohtaukseksi. Samat kaksi tarkistusta kuin tämän
+           * tiedoston 60 kentän kierroksella, koska juuri ne kaksi ovat se mitä
+           * ruudukon liittäminen väärästä kohdasta tuottaisi. */
+          reset();
+          game.state.mode = m.id;
+          const scene = new LevelScene(game, id);
+          const sx = Math.floor(scene.player.x / 16);
+          const sy = Math.floor((scene.player.y + scene.player.h - 1) / 16);
+          if (isSolid(scene.tileAt(sx, sy))) say('aloitus kiinteän laatan sisällä');
+          const stuck = scene.entities.filter((e) => {
+            if (e.constructor.name === 'Plant' || e.kind === 'hazard') return false;
+            return isSolid(scene.tileAt(Math.floor(e.cx / 16), Math.floor((e.y + e.h - 1) / 16)));
+          });
+          if (stuck.length) say(`${stuck.length} vihollista seinän sisällä`);
+        }
+        shape.push({ id: m.id, stretch: grown / base, crowd: crowd / crowdBase });
+      }
+      game.state.mode = savedMode;
+
+      expect('jokainen kenttä jokaisella vaikeustasolla on sääntöjen mukainen ja pelattavissa',
+        broken.length === 0,
+        broken.length ? broken.slice(0, 4).join(' / ') : `${MODES.length * levelIds().length} kenttää`);
+
+      /* Toleranssi on ±10 %, ja se on venytyksen oma rakenne eikä löysyys:
+       * pätkiä lisätään kokonaisina, joten tavoitteen viimeinen askel ylittää
+       * sen aina yhden pätkän verran. Mitattu tälle datalle 2,03x ja 3,01x. */
+      const wants = { easy: 1, normal: 2, hard: 3 };
+      const off = shape.filter((r) => Math.abs(r.stretch - wants[r.id]) > wants[r.id] * 0.1);
+      expect('venytys osuu siihen pituuteen jonka taso lupaa', off.length === 0,
+        shape.map((r) => `${r.id} ${r.stretch.toFixed(2)}x`).join('  '));
+
+      /* Vihollisia tulee lisää **enemmän kuin venytys yksin toisi**, eli
+       * tiheys kasvaa. Ilman tätä ehtoa 3x pituus ja 3x vihollisia olisi
+       * täsmälleen sama peli kolmesti, ja omistaja pyysi kahta asiaa. */
+      const denser = shape.every((r) => (r.id === 'easy' ? r.crowd === 1 : r.crowd > r.stretch * 1.2));
+      expect('vihollisia tulee tiheämpään eikä vain pidemmälle matkalle', denser,
+        shape.map((r) => `${r.id} ${r.crowd.toFixed(2)}x vihollisia / ${r.stretch.toFixed(2)}x pituutta`).join('  '));
+    }
 
     /* Red before green (DESIGN.md 7), for the two ways a hidden room turns into
      * a trap. Both are built here rather than borrowed from a real level,

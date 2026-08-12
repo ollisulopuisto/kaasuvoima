@@ -101,9 +101,10 @@ const anyInk = (rows, from, to) => {
  * against, and it is also the filter that stops a save from claiming a secret
  * that no longer exists (`foundKeys`).
  */
-export function secretKeys(levelId) {
-  if (keyCache.has(levelId)) return keyCache.get(levelId);
-  const def = getLevel(levelId);
+export function secretKeys(levelId, mode) {
+  const cacheKey = mode ? `${mode} ${levelId}` : levelId;
+  if (keyCache.has(cacheKey)) return keyCache.get(cacheKey);
+  const def = getLevel(levelId, mode);
   const rows = def.rows;
   const keys = [];
 
@@ -125,11 +126,11 @@ export function secretKeys(levelId) {
     }
   }
 
-  keyCache.set(levelId, keys);
+  keyCache.set(cacheKey, keys);
   return keys;
 }
 
-export const secretTotal = (levelId) => secretKeys(levelId).length;
+export const secretTotal = (levelId, mode) => secretKeys(levelId, mode).length;
 
 /**
  * What this save has found in that level, filtered against what is there now.
@@ -138,17 +139,26 @@ export const secretTotal = (levelId) => secretKeys(levelId).length;
  * remembers the old one would otherwise report 6/5 forever. Filtering makes the
  * stale entry read as "not found", which is the truthful reading — that secret
  * is gone.
+ *
+ * **Ja se on myös koko vastaus vaikeustasoihin.** Venytetty kenttä on eri
+ * ruudukko, joten sen tiilet ovat eri tiiliä (`brickHides` on paikan hajautus),
+ * ja tallennuksessa on yhä yksi lista kenttätunnusta kohti. Kolmatta avainta ei
+ * kuitenkaan tarvita: HELPOLLA löydetty avain jota NORMAALIssa ei ole
+ * suodattuu pois täsmälleen niin kuin poistetun tiilen avain suodattuu, eli
+ * lukema on aina sen kentän lukema jota juuri nyt pelataan. Hinta on yksi ja se
+ * sanotaan ääneen: sama avain voi sattua olemaan kelvollinen kahdella tasolla,
+ * ja silloin toisella löydetty näkyy toisella löydettynä.
  */
-export function foundKeys(state, levelId) {
+export function foundKeys(state, levelId, mode) {
   const mine = state && state.secrets ? state.secrets[levelId] : null;
   if (!mine || !mine.length) return [];
-  return secretKeys(levelId).filter((k) => mine.includes(k));
+  return secretKeys(levelId, mode).filter((k) => mine.includes(k));
 }
 
 /** `{ found, total }` — the only shape the map is allowed to see. */
-export const secretTally = (state, levelId) => ({
-  found: foundKeys(state, levelId).length,
-  total: secretTotal(levelId),
+export const secretTally = (state, levelId, mode) => ({
+  found: foundKeys(state, levelId, mode).length,
+  total: secretTotal(levelId, mode),
 });
 
 /**
@@ -160,8 +170,8 @@ export const secretTally = (state, levelId) => ({
  * so the demo can bump every brick in 1-1 without spending the player's
  * discoveries. Persisting here would have taken that guarantee away.
  */
-export function noteSecret(state, levelId, key) {
-  if (!state || !secretKeys(levelId).includes(key)) return false;
+export function noteSecret(state, levelId, key, mode) {
+  if (!state || !secretKeys(levelId, mode).includes(key)) return false;
   if (!state.secrets) state.secrets = {};
   const list = state.secrets[levelId] || (state.secrets[levelId] = []);
   if (list.includes(key)) return false;

@@ -40,6 +40,8 @@
  * ja hänen oman ennätyksensä välillä, ja tässä pelissä ne ovat sama ihminen.
  */
 
+import { isBaseMode, modeId } from '../data/scale.js';
+
 /**
  * Montako välipistettä radalla on. Jako on elävä vain jos sillä on mihin
  * verrata *kesken* kentän, ja pelkkä loppuaika ei sitä anna. Kahdeksan on
@@ -93,6 +95,19 @@ export function bestTimes(state) {
   if (!state.bestTimes || typeof state.bestTimes !== 'object') state.bestTimes = {};
   return state.bestTimes;
 }
+
+/**
+ * Ennätyksen avain: kenttätunnus HELPOLLA, vaikeustaso edessä muuten.
+ *
+ * NORMAALIn 2-3 on kaksi kertaa pidempi rata kuin HELPON 2-3, ja sama nimi
+ * niille tarkoittaisi että toisella tasolla ajettu aika "voittaa" toisella
+ * ajetun tai jää sen alle. Ennätys on lupaus siitä että sama rata ajettiin
+ * nopeammin, ja se lupaus pitää vain jos avain tuntee radan.
+ *
+ * HELPPO pitää paljaan tunnuksen, jotta jo ajetut ajat ovat yhä omistajansa —
+ * sama peruste kuin `DEFAULT_SAVE`n `mode: 'easy'`illa.
+ */
+export const raceKey = (id, mode) => (isBaseMode(mode) ? id : `${modeId(mode)} ${id}`);
 
 /** Yhden kentän ennätys, tai null. Välipisteet aina täyteen mittaan. */
 export function bestFor(state, id) {

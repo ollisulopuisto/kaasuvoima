@@ -25,7 +25,7 @@ const KEY = 'sfb3.scores.v1';
  * build a score was set on is honest without being destructive — an old score
  * from before a physics change is comparable-ish, and now you can tell.
  */
-export const GAME_VERSION = '26.08.09';
+export const GAME_VERSION = '26.08.12';
 export const MAX_ENTRIES = 10;
 export const NAME_LENGTH = 6;
 

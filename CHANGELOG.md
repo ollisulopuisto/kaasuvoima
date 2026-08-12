@@ -7,6 +7,164 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.12.82 — kolme vaikeustasoa, ja häntä joka rikkoo tiilen
+
+Omistaja juoksi **kolme ensimmäistä maailmaa läpi kuolematta kertaakaan**. Se on
+mittaus eikä mielipide, ja siitä seurasi tämä erä: nykyinen viritys on nyt
+HELPPO, ja sen rinnalle tuli kaksi tasoa jotka pitävät pelin auki pidempään.
+
+### Vaikeustasot: sama peli kolmessa mitassa
+
+| Taso | Pituus | Vihollisia | Kello |
+| --- | --- | --- | --- |
+| HELPPO | kuten ennen | kuten ennen | kuten ennen |
+| NORMAALI | 2,03x | 2,84x | pituuden mukana |
+| VAIKEA | 3,01x | 4,70x | pituuden mukana |
+
+**HELPPO on merkilleen se peli joka datatiedostoissa lukee** — `scaleLevel`
+palauttaa alkuperäisen määrittelyn samana oliona eikä `src/data/scale.js`:ää
+edes ajeta. Se on ehto eikä tyylivalinta: `src/data/difficulty.js`,
+`tools/curriculum.mjs`, `tools/variety.mjs` ja jokainen portin 60 kentän kierros
+on mitattu siitä kentästä, ja jos oletustaso poikkeaisi siitä yhdenkin merkin
+verran, jokainen niistä luvuista olisi mitattu kentästä jota kukaan ei pelaa.
+Portti vertaa rivi riviltä.
+
+Pidempi kenttä **toistaa omia tahtejaan**. Ruudukosta etsitään sarakkeet joissa
+on pelkkää maata ja tyhjää, ja sauma sallitaan vain kohdassa jossa kaksi
+peräkkäistä sellaista saraketta ovat merkilleen samat — silloin jokainen liitos
+asettaa vierekkäin sarakeparin joka on alkuperäisessä kentässä jo vierekkäin, ja
+liitoskohtaan ei voi syntyä seinää, kuilua, puolikasta putkea eikä katkennutta
+lauttaa. Ja koska ehto koskee koko saraketta **kaikissa kaistoissa**, sauma ei
+voi osua salaiseen huoneeseen eikä sen ja sinne vievän varren väliin: 1-2:n
+taivastarha ja sen papuvarsi siirtyvät aina yhtenä palana.
+
+Uutta maastoa ei generoida, vaikka generaattori on olemassa. Käsintehdyn kentän
+jatkaminen arvotulla maastolla tekisi siitä kaksi kenttää joilla on sama nimi.
+
+**Sauman toinen ehto löytyi punaisesta, ja se on tämän erän tärkein rivi.**
+Sääntö oli aluksi pelkkä "kaksi peräkkäistä samanlaista maasaraketta", mikä
+riittää laattojen jatkuvuuteen — ja `validateLevel` sanoi jokaisen kentän olevan
+kunnossa jokaisella tasolla. `node tools/playable.mjs --mode hard` oli eri
+mieltä: **viisi kenttää joissa botti ei enää päässyt läpi voimatasolla 0.**
+7-3 oli selvin. Sen rytmi on 43 saraketta lattiaa ja viiden sarakkeen kuilu, ja
+ehjä liitos pani kuilun eteen viisi saraketta vauhdinottoa 43:n sijaan. Kuilu oli
+yhä hyppybudjetin sisällä, ja juuri siksi validaattori vaikeni: se mittaa kuilun
+leveyden eikä sitä paljonko vauhtia sen eteen mahtuu.
+
+Sauma vaatii siis nyt myös **kuusi saraketta samaa maastoa kumpaankin suuntaan**,
+ja maasto luetaan kaistan alimmasta viidestä rivistä eikä koko sarakkeesta.
+Sekin ero on mitattu: koko sarakkeella yksikään kentän 64:stä ei venynyt
+lainkaan, koska kahdentoista sarakkeen mittaista tyhjää taivasta ei ole missään —
+ja yläpuolinen kolikkorivi ei hidasta juoksijaa. Viholliset luetaan tyhjänä
+samasta syystä: maasto on sama maasto seisoi sen päällä kuka tahansa.
+
+Molemmat venytetyt tasot ajetaan nyt sen läpi mistä vika löytyi: `--mode hard`
+ja `--mode normal`, jokainen 64 kenttää, **jokainen läpi pienimmällä koolla**.
+Kolme linnakekäytävää (6-F, 7-F, 8-5) ei veny lainkaan — niissä ei ole
+kahtatoista saraketta samaa maastoa ennen areenaa — ja ne saavat silti lisää
+vihollisia. Se kirjataan tähän sen sijaan että väännettäisiin sääntöä kolmen
+kentän takia.
+
+Neljä rajausta, kaikki samasta syystä — kenttä saa pidentyä, ei muuttua toiseksi
+kentäksi:
+
+- **Avausneljännestä ei toisteta.** Se on se osa joka opettaa, ja se on myös se
+  osa jossa validaattori vaatii tehostuksen olevan; kun mikään sitä ennen ei
+  liiku, tehostus on yhä siellä missä sääntö sen vaatii — myös uudessa,
+  pidemmässä neljänneksessä.
+- **Ainutkertaista ei monisteta**: aloitusruutu, lipputanko, pomo, ovi, kytkin,
+  papuvarsi, lämpöputken suu, tähtilaatta, vihainen aurinko, kuu ja
+  papuparooni. Kumpi kuuluu listalle on **laskettu eikä arvattu** — ja se
+  maksoi kerran: närästys oli listalla set piecenä, ja 2-F ei siksi voinut
+  toistaa itsestään yhtään pätkää, koska siinä on yksitoista liekkiä.
+- **Järjestys ei muutu.** Sekoittaminen olisi ollut vaihtelevampaa ja se olisi
+  rikkonut sen mikä kentässä on kertomusta: vaikeus kasvaa vasemmalta oikealle.
+- **Kiipeilykentät (6-K, 7-T) eivät veny.** Ne ovat säännön mukaan tasan yhden
+  ruudun levyisiä ja niiden akseli on toinen.
+
+Lisäviholliset ovat **niitä lajeja jotka kentässä jo ovat**, joten tämä lisää
+ruumiita eikä sanastoa: kenttä jonka lukemisen pelaaja on opetettu pysyy
+kenttänä jonka lukemisen hän on opetettu, ja `tools/curriculum.mjs`:n vastaus
+ensiesittelyistä pysyy totena joka tasolla. Paikan ehdot ovat samat jotka
+kenttädatassakin kelpaisivat: tyhjä ruutu, kiinteä maa alla ja sen molemmin
+puolin, kaksi tyhjää riviä yllä, kuusi laattaa väliä lähimpään toiseen, eikä
+lähtöruudun, maalin tai pomoareenan tuntumassa. Arvonta on siemenetty kentän
+tunnuksesta ja tason nimestä — tilatallennus, salaisuuslaskuri ja aika-ajon
+ennätykset kaikki olettavat että kenttä on eilen sama kuin tänään.
+
+Kolme asiaa jotka seurasivat ja jotka olisi voinut unohtaa:
+
+- **Kello venyy pituuden mukana**, katto 999 aikayksikköä — suurin luku joka
+  mahtuu HUD-nauhan kolmeen numeroon, eli nauhaa ei tarvinnut koskea. Mitattu
+  ettei se ole tiukka: pisin VAIKEA kenttä vaatii 0,82 px/frame keskinopeuden,
+  kun juoksuvauhti on 2,5.
+- **Aika-ajon ennätys tuntee radan.** NORMAALIn 2-3 on kaksi kertaa pidempi rata
+  kuin HELPON 2-3, ja sama avain niille tarkoittaisi että toisella tasolla
+  ajettu aika voittaa toisella ajetun. HELPPO pitää paljaan tunnuksen, jotta jo
+  ajetut ajat ovat yhä omistajansa.
+- **Päivän pieru ei veny.** Yksi yritys päivässä ja sama kenttä kaikille on eri
+  lupaus kuin vaikeustaso, eikä sitä lupausta voi pitää kolmessa eri
+  pituudessa. Ajossa rekisteröity kenttä on nyt omassa taulussaan eikä
+  kenttävälimuistissa — samassa taulussa HELPOLLA kerran rakennettu kenttä olisi
+  vastannut myös NORMAALIn kyselyyn.
+
+Valinta on **oma ruutunsa** eikä alkuruudun kuudes rivi: viisi riviä on siellä
+mitattu maksimi (`tools/verify.mjs` piirtää alkuruudun 280 px korkealle
+alustalle), ja tärkeämpi peruste on se mikä valinta on — vaikeustaso on osa
+kierrosta, se kulkee tallennuksen mukana, ja JATKA PELIÄ jatkaa sitä kierrosta
+kysymättä uudestaan. `newGame()` tarkoittaa yhä "aloita kierros nyt".
+
+### Häntäisku rikkoo tiilen kyljestä, maahanisku jalkojen alta
+
+Häntä oli tähän asti pelkkä ase: se kaatoi vihollisen ja lensi seinän läpi kuin
+sitä ei olisi. Nyt se on kolmas tapa rikkoa tiili päänpuskun ja potkaistun
+kuoren jälkeen, ja **maahanisku on neljäs** — voimatasolla 3 ja pudotuksella
+joka on vähintään puolet huoneesta, eli tasan sillä rajalla jolla isku muuttuu
+kaadosta tapoksi. Yksi raja eikä kaksi: "tämä isku oli tosissaan" on yksi asia
+ja pelaajan pitää pystyä oppimaan se kerran.
+
+Voimataso on tässä poikkeus, ja se on kirjoitettu poikkeuksena eikä pujahtanut
+sisään: maahaniskun oma lupaus on "voimataso vain vahvistaa". Lattian rikkominen
+on ainoa asia jonka se avaa, ja se on omistajan pyyntö ("at least when the
+character is sufficiently powered up") — ja myös ainoa luenta joka estää liikettä
+korvaamasta häntää ja puskua, jotka molemmat ovat tehostuksia jotka pitää käydä
+hakemassa.
+
+Sopimus siitä **mikä tiili on rikottava** on nyt yksi metodi
+(`LevelScene.burstBricks`) eikä neljä kopiota: vain `B`, eikä `B` joka piilottaa
+jotain. Neljä kopiota olisi neljä tapaa olla eri mieltä, ja se erimielisyys
+näkyisi pelaajalle vasta siinä että yksi liike söi salaisuuden jonka toinen
+jätti.
+
+Hännälle tuli oma laatikkonsa tiiliä varten (`tailBox`) eikä vihollisten
+`spinBox`ia levennetty: `spinBox` on tarkoituksella vartalon alempi 60 %, mikä
+on oikein lattialla seisovalle otukselle ja väärin tiiliseinälle — mitattuna se
+kattaa `brick_wall`in neljästä rivistä tasan yhden, eli häntä olisi purkanut
+seinää yksi tiili per pyörähdys ja lukenut vialta. Laatikon leventäminen olisi
+samalla leventänyt sitä mitä häntä *tappaa*, eli tasapainomuutos tiilimuutoksen
+sisään piilotettuna.
+
+### Ja yksi vika joka löytyi matkan varrelta
+
+`tools/playable.mjs --frames 9000` ei ole koskaan toiminut. Kenttätunnus
+luetaan ensimmäisestä paljaasta argumentista, ja `9000` on paljas argumentti —
+työkalu kaatui lauseeseen `unknown level: 9000`, ja sama olisi tapahtunut
+`--mode hard`ille. Lipun arvot ovat nyt listalla nimeltä (`VALUE_FLAGS`), jotta
+seuraavan lipun lisääjä joutuu sanomaan kumpaa lajia se on.
+
+### Portti
+
+Uudet väitteet: HELPPO merkilleen datatiedosto; jokainen kenttä jokaisella
+tasolla sääntöjen mukainen, yksi aloitusruutu, yksi uloskäynti, kello nauhaan
+mahtuva, kiipeily venymätön, aloitus ei kiinteän laatan sisällä eikä yhtään
+vihollista seinän sisällä (192 kenttää); venytys osuu luvattuun pituuteen ±10 %;
+vihollisia tulee **tiheämpään** eikä vain pidemmälle matkalle. Mekaniikoista:
+maahanisku rikkoo tiilen vain korkealta ja vain kyllin vahvana, häntä rikkoo
+sen siltä puolelta jonne se osoittaa eikä toiselta, eikä kumpikaan riko tiiltä
+joka piilottaa jotain. Koekenttien tiilirivi etsitään `brickSecret`illä eikä
+valita silmällä — muuten kokeen tulos riippuisi siitä mihin kohtaan ruudukkoa se
+sattui kirjoittamaan.
+
 ## v26.08.11.81 — portti joka ei voinut kaatua, ja seitsemän muuta
 
 Toinen katselmointikierros, ja sen tärkein löydös oli edellisen kierroksen
