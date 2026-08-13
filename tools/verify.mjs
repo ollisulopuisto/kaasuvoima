@@ -6865,6 +6865,42 @@ const report = await page.evaluate(async () => {
         diff > 0, `${diff} px eroa`);
     }
 
+    /*
+     * KUINKA SYVÄLLE PILVI YLTÄÄ, MITATTUNA EIKÄ LUETTUNA.
+     *
+     * `STINK_BOB_ROWS` (`src/data/rules.js`) on kopio kahdesta tämän luokan
+     * luvusta — korkeudesta ja keinun amplitudista — ja kopio on turvallinen
+     * vain niin kauan kuin joku vertaa sitä alkuperäiseen. Vertailu tehdään
+     * ajamalla eikä lukemalla kenttiä: sääntöä kiinnostaa se alin ruutu johon
+     * runko koskee, ja se on `update`in tulos eikä kahden vakion summa.
+     *
+     * Koko jakso ajetaan läpi, koska `phase` arvotaan. Yksi pilvi kertoo vain
+     * oman vaiheensa; 300 framea on yli kaksi kierrosta (2π / 0,045 ≈ 140),
+     * joten mitattu pohja on kaistan pohja riippumatta siitä mistä se lähti.
+     *
+     * Jos joku kasvattaa keinua tai pilveä, tämä kaatuu ja kertoo uuden luvun.
+     * Se on tarkoitus: vaihtoehto on että sääntö jää kattamaan liian vähän ja
+     * ensimmäinen liian matala pilvi löytyy tuotannosta.
+     */
+    {
+      const { TILE } = await import('/src/gfx/tiles.js');
+      const { RULE_CONSTANTS } = await import('/src/data/rules.js');
+      const ty = 6;
+      let deepest = ty;
+      for (let trial = 0; trial < 8; trial++) {
+        const s = setup(96).s;
+        const e = new E.StinkCloud(s, 4 * TILE, ty * TILE);
+        for (let f = 0; f < 300; f++) {
+          e.update();
+          deepest = Math.max(deepest, Math.floor((e.y + e.h - 1) / TILE));
+        }
+      }
+      const measured = deepest - ty;
+      expect('the validator knows how far below its marker a stink cloud reaches',
+        measured === RULE_CONSTANTS.STINK_BOB_ROWS,
+        `mitattu ${measured} riviä, säännöissä ${RULE_CONSTANTS.STINK_BOB_ROWS}`);
+    }
+
     {
       const want = {
         Walker: true, ShellGuy: true, Flyer: true, StinkCloud: true, CorkGuy: true,
@@ -19213,6 +19249,55 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   });
   if (!(withSand > withoutSand + 0.5)) {
     report.failures.push('vaikeusmittari pisteyttää juoksuhiekan nollaksi');
+  }
+
+  /*
+   * KEINUVA VIHOLLINEN, JA SE MIKSI TÄMÄ SÄÄNTÖ ON OLEMASSA.
+   *
+   * Ruskean pilven merkki on sen keinun keskiviiva eikä ruutu johon se jää, ja
+   * ero on kokonainen laatta alaspäin (`STINK_BOB_ROWS`). 7-P:ssä se maksoi
+   * juuri sen mitä tällaiset erot maksavat: pilvi rivillä 42 lattian ollessa
+   * 43 oli seinän sisällä aina kun arvottu vaihe osui alaspäin, eli noin 43 %
+   * ajoista. Portti *näki* sen — mutta satunnaisesti, ja satunnaisesti näkevä
+   * portti opettaa ajamaan uudestaan.
+   *
+   * Kaksi koetta samasta pohjasta, koska laukeaminen ilman ei-laukeamista ei
+   * mittaa sääntöä vaan sen olemassaoloa: rivi ylempänä on puhdas, lattian
+   * päällä raportoidaan. Se yhden rivin ero **on** koko sääntö.
+   */
+  /** Tasamaata, lattia rivillä 13, ja yksi pilvi rivillä `y` sarakkeessa 12. */
+  const cloudFix = (y) => {
+    const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+    const put = (ty, s) => { rows[ty] = s.padEnd(32, ' ').slice(0, 32); };
+    put(9, '      !');
+    put(12, '  1                         F   ');
+    put(13, '################################');
+    put(14, '################################');
+    put(y, `${rows[y].slice(0, 12)}r${rows[y].slice(13)}`);
+    return rows;
+  };
+  const bobProblems = (list) => list.filter((p) => /bobs into/.test(p));
+
+  const highCloud = validateLevel(cloudFix(11), budget);
+  report.checks.push({
+    name: 'lattian yläpuolella keinuva pilvi ei ole validaattorille ongelma',
+    ok: bobProblems(highCloud).length === 0,
+    detail: bobProblems(highCloud)[0]
+      || `merkki rivillä 11, lattia rivillä 13 — keinu yltää riville ${11 + RULE_CONSTANTS.STINK_BOB_ROWS}`,
+  });
+  if (bobProblems(highCloud).length) {
+    report.failures.push(...bobProblems(highCloud).map((p) => `pilvikoekenttä: ${p}`));
+  }
+
+  const lowCloud = validateLevel(cloudFix(12), budget);
+  report.checks.push({
+    name: 'lattiaan asti keinuva pilvi raportoidaan, ei siunata ilmaksi',
+    ok: bobProblems(lowCloud).length > 0,
+    detail: bobProblems(lowCloud)[0]
+      || `ei huomautusta keinusta (${lowCloud.join('; ') || 'ei mitään'})`,
+  });
+  if (!bobProblems(lowCloud).length) {
+    report.failures.push('validaattori ei huomaa pilveä joka keinuu lattian sisään');
   }
 
   /*

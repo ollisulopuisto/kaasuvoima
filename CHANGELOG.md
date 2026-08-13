@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.13.83 — pilvi joka keinui lattian sisään, ja portti joka näki sen joka toinen kerta
+
+Portti oli punaisella `main`illa: *7-P: 1 vihollista seinän sisällä —
+StinkCloud@17,42*. Vika tuli 7-P:n mukana (#67) eikä vaikeustasoista (#68), ja
+se oli **satunnainen** — mikä on tässä koko juttu.
+
+### Merkki ei ole ruutu vaan kaistan keskiviiva
+
+Ruskea pilvi on 14 px korkea ja keinuu ±14 px merkkinsä ympärillä, ja keinun
+vaihe arvotaan `Math.random()`illa oliota luotaessa. Merkki ei siis kerro mihin
+ruutuun pilvi jää vaan minkä kaistan ympärillä se liikkuu, ja runko yltää
+alimmillaan 14 + 14 − 1 = 27 px merkkiruudun yläreunasta alaspäin — kokonaisen
+laatan merkkiä syvemmälle.
+
+7-P:ssä pilvi oli rivillä 42 ja lattia rivillä 43, joten se syntyi lattian
+sisään aina kun arvottu vaihe osui alaspäin: noin 43 % ajoista, erikseen joka
+vaikeustasolla. Siksi samassa ajossa HELPPO ja NORMAALI kaatuivat ja VAIKEA meni
+läpi. **Portti näki vian mutta vain kolikonheitolla**, ja satunnaisesti näkevä
+portti opettaa ajamaan uudestaan — se on pahempi kuin vika jonka se näkee aina.
+
+### Kolme muutosta, ja vain yksi niistä on se kenttä
+
+**Pilvi siirtyi riville 41.** Se on pienin siirto joka vie keinun kokonaan
+lattian yläpuolelle, ja pienin on tässä tarkoitus eikä laiskuus: pienimmän kehon
+laatikko on rivillä 42, joten pilvi on yhä tiellä keinunsa alalaidassa ja
+alitettavissa sen ylälaidassa. Kohtaaminen terassin kuiluhypyn jälkeen säilyy —
+se muuttui väistämättömästä luettavaksi. Rivi 40 olisi poistanut sen kokonaan.
+
+**`checkEnemyFooting` sai oman peilikuvansa** (`src/data/rules.js`): kävelijä
+tarvitsee alleen kiinteän laatan, keinuja tarvitsee alleen tyhjän.
+`STINK_BOB_ROWS` on kopio kahdesta moottorin luvusta samassa idiomissa kuin
+`BEAN_BLOCK_OVER_FLOOR` — validaattori ei tuo olioita — ja portti vertaa kopiota
+alkuperäiseen.
+
+**Portti mittaa nyt sen mitä sääntö väittää.** Se ajaa pilveä 300 framea eli yli
+kaksi kokonaista keinukierrosta kahdeksalla eri arvotulla vaiheella ja katsoo
+mihin alimpaan ruutuun runko koskee. Keinun tai korkeuden kasvattaminen kaataa
+portin ja kertoo uuden luvun sen sijaan että sääntö jäisi hiljaa kattamaan liian
+vähän. Lisäksi koekenttäpari yhden rivin erolla: rivillä 11 puhdas, rivillä 12
+raportoidaan — se yhden rivin ero **on** koko sääntö, ja sääntö jota on koeteltu
+vain laukeamalla ei ole koeteltu.
+
+### Mikä tarkistettiin eikä oletettu
+
+Kaikki pelin **697 `r`-merkkiä** käytiin läpi jokaisella kolmella
+vaikeustasolla: 7-P oli ainoa rikkoja, ja jokaisella muulla pilvellä on
+vähintään neljä laattaa ilmaa allaan. Uusi sääntö ei siis kiristä mitään mikä on
+jo olemassa. `src/data/difficulty.js` ei muuttunut — 7-P on yhä 293,0, koska
+mittari ei painota vihollisen riviä — joten kannettu taulukko ei vanhentunut
+tästä.
+
 ## v26.08.12.82 — kolme vaikeustasoa, ja häntä joka rikkoo tiilen
 
 Omistaja juoksi **kolme ensimmäistä maailmaa läpi kuolematta kertaakaan**. Se on
