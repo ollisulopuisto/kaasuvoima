@@ -187,6 +187,27 @@ const VINE = 'v';
  * stands under it and every body can put its head into it.
  */
 const BEAN_BLOCK_OVER_FLOOR = 4;
+/**
+ * KUINKA MONTA RIVIÄ MERKKIÄÄN ALEMMAS RUSKEA PILVI YLTÄÄ.
+ *
+ * `StinkCloud` (`src/entities/enemies.js`) on 14 px korkea ja **keinuu ±14 px
+ * merkkinsä ympärillä**, joten merkki ei ole se ruutu jossa pilvi pysyy vaan
+ * sen kaistan keskiviiva. Alimmillaan runko ulottuu 14 + 14 − 1 = 27 px
+ * merkkiruudun yläreunasta alaspäin, ja 27 px on 16 px:n laatoissa yksi rivi
+ * merkkiä syvemmälle. Luku on siis kopio kahdesta moottorin luvusta samassa
+ * hengessä kuin `BEAN_BLOCK_OVER_FLOOR` — validaattori ei tuo olioita, moottori
+ * ei tuo validaattoria — ja `verify.mjs` laskee saman johdannon moottorin omista
+ * mitoista ja vertaa. Se vertailu on se osa joka tekee kopiosta turvallisen:
+ * keinun kasvattaminen kaataa portin eikä kenttää.
+ *
+ * Miksi tämä on olemassa: 7-P:n pilvi seisoi rivillä 42 lattian ollessa 43, ja
+ * se **oli** seinän sisällä aina kun `Math.random()` antoi keinulle alaspäisen
+ * vaiheen. Portin oma "vihollisia seinän sisällä" -tarkistus näki sen, mutta
+ * vain noin 43 %:ssa ajoista, koska se mittaa yhden arvotun ruudun eikä koko
+ * kaistaa — ja sääntö joka kaatuu kolmasti viidestä ei ole portti vaan
+ * kolikonheitto. Tämä kysyy geometrialta sen minkä portti kysyi arvalta.
+ */
+const STINK_BOB_ROWS = 1;
 /*
  * Not solid, and not somewhere you travel through either. Lava is what
  * `assembleTall` lids a bottomless column with, so treating it as air would
@@ -465,7 +486,23 @@ function checkEnemyFooting(rows, w, problems) {
       // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
       // a tile high and drop in) have no footing to check. The player start is
       // likewise allowed to be in mid-air: the game drops them in.
-      if ('ApfrkO'.includes(ch)) continue;
+      if ('ApfrkO'.includes(ch)) {
+        /* ...paitsi että keinuvalla on toinen kysymys, ja se on tämän saman
+         * säännön peilikuva: kävelijä tarvitsee alleen kiinteän laatan, pilvi
+         * tarvitsee alleen tyhjän. `STINK_BOB_ROWS` riviä merkin alapuolella on
+         * pilveä eikä maisemaa, joten ne kysytään samalla kysymyksellä
+         * päinvastaisella vastauksella. */
+        if (ch === 'r') {
+          const reach = y + STINK_BOB_ROWS;
+          for (let ty = y + 1; ty <= reach && ty < rows.length; ty++) {
+            if (SOLID.has(rows[ty][x])) {
+              problems.push(`${ch} at ${x},${y} bobs into the floor at ${x},${ty}`);
+              break;
+            }
+          }
+        }
+        continue;
+      }
       const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
       if (!SOLID.has(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
     }
@@ -1763,5 +1800,5 @@ export function validateLevel(rows, budget, opts = {}) {
 }
 
 export const RULE_CONSTANTS = {
-  ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS, ICE_BRAKE,
+  ROWS, FLOOR, HEAD, BEAN_BLOCK_OVER_FLOOR, VERTICAL_COLS, ICE_BRAKE, STINK_BOB_ROWS,
 };

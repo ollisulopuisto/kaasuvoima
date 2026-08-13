@@ -363,6 +363,15 @@ export const WORLD7_LEVELS = {
    * sellaisia joissa edetään pystysuunnassa. Sama korjaus ja sama syy kuin
    * 7-T:ssä.
    *
+   * **Terassin ruskea pilvi on rivillä 41 eikä 42**, vaikka 42 on se rivi jolla
+   * pelaaja seisoo ja jolta kohtaaminen luetaan. Pilvi keinuu ±14 px merkkinsä
+   * ympärillä, joten rivillä 42 sen alalaita kävi lattian sisällä aina kun
+   * arvottu vaihe osui alaspäin — ei aina, mikä oli pahempaa kuin aina. Rivi
+   * ylemmäs on pienin siirto joka vie keinun kokonaan lattian yläpuolelle, ja
+   * kohtaaminen säilyy: pienimmän kehon laatikko yltää riville 42, eli pilvi on
+   * yhä tiellä keinunsa alalaidassa ja alitettavissa sen ylälaidassa.
+   * `STINK_BOB_ROWS` (`rules.js`) on se sääntö joka ei anna tämän palata.
+   *
    * **Kentän läpäisee kiipeilijäbotti eikä vaakabotti**, ja se seuraa
    * suoraan siitä mitä kenttä on: `isClimb` (`tools/climb-bot.js`) tuntee nyt
    * osioidun kentän, koska oikealle juokseva botti kävelisi nousun juurelle ja
@@ -421,8 +430,8 @@ export const WORLD7_LEVELS = {
       '      ----              o                                   ------------        ',
       '     !                                                                          ',
       '                     --------                                                   ',
-      '        oo                                                                      ',
-      '  1              r                                                          F   ',
+      '        oo       r                                                              ',
+      '  1                                                                         F   ',
       '############    ########################                    ####################',
       '############    ########################                    ####################',
     ],
