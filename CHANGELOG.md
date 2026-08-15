@@ -7,6 +7,141 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.84 — kuvaefektit: tärinällä on suunta, ja tapahtumilla on väri
+
+Kaksi jonossa ollutta kuvaefektiä (ROADMAP, *"Ruutuefektit"* kohta 1 ja
+*"Kuvaefektit: jäljellä olevat efektit"* kohta 1). Ne ovat samassa erässä
+siksi että ne ovat sama kysymys kahdessa muodossa: **mistä pelaaja tietää mitä
+juuri tapahtui, silloin kun se tapahtuu koko ruudulle eikä yhdelle oliolle.**
+
+| väite | punainen | vihreä |
+| --- | --- | --- |
+| pystyisku tärisyttää pystyyn | `pysty 6x/4y — sama ellipsi kuin kaikella` | `pysty 0x/6y, sivu 6x/0y` |
+| pomon laskeutuminen kertoo massan | `ei suuntaa, koko 1 ja 3 samanlaisia` | `koko 1 → 3 y, koko 3 → 5 y` |
+| jättiläisen askel tuntuu | `0 askelta 160 px:llä` | `7 askelta 160 px:llä, kevyt 0/288` |
+| iskuaalto kulkee lattiaa pitkin | `3 both` | `3 x` |
+| osuma välähtää | `ei siirtoa` | `0.42 → 0 kymmenessä framessa` |
+| välähdys ei toistu | — | `1 välähdys 240 framessa = 0,25 Hz` |
+| verho ja siirto eroavat | — | `verhon keskus 128,128,128, siirron 181,136,134` |
+| tähti sykkii muttei välky | — | `1,54 Hz, luminanssia 2,2 %` |
+| pomohuoneella on oma sävy | `ei siirtoa` | `tulee 40 framessa, lähtee oven mukana` |
+
+### Tärinän suunta, ja kuka sen valitsee
+
+`shake(amount)` sai toisen parametrin: `'both'` (vanha leveä ellipsi, ja yhä
+oletus), `'y'` tai `'x'`. Kolme päätöstä jäi kirjatuksi, ja kaksi niistä on
+sellaisia jotka olisi ollut helppo tehdä toisin ja väärin:
+
+**Suunnatut ovat puhtaita eivätkä painotettuja.** Pystyisku ei liikuta kuvaa
+sivuun lainkaan (mitattu `0x/6y`). Puolikas sivuliike olisi tehnyt
+pystyiskusta vain *kapeamman ellipsin*, ja silloin ero olisi ollut makuasia
+eikä merkki — juuri se vika joka tässä oltiin korjaamassa.
+
+**Kun kaksi tärähdystä osuu samaan frameen, kovempi valitsee suunnan.** Sitä
+tapahtuu joka kerta kun pomo laskeutuu ja aalto lähtee, joten sääntö on
+pakollinen eikä hienosäätöä. Se on sama järjestys jolla voimakkuus itse on
+aina valittu (`Math.max`), eli sitä ei tarvitse opetella erikseen; tasapeli
+palaa ympyrään, koska kaksi yhtä kovaa iskua eri suunnista *on* ympyrä. Ja
+vaimennut tärinä nollaa suuntansa: seuraava isku ei peri edellisen suuntaa.
+
+**Askel on matkaa, ei kelloa.** Jättiläisen askel lähtee kuljetusta
+pikselimäärästä (`GIANT_STEP_PX` 22), joten syöksyssä askeleet tihenevät
+itsestään ja paikallaan seisova pomo on hiljaa — ajastin olisi antanut
+seisovallekin askelia, ja se olisi lukenut rikkinäiseltä kuvalta. Se alkaa
+vasta koosta 2, eli kahden osuman jälkeen: tärinä on **tieto siitä että hän
+kasvoi** eikä pomon vakio-ominaisuus. Ääntä ei tullut, koska pomoääniä on
+kaksi opeteltavaa ja kolmas olisi kolmas — sama perustelu jolla kuninkaan
+muodonvaihdos jäi olemassa olevan äänen varaan.
+
+### Palettisiirto, ja miksi se ei ole varjostimessa
+
+Kolme tapahtumaa — vahinkovälähdys, tähden syke ja pomohuoneen sävy — jakaa
+yhden mekanismin: `PostFX.setTint(r, g, b, amount)`, yksi `multiply`-veto koko
+pelikentän yli, yhden framen ajaksi. Roadmap arveli tähän yhtä varjostimen
+uniformia. Se olisi ollut lyhyempi diffi ja väärä paikka:
+
+**Palettisiirto on pelin puhetta, ei kuvaputken.** Varjostin on olemassa vain
+kun WebGL saatiin ja vain kun esiasetus ei ole "pois", eli siellä asuva
+vahinkovälähdys katoaisi kahdella eri tavalla — ajurin ja asetuksen mukana.
+Nyt se piirtyy myös esiasetuksella "pois" (mitattu: `rgb(128,80,80)` sen
+sijaan että kuva jäisi harmaaksi). **Kuvaefektit saa sammuttaa; merkkiä joka
+kertoo osumasta ei.** Toinen puoli on että yksi toteutus on yksi mittaus:
+portin lukema pikseli on se pikseli jonka pelaaja näkee, oli koneessa WebGL
+tai ei.
+
+**Ei läpikuultavaa peitettä, vaan kaksi vetoa.** Puoliksi läpinäkyvä väri
+kuvan päällä vetää kaiken kohti samaa keskiharmaata: tumma tiili vaalenee ja
+vaalea taivas tummenee. Kerto ja lisäys pitävät kuvan omat kontrastit ja
+siirtävät vain väriä — siksi tämä on siirto eikä sumu.
+
+Ja vetoja on kaksi, koska merkityksiä on kaksi. **Kerto vie väriä ja on
+paikan väri**: pomohuone on lämmin ja tumma, ja jokainen tiili siinä pysyy
+sinä tiilenä jonka pelaaja tunnistaa. **Lisäys tuo valoa ja on tapahtuman
+väri**: osuman pitää näkyä myös siellä missä kuva on jo tumma. Ero on
+mitattu eikä makuasia — tumma ruutu (32) nousee lisäyksellä 126:een ja
+laskee kerrolla 32:een. Ensimmäinen versio tästä oli kerto myös osumalle, ja
+kuvakaappaus kertoi miksi se on väärin: kerto ei voi tehdä sinisestä
+taivaasta punaista, se tekee siitä violetin, eikä *"taivas muuttui
+violetiksi"* ole se lause jonka osuman pitää sanoa.
+
+**HUD jää ulkopuolelle** (mitattu: `rgb(128,128,128)` nauhassa samalla kun
+kenttä on `rgb(128,80,80)` samalla vedolla), samasta syystä kuin hehku, kuumuus ja huurre
+jäävät: numerot ovat pelin puhetta pelaajalle, ja punaiseksi värjätty
+pistelukema tarkoittaisi jotain mitä se ei tarkoita.
+
+**Siirto elää yhden framen.** Sama sääntö kuin maailman valoilla: kohtaus
+työntää sen joka framella ja `apply` kuluttaa sen. Kartta, valikko ja
+pistetaulu eivät pyydä sitä koskaan, eikä edellisen kentän osuma siksi voi
+värjätä niitä.
+
+**Järjestys on osa määrittelyä.** Osuma > tähti > huone: osuma kesti kymmenen
+framea, tähti yksitoista sekuntia ja huone koko kentän — mitä lyhyempi, sitä
+tuoreempi, ja sitä tärkeämpi juuri nyt.
+
+### Löydös joka ei ollut tehtävälistalla: tähti ei saa välkkyä
+
+Nappulan oma tähtiväri vaihtuu kolmen framen välein, eli 20 Hz. Sama tahti
+koko ruudulle olisi ollut suora käännös — ja se olisi ollut se yksi kohta
+tässä pelissä jossa kuvavalinta on **turvallisuuskysymys**: WCAG 2.3.1:n
+yleinen välähdyskynnys on alle kolme välähdystä sekunnissa *tai* alle 10 %
+suhteellisen luminanssin muutos ruudun isolla alalla, ja peliä pelaa lapsi
+kavereineen.
+
+Ruutu siis hengittää eikä välky: sinikäyrä 46 framen jaksolla (1,3 Hz) ja
+viimeiset 138 framea 23 framen jaksolla (2,6 Hz) merkkinä siitä että tähti on
+loppumassa. Molemmat luvut ovat portissa mitattuina — **1,54 Hz ja 2,2 %
+luminanssia** — eivätkä kommenttina. Ja 138 on sekä 46:n että 23:n monikerta,
+joten tahdin vaihto osuu aallon pohjalle eikä ole askel.
+
+Ja kirkastuvalla välähdyksellä on sama kysymys kuin sykkeellä: entä jos niitä
+tulee monta peräkkäin? Ei voi tulla. Osuman jälkeen on 110 framea
+kuolemattomuutta, joten välähdyksiä tulee enintään yksi per osuma ja osumia
+enintään yksi per 110 framea — mitattuna **0,25 Hz** kun osumaa yritetään joka
+ainoalla framella. Se luku ei ole tätä varten tehty; se oli jo pelissä, ja
+tämä efekti on turvallinen sen ansiosta.
+
+### Naapuri joka tuli väliin: kuninkaan verho
+
+Tämä työ alkoi ennen kuin **kuninkaan verho** (v26.08.10.65) oli
+`main`illa, ja yhdistämisessä samaan tiedostoon jäi kaksi koko ruudun väriä.
+Ne eivät ole sama mekanismi eikä niistä tehty yhtä, ja perustelu on se sama
+jota tässä pelissä on käytetty joka kerta kun kaksi merkkiä on ollut vaarassa
+sekaantua: **kaksi samannäköistä "jotain tapahtui" opettaa lukemaan väärää.**
+
+Ero on muoto eikä väri, ja se on nyt portissa: **verho on rengas jonka keskus
+jätetään koskematta** (mitattu keskeltä `rgb(128,128,128)`, nurkasta
+`rgb(255,171,171)`), **siirto on tasainen** (keskeltä ja nurkasta sama
+`rgb(181,136,134)`). Ne myös vastaavat eri kysymyksiin — verho kertoo *kuka
+saapui*, siirto *mitä minulle juuri tapahtui* — ja elävät eri tavalla: verho
+laskee omat framensa `PostFX`issä, siirto pyydetään joka framella uudestaan.
+
+Kuolema ei välähdä. Sillä on jo oma kuvansa — musiikki lakkaa, keho kaartuu
+ruudun alle — ja välähdys olisi siinä toinen merkki asiasta josta ei ole
+epäselvyyttä. Välähdys on nimenomaan sen osuman merkki jonka jälkeen peli
+jatkuu.
+
+---
+
 ## v26.08.13.83 — pilvi joka keinui lattian sisään, ja portti joka näki sen joka toinen kerta
 
 Portti oli punaisella `main`illa: *7-P: 1 vihollista seinän sisällä —

@@ -179,6 +179,16 @@ const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
  */
 export const STAR_FRAMES = 700;
 
+/**
+ * VAHINKOVÄLÄHDYKSEN PITUUS, frameina.
+ *
+ * Kymmenen framea eli kuudesosasekunti: pitkä tarpeeksi nähtäväksi, lyhyt
+ * tarpeeksi ollakseen tapahtuma eikä tila. Kentän puoli lukee tämän
+ * (`scenes/level.js`, `PALETTE`) eikä kirjoita omaa lukuaan — välähdys joka
+ * kestäisi eri ajan kuin laskuri olisi kahdesta paikasta mitattu sama asia.
+ */
+export const HURT_FLASH = 10;
+
 export const MAX_POWER_LEVEL = 5;
 /*
  * The fourth type is PAUKKUPAPU, the breaking power-up: a bean fermented so
@@ -253,6 +263,10 @@ export class Player extends Entity {
     this.frozen = 0;
     this.corked = 0;
     this.star = 0;
+    /* Vahinkovälähdyksen laskuri. Puhtaasti kuvaa, ja siksi sama laskuri
+     * kelpaa myös palautetulle tallennukselle: nolla tarkoittaa "ei mitään
+     * juuri nyt", mikä on tosi jokaisella latauksella. */
+    this.hurtFlash = 0;
     this.airJumps = 0;
     this.dying = false;
     this.animTimer = 0;
@@ -397,6 +411,7 @@ export class Player extends Entity {
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
     if (this.corked > 0) this.corked--;
+    if (this.hurtFlash > 0) this.hurtFlash--;
     if (this.morphTimer > 0) this.morphTimer--;
     if (this.star > 0) this.star--;
     if (this.warpLock > 0) this.warpLock--;
@@ -1103,6 +1118,11 @@ export class Player extends Entity {
     this.invuln = 110;
     this.frozen = 20;
     this.flying = 0;
+    /* Koko ruutu välähtää punaisena. Kuva ja ääni yhdessä (DESIGN.md kohta 8):
+     * `powerdown` kertoo mitä tapahtui, väri kertoo *milloin*, ja kumpikaan ei
+     * ole toisen toisinto — ääni kuuluu vaikka katse oli muualla, väri näkyy
+     * vaikka peli on mykistettynä. Ks. `scenes/level.js`, `paletteShift`. */
+    this.hurtFlash = HURT_FLASH;
     Sfx.play('powerdown');
     this.level.dropReserve();
     return true;

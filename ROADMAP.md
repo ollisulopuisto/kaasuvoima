@@ -10,6 +10,33 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
+## Tila 16.8.2026
+
+Kuvaefektit saivat kaksi jonossa ollutta kohtaa (v26.08.16.84): **tärinällä on
+suunta** ja **tapahtumilla on väri**. Kumpikin on portissa lukuineen, ja
+molempien perustelut ovat muutoslokissa. Yksi asia niistä koskee kaikkea
+tulevaa eikä vain näitä kahta:
+
+**Merkki joka kertoo pelistä ei saa asua kuvaefektissä.** Palettisiirto on
+`multiply`-veto 2D-puolella eikä varjostimen uniform juuri siksi: varjostin on
+olemassa vain kun WebGL saatiin ja vain kun esiasetus ei ole "pois", eli sinne
+laitettu vahinkovälähdys katoaisi ajurin ja asetuksen mukana. Sama kysymys
+tulee vastaan seuraavallakin efektillä, ja vastaus on tämä.
+
+Ja toinen, joka on turvallisuutta eikä makua: **koko ruudun välkyntä on WCAG
+2.3.1:n välähdyskynnyksen tapaus** — alle kolme välähdystä sekunnissa tai alle
+10 % suhteellisen luminanssin muutos. Tähden syke mitataan sitä vasten (1,54
+Hz, 2,2 %), ja jokainen uusi koko ruudun efekti mitataan samalla tavalla.
+Kirkastuvalla vahinkovälähdyksellä sama todistus tulee toisesta suunnasta:
+osuman jälkeiset 110 kuolemattomuusframea rajaavat välähdykset 0,25 Hz:iin
+silloinkin kun osumaa yritetään joka framella.
+
+Ja kolmas, joka syntyi vasta yhdistämisessä: **koko ruudun värejä on nyt kaksi**
+— kuninkaan verho (v26.08.10.65) ja palettisiirto. Niitä ei yhdistetty, koska ne
+vastaavat eri kysymykseen, mutta ero on portissa muotona eikä sopimuksena:
+verho on rengas jonka keskus jätetään koskematta, siirto on tasainen. Kolmas
+koko ruudun väri saa saman kohtelun.
+
 ## Tila 10.8.2026 (iltapäivä)
 
 Kaikki alla oleva on tuotannossa ja testattu: **8 maailmaa, 64 kenttää.**
@@ -238,11 +265,23 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 
 Neljä erillistä ideaa, tahallaan erillään — ne jakavat teeman muttei toteutusta.
 
-**1. Voimakkaampi ruudun tärinä (halpa).** `scene.shake(amount)` on jo olemassa,
-katto 6 px, ja linnakkeissa siitä on viitteitä. Pomon laskeutuminen, jättiläisen
-askel ja iskuaalto ansaitsevat oman voimakkuutensa, ja tärinän pitäisi olla
-*suunnattua* (pystyisku tärisyttää pystyyn) eikä aina samaa ympyrää. Kuvaputken
-jälkikäsittely voi vahvistaa sen — se näkee jo valmiin kuvan.
+**1. ✔ Suunnattu ruudun tärinä — tehty** (v26.08.16.84). `shake(amount, axis)`,
+ja kolme nimettyä tapahtumaa saivat omansa: pomon laskeutuminen pystyyn massan
+verran (koko 1 → 3, koko 3 → 5), jättiläisen askel pystyyn (7 askelta 160
+px:llä, kevyellä pomolla 0) ja iskuaalto sivuttain. Kolme asiaa jäi kirjatuksi
+muitakin muutoksia varten:
+
+- **Suunnatut ovat puhtaita eivätkä painotettuja** (`0x/6y`). Puolikas
+  sivuliike olisi tehnyt pystyiskusta vain kapeamman ellipsin, ja silloin ero
+  olisi ollut makuasia eikä merkki.
+- **Kovempi valitsee suunnan** kun kaksi tärähdystä osuu samaan frameen. Sitä
+  tapahtuu joka kerta kun pomo laskeutuu ja aalto lähtee, joten sääntö on
+  pakollinen; tasapeli palaa ympyrään, ja vaimennut tärinä nollaa suuntansa.
+- **Askel on matkaa eikä kelloa**, ja se alkaa vasta koosta 2 — eli tärinä on
+  tieto siitä että jättiläinen kasvoi, ei pomon vakio-ominaisuus.
+
+Kuvaputken jälkikäsittely voisi yhä vahvistaa tärinää; se ei ollut tarpeen,
+koska suunta teki sen työn jota voimakkuudelta odotettiin.
 
 **2. ✔ Auringon palava jälki — tehty** (v26.08.09.18), ja sääntö piti: se meni
 `sprites/enemies.js`:ään eikä `postfx.js`:ään, koska jälkikäsittely ei tiedä
@@ -679,9 +718,27 @@ renderöijän uudelleenkirjoitus WebGL:llä, ks. muutosloki.
 
 Jäljellä on makuasioita ja kohdistettuja efektejä:
 
-1. **Palettisiirto tapahtumiin**: vahinkovälähdys, pomon huoneen sävy, tähden
-   välkyntä. Shaderiin yksi uniform lisää; 2D-tilassa `globalCompositeOperation`.
-   Vaatii että efekti voidaan ajastaa framen tarkkuudella pelilogiikasta.
+1. ✔ **Palettisiirto tapahtumiin** — tehty (v26.08.16.84): vahinkovälähdys,
+   pomohuoneen sävy ja tähden syke, kaikki `PostFX.setTint`in kautta ja kaikki
+   ajastettuna pelilogiikan omista laskureista (`hurtFlash`, `star`, `tick`).
+   Kolme asiaa jäi kirjatuksi:
+   **Se ei mennyt varjostimeen** vaikka tässä niin arveltiin. Varjostin on
+   olemassa vain kun WebGL saatiin ja vain kun esiasetus ei ole "pois", eli
+   siellä asuva vahinkovälähdys katoaisi ajurin ja asetuksen mukana.
+   Kuvaefektit saa sammuttaa; merkkiä joka kertoo osumasta ei. Sama veto
+   molemmilla ajoteillä on samalla yksi mittaus.
+   **Vetoja on kaksi, koska merkityksiä on kaksi.** Kerto vie väriä ja on
+   *paikan* väri (pomohuone); lisäys tuo valoa ja on *tapahtuman* väri
+   (osuma), koska sen on näyttävä myös tummassa kuvassa — mitattu tumma 32
+   nousee lisäyksellä 126:een ja pysyy kerrolla 32:ssa. Ensimmäinen versio
+   käytti kertoa myös osumaan, ja kuvakaappaus kertoi miksi ei: kerto tekee
+   sinisestä taivaasta violetin eikä punaista.
+   **Tähti sykkii muttei välky.** Nappulan oma väri vaihtuu 20 Hz:ssä; sama
+   koko ruudulle olisi ollut WCAG 2.3.1:n välähdyskynnyksen tapaus, ja peliä
+   pelaa lapsi. Ruutu hengittää 1,3 Hz:ssä ja 2,6 Hz:ssä (mitattu 1,54 Hz,
+   luminanssia 2,2 %), ja nopeampi jakso on samalla merkki tähden lopusta.
+   **Järjestys on osa määrittelyä**: osuma > tähti > huone, eli lyhyin voittaa.
+   Kuolema ei välähdä — sillä on jo oma kuvansa.
 2. **Aaltoilu veden alla** odottaa vedenalaisia kenttiä. Kuumuuden väreily ja
    huurre on tehty teemakohtaisina (v26.08.08.23), ja molemmat toimivat myös
    ilman WebGL:ää.
@@ -1153,21 +1210,14 @@ alla oleva on lisäystä eikä korjausta.
 Nämä löytyivät päivän töiden sivutuotteina, eikä yksikään ole rikki — ne ovat
 epäsiisteyksiä joilla on numero.
 
-1. **Neljä orpoa palikkaa** `src/data/chunks/fortresses.js`:ssä
-   (`pyre_ledge`, `crypt_ossuary`, `crypt_stair`, `spire_squall`) — samaa
-   velkaa kuin `fort_blocks`/`fort_trench`, jotka poistettiin. Portti nimeää ne
-   yksitellen, joten viides orpo punastuttaa heti.
-2. **`powerup` soi yhä kahdessa väärässä paikassa:** kartalla kun esine menee
-   varastoon (kentän puolella sama korjattiin `reserve`llä), ja kahdessa
-   esineenpudotuskohdassa `entities/enemies.js`:ssä (molemmat ovat `payout`).
-3. **`LETTERBOX_BAR`:n kommentti väittää korkeimman hypyn nousevan 100 px.**
-   Mitattu budjetti sanoo **174** juoksevalle pieruhypylle. Vanhentunut väite
-   kantavan vakion vieressä.
-4. **`gen-levels.mjs`:n reseptiproosa siteeraa `6-3`:a ja `7-2`:ta** niinä
-   käsintehtyinä ankkureina joista maailmojen 6 ja 7 `density`, `maxGap` ja
-   `aim` on mitattu. Kumpikaan ei enää toimiteta (ne korvattiin pystykentillä).
-   Mikään ei ole rikki tänään, mutta generaattorin uusinta-ajo mittaisi
-   olemattomasta.
+Neljä ensimmäistä on tehty (v26.08.10.63 ja .64), ja kukin niistä on nyt
+portissa eikä tällä listalla: **orvot palikat** poistettiin ja poikkeuslista
+meni nollaan, **`powerup`** soi kartalla ja esineenpudotuksissa oikein
+(`reserve`, `payout`), **`LETTERBOX_BAR`:n perustelu** kertoo mitatun 174 px:n
+hypyn ja sen että kamera kantaa sen, ja **generaattorin resepti** nimeää vain
+kenttiä jotka peli toimittaa. Jäljellä on kolme, ja ne ovat kaikki sellaisia
+joita ei *korjata* vaan tiedetään:
+
 5. **Maailmat 2 ja 8 eivät esittele uusia asioita loppupäässään** (`MYKKIÄ` 2
    kummassakin). Rakenteellista: kummankin sanasto on jo täynnä, joten uusi
    mekaniikka olisi lainattava toisesta maailmasta ja rikkoisi

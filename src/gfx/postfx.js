@@ -174,6 +174,16 @@ const FLASH_ALPHA = 0.55;
 const FLASH_CORE = 0.34;
 const FLASH_EDGE = 0.68;
 
+/**
+ * Palettisiirron katto.
+ *
+ * 0,6 on se raja jonka yli siirto lakkaa olemasta väri ja alkaa olla sammutin:
+ * mustaksi pyydetty siirto jättää tämän jälkeen yhä 40 % kuvasta näkyviin,
+ * eikä yksikään tapahtuma voi siis piilottaa kenttää pelaajalta. Kutsuja saa
+ * pyytää enemmän; se ei vain saa sitä.
+ */
+const TINT_MAX = 0.6;
+
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -373,6 +383,17 @@ export const PostFX = {
   /** Set from the level's theme or its flags; see THEME_AMBIENCE. */
   ambience: null,
   ambienceAmount: 0,
+  /**
+   * Tämän framen palettisiirto, tai `null`. Ks. `setTint`.
+   *
+   * Kohtaus asettaa sen joka framella uudestaan ja `apply` kuluttaa sen — sama
+   * sääntö kuin maailman valoilla: mikään ei elä yli framen, koska jäänyt
+   * siirto olisi edellisen kentän osuma seuraavan kentän ensimmäisellä
+   * framella.
+   */
+  tint: null,
+  /** Se siirto joka tällä framella oikeasti piirrettiin. Diagnostiikkaa. */
+  shownTint: null,
   /** Where the player's lamp points, in source pixels. */
   focus: { x: 160, y: 120 },
   /** How many of the world-light slots are filled this frame. */
@@ -531,6 +552,49 @@ export const PostFX = {
     this.flashSpan = Math.max(1, frames);
     this.flashLeft = this.flashSpan;
     return this.flashRgb;
+  },
+
+  /**
+   * PALETTISIIRTO: koko kuva toisessa värissä, yhden framen ajaksi.
+   *
+   * `amount` on 0…`TINT_MAX`, ja 0 tarkoittaa ettei siirtoa ole. Väri annetaan
+   * 0…255-kanavina, koska se on se muoto jossa kaikki muukin tämän pelin väri
+   * on kirjoitettu.
+   *
+   * **Miksi tämä ei ole varjostimessa.** Roadmap arveli tähän yhtä uniformia,
+   * ja se olisi ollut yksi rivi lisää — mutta kaksi asiaa puhui 2D-vetoa
+   * vastaan sitä enemmän mitä pidemmälle asiaa katsoi:
+   *
+   *   1. **Palettisiirto on pelin puhetta, ei kuvaputken.** Varjostin on
+   *      olemassa vain kun WebGL saatiin ja vain kun esiasetus ei ole "pois",
+   *      eli siellä asuva vahinkovälähdys katoaisi kahdella eri tavalla —
+   *      ajurin ja asetuksen mukana. Merkin joka kertoo osumasta ei kuulu
+   *      kuolla kuvaefektien mukana.
+   *   2. **Yksi toteutus on yksi mittaus.** Sama veto molemmilla ajoteillä
+   *      tarkoittaa että portin lukema pikseli on se pikseli jonka pelaaja
+   *      näkee, oli koneessa WebGL tai ei.
+   *
+   * Hinta on yksi `fillRect` 320×208:n alalle framea kohti, eli mitätön.
+   *
+   * **Kaksi vetoa, kaksi merkitystä.** `mode` on `'multiply'` (oletus) tai
+   * `'screen'`, ja ero on tarkoituksellinen:
+   *
+   *   - **Kerto vie väriä.** Se on *paikan* väri: pomohuone on lämmin ja
+   *     tumma, ja jokainen tiili siinä pysyy sinä tiilenä jonka pelaaja
+   *     tunnistaa. Sitä katsotaan minuutteja, joten se ei saa väsyttää.
+   *   - **Lisäys tuo valoa.** Se on *tapahtuman* väri: osuma välähtää, ja
+   *     välähdyksen pitää näkyä myös siellä missä kuva on jo tumma. Kerto ei
+   *     voisi tehdä sinisestä taivaasta punaista — se tekisi siitä
+   *     violetin — ja "taivas muuttui violetiksi" ei ole se lause jonka
+   *     osuman pitää sanoa.
+   *
+   * Kumpikin on nolla-kohdassaan tasan muuttumaton kuva, joten `amount`
+   * tarkoittaa molemmilla samaa asiaa.
+   */
+  setTint(r, g, b, amount, mode = 'multiply') {
+    const a = Math.max(0, Math.min(TINT_MAX, amount));
+    this.tint = a > 0 ? { r, g, b, amount: a, mode } : null;
+    return this.tint;
   },
 
   /**
@@ -750,7 +814,16 @@ export const PostFX = {
      * sellaisenaan. Hehku, skanviivat ja vinjetti tulevat sen päälle silloin
      * kun ne ovat päällä, mikä on oikea järjestys: verho on kuvassa, ja
      * kuvaputki katsoo kuvaa.
+     *
+     * Palettisiirto on tässä samalla perusteella ja ennen verhoa: siirto on
+     * kuvan oma väri ja verho on sen päälle heitetty valo, joten siirretty
+     * kuva on se kuva jota verho valaisee. Ja siirto kuluu tässä — se elää
+     * yhden framen, ja se frame on tämä.
      */
+    const shift = this.tint;
+    this.tint = null;
+    this.shownTint = shift;
+    if (shift) this._tintPass(ctx, source, shift);
     this._flashPass(ctx, source);
     if (this.preset === 'pois') {
       ctx.globalCompositeOperation = op;
@@ -809,6 +882,37 @@ export const PostFX = {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
+  },
+
+  /**
+   * Palettisiirto yhtenä vetona.
+   *
+   * Ei läpikuultavaa peitettä kummassakaan tilassa, ja se on koko idea:
+   * puolittain läpinäkyvä väri kuvan päällä vetää *kaiken* kohti samaa
+   * keskiharmaata, eli tumma tiili vaalenee ja vaalea taivas tummenee. Kerto
+   * ja lisäys pitävät kuvan omat kontrastit ja siirtävät vain väriä — siksi
+   * tätä kutsutaan siirroksi eikä sumuksi.
+   *
+   * Kummankin kerroin lasketaan omasta nollastaan, joten `amount 0` on tasan
+   * muuttumaton kuva: kerto valkoisesta väriä kohti, lisäys mustasta.
+   *
+   * HUD jää ulkopuolelle, samasta syystä kuin hehku, kuumuus ja huurre jäävät:
+   * numerot ovat pelin puhetta pelaajalle, ja punaiseksi värjätty pistelukema
+   * tarkoittaisi jotain mitä se ei tarkoita.
+   */
+  _tintPass(ctx, source, shift) {
+    const op = ctx.globalCompositeOperation;
+    const alpha = ctx.globalAlpha;
+    const lit = shift.mode === 'screen';
+    const level = lit
+      ? (v) => Math.round(v * shift.amount)
+      : (v) => Math.round(255 + (v - 255) * shift.amount);
+    ctx.globalCompositeOperation = lit ? 'screen' : 'multiply';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgb(${level(shift.r)},${level(shift.g)},${level(shift.b)})`;
+    ctx.fillRect(0, 0, source.width, source.height - HUD_H);
+    ctx.globalCompositeOperation = op;
+    ctx.globalAlpha = alpha;
   },
 
   /**
@@ -1091,6 +1195,12 @@ export const PostFX = {
       preset: this.preset,
       name: PRESET_NAMES[this.preset],
       ambience: this.ambience,
+      /* Se siirto joka juuri piirrettiin, eikä se jota kukaan on pyytänyt:
+       * debug-ruudulta luetaan mitä ruudulla on, ei mitä oli tarkoitus. */
+      tint: this.shownTint
+        ? `${this.shownTint.r},${this.shownTint.g},${this.shownTint.b} `
+          + `${Math.round(this.shownTint.amount * 100)}%`
+        : null,
     };
   },
 };

@@ -1693,6 +1693,22 @@ const DUST_EVERY = 4;
 const DUST_REACH = 14;
 
 /*
+ * JÄTTILÄISEN ASKEL, kolme lukua. Ks. `Boss.updateStep`.
+ *
+ *   GIANT_STEP_AT     mistä koosta alkaen kävely tuntuu lattiassa. Kaksi on
+ *                     kaksi osumaa, eli tärinä on tieto siitä että hän kasvoi.
+ *   GIANT_STEP_PX     pikseliä askelta kohti. 22 px on hieman yli laatan, eli
+ *                     kolmen kokoisen pomon kävelyvauhdilla noin joka
+ *                     kahdeskymmenes frame — kaukana siitä että kuva täräjäisi
+ *                     jatkuvasti, ja tarpeeksi tiheä ollakseen rytmi.
+ *   GIANT_STEP_SHAKE  voimakkuus kokoa kohti. Kolmen kokoisena 1,05 px eli
+ *                     viidesosa saman pomon laskeutumisesta (2 + koko = 5).
+ */
+const GIANT_STEP_AT = 2;
+const GIANT_STEP_PX = 22;
+const GIANT_STEP_SHAKE = 0.35;
+
+/*
  * PIERUKUNINGAS — variantti 6, ja pelin ainoa megapomo.
  *
  * ## Mikä tässä on eri kuin isommassa pomossa
@@ -1823,6 +1839,8 @@ export class Boss extends Enemy {
     this.doffTimer = 0;
     // Counts the deck dust down after a growth. See DUST_FRAMES.
     this.deckDust = 0;
+    /** Kuljettu matka viime askeleesta, pikseleinä. Ks. `updateStep`. */
+    this.stepDist = 0;
   }
 
   get giant() { return this.variant === 3; }
@@ -2064,9 +2082,48 @@ export class Boss extends Enemy {
     if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.form >= 1 || this.scale > 1.5)) {
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
-      this.level.shake(2 + this.scale);
+      // Pystyyn, ja massan verran: putoava paino osuu lattiaan alaspäin, ja se
+      // on eri asia kuin siitä lähtevä aalto. Aalto kulkee lattiaa pitkin, ja
+      // sen oma suunta näkyy siellä missä aalto tulee ilman laskeutumista —
+      // luurangon hajoamisessa (`stomp`).
+      this.level.shake(2 + this.scale, 'y');
       Sfx.play('stomp');
     }
+
+    this.updateStep();
+  }
+
+  /**
+   * JÄTTILÄISEN ASKEL.
+   *
+   * Kolmanteen kokoonsa puhaltunut pomo painaa niin paljon että sen kävely
+   * tuntuu lattiassa. Kolme päätöstä, ja kukin on oma väitteensä:
+   *
+   *   - **Askel on matkaa, ei kelloa.** `stepDist` kerää kuljetun pikselimäärän,
+   *     joten syöksyssä askeleet tihenevät itsestään ja seisova pomo on
+   *     hiljaa. Ajastin olisi antanut paikallaan seisovalle jättiläiselle
+   *     askelia, ja se olisi lukenut rikkinäiseltä kuvalta.
+   *   - **Vain massa tärisyttää.** Alle `GIANT_STEP_AT`:n kokoinen pomo ei
+   *     tärisytä lainkaan — myöskään se sama pomo ennen kahta osumaansa. Näin
+   *     tärinä on *tieto siitä että hän kasvoi* eikä pomon vakio-ominaisuus.
+   *   - **Askel jää laskeutumista pienemmäksi.** Sama olio, kaksi tapahtumaa;
+   *     jos ne kuulostaisivat yhtä kovilta, niin kävelevä jättiläinen huutaisi
+   *     yhtä lujaa kuin putoava, eikä putoamisesta väistäminen tuntuisi
+   *     miltään.
+   *
+   * Ääntä ei tule. Pomoääniä on kaksi opeteltavaa (`boss`, `stomp`), ja kolmas
+   * olisi kolmas — sama perustelu jolla kuninkaan muodonvaihdos jäi olemassa
+   * olevan äänen varaan.
+   */
+  updateStep() {
+    if (this.scale < GIANT_STEP_AT || !this.onGround) {
+      this.stepDist = 0;
+      return;
+    }
+    this.stepDist = (this.stepDist || 0) + Math.abs(this.vx);
+    if (this.stepDist < GIANT_STEP_PX) return;
+    this.stepDist = 0;
+    this.level.shake(GIANT_STEP_SHAKE * this.scale, 'y');
   }
 
   stomp() {
@@ -2152,7 +2209,10 @@ export class Boss extends Enemy {
        */
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
-      this.level.shake(3);
+      // Sivusuuntaan: tässä ei pudonnut mikään, vaan lattiaa pitkin lähti kaksi
+      // aaltoa vastakkaisiin suuntiin — ja juuri se on se asia jonka pelaajan
+      // pitää lukea, koska molemmista väistetään ylöspäin eikä sivuun.
+      this.level.shake(3, 'x');
       this.speed += 0.2;
     } else if (this.variant === 5) {
       /*
