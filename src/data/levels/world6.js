@@ -88,8 +88,8 @@ export const WORLD6_LEVELS = {
   '6-2': {
     theme: 'bone', bg: 'bones', music: 'bone',
     chunks: [
-      'start', 'bone_stones', 'power', 'bone_jaws', 'bone_dance', 'bone_marrow',
-      'bone_grave', 'bone_dance', 'bone_coffins', 'bone_marrow', 'bone_jaws',
+      'start', 'bone_stones', 'power', 'bone_jaws', 'bone_yokki', 'bone_dance', 'bone_marrow',
+      'bone_grave', 'bone_dance', 'bone_coffins', 'bone_yokki_ledge', 'bone_marrow', 'bone_jaws',
       'bone_dance', 'bone_grave', 'bone_stones', 'bone_ridge', 'run_up',
       'goal', 'goal_end',
     ],

@@ -185,9 +185,9 @@ export const WORLD3_LEVELS = {
   '3-3': {
     theme: 'ice', bg: 'peaks', music: 'level',
     chunks: [
-      'start', 'pipe_short', 'power', 'lava_gap', 'walkers', 'plat_steps',
+      'start', 'pipe_short', 'power', 'lava_gap', 'walkers', 'ice_pommi', 'plat_steps',
       'shell', 'lava_wide', 'clouds', 'cork_gap', 'heartburn_pair', 'pipe_plant',
-      'lava_gap', 'sky_run', 'corks', 'ice_crumble', 'brick_wall', 'plat_float',
+      'lava_gap', 'sky_run', 'corks', 'ice_pommi_gap', 'ice_crumble', 'brick_wall', 'plat_float',
       'pit_croak', 'power_hi', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },

@@ -1307,7 +1307,7 @@ const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}
  * `src/data/rules.js`; `verify.mjs` compares the two lines as strings.
  */
 const SINK = new Set(['~']);
-export const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
+export const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'T', 'Z', 'Y', 'm']);
 
 /**
  * `rules.js` owns everything that is true of any level in the game. What is

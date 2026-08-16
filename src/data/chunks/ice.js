@@ -97,6 +97,49 @@ export const ICE_CHUNKS = {
    * of the level; pits at the edge of a budget the floor will not let you meet
    * charge for it a second time.
    */
+  /**
+   * PAUKKUPÖHÖN ENSIESITTELY, ja se on tasaisella jäällä eikä missään muualla.
+   *
+   * Kaikki mitä tämä ruutu opettaa on yksi asia: **tallaus ei poistanut sitä.**
+   * Siksi tässä ei ole kuoppaa, ei toista vihollista eikä kattoa — jos
+   * ensimmäinen sytytetty paukkupöhö olisi kuilun huulella, pelaaja oppisi
+   * "kuolin kuoppaan" eikä sitä mitä tapahtui.
+   *
+   * Kolikot ovat siinä missä hyppy laskeutuu, eli tasan siellä missä sytyttäjä
+   * seisoisi katsomassa. Se ei ole ansa vaan opetus: kolikkorivi on tämän pelin
+   * ainoa osoitin, ja tässä se osoittaa siihen kohtaan josta pitää lähteä pois.
+   *
+   * Jäällä, ja se on maailman oma lisä: sytytetty pöhö jää paikalleen, mutta
+   * pelaaja ei jää — poistuminen on liukas, ja se on tämän maailman versio
+   * samasta lauseesta.
+   */
+  ice_pommi: ck(16, {
+    9: '     o o o',
+    12: '       m',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * PAUKKUPÖHÖ TOISEN KERRAN, ja nyt sillä on lattiaa vähemmän.
+   *
+   * Sama otus, eri huone: kuoppa ensin, ja sen takana kapea jäätasanne jolla
+   * pöhö kävelee. Ensimmäisellä kerralla vastaus oli "älä tallaa sitä" ja
+   * tämä kysyy sen uudestaan tilanteessa jossa tallaus on se mitä käsi tekee
+   * itsestään — hyppy kuilun yli laskeutuu suoraan sen päälle.
+   *
+   * Tasanne on `ICE_BRAKE`n verran leveä (viisi laattaa), eli sillä ehtii
+   * pysähtyä myös liukkaalla. Se ei ole armo vaan ehto: kuilun toisella
+   * puolella oleva räjähtävä otus on kysymys, ja kysymys jolla ei ole
+   * vastausta on ansa.
+   */
+  ice_pommi_gap: ck(16, {
+    9: '  o o',
+    12: '           m',
+    13: '#####     ######',
+    14: '#####     ######',
+  }),
+
   ice_pit: ck(16, { 13: '######    ######', 14: '######    ######' }),
 
   /**

@@ -21,6 +21,8 @@ export {
   drawAngrySun, drawSunTrail, SUN_TRAIL_LIFE, breath, BREATH_PERIOD,
   drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawKurnuttaja, drawCroak,
+  drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
+  drawPaukkupoho,
 } from './sprites/enemies.js';
 export { drawBoss, BOSS_SIZES, BOSS_PLANS, BOSS_LIMBS, FLOOR_REACH, bossSize } from './sprites/boss.js';
 export {

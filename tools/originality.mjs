@@ -71,7 +71,8 @@ export const WINDOW = 8;
 const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
 /** Juoksuhiekka: not air and not rock, so it folds to a letter of its own. */
 const SINK = new Set(['~']);
-const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'x', 'P', 'U', 'b']);
+const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'x', 'P', 'U', 'b',
+  'T', 'Z', 'Y', 'm']);
 
 const canonOurs = (ch) => (SOLID.has(ch) ? 'X' : SINK.has(ch) ? '~'
   : ENEMY.has(ch) ? 'E' : ch === 'o' ? 'o' : '-');

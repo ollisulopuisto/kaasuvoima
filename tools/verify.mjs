@@ -743,15 +743,16 @@ const report = await page.evaluate(async () => {
         + `; eri ruutuja 12 framessa: isku ${waveFrames}, pomo ${bossFrames}`);
     }
 
-    /* 12. MAAHANISKU RIKKOO LATTIAN, ja kolme asiaa siinä voi mennä rikki:
-     *     liike joka ei riko mitään, liike joka rikkoo aina, ja liike joka
-     *     rikkoo sen mitä se ei saa rikkoa.
+    /* 12. MAAHANISKU RIKKOO LATTIAN, ja neljä asiaa siinä voi mennä rikki:
+     *     liike joka ei riko mitään, liike joka rikkoo aina, liike joka rikkoo
+     *     sen mitä se ei saa rikkoa, ja — 16.8.2026 alkaen — liike joka on
+     *     eri mieltä päänpuskun kanssa siitä kuka tiilen rikkoo.
      *
-     *     Koekenttä on tässä eikä oikea kenttä, koska ehto on korkeus JA
-     *     voimataso, ja se vaatii tiiliriviä täsmälleen jalkojen alla. Riviä ei
-     *     valita silmällä vaan mitataan: `brickSecret` päättää salaisuuden
-     *     paikan hajautuksesta, joten koe etsii sarakkeen jossa yksikään tiili
-     *     ei piilota mitään — muuten kokeen tulos riippuisi siitä mihin kohtaan
+     *     Koekenttä on tässä eikä oikea kenttä, koska ehto on korkeus JA keho,
+     *     ja se vaatii tiiliriviä täsmälleen jalkojen alla. Riviä ei valita
+     *     silmällä vaan mitataan: `brickSecret` päättää salaisuuden paikan
+     *     hajautuksesta, joten koe etsii sarakkeen jossa yksikään tiili ei
+     *     piilota mitään — muuten kokeen tulos riippuisi siitä mihin kohtaan
      *     ruudukkoa se sattui kirjoittamaan.
      */
     {
@@ -804,17 +805,85 @@ const report = await page.evaluate(async () => {
       };
 
       const weak = dive({ type: 'shroom', level: 5 }, 24);
+      /* Tappava muttei rikkova. Tämä on se väli jonka `POUND_BREAK_AT`
+       * `POUND_KILL_AT`in yläpuolella tarkoittaa, ja ilman tätä riviä koko
+       * väite "lattian rikkominen on tiukempi vaatimus kuin tappaminen" ei ole
+       * mitattu vaan kirjoitettu. */
+      const lethal = dive({ type: 'shroom', level: 1 }, 110);
       const strongLow = dive({ type: 'shroom', level: 1 }, 150);
       const strong = dive({ type: 'shroom', level: 5 }, 150);
 
-      expect('maahanisku rikkoo tiilen vain korkealta ja vain kyllin vahvana',
+      expect('maahanisku rikkoo tiilen vain kyllin korkealta, ja se raja on tappamisen rajaa ylempänä',
         !!weak.lastPound && !weak.lastPound.broke
-        && !!strongLow.lastPound && !strongLow.lastPound.broke
+        && !!lethal.lastPound && lethal.lastPound.kills && !lethal.lastPound.broke
+        && !!strongLow.lastPound && strongLow.lastPound.broke > 0
         && !!strong.lastPound && strong.lastPound.broke > 0,
         `matala voima 5: ${weak.lastPound && weak.lastPound.broke} tiiltä`
         + ` (voima ${weak.lastPound && weak.lastPound.strength.toFixed(2)})`
+        + `, tappava voima 1: ${lethal.lastPound && lethal.lastPound.broke} tiiltä`
+        + ` (voima ${lethal.lastPound && lethal.lastPound.strength.toFixed(2)}`
+        + `, tappaa ${lethal.lastPound && lethal.lastPound.kills})`
         + `, korkea voima 1: ${strongLow.lastPound && strongLow.lastPound.broke} tiiltä`
+        + ` (voima ${strongLow.lastPound && strongLow.lastPound.strength.toFixed(2)})`
         + `, korkea voima 5: ${strong.lastPound && strong.lastPound.broke} tiiltä`);
+
+      /*
+       * JA SE ON KATON EHTO YLÖSALAISIN, eli sama vastaus kuin päänpuskulla.
+       *
+       * Sama tiilirivi, sama pudotus, kaksi kehoa: pieni ei riko sitä altakaan
+       * (`bumpTile` vaatii `player.big`), joten se ei saa rikkoa sitä
+       * päältäkään. Mitattuna molemmat suunnat samassa kokeessa, koska väite ei
+       * ole "pieni ei riko" vaan "**nämä kaksi ovat sama sääntö**" — ja se
+       * hajoaa hiljaa sinä päivänä kun jompaakumpaa säädetään yksin.
+       */
+      {
+        /* Puskukoe tarvitsee oman kenttänsä: iskukokeen tiilirivi on lattiassa
+         * ja lattian alla on lattiaa, eli sen alle ei mahdu päätä. Tässä sama
+         * tiili on ilmassa rivillä 9 — kolme tyhjää riviä lattian yllä, eli
+         * tasan se bumppirivi johon peli muutenkin panee lohkonsa. */
+        const bumpAt = 20;
+        const bumpDef = () => {
+          const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+          const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+          put(13, 0, '#'.repeat(W));
+          put(14, 0, '#'.repeat(W));
+          put(12, 1, '1');
+          put(9, 6, '!');
+          put(12, 44, 'F');
+          put(9, bumpAt, 'B'.repeat(4));
+          return {
+            id: 'bBump', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+            boss: false, bossVariant: 0, bands: null, rows,
+          };
+        };
+        const bump = (power) => {
+          reset(power);
+          const s = new LevelScene(game, 'bBump', bumpDef());
+          game.setScene(s);
+          const i = mkInput();
+          for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+          // Suoraan tiilen alle lattialle, ja hyppy pohjaan.
+          const p = s.player;
+          p.x = (bumpAt + 1) * 16;
+          p.y = 13 * 16 - p.h;
+          p.vy = 0;
+          p.onGround = true;
+          i.pressed.jump = true;
+          i.held.jump = true;
+          let f = 0;
+          while (f < 60 && s.tileAt(bumpAt + 1, 9) === 'B') { s.update(i); i.pressed = blank(); f++; }
+          return s.tileAt(bumpAt + 1, 9) !== 'B';
+        };
+        const smallDive = dive({ type: null, level: 0 }, 150);
+        const smallBump = bump({ type: null, level: 0 });
+        const bigBump = bump({ type: 'shroom', level: 1 });
+        expect('lattian rikkoo se keho joka rikkoo katon: pieni kumpaakaan, kasvanut molemmat',
+          !smallBump && !smallDive.lastPound.broke && bigBump && strongLow.lastPound.broke > 0,
+          `pieni: puskee ${smallBump}, iskee ${smallDive.lastPound.broke} tiiltä`
+          + ` (voima ${smallDive.lastPound.strength.toFixed(2)}, eli korkeus riitti)`
+          + ` — kasvanut: puskee ${bigBump}, iskee ${strongLow.lastPound.broke} tiiltä`);
+      }
 
       /* Ja se ei saa syödä salaisuutta. Sama sopimus kuin puskulla ja
        * hännällä — `LevelScene.burstBricks` — mitattuna eikä luvattuna.
@@ -914,6 +983,326 @@ const report = await page.evaluate(async () => {
     }
   } catch (e) {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
+  /* --------------------------- neljä uutta lajia ------------------------ */
+  /*
+   * NELJÄ UUTTA VIHOLLISTA, JA SE MITÄ NIISTÄ VOI MENNÄ RIKKI.
+   *
+   * "Laji on olemassa" ei todista mitään — spriteportit yllä todistavat jo
+   * että ne on piirretty, ja `ENEMY_CHARS` että ne syntyvät. Tässä mitataan se
+   * lupaus jonka kukin laji antaa pelaajalle, koska juuri se on se osa joka
+   * voi kadota yhdellä vakion muutoksella ilman että mikään muu näkyy:
+   *
+   *   TÖRÄHDYSTORVI  ampuu vaakasuoraan ja ammuksen **päälle voi hypätä**
+   *   PAARMA         ampuu suoraan alas sen päälle joka pysähtyy sen alle
+   *   YÖKKI          lähettää pallon joka kulkee lattiaa pitkin ja kiihtyy
+   *   PAUKKUPÖHÖ     ei kuole tallauksesta vaan syttyy siitä
+   *
+   * Koekenttä on tässä eikä oikea kenttä, samasta syystä kuin maahaniskun
+   * tiilikokeessa: nämä ovat väitteitä lajista, ja oikeasta kentästä mitattuna
+   * ne olisivat väitteitä siitä kentästä.
+   */
+  try {
+    const E = await import('/src/entities/enemies.js');
+    const W = 40;
+    const testDef = (put) => {
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const set = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      set(13, 0, '#'.repeat(W));
+      set(14, 0, '#'.repeat(W));
+      set(12, 1, '1');
+      set(9, 4, '!');
+      set(12, 38, 'F');
+      if (put) put(set);
+      return {
+        id: 'zoo', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+    /** Kenttä pystyyn, vanhat viholliset pois, pelaaja haluttuun sarakkeeseen. */
+    const zoo = (opts = {}) => {
+      const { power = { type: 'shroom', level: 1 }, put = null, at = 20 } = opts;
+      reset(power);
+      const s = new LevelScene(game, 'zoo', testDef(put));
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 6; f++) { s.update(i); i.pressed = blank(); }
+      /* Vihollisia EI siivota pois, toisin kuin muissa koekentissä: tässä
+       * kentässä ei ole muita kuin se yksi joka on tarkoituskin mitata, ja
+       * siivous poistaisi juuri sen. */
+      const p = s.player;
+      p.x = at * 16;
+      p.y = 13 * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = true;
+      s.centerCamera();
+      return { s, i, p };
+    };
+    const run = (s, i, n) => {
+      for (let f = 0; f < n; f++) { s.update(i); i.pressed = blank(); }
+    };
+    const of = (s, name) => s.entities.filter((e) => e.constructor.name === name && !e.remove);
+    /**
+     * Aja `n` framea ja **nappaa ensimmäinen** halutun lajin olio sillä
+     * framella jolla se on olemassa.
+     *
+     * Lopputilan lukeminen ei kelpaa näille lajeille, ja se on mittausvirhe
+     * joka tehtiin kerran: happopisara elää noin kolmekymmentä framea ennen
+     * kuin se roiskahtaa, joten sadan framen jälkeen niitä on nolla riippumatta
+     * siitä montako niistä putosi. Tapahtuma on nähtävä silloin kun se
+     * tapahtuu.
+     */
+    const watch = (s, i, n, name, stopOnFirst = false) => {
+      let seen = 0;
+      let first = null;
+      const known = new Set();
+      for (let f = 0; f < n; f++) {
+        s.update(i);
+        i.pressed = blank();
+        for (const e of s.entities) {
+          if (e.constructor.name !== name || known.has(e.id)) continue;
+          known.add(e.id);
+          seen++;
+          if (!first) first = e;
+        }
+        // `stopOnFirst` on kiihtyvyyden mittausta varten: pysähdytään sillä
+        // framella jolla olio syntyi, tai sen alkuvauhti on jo loppuvauhti.
+        if (stopOnFirst && first) break;
+      }
+      return { seen, first };
+    };
+
+    /* 1. TORVI AMPUU SINNE MISSÄ PELAAJA ON, JA AMMUS ON ASKELMA.
+     *
+     * Kolme väitettä yhdessä kokeessa, koska ne ovat sama lupaus kolmesta
+     * suunnasta: ammus syntyy, se kulkee **vaakasuoraan** (ei putoa), ja sen
+     * päälle laskeutuminen on tallaus eikä osuma. Se kolmas on koko lajin
+     * tasapaino — vaakalento jonka päälle ei voi hypätä olisi seinä. */
+    {
+      /* Kahdeksan ruutua väliä: yli `TORVI_NEAR`in (40 px) ja reilusti alle
+       * `TORVI_RANGE`n (200 px). Ensimmäinen versio tästä kokeesta pani
+       * pelaajan kuudentoista ruudun päähän, eli rajan ulkopuolelle, ja mittasi
+       * torvea joka toimi täsmälleen oikein olemalla ampumatta. */
+      const { s, i, p } = zoo({ at: 18, put: (set) => set(12, 10, 'T') });
+      const torvi = of(s, 'Torvi')[0];
+      torvi.alwaysActive = true;
+      torvi.active = true;
+      const shot = watch(s, i, 200, 'Torahdys');
+      const slug = shot.first;
+      const y0 = slug ? slug.y : 0;
+      const x0 = slug ? slug.x : 0;
+      run(s, i, 20);
+      const drop = slug ? Math.abs(slug.y - y0) : 999;
+      const moved = slug ? slug.x - x0 : 0;
+
+      /* Ja sitten sen päälle, ylhäältä ja putoavana.
+       *
+       * Jäädytys ja kuolemattomuusframet nollataan ensin, ja se on kokeen
+       * hygieniaa eikä kikkailua: ammus on saattanut ehtiä osua kylkeen näiden
+       * kahdenkymmenen framen aikana, ja jäädytetty pelaaja ei tallaa mitään —
+       * silloin koe mittaisi osumaa jonka se itse aiheutti. */
+      p.frozen = 0;
+      p.invuln = 0;
+      const level0 = p.powerLevel;
+      p.x = slug ? slug.cx - p.w / 2 : 0;
+      p.y = slug ? slug.y - p.h - 4 : 0;
+      p.vy = 3;
+      p.onGround = false;
+      run(s, i, 8);
+      expect('törähdystorvi ampuu vaakasuoraan, ja ammuksen päälle voi hypätä',
+        !!slug && drop === 0 && moved !== 0 && (slug.remove || slug.dying)
+        && p.powerLevel === level0 && !p.dying,
+        slug ? `ammuksia ${shot.seen}, putosi ${drop} px, kulki ${Math.round(moved)} px`
+          + `, tallaus poisti ${slug.remove || slug.dying}, voimataso ${level0}->${p.powerLevel}`
+          : 'torvi ei ampunut 200 framessa');
+    }
+
+    /* 2. PAARMA AMPUU SEN PÄÄLLE JOKA PYSÄHTYY SEN ALLE, EI MUUTEN.
+     *
+     * Kaksi ajoa samasta kentästä: pelaaja sen alla ja pelaaja kaukana. Pelkkä
+     * "pisara syntyi" menisi läpi myös silloin kun laji ampuu koko ajan, ja se
+     * on eri laji — se olisi kello eikä tähtäin. */
+    {
+      const under = zoo({ at: 20, put: (set) => set(5, 20, 'Z') });
+      const bug = of(under.s, 'Paarma')[0];
+      bug.alwaysActive = true;
+      bug.active = true;
+      const dropped = watch(under.s, under.i, 120, 'Happopisara').seen;
+
+      const away = zoo({ at: 4, put: (set) => set(5, 20, 'Z') });
+      const far = of(away.s, 'Paarma')[0];
+      far.alwaysActive = true;
+      far.active = true;
+      const idle = watch(away.s, away.i, 120, 'Happopisara').seen;
+
+      // Ja pisara satuttaa: se on vaara eikä koriste.
+      const hurt = zoo({ at: 20, put: (set) => set(5, 20, 'Z') });
+      const hp0 = hurt.p.powerLevel;
+      const hbug = of(hurt.s, 'Paarma')[0];
+      hbug.alwaysActive = true;
+      hbug.active = true;
+      run(hurt.s, hurt.i, 240);
+      expect('paarma pudottaa pisaran vain sen päälle joka on sen alla',
+        dropped > 0 && idle === 0 && hurt.p.powerLevel < hp0,
+        `alla ${dropped} pisaraa, kaukana ${idle}, voimataso ${hp0}->${hurt.p.powerLevel}`);
+    }
+
+    /* 3. YÖKIN PALLO KULKEE LATTIAA PITKIN, KIIHTYY, EIKÄ SITÄ TALLOTA.
+     *
+     * Vauhti mitataan kahdesta kohdasta eikä yhdestä: pallo joka lähtee
+     * nopeana ja pysyy nopeana on ammus, ja tämän lajin koko luettavuus on
+     * siinä että kaukainen pallo on hidas ja lähellä oleva nopea. */
+    {
+      /* Kahdeksan ruutua väliä, eli `YOKKI_RANGE`n (180 px) sisällä. Sama
+       * mittausvirhe kuin torvella oli kerran jo tehty, ja se on tässä
+       * korjattuna eikä kommentoituna. */
+      const { s, i, p } = zoo({ at: 18, put: (set) => set(12, 14, 'Y') });
+      const yokki = of(s, 'Yokki')[0];
+      yokki.alwaysActive = true;
+      yokki.active = true;
+      /* Neljä ruutua väliä ja 400 framea, ja molemmat luvut ovat mitattuja.
+       * `YOKKI_PERIOD` (210) + `YOKKI_WARN` (45) on 255 framea *tähdättynä*, ja
+       * ajastin juoksee vain kun pelaaja on `YOKKI_RANGE`n sisällä — mutta
+       * yökki itse kävelee 0,3 px/frame, ja kolmessasadassa framessa se
+       * kävelee yhdeksänkymmentä pikseliä. Kahdeksan ruudun päästä aloitettuna
+       * se ehti rajan ulkopuolelle ennen kuin ajastin oli valmis, ja koe
+       * mittasi kävelynopeutta luullen mittaavansa yökkäystä. */
+      const ball = watch(s, i, 400, 'Karvapallo', true).first;
+      const early = ball ? Math.abs(ball.vx) : 0;
+      const bx = ball ? ball.x : 0;
+      run(s, i, 60);
+      const late = ball ? Math.abs(ball.vx) : 0;
+      const toward = ball ? ball.x - bx : 0;
+      const onFloor = ball ? Math.floor((ball.y + ball.h) / 16) : -1;
+
+      /* Sama hygienia kuin torvella: pallo on saattanut jo osua, ja jäädytetty
+       * pelaaja ei tallaa. */
+      p.frozen = 0;
+      p.invuln = 0;
+      const level0 = p.powerLevel;
+      if (ball) {
+        p.x = ball.cx - p.w / 2;
+        p.y = ball.y - p.h - 4;
+        p.vy = 3;
+        p.onGround = false;
+        run(s, i, 8);
+      }
+      const cost = p.powerLevel < level0 || p.dying;
+      expect('yökin karvapallo vierii lattiaa pitkin, kiihtyy, eikä sitä voi tallata',
+        !!ball && onFloor === 13 && toward > 0 && late > early
+        && ball.spiky && cost && !ball.remove,
+        ball ? `vauhti ${early.toFixed(2)} -> ${late.toFixed(2)}, kulki ${Math.round(toward)} px`
+          + ` rivillä ${onFloor}, piikikäs ${ball.spiky}`
+          + `, tallaus maksoi ${level0}->${p.powerLevel}${p.dying ? ' (kuoli)' : ''}`
+          + `, pallo jäi ${!ball.remove}`
+          : 'yökki ei yökännyt 400 framessa');
+    }
+
+    /* 4. PAUKKUPÖHÖ EI KUOLE TALLAUKSESTA VAAN SYTTYY SIITÄ.
+     *
+     * Neljä väitettä, ja ne ovat sen koko sopimus: tallaus ei poista sitä,
+     * pelaaja pomppaa (eli hänellä on se hetki jona lähteä), räjähdys rikkoo
+     * tiilen `burstBricks`in säännöillä, ja se satuttaa myös sitä joka jäi
+     * katsomaan. */
+    {
+      const { s, i, p } = zoo({
+        at: 18,
+        put: (set) => {
+          set(12, 22, 'm');
+          set(12, 24, 'BBB');
+        },
+      });
+      const bomb = of(s, 'Paukkupoho')[0];
+      bomb.alwaysActive = true;
+      bomb.active = true;
+      bomb.x = 22 * 16;
+      const level0 = p.powerLevel;
+      // Päälle ylhäältä.
+      p.x = bomb.cx - p.w / 2;
+      p.y = bomb.y - p.h - 4;
+      p.vy = 3;
+      p.onGround = false;
+      run(s, i, 6);
+      const survived = !bomb.remove && !bomb.dying && bomb.fuse > 0;
+      const bounced = p.vy < 0;
+      const bricks0 = [24, 25, 26].filter((x) => s.tileAt(x, 12) === 'B').length;
+      // Ja jäädään paikalle katsomaan.
+      p.x = bomb.cx - p.w / 2;
+      run(s, i, 90);
+      const bricks1 = [24, 25, 26].filter((x) => s.tileAt(x, 12) === 'B').length;
+      expect('paukkupöhö syttyy tallauksesta, ja räjähdys rikkoo tiilen ja satuttaa',
+        survived && bounced && bomb.remove && bricks1 < bricks0 && p.powerLevel < level0,
+        `tallaus jätti sen henkiin ${survived} ja pomppasi ${bounced}`
+        + `, tiiliä ${bricks0} -> ${bricks1}, voimataso ${level0} -> ${p.powerLevel}`);
+    }
+  } catch (e) {
+    expect('uusien lajien testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
+  /* ------------------------------ hyppysarjat --------------------------- */
+  /*
+   * HYPPYSARJAT: TODISTUS AJETAAN UUDESTAAN, EI USKOTA TIEDOSTOA.
+   *
+   * `src/data/chunks/jumps.js` on generoitu tiedosto ja sen kommenteissa lukee
+   * jokaisen loikan ikkuna. Kommentti on kuitenkin muistiinpano, ja
+   * muistiinpano vanhenee: **fysiikan muutos ei kaataisi sitä vaan tekisi siitä
+   * hiljaa väärän.** Siksi tämä lohko ajaa saman ratkaisijan samoille
+   * palikoille joka ajolla — sama moduuli jolla ne tehtiin, ei kopio siitä.
+   *
+   * Kaksi väitettä, ja ne ovat toistensa vastakohdat:
+   *
+   *   **Ei mahdoton.** Jokainen loikka ratkeaa ja koko sarja kulkee yhtenä
+   *   juoksuna, voimatasolla 0 ja pelkällä juoksulla ja hypyllä. Tämä on sama
+   *   lupaus jonka `level-bot.js` antaa kentistä (DESIGN.md kohta 5) — ja se on
+   *   näille palikoille tiukempi, koska tyhmä botti ei osaisi näitä lainkaan.
+   *
+   *   **Vaikea.** Kapein ikkuna koko sarjastossa on `TIGHTEST`in ja
+   *   `LOOSEST`in välissä. Alaraja on se jonka alle mennessä sarja on
+   *   hyväksytty vain siksi että ratkaisija on tarkempi kuin ihminen; yläraja
+   *   on se jonka yli mentäessä koko tiedosto on käytävä eikä hyppysarja.
+   *
+   * Molemmat mitataan uudelleen, ja molempien luvut tulostetaan.
+   */
+  try {
+    const { JUMP_CHUNKS } = await import('/src/data/chunks/jumps.js');
+    const { solveSequence } = await import('/tools/jump-solver.js');
+    /** Kaksi framea juoksukatolla (2,5 px/frame) pyöristettynä ylös. */
+    const TIGHTEST = 5;
+    /** Reilu puolitoista ruutua: sitä väljempi loikka ei enää kysy ajoitusta. */
+    const LOOSEST = 26;
+
+    const rows = [];
+    const broken = [];
+    const narrow = [];
+    for (const [name, chunk] of Object.entries(JUMP_CHUNKS)) {
+      const mkScene = () => {
+        reset({ type: null, level: 0 });
+        const s = new LevelScene(game, name, {
+          id: name, theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+          boss: false, bossVariant: 0, bands: null, rows: chunk.rows,
+        });
+        s.entities = s.entities.filter((e) => e.kind === 'player');
+        s.goal = null;
+        return s;
+      };
+      const got = solveSequence(mkScene);
+      const wins = got.hops.map((h) => h.window);
+      const lo = wins.length ? Math.min(...wins) : 0;
+      rows.push(`${name} ${wins.join('/')} px${got.walked ? '' : ' — EI KULKENUT'}`);
+      narrow.push(lo);
+      if (!got.ok || !got.walked) broken.push(`${name}: ratkesi ${got.ok}, kulki ${got.walked}`);
+      else if (lo < TIGHTEST) broken.push(`${name}: kapein ikkuna ${lo} px, alaraja ${TIGHTEST}`);
+    }
+    const tight = narrow.length ? Math.min(...narrow) : 0;
+    expect('jokainen hyppysarja on hypättävissä voimatasolla 0, ja tiukin niistä on tiukka',
+      broken.length === 0 && tight >= TIGHTEST && tight <= LOOSEST,
+      broken.length ? broken.join('; ')
+        : `${rows.join(' · ')} — tiukin ${tight} px `
+          + `(sallittu ${TIGHTEST}–${LOOSEST}, eli ${(tight / 2.5).toFixed(1)} framea juoksuvauhdilla)`);
+  } catch (e) {
+    expect('hyppysarjojen testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
   /* ------------------------------ juoksuhiekka -------------------------- */
@@ -4009,6 +4398,7 @@ const report = await page.evaluate(async () => {
      * "pystykentät kentissä". Yksikään kenttä ei siis putoa listalta. */
     const { getLevel: levelDef } = await import('/src/data/levels.js');
     const { isClimb } = await import('/tools/climb-bot.js');
+    const { runGround } = await import('/tools/level-bot.js');
     /* `isClimb` eikä `.vertical`, ja se on korjaus eikä siistiminen: osioitu
      * kenttä (`7-P`) ei ole pystykenttä mutta sen toinen osio on nousu, ja
      * oikealle juokseva botti kävelee sen juurelle ja raportoi kentän
@@ -4027,52 +4417,29 @@ const report = await page.evaluate(async () => {
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       if (s.def.boss) s.bossDefeated = true;      // ovi on maali; tappelu on eri testi
       s.time = 9999;
-      const i = mkInput();
-      let prevJump = false;
-      let hold = 0;
-      let maxX = s.player.x;
-      for (let f = 0; f < 7000 && !finished; f++) {
-        const p = s.player;
-        const footY = Math.floor((p.y + p.h) / 16);
-        const aheadX = Math.floor((p.x + p.w + 6) / 16);
-        const solid = (tx, ty) => isSolid(s.tileAt(tx, ty));
-        const lethal = (tx, ty) => '^W'.includes(s.tileAt(tx, ty));
-        const wall = solid(aheadX, footY - 1) || solid(aheadX, footY - 2);
-        let obstacle = -1;
-        for (let d = 0; d <= 5 && obstacle < 0; d++) {
-          const tx = aheadX + d;
-          if (lethal(tx, footY) || lethal(tx, footY - 1)) obstacle = d;
-          else if (!solid(tx, footY) && !solid(tx + 1, footY)) obstacle = d;
-        }
-        const takeOff = p.onGround && (wall || (obstacle >= 0 && obstacle <= 2));
-        if (takeOff) {
-          let span = 0;
-          if (obstacle >= 0) {
-            const start = aheadX + obstacle;
-            while (span < 14 && (!solid(start + span, footY)
-              || lethal(start + span, footY) || lethal(start + span, footY - 1))) span++;
-          }
-          hold = wall ? 16 : Math.max(5, Math.min(16, 3 + span * 1.1)) | 0;
-        }
-        const wantJump = takeOff || (hold > 0 && p.vy < 0);
-        if (hold > 0) hold--;
-        i.held = blank();
-        i.held.right = true;
-        i.held.run = true;
-        i.held.jump = wantJump;
-        i.pressed = blank();
-        i.pressed.jump = takeOff && !prevJump;
-        prevJump = wantJump;
-        s.update(i);
-        maxX = Math.max(maxX, p.x);
-        if (s.state === 'dead') break;
-      }
+      /*
+       * `runGround` eikä oma botti, ja tämä on korjaus eikä siistiminen.
+       *
+       * Tässä oli kopio botista — yksinkertaisempi kuin `tools/level-bot.js`:n
+       * oma — ja se tarkoitti kahta mielipidettä siitä mitä "läpäistävissä"
+       * tarkoittaa. Ero näkyi ensimmäisen kerran sinä päivänä jona botille
+       * kirjoitettiin uusi taito (lankkureitin ylitys, ks. `plankBridges`):
+       * yksi portti kertoi kentän aukeavan ja toinen ettei se aukea, samasta
+       * kentästä samana ajona. Se on tasan se vika jota tässä tiedostossa on
+       * korjattu jo kahdesti muissa kohdissa.
+       *
+       * Sama botti, sama kehysbudjetti, sama lupaus. Ainoa asia joka tästä
+       * lohkosta jää omaksi on **mitkä kentät ajetaan** ja **mitä siitä
+       * raportoidaan**, ja ne ovat tämän lohkon oma kysymys.
+       */
+      const got = runGround(s, isSolid, 7000, () => finished);
       rows.push({
         id,
-        cleared: !!(finished && finished.cleared),
-        reach: Math.round((maxX / (s.w * 16)) * 100),
-        stopped: s.state === 'dead' ? `kuoli sarakkeessa ${Math.floor(s.player.cx / 16)}`
-          : `jumissa ${Math.round((maxX / (s.w * 16)) * 100)} %`,
+        cleared: got.cleared,
+        reach: got.reach,
+        bridged: got.bridged,
+        stopped: got.died ? `kuoli sarakkeessa ${Math.floor(s.player.cx / 16)}`
+          : `jumissa ${got.reach} %`,
       });
     }
     const stuck = rows.filter((r) => !r.cleared);
@@ -4101,7 +4468,8 @@ const report = await page.evaluate(async () => {
       rows.length === handmade.length && rows.length + climbers.length >= 22
       && stuck.length === 0,
       rows.length
-        ? `${rows.length} vaakakenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`).join(', ')}`
+        ? `${rows.length} vaakakenttää: ${rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : r.stopped}`
+          + (r.bridged ? ` (${r.bridged} lankkureittiä ratkaisijan todistamana)` : '')).join(', ')}`
           + ` — ja ${climbers.length} pystykenttää kiipeilijällä (${climbers.join(' ') || '—'})`
         : 'ei 6-, 7- eikä 8-kenttiä lainkaan');
   }
@@ -6750,6 +7118,60 @@ const report = await page.evaluate(async () => {
       Music.stop();
       Music.current = null;
     }
+
+    /*
+     * 10. SUPERTÄHTI — pelin ainoa raita joka ei ole paikka.
+     *
+     * Kaikki yllä oleva mittaa sitä että raita seuraa jalkoja. Tämä mittaa
+     * päinvastaista: raitaa joka ei välitä jaloista lainkaan, ja jonka koko
+     * merkitys on siinä että se **loppuu**. Kolme väitettä, ja jokainen niistä
+     * on sellainen jonka voi rikkoa vahingossa ilman että mikään muu näkyy:
+     *
+     *   a) tähti vaihtaa raidan sillä framella jolla se alkaa, ja **palauttaa
+     *      sen huoneen raidan joka silloin kuuluu tähän paikkaan** — ei sitä
+     *      jossa tähti alkoi. Mitataan luolassa, koska se on ainoa paikka jossa
+     *      nuo kaksi voivat erota;
+     *   b) tähti voittaa pomoraidan. Se on `trackFor`in ensimmäinen rivi ja
+     *      samalla se rivi joka näyttää kyseenalaiselta, eli juuri se jonka joku
+     *      joskus kääntää toisin päin;
+     *   c) raita on datana se mitä siitä väitetään: pelin nopein. Tempo on luku
+     *      taulussa, joten tämä on tarkistus eikä mielipide.
+     */
+    {
+      const { STAR_FRAMES } = await import('/src/entities/player.js');
+      const s = mk('1-1', { type: 'shroom', level: 1 });
+      const own = Music.current;
+      s.player.collect('star');
+      s.update(i);
+      const onStar = Music.current;
+      // Loppuun asti, ja sitten muutama frame yli.
+      s.player.star = 2;
+      for (let f = 0; f < 6; f++) { i.pressed = blank(); s.update(i); }
+      expect('supertähti soi omaa raitaansa ja antaa huoneen takaisin kun se loppuu',
+        own === 'level' && Music.has('star') && onStar === 'star'
+        && s.player.star === 0 && Music.current === 'level',
+        `${own} -> ${onStar} -> ${Music.current} (tähteä jäljellä ${s.player.star},`
+        + ` täysi mitta ${STAR_FRAMES} framea)`);
+
+      const boss = mk('1-F', { type: 'shroom', level: 1 });
+      const bossOwn = Music.current;
+      boss.player.collect('star');
+      boss.update(i);
+      const bossStar = Music.current;
+      boss.player.star = 1;
+      for (let f = 0; f < 4; f++) { i.pressed = blank(); boss.update(i); }
+      expect('tähti voittaa pomoraidan, ja pomo saa raitansa takaisin',
+        bossOwn === 'boss' && bossStar === 'star' && Music.current === 'boss',
+        `${bossOwn} -> ${bossStar} -> ${Music.current}`);
+
+      const tempos = Music.names().map((n) => [n, Music.tempoOf(n)]);
+      const fastest = tempos.reduce((a, b) => (b[1] > a[1] ? b : a));
+      expect('tähtiraita on pelin nopein: kello on osa sen sisältöä',
+        fastest[0] === 'star',
+        tempos.sort((a, b) => b[1] - a[1]).map(([n, t]) => `${n} ${t}`).join(', '));
+      Music.stop();
+      Music.current = null;
+    }
   }
 
   /* ------------------------------ kuplaloukku -------------------------- */
@@ -9382,6 +9804,22 @@ const report = await page.evaluate(async () => {
       { n: 'run 2', s: { state: 'walk', frame: 2, running: true } },
       { n: 'jump', s: { state: 'jump', frame: 0 } },
       { n: 'duck', s: { state: 'duck', ducking: true } },
+      /*
+       * MAAHANISKU, kolme näytettä. Ne ovat tässä listassa eivätkä omassa
+       * kokeessaan siksi että tämän listan kaksi porttia ovat juuri ne jotka
+       * uusi asento voi rikkoa: kyykky piirretään laatikon *pohjalle* eikä sen
+       * ylälaitaan, joten se on kaikista asennoista lähimpänä sitä riviä jonka
+       * alle mikään ei saa mennä (`below: 0` — lattiaviiva on lattiaviiva), ja
+       * se on myös ainoa asento jossa pää ja vartalo on siirretty yhdessä eikä
+       * erikseen, eli ainoa jossa hahmo voisi katketa kahtia.
+       *
+       * `ducking` on tarkoituksella `false` kaikissa kolmessa: syöksy ei kutistu
+       * laatikkoaan, ja jos joku joskus panee sen kutistumaan, tämä lista mittaa
+       * asennon väärää laatikkoa vasten ja kertoo siitä.
+       */
+      { n: 'pound charge', s: { state: 'jump', pound: 'charge', poundT: 12 } },
+      { n: 'pound lag', s: { state: 'idle', pound: 'lag', poundT: 20 } },
+      { n: 'pound rise', s: { state: 'idle', pound: 'lag', poundT: 3 } },
       /* Hand over hand up a vine, seen from behind. Nothing leaves the box
        * that the standing pose does not already send out: the raised arms sit
        * on the same columns the hanging ones do. */
@@ -9417,6 +9855,10 @@ const report = await page.evaluate(async () => {
     const leaks = [];
     const pieces = [];
     const hashes = {};
+    /* Kuinka monta pikseliä laatikon ylälaidasta alaspäin piirros alkaa. Yksi
+     * luku per asento, ja se on koko kyykyn mitta: kyykky *on* se että pää on
+     * alempana. */
+    const tops = {};
     for (const level of [0, 1, 2, 3, 4, 5]) {
       for (const type of [null, 'shroom', 'flower', 'leaf', 'pop']) {
         for (const p of poses) {
@@ -9445,7 +9887,10 @@ const report = await page.evaluate(async () => {
                 if (y > y1) y1 = y;
               }
             }
-            if (facing === 1) hashes[`${level}|${type}|${p.n}`] = hash;
+            if (facing === 1) {
+              hashes[`${level}|${type}|${p.n}`] = hash;
+              tops[`${level}|${type}|${p.n}`] = y0 - OY;
+            }
             const where = `L${level} ${type || 'none'} ${p.n} f${facing}`;
             if (x1 < 0) { leaks.push(`${where}: nothing drawn at all`); continue; }
 
@@ -9501,6 +9946,44 @@ const report = await page.evaluate(async () => {
       leaks.length === 0, `${leaks.length} poses leak: ${leaks.slice(0, 4).join('; ')}`);
     expect('the player is one piece in every pose at every power level',
       pieces.length === 0, `${pieces.length} broken: ${pieces.slice(0, 4).join('; ')}`);
+
+    /*
+     * MAAHANISKUN KYYKKY ON KYYKKY, JA SE MITATAAN PÄÄN PAIKASTA.
+     *
+     * Asento tuli siksi että liikkeen hinta — ne 12 + n framea joina pelaaja ei
+     * ohjaa mitään — oli koko ajan olemassa mutta näkymätön: ilmassa `state()`
+     * sanoi `jump` ja maassa `idle`, eli lataus näytti leijumiselta ja
+     * laskeutumisen jälkeinen jäykkyys siltä että hahmo seisoo tumput suorina.
+     * "Piirsimme asennon" ei ole tarkistettavissa; **"pää on alempana"** on.
+     *
+     * Kolme lukua ja kaksi väitettä: kyykyssä pää on alempana kuin seistessä,
+     * ja nousussa se on matkalla takaisin ylös muttei vielä perillä. Jokaisella
+     * voimatasolla ja jokaisella tehostuksella, koska piirros skaalataan
+     * tasoille 2–5 samasta 26 rivin pohjasta eikä yksikään niistä ole erikseen
+     * piirretty — ja juuri siksi yksikään niistä ei myöskään ole erikseen
+     * katsottu.
+     */
+    {
+      const flat = [];
+      for (const level of [0, 1, 2, 3, 4, 5]) {
+        for (const t of [null, 'shroom', 'flower', 'leaf', 'pop']) {
+          const key = (n) => tops[`${level}|${t}|${n}`];
+          const stand = key('idle');
+          const lag = key('pound lag');
+          const rise = key('pound rise');
+          if (!(lag > stand && rise < lag && rise >= stand)) {
+            flat.push(`L${level} ${t || 'none'}: seisten ${stand}, kyykyssä ${lag}, noustessa ${rise}`);
+          }
+        }
+      }
+      expect('maahaniskun kyykky on kyykky: pää laskee ja nousee takaisin',
+        flat.length === 0,
+        flat.length ? flat.slice(0, 4).join('; ')
+          : `L1 none seisten ${tops['1|null|idle']}, kyykyssä ${tops['1|null|pound lag']}`
+            + `, noustessa ${tops['1|null|pound rise']}`
+            + ` — L5 none ${tops['5|null|idle']}/${tops['5|null|pound lag']}`
+            + `/${tops['5|null|pound rise']}`);
+    }
 
     /* The paukkupapu landed as the fourth power type on the day this audit was
      * written, and a new type that inherits another one's drawing looks exactly
@@ -9706,6 +10189,23 @@ const report = await page.evaluate(async () => {
       '216,224,240', '140,156,192',
       // nielu: märkä, lähes musta kurkku ja sen punainen sisus
       '24,16,48', '52,44,104', '104,88,176', '32,24,64', '120,16,60', '200,40,108',
+      /*
+       * Neljä uutta lajia, 16.8.2026. Terästä ei ole tässä listassa kahdesti:
+       * törähdystorvi ja sen ammus on maalattu **pöntön omilla sinisillä**,
+       * koska ne ovat samaa tehdasta — se on piirroksen väite ja tämä lista on
+       * paikka jossa se väite näkyy koodina.
+       */
+      // torvi ja törähdys: messinkiä läpi koko esineen, ja se kaasu joka niistä tulee
+      '255,232,160', '255,200,74', '200,144,24', '140,90,16',
+      '168,224,74', '92,156,40', '244,255,208',
+      // paarma: happamanvihreä raidoitus
+      '200,232,56', '92,108,16',
+      // yökki: kuuma oranssi, jota kukaan muu tässä pelissä ei käytä
+      '224,88,32', '122,36,8', '248,160,80', '168,28,28',
+      // karvapallo: vaalennettu takku, ja se kirkas kohta joka näyttää kierteen
+      '160,104,48', '216,168,96', '90,50,16', '248,224,168',
+      // paukkupöhö: paineen punainen, ja valkoiseksi kirkastuva sytytys
+      '200,24,32', '240,64,48', '140,12,24', '255,232,192',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -9803,6 +10303,43 @@ const report = await page.evaluate(async () => {
       { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8,
         stomp: false, pit: true, ...none,
         paint: (ox, t, f) => sprites.drawKurnuttaja(g, ox, OY, t, f) },
+      /*
+       * NELJÄ UUTTA, JA NE OVAT TÄSSÄ LISTASSA SAMALLA RIVILLÄ KUIN MUUTKIN.
+       *
+       * Se on koko pointti: uusi vihollinen ei tule peliin sillä että se toimii
+       * vaan sillä että se kestää samat mitat kuin ne jotka ovat jo siellä.
+       * Kolme näistä on tallattavia ja niiden lakipinnan on siis oltava leveä;
+       * karvapallo ei ole, ja sen on kannettava piikkejä. Kumpaakaan ei
+       * väitetä tässä — ne mitataan alempana samasta piirroksesta.
+       *
+       * Latautuva torvi ja yökkäävä yökki piirretään myös ladatussa asennossaan
+       * (`charge`/`heave` 1), koska varoitusasento on se frame jolla piirros voi
+       * kasvaa ulos laatikostaan huomaamatta: se on se muoto jota kukaan ei
+       * katso kuin sen puolen sekunnin ajan.
+       */
+      { n: 'torvi', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorvi(g, ox, OY, t, f, 0) },
+      { n: 'torvi ladattu', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorvi(g, ox, OY, t, f, 1) },
+      { n: 'törähdys', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorahdys(g, ox, OY, t, f) },
+      { n: 'paarma', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaarma(g, ox, OY, t, f, 0) },
+      { n: 'paarma tähtää', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaarma(g, ox, OY, t, f, 1) },
+      { n: 'yökki', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawYokki(g, ox, OY, Math.floor(t / 8), f, 0) },
+      { n: 'yökki yökkää', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawYokki(g, ox, OY, Math.floor(t / 8), f, 1) },
+      /* Tupsut nousevat rivin laatikon yli, ja se on sama sallittu ylitys kuin
+       * piikkiukolla: piikki on taidetta joka ei satuta, ja juuri siksi se saa
+       * olla laatikon ulkopuolella. */
+      { n: 'karvapallo', box: [0, 0, 12, 12], stomp: false, ...none,
+        paint: (ox, t, f) => sprites.drawKarvapallo(g, ox, OY, t, f) },
+      { n: 'paukkupöhö', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaukkupoho(g, ox, OY, Math.floor(t / 8), f, 0) },
+      { n: 'paukkupöhö sytytetty', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaukkupoho(g, ox, OY, Math.floor(t / 8), f, 0.9) },
     ];
 
     // One line per distinct fault, not one per frame: 176 frames of the same
@@ -14667,6 +15204,25 @@ const report = await page.evaluate(async () => {
         sprites.drawBeanBomb(g, 20, 40, 12);
         check('beanbomb');
       }
+      // Neljä uutta, ladattuina ja lataamattomina: `charge`-haarat ovat niitä
+      // joissa piirto vaihtaa väriä kesken sprite, eli juuri niitä joissa
+      // composite-tila voi jäädä auki.
+      for (const c of [0, 1]) {
+        sprites.drawTorvi(g, 20, 40, 12, 1, c);
+        check(`torvi ${c}`);
+        sprites.drawPaarma(g, 20, 40, 12, -1, c);
+        check(`paarma ${c}`);
+        sprites.drawYokki(g, 20, 40, 12, 1, c);
+        check(`yökki ${c}`);
+        sprites.drawPaukkupoho(g, 20, 40, 12, -1, c);
+        check(`paukkupöhö ${c}`);
+      }
+      sprites.drawTorahdys(g, 20, 40, 12, 1);
+      check('törähdys');
+      sprites.drawKarvapallo(g, 20, 40, 12, 1);
+      check('karvapallo');
+      sprites.drawPisara(g, 20, 40, 12);
+      check('happopisara');
       /* Kaikki seitsemän, ei viisi. Lista oli `[0,1,2,3,4]` siihen asti kun
        * pomot piirrettiin uusiksi, eli sääherra ja kuningas — ne kaksi jotka
        * tulivat viimeisenä ja joita kukaan ei ollut katsonut — olivat ainoat

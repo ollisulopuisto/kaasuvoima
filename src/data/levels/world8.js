@@ -314,7 +314,7 @@ export const WORLD8_LEVELS = {
   '8-5': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
     chunks: [
-      'keep_start', 'fort_power', 'keep_pour', 'keep_watch', 'fort_gap',
+      'keep_start', 'fort_power', 'keep_pour', 'keep_watch', 'hyppy_harjoitus', 'fort_gap',
       'keep_teeth', 'keep_pour', 'keep_yoke', 'fort_gap', 'boss_arena_big',
     ],
   },
@@ -340,7 +340,7 @@ export const WORLD8_LEVELS = {
   '8-6': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 4,
     chunks: [
-      'keep_start', 'fort_power', 'keep_forge', 'fort_hall', 'fort_gap',
+      'keep_start', 'fort_power', 'keep_forge', 'fort_hall', 'hyppy_kampi', 'fort_gap',
       'keep_hole', 'keep_teeth', 'fort_gap', 'keep_croak', 'boss_arena',
     ],
   },
@@ -369,7 +369,7 @@ export const WORLD8_LEVELS = {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 5,
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'fort_gap', 'keep_hole',
-      'fort_burn', 'keep_teeth', 'fort_gap', 'keep_croak', 'keep_watch',
+      'fort_burn', 'keep_teeth', 'fort_gap', 'keep_croak', 'keep_watch', 'hyppy_neula',
       'fort_gap', 'keep_teeth', 'fort_gap', 'boss_arena_big',
     ],
   },

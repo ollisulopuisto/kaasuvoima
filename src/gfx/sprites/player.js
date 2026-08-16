@@ -540,6 +540,89 @@ function climbPose(ctx, px, py, pal, s, small) {
 }
 
 /**
+ * Frames of the landing lag left when the body starts getting up again, and how
+ * far it comes up. The number is the drawing's own and not the move's: the lag
+ * is 16 to 36 frames (`entities/player.js`) and it is not this file's business
+ * how long it is — only that the last few of them look like standing up rather
+ * than like the crouch ending on a cut.
+ */
+const POUND_RISE_AT = 7;
+const POUND_RISE = 2;
+
+/**
+ * MAAHANISKU — the tuck. One drawing for all three phases of the dive, and the
+ * argument for that is the move itself.
+ *
+ * The ground pound already charged for the frames it takes (`POUND_CHARGE`
+ * hanging still, then the drop, then `POUND_LAG_*` stuck on the floor), and
+ * until this pose existed the player paid all of it while looking exactly as he
+ * looks in an ordinary jump: `state()` says `jump` in the air and `idle` on the
+ * ground, so the wind-up looked like hanging, the dive looked like falling and
+ * the lag looked like standing there for no reason. **The one thing the whole
+ * move is built around — that it costs you time you are not driving — was the
+ * one thing the picture did not say.**
+ *
+ * So the body balls up, and it stays balled up until the move lets go:
+ *
+ *   - **charge**: tucked in the air, and this is the telegraph. It is the only
+ *     moment anything on screen has to read the move and get out from under it,
+ *     which is exactly what those twelve frames were bought for.
+ *   - **dive**: the same tuck, moving. He is a cannonball and not a man falling
+ *     — the gas he rides down on is already drawn by the scene.
+ *   - **lag**: the same tuck, arrived, and for the last `POUND_RISE_AT` frames
+ *     of it he begins to come up. That rise is the whole animation: it says the
+ *     controls are about to come back before they do.
+ *
+ * **The hitbox does not move.** `drawPlayer` picks the box from `PLAYER_SIZES`
+ * as always, because `ducking` is the flag that resizes a body and this pose
+ * deliberately does not set it — a dive that shrank the box would change what a
+ * dive collides with, and every measured thing about the move (verify.mjs's
+ * maahanisku block) is measured on the box it has always had. What changes is
+ * only where the art sits inside that box: at the bottom of it, with air over
+ * his head, which is what a crouch looks like.
+ *
+ * On the big body this is the ducking drawing, moved down to stand on the floor
+ * line of the taller box. Not a coincidence and not laziness: a crouch is a
+ * crouch, and two drawings of it would be two ways for the same posture to
+ * drift apart. The small body has never had a ducking pose — `wantDuck` is
+ * gated on `big` — so its crouch is drawn here, at the same proportions.
+ */
+function poundPose(ctx, px, py, pal, s, small) {
+  const rise = s.pound === 'lag' && (s.poundT || 0) <= POUND_RISE_AT ? POUND_RISE : 0;
+
+  if (small) {
+    const hy = py + 4 - rise;
+    if (s.type === 'leaf') gasHose(ctx, px + 3, hy + 6, s.wag || 0);
+    head(ctx, px + 3, hy, pal, 7, 3, 4, false);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(px + 8, hy + 4, 1, 2);
+    ctx.fillStyle = pal.suit;
+    ctx.fillRect(px + 1, hy + 7, 10, 3);
+    if (pal.mark) gasMarks(ctx, pal.mark, px + 1, hy + 7, 10, 3);
+    ctx.fillStyle = pal.legs;
+    ctx.fillRect(px + 2, hy + 10, 8, 2);
+    ctx.fillStyle = pal.shade;
+    ctx.fillRect(px + 2, hy + 10, 8, 1);
+    if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 10);
+    return;
+  }
+
+  const hy = py + 10 - rise;
+  if (s.type === 'leaf') gasHose(ctx, px + 3, hy + 7, s.wag || 0);
+  head(ctx, px + 3, hy + 1, pal, 8, 3, 6, false);
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(px + 8, hy + 6, 1, 2);
+  ctx.fillStyle = pal.suit;
+  ctx.fillRect(px + 1, hy + 10, 12, 3);
+  if (pal.mark) gasMarks(ctx, pal.mark, px + 1, hy + 10, 12, 3);
+  ctx.fillStyle = pal.legs;
+  ctx.fillRect(px + 2, hy + 13, 10, 3);
+  ctx.fillStyle = pal.shade;
+  ctx.fillRect(px + 2, hy + 13, 10, 1);
+  if (s.type === 'leaf') leafFronds(ctx, px + 1, hy + 1, 12);
+}
+
+/**
  * Hair on fire. Gold core, red edge, and it grows and shrinks from the bottom
  * up, so `burn` is simply how many of the four rows are alight. It sits on the
  * head and touches it — a flame floating a pixel clear of the head is a separate
@@ -600,6 +683,16 @@ function drawPlayerBase(ctx, x, y, s, small) {
     // shoulders looks broken, not cold.
     const px = Math.round(bx) + pose.shiver;
     const py = Math.round(y);
+
+    /* Ahead of everything, including the hose, because the tuck draws its own:
+     * a hose left at the standing shoulder would hang in the air a body-length
+     * above the man it comes out of. Same shape of early return as the dive
+     * itself has in `Player.update`, and for the same reason — while it runs,
+     * nothing else about the body is happening. */
+    if (s.pound) {
+      poundPose(ctx, px, py, pal, s, small);
+      return;
+    }
 
     if (s.type === 'leaf') {
       gasHose(ctx, px + (ducking ? 3 : 2), py + (small ? 7 : ducking ? 7 : 17), s.wag || 0);
@@ -829,7 +922,8 @@ function sleepZs(ctx, x, y, box, facing, d) {
 }
 
 /**
- * @param {object} s { type, level, facing, frame, state, ducking, running, wag, tint, glow }
+ * @param {object} s { type, level, facing, frame, state, ducking, pound, poundT,
+ *                     running, wag, tint, glow }
  */
 export function drawPlayer(ctx, x, y, s) {
   const level = Math.max(0, Math.min(5, s.level ?? 0));

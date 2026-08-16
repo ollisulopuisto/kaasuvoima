@@ -169,7 +169,14 @@ const SEMI = new Set(['-']);
  * `checkFalling` kysyy siltä kolme asiaa joita muilta ei kysytä.
  */
 const FALLING = new Set(['C']);
-const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O']);
+/*
+ * Se joukko jonka jaloilta kysytään mitä niiden alla on. Neljä uutta merkkiä
+ * (16.8.2026) — `T` törähdystorvi, `Z` paarma, `Y` yökki, `m` paukkupöhö —
+ * ovat mukana siksi että kolme neljästä seisoo lattialla ja lattian olemassaolo
+ * on juuri se asia jonka tämä tiedosto tarkistaa. Paarma on hyväksytysti
+ * ilmassa, ks. `checkEnemyFooting`in oma lista.
+ */
+const ENEMY = new Set(['g', 'k', 'f', 'p', 'r', 'c', 'A', 'H', 'O', 'T', 'Z', 'Y', 'm']);
 const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 /* The two halves of a warp pipe's mouth. `{}` below them is ordinary pipe. */
 const WARP = new Set(['(', ')']);
@@ -486,7 +493,7 @@ function checkEnemyFooting(rows, w, problems) {
       // Hovering kinds, pipe dwellers, and the shell walkers (which spawn half
       // a tile high and drop in) have no footing to check. The player start is
       // likewise allowed to be in mid-air: the game drops them in.
-      if ('ApfrkO'.includes(ch)) {
+      if ('ApfrkOZ'.includes(ch)) {
         /* ...paitsi että keinuvalla on toinen kysymys, ja se on tämän saman
          * säännön peilikuva: kävelijä tarvitsee alleen kiinteän laatan, pilvi
          * tarvitsee alleen tyhjän. `STINK_BOB_ROWS` riviä merkin alapuolella on

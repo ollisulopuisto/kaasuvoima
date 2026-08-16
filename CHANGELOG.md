@@ -7,6 +7,181 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.85 — maahaniskun kyykky, neljä uutta vihollista, mitatut hyppysarjat ja tähden oma raita
+
+Omistajan viisi pyyntöä 16.8.2026, yhtenä eränä. Neljä niistä on samaa asiaa
+eri suunnista — **peli oli normaalilla liian helppo** — ja viides on merkki
+jota ei ollut.
+
+| väite | punainen | vihreä |
+| --- | --- | --- |
+| maahaniskulla on asento | `seisten 0, kyykyssä 0` | `L1 seisten 0, kyykyssä 11, noustessa 9` |
+| lattian rikkoo se joka rikkoo katon | `pieni puskee false, iskee 5 tiiltä` | `pieni: puskee false, iskee 0 — kasvanut: molemmat` |
+| rikkominen on tappamista tiukempi | `voima 0.60 rikkoi` | `voima 0.60 tappaa mutta ei riko, 0.82 rikkoo` |
+| jokaisella uudella lajilla on hinta | `13 merkkiä` | `17 merkkiä: g k f p r c x A H b O P U T Z Y m` |
+| ammuksen päälle voi hypätä | — | `putosi 0 px, tallaus poisti sen` |
+| paarma ampuu vain alleen | — | `alla 1 pisara, kaukana 0` |
+| karvapallo kiihtyy eikä talloudu | — | `0,91 → 1,75 px/frame, tallaus maksoi tason` |
+| paukkupöhö syttyy tallauksesta | — | `jäi henkiin, tiiliä 3 → 2, voimataso 1 → 0` |
+| hyppysarja on hypättävissä voimatasolla 0 | — | `kolme sarjaa, kaikki läpi ratkaisijalla` |
+| ...ja tiukin on tiukka | — | `9 px = 3,6 framea juoksuvauhdilla` |
+| tähtiraita on pelin nopein | — | `star 208, boss 176, cave 88` |
+
+### Maahanisku näyttää nyt siltä mitä se maksaa
+
+Liike on maksanut alusta asti ohjaamattomia frameja — kaksitoista latausta,
+syöksy, ja kuudestatoista kuuteentoista+kahteenkymmeneen framea laskeutumisen
+jälkeen — ja **se hinta oli näkymätön**: `state()` sanoi ilmassa `jump` ja
+maassa `idle`, joten lataus näytti leijumiselta ja jäykkyys siltä että hahmo
+seisoo tumput suorina. Nyt keho menee kerälle latauksessa, pysyy kerällä
+syöksyssä ja nousee siitä viimeisillä frameilla.
+
+**Osumalaatikko ei liiku.** `ducking` on se lippu joka kutistaa kehon, eikä
+tämä asento aseta sitä: syöksy joka kutistaisi laatikkonsa muuttaisi sen mihin
+se törmää, ja jokainen maahaniskusta mitattu luku on mitattu sillä laatikolla
+joka sillä on aina ollut. Muuttunut on vain se missä piirros istuu laatikon
+sisällä — sen pohjalla, ilmaa pään yllä, mikä on se miltä kyykky näyttää.
+
+Iso keho käyttää **kyykkypiirrosta siirrettynä**, ei omaansa: kyykky on kyykky,
+ja kaksi piirrosta samasta asennosta on kaksi tapaa ajautua erilleen. Pieni
+keho ei ole koskaan saanut kyykistyä (`wantDuck` vaatii `big`), joten sen
+kyykky piirrettiin tässä.
+
+### Lattian rikkominen on katon ehto ylösalaisin
+
+Ehto oli **voimataso 3**. Nyt se on `p.big`, eli täsmälleen sama ehto jonka
+päänpusku on aina asettanut: pieni Pieruprinssi kolauttaa tiiltä alta eikä se
+hajoa, ja nyt hän myös laskeutuu sen päälle eikä se hajoa. Omistajan pyyntö oli
+tämä symmetria sanasta sanaan, ja se on parempi sääntö kuin vanha siksi ettei
+se ole tämän liikkeen oma luku lainkaan — pelaaja on jo oppinut kerran kuka
+tiilen rikkoo.
+
+Hinta siirtyi korkeuteen. `POUND_BREAK_AT` on 0,72 ja se on **tappamisen rajaa
+(0,50) ylempänä**: syöksy joka tappaa vihollisen ei vielä riitä tiileen. Se on
+mitattu molemmista suunnista — voima 0,60 tappaa muttei riko, 0,82 rikkoo —
+eikä yksikään hyppy tasamaalta yllä siihen (mitattu paras nousu 100 px,
+[PHYSICS.md](PHYSICS.md)), joten reikä lattiassa on aina joko korokkeelta tai
+pieruhypyllä ansaittu.
+
+### Neljä uutta vihollista, ja ne kysyvät neljää eri kysymystä
+
+Peli oli helppo koska **jokainen vihollinen kysyi samaa kysymystä**: milloin
+hyppään sen yli tai päälle. Kun se osataan, kentän pidentäminen kysyy sitä
+useammin eikä vaikeammin — ja juuri sen NORMAALI-taso tekee. Neljä uutta on
+valittu peittämään neljä eri **etäisyyttä**:
+
+| laji | mistä se tulee | vastaus | hinta mittarissa |
+| --- | --- | --- | --- |
+| **törähdystorvi** (`T`) | kaukaa vaakasuoraan | mene ali tai talloo torvi | 2,2 |
+| **paarma** (`Z`) | ylhäältä alas | älä jää seisomaan | 1,8 |
+| **yökki** (`Y`) | lattiaa pitkin | hyppää pallon yli, kaada lähde | 2,4 |
+| **paukkupöhö** (`m`) | lähietäisyydeltä, kun siihen on koskettu | lähde heti | 1,9 |
+
+Kaksi niistä on myös **työkalu**: törähdys on tallattava, eli kuilun yli lentävä
+ammus on askelma; paukkupöhön räjähdys rikkoo tiiliä `burstBricks`in omilla
+säännöillä, eli seinän voi avata ilman voimatasoa, häntää ja maahaniskun
+korkeutta.
+
+Kaikki neljä läpäisevät samat kolme spriteporttia kuin vanhat lajit, ja **kaksi
+mittausta ostettiin punaisella**:
+
+- **messinkitorvi erottui tehtaan lattiasta 5,4 prosentilla** (kynnys 8,6).
+  Syy oli kirjoitettu auki jo pöntön kohdalle eikä sitä tarvinnut arvata
+  uudestaan: yhtä paljon lämmintä ja kylmää keskiarvoistuu tasan siksi
+  keskiharmaaksi joka tehtaan lattia on. Esine valitsi puolen — pönttö on
+  terästä, torvi on messinkiä läpi koko esineen — ja luku on nyt 12,0.
+- **karvapallo erottui yön maasta 1,7 prosentilla**, eli se oli käytännössä
+  näkymätön juuri sillä lattialla jota pitkin se vierii. Vaalennettuna 12,0.
+- ja sama vika kolmannen kerran: **törähdys 2,6 % aavikon maata vasten**.
+  Korjaus on kaasupyrstö, joka on kolmannes rungosta ja samalla se osa joka
+  kertoo mikä ammuksen liikkeelle panee — **6,9 %**, ja se on yhä alle 8,6:n.
+  Se jää tähän tietoisena eikä huomaamatta: laji on maailmassa 4 eikä aavikolla,
+  eikä `scale.js` lisää sitä (torvi ei ole `GROUNDLINGS`issa), joten mitattu
+  huonoin tapaus on tilanne jota peli ei tänään tuota. Jos joku panee torven
+  aavikolle, tämä rivi on se joka kertoo mitä sille pitää ensin tehdä.
+
+### Hyppysarjat: "vaikea muttei mahdoton" on kaksi mitattavaa väitettä
+
+Omistaja pyysi *algoritmia* joka tekee hyppysarjoja jotka ovat vaikeita muttei
+mahdottomia. Siinä lauseessa on kaksi vaatimusta jotka osoittavat vastakkaisiin
+suuntiin, eikä kumpaakaan voi jättää arvioitavaksi:
+
+- **"Ei mahdoton" on olemassaoloväite.** Jonkin syötejonon on vietävä läpi.
+- **"Vaikea" on niukkuusväite.** Niitä jonoja ei saa olla montaa.
+
+Molemmat lasketaan, koska fysiikka on deterministinen.
+`tools/jump-solver.js` hakee jokaiselle loikalle ponnistuskohdan pikselin
+tarkkuudella ja pitoajan neljästä, mittaa **ikkunan** — montako
+ponnistuskohtaa vie perille — ja ajaa lopuksi koko sarjan yhtenä juoksuna
+voimatasolla 0, pelkällä juoksulla ja hypyllä. `tools/gen-jumps.mjs` arpoo
+ehdokkaita, mittaa neljätoista kutakin reseptiä kohti ja valitsee sen jonka
+**kapein** loikka on lähimpänä reseptin tavoitetta.
+
+Ikkuna on pikseleinä eikä frameina, ja se on päätös: ponnistuskohta on paikka,
+ja pelaaja näkee paikan muttei framea. Juoksukatolla kymmenen pikseliä on neljä
+framea, kävelyvauhdilla seitsemän — sama ikkuna on eri määrä armoa eri
+vauhdilla, ja niin se on myös pelattuna.
+
+Kolme sarjaa, kaikki maailmaan 8 jossa hyppy saa olla pelin vaikein asia:
+
+| sarja | loikat | ikkunat | kenttä |
+| --- | --- | --- | --- |
+| HARJOITUS | 5 | 40–49 px | 8-5 |
+| KAMPI | 6 | 28–49 px | 8-6 |
+| NEULA | 6 | 9–33 px | 8-7 |
+
+Yhdeksän pikseliä on 3,6 framea juoksuvauhdilla, ja se on koko sarjaston
+tiukin kohta. `verify.mjs` ajaa saman todistuksen samasta moduulista joka
+ajolla: fysiikan muutos ei vanhenna näitä hiljaa vaan kaataa portin.
+
+**Ehto koskee kapeinta loikkaa eikä kaikkia.** Ensimmäinen versio vaati
+haarukan joka loikalta ja hylkäsi jokaisen ehdokkaan yhdestä helposta loikasta
+viidestä — se olisi ollut vaatimus "tasainen sarja", ja tasainen sarja on
+rytmitön. Sarjan vaikeus on sen tiukin kohta; väljä loikka sen keskellä on
+hengähdys.
+
+### Ja se mitä tämä paljasti botista
+
+Maareitin todistaja (`tools/level-bot.js`) **ei osaa lankkusarjaa**. Ei siksi
+että lankku olisi sille tuntematon — se tähtää astinkiveen aivan oikein — vaan
+siksi että se pitää hyppyä pohjassa kuusitoista framea joka kerta kun se
+tähtää: yksi lankku kuilussa menee siitä hyvin, viisi peräkkäistä ei.
+
+Se on botin karkeus eikä kentän vika, ja sellaiselle paikalle on nyt **oma,
+vahvempi todistaja**. Raja kahden todistajan välillä on kirjattu koodiin ja se
+on tiukka: ylitys kelpaa vain jos tyhjä on leveämpi kuin *kaksi* mitattua
+hyppyä ja sen yllä on vähintään kolme lankkua. Kapeamman botti hyppää itse —
+myös silloin kun siinä on lankku, kuten 4-1:ssä ja 4-3:ssa. Ylitysten määrä
+tulostetaan joka kentästä, ja koko muu peli antaa nollan.
+
+Samalla korjaantui vanha kahdennus: maailmojen 6–8 portilla oli **oma kopio
+botista**, yksinkertaisempi kuin varsinainen. Se tarkoitti kahta mielipidettä
+siitä mitä "läpäistävissä" tarkoittaa, ja ero näkyi ensimmäisenä päivänä jona
+botille kirjoitettiin uusi taito: yksi portti kertoi kentän aukeavan ja toinen
+ettei se aukea, samasta kentästä samana ajona. Nyt molemmat ajavat samaa
+`runGround`ia.
+
+### Supertähdellä on oma raita
+
+Jokainen muu raita `TRACKS`-taulussa vastaa kysymykseen *missä olen*. Tämä
+vastaa kysymykseen *mitä minulle juuri nyt tapahtuu*, ja siksi se on ainoa joka
+soi minkä tahansa huoneen päällä — **myös pomohuoneen**. Se on `trackFor`in
+ensimmäinen rivi ja samalla se rivi joka näyttää kyseenalaiselta: tähti
+pomohuoneessa on juuri se hetki jona pelaaja tekee sen mitä tähti lupaa, eli
+kävelee suoraan päin.
+
+Järjestys on sama kuin ruudun värillä (`PALETTE`: osuma > tähti > huone), koska
+kahden signaalin eri järjestys olisi kaksi eri väitettä samasta hetkestä.
+
+Raita on **pelin nopein**, 208 vastaan pomon 176, ja kaikki siinä on
+kirjoitettu sen loppumista vasten: yksi kahden tahdin riffi ilman yhtään
+taukoa, kromaattisesti nouseva basso, ja bassorumpu kahdeksasosille. Omaa
+sävellystä — vapautuneesta sävelmistöstä ei löydy teosta joka olisi *tämä
+lause*, koska klassikot ovat paikkoja ja tunnelmia eikä kuudentoista sekunnin
+voittoputki ole kumpikaan.
+
+---
+
 ## v26.08.16.84 — kuvaefektit: tärinällä on suunta, ja tapahtumilla on väri
 
 Kaksi jonossa ollutta kuvaefektiä (ROADMAP, *"Ruutuefektit"* kohta 1 ja

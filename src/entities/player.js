@@ -1279,6 +1279,14 @@ export class Player extends Entity {
       frame: this.animFrame,
       state: this.state(),
       ducking: this.ducking,
+      /* MAAHANISKU. Two plain fields rather than a pose name, for the same
+       * reason the move itself is three plain fields: the drawing decides what
+       * a tuck looks like and how long the getting-up lasts, and this side
+       * decides nothing but which phase is running and how much of it is left.
+       * `state()` is left alone — it answers "standing, walking, jumping or
+       * climbing", and a dive is none of those. */
+      pound: this.poundPhase || null,
+      poundT: this.poundTimer,
       running: Math.abs(this.vx) > MAX_WALK,
       tick: this.tick,
       wag: this.wag,
