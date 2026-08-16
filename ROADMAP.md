@@ -284,7 +284,15 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    salaisuudet avautuu jo tavallisella pelaamisella eikä vihje niiden päällä
    olisi vihje vaan kyltti. Sama kolikkorivi on tavallisella putkella, ja
    koko pelin kuoppakaistan kolikkoriveistä 6,4 % on salaisuuden kohdalla.
-   Jäljellä: **demo näyttää tempun**.
+   ✔ **demo näyttää tempun** (v26.08.17.93) — alkuruudun esittely pysähtyy
+   putken kannelle, painaa alas, katoaa siihen, kerää luolan kolikot ja tulee
+   samaa tietä takaisin painamalla ylös katosta roikkuvaa suuta. Verbi
+   opetetaan, paikkaa ei: kenttä on **oma esittelykenttä**
+   ([src/data/demo-level.js](src/data/demo-level.js)) jota ei ole pelin
+   kentissä, joten paljastettavaa paikkaa ei ole olemassa. Kolme hylättyä
+   vaihtoehtoa ja niiden perustelut ovat sen tiedoston alussa. Portti mittaa
+   **tapahtuman eikä olemassaoloa**: kaistat 1 → 2 → 1, alas framella 389 ja
+   ylös framella 546, ja pelaajan oma tallennus koskematon sen jälkeen.
 
 ## Omistajan päätökset 16.8.2026 (ilta)
 
@@ -298,7 +306,7 @@ tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedo
 | minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen |
 | demo näyttää tempun | **tee** |
 | aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
-| jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet |
+| jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu 17.8.2026 (v26.08.17.93), eli este on poissa |
 | lisää pomovariaatioita | **kahdeksas variantti**, jotta "jokainen pomo kerran" on totta |
 | kenttäsäännöt käsintehdyille | vanhentunut merkintä: **jo voimassa** |
 | nimen tavaramerkkiriski | vanhentunut merkintä: **nimi on jo vaihdettu** |
@@ -981,13 +989,40 @@ koe joka voi asettaa sen paikkaan jota pelissä ei ole olemassa. Kaksi kertaa
 tässä erässä — ensin talloportin pelaaja piikkipenkkiin, nyt tämä — ja
 molemmilla kerroilla tulos näytti uskottavalta vialta.
 
-### Tiedossa: puhetesti on ajoittain epävakaa
+### Löydetty 17.8.2026: puhetestit mittasivat seinäkellolla ääntä (v26.08.17.93)
 
-`a spoken line is loud enough to hear` kaatui kerran lukemalla ääni 0.000,
-tausta 0.000, ja meni läpi heti seuraavalla ajolla lukemalla 0.566. Mittaus on
-aikariippuvainen eikä liity muutoksiin sen ympärillä. Ei korjattu, mutta
-kirjattu, koska satunnaisesti kaatuva portti on portti jonka lopettaa
-lukemasta.
+Neljä puhetestiä kaatui satunnaisesti noin joka toisessa ajossa, ja vikaa
+etsittiin **kolme kertaa testin omista luvuista**: kiinteä 900 ms:n odotus
+vaihdettiin hiljaisuuden odottamiseen, yksi ikkuna kahdeksi peräkkäiseksi.
+Kumpikin korjasi oikean asian, kumpikaan ei auttanut.
+
+Syy oli se ettei kysytty **mittasiko kone ollenkaan**:
+
+```
+hiljeni 465 ms, äänikello 0.00 s / seinäkello 0.47 s, ikkunat 0.00 0.00
+```
+
+Seinäkello eteni puoli sekuntia ja äänikello ei lainkaan; `ctx.state` sanoi
+koko ajan `running`. Ja vihreässäkin ajossa renderöijä laahasi — **2,65 s ääntä
+6,14 s:ssa, eli 43 % nopeudella**, jolloin 420 ms:n ikkuna on 180 ms ääntä ja
+400 ms pitkä puhuttu rivi mitataan puolikkaana.
+
+Seissyt renderöijä tuottaa kaikki kolme oiretta yhdellä syyllä: analysaattori
+palauttaa saman vanhan puskurin (siitä *täsmälleen* yhtä suuret lukemat
+`s 24.82 š 24.82 f 24.82`), sillä välin soitetut äänet ajastuvat samaan
+jäätyneeseen hetkeen ja soivat yhtä aikaa kun renderöijä herää (siitä
+mahdottomat pohjakohinat 15,3 · 25,1 · 46,0), ja juuri soitettu ääni lukee
+0,000. Kolme neljästä testistä oli siis koko ajan **oire eikä oma vikansa**.
+
+Korjaus on kaksiosainen eikä kumpikaan osa löysää kynnystä: mittausikkuna
+odottaa **äänikellossa** sen verran soitettua ääntä kuin siltä pyydettiin, ja
+väylällä pidetään mittausten ajan äänetön oskillaattori joka pitää renderöijän
+töissä. Jos renderöijä silti seisoo, rivi sanoo *"ei mitattu"* — ja erillinen
+tarkistus kaatuu jos **yksikään** äänimittaus ei toteutunut, jottei portti voi
+kadota huomaamatta.
+
+**Peli ei vuoda ääntä.** Tämä on headless-Chromiumin renderöijä; oikealla
+koneella äänilaite pyytää näytteitä riippumatta siitä mitä sivu tekee.
 
 ### Löydetty 11.8.2026: talloportti mittasi hyppyä vain leveydestä (v26.08.11.70)
 

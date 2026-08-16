@@ -340,7 +340,7 @@ export class Enemy extends Entity {
       return;
     }
     this.tumble(dir);
-    this.level.awardScore(this.score, this.cx, this.y);
+    this.level.chainReward(this.score, this.cx, this.y);
     Sfx.play('kick');
   }
 
@@ -424,7 +424,7 @@ export class Enemy extends Entity {
   /** @returns true when the stomp counted (player should bounce). */
   stomp() {
     this.remove = true;
-    this.level.awardScore(this.score, this.cx, this.y);
+    this.level.chainReward(this.score, this.cx, this.y);
     return true;
   }
 
@@ -499,7 +499,7 @@ export class Walker extends Enemy {
     this.squash = 22;
     this.stompable = false;
     this.vx = 0;
-    this.level.awardScore(this.score, this.cx, this.y);
+    this.level.chainReward(this.score, this.cx, this.y);
     return true;
   }
 
@@ -624,6 +624,9 @@ export class ShellGuy extends Enemy {
     this.vx = SHELL_SPEED * dir;
     this.facing = dir;
     this.reviveTimer = 0;
+    /* Uusi potku, uusi ketju: kuori kantaa omaa laskuriaan (ks. `CHAIN_LADDER`
+     * `scenes/level.js`:ssä), ja se alkaa siitä potkusta joka sen lähetti. */
+    this.chain = 0;
     /*
      * Reported from play: stomp a shell walker, walk into the shell, lose a
      * power level. The kick was landing correctly — and then the shell, which
@@ -694,7 +697,7 @@ export class ShellGuy extends Enemy {
   stomp() {
     if (this.mode === 'walk') {
       this.toShell();
-      this.level.awardScore(this.score, this.cx, this.y);
+      this.level.chainReward(this.score, this.cx, this.y);
       return true;
     }
     if (this.mode === 'sliding') {
@@ -764,7 +767,7 @@ export class Flyer extends Enemy {
     walker.spawnGrace = 12;
     this.level.add(walker);
     this.remove = true;
-    this.level.awardScore(this.score, this.cx, this.y);
+    this.level.chainReward(this.score, this.cx, this.y);
     return true;
   }
 
@@ -1159,7 +1162,7 @@ export class StinkCloud extends Enemy {
   stomp() {
     this.remove = true;
     this.level.spawnPuff(this.cx, this.cy, true);
-    this.level.awardScore(this.score, this.cx, this.y);
+    this.level.chainReward(this.score, this.cx, this.y);
     return true;
   }
 
@@ -3217,6 +3220,22 @@ export class Yokki extends Enemy {
  */
 const FUSE_FRAMES = 48;
 const BLAST_R = 40;
+/**
+ * Kuinka korkealle räjähdys yltää **pelaajaan**, ja miksi se on eri luku.
+ *
+ * Tallauspomppu kasvoi -4,0:sta -4,5:een (ks. `STOMP_BOUNCE`), ja se rikkoi
+ * tämän vihollisen ilman että kukaan koski siihen: pommin päällä pomppiva
+ * pelaaja on räjähdyshetkellä mitatusti **42 px** sen keskipisteen yläpuolella
+ * (kaaren huippu 47 px), eli kahden pikselin päässä 40:n ulkopuolella. Osuma
+ * jäi tulematta, ja portti kertoi sen — mutta se ei ole se vastaus jonka peli
+ * haluaa: pommin päällä pomppiminen on juuri se teko jonka pitää olla
+ * vaarallinen.
+ *
+ * Krateri **ei** kasva mukana, ja se on tarkoituksellinen ero: sivusuunta ja
+ * tiilet ovat kentän geometriaa, jota yksi hyppyvakio ei saa liikuttaa. Tämä
+ * luku koskee vain sitä kysymystä osuiko se sinuun.
+ */
+const BLAST_UP = 56;
 
 /**
  * PAUKKUPÖHÖ — pöhö joka on täyttynyt liikaa, ja jonka ainoa mahdollinen loppu
@@ -3328,8 +3347,10 @@ export class Paukkupoho extends Enemy {
       e.hitByShell(Math.sign(e.cx - this.cx) || 1);
     }
     const p = level.player;
+    const above = this.cy - (p ? p.cy : 0);
     if (p && !p.dying && p.star <= 0
-      && Math.abs(p.cx - this.cx) < BLAST_R && Math.abs(p.cy - this.cy) < BLAST_R) {
+      && Math.abs(p.cx - this.cx) < BLAST_R
+      && (above > 0 ? above < BLAST_UP : -above < BLAST_R)) {
       p.hurt('hazard');
     }
     const tiles = [];

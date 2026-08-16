@@ -7,6 +7,134 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.94 — pomppu, ketju, tanko ja se kuori joka osui maalin jälkeen
+
+Neljä asiaa suoraan pelistä, omistajan raportoimina.
+
+| väite | mitattu |
+| --- | --- |
+| vihollisen päältä ponnistaa korkeammalle kuin omalla hypyllä | `pomppu 134 px, oma juoksuhyppy 100 px` |
+| ilmassa ketjutettu tallaus maksaa enemmän, ja maakosketus katkaisee ketjun | `1. 100, 2. 200, maahan käynnin jälkeen 100` |
+| potkaistun kuoren jono maksaa nousevasti | `100 -> 200 -> 400` |
+| tangon korkeus maksaa, ja huipulta saa tähden | `alhaalta 100, huipulta 5000` |
+| maalin jälkeen mikään ei enää satuta | `osui false, voimataso 2 -> 2` |
+
+**Tallauspomppu oli sama kuin oma hyppy.** Mitattuna lähtönopeudella -4,0 pomppu
+nousi napin ollessa pohjassa 100 px — ja pelaajan oma täyden vauhdin juoksuhyppy
+nousee saman 100 px. Vihollisen päältä ponnistaminen ei siis antanut mitään mitä
+hyppy ei antanut jo; se oli vain hyppy jonka aloitti joku muu. -4,5 nostaa sen
+134 px:ään. -5,0 mitattiin myös (172 px) ja hylättiin: se on käytännössä pelin
+paras hyppy, eli se tekisi jokaisesta vihollisesta oven kattoon.
+
+**Ketjutappo on kerroin eikä taulukko.** Tässä pelissä viholliset ovat
+eriarvoisia, ja kiinteä 100/200/400 olisi hukannut sen eron. Kerroin säilyttää
+molemmat: *kuka* kaatui ja *monesko* se oli. Ketjuja on kaksi ja kummallakin on
+oma omistajansa — pelaajan ketju katkeaa maahan laskeutumiseen, ja potkaistu
+kuori kantaa omaansa potkusta lähtien. Kahdeksas peräkkäinen maksaa elämän.
+
+**Tanko oli kytkin.** Mihin tahansa sen kuudesta ruudusta koskeminen päätti
+kentän samalla tavalla, ja ainoa vaihtelu tuli kortin pyörimisestä eli puhtaasta
+ajoituksesta johon ei voi tähdätä. Nyt tartuntakorkeus maksetaan kahdesti:
+pisteet viidessä portaassa (100 · 400 · 800 · 2000 · 5000) ja **ylin porras
+antaa tähden**. Onnenkortti on yhä olemassa — se on nyt se mitä saa kun ei
+tähdännyt.
+
+**Ja läpäisty kenttä ei voi enää satuttaa.** Raportoitu pelistä: potkaistu kuori
+kimposi takaisin ja osui maalin jälkeen, kesken sitä kävelyä jota pelaaja ei
+enää ohjaa. Sääntö on `hurt`issa eikä törmäyksissä, koska vahinkoa jaetaan
+kymmenestä paikasta ja yksi tarkistus jokaisen edellä on lista joka vanhenee.
+
+Sivuvaikutus joka mitattiin ja korjattiin samalla: isompi pomppu nosti pommin
+päällä pomppivan pelaajan **42 px** sen keskipisteen yläpuolelle, eli kahden
+pikselin päähän räjähdyksen 40:n ulkopuolelle. Räjähdyksen *pystyulottuvuus*
+pelaajaan kasvoi 56:een; krateri ja tiilet eivät kasvaneet mukana, koska
+sivusuunta on kentän geometriaa jota yksi hyppyvakio ei saa liikuttaa.
+
+---
+
+## v26.08.17.93 — demo näyttää tempun, ja puhetestit mittaavat oikeaa kelloa
+
+Kaksi työtä, ja jälkimmäinen ei näy pelaajalle mutta poistaa esteen
+pomoäänten tieltä.
+
+### Puhetestit: neljä satunnaista kaatumista, yksi syy
+
+Neljä äänitestiä kaatui noin joka toisessa ajossa. Vikaa oli etsitty **kolme
+kertaa testin omista luvuista**; se ei ollut siellä.
+
+| väite | mitattu |
+| --- | --- |
+| kaatuneessa ajossa äänikello ei edennyt lainkaan | `äänikello 0.00 s / seinäkello 0.47 s` |
+| eikä se edennyt täyttä vauhtia vihreässäkään | `2.65 s / 6.14 s` eli 43 % |
+| jäätynyt puskuri näkyy toistuvina lukemina | `s 24.82 š 24.82 f 24.82` |
+| ja jäätyneeseen hetkeen kasautuneet äänet pohjakohinana | `15.3 · 25.1 · 46.0` |
+
+Renderöijä seisoi kesken mittauksen, ja `ctx.state` sanoi koko ajan `running`.
+Silloin analysaattori palauttaa saman vanhan puskurin uudestaan, sillä välin
+soitetut äänet ajastuvat samaan hetkeen ja soivat yhtä aikaa kun renderöijä
+herää, ja juuri soitettu ääni lukee 0,000. **Kolme neljästä kaatuvasta testistä
+oli oire eikä oma vikansa.**
+
+Korjaus on kaksiosainen, eikä kumpikaan osa löysää yhtään kynnystä:
+mittausikkuna odottaa **äänikellossa** sen verran soitettua ääntä kuin siltä
+pyydettiin (seinäkello on väärä kello äänelle), ja väylällä pidetään mittausten
+ajan äänetön oskillaattori joka pitää renderöijän töissä. Jos se silti seisoo,
+rivi sanoo *"ei mitattu"* eikä väitä lukua joka ei ole mittaus — ja oma
+tarkistuksensa kaatuu jos yksikään äänimittaus ei toteutunut, jottei portti voi
+kadota huomaamatta.
+
+**Peli ei vuoda ääntä.** Tämä on headless-Chromiumin renderöijä eikä
+`audio.js`: oikealla koneella äänilaite pyytää näytteitä 48 000 kertaa
+sekunnissa riippumatta siitä mitä sivu tekee.
+
+### Demo näyttää tempun, kentässä jota ei ole olemassa
+
+Salaisuuksien löydettävyyden kolmas ja viimeinen osa (ROADMAP kohta 9).
+Alkuruudun esittely **pysähtyy putken kannelle, painaa alas ja katoaa siihen**
+— ja tulee samaa tietä takaisin painamalla ylös katosta roikkuvaa suuta.
+
+| väite | mitattu |
+| --- | --- |
+| demo menee putkesta alas ja tulee takaisin | `kaistat 1 -> 2 -> 1, alas framella 389, ylös framella 546` |
+| eikä sen löytämä kaista päädy pelaajan kirjanpitoon | `ei merkintöjä` |
+| esittelykenttä läpäisee samat säännöt kuin pelin kentät | `ei huomautuksia` |
+| ja saman botin voimatasolla 0 | `läpi` |
+
+**Verbi opetetaan, paikkaa ei.** Alas painaminen putken päällä on ainoa verbi
+jota peli ei pyydä missään, eikä sitä voi arvata näppäimistä. Mutta kaksi
+ensimmäistä osaa lupaavat että kartta kertoo vain *että* salaisuuksia on ja
+kolikkojono osoittaa vain sitä yhtä johon ei voi kompastua — eli demo ei saa
+paljastaa mitään paikkaa. Ristiriita ratkesi omalla **esittelykentällä**
+(`src/data/demo-level.js`) jota ei ole pelin kentissä: temppu tehdään oikeasti,
+oikealla moottorilla ja oikealla putkella, mutta se putki ei ole missään
+kentässä jonka pelaaja pelaa. Paljastettavaa ei ole.
+
+Kolme hylättyä vaihtoehtoa, ja jokainen kaatuu samaan ehtoon: **1-1:n tavallinen
+putki** ei tekisi mitään ja näyttäisi rikkinäiseltä; **demo 1-2:ssa** paljastaisi
+sarakkeen 229; **salaisuus 1-1:een** panisi sen peliin ainoaan kenttään jonka
+jokainen pelaa ennen kuin tietää mitään.
+
+Kenttä ei ole `LEVEL_DEFS`:ssä (sama ratkaisu kuin päivän pierulla), koska
+`levelIds()` on se lista jonka päällä kartta, vaikeusmittari, opetusjärjestys ja
+vaihtelumittari lasketaan — näyteikkuna ei ole osa opetusjärjestystä. Se on
+silti kenttä jonka pelaaja näkee, joten `verify.mjs` ajaa sille `validateLevel`in
+ja maabotin erikseen: näyteikkuna jonka läpi ei pääse on huonompi mainos kuin ei
+näyteikkunaa lainkaan.
+
+Temppu on **ehdollinen asentoon eikä kelloon**. Ensimmäinen versio jarrutti
+mitatusti (juoksusta 19 px vastaan kääntymällä, 56 px otetta irrottamalla) ja
+epäonnistui joka kerta: se pysähtyi putken *viereen* maahan ja painoi alas
+siellä missä jalkojen alla oli maata — mitattu 30 framea sarakkeessa 52 kun suu
+on 53. Ehto on nyt sama kysymys jonka `tryWarp` kysyy: ovatko jalat sillä
+rivillä jossa suu on. Kannen päälle noustaan tavallisella seinähypyllä, ja
+siihen botti osaa itse.
+
+Jos temppu ei onnistu — botti kuolee matkalla tai putki kieltäytyy — demo
+jatkaa tavallisena demona: puolen sekunnin jälkeen suu jätetään rauhaan.
+Katsoja näkee silloin demon eikä keskeytynyttä esitystä.
+
+---
+
 ## v26.08.16.92 — hiekka tottelee painovoimaa, ja portti mittaa lopputilan
 
 IDEAS-synteesi E, tuomio 16.8.2026 *"tee, ennen pomoa"*. Riko hiekkalammikon
