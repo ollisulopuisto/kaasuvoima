@@ -169,6 +169,14 @@ const BUBBLE_CARRY = 18;
 const SPRING_LOW = -4.0;
 const SPRING_HIGH = -5.4;
 
+/* Kaasulyhdyn mitat; perustelut ovat `plantLamp`issa ja `lampFooting`issa.
+ * `LAMP_EDGE` pitää lyhdyn irti kentän molemmista päistä: alku on jo
+ * tarkistuspiste ja loppu on maalitolppa, eikä kumpikaan tarvitse toista. */
+const LAMP_MIN_COLS = 340;
+const LAMP_EDGE = 24;
+const LAMP_CLEAR = 2;
+const LAMP_RUNUP = 24;
+
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
 const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
@@ -1146,6 +1154,21 @@ export class LevelScene {
      * Ovi on siis viimeinen sana eikä ensimmäinen. */
     if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
     this.plantVines();
+    this.plantLamp();
+    /*
+     * Sytytetty lyhty on lähtöruutu, ja vertailu on saraketta vasten eikä
+     * pelkkää "on käyty" — ks. `lightLamp`. Jos vaikeustaso on vaihtunut, tämä
+     * ei täsmää ja kenttä alkaa alusta, mikä on oikea vastaus: sarake 190 on
+     * eri paikka eri levyisessä kentässä.
+     */
+    const lampSaved = game.state.checks ? game.state.checks[this.id] : undefined;
+    if (this.lampCol !== null && lampSaved === this.lampCol) {
+      const lampRow = this.grid.findIndex((row) => row[this.lampCol] === T.LAMP);
+      if (lampRow >= 0) {
+        this.grid[lampRow][this.lampCol] = T.LAMP_LIT;
+        this.spawn = { x: this.lampCol * TILE, y: (lampRow - 2) * TILE };
+      }
+    }
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
     this.centerCamera();
@@ -1332,6 +1355,145 @@ export class LevelScene {
         ty = foot;
       }
     }
+  }
+
+  /*
+   * KAASULYHTY — kentän puolivälin tarkistuspiste, ja se pystytetään tässä
+   * eikä kirjoiteta kenttädataan.
+   *
+   * Perustelu on sama kuin pavunvarrella, mutta toisin päin: varsi on
+   * *piirretty* kenttään ja `plantVines` ottaa sen pois, koska validaattorin
+   * pitää nähdä se reitti jonka varsi avaa. Lyhty ei avaa mitään — se ei ole
+   * kiinteä, ei vaarallinen, eikä se muuta yhtään hyppyä, kuilua tai kattoa —
+   * joten yksikään portti ei tarvitse sitä nähdäkseen kentän oikein. Sen
+   * kirjoittaminen 17 kentän palikkalistaan olisi maksanut 17 muutosta
+   * kenttädataan, uuden vaikeustaulun ja uuden opetusjärjestyksen tarkistuksen,
+   * eikä yksikään niistä olisi mitannut mitään uutta.
+   *
+   * **Kolme ehtoa, ja jokainen on mitattu eikä valittu.**
+   *
+   *   1. **`LAMP_MIN_COLS` = 340 saraketta.** Täydellä juoksuvauhdilla (2,5
+   *      px/frame = 9,4 laattaa sekunnissa) 340 laattaa on ~36 s, eli
+   *      puoliväliin kävelee ~18 s. Se on se aika joka kuolemasta menee
+   *      uudelleen, ja 18 s on jo pitempi kuin koko linnakkeen käytävä (19–24
+   *      s), jonka toisto perusteli oven. Mediaanikenttä on 314 saraketta ja
+   *      jää siis ilman lyhtyä tarkoituksella: lyhty ei ole palkinto vaan
+   *      korjaus pituuteen. Rajan yli menee 17 kenttää 64:stä.
+   *   2. **Vain kerran, ja puolivälissä.** Kaksi lyhtyä tekisi kentästä
+   *      jonon huoneita, ja se on eri peli. Puoliväli on ainoa piste joka ei
+   *      ole mielipide: se puolittaa pisimmän mahdollisen uusinnan.
+   *   3. **Ei pomokentissä.** Siellä on jo ovi, ja ovella on oma perustelunsa
+   *      (`arenaCol`). Kaksi tarkistuspistettä samassa kentässä olisi kaksi
+   *      vastausta samaan kysymykseen.
+   *
+   * Ja se mitä lyhty **ei** tee, on yhtä tärkeää: kuolema vie yhä karttaan,
+   * maksaa yhä elämän ja pudottaa yhä voimatason. Lyhty säästää kävelyn, ei
+   * kenttää — sama lause kuin linnakkeen ovella, ja samasta syystä.
+   */
+  plantLamp() {
+    this.lampCol = null;
+    if (this.w < LAMP_MIN_COLS || this.def.boss || this.game.timeAttack) return;
+    const mid = Math.floor(this.w / 2);
+    /* Ulospäin puolivälistä, ja ensimmäinen kelpaava voittaa. Reunat on
+     * rajattu pois: alku on jo tarkistuspiste ja loppu on maalitolppa. */
+    for (let d = 0; d < Math.floor(this.w / 2) - LAMP_EDGE; d++) {
+      for (const tx of d === 0 ? [mid] : [mid - d, mid + d]) {
+        if (tx < LAMP_EDGE || tx >= this.w - LAMP_EDGE) continue;
+        const ty = this.lampFooting(tx);
+        if (ty === null) continue;
+        this.grid[ty - 1][tx] = T.LAMP;
+        this.lampCol = tx;
+        return;
+      }
+    }
+  }
+
+  /**
+   * The row a lamp post can stand on in column `tx`, or null.
+   *
+   * Ehdot ovat sen paikan ehtoja johon *herätään*, eivät koristeen. Pelaaja
+   * ilmestyy tähän ruutuun **paikaltaan, vauhdittomana**, ja siitä seuraa se
+   * vaatimus jonka ensimmäinen versio jätti pois ja jonka botti mittasi:
+   *
+   * **Herätyspaikan edessä pitää olla rauhallista, ja pitkälti.** Ensimmäinen
+   * versio vaati kaksi laattaa tasaista molempiin suuntiin, ja portti kaatui
+   * viiteen kenttään: 3-3:n lyhty oli kolme laattaa ennen kuuden laatan
+   * laavalampea, 3-1:n kolme laattaa ennen kuilua, 3-7:n neljä ennen piikkejä.
+   * Kentän alusta juostessa ne kaikki ylitetään täydellä vauhdilla;
+   * seisaaltaan ei yhtäkään.
+   *
+   * `LAMP_RUNUP` = 24 laattaa oikealle, ja luku on mitattu botilla eikä
+   * johdettu kiihtyvyydestä. Kiihtyvyys sanoo että täyteen juoksuvauhtiin
+   * (`MAX_RUN` 2,5 px/frame, `ACC` 0,0547) menee 46 framea ja 57 px eli 3,6
+   * laattaa — ja se osoittautui vääräksi kysymykseksi. Kahdeksalla laatalla
+   * neljä viidestä kentästä korjaantui ja 2-1 ei: sen kuilu on kuusi laattaa
+   * eli kuilubudjetin maksimi, ja se ylitetään vain oikealla irtoamishetkellä.
+   * Lyhdyltä lähtevä juoksu osuu siihen eri vaiheessa kuin kentän alusta
+   * lähtevä, ja mitattuna se putosi. 24 laattaa siirtää lyhdyn niin kauas
+   * seuraavasta kuilusta ettei vaihe ratkaise.
+   *
+   * Sama luku on myös oikea pelaajalle eikä vain botille: paikka johon
+   * herätään ilman muistia siitä mitä edessä on, ei saa olla kuilun reunalla.
+   * Vasemmalle riittää `LAMP_CLEAR`, koska taaksepäin ei tarvitse ottaa
+   * vauhtia mihinkään — se suunta on jo pelattu.
+   *
+   * Hinta on kirjattava: lyhty ei ole enää puolivälissä vaan **lähimmässä
+   * rauhallisessa paikassa** puolivälin ympärillä, ja mitattuna se on 35–72 %
+   * kentästä. Rajattu haku (±15 % puolivälistä) olisi pitänyt luvun siistinä,
+   * mutta se olisi jättänyt pelin pisimmän kentän (3-3, 425 saraketta) kokonaan
+   * ilman tarkistuspistettä. Se on väärä vaihtokauppa: siisti luku ei auta
+   * ketään, tarkistuspiste auttaa.
+   *
+   * Kolme riviä ilmaa ylöspäin: iso pelaaja on 26 px eli kaksi laattaa, ja
+   * kolmas rivi on se jossa hypätään.
+   */
+  lampFooting(tx) {
+    // Rivistä 3 alkaen, koska kolme riviä ilmaa luetaan ylöspäin: rivi 2 luki
+    // `grid[-1]`ia, ja kaatui ensimmäiseen kenttään jonka katto oli ylhäällä.
+    for (let ty = 3; ty < this.h; ty++) {
+      if (!isSolid(this.grid[ty][tx])) continue;
+      for (let y = ty - 3; y < ty; y++) if (this.grid[y][tx] !== T.EMPTY) return null;
+      for (let x = tx - LAMP_CLEAR; x <= tx + LAMP_RUNUP; x++) {
+        if (x < 0 || x >= this.w) return null;
+        // Sama lattiarivi koko matkalta, ja mitään ei roiku sen päällä.
+        if (!isSolid(this.grid[ty][x])) return null;
+        if (info(this.grid[ty - 1][x]).hazard || info(this.grid[ty][x]).hazard) return null;
+        if (info(this.grid[ty][x]).crumble || info(this.grid[ty][x]).falls) return null;
+        // Eikä seinää vasten juoksemista: kaksi alinta riviä ovat sitä tilaa
+        // jonka keho vie, ja kolikko niissä on eri asia kuin palikka.
+        if (isSolid(this.grid[ty - 1][x]) || isSolid(this.grid[ty - 2][x])) return null;
+      }
+      return ty;
+    }
+    return null;
+  }
+
+  /**
+   * Sytyttää lyhdyn, kerran.
+   *
+   * Tallennus on `game.state`issa eikä kohtauksessa, koska kuolema tuhoaa
+   * kohtauksen — sama syy kuin linnakkeen ovella. Talteen menee **sarake**
+   * eikä `true`, ja se on tahallinen turvalukko: vaikeustaso venyttää kentän
+   * (`scale.js`), joten HELPOSSA sytytetty sarake ei ole NORMAALIssa sama
+   * paikka. Sisääntulo vertaa lukua tämänhetkiseen lyhtyyn ja unohtaa
+   * tarkistuspisteen jos ne eivät täsmää: menetetty lyhty maksaa yhden
+   * kävelyn, väärään paikkaan herätetty pelaaja maksaisi kentän.
+   */
+  lightLamp(tx, ty) {
+    this.setTile(tx, ty, T.LAMP_LIT);
+    const st = this.game.state;
+    if (st.checks) {
+      st.checks[this.id] = tx;
+      if (this.game.persist) this.game.persist();
+    }
+    /* Ääni ja kuva samasta tapahtumasta, ja molemmat kertovat "päällä": liekki
+     * jää palamaan ruudulle, sytytys kuuluu kerran. Tärinää ei ole — tärinä on
+     * tässä pelissä iskun sana (ks. `shake`), eikä lyhty osu mihinkään. */
+    Sfx.play('lamp');
+    for (let i = 0; i < 5; i++) {
+      this.spawnPuff(tx * TILE + 2 + i * 3, ty * TILE + 2 + (i % 2) * 4);
+    }
+    this.addScorePop(tx * TILE + 8, ty * TILE - 2, 'PUOLIVÄLI');
   }
 
   enter() {
@@ -3398,6 +3560,8 @@ export class LevelScene {
             x: tx * TILE, y: ty * TILE + SPIKE_TOP, w: TILE, h: TILE - SPIKE_TOP,
           };
           if (overlaps(p.box, box) && p.hurt('spike')) p.vy = -3;
+        } else if (ch === T.LAMP && this.state === 'play') {
+          this.lightLamp(tx, ty);
         } else if (info(ch).door && this.doorOpen >= 1) {
           this.enterDoor(tx, ty);
           return;

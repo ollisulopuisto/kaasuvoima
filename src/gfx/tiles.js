@@ -32,6 +32,8 @@ export const T = {
   LUMP: 'C',
   ICE: 'I',
   SPRING: 'J',
+  LAMP: 'L',
+  LAMP_LIT: 'l',
 };
 
 const S = { solid: true };
@@ -166,6 +168,32 @@ export const TILE_INFO = {
    */
   [T.ICE]: { ...S, surface: 'ice' },
   [T.QUICKSAND]: { quicksand: true },
+  /*
+   * KAASULYHTY — kentän puolivälin tarkistuspiste, ja **kaksi merkkiä eikä
+   * yksi**, koska sammunut ja palava lyhty ovat kentän kannalta eri laattoja.
+   *
+   * Sytytys on siis ruudukon kirjoitus (`L` → `l`) eikä kohtauksen kirjanpitoa,
+   * ja se on sama ratkaisu kuin kolikolla ja rikotulla tiilellä. Siitä seuraa
+   * kolme asiaa ilmaiseksi:
+   *
+   *   1. **Pikatallennus muistaa sen.** `savestate.js` tallentaa ruudukon, joten
+   *      palautettu tilannekuva palauttaa myös liekin. Kohtauksen omana
+   *      muuttujana se olisi pitänyt lisätä erikseen, ja se on juuri se laji
+   *      unohdusta jonka `save.js`:n `doors` jo maksoi kerran.
+   *   2. **Piirto ei tarvitse tilaa.** `drawTile` saa merkin ja tietää kumpi
+   *      kuva piirretään; vaihtoehto olisi ollut kuljettaa kohtauksen tila
+   *      `opts`issa asti niin kuin kytkimellä, ja kytkin tekee niin siksi että
+   *      se on koko kentän laajuinen — lyhty on yksi ruutu.
+   *   3. **Kysymys "onko tämä sytytetty" on merkkivertailu** eikä hakua
+   *      listasta, ja `plantLamp` löytää molemmat muodot samasta ruudusta.
+   *
+   * Kumpikaan ei ole kiinteä eikä vaarallinen: lyhty on koriste jonka läpi
+   * kävellään. Se on tahallista. Tarkistuspiste jonka voi *ohittaa hyppäämällä*
+   * olisi ansa jota ei näe, ja tarkistuspiste jota vasten törmätään olisi este
+   * jonka kenttä sai lahjaksi keskeltä juoksuaan.
+   */
+  [T.LAMP]: { lamp: true },
+  [T.LAMP_LIT]: { lamp: true, lit: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
    * door" — in `playerTiles` and in the edge test that shapes the drawing; it
@@ -1684,6 +1712,66 @@ function drawSpring(ctx, x, y, th, tick) {
 }
 
 /**
+ * KAASULYHTY, sammuneena ja palavana.
+ *
+ * Kiinteät värit eivätkä teeman omat, ja samasta syystä kuin jäällä ja
+ * juoksuhiekalla: lyhty tarkoittaa joka maailmassa täsmälleen samaa asiaa, eikä
+ * merkki joka *tarkoittaa* samaa saa *näyttää* joka maailmassa eri asialta.
+ * Teeman paletilla maalattu lyhty olisi luumaailmassa luunvärinen tolppa ja
+ * tehtaassa yksi teräsputki muiden joukossa.
+ *
+ * Ero sammuneen ja palavan välillä on tahallisen iso — tumma lasi vs. valkoinen
+ * ydin, ja kaksi kertaa leveämpi pää — koska tämä on ainoa laatta pelissä joka
+ * kertoo *jotain jonka pelaaja saa vasta kuollessaan*. Sen pitää näkyä
+ * ruudulla myös silloin kun se on jo takana ja kamera vetää sitä pois: siksi
+ * liekki on kirkkain piste koko laatassa eikä varjoisa yksityiskohta.
+ *
+ * Muoto on lyhty eikä lippu, ja se on lajivalinta: lippu tässä pelissä on jo
+ * varattu (maalitolppa), ja kaksi eri asiaa jotka molemmat ovat "tolppa jossa
+ * on jotain päällä" olisi tasan se sekaannus jota DESIGN.md kohta 8 kieltää.
+ * Kaasu palaa liekkinä, ja liekki on tämän pelin oma kuva siitä että jokin on
+ * *päällä*.
+ */
+function drawLamp(ctx, x, y, lit, tick) {
+  // Tolppa: sama teräs kuin ponnahduslaudalla, koska molemmat ovat rakennettuja
+  // esineitä kentässä eivätkä maastoa.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x + 6, y + 7, 4, 9);
+  ctx.fillStyle = '#2050c0';
+  ctx.fillRect(x + 7, y + 7, 2, 9);
+  // Jalka, jotta tolppa seisoo eikä pääty ilmaan.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x + 4, y + 14, 8, 2);
+
+  if (!lit) {
+    // Sammunut: umpinainen tumma lasi ja yksi vaalea heijastus, jotta se lukee
+    // lyhdyksi eikä tolpan päähän jääneeksi mustaksi ruuduksi.
+    ctx.fillStyle = '#3a4356';
+    ctx.fillRect(x + 4, y + 2, 8, 6);
+    ctx.fillStyle = '#5a6478';
+    ctx.fillRect(x + 5, y + 3, 6, 4);
+    ctx.fillStyle = '#8a94a8';
+    ctx.fillRect(x + 5, y + 3, 2, 1);
+    return;
+  }
+
+  // Palava: kotelo aukeaa ja liekki hengittää kahdessa vaiheessa.
+  const tall = Math.floor(tick / 8) % 2 === 1;
+  ctx.fillStyle = '#f07818';
+  ctx.fillRect(x + 3, y + 1, 10, 8);
+  ctx.fillStyle = '#ffc040';
+  ctx.fillRect(x + 4, y + 2, 8, 6);
+  ctx.fillStyle = '#fffbe0';
+  ctx.fillRect(x + 6, y + (tall ? 1 : 3), 4, tall ? 6 : 4);
+  // Ja kipinät, jotka kertovat että liekki elää eikä ole maalattu.
+  ctx.fillStyle = '#ffc040';
+  if (tall) {
+    ctx.fillRect(x + 2, y, 2, 2);
+    ctx.fillRect(x + 12, y + 1, 2, 2);
+  }
+}
+
+/**
  * Hazard stripes painted into the lip of the ground tile beside a spike bed.
  *
  * Spikes sit flush in the floor and are the same pale grey as half the tilesets,
@@ -1794,6 +1882,8 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.ICE: drawIce(ctx, x, y, !isSolid(above), tx, ty); break;
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
     case T.SPRING: drawSpring(ctx, x, y, th, tick); break;
+    case T.LAMP: drawLamp(ctx, x, y, false, tick); break;
+    case T.LAMP_LIT: drawLamp(ctx, x, y, true, tick); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:

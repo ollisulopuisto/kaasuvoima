@@ -922,6 +922,20 @@ const SFX = {
     });
     noise({ dur: 0.1, from: 1700, to: 460, q: 2, gain: 0.13, attack: 0.004 });
   },
+  /*
+   * KAASULYHDYN SYTYTYS: sihahdus ja kaksi nousevaa säveltä.
+   *
+   * Kohinasta soinnuksi, ja siinä järjestyksessä, koska tapahtuma on juuri se:
+   * kaasu virtaa ensin ja syttyy sitten. Nouseva pari eikä laskeva — laskeva on
+   * tässä pelissä jo varattu (`powerdown`), ja tarkistuspiste on hyvä uutinen.
+   * Lyhyt (0,3 s) siksi että se soi keskellä juoksua eikä lopeta mitään:
+   * kolikko on 0,2 s ja maali on pitkä, ja tämä kuuluu näiden väliin.
+   */
+  lamp: () => {
+    noise({ dur: 0.12, from: 380, to: 1900, q: 1.6, gain: 0.16, attack: 0.01 });
+    tone({ type: 'triangle', from: 523, dur: 0.12, gain: 0.2, hold: 0.5, delay: 0.06 });
+    tone({ type: 'triangle', from: 784, dur: 0.22, gain: 0.2, hold: 0.5, delay: 0.15, detune: 6 });
+  },
   sylkaisy: () => {
     farty({ dur: 0.15, base: 320, gain: 0.2, wobble: 44, wet: 0.9, vary: 0.25 });
     noise({ dur: 0.13, from: 2600, to: 700, q: 2.6, gain: 0.12, attack: 0.03 });

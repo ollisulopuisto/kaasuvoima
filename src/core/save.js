@@ -58,6 +58,20 @@ export const DEFAULT_SAVE = () => ({
    */
   doors: {},
   /*
+   * levelId -> se sarake jossa kentän kaasulyhty palaa (ks.
+   * `LevelScene.lightLamp`). Sisään samalla perusteella kuin `doors`, eli ilman
+   * versionostoa: puuttuva kenttä saa `{}`, ja `{}` on totuus — sytyttämättä
+   * jääneet lyhdyt ovat sytyttämättä.
+   *
+   * Sarake eikä `true`, koska vaikeustaso venyttää kentän ja sytytetty sarake
+   * on eri paikka eri levyisessä kentässä. Ja **läpäisy tyhjentää sen**
+   * (`Game.finishLevel`), toisin kuin ovi: ovi on pysyvä oikotie linnakkeen
+   * toistuvaan käytävään, lyhty on yhden yrityssarjan muisti. Pysyvä lyhty
+   * tarkoittaisi että kentän alkupuolisko pelataan kerran ja sen jälkeen ei
+   * koskaan.
+   */
+  checks: {},
+  /*
    * VAIKEUSTASO, ks. `src/data/scale.js`.
    *
    * Sisään samalla perusteella kuin `secrets`, `bestTimes` ja `doors`, eli
@@ -115,6 +129,7 @@ export const Save = {
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
         doors: state.doors || {},
+        checks: state.checks || {},
         mode: state.mode || 'easy',
       }));
     } catch {

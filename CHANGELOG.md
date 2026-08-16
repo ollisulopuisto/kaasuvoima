@@ -7,6 +7,65 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.88 — kaasulyhty: pitkä kenttä ei ala enää alusta
+
+Omistajan kysymys 16.8.2026: onko kentän puolivälissä tarkistuspisteitä, ettei
+tarvitse aina aloittaa alusta. **Ei ollut.** Pelissä oli tasan yksi lähtöruutua
+siirtävä asia, linnakkeen ovi, ja se on eri asia: se koskee vain linnakkeita ja
+sen perustelu on pomon jälkeen toistuva käytävä.
+
+Nyt jokainen **yli 340 saraketta pitkä** kenttä saa yhden kaasulyhdyn, ja siitä
+kuolema jatkuu. Mitattuna se on 15 kenttää 64:stä.
+
+| väite | mitattu |
+| --- | --- |
+| pitkä kenttä saa lyhdyn, lyhyt ei | `400 saraketta: 1, 300 saraketta: 0` |
+| ohi käveleminen sytyttää sen ja merkitsee sarakkeen | `laatta palaa, muistiin jäi sarake 200, ääni soi kerran` |
+| uusi yritys alkaa lyhdyltä, ja lyhty palaa jo | `aloitus sarakkeesta 200/400` |
+| vaikeustason vaihto unohtaa pisteen | `420 sarakkeen kentässä aloitus sarakkeesta 1` |
+| ja jokaisesta lyhdystä pääsee maaliin voimatasolla 0 | `15/15 kenttää botilla` |
+
+**Raja 340 saraketta on aikaa eikä pituutta.** Täydellä juoksuvauhdilla se on
+~36 s, eli puoliväliin kävelee ~18 s — pitempään kuin koko linnakkeen käytävä
+(19–24 s), jonka toisto perusteli oven. Mediaanikenttä on 314 saraketta ja jää
+tarkoituksella ilman: lyhty ei ole palkinto vaan korjaus pituuteen.
+
+**Se mitä lyhty ei tee, on yhtä tärkeää.** Kuolema vie yhä karttaan, maksaa yhä
+elämän ja pudottaa yhä voimatason. Lyhty säästää kävelyn, ei kenttää — sama
+lause kuin linnakkeen ovella. Ja **läpäisy tyhjentää sen**: tarkistuspiste on
+yhden yrityssarjan muisti, ei pysyvä oikotie. Muuten kentän alkupuolisko
+pelattaisiin kerran eikä koskaan enää.
+
+Kolme asiaa ratkesi tekemällä:
+
+**Lyhty pystytetään kohtauksessa, ei kirjoiteta kenttädataan.** Se ei ole
+kiinteä, ei vaarallinen eikä se muuta yhtään hyppyä, kuilua tai kattoa, joten
+yksikään validaattori ei tarvitse sitä nähdäkseen kentän oikein. Vaihtoehto oli
+17 muutosta kenttädataan, uusi vaikeustaulu ja uusi opetusjärjestyksen
+tarkistus, eikä yksikään niistä olisi mitannut mitään uutta.
+
+**Talteen menee sarake eikä `true`.** Vaikeustaso venyttää kentän (`scale.js`),
+joten HELPOSSA sytytetty sarake ei ole NORMAALIssa sama paikka. Sisääntulo
+vertaa lukua tämänhetkiseen lyhtyyn ja unohtaa pisteen jos ne eivät täsmää:
+menetetty lyhty maksaa yhden kävelyn, väärään paikkaan herätetty pelaaja
+maksaisi kentän.
+
+**Ja herätyspaikan edessä pitää olla 24 laattaa rauhallista.** Tämä on se luku
+jonka portti opetti. Ensimmäinen versio vaati kaksi laattaa tasaista, ja botti
+kuoli viidessä kentässä heti lyhdyn jälkeen: 3-3:n lyhty oli kolme laattaa
+ennen kuuden laatan laavalampea, 3-1:n kolme ennen kuilua, 3-7:n neljä ennen
+piikkejä. Kentän alusta juostessa ne ylitetään täydellä vauhdilla, seisaaltaan
+ei yhtäkään. Kahdeksan laattaa korjasi neljä viidestä; 2-1 vaati 24, koska sen
+kuilu on kuusi laattaa eli budjetin maksimi ja ylittyy vain oikealla
+irtoamishetkellä. Hinta on kirjattu: lyhty ei ole enää tarkassa puolivälissä
+vaan lähimmässä rauhallisessa paikassa, mitattuna 35–72 % kentästä.
+
+Kaksi merkkiä eikä yksi (`L` sammunut, `l` palava), koska sytytys on ruudukon
+kirjoitus samalla tavalla kuin kolikon poiminta — jolloin pikatallennus muistaa
+liekin ilmaiseksi, `savestate.js` kun tallentaa ruudukon.
+
+---
+
 ## v26.08.16.87 — ponnahduslauta: vauhtimittari ostaa korkeutta
 
 IDEAS-synteesi H, tuomio 16.8.2026 "tee", ja se on kohdan 1 (*vauhti
