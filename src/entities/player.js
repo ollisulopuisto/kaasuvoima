@@ -37,7 +37,23 @@ const SKID = 0.125;            // $02
 const JUMP_BASE = -3.5;        // -$38
 /** Player_SpeedJumpInc: extra lift per whole pixel/frame of ground speed. */
 const JUMP_SPEED_BONUS = [0, 0.125, 0.25, 0.5];
-const STOMP_BOUNCE = -4.0;     // -$40
+/**
+ * Tallauspomppu, ja se on tarkoituksella **isompi kuin oma hyppy**.
+ *
+ * Mitattu oikealla moottorilla (`scratchpad/bounce.mjs`, sama tapa kuin
+ * `tools/measure-jump.mjs`): lähtönopeudella -4,0 pomppu nousi napin ollessa
+ * pohjassa **100 px**, ja pelaajan oma täyden vauhdin juoksuhyppy nousee
+ * saman **100 px**. Vihollisen päältä ponnistaminen ei siis antanut mitään
+ * mitä hyppy ei antanut jo — se oli vain hyppy jonka aloitti joku muu.
+ *
+ * -4,5 nostaa sen 134 px:ään eli kolmanneksen oman hypyn yli, ja napin
+ * vapaana 24 px:stä 30 px:ään. Ero on nyt luettava ilman mittaria: kaksi
+ * vihollista päällekkäin on reitti, yksi vihollinen on oikaisu.
+ *
+ * -5,0 mitattiin myös (172 px) ja hylättiin: se on käytännössä pelin paras
+ * hyppy (174 px), eli se tekisi jokaisesta vihollisesta oven kattoon.
+ */
+const STOMP_BOUNCE = -4.5;
 const TAIL_FLOAT = 1.0;        // PLAYER_TAILWAG_YVEL $10
 const FLIGHT_CLIMB = -1.5;     // PLAYER_FLY_YVEL -$18
 /*
@@ -764,6 +780,13 @@ export class Player extends Entity {
       dropThrough: down && !this.onGround,
     });
 
+    /* Ketju katkeaa maakosketukseen, ja se luetaan **liikkeen jälkeen**: se on
+     * ainoa hetki jolla `onGround` kertoo tämän framen totuuden. Kohtauksesta
+     * kysyttynä vastaus oli edellisen framen, ja mitattuna ketju jatkui yli
+     * laskeutumisen (1. 100, 2. 200, maahan käynnin jälkeen 400).
+     * Ks. `CHAIN_LADDER` `scenes/level.js`:ssä. */
+    if (this.onGround) this.chain = 0;
+
     /* ------------------------------ animation ------------------------- */
     // How long the player has been standing perfectly still, which is what
     // drives the idle performance in the sprite.
@@ -1176,6 +1199,22 @@ export class Player extends Entity {
   hurt(cause = 'enemy') {
     // A body inside a pipe is not in the room; nothing in the room reaches it.
     if (this.invuln > 0 || this.dying || this.frozen > 0 || this.transit) return false;
+    /*
+     * LÄPÄISTY KENTTÄ EI VOI ENÄÄ SATUTTAA.
+     *
+     * Omistajan raportti pelistä: potkaistu kuori kimposi takaisin ja osui
+     * **maalin jälkeen**, kesken sen kävelyn jota pelaaja ei enää ohjaa.
+     * Se on rakenteellisesti epäreilu — `completeLevel` ottaa ohjaimet pois
+     * (`controllable = false`, `autoWalk = true`), joten mitään väistöä ei
+     * ole olemassa — ja `collisions()` jatkoi silti ajamistaan, koska sen
+     * ehto on `state !== 'dead'`.
+     *
+     * Sääntö on tässä eikä siellä, ja se on tarkoituksellista: vahinkoa
+     * jaetaan kymmenestä paikasta (kuori, piikit, laava, raajat, viholliset),
+     * ja yksi tarkistus jokaisen edellä on lista joka vanhenee. Keho joka ei
+     * ole enää pelissä ei ota vastaan mitään, olipa lähettäjä mikä tahansa.
+     */
+    if (this.level.state !== 'play') return false;
     if (this.power.level === 0) {
       this.die(cause);
       return true;

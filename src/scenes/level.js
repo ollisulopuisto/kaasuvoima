@@ -30,6 +30,30 @@ export const VIEW_H = 208;
 export const HUD_H = 32;
 
 const GOAL_HEIGHT = 6 * TILE;
+
+/*
+ * KETJUTAPPO: sama tappo on sitä arvokkaampi mitä useampi niitä on peräkkäin.
+ *
+ * Kerroin viholliskohtaiseen pistearvoon, ei kiinteä taulukko: tässä pelissä
+ * eri viholliset ovat eriarvoisia (`enemy.score`), ja kiinteä 100/200/400 olisi
+ * hukannut sen eron — kolmen kuoriukon ketju maksaisi saman kuin kolmen
+ * kurnuttajan. Kerroin säilyttää kummankin: *kuka* kaatui ja *monesko* se oli.
+ *
+ * Kaksi ketjua, ja kummallakin on oma omistajansa:
+ *
+ *   - **Pelaaja ilmassa.** Hyppy vihollisen päältä toiselle on yksi ketju, ja
+ *     se katkeaa maahan laskeutumiseen. Maakosketus on se hinta jonka ketju
+ *     maksaa, ja se on myös se mitä pelaaja katsoo — ei kelloa.
+ *   - **Potkaistu kuori.** Kuori kantaa omaa laskuriaan potkusta lähtien, eli
+ *     rivissä seisova vihollisjono on oma palkintonsa. Kuoren ketju ei ole
+ *     pelaajan ketju: sama pelaaja voi olla maassa sillä välin kun kuori
+ *     tekee työn, ja niiden yhdistäminen tekisi laskurista sattumaa.
+ *
+ * Katto on kahdeksas tappo, ja se maksaa elämän. Sama muoto kuin genren
+ * alkuperäisessä (100…8000, sitten 1UP): kun palkinto ei enää mahdu
+ * pistelukuun, se muuttuu joksikin muuksi.
+ */
+const CHAIN_LADDER = [1, 2, 4, 8, 10, 20, 40, 80];
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
 
@@ -2198,6 +2222,39 @@ export class LevelScene {
     if (x !== undefined) this.addScorePop(x, y, points);
   }
 
+  /**
+   * Ajaa yhden tapon niin että sen pisteet menevät ketjuun.
+   *
+   * Omistaja annetaan tähän eikä `awardScore`en, ja syy on että tappajia on
+   * monta lajia: pelaajan tallaus menee `Enemy.stomp`in läpi, kuoren osuma
+   * `hitByShell`in, ja kummankin *alalajit* laskevat pisteensä itse. Yksi
+   * kääre kutsupaikan ympärillä osuu niihin kaikkiin; kerroin jokaiseen
+   * `awardScore`-kutsuun olisi lista joka vanhenee ensimmäisessä uudessa
+   * vihollisessa.
+   */
+  chained(owner, fn) {
+    const prev = this.chainOwner;
+    this.chainOwner = owner;
+    try {
+      return fn();
+    } finally {
+      this.chainOwner = prev;
+    }
+  }
+
+  /**
+   * Ketjun palkinto, ja se maksetaan `awardScore`n kautta niin että
+   * pistepomppu näyttää sen mitä oikeasti tuli.
+   */
+  chainReward(points, x, y) {
+    const owner = this.chainOwner;
+    if (!owner) return this.awardScore(points, x, y);
+    const n = owner.chain || 0;
+    owner.chain = n + 1;
+    if (n >= CHAIN_LADDER.length) return this.gainLife(x, y);
+    return this.awardScore(points * CHAIN_LADDER[n], x, y);
+  }
+
   gainLife(x, y) {
     this.game.state.lives++;
     Sfx.play('oneup');
@@ -2246,7 +2303,9 @@ export class LevelScene {
       if (e === shell || e.dying || e.remove) continue;
       if (e.kind !== 'enemy' && e.kind !== 'hazard') continue;
       if (typeof e.hitByShell !== 'function') continue;
-      if (overlaps(shell.box, e.box)) e.hitByShell(Math.sign(shell.vx) || 1);
+      if (overlaps(shell.box, e.box)) {
+        this.chained(shell, () => e.hitByShell(Math.sign(shell.vx) || 1));
+      }
     }
   }
 
@@ -3864,7 +3923,7 @@ export class LevelScene {
 
     if (this.goal && this.state === 'play') {
       const pole = { x: this.goal.x + 4, y: this.goal.y - 8, w: 10, h: GOAL_HEIGHT + 8 };
-      if (overlaps(p.box, pole)) this.completeLevel(['shroom', 'flower', 'star'][this.cardIndex]);
+      if (overlaps(p.box, pole)) this.grabGoal(pole);
     }
   }
 
@@ -4054,7 +4113,7 @@ export class LevelScene {
       }
 
       if (stomping && e.stompable && !e.spiky) {
-        if (e.stomp()) {
+        if (this.chained(p, () => e.stomp())) {
           p.bounce(this.game.input.held.jump);
           Sfx.play('stomp');
         }
@@ -4094,6 +4153,48 @@ export class LevelScene {
       if (e.corks) p.cork();
       else p.hurt();
     }
+  }
+
+  /**
+   * TANGON KORKEUS ON PALKINTO, ELI MAALIIN VOI YLTÄÄ PAREMMIN.
+   *
+   * Ennen tätä tanko oli **kytkin**: mihin tahansa sen kuudesta ruudusta
+   * koskeminen päätti kentän samalla tavalla, ja ainoa palkinnon vaihtelu tuli
+   * kortin pyörimisestä (`cardIndex`, `tick / 9 % 3`) eli puhtaasta
+   * ajoituksesta johon pelaaja ei voi tähdätä. Hyppy tangon huipulle näytti
+   * paremmalta muttei ollut parempi.
+   *
+   * Nyt tartuntakorkeus luetaan ja maksetaan kahdella tavalla, ja jako on
+   * tarkoituksellinen:
+   *
+   *   - **Pisteet portaittain** (100 · 400 · 800 · 2000 · 5000). Viisi
+   *     porrasta eikä liukuva luku, koska palkinto pitää pystyä *lukemaan*
+   *     ruudulta: pelaaja näkee että tuli 800 eikä 2000, ja tietää mitä
+   *     yrittää ensi kerralla.
+   *   - **Ylin porras antaa tähden.** Se on se osa jonka omistaja pyysi
+   *     ("parempi tehostus, mitä paremmin hyppäät"): kortti on tähän asti ollut
+   *     kolikonheitto, ja huipulle yltäminen on ainoa kohta koko kentässä jossa
+   *     pelaaja voi ansaita sen. Muut portaat jättävät kortin ennalleen, eli
+   *     onnenkortti on yhä olemassa — se on nyt vain se mitä saa kun ei
+   *     tähdännyt.
+   *
+   * Korkeus mitataan jalkojen alta eikä laatikon keskeltä: se on se piste jonka
+   * pelaaja itse näkee osuvan tankoon.
+   */
+  grabGoal(pole) {
+    const p = this.player;
+    const feet = p.y + p.h;
+    const height = clamp((pole.y + pole.h - feet) / pole.h, 0, 1);
+    const steps = [100, 400, 800, 2000, 5000];
+    const idx = Math.min(steps.length - 1, Math.floor(height * steps.length));
+    this.awardScore(steps[idx], p.cx, p.y - 10);
+    /* Kaksi kutsua eikä yksi muuttuja, ja se on portin takia: `verify.mjs`
+     * lukee lähdekoodista mitkä esineet peli osaa antaa, ja se lukee sen
+     * `completeLevel(...)`-riviltä. Muuttujan taakse piilotettu kortti olisi
+     * kuva ilman lähdettä — eli tasan se vika jonka portti on olemassa
+     * löytääkseen. */
+    if (idx === steps.length - 1) return this.completeLevel('star');
+    return this.completeLevel(['shroom', 'flower', 'star'][this.cardIndex]);
   }
 
   completeLevel(card) {

@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.94 — pomppu, ketju, tanko ja se kuori joka osui maalin jälkeen
+
+Neljä asiaa suoraan pelistä, omistajan raportoimina.
+
+| väite | mitattu |
+| --- | --- |
+| vihollisen päältä ponnistaa korkeammalle kuin omalla hypyllä | `pomppu 134 px, oma juoksuhyppy 100 px` |
+| ilmassa ketjutettu tallaus maksaa enemmän, ja maakosketus katkaisee ketjun | `1. 100, 2. 200, maahan käynnin jälkeen 100` |
+| potkaistun kuoren jono maksaa nousevasti | `100 -> 200 -> 400` |
+| tangon korkeus maksaa, ja huipulta saa tähden | `alhaalta 100, huipulta 5000` |
+| maalin jälkeen mikään ei enää satuta | `osui false, voimataso 2 -> 2` |
+
+**Tallauspomppu oli sama kuin oma hyppy.** Mitattuna lähtönopeudella -4,0 pomppu
+nousi napin ollessa pohjassa 100 px — ja pelaajan oma täyden vauhdin juoksuhyppy
+nousee saman 100 px. Vihollisen päältä ponnistaminen ei siis antanut mitään mitä
+hyppy ei antanut jo; se oli vain hyppy jonka aloitti joku muu. -4,5 nostaa sen
+134 px:ään. -5,0 mitattiin myös (172 px) ja hylättiin: se on käytännössä pelin
+paras hyppy, eli se tekisi jokaisesta vihollisesta oven kattoon.
+
+**Ketjutappo on kerroin eikä taulukko.** Tässä pelissä viholliset ovat
+eriarvoisia, ja kiinteä 100/200/400 olisi hukannut sen eron. Kerroin säilyttää
+molemmat: *kuka* kaatui ja *monesko* se oli. Ketjuja on kaksi ja kummallakin on
+oma omistajansa — pelaajan ketju katkeaa maahan laskeutumiseen, ja potkaistu
+kuori kantaa omaansa potkusta lähtien. Kahdeksas peräkkäinen maksaa elämän.
+
+**Tanko oli kytkin.** Mihin tahansa sen kuudesta ruudusta koskeminen päätti
+kentän samalla tavalla, ja ainoa vaihtelu tuli kortin pyörimisestä eli puhtaasta
+ajoituksesta johon ei voi tähdätä. Nyt tartuntakorkeus maksetaan kahdesti:
+pisteet viidessä portaassa (100 · 400 · 800 · 2000 · 5000) ja **ylin porras
+antaa tähden**. Onnenkortti on yhä olemassa — se on nyt se mitä saa kun ei
+tähdännyt.
+
+**Ja läpäisty kenttä ei voi enää satuttaa.** Raportoitu pelistä: potkaistu kuori
+kimposi takaisin ja osui maalin jälkeen, kesken sitä kävelyä jota pelaaja ei
+enää ohjaa. Sääntö on `hurt`issa eikä törmäyksissä, koska vahinkoa jaetaan
+kymmenestä paikasta ja yksi tarkistus jokaisen edellä on lista joka vanhenee.
+
+Sivuvaikutus joka mitattiin ja korjattiin samalla: isompi pomppu nosti pommin
+päällä pomppivan pelaajan **42 px** sen keskipisteen yläpuolelle, eli kahden
+pikselin päähän räjähdyksen 40:n ulkopuolelle. Räjähdyksen *pystyulottuvuus*
+pelaajaan kasvoi 56:een; krateri ja tiilet eivät kasvaneet mukana, koska
+sivusuunta on kentän geometriaa jota yksi hyppyvakio ei saa liikuttaa.
+
+---
+
 ## v26.08.17.93 — demo näyttää tempun, ja puhetestit mittaavat oikeaa kelloa
 
 Kaksi työtä, ja jälkimmäinen ei näy pelaajalle mutta poistaa esteen

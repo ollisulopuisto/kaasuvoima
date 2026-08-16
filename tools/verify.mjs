@@ -12076,6 +12076,194 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------- ketjutappo, pomppu, tanko, maali ----------------- */
+  /*
+   * Neljä muutosta jotka tulivat suoraan pelistä, ja jokainen mitataan
+   * tapahtumana: mitä pelaaja sai, ei mitä koodissa lukee.
+   */
+  {
+    const enemies = await import('/src/entities/enemies.js');
+    const { TILE } = await import('/src/gfx/tiles.js');
+
+    /** Kenttä jossa on tasainen lattia ja pelaaja ilmassa sen yllä. */
+    const arena = (power = { type: 'shroom', level: 2 }) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+    /** Kävelijä annettuun ruutuun, heti hereillä. */
+    const walkerAt = (s, tx, ty) => {
+      const e = new enemies.Walker(s, tx * TILE, ty * TILE);
+      e.x = tx * TILE;
+      e.y = ty * TILE - e.h;
+      e.vx = 0;
+      e.active = true;
+      e.alwaysActive = true;
+      e.spawnGrace = 0;
+      s.add(e);
+      return e;
+    };
+
+    /*
+     * 1. KETJU: sama vihollinen maksaa enemmän kun se on ketjussa toinen.
+     *
+     * Kaksi kävelijää vierekkäin, pelaaja pudotetaan ensimmäisen päälle ja
+     * heti perään toisen. Väite on suhde eikä absoluuttinen luku: kerroin on
+     * viholliskohtaiseen pistearvoon, joten testi ei tiedä `Walker.score`ä
+     * eikä sen tarvitse.
+     */
+    {
+      const s = arena();
+      const floor = 13;
+      const a = walkerAt(s, 6, floor);
+      const b = walkerAt(s, 8, floor);
+      const p = s.player;
+      /* Keho **päällekkäin** vihollisen kanssa ja putoamassa: `collisions`
+       * vaatii osuman, ja kaksi pikseliä sen yläpuolella ei ole osuma. Sama
+       * virhe kirjattiin tähän kerran mitattuna (1. 0, 2. 0). */
+      const land = (e) => {
+        p.x = e.x;
+        p.y = e.y - p.h + 3;
+        p.vy = 3;
+        p.onGround = false;
+        s.collisions();
+      };
+      const score0 = game.state.score;
+      land(a);
+      const first = game.state.score - score0;
+      const mid = game.state.score;
+      land(b);
+      const second = game.state.score - mid;
+      /* Ja maahan laskeutuminen katkaisee ketjun. Keho pudotetaan oikeasti
+       * lattialle ja annetaan moottorin todeta kosketus — `onGround = true`
+       * käsin asetettuna on edellisen framen väite, ja pelaajan oma päivitys
+       * kumoaa sen ennen kuin kukaan lukee sitä. */
+      p.x = 6 * TILE;
+      p.y = floor * TILE - p.h;
+      p.vy = 0;
+      for (let f = 0; f < 8; f++) s.update(mkInput());
+      const landed = p.onGround;
+      const c = walkerAt(s, 10, floor);
+      const before = game.state.score;
+      land(c);
+      const third = game.state.score - before;
+      expect('ilmassa ketjutettu tallaus maksaa enemmän, ja maakosketus katkaisee ketjun',
+        first > 0 && second === first * 2 && third === first,
+        `1. ${first}, 2. ${second}, maahan käynnin jälkeen ${third}`
+        + `, maassa ${landed}`);
+    }
+
+    /*
+     * 2. KUORELLA ON OMA KETJUNSA. Rivissä seisova jono on oma palkintonsa, ja
+     *    laskuri lähtee potkusta — ei pelaajan kaaresta.
+     */
+    {
+      const s = arena();
+      const floor = 13;
+      const shell = new enemies.ShellGuy(s, 5 * TILE, floor * TILE);
+      shell.x = 5 * TILE;
+      shell.y = floor * TILE - shell.h;
+      shell.active = true;
+      shell.alwaysActive = true;
+      s.add(shell);
+      shell.toShell();
+      const row = [7, 9, 11].map((tx) => walkerAt(s, tx, floor));
+      const paid = [];
+      shell.kick(1);
+      for (const target of row) {
+        const before = game.state.score;
+        shell.x = target.x;
+        shell.y = target.y;
+        s.shellSweep(shell);
+        paid.push(game.state.score - before);
+      }
+      expect('potkaistun kuoren jono maksaa nousevasti, ja ketju alkaa potkusta',
+        paid[0] > 0 && paid[1] === paid[0] * 2 && paid[2] === paid[0] * 4,
+        paid.join(' -> '));
+    }
+
+    /*
+     * 3. LÄPÄISTY KENTTÄ EI SATUTA. Omistajan raportti: kuori kimposi takaisin
+     *    maalin jälkeen, kesken sitä kävelyä jota ei enää ohjata.
+     */
+    {
+      const s = arena();
+      const p = s.player;
+      const powerBefore = p.power.level;
+      s.completeLevel('shroom');
+      const hurt = p.hurt('enemy');
+      expect('maalin jälkeen mikään ei enää satuta',
+        hurt === false && p.power.level === powerBefore && !p.dying,
+        `osui ${hurt}, voimataso ${powerBefore} -> ${p.power.level}, tila ${s.state}`);
+    }
+
+    /*
+     * 4. TANGON KORKEUS ON PALKINTO. Kaksi tarttumista samaan tankoon, alhaalta
+     *    ja huipulta: pisteiden pitää erota ja huipun antaa tähti.
+     */
+    {
+      const grab = (frac) => {
+        const s = arena();
+        const g = s.goal;
+        if (!g) return null;
+        s.time = 0;                          // aikabonus pois mittauksen tieltä
+        const pole = { x: g.x + 4, y: g.y - 8, w: 10, h: 6 * TILE + 8 };
+        const p = s.player;
+        p.x = pole.x;
+        p.y = pole.y + pole.h * (1 - frac) - p.h;
+        const before = game.state.score;
+        s.grabGoal(pole);
+        return { points: game.state.score - before, card: s.wonCard };
+      };
+      const low = grab(0.02);
+      const high = grab(0.99);
+      expect('tangon korkeus maksaa, ja huipulta saa tähden',
+        !low || (high.points > low.points && high.card === 'star'),
+        low ? `alhaalta ${low.points} (${low.card}), huipulta ${high.points} (${high.card})`
+          : 'kentässä ei ole tankoa');
+    }
+
+    /*
+     * 5. JA POMPPU ON ISOMPI KUIN OMA HYPPY. Mitattu nousu, ei vakion arvo:
+     *    vakio voi vaihtua ilman että kaari muuttuu, ja kaari on se mitä
+     *    pelaaja tuntee.
+     */
+    {
+      /* Nousu mitataan samalla tavalla kummallekin: sama kenttä, sama lattia,
+       * nappi pohjassa koko kaaren ajan. Pelaajalla ei ole `jump()`-metodia —
+       * hyppy syntyy syötteestä — joten vertailukaari ajetaan syötteellä ja
+       * pomppu kutsumalla sitä mitä tallaus kutsuu. */
+      const rise = (start) => {
+        const s = arena();
+        const p = s.player;
+        for (let f = 0; f < 40; f++) s.update(mkInput());
+        const y0 = p.y;
+        const first = mkInput();
+        first.held.jump = true;
+        if (start) start(p);
+        else first.pressed.jump = true;
+        s.update(first);
+        let top = Math.min(y0, p.y);
+        for (let f = 0; f < 200; f++) {
+          const k = mkInput();
+          k.held.jump = true;
+          s.update(k);
+          top = Math.min(top, p.y);
+          if (p.onGround && f > 4) break;
+        }
+        return Math.round(y0 - top);
+      };
+      const bounced = rise((p) => { p.bounce(true); p.jumpHeld = true; });
+      const jumped = rise(null);
+      expect('vihollisen päältä ponnistaa korkeammalle kuin omalla hypyllä',
+        bounced > jumped * 1.15,
+        `pomppu ${bounced} px, paikaltaan hyppy ${jumped} px`);
+    }
+  }
+
   /* ------------------------------- piikit ------------------------------- */
   /* Reported from play: "the player passed on top of the spikes but still took
    * damage". The spikes are drawn in the bottom ten pixels of their tile, but
@@ -14733,25 +14921,37 @@ const report = await page.evaluate(async () => {
       const w0 = performance.now();
       const cap = ms * 6 + 500;
       let last = c0;
-      while ((tap.ctx.currentTime - c0) * 1000 < ms) {
+      const sample = () => {
         an.getFloatTimeDomainData(buf);
         for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
-        /*
-         * Renderöijä ei ainoastaan seiso — se **ottaa kiinni ryöppyinä**:
-         * mitattu `äänikello 12.18 s / seinäkello 3.99 s`, eli neljässä
-         * sekunnissa renderöitiin kaksitoista sekuntia ääntä. Analysaattori
-         * muistaa vain viimeiset `windowSec` sekuntia, joten ryöpyn yli
-         * hypätty ääni ei ole hiljaisuutta vaan **ohi mennyttä**: juuri siitä
-         * tulivat lukemat `ääni 0.000` ja `s 0.000` silloin kun äänikello
-         * eteni ihan normaalisti. Jos kahden näytteen väliin mahtui enemmän
-         * ääntä kuin ikkunaan mahtuu, tämä ei ole mittaus.
-         */
         const now = tap.ctx.currentTime;
         if (now - last > windowSec) stalled = true;
         last = now;
+      };
+      while ((tap.ctx.currentTime - c0) * 1000 < ms) {
+        sample();
         if (performance.now() - w0 > cap) { stalled = true; break; }
-        await new Promise((r) => setTimeout(r, 8));
+        await new Promise((r) => setTimeout(r, 4));
       }
+      /*
+       * Vielä yksi näyte silmukan **jälkeen**, ja se on korjaus eikä
+       * varmuuden vuoksi.
+       *
+       * Renderöijä ei ainoastaan seiso — se **ottaa kiinni ryöppyinä**:
+       * mitattu `äänikello 12.18 s / seinäkello 3.99 s`, eli neljässä
+       * sekunnissa renderöitiin kaksitoista sekuntia ääntä. Jos ryöppy osuu
+       * viimeisen näytteen ja poistumisehdon väliin, koko mitattava ääni
+       * renderöityy sen jälkeen kun sitä viimeksi katsottiin — mitattu
+       * `s 0.00 š 0.00 f 0.00` kolmelta peräkkäiseltä äänteeltä kun loput
+       * samasta silmukasta olivat normaaleja.
+       *
+       * Analysaattori muistaa vain viimeiset `windowSec` sekuntia, joten
+       * ryöpyn yli hypätty ääni ei ole hiljaisuutta vaan **ohi mennyttä**.
+       * Siksi jokainen näyte tarkistaa myös sen, mahtuiko edellisen ja tämän
+       * väliin enemmän ääntä kuin ikkunaan mahtuu; jos mahtui, tämä ei ole
+       * mittaus.
+       */
+      sample();
       return peak;
     };
     /**
@@ -15030,12 +15230,19 @@ const report = await page.evaluate(async () => {
        * renderöi sen ajan. Ks. `metered` ylempänä: kolme näistä neljästä
        * puhetestistä oli oire eikä oma vikansa, ja tämä on se rivi jolla ero
        * tehdään. */
+      /* Kolme tarkistusta, yksi mittaus: `levels` kerätään ensimmäisessä ja
+       * luetaan kahdessa seuraavassa. Siksi ohitus periytyy — jos numeroita ei
+       * mitattu, niistä johdettu väite ei ole sen mitatumpi. Mitattu ilman
+       * tätä: `s 0.000` kaatoi frikatiivirivin samassa ajossa jossa sen oma
+       * lähde sanoi jo "ei mitattu". */
+      let inconclusive = false;
       const checkA = async (name, fn) => {
         try {
           meter.clear();
           noisy = false;
           const [ok, detail] = await fn();
-          const real = metered(tap, meter.stalled() || noisy);
+          const real = metered(tap, meter.stalled() || noisy) && !inconclusive;
+          if (!real) inconclusive = true;
           expect(name, !real || ok, real ? detail : `ei mitattu (äänikello seisoi): ${detail}`);
         } catch (err) {
           expect(name, false, `heitti: ${err.message}`);
@@ -16985,17 +17192,26 @@ const report = await page.evaluate(async () => {
         an.fftSize = 16384;
         tap2.bus.connect(an);
         const buf = new Float32Array(an.fftSize);
+        const windowSec = an.fftSize / tap2.ctx.sampleRate;
         const peakFor = async (ms) => {
           let peak = 0;
           const c0 = tap2.ctx.currentTime;
           const w0 = performance.now();
           const cap = ms * 6 + 500;
-          while ((tap2.ctx.currentTime - c0) * 1000 < ms) {
+          let last = c0;
+          const sample = () => {
             an.getFloatTimeDomainData(buf);
             for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+            const now = tap2.ctx.currentTime;
+            if (now - last > windowSec) stalled = true;
+            last = now;
+          };
+          while ((tap2.ctx.currentTime - c0) * 1000 < ms) {
+            sample();
             if (performance.now() - w0 > cap) { stalled = true; break; }
-            await new Promise((r) => setTimeout(r, 8));
+            await new Promise((r) => setTimeout(r, 4));
           }
+          sample();                          // ks. `meterFor`: ryöppy ikkunan ohi
           return peak;
         };
         /* Neljä sekuntia soitettua ääntä, sama kuin aamun erässä. Seinäkellossa
