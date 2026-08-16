@@ -51,6 +51,66 @@ const FLIGHT_CLIMB = -1.5;     // PLAYER_FLY_YVEL -$18
 const COYOTE_FRAMES = 5;
 const JUMP_BUFFER_FRAMES = 6;
 
+/**
+ * PIERUPOMPUN JÄÄHDYTYS — se yksi luku joka tekee panoksista panoksia.
+ *
+ * Omistajan päätös 16.8.2026: ilmahypyt ovat **kuluvia panoksia joita ei saa
+ * peräkkäin**. Määrä jää voimatasoon kiinni (`airJumpsMax`), eli taso 5 on yhä
+ * enemmän kuin taso 1; muuttunut on se ettei niitä voi ladata yhdeksi kaareksi.
+ *
+ * **Miksi tämä ylipäätään tarvittiin.** Kenttägeometria on hinnoiteltu *yhtä*
+ * hyppyä vasten: kuilubudjetti on 6 ruutua eli 96 px, ja mitattu juoksuhypyn
+ * kantama on 155 px (PHYSICS.md). Viidellä peräkkäisellä ponnistuksella pelin
+ * levein kuilu (`softGapTiles` 9) on lyhyempi kuin yksi ponnistus — eli palkinto
+ * ei tehnyt hypystä parempaa vaan poisti kysymyksen. Sitä ei voi hinnoitella
+ * kuilun leveydellä, koska kuilu ei tiedä montako ponnistusta pelaajalla on.
+ *
+ * **Miksi 40 framea, ja miksi se on johdettu eikä valittu.** Pieruhyppy asettaa
+ * `vy = -4.3`, ja nousu kestää niin kauan kuin nappi on pohjassa ja `vy` alle
+ * `GRAVITY_HELD_CUTOFF`in (-2,0): 2,3 / 0,0625 = 37 framea, ja loput 2,0
+ * tavallisella painovoimalla noin 6 framea. Huippu on siis noin 43 framen
+ * päässä. Neljäkymmentä framea tarkoittaa että **toinen panos on käytettävissä
+ * vasta ensimmäisen huipun tuntumassa** — se voi napata putoamisen kiinni,
+ * muttei kasata korkeutta edellisen päälle. Panos on pelastus, ei lento.
+ *
+ * **Mitä tämä tarkoituksella EI muuta:** yksi pieruhyppy on merkilleen sama
+ * kuin ennen. `tools/jump-budget.json`in tapaus "juoksu + pieruhyppy" (174 px
+ * nousua, 285 px kantamaa) on se luku josta `softGapTiles` on johdettu ja jota
+ * vasten jokainen kenttä on validoitu, joten sen liikkuminen olisi liikuttanut
+ * kaikkien kenttien sääntöjä. Jäähdytys alkaa vasta ensimmäisestä panoksesta.
+ */
+const AIR_JUMP_CD = 40;
+
+/**
+ * ...JA SE MITÄ KETJUTTAMINEN MAKSAA, koska jäähdytys yksin ei riittänyt.
+ *
+ * Jäähdytys kesytti korkeuden mutta ei kantamaa, ja **kantama on se luku jota
+ * vasten kentät on hinnoiteltu.** Mitattuna, sama juoksu ja sama napinhakkaus:
+ * yhdellä panoksella 124 px ylös ja 205 px sivuun, viidellä 165 px ylös ja
+ * **402 px sivuun**. Korkeuseroa 41 px, kantamaeroa 197 px — eli kaksitoista
+ * ruutua siinä missä koko kuilubudjetti on kuusi.
+ *
+ * **Yksi korjausyritys mitattiin ja se oli väärä, ja se kannattaa lukea ennen
+ * kuin joku keksii sen uudelleen.** Ensin panokselle annettiin hinnaksi
+ * vaakavauhtia (`vx *= 0.55`), perusteluna että alaspäin purkava kaasu ei saa
+ * työntää eteenpäin. Se kuulosti oikealta ja teki asian **pahemmaksi**:
+ * kantama nousi 402:sta 554:ään. Syy on että tässä pelissä on ilmaohjaus —
+ * `ACC` toimii myös ilmassa — joten leikattu vauhti palaa kattoon
+ * neljässäkymmenessä framessa, ja ainoa mitä leikkaus sai aikaan oli pidempi
+ * kaari (160 framesta 240:een). **Kantaman ajuri ei ole vauhti vaan ilma-aika.**
+ *
+ * Siksi hinta on nosto: jokainen panos nostaa `AIR_JUMP_DECAY`n verran
+ * edellistä vähemmän, eli ketju suppenee eikä jatka kaarta loputtomiin.
+ * Ensimmäinen panos on tasan entisensä, ja se on ehto eikä armo: mitattu
+ * "juoksu + pieruhyppy" (174 px nousua, 285 px kantamaa) on se tapaus josta
+ * `softGapTiles` on johdettu ja jota vasten jokainen kenttä on validoitu.
+ * Toisesta eteenpäin ei liikuta mitään, koska mikään mitattu tapaus ei käytä
+ * kahta.
+ */
+const AIR_JUMP_DECAY = 0.5;
+/** Ensimmäisen panoksen nosto. Mitattu tapaus "juoksu + pieruhyppy" lepää tässä. */
+const FART_LIFT = -4.3;
+
 /*
  * MAAHANISKU — the ground pound. Down + jump in the air, and the gas that
  * normally lifts him instead shoves him at the floor.
@@ -268,6 +328,9 @@ export class Player extends Entity {
      * juuri nyt", mikä on tosi jokaisella latauksella. */
     this.hurtFlash = 0;
     this.airJumps = 0;
+    /* Frameja seuraavaan panokseen. Tavallinen luku ja konstruktorissa, kuten
+     * `sunk` ja `drift` viholliselle: `savestate.js` sarjallistaa sen itse. */
+    this.airJumpCd = 0;
     this.dying = false;
     this.animTimer = 0;
     this.animFrame = 0;
@@ -615,7 +678,12 @@ export class Player extends Entity {
     if (this.onGround) {
       this.coyote = COYOTE_FRAMES;
       this.airJumps = 0;
+      /* Jäähdytys nollautuu maassa, ei vain laskuri. Muuten kaari joka alkaa
+       * heti edellisen perään olisi rangaistu siitä mitä edellisessä tehtiin,
+       * ja panos on tarkoitettu kuluvaksi kaarta kohti eikä sekuntia kohti. */
+      this.airJumpCd = 0;
     } else if (this.coyote > 0) this.coyote--;
+    if (this.airJumpCd > 0) this.airJumpCd--;
 
     const canFly = this.type === 'leaf' && this.pFull && !this.corked;
     if (jumpPressed && (this.onGround || this.coyote > 0)) {
@@ -633,7 +701,7 @@ export class Player extends Entity {
     } else if (jumpPressed && this.flying > 0) {
       this.vy = Math.max(FLIGHT_CLIMB, this.vy - 2.6);
       Sfx.play('flight');
-    } else if (jumpPressed && this.airJumps < this.airJumpsMax) {
+    } else if (jumpPressed && this.airJumps < this.airJumpsMax && this.airJumpCd === 0) {
       this.jumpBuffer = 0;
       this.fartJump();
     }
@@ -985,7 +1053,10 @@ export class Player extends Entity {
   /** Mid-air fart jump: a burst of gas that also knocks out whatever is below. */
   fartJump() {
     this.airJumps++;
-    this.vy = -4.3;
+    this.airJumpCd = AIR_JUMP_CD;
+    // Ensimmäinen panos on -4,3 kuten aina; jokainen seuraava puolet
+    // edellisestä, jolloin ketju suppenee. Ks. `AIR_JUMP_DECAY`.
+    this.vy = FART_LIFT * (AIR_JUMP_DECAY ** (this.airJumps - 1));
     this.jumpHeld = true;
     this.onGround = false;
     Sfx.play(this.power.level >= 3 ? 'bigfart' : 'fart');
@@ -1079,6 +1150,9 @@ export class Player extends Entity {
     this.vy = STOMP_BOUNCE;
     this.onGround = false;
     this.airJumps = 0;
+    // Ja jäähdytys, samasta syystä kuin laskeutuminen nollaa sen: pomppu on
+    // uuden kaaren alku, ja panos kuluu kaarta kohti.
+    this.airJumpCd = 0;
     /* A dive that found something to land on before it found the floor is a
      * stomp, and a stomp gives the controls straight back. Leaving the pound
      * running would have pinned the player in mid-air with a bounce underneath
