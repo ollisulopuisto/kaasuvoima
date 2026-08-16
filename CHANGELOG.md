@@ -7,6 +7,38 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.90 — kaasulehti tekee hänestä paineastian
+
+Omistajan tuomio 16.8.2026: *"muuta tanooki-design, keksi jotain pierumaisempaa
+ja kaasuisempaa"*.
+
+Tämä on **neljäs** korjaus samaan tasoon, ja kolme edellistä osui muotoon
+muttei väriin: pesukarhun häntä vaihtui kaasuletkuksi, korvat lehdiksi, ja
+puku jäi ruskeanbeigeksi — eli tarkalleen sen yhden puvun väriskaalaan jota
+tämä genre ei omista. Muoto oli korjattu, luenta ei.
+
+| ennen | nyt |
+| --- | --- |
+| `suit: C.tan, shade: C.brownDark, legs: C.brown` | messinki `#b8862c` / `#5c3c0c` / `#8c6414` |
+| kaksi lehteä pään päällä korvien paikalla | kaksi messinkiventtiiliä samoissa pikseleissä |
+
+**Hän ei muutu eläimeksi vaan laitteeksi.** Messinki on jo pelin oma metalli —
+vyön paineventtiili, letkun suutin, torven torvi — ja kun sama metalli tulee
+haalariin ja kahteen venttiiliin pään päälle, lentäminen lakkaa olemasta
+"lentopuku" ja alkaa olla painetta jota päästetään ulos hallitusti.
+
+Venttiilit ovat **samat kaksi 2x3-palikkaa samoissa pikseleissä** kuin lehdet
+ja korvat ennen niitä: ne koskettavat pään yläreunaa täsmälleen kuten ennen, ja
+se vierekkäisyys on se mikä pitää hahmon yhtenä kappaleena. Vaihtui väri ja
+sisärakenne (vaalea laippa alas, tumma rako ylös — rako on se yksi yksityiskohta
+joka tekee tolpasta venttiilin), ei silhuetti. Portti vahvistaa: *"the player is
+one piece in every pose at every power level — 0 broken"*.
+
+Vihreä hiuspohja jää tarkoituksella: se on tason ainoa vihreä, ja se sitoo
+laitteen siihen kaasuun jota se käsittelee.
+
+---
+
 ## v26.08.16.89 — putkesta tullaan ulos putkesta
 
 Omistajan havainto 16.8.2026: luolasta noustessa hahmo "ilmestyy tyhjästä".

@@ -65,7 +65,7 @@ const BASE_DUCK = { w: 14, h: 16 };
  * What replaced it comes from what this game is actually about. He goes down
  * into a world of bowels after the PIERUPRINSSI, so he is dressed for the job:
  * a one-piece coverall, a belt with a brass pressure valve on it, and — with
- * the kaasulehti — a gas hose that whips behind him and a pair of leaves. He
+ * the kaasulehti — a gas hose that whips behind him and a pair of valves. He
  * has hair instead of a hat, which is also the honest drawing: the desert idle
  * has always been called `hairFire` in this file and it used to set a cap
  * alight.
@@ -73,7 +73,7 @@ const BASE_DUCK = { w: 14, h: 16 };
  * And the gas shows in him. The tiers are not a wardrobe, they are how much of
  * the stuff he is carrying: drab slate when he has none, gas green at the
  * mushroom with bubbles rising through the cloth, the flower's purple, the
- * leaf's tan under green hair, and the bean's browns. That is why the hair
+ * leaf's brass under green hair, and the bean's browns. That is why the hair
  * changes colour with the tier and a hat would not have needed to — at 12x16
  * the head is a quarter of the picture, and a tier you cannot name at a glance
  * is not a tier.
@@ -82,7 +82,28 @@ const POWER_LOOKS = {
   none: { hair: C.brownDark, suit: '#6a7488', shade: '#39414f', legs: '#4c5666' },
   shroom: { hair: C.greenDark, suit: C.gas, shade: C.greenDark, legs: C.gasDark, mark: '#e8ffc0' },
   flower: { hair: C.purpleDark, suit: C.purple, shade: '#3c1840', legs: C.purpleDark },
-  leaf: { hair: C.gasDark, suit: C.tan, shade: C.brownDark, legs: C.brown },
+  /*
+   * KAASULEHTI = PAINEASTIA, ja tämä rivi on omistajan tuomio 16.8.2026:
+   * "muuta tanooki-design, keksi jotain pierumaisempaa ja kaasuisempaa".
+   *
+   * Rivissä luki `suit: C.tan, shade: C.brownDark, legs: C.brown`, eli
+   * ruskeanbeige puku vihreiden lehtikorvien alla. Se on tarkalleen sen yhden
+   * puvun väriskaala jota tämä genre ei omista, ja kaikki kolme aiempaa
+   * korjausta olivat kohdistuneet **muotoon** (korvat → lehdet, häntä → letku)
+   * eivätkä väriin — joten taso luki yhä siltä siltä miltä se on aina lukenut.
+   *
+   * Messinki on tämän pelin oma vastaus, ja se on jo pelissä: vyön
+   * paineventtiili, letkun suutin, torven torvi. Tässä tasossa hän ei muutu
+   * eläimeksi vaan **laitteeksi** — letku, kaksi venttiiliä (`ventValves`) ja
+   * messinkihaalari — ja lentäminen on painetta jota päästetään ulos.
+   *
+   * Vihreä hiuspohja jää, ja se on tahallista: se on ainoa vihreä tässä
+   * tasossa, joten se sitoo laitteen siihen kaasuun jota se käsittelee. Ja
+   * messinki on erotettava neljästä muusta tasosta — kivilohkare (liuske),
+   * sieni (kaasunvihreä), kukka (violetti), papu (ruoste) — mikä se
+   * kylläisyydeltään ja tummuudeltaan on.
+   */
+  leaf: { hair: C.gasDark, suit: '#b8862c', shade: '#5c3c0c', legs: '#8c6414' },
   /* Paukkupapu. The darkest, heaviest row of the five, because the thing it
    * does is walk through a wall — and it must not be mistaken for the mushroom,
    * which is the one every player learns first. That used to mean "not red";
@@ -185,18 +206,42 @@ function gasHose(ctx, x, y, wag) {
 }
 
 /**
- * Two leaves either side of the head, which is the other half of what the
- * kaasulehti puts on him. Same two 2x3 blocks the ears used to be — they touch
- * the top of the head at the same pixels, and that adjacency is what keeps him
- * one piece — repainted into the leaf's own green with a vein down each.
+ * KAKSI VENTTIILIÄ PÄÄN PÄÄLLÄ, ja ne ovat se toinen puoli siitä mitä
+ * kaasulehti tekee hänelle.
+ *
+ * Tässä oli ensin pesukarhun korvat, sitten kaksi lehteä. Lehdet olivat jo
+ * korjaus — korvat ovat lainaa siitä yhdestä puvusta jota tämä genre ei
+ * omista — mutta ne olivat korjaus **muotoon eivätkä asiaan**: ne istuivat
+ * korvien paikalla, korvien kokoisina, ja pari pystyä töpöttiä pään päällä
+ * lukee korviksi maalattiin ne miksi tahansa. Omistaja luki ne niin, ja se on
+ * ainoa mittari joka tässä pätee.
+ *
+ * Nyt siinä on kaksi messinkistä venttiiliä: sama laite kuin vyön paineventtiili
+ * ja letkun suutin, eli tämän pelin oma metalli. Se on myös se selitys jota
+ * puku kaipasi — hän ei muutu eläimeksi vaan **paineastiaksi**, ja lentäminen
+ * on sitä että hän päästää painetta ulos hallitusti.
+ *
+ * Kolme ratkaisua, joista kaksi on rajoitteita eikä makua:
+ *
+ *   1. **Samat kaksi 2x3-palikkaa, samoissa pikseleissä.** Ne koskettavat pään
+ *      yläreunaa täsmälleen kuten ennen, ja se vierekkäisyys on se mikä pitää
+ *      hahmon yhtenä kappaleena (`verify.mjs`, `comps`). Vaihtui väri ja
+ *      sisärakenne, ei silhuetti.
+ *   2. **Vaalea laippa alas, tumma rako ylös.** Rako ylöspäin on se yksi
+ *      yksityiskohta joka tekee tolpasta venttiilin: siitä tulee ulos.
+ *   3. **Messinki eikä vihreä.** Vihreä on jo kaasun väri tässä pelissä ja
+ *      sienitason oma puku; venttiili on laite eikä kaasu.
  */
-function leafFronds(ctx, x, y, w) {
-  ctx.fillStyle = C.gas;
+function ventValves(ctx, x, y, w) {
+  ctx.fillStyle = C.corkDark;
   ctx.fillRect(x + 1, y - 2, 2, 3);
   ctx.fillRect(x + w - 3, y - 2, 2, 3);
-  ctx.fillStyle = C.gasDark;
-  ctx.fillRect(x + 2, y - 2, 1, 3);
-  ctx.fillRect(x + w - 3, y - 2, 1, 3);
+  ctx.fillStyle = C.cork;
+  ctx.fillRect(x + 1, y, 2, 1);
+  ctx.fillRect(x + w - 3, y, 2, 1);
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(x + 1, y - 2, 1, 1);
+  ctx.fillRect(x + w - 3, y - 2, 1, 1);
 }
 
 /**
@@ -603,7 +648,7 @@ function poundPose(ctx, px, py, pal, s, small) {
     ctx.fillRect(px + 2, hy + 10, 8, 2);
     ctx.fillStyle = pal.shade;
     ctx.fillRect(px + 2, hy + 10, 8, 1);
-    if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 10);
+    if (s.type === 'leaf') ventValves(ctx, px + 1, hy, 10);
     return;
   }
 
@@ -619,7 +664,7 @@ function poundPose(ctx, px, py, pal, s, small) {
   ctx.fillRect(px + 2, hy + 13, 10, 3);
   ctx.fillStyle = pal.shade;
   ctx.fillRect(px + 2, hy + 13, 10, 1);
-  if (s.type === 'leaf') leafFronds(ctx, px + 1, hy + 1, 12);
+  if (s.type === 'leaf') ventValves(ctx, px + 1, hy + 1, 12);
 }
 
 /**
@@ -701,7 +746,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
     if (small) {
       if (s.state === 'climb') {
         climbPose(ctx, px, py, pal, s, true);
-        if (s.type === 'leaf') leafFronds(ctx, px, py, 12);
+        if (s.type === 'leaf') ventValves(ctx, px, py, 12);
         return;
       }
       const b = pose.breath;
@@ -732,7 +777,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
       /* The leaves belong to the head, so they nod with it. A pixel further in
        * than the raccoon ears were: this head is the narrower profile one and
        * they have to touch it, or the flood fill counts three characters. */
-      if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 10);
+      if (s.type === 'leaf') ventValves(ctx, px + 1, hy, 10);
       if (pose.sweat >= 0) sweatBead(ctx, px + 11, hy + 2 + pose.sweat);
       if (pose.burn) hairFire(ctx, px + 6, hy, pose.burn);
       if (pose.smoke) hairSmoke(ctx, px + 6, hy);
@@ -771,13 +816,13 @@ function drawPlayerBase(ctx, x, y, s, small) {
       ctx.fillRect(px + 2, py + 13, 10, 3);
       ctx.fillStyle = pal.shade;
       ctx.fillRect(px + 2, py + 13, 10, 1);
-      if (s.type === 'leaf') leafFronds(ctx, px + 1, py + 1, 12);
+      if (s.type === 'leaf') ventValves(ctx, px + 1, py + 1, 12);
       return;
     }
 
     if (s.state === 'climb') {
       climbPose(ctx, px, py, pal, s, false);
-      if (s.type === 'leaf') leafFronds(ctx, px + 1, py, 12);
+      if (s.type === 'leaf') ventValves(ctx, px + 1, py, 12);
       return;
     }
 
@@ -818,7 +863,7 @@ function drawPlayerBase(ctx, x, y, s, small) {
     ctx.fillRect(px + 6, py + 17, 3, 2);
     ctx.fillStyle = C.ink;
     ctx.fillRect(px + 7, py + 18, 1, 1);
-    if (s.type === 'leaf') leafFronds(ctx, px + 1, hy, 12);
+    if (s.type === 'leaf') ventValves(ctx, px + 1, hy, 12);
     if (pose.sweat >= 0) sweatBead(ctx, px + 12, hy + 3 + pose.sweat);
     if (pose.burn) hairFire(ctx, px + 7, hy, pose.burn);
     if (pose.smoke) hairSmoke(ctx, px + 7, hy);
