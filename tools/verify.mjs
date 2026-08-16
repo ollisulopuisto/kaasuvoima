@@ -18453,6 +18453,589 @@ const report = await page.evaluate(async () => {
   }
 }
 
+/* ---- kuvaefektit: suunnattu tärinä ja palettisiirto ---- */
+/*
+ * Kaksi jonossa ollutta kuvaefektiä, ja ne ovat samassa erässä siksi että ne
+ * ovat sama kysymys kahdessa muodossa: **mistä pelaaja tietää mitä juuri
+ * tapahtui, silloin kun se tapahtuu koko ruudulle eikä yhdelle oliolle.**
+ *
+ * 1. **Tärinällä on suunta.** Yksi ympyrä kaikelle tarkoittaa että maahanisku,
+ *    iskuaalto ja jättiläisen askel näyttävät samalta — ja kaksi samannäköistä
+ *    "jotain tapahtui" -signaalia opettavat lukemaan väärää (DESIGN.md kohta 8,
+ *    sama perustelu joka on jo kirjattu maahaniskun ja pomoäänten kohdalle).
+ *    Pystyisku tärisyttää pystyyn, lattiaa pitkin lähtevä aalto sivuttain.
+ * 2. **Palettisiirto on pelin puhetta, ei kuvaputken.** Siksi se ei asu
+ *    varjostimessa vaan yhdessä `multiply`-vedossa jonka molemmat ajotiet
+ *    piirtävät samalla koodilla — ja siksi se piirtyy myös kun kuvaefektit on
+ *    kytketty pois. Efektin voi sammuttaa; tiedon ei.
+ *
+ * Väitteet alla on kirjoitettu niin että jokainen mittaa lukua eikä
+ * olemassaoloa: "tärinä on pystysuuntainen" on `maxX === 0`, ja "tähti ei
+ * välky" on kaksi lukua joilla on lähde — WCAG 2.3.1:n välähdyskynnys, alle
+ * kolme välähdystä sekunnissa ja alle 10 % suhteellisen luminanssin muutos.
+ * Se kynnys on tässä pelissä oikea kysymys eikä muodollisuus: peliä pelaa
+ * lapsi, ja koko ruudun sykkiminen on juuri se asia jota kynnys koskee.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  /* --- 1. tärinän suunta, ja kuka sen valitsee --- */
+  /*
+   * Neljä mittausta yhdessä, koska suunta ilman valintasääntöä ei ole sääntö:
+   * kaksi tärähdystä osuu samaan frameen aina kun pomo laskeutuu ja aalto
+   * lähtee, ja silloin jonkun on voitettava. Sääntö on **kovempi ohjaa** —
+   * sama järjestys jolla `shakeAmp` itse on aina valittu (`Math.max`) — ja
+   * tasapeli palaa ympyrään, koska kaksi yhtä kovaa iskua eri suunnista *on*
+   * ympyrä.
+   */
+  {
+    const out = await page.evaluate(async () => {
+      try {
+        const { LevelScene } = await import('/src/scenes/level.js');
+        const game = window.sfb3;
+        game.state = {
+          lives: 5, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 8, cards: [],
+        };
+        game.finishLevel = () => {};
+        const scene = new LevelScene(game, '1-1');
+
+        const sweep = (amount, axis) => {
+          scene.shakeAmp = 0;
+          scene.shakeAxis = 'both';
+          scene.shake(amount, axis);
+          let maxX = 0;
+          let maxY = 0;
+          for (let t = 0; t < 120; t++) {
+            scene.tick = t;
+            const o = scene.shakeOffset();
+            maxX = Math.max(maxX, Math.abs(o.x));
+            maxY = Math.max(maxY, Math.abs(o.y));
+          }
+          return { maxX, maxY };
+        };
+        const both = sweep(6, 'both');
+        const up = sweep(6, 'y');
+        const side = sweep(6, 'x');
+
+        const set = (calls) => {
+          scene.shakeAmp = 0;
+          scene.shakeAxis = 'both';
+          for (const [amount, axis] of calls) scene.shake(amount, axis);
+          return scene.shakeAxis;
+        };
+        const louder = set([[2, 'y'], [5, 'x']]);
+        const quieter = set([[5, 'x'], [1, 'y']]);
+        const tie = set([[3, 'y'], [3, 'x']]);
+
+        /* Ja kun tärinä on vaimennut, suunta on taas oletus: seuraava isku ei
+         * peri edellisen suuntaa. Vaimeneminen tapahtuu `update`issa, joten se
+         * ajetaan sitä kautta eikä nollaamalla kenttä käsin. */
+        const blank = () => ({
+          left: false, right: false, up: false, down: false, jump: false, run: false,
+          start: false, mute: false, quicksave: false, quickload: false, slot: false,
+        });
+        const input = {
+          held: blank(), pressed: blank(), released: blank(), consume() {},
+        };
+        game.setScene(scene);
+        scene.shake(6, 'x');
+        for (let i = 0; i < 40 && scene.shakeAmp > 0; i++) scene.update(input);
+        const settled = { amp: scene.shakeAmp, axis: scene.shakeAxis };
+
+        return { both, up, side, louder, quieter, tie, settled };
+      } catch (e) { return { error: String(e && e.message || e) }; }
+    });
+
+    expect('pystyisku tärisyttää pystyyn eikä sivuun, ja sivuisku toisin päin',
+      !out.error && out.up.maxX === 0 && out.up.maxY >= 5
+      && out.side.maxY === 0 && out.side.maxX >= 5,
+      out.error || `pysty ${out.up.maxX}x/${out.up.maxY}y, `
+        + `sivu ${out.side.maxX}x/${out.side.maxY}y`);
+    /* Vanha muoto on yhä oletus: leveämpi kuin korkea, koska se on se tärinä
+     * jota kaikki nykyiset kutsupaikat ovat aina saaneet. */
+    expect('suunnaton tärinä on yhä se leveä ympyrä jota se on aina ollut',
+      !out.error && out.both.maxX > out.both.maxY && out.both.maxY > 0,
+      out.error || `${out.both.maxX}x/${out.both.maxY}y`);
+    expect('kovempi isku valitsee suunnan, heikompi ei käännä sitä, tasapeli on ympyrä',
+      !out.error && out.louder === 'x' && out.quieter === 'x' && out.tie === 'both',
+      out.error || `kovempi "${out.louder}", heikompi "${out.quieter}", tasapeli "${out.tie}"`);
+    expect('vaimennut tärinä ei jätä suuntaansa seuraavalle iskulle',
+      !out.error && out.settled.amp === 0 && out.settled.axis === 'both',
+      out.error || `amp ${out.settled.amp}, suunta "${out.settled.axis}"`);
+  }
+
+  /* --- 2. mikä tärisee mihinkin suuntaan --- */
+  /*
+   * Suunta ilman kutsupaikkoja on vain parametri. Nämä kolme ovat ne jotka
+   * ROADMAPissa nimettiin — maahanisku, pomon laskeutuminen ja iskuaalto — ja
+   * kukin ajetaan sitä kautta josta se pelissäkin lähtee.
+   *
+   * Pomon laskeutuminen pakotetaan kentällä eikä odottamalla: hyppy tulee
+   * ajastimesta ja putoamisnopeus painovoimasta, joten "odota kunnes se
+   * sattuu" olisi testi joka mittaa satunnaislukugeneraattoria. Pakotettu on
+   * `y`, `vy` ja `jumpTimer` — eli tasan se tila jossa pomo *on* juuri ennen
+   * laskeutumista — ja loppu on pomon omaa koodia.
+   */
+  {
+    const out = await page.evaluate(async () => {
+      try {
+        const { LevelScene } = await import('/src/scenes/level.js');
+        const game = window.sfb3;
+        const state = () => {
+          game.state = {
+            lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 3 }, reserve: null,
+            world: 0, node: 'w1-1', cleared: {}, worldsOpen: 8, cards: [],
+          };
+          game.finishLevel = () => {};
+        };
+        const tap = (scene) => {
+          const heard = [];
+          scene.shake = function record(amount, axis = 'both') {
+            heard.push({ amount, axis: axis });
+            return LevelScene.prototype.shake.call(this, amount, axis);
+          };
+          return heard;
+        };
+
+        /* a) maahanisku: pystyisku, ja se on koko liikkeen nimi. */
+        state();
+        const l1 = new LevelScene(game, '1-1');
+        game.setScene(l1);
+        const p = l1.player;
+        p.poundFromY = p.y - 120;
+        const pound = tap(l1);
+        l1.poundImpact(p, 1);
+
+        /* b) pomon laskeutuminen: pystyyn, ja voimakkuus massasta.
+         *
+         * Pomo asetetaan ensin lattialle omalla painovoimallaan, ja vasta
+         * sitten nostetaan ja pudotetaan. Se on tarkempi kuin arvattu lattian
+         * korkeus — ja arvattu se olisi, koska pomo aloittaa ilmassa. */
+        const drop = (id, scale) => {
+          state();
+          const scene = new LevelScene(game, id);
+          game.setScene(scene);
+          const boss = scene.entities.find((e) => e.constructor.name === 'Boss');
+          if (!boss) return { missing: id, heard: [] };
+          boss.scale = scale;
+          boss.targetScale = scale;
+          boss.jumpTimer = 999;       // hyppy tulee ajastimesta; tämä on pudotus
+          boss.chargeTimer = 999;
+          boss.spikeTimer = 99999;    // piikkien varoitus tärisyttää omansa
+          const heard = tap(scene);
+          for (let i = 0; i < 300 && !boss.onGround; i++) boss.update();
+          heard.length = 0;
+          boss.y -= 40;
+          boss.onGround = false;
+          boss.vy = 5.5;
+          for (let i = 0; i < 40 && !boss.onGround; i++) boss.update();
+          return { heard, landed: boss.onGround };
+        };
+        const small = drop('4-F', 1);
+        const big = drop('4-F', 3);
+
+        /* c) jättiläisen askel: matkaa, ei kelloa — ja vain kun massa on siellä.
+         *
+         * Piikkiajastin ja hyppy ovat poissa, joten kaikki mitä tässä kuuluu on
+         * kävelyä. */
+        const walk = (scale) => {
+          state();
+          const scene = new LevelScene(game, '4-F');
+          game.setScene(scene);
+          const boss = scene.entities.find((e) => e.constructor.name === 'Boss');
+          boss.scale = scale;
+          boss.targetScale = scale;
+          boss.jumpTimer = 999999;
+          boss.chargeTimer = 999999;
+          boss.spikeTimer = 999999;
+          for (let i = 0; i < 300 && !boss.onGround; i++) boss.update();
+          const heard = tap(scene);
+          let travel = 0;
+          for (let i = 0; i < 240; i++) {
+            const was = boss.x;
+            boss.update();
+            travel += Math.abs(boss.x - was);
+          }
+          return { heard, travel };
+        };
+        const heavy = walk(3);
+        const light = walk(1);
+
+        /* d) iskuaalto: luuranko hajoaa ja kaksi aaltoa lähtee lattiaa pitkin. */
+        state();
+        const l6 = new LevelScene(game, '6-F');
+        game.setScene(l6);
+        const skeleton = l6.entities.find((e) => e.constructor.name === 'Boss');
+        const waveShakes = tap(l6);
+        skeleton.invuln = 0;
+        skeleton.stomp();
+        const waves = l6.entities.filter((e) => e.constructor.name === 'Shockwave').length;
+
+        return {
+          pound, small, big, heavy, light, waveShakes, waves,
+        };
+      } catch (e) { return { error: String(e && e.message || e) }; }
+    });
+
+    const one = (heard) => (heard && heard.length === 1 ? heard[0] : null);
+    const poundHit = one(out.pound);
+    expect('maahanisku tärisyttää pystyyn',
+      !out.error && !!poundHit && poundHit.axis === 'y' && poundHit.amount > 0,
+      out.error || `${(out.pound || []).map((h) => `${h.amount} ${h.axis}`).join(', ') || 'ei tärinää'}`);
+
+    const smallLand = out.error ? null : one(out.small.heard);
+    const bigLand = out.error ? null : one(out.big.heard);
+    expect('pomon laskeutuminen tärisyttää pystyyn, ja isompi pomo kovempaa',
+      !!smallLand && !!bigLand && smallLand.axis === 'y' && bigLand.axis === 'y'
+      && bigLand.amount > smallLand.amount,
+      out.error || `koko 1 → ${smallLand ? `${smallLand.amount} ${smallLand.axis}` : 'ei tärinää'}, `
+        + `koko 3 → ${bigLand ? `${bigLand.amount} ${bigLand.axis}` : 'ei tärinää'}`);
+
+    const steps = out.error ? [] : out.heavy.heard;
+    const lightSteps = out.error ? [] : out.light.heard;
+    expect('jättiläisen askel tuntuu pystyssä, kevyen pomon askel ei tunnu lainkaan',
+      !out.error && steps.length >= 3 && steps.every((h) => h.axis === 'y')
+      && lightSteps.length === 0,
+      out.error || `koko 3: ${steps.length} askelta ${Math.round(out.heavy.travel)} px:llä, `
+        + `koko 1: ${lightSteps.length} askelta ${Math.round(out.light.travel)} px:llä`);
+    /* Askel on pienempi kuin laskeutuminen. Sama olio, kaksi tapahtumaa, ja
+     * jos ne olisivat yhtä kovia niin kävelevä jättiläinen huutaisi yhtä
+     * lujaa kuin putoava. */
+    expect('askel jää laskeutumista pienemmäksi',
+      !out.error && !!bigLand && steps.length > 0
+      && Math.max(...steps.map((h) => h.amount)) < bigLand.amount,
+      out.error || `askel ${steps.length ? Math.max(...steps.map((h) => h.amount)) : '-'}, `
+        + `laskeutuminen ${bigLand ? bigLand.amount : '-'}`);
+
+    const wave = out.error ? null : one(out.waveShakes);
+    expect('lattiaa pitkin lähtevä iskuaalto tärisyttää sivusuuntaan',
+      !!wave && wave.axis === 'x' && out.waves >= 2,
+      out.error || `${(out.waveShakes || []).map((h) => `${h.amount} ${h.axis}`).join(', ') || 'ei tärinää'}`
+        + `, aaltoja ${out.waves}`);
+  }
+
+  /* --- 3. palettisiirto: yksi veto, yksi frame, ja HUD ulkopuolella --- */
+  /*
+   * Neljä väitettä samasta yhdestä vedosta:
+   *
+   *   - se **kertoo** kuvan värillä (`multiply`), eli punainen välähdys vie
+   *     vihreän ja sinisen eikä lisää valoa. Palettisiirto on nimenomaan
+   *     siirto: sama kuva toisessa värissä, ei toinen kuva.
+   *   - se **ei koske HUDiin**, samasta syystä kuin hehku, kuumuus ja huurre
+   *     eivät koske: numerot ovat pelin puhetta pelaajalle, ja punaiseksi
+   *     värjätty pistelukema tarkoittaisi jotain mitä se ei tarkoita.
+   *   - se **elää yhden framen**. Sama sääntö kuin maailman valoilla: jos
+   *     siirto jäisi voimaan, niin edellisen kentän vahinkovälähdys palaisi
+   *     seuraavan kentän ensimmäiselle framelle.
+   *   - se **piirtyy vaikka kuvaefektit on pois**. Tämä on koko syy siihen
+   *     ettei se ole varjostimessa: `7` sammuttaa kuvaputken, ja kuvaputken
+   *     sammuttaminen ei saa sammuttaa sitä merkkiä joka kertoo osumasta.
+   */
+  {
+    const out = await page.evaluate(async () => {
+      try {
+        const { PostFX } = await import('/src/gfx/postfx.js');
+        const fx = Object.create(PostFX);
+        const c = document.createElement('canvas');
+        c.width = 320;
+        c.height = 240;
+        const g = c.getContext('2d');
+        const paint = () => {
+          g.fillStyle = '#808080';
+          g.fillRect(0, 0, 320, 240);
+        };
+        paint();
+        fx.source = c;
+        fx.mode = '2d';
+        fx.preset = 'pois';            // kuvaefektit pois: vain siirto saa näkyä
+        const at = (x, y) => Array.from(g.getImageData(x, y, 1, 1).data).slice(0, 3);
+
+        const set = fx.setTint(255, 64, 64, 0.5);
+        fx.apply(g);
+        const play = at(160, 100);
+        const hud = at(160, 232);
+        const left = fx.tint;
+        const shown = fx.shownTint;
+
+        /* Toinen frame ilman uutta siirtoa: kuvan pitää pysyä täsmälleen
+         * siinä mihin se jäi, eikä värjäytyä toiseen kertaan. */
+        fx.apply(g);
+        const again = at(160, 100);
+
+        /* Ja kolmas, jossa siirto asetetaan uudestaan: nyt sen pitää purra. */
+        paint();
+        fx.setTint(255, 64, 64, 0.5);
+        fx.apply(g);
+        const third = at(160, 100);
+
+        /* Katto: pimeäksi ei värjätä, olipa pyyntö mikä tahansa. */
+        paint();
+        fx.setTint(0, 0, 0, 5);
+        const clamped = fx.tint ? fx.tint.amount : null;
+        fx.apply(g);
+        const dark = at(160, 100);
+
+        /* Ja nollan kokoinen siirto ei ole siirto. */
+        fx.setTint(255, 0, 0, 0);
+        const none = fx.tint;
+
+        /* Toinen veto: lisäys. Sen on tuotava valoa myös sinne missä kuva on
+         * tumma — juuri se mitä kerto ei voi tehdä. Tumma ruutu ja kirkas
+         * ruutu samalla siirrolla, ja kummankin on noustava. */
+        const litFrom = (v) => {
+          g.fillStyle = `rgb(${v},${v},${v})`;
+          g.fillRect(0, 0, 320, 240);
+          fx.setTint(255, 40, 30, 0.42, 'screen');
+          fx.apply(g);
+          return at(160, 100);
+        };
+        const litDark = litFrom(32);
+        const litBright = litFrom(200);
+        /* Ja sama tumma ruutu kerrolla: se ei voi nousta, koska kerto ei tuo
+         * valoa. Tässä on koko syy siihen että vetoja on kaksi. */
+        g.fillStyle = 'rgb(32,32,32)';
+        g.fillRect(0, 0, 320, 240);
+        fx.setTint(255, 40, 30, 0.42);
+        fx.apply(g);
+        const mulDark = at(160, 100);
+
+        /* Ja kolmas kysymys, joka syntyi vasta kun kuninkaan verho (#66) ja
+         * tämä siirto tulivat samaan tiedostoon: **kaksi koko ruudun väriä on
+         * kaksi merkkiä vain jos ne näyttävät erilaisilta.** Ero on muoto eikä
+         * väri — verho on rengas jonka keskus jätetään koskematta, siirto on
+         * tasainen. Mitataan keskeltä ja nurkasta. */
+        const shape = (paint) => {
+          g.fillStyle = '#808080';
+          g.fillRect(0, 0, 320, 240);
+          /* Verho elää omaa laskuriaan 20 framea, joten se on nollattava tai
+           * se olisi mukana myös siinä kuvassa jota verrataan siihen. */
+          fx.flashLeft = 0;
+          paint();
+          fx.apply(g);
+          return { mid: at(160, 100), corner: at(4, 4) };
+        };
+        const curtain = shape(() => fx.flash([255, 80, 80], 20));
+        const shifted = shape(() => fx.setTint(255, 40, 30, 0.42, 'screen'));
+
+        return {
+          set, play, hud, left, shown, again, third, clamped, dark, none,
+          litDark, litBright, mulDark, curtain, shifted,
+        };
+      } catch (e) { return { error: String(e && e.message || e) }; }
+    });
+
+    const [r, gr, b] = out.play || [];
+    expect('kertoveto vie vihreän ja sinisen, ei lisää valoa',
+      !out.error && r === 128 && gr < 100 && gr > 60 && b === gr,
+      out.error || `pelikenttä rgb(${(out.play || []).join(',')})`);
+    expect('palettisiirto ei ulotu HUD-nauhaan',
+      !out.error && String(out.hud) === '128,128,128',
+      out.error || `HUD rgb(${(out.hud || []).join(',')})`);
+    expect('siirto elää yhden framen: se kuluu piirtoon eikä jää voimaan',
+      !out.error && out.left === null && !!out.shown
+      && String(out.again) === String(out.play) && String(out.third) === String(out.play),
+      out.error || `jäljelle ${JSON.stringify(out.left)}, toinen frame ${(out.again || []).join(',')}, `
+        + `uudestaan asetettuna ${(out.third || []).join(',')}`);
+    expect('siirto piirtyy vaikka kuvaefektit on kytketty pois',
+      !out.error && String(out.play) !== '128,128,128',
+      out.error || `esiasetus "pois", tulos rgb(${(out.play || []).join(',')})`);
+    /* Kaksi vetoa, kaksi merkitystä: paikan väri viedään, tapahtuman väri
+     * tuodaan. Väite on että tumma ruutu *nousee* lisäyksellä eikä kerrolla —
+     * eli että toinen veto ei ole toisen makuversio. */
+    expect('lisäysveto tuo valoa myös tummaan kuvaan, kerto ei voi',
+      !out.error && out.litDark && out.mulDark
+      && out.litDark[0] > 32 + 60 && out.litBright[0] > 200
+      && out.mulDark[0] <= 32 && out.mulDark[1] < 32,
+      out.error || `tumma 32 → lisäys rgb(${(out.litDark || []).join(',')}), `
+        + `kerto rgb(${(out.mulDark || []).join(',')}); `
+        + `kirkas 200 → lisäys rgb(${(out.litBright || []).join(',')})`);
+    /* Verho ja siirto ovat kaksi eri merkkiä, ja se on nyt mitattu eikä
+     * sovittu: verhon keskus on koskematon (rengas), siirron ei (tasainen). */
+    expect('kuninkaan verho ja palettisiirto eivät voi näyttää samalta',
+      !out.error && String(out.curtain.mid) === '128,128,128'
+      && out.curtain.corner[0] > 128 + 20
+      && out.shifted.mid[0] > 128 + 20
+      && Math.abs(out.shifted.mid[0] - out.shifted.corner[0]) <= 1,
+      out.error || `verho keskellä rgb(${(out.curtain.mid || []).join(',')}) `
+        + `nurkassa rgb(${(out.curtain.corner || []).join(',')}) — `
+        + `siirto keskellä rgb(${(out.shifted.mid || []).join(',')}) `
+        + `nurkassa rgb(${(out.shifted.corner || []).join(',')})`);
+    expect('siirrolla on katto, eikä nollan kokoinen siirto ole siirto',
+      !out.error && out.clamped !== null && out.clamped <= 0.6 && out.clamped > 0
+      && out.none === null && out.dark && out.dark[0] > 40,
+      out.error || `katto ${out.clamped}, pimeimmillään rgb(${(out.dark || []).join(',')}), `
+        + `nolla → ${JSON.stringify(out.none)}`);
+  }
+
+  /* --- 4. kolme tapahtumaa, ja niiden järjestys --- */
+  /*
+   * Kolme tapahtumaa jakaa yhden mekanismin, joten järjestys on osa
+   * määrittelyä eikä sattuma: **uusin tieto voittaa.** Osuma on tapahtuma joka
+   * kesti kymmenen framea, tähti on tila joka kestää yksitoista sekuntia ja
+   * pomohuone on paikka joka kestää koko kentän — eli mitä lyhyempi, sitä
+   * tuoreempi, ja sitä tärkeämpi juuri nyt.
+   */
+  {
+    const out = await page.evaluate(async () => {
+      try {
+        const { LevelScene } = await import('/src/scenes/level.js');
+        const { STAR_FRAMES, HURT_FLASH } = await import('/src/entities/player.js');
+        const { PostFX } = await import('/src/gfx/postfx.js');
+        const game = window.sfb3;
+        const make = (id, power = { type: 'shroom', level: 3 }) => {
+          game.state = {
+            lives: 5, coins: 0, score: 0, power, reserve: null,
+            world: 0, node: 'w1-1', cleared: {}, worldsOpen: 8, cards: [],
+          };
+          game.finishLevel = () => {};
+          const scene = new LevelScene(game, id);
+          game.setScene(scene);
+          return scene;
+        };
+
+        /* a) vahinkovälähdys: osuma sytyttää sen, ja se sammuu itsestään. */
+        const hurt = make('1-1');
+        const clean = hurt.paletteShift();
+        hurt.player.hurt('enemy');
+        const lit = hurt.paletteShift();
+        const trail = [];
+        for (let i = 0; i <= HURT_FLASH + 4; i++) {
+          const shift = hurt.paletteShift();
+          trail.push(shift ? shift.amount : 0);
+          if (hurt.player.hurtFlash > 0) hurt.player.hurtFlash--;
+        }
+
+        /* a2) välähdyksiä ei voi tulla peräkkäin nopeammin kuin osumia.
+         *
+         * Tämä on välähdyskynnyksen toinen puoli: yksi kirkastuva välähdys per
+         * osuma on turvallinen vain jos osumia ei voi tulla kolmea sekunnissa.
+         * Ne eivät voi, ja syy on vanha eikä tätä varten tehty —
+         * kuolemattomuusframet osuman jälkeen. Mitataan yrittämällä. */
+        const spam = make('1-1');
+        let flashes = 0;
+        let wasLit = false;
+        for (let f = 0; f < 240; f++) {
+          spam.player.hurt('enemy');       // joka frame, koko ajan
+          const isLit = spam.player.hurtFlash > 0;
+          if (isLit && !wasLit) flashes++;
+          wasLit = isLit;
+          if (spam.player.invuln > 0) spam.player.invuln--;
+          if (spam.player.hurtFlash > 0) spam.player.hurtFlash--;
+          if (spam.player.power.level === 0) spam.player.power = { type: 'shroom', level: 3 };
+        }
+        const spamHz = flashes / (240 / 60);
+
+        /* b) tähti: sykkii, muttei välky. Kello on tähden oma laskuri, joten
+         *    näyte otetaan sitä pitkin eikä seinäkellosta. */
+        const star = make('1-1');
+        star.player.star = STAR_FRAMES;
+        const amounts = [];
+        const lums = [];
+        /* Nollaan asti, ja nolla mukaan: viimeinen näyte on se frame jolla
+         * tähti loppuu, ja siirron on oltava silloin poissa eikä pienenä. */
+        for (let f = 0; f <= STAR_FRAMES; f++) {
+          star.player.star = STAR_FRAMES - f;
+          const shift = star.paletteShift();
+          const a = shift ? shift.amount : 0;
+          amounts.push(a);
+          const m = (v) => 1 - a * (1 - v / 255);
+          lums.push(0.2126 * m(shift ? shift.r : 255)
+            + 0.7152 * m(shift ? shift.g : 255)
+            + 0.0722 * m(shift ? shift.b : 255));
+        }
+        /* Välähdys on huippu: nousu joka kääntyy laskuksi. */
+        let peaks = 0;
+        for (let i = 1; i < amounts.length - 1; i++) {
+          if (amounts[i] > amounts[i - 1] && amounts[i] >= amounts[i + 1]) peaks++;
+        }
+        const hz = peaks / (STAR_FRAMES / 60);
+        const swing = (Math.max(...lums) - Math.min(...lums)) / Math.max(...lums);
+        const endsAtZero = amounts[amounts.length - 1];
+
+        /* c) pomohuone: sävy niin kauan kuin tappelu on kesken. */
+        const boss = make('1-F');
+        boss.tick = 0;
+        const atStart = boss.paletteShift();
+        boss.tick = 120;
+        const midFight = boss.paletteShift();
+        boss.onBossDefeated();
+        boss.tick += 200;
+        const afterWin = boss.paletteShift();
+        const plain = make('1-1').paletteShift();
+
+        /* d) järjestys, kaikki kolme päällä yhtä aikaa. */
+        const all = make('1-F');
+        all.tick = 200;
+        all.player.star = STAR_FRAMES;
+        all.player.hurtFlash = HURT_FLASH;
+        const first = all.paletteShift();
+        all.player.hurtFlash = 0;
+        const second = all.paletteShift();
+        all.player.star = 0;
+        const third = all.paletteShift();
+
+        /* e) ja se päätyy oikeasti kuvalle: kentän piirto työntää sen PostFX:ään. */
+        const drawn = make('1-1');
+        drawn.player.hurtFlash = HURT_FLASH;
+        PostFX.tint = null;
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        drawn.draw(canvas.getContext('2d'));
+        const pushed = PostFX.tint ? { ...PostFX.tint } : null;
+        PostFX.tint = null;
+
+        return {
+          clean, lit, trail, peaks, hz, swing, endsAtZero, maxAmount: Math.max(...amounts),
+          flashes, spamHz,
+          atStart, midFight, afterWin, plain,
+          order: [first && first.reason, second && second.reason, third && third.reason],
+          pushed,
+        };
+      } catch (e) { return { error: String(e && e.message || e) }; }
+    });
+
+    expect('osuma välähtää punaisena valona ja sammuu itsestään',
+      !out.error && out.clean === null && !!out.lit && out.lit.reason === 'hurt'
+      && out.lit.mode === 'screen'
+      && out.lit.r > out.lit.g && out.lit.r > out.lit.b
+      && out.trail[0] > 0 && out.trail[out.trail.length - 1] === 0
+      && out.trail.every((v, i) => i === 0 || v <= out.trail[i - 1]),
+      out.error || `${out.trail ? out.trail.map((v) => Math.round(v * 100) / 100).join(' → ') : '-'}`);
+    expect('välähdyksiä ei voi tulla nopeammin kuin osumia, eli alle kolme sekunnissa',
+      !out.error && out.spamHz > 0 && out.spamHz < 3,
+      out.error || `${out.flashes} välähdystä 240 framessa = `
+        + `${Math.round(out.spamHz * 100) / 100} Hz`);
+    /* Kaksi lukua, yksi lähde: WCAG 2.3.1 yleinen välähdyskynnys. */
+    expect('tähti sykkii muttei välky: alle kolme huippua sekunnissa ja alle 10 % luminanssia',
+      !out.error && out.hz < 3 && out.swing < 0.1 && out.maxAmount > 0 && out.endsAtZero === 0,
+      out.error || `${out.peaks} huippua = ${Math.round(out.hz * 100) / 100} Hz, `
+        + `luminanssin heilahdus ${Math.round(out.swing * 1000) / 10} %, `
+        + `suurin siirto ${Math.round(out.maxAmount * 100) / 100}`);
+    expect('pomohuoneen sävy tulee tappelun mukana ja lähtee sen mukana',
+      !out.error && out.atStart === null && !!out.midFight && out.midFight.reason === 'boss'
+      && out.afterWin === null && out.plain === null,
+      out.error || `alussa ${JSON.stringify(out.atStart)}, kesken ${out.midFight && out.midFight.reason}, `
+        + `voiton jälkeen ${JSON.stringify(out.afterWin)}, tavallisessa kentässä ${JSON.stringify(out.plain)}`);
+    expect('uusin tieto voittaa: osuma > tähti > huone',
+      !out.error && String(out.order) === 'hurt,star,boss',
+      out.error || `järjestys ${JSON.stringify(out.order)}`);
+    expect('kentän piirto työntää siirron kuvaputkelle asti',
+      !out.error && !!out.pushed && out.pushed.amount > 0,
+      out.error || `PostFX:ssä ${JSON.stringify(out.pushed)}`);
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- kuvaefektit: loppu ---- */
+
 await browser.close();
 server.close();
 

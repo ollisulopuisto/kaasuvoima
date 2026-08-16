@@ -8,7 +8,7 @@ import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
-import { Player, P_METER_MAX, MAX_RUN } from '../entities/player.js';
+import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
@@ -635,6 +635,50 @@ const CAM_PAGE_FRAMES = 60;
  */
 const LETTERBOX_BAR = 24;
 
+/** Kova katto tärinälle. Kuusi pikseliä on kuva joka tärähtää; enemmän on rikki. */
+const SHAKE_MAX = 6;
+
+/*
+ * TÄRINÄN MUOTO SUUNNITTAIN. Painot kertovat mikä osuus voimakkuudesta menee
+ * kummallekin akselille, ja `both` on tasan se leveä ellipsi jota koko peli on
+ * aina tärissyt (x täysillä, y 60 %) — eli jokainen kutsupaikka joka ei sano
+ * suuntaa saa täsmälleen sen mitä se on ennenkin saanut.
+ *
+ * Suunnatut ovat puhtaita eivätkä painotettuja: pystyisku ei liikuta kuvaa
+ * sivuun *lainkaan*. Puolikas sivuliike tekisi pystyiskusta vain kapeamman
+ * ympyrän, ja silloin ero olisi taas makuasia eikä merkki.
+ */
+const SHAKE_AXES = {
+  both: { x: 1, y: 0.6 },
+  x: { x: 1, y: 0 },
+  y: { x: 0, y: 1 },
+};
+
+/*
+ * PALETTISIIRTO TAPAHTUMIIN. Kolme tapahtumaa, yksi mekanismi, ja luvut tässä
+ * eikä kutsupaikoissa — koska niiden *keskinäiset* suhteet ovat koko asia:
+ * osuma on nelinkertainen huoneeseen nähden ja kymmenkertainen tähteen.
+ *
+ *   - `hurt`  Punainen valo koko kuvan yli (`screen`), koska tapahtuman pitää
+ *             näkyä myös siellä missä kuva on jo tumma. Kerto olisi tehnyt
+ *             sinisestä taivaasta violetin, eikä "taivas muuttui violetiksi"
+ *             ole se lause jonka osuman pitää sanoa. Että se ei silti ole
+ *             välkkyvä salama, on kahden luvun asia: yksi välähdys per osuma,
+ *             ja osumia rajoittaa `invuln` 110 framea eli 0,55 Hz.
+ *   - `star`  Lämmin kulta, ja niin pieni että se on tunnelmaa eikä varoitus.
+ *             Jakso 46 framea = 1,3 Hz, ja viimeiset 138 framea 23 framen
+ *             jaksolla = 2,6 Hz. Molemmat alle kolmen (WCAG 2.3.1), ja 138 on
+ *             sekä 46:n että 23:n monikerta, joten tahdin vaihto osuu aallon
+ *             pohjalle. Katso `paletteShift`.
+ *   - `boss`  Lämmin, hieman tumma huone. Nousee sisään 40 framessa, jotta se
+ *             ei ole kentän ensimmäisen framen kohtaus vaan paikan väri.
+ */
+const PALETTE = {
+  hurt: { r: 255, g: 40, b: 30, amount: 0.42, mode: 'screen' },
+  star: { r: 255, g: 214, b: 96, peak: 0.14, period: 46, hurried: 23, hurryAt: 138 },
+  boss: { r: 255, g: 190, b: 168, amount: 0.3, ramp: 40 },
+};
+
 /*
  * Going into something, and coming out of it somewhere else.
  *
@@ -976,6 +1020,8 @@ export class LevelScene {
     this.stateTimer = 0;
     this.bossDefeated = false;
     this.shakeAmp = 0;
+    /** Mihin suuntaan tämä tärähdys menee; ks. `shake`. */
+    this.shakeAxis = 'both';
     /* Vauhtimittarin sykäys ja sen suunta. Puhtaasti kosmeettinen ja siksi
      * `savestate.js`:n ulkopuolella samasta syystä kuin `shakeAmp`: pikalataus
      * ei ole se hetki jolla mittari täyttyi. Reuna itse on pelaajan päällä
@@ -1248,9 +1294,104 @@ export class LevelScene {
     Ambience.set(this.theme, this.def);
   }
 
-  /** Kicks the camera for a frame or two. Purely cosmetic. */
-  shake(amount) {
-    this.shakeAmp = Math.min(6, Math.max(this.shakeAmp, amount));
+  /**
+   * Kicks the camera for a frame or two. Purely cosmetic — but not shapeless.
+   *
+   * **Suunta on osa viestiä.** Yksi ja sama ympyrä kaikelle tarkoittaa että
+   * maahanisku, lattiaa pitkin lähtevä iskuaalto ja jättiläisen askel
+   * näyttävät samalta, ja kaksi samannäköistä "jotain tapahtui" -signaalia
+   * opettavat lukemaan väärää — sama perustelu joka on jo kirjattu maahaniskun
+   * ääneen ja pomoäänten jakoon (DESIGN.md kohta 8). Pystyisku tärisyttää
+   * pystyyn, lattiaa pitkin kulkeva aalto sivuttain.
+   *
+   * `axis` on `'both'` (vanha leveä ympyrä, ja yhä oletus), `'y'` tai `'x'`.
+   *
+   * **Kuka valitsee suunnan, kun kaksi asiaa osuu samaan frameen.** Kovempi.
+   * Se on sama järjestys jolla voimakkuus itse on aina valittu — `Math.max` —
+   * eikä sitä siksi tarvitse opetella erikseen: pomon laskeutuminen kuuluu
+   * kovempaa kuin aalto joka siitä lähti, joten frame on laskeutumisen
+   * näköinen. Tasapeli palaa ympyrään, koska kaksi yhtä kovaa iskua eri
+   * suunnista *on* ympyrä.
+   */
+  shake(amount, axis = 'both') {
+    const next = Math.min(SHAKE_MAX, amount);
+    if (next > this.shakeAmp) {
+      this.shakeAxis = axis;
+    } else if (next === this.shakeAmp && axis !== this.shakeAxis) {
+      this.shakeAxis = 'both';
+    }
+    this.shakeAmp = Math.max(this.shakeAmp, next);
+  }
+
+  /**
+   * Tämän framen tärähdys pikseleinä.
+   *
+   * Omana metodinaan eikä `draw`in sisällä, koska tämä on se numero jonka
+   * suunta *on*: ilman erillistä lukua "tärinä on pystysuuntainen" olisi
+   * väite kahdesta sinistä eikä mitattava asia.
+   */
+  shakeOffset() {
+    if (this.shakeAmp <= 0) return { x: 0, y: 0 };
+    const w = SHAKE_AXES[this.shakeAxis] || SHAKE_AXES.both;
+    return {
+      x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp * w.x),
+      y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * w.y),
+    };
+  }
+
+  /**
+   * PALETTISIIRTO: mitä väriä tämä frame on, ja miksi.
+   *
+   * Kolme tapahtumaa jakaa yhden mekanismin (`PostFX.setTint`), joten
+   * järjestys on osa määrittelyä eikä sattuma: **uusin tieto voittaa.** Osuma
+   * kesti kymmenen framea, tähti yksitoista sekuntia ja pomohuone koko kentän
+   * — mitä lyhyempi, sitä tuoreempi, ja sitä tärkeämpi juuri nyt.
+   *
+   * Kello on joka kohdassa pelilogiikan oma laskuri (`hurtFlash`, `star`,
+   * `tick`) eikä seinäkello, joten siirto osuu framen tarkkuudella siihen
+   * tapahtumaan jota se selittää — ja sama kenttä pelattuna uudestaan näyttää
+   * samalta.
+   *
+   * Kuolema ei välähdä. Sillä on jo oma kuvansa — musiikki lakkaa, keho
+   * kaartuu ruudun alle — ja välähdys olisi siinä toinen merkki asiasta josta
+   * ei ole epäselvyyttä. Välähdys on nimenomaan sen osuman merkki jonka
+   * jälkeen peli jatkuu.
+   */
+  paletteShift() {
+    const p = this.player;
+    if (p && p.hurtFlash > 0) {
+      const t = p.hurtFlash / HURT_FLASH;
+      return { ...PALETTE.hurt, amount: PALETTE.hurt.amount * t, reason: 'hurt' };
+    }
+    if (p && p.star > 0) {
+      /*
+       * Sykkii, muttei välky. Koko ruudun välkkyminen on juuri se asia jota
+       * WCAG 2.3.1:n välähdyskynnys koskee — alle kolme välähdystä sekunnissa
+       * ja alle 10 % suhteellisen luminanssin muutosta — ja tätä peliä pelaa
+       * lapsi kavereineen. Nappulan oma väri vaihtuu kolmen framen välein
+       * (`STAR_TINTS`), koska se on pieni pinta-ala; ruutu hengittää.
+       *
+       * Kello on tähden oma laskuri, joka laskee nollaan: siirto päättyy
+       * tasan siihen framiin jolla tähti päättyy. Ja tiheämpi jakso alkaa
+       * `hurryAt`issa, joka on molempien jaksojen monikerta — vaihto osuu
+       * aallon pohjalle, joten se ei ole askel vaan pelkkä tahdin muutos.
+       */
+      const { star } = PALETTE;
+      const period = p.star <= star.hurryAt ? star.hurried : star.period;
+      const phase = (1 - Math.cos((p.star % period) / period * Math.PI * 2)) / 2;
+      return { ...star, amount: star.peak * phase, reason: 'star' };
+    }
+    if (this.def.boss) {
+      /* Huone on sen väristä niin kauan kuin tappelu on kesken, ja se palaa
+       * ennalleen samaa tahtia kuin ovi aukeaa. Voitto on siis myös väri. */
+      const fade = this.bossDefeated
+        ? 1 - this.doorOpen
+        : Math.min(1, this.tick / PALETTE.boss.ramp);
+      if (fade > 0) {
+        return { ...PALETTE.boss, amount: PALETTE.boss.amount * fade, reason: 'boss' };
+      }
+    }
+    return null;
   }
 
   /**
@@ -1541,7 +1682,8 @@ export class LevelScene {
       if (this.lastPound.broke) Sfx.play('burst');
     }
 
-    this.shake(shake);
+    // Pystyyn: koko liike on pystysuora, ja tämä on se frame jolla se osuu.
+    this.shake(shake, 'y');
     Sfx.play('slam');
   }
 
@@ -1614,7 +1756,8 @@ export class LevelScene {
     this.add(new BrickPiece(this, px, py + 8, -1.1, -2.2, this.theme));
     this.add(new BrickPiece(this, px + 8, py + 8, 1.1, -2.2, this.theme));
     this.awardScore(50);
-    this.shake(1.5);
+    // Tiili hajoaa nyrkiltä alhaalta: liike on pystyssä.
+    this.shake(1.5, 'y');
     Sfx.play('brick');
   }
 
@@ -2370,7 +2513,12 @@ export class LevelScene {
      * line is also how it stops: pausing, dying, clearing and every scene
      * change all stop calling it. See Ambience.hold. */
     if (this.state === 'play') Ambience.hold(this.gust);
-    if (this.shakeAmp > 0) this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
+    if (this.shakeAmp > 0) {
+      this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
+      // Vaimennut tärinä ei jätä suuntaansa perinnöksi: seuraava isku saa
+      // valita omansa, eikä edellisen suunta odota sitä valmiina.
+      if (this.shakeAmp === 0) this.shakeAxis = 'both';
+    }
     if (this.speedPulse > 0) this.speedPulse--;
     this.updateEntities();
     if (this.state !== 'dead') this.collisions();
@@ -2528,7 +2676,8 @@ export class LevelScene {
         const py = ty * TILE;
         this.add(new BrickPiece(this, px, py, -1.2, -2.6, this.theme));
         this.add(new BrickPiece(this, px + 8, py, 1.2, -2.6, this.theme));
-        this.shake(1.2);
+        // Lava murenee jalkojen alta — pystyyn, kuten kaikki putoava.
+        this.shake(1.2, 'y');
         Sfx.play('brick');
       } else if (next > CRUMBLE_FRAMES + CRUMBLE_REGROW) {
         // Never rebuild a tile inside the player: that would be a wall
@@ -2615,7 +2764,7 @@ export class LevelScene {
         const below = this.tileAt(f.x, ny);
         if (ny >= this.h || isSolid(below) || isSemi(below)) {
           f.rest = f.t;
-          this.shake(1.4);
+          this.shake(1.4, 'y');            // möykky tuli ylhäältä
           Sfx.play('bump');
           this.lumpImpact(f.x, f.y);
           continue;
@@ -3293,6 +3442,16 @@ export class LevelScene {
   /* --------------------------------- draw ------------------------------ */
 
   draw(ctx) {
+    /*
+     * Palettisiirto työnnetään framen alussa, samasta syystä kuin lamppu
+     * (`PostFX.setFocus`): kohtaus on ainoa joka tietää mitä juuri tapahtui.
+     * Siirto elää yhden framen ja kuluu piirtoon, joten se on pyydettävä joka
+     * kerta uudestaan — kartta, valikko ja pistetaulu eivät pyydä sitä
+     * koskaan, eikä edellisen kentän osuma siksi voi värjätä niitä.
+     */
+    const shift = this.paletteShift();
+    if (shift) PostFX.setTint(shift.r, shift.g, shift.b, shift.amount, shift.mode);
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, this.bar, VIEW_W, this.viewH);
@@ -3308,10 +3467,7 @@ export class LevelScene {
       ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick, bandDrop);
 
-    const jitter = this.shakeAmp > 0
-      ? { x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp),
-        y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * 0.6) }
-      : { x: 0, y: 0 };
+    const jitter = this.shakeOffset();
     const camX = Math.round(this.cam.x) + jitter.x;
     const camY = Math.round(this.cam.y) + jitter.y;
     ctx.translate(-camX, -camY);
