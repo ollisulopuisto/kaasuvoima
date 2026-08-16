@@ -246,6 +246,150 @@ pystytukea vasta rakennetaan.
 
 ---
 
+## Mukautuva maailma — suunnitelma, ei päätös (16.8.2026)
+
+Omistajan kysymys: *"onko tää hullu idea: kenttä joka mukautuu siihen miten
+vahva pelaaja on… entä jos skaalaamme vihujen määrää/nopeutta ja hyppyjen/
+aukkojen mittaa jossain suhteessa powerupien kertymisen kanssa?"* — ja heti
+perään se lause joka ratkaisee koko asian: *"kaikkein siisteintä tietysti
+olisi, jos pelaaja näkisi maailman muuttuvan suoraan silmien edessä."*
+
+Tämä osio on se suunnittelu jota omistaja pyysi tehtäväksi ennen kuin mitään
+rakennetaan. Se ei päätä mitään.
+
+### 1. Ongelma, mitattuna
+
+Palkinto ei tee hypystä parempaa. Se tekee hyppyjä **lisää**:
+`airJumpsMax` on pierusienellä sama kuin voimataso, eli tasolla 5 ilmassa on
+viisi ylimääräistä ponnistusta.
+
+Kenttägeometria on mitoitettu yhtä hyppyä vasten. [PHYSICS.md](PHYSICS.md):n
+mitatut luvut ovat juoksuhyppy 85 px nousua ja 155 px kantamaa, pieruhypyllä
+174 ja 285, ja suunnittelubudjetti on kuilu 6 ruutua eli 96 px — 70 % siitä
+mitä juoksuhyppy kantaa. Viidellä ilmahypyllä vaakasuora ulottuvuus ei ole
+enää rajallinen suure lainkaan, joten **pelin levein kuilu (softGap 9) on
+täydellä kaasulla lyhyempi kuin yksi ponnistus.**
+
+Se on talouden vika eikä kenttien: kentät on hinnoiteltu hypyn *pituudella*, ja
+palkinto myy hyppyjen *määrää*. Mikään kuilu ei voi hinnoitella sitä.
+
+### 2. Se sääntö joka erottaa hyvän mukautumisen huonosta
+
+**Maailma saa reagoida siihen mitä pelaaja tekee, ei siihen mitä hänellä on.**
+
+Molemmat ovat "mukautumista", ja ne ovat eri asioita:
+
+- **Reagointi omistamiseen** (voimataso, kerätyt esineet) on näkymätöntä. Se
+  kumoaa palkinnon — kerätty sieni ei anna mitään jos kuilu levenee sen mukana
+  — ja pelaaja lukee sen huijaukseksi heti kun huomaa sen. Se myös tekee
+  jokaisesta mitatusta luvusta epätoden: `DIFFICULTY`-taulu, aika-ajon
+  ennätykset, opetusjärjestys ja päivän pierun sormenjälki kuvaavat *sitä yhtä
+  kenttää*, ja kuudessa versiossa jokainen niistä joutuu kysymään "minkä
+  version?".
+- **Reagointi tekemiseen** on mekaniikka. Sillä on syy jonka näkee, seuraus
+  jonka voi ennustaa, ja hinta jonka pelaaja valitsee.
+
+Omistajan oma lause on tämän testi: **jos pelaaja ei näe syytä, se on väärä
+laji mukautumista.** "Näkee maailman muuttuvan" ei ole koriste tämän idean
+päällä — se on ainoa asia joka tekee ideasta kelvollisen.
+
+### 3. Kolme ehdokasta sille mikä näkyvästi muuttuu
+
+**V1 — geometria liikkuu.** Kuilut levenevät, lavat vetäytyvät.
+*Näkyvyys:* paras. *Hinta:* korkein, ja yksi sen muodoista on se ainoa asia
+jota tasohyppely ei saa tehdä: maasto joka liikkuu sitoutuneen hypyn alla.
+Lisäksi jokainen validaattorin sääntö (`checkGaps`, `checkWalls`), voimatason 0
+todistus ja tallennus koskisivat versiota eikä kenttää. **Ei** — paitsi
+kapeana muotona jossa muutos tapahtuu vain siellä missä pelaaja ei ole ja vain
+ennen sinne tuloa, ja sekin on kallis.
+
+**V2 — aine nousee.** Kaasu (tai hiekka) nousee huoneessa ruutu kerrallaan.
+*Näkyvyys:* erinomainen — nouseva pintaviiva on luettavin maailmanmuutos mitä
+on. *Se ei siirrä geometriaa*, se poistaa alareitin ja jättää yläreitin, ja
+yläreitti on jo olemassa: lankut ja hyppysarjat. Moottorissa on ennakkotapaus
+kolmesti — juoksuhiekalla on kirjattu sopimus ("hidas veto, sekunteja aikaa
+reagoida"), laava on kuoppien kansi, ja kytkin kirjoittaa laattoja koko
+kentässä ajastimen ajan. *Hinta:* keskitaso. **Ja se lahja jonka vain tämä
+vaihtoehto antaa: pelaajan voima muuttuu siksi mikä hänet pelastaa** — yläreitti
+on hyppyjä, ja hyppyjä hän juuri osti.
+
+**V3 — asukkaat heräävät.** Vihollisia enemmän ja nopeammin.
+*Näkyvyys:* puolittainen: enemmän vihollisia näkyy, mutta *miksi* ei näy. Tämän
+akselin omistaa jo `scale.js` vaikeustasovalinnan kautta, ja toinen piilotettu
+säädin samalle akselille tekee näkyvästä valinnasta valheen. *Hinta:* matala,
+*arvo:* matala.
+
+### 4. Suositus: PAINEVENTTIILI
+
+V2 yhdistettynä kohdan 2 sääntöön.
+
+Kentässä on **venttiili**, ja sen saa auki **maahaniskulla** — pelin oma
+tahallinen, ennakoitu ja aikaa maksava maailmaan vaikuttava verbi, joka jo
+rikkoo lattian. Iskusta **paine nousee yhden askeleen, näkyvästi**: kaasupinta
+nousee ruudun, huone saa sävynsä (palettisiirto on jo olemassa), nukkuvat
+heräävät.
+
+Askelia on 0–3. Jokainen askel vie alareitin ja nostaa palkkiota. **Pelaaja
+valitsee.** Nolla askelta on se kenttä joka on mitattu ja todistettu; kolme on
+vaikeampi kenttä jonka hän pyysi ja josta hänelle maksetaan.
+
+Miksi tämä on meidän eikä lainaa (kohdan 2 lisäsääntö):
+
+- **Hahmolla on vyöllään messinkinen paineventtiili**, ja se on ollut siinä
+  siitä asti kun puku piirrettiin — `sprites/player.js` sanoo sen omin sanoin:
+  mies joka menee alas suolistojen maailmaan mukanaan jotain jolla päästää
+  paine ulos. Mekaniikka on jo piirretty; sitä ei ole vielä ollut olemassa.
+- Maailma on suoli. Paineen nousu suolessa ei ole vertauskuva vaan juoni.
+- Verbi on maahanisku, jolle juuri annettiin kyykky ja lattian rikkominen.
+
+Ja miksi se korjaa kohdan 1: **paine ei ohita pelaajan voimaa vaan kuluttaa
+sen.** Yläreitti pyytää tasan niitä ylimääräisiä hyppyjä jotka sieni antoi.
+
+### 5. Mitä tämä rikkoisi, ja miten kukin pidetään
+
+| mikä | miten se pidetään |
+| --- | --- |
+| DESIGN.md 5: tehostus avaa paikkoja, ei kenttää | paine 0 on kenttä sellaisena kuin se on todistettu; venttiili on valinnainen |
+| voimatason 0 todistus (botti + ratkaisija) | **sääntö geometriana, ei N ajoa:** kaasu ei saa koskaan nousta niille riveille joilla todistettu maareitti kulkee. Se on `rules.js`:n tarkistettavissa |
+| `DIFFICULTY`, aika-ajo, pistetaulu | mitattu luku on paineen 0 luku; paine on modifikaattori kuten vaikeustasokin. Aika-ajon ennätys kantaa paineen mukanaan — kolmella paineella ajettu aika on eri ja parempi suoritus |
+| päivän pieru, generoidut kentät | ei kosketa: generaattori ei aseta venttiilejä |
+| tallennus | yksi kokonaisluku (`pressure`) ja ruudukko, joka tallennetaan jo |
+| DESIGN.md 8: yksi merkki, yksi merkitys | askel on **yksi** tapahtuma: yksi kuva, yksi ääni. Koko ruudun väri vaatii saman välähdysmittauksen kuin tähti (ROADMAP 16.8.) |
+
+### 6. Ja se mikä on tehtävä ensin, riippumatta tästä
+
+**Ilmahyppyjen määrä on korjattava ennen kuin venttiili kannattaa rakentaa.**
+Viisi ilmahyppyä trivialisoi myös yläreitin, eli paine nostaisi kaasua ja
+pelaaja lentäisi sen yli. Venttiili ei siis ole vaihtoehto ilmahyppyjen
+rajaamiselle vaan asia joka vaatii sen ensin.
+
+Se on yhden luvun muutos eikä riko mitään: kaikki on todistettu voimatasolla 0,
+joten kyvyn vähentäminen ei voi tehdä yhdestäkään kentästä mahdotonta.
+
+### 7. Yksi mittaus, joka pitää ajaa ennen päätöstä
+
+Koko suositus lepää väitteellä **"tarkkuus ei skaalaudu kaasulla, kantama
+skaalautuu"**: yhden ruudun laskeutuminen on 16 px olitpa miten vahva tahansa.
+Väite on mitattavissa, joten sitä ei pidä uskoa.
+
+`tools/jump-solver.js` ajetaan kolmelle toimitetulle sarjalle voimatasolla 5
+pierusienellä ja ilmahypyt sallittuna, ja ikkunoita verrataan voimatason 0
+lukuihin (49/48/40/47/49 · 33/33/28/33/36/49 · 18/17/15/9/17/33 px):
+
+- **Jos ikkunat avautuvat vähän**, tarkkuus on voimasta riippumaton, yläreitti
+  toimii suunnitellusti ja tämä osio seisoo mitatulla pohjalla.
+- **Jos ne avautuvat rajusti**, yläreitti on täydellä kaasulla yhtä helppo kuin
+  alareitti, ja silloin venttiili ei muuta kysymystä vaan vain maisemaa — ja
+  koko suunta on väärä ennen kuin kohta 6 on tehty.
+
+### 8. Avoimet kysymykset omistajalle
+
+1. **Venttiili vai automaatti** — nostaako paineen pelaaja vai voimataso? (Tämä
+   osio suosittelee venttiiliä, ja kohta 2 on se perustelu.)
+2. **Kuinka kauas paine kantaa** — kenttä vai maailma?
+3. **Mikä on palkkio** — pisteet, kortti, salaisuus vai oikotie?
+4. **Missä tämä on** — kaikkialla, vai maailma 8:n oma asia?
+
 ## Kaksi läpiajoa, koska niitä pyydettiin
 
 ### Kohta 4 tarkemmin: mitä "litteä maailma käännetään" olisi täällä
