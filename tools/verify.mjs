@@ -7208,6 +7208,64 @@ const report = await page.evaluate(async () => {
         `${e.box.w}x${e.box.h} vs ${e.w}x${e.h}`);
     }
 
+    /*
+     * KUPLA KANTAA, JA SE ON ASKELMA EIKÄ HISSI.
+     *
+     * Kaksi väitettä samassa kokeessa, koska ne ovat saman säännön kaksi
+     * puoliskoa eivätkä kaksi ominaisuutta:
+     *
+     *   **Se kantaa.** Kuplan päälle laskeutunut pelaaja ei putoa. Ilman tätä
+     *   riviä "kupla kantaa" menisi läpi myös toteutuksella joka vain
+     *   viivästää puhkeamista yhdellä framella.
+     *
+     *   **Eikä kanna kauan.** Kupla puhkeaa itsestään `BUBBLE_CARRY`n jälkeen
+     *   vaikkei mihinkään koskettaisi. Yläraja mitataan siksi että juuri se
+     *   erottaa askelman lautasta: kannettava kupla jolla voi odottaa on
+     *   hissi, ja hissi on eri peli.
+     *
+     * Mitataan frameina eikä vakiota vastaan: koe ei saa tietää lukua jonka
+     * se tarkistaa, tai se hyväksyy sen mitä koodissa sattuu lukemaan.
+     */
+    {
+      const { s, e, p } = setup(40);
+      e.trap();
+      // Kuplan katolle ilmasta, putoavana. Sivulta tullut kosketus on eri
+      // tapaus ja se on kokeessa alempana.
+      const top = e.box.y;
+      p.x = e.cx - p.w / 2;
+      p.y = top - p.h - 6;
+      p.vy = 3;
+      p.onGround = false;
+      let held = 0;
+      let bounced = false;
+      for (let f = 0; f < 90; f++) {
+        s.update(idle);
+        if (e.bubbled && !e.dying) { held++; continue; }
+        bounced = p.vy < 0;
+        break;
+      }
+      expect('kuplan päälle voi astua, ja se kantaa hetken ennen kuin puhkeaa',
+        held >= 8 && held <= 40 && (e.dying || e.remove) && bounced,
+        `kantoi ${held} framea, kupla ${e.dying || e.remove ? 'puhkesi' : 'jäi'}`
+        + `, pomppu ${bounced} (vy ${p.vy.toFixed(2)})`);
+    }
+
+    /* Ja sivulta se on yhä se mitä se on aina ollut: koko kaato yhdestä
+     * kosketuksesta. Tämä on regressio eikä uusi väite — astuminen ei saa
+     * vievä pois sitä tapaa jolla kupla on tähän asti kaadettu. */
+    {
+      const { s, e, p } = setup(40);
+      e.trap();
+      p.x = e.box.x - p.w + 2;
+      p.y = e.cy - p.h / 2;
+      p.vy = 0;
+      p.onGround = false;
+      s.update(idle);
+      expect('kuplaan kävelemällä se puhkeaa heti, kuten ennenkin',
+        e.dying || e.remove,
+        `kupla ${e.dying || e.remove ? 'puhkesi' : 'jäi'}, carried ${e.carried}`);
+    }
+
     {
       const { s, e, p } = setup(50);
       e.trap();

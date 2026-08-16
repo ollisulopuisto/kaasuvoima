@@ -131,6 +131,17 @@ const POUND_SHAKE_RANGE = 4.5;
  */
 const POUND_BREAK_AT = 0.72;
 
+/**
+ * KUINKA KAUAN KUPLA KANTAA, frameina. Ks. `collisions` ja `rideBubble`.
+ *
+ * Kolmasosa sekunnista, ja luku on valittu hypyn mitasta eikä tunnelmasta:
+ * lyhin mitattu hyppy tässä pelissä on paikaltaan näpäytetty 22 framea
+ * (PHYSICS.md), joten kupla kantaa vähemmän aikaa kuin kestää hypätä sen yli.
+ * Se on siis askelma jonka ajoittaa, ei taso jolla odotetaan — ja se on koko
+ * ero kuplaloukun ja hissin välillä.
+ */
+const BUBBLE_CARRY = 18;
+
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
 const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
@@ -1591,6 +1602,43 @@ export class LevelScene {
         e.hitByProjectile(Math.sign(e.cx - x) || 1);
       }
     }
+  }
+
+  /**
+   * Yksi frame kuplan päällä seisomista.
+   *
+   * Pelaaja istutetaan kuplan katolle joka framella eikä kerran, ja se on
+   * tarkoituksellista: kupla liikkuu itse (`updateBubbled` keinuttaa sitä ja
+   * tuore kupla vielä nousee), joten uudelleenistutus on se mikä tekee tästä
+   * *kannettavana olemisen* eikä paikallaan seisomisen. Se on myös ainoa
+   * tapa saada tämä toimimaan ilman että moottorille opetetaan olio jonka
+   * päällä voi seistä — `moveY` tuntee laatat eikä olioita, ja sen
+   * opettaminen olisi ollut fysiikkaremontti yhden kuplan takia.
+   *
+   * `onGround` asetetaan, ja siitä seuraa että ilmahypyt ja coyote-framet
+   * palautuvat kuten lattialla. Se on päätös eikä sivuvaikutus: kuplan päällä
+   * **seisotaan**, ja jalansija joka ei kelpaa jalansijaksi olisi toinen
+   * sääntö opeteltavaksi. Hinta on pieni, koska ikkuna on 18 framea.
+   *
+   * Kannon voi katkaista mikä tahansa mikä katkaisee kuplan: aika loppuu
+   * kesken (`escape`), joku ampuu sen, tai vihollinen kuolee muuten. Siksi
+   * tila tarkistetaan ennen istuttamista eikä sen jälkeen.
+   */
+  rideBubble(p, e) {
+    if (!e.bubbled || e.dying || e.remove) {
+      e.carried = 0;
+      return;
+    }
+    const box = e.box;
+    p.y = box.y - p.h;
+    p.vy = 0;
+    p.onGround = true;
+    if (--e.carried > 0) return;
+    /* Ja sitten se puhkeaa. `popBubble` on sama kaato kuin kosketuksellakin,
+     * eli myös sama tuplapisteinen palkinto — kuplan puhkaisu maksaa saman
+     * riippumatta siitä puhkaisiko sen kädellä vai jalalla. */
+    e.popBubble(e.cx >= p.cx ? 1 : -1);
+    p.bounce();
   }
 
   /**
@@ -3361,11 +3409,45 @@ export class LevelScene {
 
       if (e.kind !== 'enemy' || e.dying) continue;
 
-      /* A bubble is a target, not a threat: touching it is the whole kill.
-       * Popping one from above still bounces the player, or a jump onto a
-       * bubble would read as a stomp that did not take. */
+      /*
+       * KUPLA ON KOHDE, EI UHKA — JA NYT MYÖS ASKELMA.
+       *
+       * Kosketus sivulta tai alta on yhä koko kaato: kupla puhkeaa ja
+       * vihollinen kuolee. Muuttunut on se mitä tapahtuu **päältä**.
+       *
+       * Kuplaan vangittu vihollinen on jo leijuva ja jo vaarataon, eli kaikki
+       * mitä askelma tarvitsee oli valmiina — puuttui vain se että kuplalla
+       * saisi seistä hetken. Nyt saa: `BUBBLE_CARRY` framea, joiden ajan
+       * pelaaja istuu kuplan katolla ja **kulkee sen mukana**, ja sitten se
+       * puhkeaa alta. Vihollinen kuolee, pelaaja on ruutua ylempänä.
+       *
+       * Kolme asiaa jotka tämä ratkaisee tarkoituksella tietyllä tavalla:
+       *
+       *   - **Astuminen on päätös eikä vahinko.** Ehto on `fallVy > 0` ja
+       *     jalat kuplan keskiviivan yläpuolella, eli sama muoto kuin raajan
+       *     `onTop` alempana. Kyljestä tullut kosketus ei ala kannatella.
+       *   - **Kupla ei jää.** Kerran astuttu kupla on menossa rikki, vaikka
+       *     pelaaja kävelisi siltä pois — se on kaasukupla jonka päälle
+       *     astuttiin, ei lautta. Siksi `carried` juoksee loppuun myös
+       *     ilman kosketusta.
+       *   - **Vain se hetki.** `BUBBLE_CARRY` on kolmasosa sekunnista, eli
+       *     lyhyempi kuin yksikään hyppy tässä pelissä (lyhin mitattu 22
+       *     framea). Kupla on siis askelma jonka *ajoittaa*, ei taso jolla
+       *     odotetaan — pitempi kantaminen tekisi kuplaloukusta hissin.
+       */
       if (e.bubbled) {
+        if (e.carried > 0) {
+          this.rideBubble(p, e);
+          continue;
+        }
         if (overlaps(p.box, e.box)) {
+          const box = e.box;
+          const onTop = fallVy > 0 && p.y + p.h - fallVy <= box.y + box.h * 0.5;
+          if (onTop) {
+            e.carried = BUBBLE_CARRY;
+            this.rideBubble(p, e);
+            continue;
+          }
           e.popBubble(e.cx >= p.cx ? 1 : -1);
           if (fallVy > 0) p.bounce();
         }
