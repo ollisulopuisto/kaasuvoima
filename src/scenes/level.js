@@ -142,6 +142,33 @@ const POUND_BREAK_AT = 0.72;
  */
 const BUBBLE_CARRY = 18;
 
+/**
+ * PONNAHDUSLAUTA, ja sen kaksi lukua ovat koko mekaniikka.
+ *
+ * IDEAS-synteesi H, tuomio 16.8.2026 "tee": rinteitä ei ole eikä niitä kannata
+ * rakentaa, mutta **täysi vauhtimittari voi ostaa korkeutta**. Tämä on se
+ * laatta joka myy sitä.
+ *
+ * Luvut on johdettu nousun kaavasta eikä valittu tunnelmasta. Kun hyppynappi
+ * on pohjassa, nousu kuluttaa `GRAVITY_HELD`ia (0,0625) siihen asti kun `vy`
+ * ylittää -2,0, ja loppu tavallisella painovoimalla — eli lähtönopeus `v`
+ * nostaa `(v² - 4) × 8 + 6,4` pikseliä. Sillä kaavalla:
+ *
+ *   `SPRING_LOW`  -4,0 → 102 px. Tyhjällä mittarilla lauta on siis suunnilleen
+ *                 tallauspomppu (`STOMP_BOUNCE` on sama -4,0), eli se antaa
+ *                 jotain aina — laatta joka ei tee mitään ilman mittaria olisi
+ *                 pelaajalle rikki eikä ehdollinen.
+ *   `SPRING_HIGH` -5,4 → 205 px eli kolmetoista ruutua. Se on enemmän kuin
+ *                 mikään muu tässä pelissä nostaa (mitattu paras on juoksu +
+ *                 pieruhyppy, 174 px), ja se on tarkoitus: mittarin täyttäminen
+ *                 on työtä, ja työn on ostettava jotain jota ei saa muuten.
+ *
+ * Väli on lineaarinen mittarin täyttöasteessa, koska mittari on jo palkkeina
+ * HUDissa: pelaaja näkee mitä hän ostaa, eikä lukua tarvitse opettaa erikseen.
+ */
+const SPRING_LOW = -4.0;
+const SPRING_HIGH = -5.4;
+
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
 const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
@@ -1605,6 +1632,48 @@ export class LevelScene {
   }
 
   /**
+   * PONNAHDUSLAUTA: se frame jolla jalat osuvat ritilään.
+   *
+   * Sama muoto kuin `updateCrumbles`illa ja samasta syystä: laatta jonka päällä
+   * seistään luetaan jalkojen alta eikä kehon sisältä, ja `p.onGround` on se
+   * yksi ehto joka erottaa seisomisen ohi lentämisestä. Alta puskeminen tai
+   * kyljestä koskeminen ei siis laukaise mitään — lauta on lattia, ja lattia
+   * työntää vain sitä joka seisoo sillä.
+   *
+   * Nosto luetaan vauhtimittarista sillä framella jolla se tapahtuu, eikä
+   * mittaria kuluteta: lauta myy korkeutta vauhdista, ja vauhti on jo maksettu
+   * juoksemalla. Mittarin nollaaminen tekisi laudasta toisen `pSpent`-tapahtuman
+   * ja veisi pelaajalta sen edun jonka hän juuri osti — ja se etu (`MAX_P`,
+   * lento kaasulehdellä) on olemassa erikseen tästä laatasta.
+   *
+   * `jumpHeld` asetetaan, kuten pieruhypyssäkin: nousu on `GRAVITY_HELD`in
+   * varassa, ja ilman tätä lauta antaisi kolmanneksen siitä mitä se lupaa
+   * sille pelaajalle joka ei satu pitämään nappia pohjassa laskeutuessaan.
+   */
+  updateSprings() {
+    const p = this.player;
+    if (p.dying || p.transit || !p.onGround) return;
+    const ty = Math.floor((p.y + p.h) / TILE);
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    for (let tx = x0; tx <= x1; tx++) {
+      if (!info(this.tileAt(tx, ty)).spring) continue;
+      const fill = Math.min(1, p.pMeter / P_METER_MAX);
+      p.vy = SPRING_LOW + (SPRING_HIGH - SPRING_LOW) * fill;
+      p.onGround = false;
+      p.jumpHeld = true;
+      p.airJumps = 0;
+      p.airJumpCd = 0;
+      this.shake(1 + fill * 2, 'y');
+      Sfx.play(fill >= 1 ? 'bigfart' : 'fart');
+      for (let i = 0; i < 4; i++) {
+        this.spawnPuff(tx * TILE + 4 + i * 3, ty * TILE + 8);
+      }
+      return;
+    }
+  }
+
+  /**
    * Yksi frame kuplan päällä seisomista.
    *
    * Pelaaja istutetaan kuplan katolle joka framella eikä kerran, ja se on
@@ -2638,6 +2707,7 @@ export class LevelScene {
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
+    this.updateSprings();
     this.updateFalls();
     this.updateSwitch();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;

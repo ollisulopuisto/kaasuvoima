@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.87 — ponnahduslauta: vauhtimittari ostaa korkeutta
+
+IDEAS-synteesi H, tuomio 16.8.2026 "tee", ja se on kohdan 1 (*vauhti
+korkeudeksi*, omistajan vahvimmaksi arvioima verbi) halpa muoto: rinteitä ei
+ole eikä niitä kannata rakentaa, mutta **täysi vauhtimittari voi ostaa
+korkeutta ponnahduslaudalta**.
+
+| väite | mitattu |
+| --- | --- |
+| tyhjällä mittarilla lauta antaa jotain | `100 px` |
+| täysi mittari antaa enemmän | `192 px` |
+| ...ja enemmän kuin mikään muu tässä pelissä | `paras hyppy on 174 px` |
+
+Laatta on `J`, kiinteä, ja se asetetaan **lattiariviin**. Nosto on
+`SPRING_LOW` (-4,0) ja `SPRING_HIGH` (-5,4) väliltä mittarin täyttöasteen
+mukaan, ja molemmat luvut on johdettu nousun kaavasta eikä valittu: kun
+hyppynappi on pohjassa, lähtönopeus `v` nostaa `(v² - 4) × 8 + 6,4` pikseliä.
+Tyhjä mittari on siis suunnilleen tallauspomppu (`STOMP_BOUNCE` on sama -4,0)
+— laatta joka ei tekisi mitään ilman mittaria olisi pelaajalle rikki eikä
+ehdollinen — ja täysi on kolmetoista ruutua.
+
+Kolme asiaa ratkesi tekemällä, ja kaksi niistä oli virhe jonka mittaus näytti:
+
+**Lauta on lattiarivissä eikä sen päällä.** Laatta on kiinteä, joten lattian
+päälle pantuna se on yhden ruudun seinä jota vasten juostaan. Mitattu: nosto
+0 px, koska kukaan ei koskaan seissyt sen päällä.
+
+**Mittari luetaan siltä frameelta jolla lauta lukee sen.** Ensimmäinen koe otti
+suurimman arvon koko ajolta ja raportoi molemmille tapauksille 100 %, koska kun
+lauta ei laukea, pelaaja juoksee sen ohi ja täyttää mittarin myöhemmin. Koe
+kertoi siis mittarista eikä laudasta.
+
+**Ja se ei kuluta mittaria.** Lauta myy korkeutta vauhdista, ja vauhti on jo
+maksettu juoksemalla; mittarin nollaaminen veisi pelaajalta sen edun (`MAX_P`,
+lento kaasulehdellä) jonka hän juuri osti, ja tekisi laudasta toisen
+`pSpent`-tapahtuman.
+
+Paikka on **3-1**, ja se on valinta: jäämaailma on se jossa vauhti jo
+merkitsee, ja kolmentoista ruudun nousu päättyy siellä liukkaaseen
+laskeutumiseen. Opetusjärjestys sanoi missä se *ei* voi olla — 1-3 esitteli jo
+kolme asiaa ja neljäs olisi kaatanut portin, ja lauta olisi ollut neljäntoista
+laatan päässä piikkien ensiesittelystä.
+
+---
+
 ## v26.08.16.86 — kupla kantaa, ja pierupompusta tuli panos
 
 Kaksi ensimmäistä kohtaa 16.8.2026 tehdystä läpikäynnistä ([IDEAS.md](IDEAS.md),

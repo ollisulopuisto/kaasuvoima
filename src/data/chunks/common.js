@@ -336,6 +336,43 @@ export const COMMON_CHUNKS = {
   }),
 
   /* -------------------------------- goal ------------------------------- */
+  /**
+   * KAASUSUIHKU LATTIASSA — ponnahduslauta, ja ainoa laatta pelissä joka lukee
+   * vauhtimittaria.
+   *
+   * Ruutu on rakennettu niin että **mittari näkyy palkintona eikä ohjeena**.
+   * Laudan päältä nousee tyhjällä mittarilla 102 px ja täydellä 205 px
+   * (`SPRING_LOW`/`SPRING_HIGH`, `scenes/level.js`), eli kuudesta ruudusta
+   * kolmeentoista. Lauta on rivillä 12, ja palkinto — kolikot laudan yllä
+   * rivillä 3 — on kolmentoista ruudun päässä: sinne yltää vain se joka tulee
+   * täydellä vauhdilla.
+   *
+   * Puolikas mittari ei siis jää ilman mitään, se jää **lähelle**, ja se on
+   * koko opetus. Lauta rivillä 4 on se paikka johon vajaakin nousu laskeutuu,
+   * joten yritys näkyy matkana eikä epäonnistumisena.
+   *
+   * Vauhdinottoa on seitsemän saraketta ennen lautaa ja palikka liitetään
+   * toisten perään, joten mittari ehtii täyttyä vain jos edellinen ruutu on
+   * ollut juostava. Se on tarkoitus: tämä laatta myy sitä työtä.
+   *
+   * Yhteisessä sanastossa eikä yhden maailman omassa, koska laatta ei ole
+   * minkään maailman aihetta: se on mekaniikka, ja mekaniikka piirtyy sen
+   * teeman väreillä johon se pannaan. Ainoa rajoitus on avoin taivas —
+   * kolmentoista ruudun nousu ei mahdu katolliseen huoneeseen, joten tehdas ja
+   * linnake eivät ole tämän palikan paikkoja.
+   */
+  spring_jet: ck(16, {
+    3: '      ooo',
+    4: '     -----',
+    /* Lauta on **lattiarivissä** eikä sen päällä, ja se on ehto eikä
+     * asettelua: laatta on kiinteä, joten lattian päälle pantuna se olisi
+     * yhden ruudun seinä jota vasten juostaan — ei ritilä jonka yli
+     * juostaan. Mitattu: ensimmäinen versio nosti 0 px, koska kukaan ei
+     * koskaan seissyt sen päällä. */
+    13: '#######J########',
+    14: G,
+  }),
+
   run_up: ck(16, { 9: '     o o o', 13: G, 14: G }),
   goal: ck(16, {
     12: '      F',

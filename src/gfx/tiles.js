@@ -31,6 +31,7 @@ export const T = {
   WARP_R: ')',
   LUMP: 'C',
   ICE: 'I',
+  SPRING: 'J',
 };
 
 const S = { solid: true };
@@ -63,6 +64,19 @@ export const TILE_INFO = {
    * `TILE_INFO` describes what a character *is*, never what it is doing. */
   [T.CRUMBLE]: { ...S, crumble: true },
   [T.SWITCH]: { ...S, bumpable: true, switch: true },
+  /*
+   * PONNAHDUSLAUTA — kaasusuihku lattiassa, ja se on kiinteä laatta eikä oma
+   * lajinsa. Kiinteä siksi että sen päällä *seistään*: se on lattiaa jolla on
+   * mielipide siitä mihin suuntaan lattian kuuluu työntää. Kaikki mikä lukee
+   * lattiaa — kuiluvalidointi, seinien korkeus, botti, hyppyratkaisija —
+   * lukee sen oikein ilman että yhdellekään niistä opetetaan mitään.
+   *
+   * `spring` on lippu eikä käytös, kuten `crumble`: `TILE_INFO` kertoo mikä
+   * laatta *on*, eikä koskaan mitä se juuri nyt tekee. Nosto on
+   * `LevelScene.updateSprings`in asia, koska vain se tietää kuka laatan päällä
+   * seisoo ja kuinka täynnä hänen vauhtimittarinsa on.
+   */
+  [T.SPRING]: { ...S, spring: true },
   [T.COIN]: { coin: true },
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
@@ -1629,6 +1643,47 @@ function drawSwitch(ctx, x, y, th, tick, pressed) {
 }
 
 /**
+ * PONNAHDUSLAUTA: ritilä lattiassa ja kaasua sen läpi.
+ *
+ * Laatta ei tiedä kuka sen päällä seisoo eikä kuinka täynnä kenenkään mittari
+ * on — se tieto on kohtauksella — joten piirros ei yritä kertoa nostoa vaan
+ * sen että **tästä tulee kaasua**. Suihku sykkii jaetulla kellolla samaan
+ * tahtiin kuin muukin pelin kaasu, ja ritilä on terästä samasta syystä kuin
+ * pönttö ja törähdystorvi ovat: tämä on tehty eikä kasvanut.
+ *
+ * Suihku piirretään laatan **sisään** eikä sen yli. Laatan ulkopuolelle
+ * vuotava piirros olisi kuva siitä että jotain tapahtuu jossain missä mitään
+ * ei ole, ja ruudukossa se tarkoittaa naapurilaatan päälle maalaamista.
+ */
+function drawSpring(ctx, x, y, th, tick) {
+  // Kotelo: sama teräs kuin muillakin tehdyillä esineillä.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x, y + 6, TILE, 10);
+  ctx.fillStyle = '#2050c0';
+  ctx.fillRect(x + 1, y + 7, TILE - 2, 8);
+  ctx.fillStyle = '#a8c8f0';
+  ctx.fillRect(x + 1, y + 7, TILE - 2, 1);
+  // Ritilä: kolme rakoa joista kaasu tulee.
+  ctx.fillStyle = '#10306c';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 3 + i * 4, y + 8, 2, 6);
+  // Ja kaasu, kolmessa vaiheessa: matala, korkea, matala.
+  const phase = Math.floor(tick / 6) % 3;
+  const tall = phase === 1;
+  ctx.fillStyle = tall ? '#a8e04a' : '#5c9c28';
+  for (let i = 0; i < 3; i++) {
+    const h = tall ? 6 : 3;
+    ctx.fillRect(x + 3 + i * 4, y + 8 - h, 2, h);
+  }
+  if (tall) {
+    ctx.fillStyle = '#f4ffd0';
+    for (let i = 0; i < 3; i++) ctx.fillRect(x + 3 + i * 4, y + 2, 2, 2);
+  }
+  // Ja laatan oma pohja, jotta se istuu lattiaan eikä leiju siinä.
+  ctx.fillStyle = th.groundDark || '#3a2a18';
+  ctx.fillRect(x, y + 15, TILE, 1);
+}
+
+/**
  * Hazard stripes painted into the lip of the ground tile beside a spike bed.
  *
  * Spikes sit flush in the floor and are the same pale grey as half the tilesets,
@@ -1738,6 +1793,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.LUMP: drawLump(ctx, x, y, th, tx, ty, opts.fall || 0); break;
     case T.ICE: drawIce(ctx, x, y, !isSolid(above), tx, ty); break;
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
+    case T.SPRING: drawSpring(ctx, x, y, th, tick); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:

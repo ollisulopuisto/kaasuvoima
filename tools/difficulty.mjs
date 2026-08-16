@@ -294,7 +294,7 @@ const ICE_BRAKE = 5;
 /** Kuinka leveä jalansija on ennen kuin laskeutuminen lakkaa vaatimasta tähtäystä. */
 const aimWidth = (chars) => (chars.includes(ICE) ? ICE_BRAKE : 3);
 
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I', 'J']);
 
 /**
  * Same band rule as src/data/rules.js: the route is the band the player starts

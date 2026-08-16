@@ -985,6 +985,97 @@ const report = await page.evaluate(async () => {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
+  /* -------------------------- ponnahduslauta ----------------------------- */
+  /*
+   * PONNAHDUSLAUTA MYY KORKEUTTA VAUHDISTA, ja se on väite mittarista.
+   *
+   * IDEAS-synteesi H: rinteitä ei ole eikä niitä kannata rakentaa, mutta täysi
+   * vauhtimittari voi ostaa korkeutta. Väitteessä on kolme osaa ja jokainen
+   * niistä voi mennä rikki yksin:
+   *
+   *   1. **Tyhjällä mittarilla lauta antaa jotain.** Laatta joka ei tee mitään
+   *      ilman mittaria olisi pelaajalle rikki eikä ehdollinen.
+   *   2. **Täysi mittari antaa enemmän.** Ilman tätä koko laatta on
+   *      tallauspomppu jolla on hieno piirros.
+   *   3. **Ja enemmän kuin mikään muu.** Mitattu paras nousu tässä pelissä on
+   *      juoksu + pieruhyppy, 174 px. Jos lauta jää sen alle, se ei osta mitään
+   *      jota ei jo saa — ja koko synteesin peruste oli että mittarille pitää
+   *      saada kolmas käyttötapa.
+   *
+   * Mitataan kentästä eikä vakioista: koe täyttää mittarin juoksemalla, ei
+   * asettamalla.
+   */
+  try {
+    const { P_METER_MAX } = await import('/src/entities/player.js');
+    const { T } = await import('/src/gfx/tiles.js');
+
+    /** Koekenttä: pitkä lattia ja yksi lauta, ei muuta. */
+    const springDef = () => {
+      const W = 60;
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      put(9, 4, '!');
+      put(13, 40, T.SPRING);   // lattiariviin, ks. `grass_jet`
+      put(12, 58, 'F');
+      return {
+        id: 'jFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+
+    /** Juoksee laudalle ja kertoo kuinka korkealle se heitti. */
+    const launch = (runUp) => {
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, 'jFix', springDef());
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 6; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const p = s.player;
+      // Lähtöpaikka valitaan vauhdinoton mukaan: pitkä matka täyttää mittarin,
+      // lyhyt ei ehdi. Mittaria ei aseteta käsin — se on se asia jota mitataan.
+      p.x = (40 - runUp) * 16;
+      p.y = 13 * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = true;
+      s.centerCamera();
+      /* Mittari luetaan **maasta**, eli siitä hetkestä jolla lauta lukee sen.
+       * Ensimmäinen versio otti suurimman arvon koko ajolta, ja se raportoi
+       * molemmille tapauksille 100 % — koska kun lauta ei laukea, pelaaja
+       * juoksee sen ohi ja täyttää mittarin myöhemmin. Mittaus kertoi siis
+       * mittarista eikä laudasta. */
+      let meter = 0;
+      let peak = 0;
+      const floor = p.y;
+      for (let f = 0; f < 400; f++) {
+        i.held = blank();
+        i.held.right = true;
+        i.held.run = true;
+        i.held.jump = true;
+        i.pressed = blank();
+        if (p.onGround) meter = p.pMeter;
+        s.update(i);
+        peak = Math.max(peak, floor - p.y);
+        if (peak > 4 && p.onGround) break;
+      }
+      return { peak: Math.round(peak), fill: Math.round((meter / P_METER_MAX) * 100) };
+    };
+
+    const empty = launch(3);
+    const full = launch(38);
+    expect('ponnahduslauta myy korkeutta vauhdista, ja täysi mittari ostaa eniten',
+      empty.peak > 60 && full.peak > empty.peak + 60 && full.peak > 174,
+      `tyhjä mittari (${empty.fill} %) nosti ${empty.peak} px, `
+      + `täysi (${full.fill} %) nosti ${full.peak} px `
+      + '— vertailuna mitattu paras hyppy 174 px (juoksu + pieruhyppy)');
+  } catch (e) {
+    expect('ponnahduslaudan testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* ---------------------------- ilmahypyt -------------------------------- */
   /*
    * PIERUPOMPUISTA TULI PANOKSIA, JA SE ON KAKSI VÄITETTÄ EIKÄ YKSI.
@@ -20157,8 +20248,13 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   const { scoreRows } = await import('./difficulty.mjs');
 
   const HURTS = ['hazard', 'quicksand', 'falls'];
+  /* `spring` on vaarattomien listalla, ja se on väite eikä oletus: laatta
+   * heittää pelaajaa ylöspäin eikä koske häneen. Se voi tietysti heittää
+   * jonnekin ikävään, mutta niin voi lauttakin — vaara on siinä mihin
+   * laskeudutaan, ja sen mittaa jo kuilu- ja piikkihinnoittelu. */
   const HARMLESS = ['solid', 'semi', 'breakable', 'bumpable', 'question', 'note',
-    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door', 'surface'];
+    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door', 'surface',
+    'spring'];
 
   /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
   const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]
