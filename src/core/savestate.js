@@ -115,6 +115,11 @@ export function captureState(game) {
         /* Liikkeellä oleva hiekka. Joukko eikä kartta, koska hiekasta ei
          * tarvitse muistaa muuta kuin että se on matkalla — ks. `pourAbove`. */
         pours: [...scene.pours],
+        /* Areenan pilarit. Ruudukko palauttaa nousseet pilarit itsestään, mutta
+         * ei sitä **varoitusta joka oli kesken**: ilman tätä pikalataus
+         * keskeltä varoitusta antaisi pilarin joka nousee ilman ennakointia, ja
+         * ennakointi on koko ominaisuuden ensimmäinen hyväksymiskriteeri. */
+        pillars: (scene.pillars || []).map((s) => ({ ...s })),
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -180,6 +185,8 @@ export function restoreState(game, snap) {
   scene.crumbles = new Map(data.crumbles || []);
   scene.shelves = new Map(data.shelves || []);
   scene.pours = new Set(data.pours || []);
+  // Vanhempi tilannekuva on otettu ennen areenapomoa; johdetut paikat jäävät.
+  if (data.pillars) scene.pillars = data.pillars.map((s) => ({ ...s }));
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;
