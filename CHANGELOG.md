@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.91 — pieruhylly: kukalla on nyt rakennusverbi
+
+IDEAS-synteesi A, tuomio 16.8.2026 "tee". Seinään litistynyt laukaus jää
+**kolmen ruudun kaasuhyllyksi kahdeksi sekunniksi**, ja sen päälle voi astua.
+Kukka on pelin ainoa ase, ja ampuminen oli tähän asti vain vahinkoa; tämä antaa
+sille rakennusverbin ilman että pelistä tulee rakennuspeli.
+
+| väite | mitattu |
+| --- | --- |
+| seinäosuma jättää hyllyn seinän omalle puolelle | `3 ruutua rivillä 12, sarakkeet 27–29 (seinä 30)` |
+| sen päällä seistään | `jalat 192, hyllyn pinta 192` |
+| se haihtuu kahdessa sekunnissa | `0 ruutua jäljellä` |
+| lattiaosuma ei jätä mitään | `0 hyllyä ilman seinää` |
+
+Neljä rajaa, ja kolme niistä on kielto — mikä on oikea suhde, koska ainoa tapa
+jolla tämä voi rikkoa pelin on tekemällä *liikaa*:
+
+**Vain seinä laukaisee sen.** Pallo pomppii lattiaa pitkin koko matkansa, joten
+lattiaosumasta syntyvä hylly tarkoittaisi hyllyä joka toinen ruutu koko juoksun
+ajan. Seinä on harvinainen ja tahallinen osuma — ja se on myös se paikka jossa
+askelma on jotain.
+
+**Hylly kasvaa seinästä poispäin**, eli sitä kohti josta ammuttiin: seinän
+toisella puolella oleva askelma on toisen huoneen askelma.
+
+**Puolikiinteä eikä kiinteä.** Sen läpi mennään alhaalta ylös ja sen päälle
+laskeudutaan, joten hylly ei voi sulkea käytävää, tukkia hyppyä eikä puristaa
+ketään seinää vasten. Kiinteänä se olisi ollut ammuttava seinä, ja ammuttava
+seinä on eri peli.
+
+**Ja se katoaa itsestään.** Kaksi sekuntia on mitattu: juoksuhypyn koko kaari
+on ~50 framea, joten 120 framea riittää ampumiseen, kääntymiseen ja yhteen
+hyppyyn — muttei siihen että pelaaja kävelee pois ja tulee takaisin. Hylly on
+liike, ei rakennelma. Sama perustelu kuin murenevan laudan paluulla: tilapäinen
+tapahtuma staattisessa kentässä on turvallinen, pysyvä muutos maastoon ei ole.
+
+Korkeus tulee ilmaiseksi ja on tämän parasta: pallo pomppii kaarina, joten se
+osuu seinään eri korkeuksilla sen mukaan **milloin** laukaus lähti. Hyllyn
+korkeus on siis ajoitusta.
+
+---
+
 ## v26.08.16.90 — kaasulehti tekee hänestä paineastian
 
 Omistajan tuomio 16.8.2026: *"muuta tanooki-design, keksi jotain pierumaisempaa

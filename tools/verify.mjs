@@ -7623,6 +7623,115 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------------------- pieruhylly --------------------------- */
+  /*
+   * KUKALLA ON NYT RAKENNUSVERBI, ja tämä portti on se rajaus jonka se tarvitsee.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee": seinään litistynyt laukaus jää
+   * askelmaksi kahdeksi sekunniksi. Neljä väitettä, ja kolme niistä on kielto —
+   * mikä on oikea suhde, koska ainoa tapa jolla tämä ominaisuus voi rikkoa
+   * pelin on tekemällä *liikaa*:
+   *
+   *   1. **Seinäosuma jättää hyllyn, ja sen päällä seistään.** Hylly jonka
+   *      päälle ei voi astua on kuvaefekti eikä verbi.
+   *   2. **Lattiaosuma ei jätä mitään.** Pallo pomppii lattiaa pitkin koko
+   *      matkansa, joten tämä on se toteutus joka täyttäisi kentän hyllyillä
+   *      yhdestä laukauksesta.
+   *   3. **Mitään ei kirjoiteta yli.** Tyhjä ruutu tai ei mitään.
+   *   4. **Ja se katoaa.** Pysyvä hylly on maasto jonka pelaaja rakensi, ja
+   *      silloin kenttä ei ole enää se kenttä jonka portit todistivat.
+   */
+  try {
+    const { FartBall } = await import('/src/entities/items.js');
+    const { T, isSemi } = await import('/src/gfx/tiles.js');
+
+    /** Koekenttä: tasainen lattia ja yksi seinä sarakkeessa 30. */
+    const shelfDef = (wall = true) => {
+      const W = 60;
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      if (wall) for (let y = 8; y <= 12; y++) put(y, 30, '#');
+      put(12, 58, 'F');
+      return {
+        id: 'gFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+    const shelvesIn = (s) => {
+      const at = [];
+      for (let ty = 0; ty < s.h; ty++) {
+        for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.SHELF) at.push({ tx, ty });
+      }
+      return at;
+    };
+    const shoot = (wall) => {
+      reset({ type: 'flower', level: 2 });
+      const s = new LevelScene(game, 'gFix', shelfDef(wall));
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      s.time = 9999;
+      const p = s.player;
+      p.x = 20 * 16;
+      p.y = 13 * 16 - p.h;
+      p.vx = 0; p.vy = 0; p.onGround = true;
+      s.centerCamera();
+      s.add(new FartBall(s, p.x + p.w, p.y + p.h * 0.45, 1));
+      const i = mkInput();
+      for (let f = 0; f < 120; f++) { i.pressed = blank(); s.update(i); }
+      return s;
+    };
+
+    const hit = shoot(true);
+    const made = shelvesIn(hit);
+    const row = made.length ? made[0].ty : -1;
+    const cols = made.map((m) => m.tx).sort((a, b) => a - b);
+    expect('seinään osunut laukaus jättää kaasuhyllyn, seinän omalle puolelle',
+      made.length >= 1 && made.length <= 3
+      && made.every((m) => m.ty === row) && cols[cols.length - 1] === 29
+      && cols[cols.length - 1] - cols[0] === made.length - 1
+      && isSemi(T.SHELF),
+      made.length
+        ? `${made.length} ruutua rivillä ${row}, sarakkeet ${cols.join(',')} (seinä 30)`
+        : 'ei yhtään hyllyä');
+
+    // Sen päälle astuminen: ilmasta, putoavana, hyllyn keskimmäisen ruudun yllä.
+    const stood = (() => {
+      if (!made.length) return null;
+      const p = hit.player;
+      p.x = cols[0] * 16;
+      p.y = row * 16 - p.h - 20;
+      p.vx = 0; p.vy = 2; p.onGround = false;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) {
+        i.pressed = blank();
+        hit.update(i);
+        if (p.onGround) return Math.round(p.y + p.h);
+      }
+      return null;
+    })();
+    expect('kaasuhyllyn päällä seistään',
+      stood !== null && Math.abs(stood - row * 16) <= 1,
+      stood === null ? 'ei kantanut' : `jalat ${stood}, hyllyn pinta ${row * 16}`);
+
+    // Ja se haihtuu itsestään.
+    const idle2 = mkInput();
+    for (let f = 0; f < 140; f++) { idle2.pressed = blank(); hit.update(idle2); }
+    expect('kaasuhylly haihtuu kahdessa sekunnissa eikä jää kentän maastoksi',
+      shelvesIn(hit).length === 0 && hit.shelves.size === 0,
+      `${shelvesIn(hit).length} ruutua jäljellä, kello ${hit.shelves.size}`);
+
+    // Lattiaa pitkin pomppiva laukaus ei rakenna mitään.
+    const floorOnly = shoot(false);
+    expect('lattiaa pitkin pomppiva laukaus ei jätä hyllyjä perässään',
+      shelvesIn(floorOnly).length === 0,
+      `${shelvesIn(floorOnly).length} hyllyä ilman seinää — pallo pomppii lattiaa koko matkansa`);
+  } catch (e) {
+    expect('pieruhyllyn testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* ------------------------------ kuplaloukku -------------------------- */
   {
     const E = await import('/src/entities/enemies.js');
@@ -20507,7 +20616,11 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
      * mitään muuta kuin tarkistuspiste — liekki on kuva, ei laji tulta. Jos
      * jonain päivänä palava lyhty polttaa, se rivi kuuluu `HURTS`iin ja
      * `playerTiles`iin, ei tänne. */
-    'lamp', 'lit'];
+    'lamp', 'lit',
+    /* Pieruhylly. Vaaraton, ja se on rakenteellista eikä toiveajattelua: hylly
+     * on puolikiinteä, eli sen läpi mennään alhaalta ja sen päälle
+     * laskeudutaan. Se ei voi sulkea käytävää eikä puristaa ketään. */
+    'shelf'];
 
   /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
   const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]

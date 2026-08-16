@@ -172,6 +172,11 @@ const SPRING_HIGH = -5.4;
 /* Kaasulyhdyn mitat; perustelut ovat `plantLamp`issa ja `lampFooting`issa.
  * `LAMP_EDGE` pitää lyhdyn irti kentän molemmista päistä: alku on jo
  * tarkistuspiste ja loppu on maalitolppa, eikä kumpikaan tarvitse toista. */
+/* Pieruhyllyn mitat; perustelut ovat `gasShelf`issa. Kaksi sekuntia ja kolme
+ * ruutua: askelma jonka ehtii käyttää kerran, eikä rakennelma. */
+const SHELF_LIFE = 120;
+const SHELF_TILES = 3;
+
 const LAMP_MIN_COLS = 340;
 const LAMP_EDGE = 24;
 const LAMP_CLEAR = 2;
@@ -1015,6 +1020,8 @@ export class LevelScene {
      * which is deliberate — the save-state code already knows how to store a
      * per-tile timer map, so this costs one line there instead of a design. */
     this.crumbles = new Map();
+    /* Pieruhyllyt: avain "tx,ty" → jäljellä olevat framet. Ks. `gasShelf`. */
+    this.shelves = new Map();
     /* Liikkeellä olevat möykyt: kotiruutu "ox,oy" → missä se nyt on ja kuinka
      * kauan se on ollut matkalla. Avain on **kotiruutu eikä nykyinen paikka**,
      * koska se on se ainoa asia joka ei muutu — ja se on myös se paikka johon
@@ -2980,6 +2987,7 @@ export class LevelScene {
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
+    this.updateShelves();
     this.updateSprings();
     this.updateFalls();
     this.updateSwitch();
@@ -3147,6 +3155,86 @@ export class LevelScene {
       }
       this.crumbles.set(key, next);
     }
+  }
+
+  /**
+   * PIERUHYLLY: seinään litistynyt laukaus jää askelmaksi kahdeksi sekunniksi.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee". Kukka on pelin ainoa ase, ja
+   * ampuminen oli tähän asti vain vahinkoa: tämä antaa sille **rakennusverbin**
+   * ilman että pelistä tulee rakennuspeli.
+   *
+   * Neljä ehtoa, ja jokainen niistä on raja eikä koriste:
+   *
+   *   1. **Vain seinä laukaisee sen.** Pallo pomppii lattiaa pitkin koko
+   *      matkansa (`FartBall.update`, `hit.ground`), joten lattiaosumasta
+   *      syntyvä hylly tarkoittaisi hyllyä joka toinen ruutu koko juoksun ajan.
+   *      Seinä on se harvinainen ja tahallinen osuma — ja se on myös se paikka
+   *      jossa askelma on jotain: seinän vieressä.
+   *   2. **Hylly kasvaa seinästä poispäin**, eli sitä kohti josta ammuttiin.
+   *      Se on ainoa suunta jossa se on saavutettavissa: seinän toisella
+   *      puolella oleva askelma on toisen huoneen askelma.
+   *   3. **Vain tyhjään ruutuun.** Mitään ei kirjoiteta yli — ei palkintolohkoa,
+   *      ei lavaa, ei toista hyllyä. Kolmen ruudun leveys on maksimi eikä
+   *      lupaus; yksikin ruutu riittää hyllyksi.
+   *   4. **Ja se katoaa itsestään.** `SHELF_LIFE` on kaksi sekuntia, mikä on
+   *      mitattu eikä valittu: juoksuhypyn koko kaari on ~50 framea, joten 120
+   *      framea riittää ampumiseen, kääntymiseen ja yhteen hyppyyn — muttei
+   *      siihen että pelaaja kävelee pois ja tulee takaisin. Hylly on liike,
+   *      ei rakennelma.
+   */
+  gasShelf(ball) {
+    const dir = ball.vx >= 0 ? 1 : -1;
+    const ty = Math.floor(ball.cy / TILE);
+    const wallX = Math.floor((dir > 0 ? ball.x + ball.w : ball.x) / TILE);
+    let made = 0;
+    for (let i = 1; i <= SHELF_TILES; i++) {
+      const tx = wallX - dir * i;
+      if (tx < 0 || tx >= this.w) break;
+      if (this.tileAt(tx, ty) !== T.EMPTY) break;
+      this.setTile(tx, ty, T.SHELF);
+      this.shelves.set(`${tx},${ty}`, SHELF_LIFE);
+      made++;
+    }
+    if (!made) return false;
+    /* Ääni on `sylkaisy` eikä `fart`: pallo lähti jo pieruäänellä, ja sama ääni
+     * matkan molemmissa päissä olisi yksi merkki kahdelle tapahtumalle
+     * (DESIGN.md kohta 8). Tämä on litsahdus seinää vasten. */
+    Sfx.play('sylkaisy');
+    for (let i = 0; i < made * 2; i++) {
+      this.spawnPuff(wallX * TILE - dir * i * 6, ty * TILE + 8);
+    }
+    return true;
+  }
+
+  /**
+   * Hyllyjen kello. Sama muoto kuin murenevalla laudalla, ja sama turvallisuus:
+   * ruutu palautetaan tyhjäksi vain jos se on yhä hylly — jokin muu on voinut
+   * kirjoittaa siihen sillä välin, eikä tämän kellon tehtävä ole pyyhkiä sitä.
+   *
+   * Pelaajan sisään ei tarvitse varoa mitään: hylly on puolikiinteä, joten
+   * poistuva hylly ei voi jättää ketään seinän sisään. Se on sama ero joka
+   * teki `updateCrumbles`ista varovaisen ja tästä yksinkertaisen.
+   */
+  updateShelves() {
+    if (this.shelves.size === 0) return;
+    for (const [key, left] of this.shelves) {
+      const [tx, ty] = key.split(',').map(Number);
+      if (this.tileAt(tx, ty) !== T.SHELF) { this.shelves.delete(key); continue; }
+      if (left <= 1) {
+        this.setTile(tx, ty, T.EMPTY);
+        this.shelves.delete(key);
+        this.spawnPuff(tx * TILE + 8, ty * TILE + 8);
+        continue;
+      }
+      this.shelves.set(key, left - 1);
+    }
+  }
+
+  /** 1→0 sen mukaan kuinka paljon hyllyä on jäljellä, piirtoa varten. */
+  shelfLeft(tx, ty) {
+    const left = this.shelves.get(`${tx},${ty}`);
+    return left === undefined ? 1 : Math.min(1, left / SHELF_LIFE);
   }
 
   startSwitch() {
@@ -4138,6 +4226,7 @@ export class LevelScene {
             // How far, not whether: the leaves swing. See DOOR_OPEN_FRAMES.
             doorOpen: this.doorOpen,
             crumble: this.crumbleProgress(tx, ty),
+            shelf: ch === T.SHELF ? this.shelfLeft(tx, ty) : undefined,
             /* Möykyn varoitustärinä. Sama kanava kuin murenevalla laudalla,
              * koska se on sama lupaus: se mikä on lähdössä, näyttää siltä. */
             fall: this.fallWobble(tx, ty),

@@ -34,6 +34,7 @@ export const T = {
   SPRING: 'J',
   LAMP: 'L',
   LAMP_LIT: 'l',
+  SHELF: 'G',
 };
 
 const S = { solid: true };
@@ -194,6 +195,25 @@ export const TILE_INFO = {
    */
   [T.LAMP]: { lamp: true },
   [T.LAMP_LIT]: { lamp: true, lit: true },
+  /*
+   * PIERUHYLLY — se mitä seinään osunut laukaus jättää jälkeensä.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee". Kukka antaa pelille sen ainoan
+   * rakennusverbin: laukaus joka litistyy seinää vasten jää kolmen ruudun
+   * kaasupatjaksi kahdeksi sekunniksi, ja sen päälle voi astua.
+   *
+   * **Puolikiinteä eikä kiinteä**, ja se on koko laatan turvallisuus. Sen läpi
+   * mennään alhaalta ylös ja sen päälle laskeudutaan, joten hylly ei voi
+   * sulkea käytävää, tukkia hyppyä eikä puristaa ketään seinää vasten —
+   * pahimmillaan se on askelma jota ei tarvinnut. Kiinteänä se olisi ollut
+   * ammuttava seinä, ja ammuttava seinä on eri peli.
+   *
+   * Ja se **katoaa itsestään** (`SHELF_LIFE`), samasta syystä kuin mureneva
+   * lauta kasvaa takaisin: tilapäinen tapahtuma staattisessa kentässä on
+   * turvallinen, pysyvä muutos maastoon ei ole. Kenttä jonka voi rakentaa
+   * umpeen ei ole enää se kenttä jonka portit todistivat läpäistäväksi.
+   */
+  [T.SHELF]: { ...SEMI, shelf: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
    * door" — in `playerTiles` and in the edge test that shapes the drawing; it
@@ -1712,6 +1732,44 @@ function drawSpring(ctx, x, y, th, tick) {
 }
 
 /**
+ * PIERUHYLLY: kaasupatja jolla on kiinteä pinta ja haihtuva ruumis.
+ *
+ * Kaksi asiaa pitää lukea yhdellä silmäyksellä, ja ne ovat vastakkaisia:
+ * **tämän päällä voi seistä** ja **tämä on menossa pois**. Ratkaisu on jako
+ * ylä- ja alaosaan. Ylin rivi on vaalea ja tiivis pinta joka pysyy paikallaan
+ * koko keston ajan — se on se viiva jolle jalka osuu, ja jos se ohenisi
+ * mukana, hylly näyttäisi pettävän ennen kuin se pettää. Sen alla oleva kaasu
+ * sen sijaan ohenee ja kuplii, ja se on kello.
+ *
+ * `k` on jäljellä oleva osuus (1 → 0), ja se tulee kohtaukselta samalla tavalla
+ * kuin murenevan laudan oma eteneminen: laatta ei tiedä kelloaan, `TILE_INFO`
+ * kertoo mikä laatta *on* eikä mitä se juuri nyt tekee.
+ *
+ * Kiinteät värit eivätkä teeman omat, kuten jäällä ja lyhdyllä: hylly on
+ * pelaajan tekemä esine eikä maastoa, ja pelaajan tekemän esineen pitää näkyä
+ * jokaisessa maailmassa samana.
+ */
+function drawShelf(ctx, x, y, tick, k) {
+  const fade = Math.min(1, Math.max(0, k));
+  // Pinta: vaalea, tiivis, ja aina yhtä leveä.
+  ctx.fillStyle = '#e8ffc0';
+  ctx.fillRect(x, y, TILE, 2);
+  ctx.fillStyle = '#a8e04a';
+  ctx.fillRect(x, y + 2, TILE, 2);
+  // Ruumis: ohenee kellon mukana, ja kuplii kahdessa vaiheessa.
+  const body = Math.round(4 * fade);
+  if (body > 0) {
+    ctx.fillStyle = '#5c9c28';
+    ctx.fillRect(x, y + 4, TILE, body);
+    ctx.fillStyle = '#a8e04a';
+    const phase = Math.floor(tick / 5) % 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(x + 2 + i * 5 + phase, y + 4, 2, Math.max(1, body - 1));
+    }
+  }
+}
+
+/**
  * KAASULYHTY, sammuneena ja palavana.
  *
  * Kiinteät värit eivätkä teeman omat, ja samasta syystä kuin jäällä ja
@@ -1884,6 +1942,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.SPRING: drawSpring(ctx, x, y, th, tick); break;
     case T.LAMP: drawLamp(ctx, x, y, false, tick); break;
     case T.LAMP_LIT: drawLamp(ctx, x, y, true, tick); break;
+    case T.SHELF: drawShelf(ctx, x, y, tick, opts.shelf === undefined ? 1 : opts.shelf); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:
