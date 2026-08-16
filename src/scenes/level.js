@@ -1154,6 +1154,7 @@ export class LevelScene {
      * Ovi on siis viimeinen sana eikä ensimmäinen. */
     if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
     this.plantVines();
+    this.plantWarpExits();
     this.plantLamp();
     /*
      * Sytytetty lyhty on lähtöruutu, ja vertailu on saraketta vasten eikä
@@ -1353,6 +1354,80 @@ export class LevelScene {
           this.beanstalks.set(`${tx},${by}`, tiles);
         }
         ty = foot;
+      }
+    }
+  }
+
+  /*
+   * PUTKESTA TULLAAN ULOS PUTKESTA, ja tämä pystyttää sen toisen pään.
+   *
+   * Omistajan havainto 16.8.2026: luolasta noustessa hahmo "ilmestyy tyhjästä".
+   * Se oli totta ja se oli mitattavissa — **pelin jokainen kymmenestä
+   * kaistamatkasta päättyi paljaaseen ilmaan**, eikä yhdenkään päässä ollut
+   * putkea. Pahimmillaan neljä ruutua lattian yläpuolelle (1-2, sarake 250:
+   * saapuminen rivillä 24, lattia rivillä 28), josta pelaaja tipahti maahan
+   * kuin pudotettuna.
+   *
+   * Syy on `tryWarp`in vanhassa laskussa: se säilyttää **suhteellisen
+   * korkeuden** kaistan sisällä (`arriveY = p.y + shift`) ja tarkistaa vain
+   * että keho mahtuu ja että jotain kiinteää on jossain alla. Kumpikaan ei ole
+   * väärin, mutta yhdessä ne tarkoittavat että matkan pää on se kohta johon
+   * lähtökorkeus sattuu osoittamaan — ei paikka.
+   *
+   * **Ratkaisu on pari, ja se johdetaan datasta eikä kirjoiteta siihen.** Joka
+   * suulle etsitään kohdekaistasta se lattiarivi jolle matka päättyy, ja siihen
+   * upotetaan putken suu. Pelaaja nousee siitä ylös (ks. `tryWarp`in
+   * `farHide`), eli molemmat päät ovat putkia ja matka näyttää matkalta.
+   *
+   * Kolme päätöstä, ja jokainen on rajaus:
+   *
+   *   1. **Suu upotetaan lattiaan, ei rakenneta sen päälle.** Kiinteä laatta
+   *      vaihtuu kiinteään laattaan, joten kentän geometria ei muutu
+   *      pikseliäkään: yksikään reitti, hyppy tai kuilubudjetti ei tiedä että
+   *      tässä tapahtui mitään. Kaksi ruutua korkea putki lattian päällä olisi
+   *      ollut uusi este keskellä todistettua reittiä.
+   *   2. **Uloskäynti on tavallinen putki eikä lämpöputki.** Se ei vie
+   *      minnekään, ja juuri siksi se ei saa näyttää siltä että veisi:
+   *      lämpöputken oma piirros (`drawWarpPipe`) tarkoittaa tässä pelissä
+   *      "tästä pääsee", ja alimmasta kaistasta ei pääse alaspäin mihinkään.
+   *      Tavallisia putkia kenttä on täynnä, eikä yksikään niistä lupaa
+   *      matkaa. DESIGN.md kohta 8.
+   *   3. **Vain kohtauksessa, kuten kaasulyhty.** Kenttädata ja sen
+   *      validaattorit näkevät saman kentän kuin ennen; tämä on johdettua
+   *      maisemaa jonka kiinteys on identtinen sen kanssa mitä se korvasi.
+   */
+  plantWarpExits() {
+    /** avain `"tx,ty"` (suun vasen ruutu) → se rivi jolle matka päättyy. */
+    this.warpExits = new Map();
+    const bands = this.def.bands;
+    if (!bands) return;
+    for (let ty = 0; ty < this.h; ty++) {
+      for (let tx = 0; tx < this.w; tx++) {
+        if (!info(this.grid[ty][tx]).warp) continue;
+        // Suun suunta on se puoli jolla on ilmaa: lattiassa oleva suu vie alas,
+        // katosta roikkuva ylös. Sama kysymys kuin `tryWarp`issa, toisin päin.
+        const up = ty > 0 && this.grid[ty - 1][tx] === T.EMPTY;
+        const down = ty + 1 < this.h && this.grid[ty + 1][tx] === T.EMPTY;
+        if (up === down) continue;              // umpiputken keskiosa
+        const dir = up ? 1 : -1;                // ilmaa päällä = matka alaspäin
+        const to = ty + dir * bands.rows;
+        if (to < 0 || to >= this.h) continue;
+        const bandEnd = (Math.floor(to / bands.rows) + 1) * bands.rows - 1;
+        let floor = -1;
+        for (let y = to; y <= bandEnd; y++) {
+          if (isSolid(this.grid[y][tx])) { floor = y; break; }
+        }
+        if (floor < 0) continue;
+        // Suu on kaksi ruutua leveä, kuten jokainen putki tässä pelissä.
+        const left = info(this.grid[ty][tx - 1]).warp ? tx - 1 : tx;
+        for (const [x, ch] of [[left, T.PIPE_TL], [left + 1, T.PIPE_TR]]) {
+          if (x < 0 || x >= this.w) continue;
+          // Vain tavallinen maa vaihdetaan. Palkintolohko, mureneva lauta tai
+          // toinen putki on jonkun muun päätös, eikä sitä kirjoiteta yli.
+          const at = this.grid[floor][x];
+          if (at === T.GROUND || at === T.HARD || at === T.ICE) this.grid[floor][x] = ch;
+        }
+        this.warpExits.set(`${tx},${ty}`, floor);
       }
     }
   }
@@ -2292,10 +2367,13 @@ export class LevelScene {
 
     /** The world edge the body disappears behind: the mouth's own near lip. */
     let hide;
+    /** The row of the mouth being entered — the key its far end is filed under. */
+    let mouthRow;
     if (dir > 0) {
       const under = Math.floor((p.y + p.h) / TILE);
       if (!this.warpMouthAt(under)) return;
       hide = under * TILE;                       // the mouth's top edge
+      mouthRow = under;
     } else {
       /* Every row that lies wholly above the head and whose lower lip is within
        * reach of the ground being stood on. The lowest lip wins: the mouth of a
@@ -2307,6 +2385,7 @@ export class LevelScene {
       for (let ty = first; ty <= last; ty++) if (this.warpMouthAt(ty)) mouth = ty;
       if (mouth < 0) return;
       hide = (mouth + 1) * TILE;                 // the ceiling mouth's bottom edge
+      mouthRow = mouth;
     }
 
     const shift = dir * bands.rows * TILE;
@@ -2315,21 +2394,48 @@ export class LevelScene {
     const bandEnd = (Math.floor(feet / bands.rows) + 1) * bands.rows - 1;
     if (!this.footingWithin(p.x, p.w, feet, bandEnd)) return;
 
+    /*
+     * Matkan pää on se putki jonka `plantWarpExits` pystytti, ja siitä
+     * noustaan ylös — myös alaspäin kuljetulta matkalta.
+     *
+     * **Ylös molemmissa suunnissa, ja se on tahallista.** Meno ja tulo ovat
+     * saman matkan päät eivätkä saman liikkeen jatko: kaista vaihtuu leikkauksena
+     * (`updateTransit`, 'hold'), eikä leikkauksen yli kuljeteta liikesuuntaa.
+     * Molemmissa päissä tapahtuu siis sama luettava asia — keho häviää suuhun,
+     * keho nousee suusta — ja se on tämän genren oma kielioppi. Alaspäin
+     * tuleminen olisi vaatinut katosta roikkuvan putken jokaiseen määränpäähän,
+     * eikä sellaista kattoa ole kuin osassa niistä.
+     *
+     * Jos paria ei jostain syystä ole (`exitRow === undefined`), matka menee
+     * vanhalla tavalla: suhteellinen korkeus säilyy. Se on huonompi mutta ei
+     * rikki, ja se on oikea vara kentälle jonka lattiaa ei voinut vaihtaa.
+     */
+    let exitRow;
+    for (let tx = Math.floor(p.x / TILE); tx <= Math.floor((p.x + p.w - 1) / TILE); tx++) {
+      const at = this.warpExits ? this.warpExits.get(`${tx},${mouthRow}`) : undefined;
+      if (at !== undefined) { exitRow = at; break; }
+    }
+    const arriveY = exitRow === undefined ? p.y + shift : exitRow * TILE - p.h;
+    const rise = p.h + 4;
+
     p.beginTransit({
       kind: 'warp',
       axis: 'y',
       slide: dir * (p.h + 4),
-      out: dir * (p.h + 4),
+      out: exitRow === undefined ? dir * (p.h + 4) : -rise,
       arriveX: p.x,
-      arriveY: p.y + shift,
+      arriveY,
       hide,
       hideDir: dir,
+      // Kaukopään oma leikkuri: keho nousee lattialinjan alta näkyviin, eikä
+      // ole hetkeäkään maalattuna maan päälle. Ks. `drawPlayerInto`.
+      farHide: exitRow === undefined ? null : exitRow * TILE,
     });
     /* Arriving in a hidden band *is* finding the secret, so the find is written
      * here, where the journey is decided, rather than by something watching the
      * scene from outside. `noteSecret` filters against the level's own key
      * list, so this writes nothing in a level that has no hidden band. */
-    this.noteBand(p.y + shift + p.h);
+    this.noteBand(arriveY + p.h);
     /* Going in gets the falling sweep and coming out gets the rising one, so
      * the two ends of the journey do not sound like the same event happening
      * twice (DESIGN.md §8). Ne ovat nyt oikeasti pari: ulostulo soitti pitkään
@@ -2444,7 +2550,12 @@ export class LevelScene {
       p.climbing = false;
       this.centerCamera();
       p.y = t.arriveY - t.out;
-      t.hide = null;
+      /* Kaukopäässä on oma leikkuri jos matkan päässä on putki: keho nousee
+       * sen suusta ylös eikä ole hetkeäkään maalattuna lattian päälle. Ilman
+       * paria leikkuria ei ole, ja silloin `null` on oikea vastaus — sama kuin
+       * ennen. */
+      t.hide = t.farHide === undefined ? null : t.farHide;
+      t.hideDir = 1;
       this.spawnPuff(p.cx, t.arriveY + p.h);
       /* Putken oma ulostuloääni, ei oven laina. Tässä soi `door` siihen asti
        * kunnes se huomattiin: sama ääni tarkoitti oven aukeamista, ovesta

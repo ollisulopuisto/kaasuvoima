@@ -4839,6 +4839,80 @@ const report = await page.evaluate(async () => {
         : 'yhdessäkään kentässä ei ole lyhtyä — raja LAMP_MIN_COLS on liian korkea');
   }
 
+  /* ------------------ putkesta tullaan ulos putkesta --------------------- */
+  /*
+   * OMISTAJAN HAVAINTO 16.8.2026: luolasta noustessa hahmo ilmestyy tyhjästä.
+   *
+   * Se oli totta, ja se oli mitattavissa: pelin **jokainen kymmenestä
+   * kaistamatkasta päättyi paljaaseen ilmaan**, pahimmillaan neljä ruutua
+   * lattian yläpuolelle. `tryWarp` säilytti suhteellisen korkeuden ja tarkisti
+   * vain että keho mahtuu ja että jotain kiinteää on jossain alla — kumpikaan
+   * ei ole väärin, mutta yhdessä ne tarkoittivat että matkan pää on se kohta
+   * johon lähtökorkeus sattuu osoittamaan.
+   *
+   * Tämä portti mittaa tapahtumaa eikä ruudukkoa: **matkustetaan oikeasti** ja
+   * katsotaan mitä jalkojen alla on perillä. Kaksi ehtoa, ja molemmat ovat
+   * pelaajan näkemiä asioita: jalat ovat sen putken päällä joka matkan päähän
+   * pystytettiin, ja siitä noustaan (`farHide`) eikä pudota siihen.
+   */
+  {
+    const { T, info } = await import('/src/gfx/tiles.js');
+    const { getLevel: levelDefOf } = await import('/src/data/levels.js');
+    const trips = [];
+    for (const id of levelIds()) {
+      if (!levelDefOf(id).bands) continue;
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      for (const [key, exitRow] of s.warpExits) {
+        const [tx, ty] = key.split(',').map(Number);
+        if (info(s.grid[ty][tx - 1]).warp) continue;   // sama suu vain kerran
+        const down = s.grid[ty - 1][tx] === T.EMPTY;   // ilmaa päällä = matka alas
+        const p = s.player;
+        p.x = tx * 16;
+        if (down) p.y = ty * 16 - p.h;
+        else {
+          let f = ty + 1;
+          while (f < s.h && !isSolid(s.grid[f][tx])) f++;
+          p.y = f * 16 - p.h;
+        }
+        p.vx = 0; p.vy = 0; p.onGround = true; p.warpLock = 0; p.transit = null;
+        s.centerCamera();
+        const i = mkInput();
+        i.held = blank();
+        i.held[down ? 'down' : 'up'] = true;
+        let travelled = false;
+        let rose = false;
+        for (let f = 0; f < 200; f++) {
+          s.update(i);
+          i.pressed = blank();
+          if (p.transit) {
+            travelled = true;
+            // Noustaanko perillä ylös? Kaukopään leikkuri on se joka sen tekee.
+            if (p.transit.phase === 'out' && p.y > p.transit.arriveY) rose = true;
+          } else if (travelled) break;
+        }
+        const feet = Math.floor((p.y + p.h) / 16);
+        const under = s.grid[Math.min(s.h - 1, feet)][Math.floor(p.cx / 16)];
+        trips.push({
+          id, tx, ty, down, exitRow, feet, rose, travelled,
+          onPipe: info(under).pipe,
+          ok: travelled && rose && info(under).pipe && feet === exitRow,
+        });
+      }
+    }
+    const bad = trips.filter((t) => !t.ok);
+    expect('jokainen kaistamatka päättyy putkeen, ja siitä noustaan ylös',
+      trips.length >= 10 && bad.length === 0,
+      bad.length
+        ? bad.map((t) => `${t.id} ${t.tx},${t.ty}: jalat ${t.feet} (pari ${t.exitRow}), `
+          + `putki ${t.onPipe}, nousi ${t.rose}`).join('; ')
+        : `${trips.length} matkaa, jokainen päättyi putken suulle `
+          + `(${trips.filter((t) => t.down).length} alas, ${trips.filter((t) => !t.down).length} ylös)`);
+  }
+
   /* ----------------------------- pilvimaailma ---------------------------- */
   /*
    * Maailma 7, KAASUKEHÄ, ja kaksi ongelmaa jotka se on olemassa ratkaistakseen.
@@ -6809,7 +6883,17 @@ const report = await page.evaluate(async () => {
        * the way in, and `applySize` pins the bottom of the body and moves `y`;
        * the feet are the thing that is actually one band lower afterwards. */
       const before = s.player.y + s.player.h;
-      const shift = 15 * 16;
+      /*
+       * Matkan pää luetaan parista eikä siirtymästä, ja tämä rivi on korjaus.
+       *
+       * Tässä luki `before + 15 * 16`, eli "liuku päättyy sinne mihin hetkessä
+       * tapahtunut siirto päättyi". Se oli tosi niin kauan kuin matkan pää oli
+       * lähtökorkeus siirrettynä — ja juuri se oli se vika jonka omistaja näki
+       * (hahmo ilmestyi tyhjään ilmaan). Nyt pää on se putken suu jonka
+       * `plantWarpExits` pystytti, ja koe kysyy sitä samasta paikasta kuin peli.
+       */
+      const exitRow = s.warpExits.get('229,26');
+      const target = exitRow * 16;
       let frames = 0;
       let acted = 0;
       let hurtLanded = 0;
@@ -6829,17 +6913,17 @@ const report = await page.evaluate(async () => {
         if (Math.abs(s.player.x - px) > 0.001 || s.player.vx !== 0 || s.player.vy !== 0) acted++;
       }
       // Measured where the slide left him and not a moment later: the arrival
-      // is two tiles above the cave floor and gravity has it from here.
+      // is the mouth of the paired pipe, and he is standing on it.
       // `controllable` is in here because taking the controls away is easy and
       // giving them back is the half that gets forgotten.
       expect('entering a pipe is a slide, and nothing reaches the player during it',
         started && frames > 20 && frames < 60 && acted === 0 && hurtLanded === 0
         && s.player.powerLevel === 1 && s.player.controllable === true
-        && Math.abs((s.player.y + s.player.h) - (before + shift)) < 1,
+        && Math.abs((s.player.y + s.player.h) - target) < 1,
         `${frames} framea, liikkui ${acted}, osumia ${hurtLanded}, `
         + `ohjattavissa ${s.player.controllable}, jalat `
         + `${Math.round(before)} -> ${Math.round(s.player.y + s.player.h)} `
-        + `(odotus ${before + shift})`);
+        + `(odotus ${target}, eli putken suu rivillä ${exitRow})`);
     }
 
     /*
@@ -6852,7 +6936,7 @@ const report = await page.evaluate(async () => {
     {
       const s = mk({ type: 'shroom', level: 1 });
       put(s, 229, 26);
-      const target = s.player.y + s.player.h + 15 * 16;      // feet, see above
+      const target = s.warpExits.get('229,26') * 16;         // putken suu, ks. yllä
       game.setScene(s);
       i.held = blank(); i.held.down = true; i.pressed = blank();
       for (let f = 0; f < 8; f++) s.update(i);
@@ -10203,9 +10287,11 @@ const report = await page.evaluate(async () => {
       '255,208,72', '156,106,40', '224,76,60', '200,200,208', '192,90,36',
       '140,60,28', '74,28,10', '42,74,106', '127,200,240',
       '232,248,255',
-      // POWER_LOOKS, the gas hose and the leaves.
+      // POWER_LOOKS, the gas hose and the valves.
       '168,224,74', '160,76,160', '106,44,106', '60,24,64',
       '106,116,136', '57,65,79', '76,86,102', '232,255,192', '216,168,96',
+      // Kaasulehden messinki (puku, vyö, housut), ks. POWER_LOOKS.leaf.
+      '184,134,44', '92,60,12', '140,100,20',
     ]);
 
     const poses = [

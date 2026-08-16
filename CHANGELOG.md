@@ -7,6 +7,51 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.89 — putkesta tullaan ulos putkesta
+
+Omistajan havainto 16.8.2026: luolasta noustessa hahmo "ilmestyy tyhjästä".
+Se oli totta, ja mitattuna se oli pahempaa kuin miltä kuulosti: **pelin
+jokainen kymmenestä kaistamatkasta päättyi paljaaseen ilmaan**, eikä yhdenkään
+päässä ollut putkea. Pahimmillaan neljä ruutua lattian yläpuolelle (1-2, sarake
+250: saapuminen rivillä 24, lattia rivillä 28), josta pelaaja tipahti maahan
+kuin pudotettuna.
+
+| väite | ennen | nyt |
+| --- | --- | --- |
+| matkan päässä on putki | `0/10` | `10/10` |
+| jalat osuvat sen suulle | `–` | `10/10` |
+| ja siitä noustaan ylös | `–` | `10/10` |
+
+Syy oli `tryWarp`in laskussa: se säilyttää **suhteellisen korkeuden** kaistan
+sisällä (`arriveY = p.y + shift`) ja tarkistaa vain että keho mahtuu ja että
+jotain kiinteää on jossain alla. Kumpikaan ei ole väärin, mutta yhdessä ne
+tarkoittivat että matkan pää on se kohta johon lähtökorkeus sattuu osoittamaan
+— ei paikka.
+
+Korjaus on pari, ja se **johdetaan datasta eikä kirjoiteta siihen**
+(`plantWarpExits`): joka suulle etsitään kohdekaistasta se lattiarivi jolle
+matka päättyy, ja siihen upotetaan putken suu. Kolme rajausta:
+
+**Suu upotetaan lattiaan eikä rakenneta sen päälle.** Kiinteä laatta vaihtuu
+kiinteään laattaan, joten kentän geometria ei muutu pikseliäkään — yksikään
+reitti, hyppy tai kuilubudjetti ei tiedä että tässä tapahtui mitään. Kaksi
+ruutua korkea putki olisi ollut uusi este keskellä todistettua reittiä.
+
+**Uloskäynti on tavallinen putki eikä lämpöputki.** Se ei vie minnekään, ja
+juuri siksi se ei saa näyttää siltä että veisi: lämpöputken oma piirros
+tarkoittaa tässä pelissä "tästä pääsee", eikä alimmasta kaistasta pääse
+alaspäin mihinkään. Tavallisia putkia kenttä on täynnä eikä yksikään niistä
+lupaa matkaa (DESIGN.md kohta 8).
+
+**Ja perillä noustaan ylös, myös alaspäin kuljetulta matkalta.** Meno ja tulo
+ovat saman matkan päät eivätkä saman liikkeen jatko: kaista vaihtuu
+leikkauksena, eikä leikkauksen yli kuljeteta liikesuuntaa. Molemmissa päissä
+tapahtuu siis sama luettava asia — keho häviää suuhun, keho nousee suusta —
+ja kaukopäähän tuli oma leikkuri (`farHide`), joten keho ei ole hetkeäkään
+maalattuna lattian päälle.
+
+---
+
 ## v26.08.16.88 — kaasulyhty: pitkä kenttä ei ala enää alusta
 
 Omistajan kysymys 16.8.2026: onko kentän puolivälissä tarkistuspisteitä, ettei
