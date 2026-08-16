@@ -286,6 +286,70 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
    koko pelin kuoppakaistan kolikkoriveistä 6,4 % on salaisuuden kohdalla.
    Jäljellä: **demo näyttää tempun**.
 
+## Omistajan päätökset 16.8.2026 (ilta)
+
+Läpikäynti kohta kerrallaan, [IDEAS.md](IDEAS.md) ja tämä tiedosto. IDEASin
+tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedostoa.
+
+| kohta | tuomio |
+| --- | --- |
+| pomo järjestää kentän uusiksi | **pysyy, ja tehdään heti** — ei odota valuvaa hiekkaa |
+| salainen alue maailmaan 5 | **tee**, opettamalla generaattorille kolmikerroksinen kokoonpano |
+| minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen |
+| demo näyttää tempun | **tee** |
+| aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
+| jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet |
+| lisää pomovariaatioita | **kahdeksas variantti**, jotta "jokainen pomo kerran" on totta |
+| kenttäsäännöt käsintehdyille | vanhentunut merkintä: **jo voimassa** |
+| nimen tavaramerkkiriski | vanhentunut merkintä: **nimi on jo vaihdettu** |
+
+### Se yksi järjestysristiriita, kirjattuna eikä siloteltuna
+
+IDEASin kohta E (valuva hiekka) hyväksyttiin sanoilla *"tee, ennen pomoa"* —
+perusteena että se on halpa harjoitus muuttuvan ruudukon validoinnista, jonka
+areenapomo joutuu joka tapauksessa ratkaisemaan. Areenapomo puolestaan
+päätettiin tehtäväksi **heti**, odottamatta sitä.
+
+Nämä eivät ole ristiriidassa lopputuloksesta vaan järjestyksestä, ja se
+ratkeaa itsestään: **kumpi tahansa niistä ensin joutuu ratkaisemaan sen saman
+asian** — validaattori joka tarkistaa jokaisen mahdollisen ruudukon eikä vain
+lähtötilaa — ja jälkimmäinen saa sen valmiina. Järjestys on siis tekijän
+valinta eikä suunnittelupäätös, ja se on kirjattu tähän jotta seuraava lukija
+ei luule sitä unohdukseksi.
+
+### Vedenalaiset kentät: ei, ja miksi se kannattaa säilyttää
+
+Uinti on genren vakiokalustoa ja siksi vapaata (DESIGN.md kohta 2), eikä sitä
+hylätty hinnan takia — hinta on kyllä iso (oma liikemalli pelaajalle, oma
+käytös jokaiselle viholliselle, oma validointi). Se hylättiin **sanaston**
+takia: maailma on suolisto, ja se mitä siellä virtaa ei ole vettä. Lainattu
+verbi on käännettävä tämän pelin sanastolle tai se jää lainaksi, ja tälle
+verbille käännöstä ei löytynyt siltä istumalta.
+
+Siksi myös `postfx`-jonon kohta "aaltoilu veden alla" poistuu: se odotti
+jotain jota ei tule.
+
+### Kahdeksas pomovariantti, ja mitä se korjaa
+
+Variantteja on seitsemän — nyrkkeilijä, jyskyttäjä, syöksyjä, pöhö, luuranko,
+sääherra, pierukuningas — ja jokaisella on oma kokonsa ja runkokaavansa. Yksi
+niistä esiintyy neljästi: **pöhö on 4-F, 5-F, 8-4 ja 8-5**, kun jokainen muu
+esiintyy kahdesti.
+
+Se on juuri se väite jonka maailma 8 tekee itsestään ("jokainen pomo kerran",
+kuusi varianttia yhtä vastaan, portissa lukuna). Kahdeksas variantti toiselle
+maailman 8 esiintymälle tekee väitteestä merkilleen toden sen sijaan että se
+on totta vain jos pöhöä ei lasketa kahdesti.
+
+### Pomoäänet odottavat testien korjausta, eivät päätöstä
+
+Päätös 9.8.2026 on voimassa sellaisenaan: **oma ääni, jaetut toimintaäänet.**
+Este on muualla — puhesynteesin testit (`a spoken line is loud enough to hear`,
+`every consonant makes a sound of its own`, `a fricative is audible…`) kaatuvat
+satunnaisesti, kolmesti 16.8.2026 aikana ja aina eri lukemin. Kuuden uuden
+äänen rakentaminen sen päälle tarkoittaisi kuutta ääntä joiden portti ei kerro
+mitään. **Korjataan mittaus ensin.**
+
 ## Jonossa
 
 ### Ruutuefektit ja neljännen seinän rikkominen
@@ -766,9 +830,11 @@ Jäljellä on makuasioita ja kohdistettuja efektejä:
    luminanssia 2,2 %), ja nopeampi jakso on samalla merkki tähden lopusta.
    **Järjestys on osa määrittelyä**: osuma > tähti > huone, eli lyhyin voittaa.
    Kuolema ei välähdä — sillä on jo oma kuvansa.
-2. **Aaltoilu veden alla** odottaa vedenalaisia kenttiä. Kuumuuden väreily ja
-   huurre on tehty teemakohtaisina (v26.08.08.23), ja molemmat toimivat myös
-   ilman WebGL:ää.
+2. ✘ **Aaltoilu veden alla — poistettu 16.8.2026.** Se odotti vedenalaisia
+   kenttiä, ja ne päätettiin samana päivänä jättää tekemättä: uinti on genren
+   vapaata kalustoa muttei käännettävissä tämän pelin sanastolle, koska maailma
+   on suolisto eikä siellä virtaa vesi. Kuumuuden väreily ja huurre jäävät —
+   ne on tehty teemakohtaisina (v26.08.08.23) ja toimivat myös ilman WebGL:ää.
 3. **Spritekohtaiset efektit eivät kuulu tähän tiedostoon.** Jälkikäsittely näkee
    vain valmiin kuvan eikä tiedä mikä pikseli oli mikäkin olio, joten kaikki
    "vain tämä sprite" -efektit tehdään piirtokoodissa. Meillä on tähän
@@ -1317,11 +1383,15 @@ on kalliimpi kuin diffinsä.**
 
   Rakentuu konsonanttien päälle (ks. muutosloki): puheääni jolla on vain
   vokaaleja ei voi sanoa eri asioita, se voi vain huutaa eri korkeuksilla.
-- **Lisää pomovariaatioita** — nyt neljä, ja 5-F on uusinta 4-F:stä.
-- **Kenttäsäännöt käsintehdyille kentille pakollisiksi.** Nyt ne kaatavat ajon
-  vain generoiduissa; kun maailmat 1–4 on korjattu, kytke sama koko peliin.
-- **Nimen tavaramerkkiriski** ([DESIGN.md](DESIGN.md) kohta 2), jos peliä
-  levitetään laajemmin tai siitä otetaan rahaa.
+- **Kahdeksas pomovariantti** (päätetty 16.8.2026) — variantteja on seitsemän,
+  mutta pöhö esiintyy neljästi (4-F, 5-F, 8-4, 8-5). Ks. päätösosio ylempänä.
+- ✔ **Kenttäsäännöt käsintehdyille kentille pakollisiksi** — tehty, ja merkintä
+  oli vanhentunut 16.8.2026 asti. Portti kaatoi sinä päivänä käsintehdyn 4-3:n
+  (`T at 96,12 is standing on nothing`) ja sen jokaisella vaikeustasolla, eli
+  säännöt koskevat koko peliä eivätkä vain generoituja.
+- ✔ **Nimen tavaramerkkiriski** — omistaja 16.8.2026: *"nimi on jo vaihdettu."*
+  Merkintä jää tänne historiana, ja [DESIGN.md](DESIGN.md) kohdan 2 riskikappale
+  kannattaa lukea uudelleen sitä vasten — se puhuu yhä nimestä sanaleikkinä.
 
 ## Tiedossa olevat rajoitukset
 

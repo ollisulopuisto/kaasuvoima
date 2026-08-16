@@ -143,9 +143,84 @@ epämääräinen "korkea".
 
 ---
 
-## Synteesit: kahdeksan jotka olisivat meidän
+## Omistajan tuomiot 16.8.2026
+
+Toinen läpikäynti, kohta kerrallaan. Ensimmäinen (10.8.) koski kahtatoista
+lainattavaa verbiä; tämä koskee **synteesejä A–I**, niitä kolmea verbiä joille
+jäi epäselvä tuomio, ja sitä yhtä verbiä joka oli hyväksytty ilman kotia.
+
+| kohta | mitä se on | tuomio |
+| --- | --- | --- |
+| A | pieruhylly: ammuksesta tulee lava | **tee** |
+| B | kaasukupla joka kantaa: kuplan päälle voi astua | **tee** |
+| C | ummetus muodoksi: tukossa oleva on raskas | ei |
+| D | kaistan vilkaisu | **tee rajattuna** |
+| E | hiekka tottelee painovoimaa | **tee** |
+| F | kurnuttajan kyyti | ei |
+| G | loppukentän voi syödä (maailma 8) | ei näin |
+| H | vauhti on valuutta: ponnahduslauta lukee mittaria | **tee** |
+| I | kaivautuminen | ✔ jo tehty (6-K) |
+| verbi 5 | vahinko muuttaa muotoa (Wario Land) | ei |
+| verbi 6 | syö vihollinen, saat kyvyn (Kirby) | **kyllä: väliaikainen kyky** |
+| verbi 7 | syöksy jolla on lataus (Celeste) | ei |
+| verbi 11 | ammuksen voi ratsastaa (Mr. Gimmick) | ei |
+| — | ilmahyppyjen talous | **kuluva panos** |
+| — | mukautuva maailma | ⏸ parkissa |
+
+### Mitä hylkäyksissä on yhteistä, ja miksi se kannattaa lukea
+
+Neljä ei:tä (C, F, verbi 5, verbi 11) eivät ole neljä erillistä makuarviota.
+Niissä on kaksi linjaa, ja molemmat ovat sellaisia joita kannattaa soveltaa
+seuraavaan ideaan ennen kuin se kirjoitetaan auki:
+
+**Rangaistus jota joskus haluaa lakkaa olemasta rangaistus.** Se on C:n
+peruste ja sama peruste kaatoi verbin 5. Ummetus ja osuma ovat molemmat
+tappioita, ja tappio joka avaa reitin ei ole enää tappio vaan valinta —
+jolloin peli menettää sen yhden asian jonka se sanoo osumalla.
+
+**Ammuksesta tulee porras, ei kyyti.** A hyväksyttiin ja F ja verbi 11
+hylättiin, ja ne kolme ovat sama kysymys kolmesti: saako pelaaja tehdä
+liikkuvasta asiasta kulkuneuvon. Vastaus on ei — mutta *paikallaan pysyvästä*
+asiasta saa tehdä askelman. Se on kapea raja ja se on nyt vedetty.
+
+### Kolme kohtaa joilla on ehto mukanaan
+
+**D tehdään rajattuna**, eli sellaisena kuin ROADMAP sen jo päätti: vain
+näkeminen, hinta täysi vauhtimittari, aina luolakaista alaspäin. Rohkeampi
+versio (läpi astuminen siellä missä molemmissa kaistoissa on lattia) jää
+tekemättä, koska se tekisi piilokaistoista reitin eikä vihjeen.
+
+**E tehdään**, ja se kirjattiin ensin tehtäväksi *ennen* areenapomoa halpana
+harjoituksena muuttuvan ruudukon validoinnista. Areenapomo päätettiin samassa
+läpikäynnissä tehtäväksi heti odottamatta sitä, joten järjestys jäi toiveeksi:
+**kumpi tahansa niistä ensin ratkaisee sen saman validointiongelman**, ja
+jälkimmäinen saa sen ilmaiseksi.
+
+**Verbi 6 sai kodin muttei muotoa.** Nielaistu vihollinen antaa oman lajinsa
+kyvyn hetkeksi — piikkiukko tekee piikikkääksi, lentäjä antaa hypyn — eli
+jokaisesta lajista tulee työkalu. G hylättiin siksi että se olisi pannut verbin
+maailmaan 8 kertakäyttöisenä pomopalkintona, mikä on sama verbi ilman sitä
+osaa joka tekee siitä hauskan: valinnan siitä *mikä* syödään.
+
+### Ilmahyppyjen talous: kuluva panos
+
+Tämä ei ole synteesilistalta vaan mitattu vika. `airJumpsMax` on pierusienellä
+sama kuin voimataso, eli tasolla 5 ilmassa on viisi ponnistusta — ja
+kenttägeometria on hinnoiteltu **yhtä** hyppyä vasten (kuilubudjetti 6 ruutua
+= 96 px, mitattu juoksuhypyn kantama 155 px). Viidellä hypyllä pelin levein
+kuilu on lyhyempi kuin yksi ponnistus.
+
+Päätös: **panokset kuluvat eikä niitä saa peräkkäin.** Määrä jää voimatasoon
+kiinni, eli taso 5 on yhä enemmän kuin taso 1, mutta niitä ei voi ladata
+yhdeksi kaareksi. Konkreettinen muoto — jäähdytys ponnistusten välissä vai
+lataus vain maakosketuksesta — on auki, ja se on **mitattava eikä valittava**:
+`tools/jump-solver.js` osaa jo mitata mitä ikkunalle tapahtuu, ja sama koe
+kertoo kumpi muoto säilyttää hypyn kysymyksenä.
+
+## Synteesit: yhdeksän jotka olisivat meidän
 
 Lainattu verbi + tämän pelin sanasto. Nämä ovat se osa jota ei voi googlata.
+**Tuomiot ovat yllä** (16.8.2026); alla on se mitä kukin on.
 
 ### A. PIERUHYLLY — ammus joka on lava (2 + kaasu)
 Pierupallo joka osuu seinään tai kattoon **litistyy kaasuhyllyksi**: kolmen
@@ -224,7 +299,7 @@ korkeammalle mitä täydempi mittari on.
 Se on Sonicin idea — nopeus on pääsylippu ylemmälle reitille — ilman
 fysiikkaremonttia. Ja se antaa mittarille kolmannen käyttötavan.
 
-### I. KAIVAUTUMINEN — pystykenttä joka menee alas (odottaa pystytukea)
+### I. ✔ TEHTY: KAIVAUTUMINEN — pystykenttä joka menee alas
 Pystykenttä rakennetaan nyt pilvimaailmaa varten, ja siellä suunta on ylös:
 lava lavalta, putoaminen ei tapa. **Sama kamera osaa saman tempun ylösalaisin.**
 Luumaailmaan kenttä jossa lähdetään pinnalta ja kaivaudutaan alas.
@@ -244,9 +319,24 @@ Miksi tämä on eri kenttä eikä sama peilattuna:
 tehdään suuntaneutraalisti — ja juuri siksi se kannattaa kirjata nyt, kun
 pystytukea vasta rakennetaan.
 
+**Tehty**, ja ennuste piti: `6-K KAIVAUTUMINEN` on tuotannossa (vaikeus 245,9)
+ja se käyttää samaa kamera- ja validointitukea kuin pilvimaailman nousu, eli
+suuntaneutraalius maksoi itsensä takaisin täsmälleen niin kuin tässä
+arvattiin. Tämä merkintä luki *"odottaa pystytukea"* 16.8.2026 asti, mikä on
+oma opetuksensa: **synteesilistan kohta ei poistu itsestään kun se tehdään.**
+
 ---
 
-## Mukautuva maailma — suunnitelma, ei päätös (16.8.2026)
+## ⏸ Parkissa 16.8.2026: mukautuva maailma — suunnitelma, ei päätös
+
+**Omistajan tuomio 16.8.2026: *"kiinnostava, mutta liikaa juuri nyt."*** Koko
+suunnitelma jää alle sellaisenaan — se ei ole hylätty vaan siirretty, ja siirto
+on kirjattu tähän eikä poistettu, koska seuraava kerta kun joku kysyy
+"pitäisikö kentän mukautua pelaajaan" ansaitsee tämän vastauksen valmiina.
+
+Yksi asia siitä eteni silti erikseen: **ilmahyppyjen talous**, ks. tuomiot
+alempana. Se oli suunnitelman kohta 6 eli sen edellytys, ja se on hyödyllinen
+myös ilman muuta suunnitelmaa.
 
 Omistajan kysymys: *"onko tää hullu idea: kenttä joka mukautuu siihen miten
 vahva pelaaja on… entä jos skaalaamme vihujen määrää/nopeutta ja hyppyjen/
