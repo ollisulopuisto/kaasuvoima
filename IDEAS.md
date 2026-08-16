@@ -151,14 +151,14 @@ jäi epäselvä tuomio, ja sitä yhtä verbiä joka oli hyväksytty ilman kotia.
 
 | kohta | mitä se on | tuomio |
 | --- | --- | --- |
-| A | pieruhylly: ammuksesta tulee lava | **tee** |
-| B | kaasukupla joka kantaa: kuplan päälle voi astua | **tee** |
+| A | pieruhylly: ammuksesta tulee lava | ✔ tehty v26.08.16.91 |
+| B | kaasukupla joka kantaa: kuplan päälle voi astua | ✔ tehty v26.08.16.86 |
 | C | ummetus muodoksi: tukossa oleva on raskas | ei |
 | D | kaistan vilkaisu | **tee rajattuna** |
-| E | hiekka tottelee painovoimaa | **tee** |
+| E | hiekka tottelee painovoimaa | ✔ tehty v26.08.16.92 |
 | F | kurnuttajan kyyti | ei |
 | G | loppukentän voi syödä (maailma 8) | ei näin |
-| H | vauhti on valuutta: ponnahduslauta lukee mittaria | **tee** |
+| H | vauhti on valuutta: ponnahduslauta lukee mittaria | ✔ tehty v26.08.16.87 |
 | I | kaivautuminen | ✔ jo tehty (6-K) |
 | verbi 5 | vahinko muuttaa muotoa (Wario Land) | ei |
 | verbi 6 | syö vihollinen, saat kyvyn (Kirby) | **kyllä: väliaikainen kyky** |

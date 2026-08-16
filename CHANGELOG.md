@@ -7,6 +7,52 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.92 — hiekka tottelee painovoimaa, ja portti mittaa lopputilan
+
+IDEAS-synteesi E, tuomio 16.8.2026 *"tee, ennen pomoa"*. Riko hiekkalammikon
+alta tuki ja **hiekka valuu alas ja täyttää sen mihin se putoaa**.
+
+| väite | mitattu |
+| --- | --- |
+| rikottu tiili tyhjentää oman sarakkeensa, ja vain sen | `sarake 10: hiekka rivillä 12; sarake 11: rivillä 6, koskematon` |
+| valunut hiekka kasautuu lattialle | `12 12 12 12` |
+| lopputila läpäisee kenttäsäännöt | `ei huomautuksia` |
+| ja botti pääsee sen läpi voimatasolla 0 | `2-4 läpi` |
+
+**Tämä on pelin ensimmäinen laki jossa kenttä jää toisenlaiseksi kuin se oli.**
+Mureneva lauta kasvaa takaisin, möykky palaa kotiruutuunsa, kytkin nollautuu —
+valunut hiekka ei palaa. Se on ominaisuuden koko idea ja samalla se ainoa asia
+joka tässä on oikeasti uutta moottorille, joten `verify.mjs` ajaa nyt sekä
+`validateLevel`in että maabotin **sille ruudukolle joka jäi jäljelle**. Juuri
+tätä IDEAS.md:n ehto vaatii (*"emergenssi saa koskea vain sitä mikä ei ole
+reitti"*), ja se on olemassa ennen ensimmäistä areenaa muokkaavaa pomoa
+nimenomaan siksi että tämä on halpa harjoitus samasta ongelmasta.
+
+Turvallisuus on rakenteellista eikä toiveajattelua: **hiekka ei ole reitti.**
+Se ei ole kiinteä eikä puolikiinteä, joten poistuva hiekka ei voi viedä
+askelmaa eikä saapuva tukkia käytävää. Se voi tehdä yhden asian — upottaa
+siihen mihin se tuli — ja juuri sen portti mittaa.
+
+**Ja pelissä ei ollut yhtäkään paikkaa jossa laki olisi voinut tapahtua.**
+Kahdestatoista hiekkaruudusta yksikään ei ollut rikottavan laatan päällä, eli
+mekaniikka olisi ollut olemassa ilman ominaisuutta. Siksi 2-4 sai
+`dune_pour`-palikan (`clay_cut`in toisen esiintymän tilalta, joten kentän
+pituus ei muutu): **hiekkasiilo**, neljä ruutua hiekkaa kivilaipoissa neljän
+tiilen päällä.
+
+Sarake kerrallaan, ja se on koko pulma: jokainen tiili kannattelee täsmälleen
+oman sarakkeensa hiekan, joten pelaaja päättää kuinka paljon hiekkaa hän kaataa
+itselleen. Keskellä oleva `?` on samalla palkinto ja kilpi — sarake 7 on ainoa
+jonka alta ei voi puskea tiiltä, koska lohko pysäyttää pään kaksi riviä
+aikaisemmin.
+
+Valuminen on 4 px/frame (möykky 3,2), eikä siinä ole möykyn varoitustärinää:
+hiekan varoitus on se lyönti jonka pelaaja itse teki. Ääni on pelin ainoa
+täysin sävelettön — valuminen on tila eikä tapahtuma, ja kolmekymmentä pientä
+kilahdusta peräkkäin olisi hälytys.
+
+---
+
 ## v26.08.16.91 — pieruhylly: kukalla on nyt rakennusverbi
 
 IDEAS-synteesi A, tuomio 16.8.2026 "tee". Seinään litistynyt laukaus jää

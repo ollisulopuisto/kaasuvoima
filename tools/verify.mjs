@@ -7623,6 +7623,153 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* ------------------------------ valuva hiekka -------------------------- */
+  /*
+   * HIEKKA TOTTELEE PAINOVOIMAA, JA LOPPUTILA ON SE JOKA MITATAAN.
+   *
+   * IDEAS-synteesi E, tuomio 16.8.2026 "tee, ennen pomoa". Tämä on pelin
+   * ensimmäinen laki jossa **kenttä jää toisenlaiseksi kuin se oli**: mureneva
+   * lauta kasvaa takaisin, möykky palaa kotiruutuunsa, kytkin nollautuu — mutta
+   * valunut hiekka jää sinne minne se valui. Siksi tämä lohko mittaa kaksi eri
+   * asiaa, ja jälkimmäinen on se joka on oikeasti uusi:
+   *
+   *   1. **Hiekka valuu, sarake kerrallaan, ja pysähtyy pohjalle.** Yksi
+   *      rikottu tiili tyhjentää täsmälleen oman sarakkeensa. Jos se
+   *      tyhjentäisi koko lammikon, siilon pulma olisi olematon; jos se ei
+   *      tyhjentäisi mitään, koko laki olisi olematon.
+   *   2. **Lopputila on yhä kenttä.** `validateLevel` ja maabotti ajetaan
+   *      *sille ruudukolle joka jäi jäljelle* eikä sille joka kirjoitettiin
+   *      kenttädataan. Tämä on se portti jota IDEAS.md vaatii ehdolta
+   *      "emergenssi saa koskea vain sitä mikä ei ole reitti", ja se on
+   *      olemassa ennen ensimmäistä areenaa muokkaavaa pomoa nimenomaan siksi
+   *      että se on halpa harjoitus samasta ongelmasta.
+   */
+  try {
+    const { T } = await import('/src/gfx/tiles.js');
+    const { validateLevel } = await import('/src/data/rules.js');
+    const { JUMP_BUDGET } = await import('/src/data/pacing.js');
+    const { runGround } = await import('/tools/level-bot.js');
+
+    /** Koekenttä: neljän ruudun siilo neljän tiilen päällä, ja tasainen lattia. */
+    const pourDef = () => {
+      const W = 40;
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      /* Tehostus ensimmäiseen neljännekseen, koska `validateLevel` vaatii sen
+       * jokaiselta kentältä — myös koekentältä. Se kaatoi tämän kokeen kerran,
+       * ja se on oikein: koekenttä jota säännöt eivät hyväksy ei ole se peli
+       * jonka lopputilaa tässä mitataan. */
+      put(9, 4, '!');
+      put(6, 10, '~~~~');
+      put(7, 10, 'BBBB');
+      put(12, 38, 'F');
+      return {
+        id: 'sFix', theme: 'desert', bg: 'dunes', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+    const sandAt = (s, tx) => {
+      const at = [];
+      for (let ty = 0; ty < s.h; ty++) if (s.grid[ty][tx] === T.QUICKSAND) at.push(ty);
+      return at;
+    };
+    const settle = (s, n = 240) => {
+      const i = mkInput();
+      for (let f = 0; f < n; f++) { i.pressed = blank(); s.update(i); }
+    };
+
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, 'sFix', pourDef());
+    game.setScene(s);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+    s.time = 9999;
+    // Pelaaja pois siilon alta, jotta koe mittaa hiekkaa eikä uppoamista.
+    s.player.x = 2 * 16;
+    s.player.y = 13 * 16 - s.player.h;
+    // Oikea reitti: iso pelaaja puskee tiilen, kuten pelissä.
+    s.bumpTile(10, 7, s.player);
+    settle(s);
+    const drained = sandAt(s, 10);
+    const kept = sandAt(s, 11);
+    expect('rikottu tiili tyhjentää oman sarakkeensa hiekan, ja vain sen',
+      drained.length === 1 && drained[0] === 12
+      && kept.length === 1 && kept[0] === 6,
+      `sarake 10: hiekka rivillä ${drained.join(',') || '–'} (odotus 12, lattia 13), `
+      + `sarake 11: rivillä ${kept.join(',') || '–'} (odotus 6, koskematon)`);
+
+    // Ja loput kolme perään: koko siilo alas.
+    for (const tx of [11, 12, 13]) s.bumpTile(tx, 7, s.player);
+    settle(s);
+    const heap = [10, 11, 12, 13].map((tx) => sandAt(s, tx).join('') || '–').join(' ');
+    const endRows = s.grid.map((row) => row.join(''));
+    const problems = validateLevel(endRows, JUMP_BUDGET);
+    expect('valuneen hiekan jälkeen kenttä läpäisee yhä omat sääntönsä',
+      heap === '12 12 12 12' && problems.length === 0,
+      `kasa sarakkeittain: ${heap}; säännöt: ${problems.slice(0, 2).join('; ') || 'ei huomautuksia'}`);
+
+    /*
+     * Ja botti lopputilalle. Uusi kohtaus samasta kentästä, jonka ruudukko
+     * korvataan valuneella: botti aloittaa alusta ja juoksee sen läpi kenttänä
+     * joka on jo muuttunut. Juuri tätä IDEAS.md tarkoittaa lopputilan
+     * validoinnilla — lähtötila oli jo todistettu, ja se on eri kenttä.
+     */
+    reset({ type: null, level: 0 });
+    let finished = null;
+    game.finishLevel = (r) => { finished = r; };
+    const after = new LevelScene(game, 'sFix', pourDef());
+    game.setScene(after);
+    after.grid = endRows.map((row) => row.split(''));
+    after.entities = after.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    after.time = 9999;
+    const got = runGround(after, isSolid, 3000, () => finished);
+    game.finishLevel = () => {};
+    expect('valuneen hiekan läpi pääsee yhä maaliin voimatasolla 0',
+      got.cleared, got.cleared ? `${after.w} saraketta läpi` : `eteni ${got.reach} %`);
+
+    /*
+     * Sama koe sillä kentällä joka tämän oikeasti sisältää. `dune_pour` on 2-4:n
+     * palikka 16, ja se on pelin ainoa paikka jossa hiekka on rikottavan laatan
+     * päällä — eli ainoa jossa tämä laki voi tapahtua pelaajalle.
+     */
+    reset({ type: 'shroom', level: 1 });
+    const real = new LevelScene(game, '2-4');
+    game.setScene(real);
+    real.entities = real.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    real.time = 9999;
+    const silo = [];
+    for (let ty = 0; ty < real.h; ty++) {
+      for (let tx = 0; tx < real.w; tx++) {
+        if (real.grid[ty][tx] === T.QUICKSAND && real.grid[ty + 1][tx] === T.BRICK) {
+          silo.push([tx, ty + 1]);
+        }
+      }
+    }
+    for (const [tx, ty] of silo) real.bumpTile(tx, ty, real.player);
+    settle(real, 400);
+    const realRows = real.grid.map((row) => row.join(''));
+    const realProblems = validateLevel(realRows, JUMP_BUDGET);
+    reset({ type: null, level: 0 });
+    let done = null;
+    game.finishLevel = (r) => { done = r; };
+    const realAfter = new LevelScene(game, '2-4');
+    game.setScene(realAfter);
+    realAfter.grid = realRows.map((row) => row.split(''));
+    realAfter.entities = realAfter.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    realAfter.time = 9999;
+    const realGot = runGround(realAfter, isSolid, 7000, () => done);
+    game.finishLevel = () => {};
+    expect('2-4:n hiekkasiilon voi kaataa, ja kenttä kelpaa yhä sen jälkeen',
+      silo.length === 4 && realProblems.length === 0 && realGot.cleared,
+      `siilossa ${silo.length} tiiltä (odotus 4), säännöt: `
+      + `${realProblems.slice(0, 2).join('; ') || 'ei huomautuksia'}, `
+      + `botti ${realGot.cleared ? 'läpi' : `jumissa ${realGot.reach} %`}`);
+  } catch (e) {
+    expect('valuvan hiekan testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* ------------------------------- pieruhylly --------------------------- */
   /*
    * KUKALLA ON NYT RAKENNUSVERBI, ja tämä portti on se rajaus jonka se tarvitsee.
@@ -14739,6 +14886,29 @@ const report = await page.evaluate(async () => {
         return level;
       };
       for (const name of ['pfull', 'pspent', 'pipeout', 'reserve', 'pipe', 'coin', 'powerup']) {
+        /*
+         * Jouten olon kello nollataan **jokaisen** äänen edeltä, eikä kerran
+         * lohkon alussa.
+         *
+         * Kerran riitti niin kauan kuin lohko ehti mitata seitsemän ääntä
+         * kahdessakymmenessä sekunnissa. Se ei ole taattua: `settle` odottaa
+         * väylän hiljenemistä jopa neljä sekuntia kerrallaan, joten pahin
+         * tapaus on ~32 s ja esittelydemo käynnistyy 20 s:n kohdalla samalle
+         * väylälle. Mitattu kerran: `pipe` 0,332 kun sen neljä edellistä ajoa
+         * olivat 0,169 — eli tasan kaksinkertainen, koska demon oma ääni osui
+         * samaan ikkunaan. Portti kaatui äänestä joka ei liity siihen mitä se
+         * mittaa, ja se on juuri se laji vikaa jota tämä tiedosto muualla
+         * korjaa nimeltä mainiten.
+         */
+        if (game.scene && game.scene.idle !== undefined) game.scene.idle = 0;
+        else if (game.scene && game.scene.constructor.name === 'DemoScene') {
+          // Demo ehti jo alkaa: takaisin alkuruutuun, ja väylä hiljaiseksi
+          // samoilla kahdella kutsulla joilla tämä lohko aloitti. Muu kohtaus
+          // ei voi käynnistää demoa, joten sitä ei myöskään herätellä tässä.
+          game.toTitle();
+          Music.stop();
+          Ambience.stop();
+        }
         await settle();
         Sfx.play(name);
         peaks[name] = await peakFor(600);
@@ -16531,6 +16701,16 @@ const report = await page.evaluate(async () => {
           return level;
         };
         for (const name of ['payout', 'kytkin', 'doorin', 'door', 'pipe', 'coin', 'powerup']) {
+          /* Jouten olon kello nollataan jokaisen äänen edeltä — sama korjaus ja
+           * sama mitattu syy kuin aamun erässä: `settle` voi odottaa neljä
+           * sekuntia kerrallaan, joten seitsemän ääntä ei mahdu taatusti siihen
+           * kahteenkymmeneen sekuntiin jonka jälkeen esittelydemo alkaa soittaa
+           * samalle väylälle. Mitattu kerran tässä lohkossa: `pipe` 0,332 kun
+           * sen neljä edellistä ajoa olivat 0,169. */
+          if (game.scene && game.scene.idle !== undefined) game.scene.idle = 0;
+          else if (game.scene && game.scene.constructor.name === 'DemoScene') {
+            game.toTitle(); Music.stop(); Amb.stop();
+          }
           await settle();
           A.play(name);
           peaks[name] = await peakFor(600);

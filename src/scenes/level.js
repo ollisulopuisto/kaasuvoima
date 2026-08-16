@@ -939,6 +939,39 @@ const FALL_HANG = 12;
 const FALL_STEP = 5;
 const FALL_REGROW = 240;
 
+/*
+ * VALUVA HIEKKA — juoksuhiekka (`T.QUICKSAND`) tottelee painovoimaa.
+ *
+ * IDEAS-synteesi E, tuomio 16.8.2026 "tee, ennen pomoa". Riko lammikon alta
+ * tuki ja hiekka valuu alas ja täyttää sen mihin se putoaa.
+ *
+ * **Miksi hiekka eikä möykky, vaikka möykky putoaa jo.** Möykky on yksi laatta
+ * joka putoaa ja **palaa kotiin**, ja paluu on koko sen turvallisuus: kenttä on
+ * hetken toisenlainen ja sitten taas se kenttä jonka portit todistivat. Hiekka
+ * ei palaa. Se on tämän ominaisuuden koko idea (*"täyttää sen mihin se
+ * putoaa"*) ja samalla se ainoa asia joka tässä on oikeasti uutta pelin
+ * moottorille: **lopputila on eri kenttä kuin lähtötila**, ja siksi
+ * `verify.mjs` validoi nyt lopputilan eikä vain lähtötilaa (ks. IDEAS.md kohta
+ * "emergenssi saa koskea vain sitä mikä ei ole reitti").
+ *
+ * Se on turvallista tasan siksi että **hiekka ei ole reitti**. Se ei ole
+ * kiinteä eikä puolikiinteä; sen päällä ei seistä ja sen läpi ei kuljeta.
+ * Poistuva hiekka ei voi siis poistaa askelmaa, ja saapuva hiekka ei voi
+ * tukkia käytävää — se voi tehdä yhden asian, upottaa siihen mihin se tuli, ja
+ * juuri sen portti mittaa.
+ *
+ * `POUR_STEP` on ruutu neljää framea kohti eli 4,0 px/frame. Nopeampi kuin
+ * möykky (3,2), ja se on ero jonka pitää näkyä: möykky on massa joka uhkaa,
+ * hiekka on aine joka valuu. Se on myös tasan pelaajan putoamisen
+ * huippunopeus, eli hiekan mukana pudotessa se pysyy jalkojen tasalla.
+ *
+ * Ja varoitusta (`FALL_HANG`) ei ole, mikä on päätös eikä unohdus: möykky
+ * lähtee liikkeelle **pelaajan alta** ja tarvitsee sen puolen sekunnin, hiekka
+ * lähtee liikkeelle vasta kun joku on rikkonut sen tuen — eli hiekan varoitus
+ * on se lyönti jonka pelaaja itse teki.
+ */
+const POUR_STEP = 4;
+
 /* How long a switch runs. Ten seconds is enough to cross a room and get back,
  * and short enough that it is a window rather than a new normal. */
 const SWITCH_FRAMES = 600;
@@ -1022,6 +1055,8 @@ export class LevelScene {
     this.crumbles = new Map();
     /* Pieruhyllyt: avain "tx,ty" → jäljellä olevat framet. Ks. `gasShelf`. */
     this.shelves = new Map();
+    /* Liikkeellä oleva hiekka: avaimet "tx,ty". Ks. `updatePours`. */
+    this.pours = new Set();
     /* Liikkeellä olevat möykyt: kotiruutu "ox,oy" → missä se nyt on ja kuinka
      * kauan se on ollut matkalla. Avain on **kotiruutu eikä nykyinen paikka**,
      * koska se on se ainoa asia joka ei muutu — ja se on myös se paikka johon
@@ -1812,6 +1847,10 @@ export class LevelScene {
      * konstruktori on ehtinyt luoda sen.
      */
     if (ch === T.EMPTY && this.falls) this.dropAbove(tx, ty);
+    /* Sama tapahtuma, toinen aine: tyhjentynyt ruutu herättää myös sen päällä
+     * olevan hiekan. Erillinen kutsu eikä `dropAbove`in haara, koska hiekka ei
+     * ole möykky missään muussakaan kohdassa — ks. `POUR_STEP`. */
+    if (ch === T.EMPTY && this.pours) this.pourAbove(tx, ty);
   }
 
   /**
@@ -2988,6 +3027,7 @@ export class LevelScene {
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
+    this.updatePours();
     this.updateSprings();
     this.updateFalls();
     this.updateSwitch();
@@ -3154,6 +3194,58 @@ export class LevelScene {
         continue;
       }
       this.crumbles.set(key, next);
+    }
+  }
+
+  /**
+   * Tyhjentynyt ruutu herättää sen päällä olevan hiekan. Ks. `POUR_STEP`.
+   *
+   * Joukko eikä kartta, ja siinä on ero möykkyyn: möykky kantaa mukanaan
+   * kotiruutunsa, koska se palaa sinne. Hiekka ei palaa, joten ainoa asia joka
+   * siitä pitää muistaa on **että se on liikkeellä** — sijainti on ruudukossa,
+   * ja ruudukko on jo tallennuksessa.
+   */
+  pourAbove(tx, ty) {
+    const oy = ty - 1;
+    if (oy < 0 || this.rawTileAt(tx, oy) !== T.QUICKSAND) return;
+    this.pours.add(`${tx},${oy}`);
+  }
+
+  /**
+   * Valuvan hiekan askel, ruutu kerrallaan.
+   *
+   * Silmukka on tahallaan tyhmä: jokainen liikkeellä oleva ruutu katsoo vain
+   * omaa alapuoltaan. Ketju syntyy siitä että vapautuva ruutu menee `setTile`n
+   * kautta, joka herättää sen päällä olevan hiekan — eli pino tulee alas
+   * pinona ilman että kukaan laskee pinon korkeutta. Sama tapa kuin möykyllä,
+   * ja samasta syystä: yksi sääntö jota sovelletaan monta kertaa on
+   * tarkistettavissa, monta sääntöä ei ole.
+   *
+   * Pysähtymisen ehto on **ilma**, ei kiinteys: hiekka pysähtyy myös toisen
+   * hiekan päälle, jolloin lammikko laskeutuu kasaan omalla pohjallaan eikä
+   * mene itsensä läpi.
+   */
+  updatePours() {
+    if (this.pours.size === 0) return;
+    if (this.tick % POUR_STEP !== 0) return;
+    for (const key of [...this.pours]) {
+      const [tx, ty] = key.split(',').map(Number);
+      if (this.rawTileAt(tx, ty) !== T.QUICKSAND) { this.pours.delete(key); continue; }
+      const ny = ty + 1;
+      if (ny >= this.h || this.rawTileAt(tx, ny) !== T.EMPTY) {
+        this.pours.delete(key);
+        continue;
+      }
+      this.pours.delete(key);
+      this.grid[ny][tx] = T.QUICKSAND;
+      this.pours.add(`${tx},${ny}`);
+      // Vasta tämän jälkeen, ja `setTile`n kautta: se herättää sen mikä jää
+      // ilmaan tähän ruutuun — hiekan tai möykyn.
+      this.setTile(tx, ty, T.EMPTY);
+      /* Ääni on hiekan omaa eikä lainaa: valuminen on jatkuvaa, joten se soi
+       * kerran ruutua kohti ja vaimeana. `hiekka` on tehty tähän, ks.
+       * `core/audio.js`. */
+      if (this.pours.size <= 2 || ny % 2 === 0) Sfx.play('hiekka');
     }
   }
 

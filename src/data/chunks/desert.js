@@ -212,6 +212,46 @@ export const DESERT_CHUNKS = {
     14: '################',
   }),
 
+  /**
+   * HIEKKASIILO — se paikka jossa hiekka pääsee liikkeelle.
+   *
+   * IDEAS-synteesi E, tuomio "tee, ennen pomoa": riko lammikon alta tuki ja
+   * hiekka valuu alas. Moottori osaa sen nyt (`LevelScene.updatePours`), mutta
+   * **pelin kahdessatoista hiekkaruudussa ei ollut yhtäkään rikottavan laatan
+   * päällä** — eli koko laki oli olemassa ilman yhtäkään paikkaa jossa se voisi
+   * tapahtua. Tämä palikka on se paikka, ja se on tahallaan yksi.
+   *
+   * Muoto on siilo: neljä ruutua hiekkaa kivilaipoissa, ja sen pohjana neljä
+   * tiiltä. Se on ainoa asetelma jossa hiekka on **selvästi kannateltua** —
+   * lattiassa oleva lammikko lepää maassa eikä sitä voi kaataa, ja ilmassa
+   * roikkuva ilman laippoja näyttäisi unohtuneelta.
+   *
+   * **Sarake kerrallaan, ja se on koko pulma.** Jokainen tiili kannattelee
+   * täsmälleen oman sarakkeensa hiekan, joten yksi puski tyhjentää neljänneksen
+   * ja neljä puskia koko siilon. Pelaaja päättää siis kuinka paljon hiekkaa hän
+   * kaataa itselleen — mikä on parempi kysymys kuin "tapahtuuko se".
+   *
+   * **Palkinto on kolikkolohko keskellä, ja se on kilpi.** Sarake 7 on ainoa
+   * jonka alta ei voi puskea tiiltä: sen alla oleva `?` pysäyttää pään kaksi
+   * riviä aikaisemmin. Se on siis samalla se palkinto joka houkuttelee hyppimään
+   * siilon alla ja se ainoa turvallinen ruutu jossa sen voi tehdä. Ahne pelaaja
+   * joka hyppää sen vierestä saa hiekan niskaansa, ja se on tämän palikan koko
+   * opetus — sama vaihtokauppa kuin `dune_sink`in kolikoissa, mutta pelaajan
+   * itsensä laukaisemana.
+   *
+   * Ja hiekka jää sinne minne se valui: neljä ruutua hiekkaa lattialla siinä
+   * kohdassa jonka läpi juuri juostiin. Se ei tuki reittiä — hiekka ei ole
+   * kiinteä eikä puolikiinteä, ja `verify.mjs` ajaa botin **lopputilalle**
+   * todistamassa sen — mutta se maksaa sen mitä kahlaaminen maksaa.
+   */
+  dune_pour: ck(16, {
+    6: '     X~~~~X',
+    7: '     XBBBBX',
+    9: '       ?',
+    13: '################',
+    14: '################',
+  }),
+
   /* ------------------------ savikuoppa: 2-4:n kaivanto ------------------ */
   /**
    * KUOPPA JOHON KÄVELLÄÄN, EIKÄ JONKA YLI HYPÄTÄÄN.
