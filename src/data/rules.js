@@ -157,7 +157,7 @@ const SMALL_HEAD = 1;
  * not. That mattered nowhere while the rules only measured floors; it matters
  * now that they ask whether a body fits somewhere, so the two lists agree.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I', 'J']);
 const SEMI = new Set(['-']);
 /*
  * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`, `src/gfx/tiles.js`).

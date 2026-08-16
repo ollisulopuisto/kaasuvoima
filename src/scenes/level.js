@@ -142,6 +142,46 @@ const POUND_BREAK_AT = 0.72;
  */
 const BUBBLE_CARRY = 18;
 
+/**
+ * PONNAHDUSLAUTA, ja sen kaksi lukua ovat koko mekaniikka.
+ *
+ * IDEAS-synteesi H, tuomio 16.8.2026 "tee": rinteitä ei ole eikä niitä kannata
+ * rakentaa, mutta **täysi vauhtimittari voi ostaa korkeutta**. Tämä on se
+ * laatta joka myy sitä.
+ *
+ * Luvut on johdettu nousun kaavasta eikä valittu tunnelmasta. Kun hyppynappi
+ * on pohjassa, nousu kuluttaa `GRAVITY_HELD`ia (0,0625) siihen asti kun `vy`
+ * ylittää -2,0, ja loppu tavallisella painovoimalla — eli lähtönopeus `v`
+ * nostaa `(v² - 4) × 8 + 6,4` pikseliä. Sillä kaavalla:
+ *
+ *   `SPRING_LOW`  -4,0 → 102 px. Tyhjällä mittarilla lauta on siis suunnilleen
+ *                 tallauspomppu (`STOMP_BOUNCE` on sama -4,0), eli se antaa
+ *                 jotain aina — laatta joka ei tee mitään ilman mittaria olisi
+ *                 pelaajalle rikki eikä ehdollinen.
+ *   `SPRING_HIGH` -5,4 → 205 px eli kolmetoista ruutua. Se on enemmän kuin
+ *                 mikään muu tässä pelissä nostaa (mitattu paras on juoksu +
+ *                 pieruhyppy, 174 px), ja se on tarkoitus: mittarin täyttäminen
+ *                 on työtä, ja työn on ostettava jotain jota ei saa muuten.
+ *
+ * Väli on lineaarinen mittarin täyttöasteessa, koska mittari on jo palkkeina
+ * HUDissa: pelaaja näkee mitä hän ostaa, eikä lukua tarvitse opettaa erikseen.
+ */
+const SPRING_LOW = -4.0;
+const SPRING_HIGH = -5.4;
+
+/* Kaasulyhdyn mitat; perustelut ovat `plantLamp`issa ja `lampFooting`issa.
+ * `LAMP_EDGE` pitää lyhdyn irti kentän molemmista päistä: alku on jo
+ * tarkistuspiste ja loppu on maalitolppa, eikä kumpikaan tarvitse toista. */
+/* Pieruhyllyn mitat; perustelut ovat `gasShelf`issa. Kaksi sekuntia ja kolme
+ * ruutua: askelma jonka ehtii käyttää kerran, eikä rakennelma. */
+const SHELF_LIFE = 120;
+const SHELF_TILES = 3;
+
+const LAMP_MIN_COLS = 340;
+const LAMP_EDGE = 24;
+const LAMP_CLEAR = 2;
+const LAMP_RUNUP = 24;
+
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
 const CAM_DEAD_ZONE = 8;      // px of free movement before the camera follows
@@ -980,6 +1020,8 @@ export class LevelScene {
      * which is deliberate — the save-state code already knows how to store a
      * per-tile timer map, so this costs one line there instead of a design. */
     this.crumbles = new Map();
+    /* Pieruhyllyt: avain "tx,ty" → jäljellä olevat framet. Ks. `gasShelf`. */
+    this.shelves = new Map();
     /* Liikkeellä olevat möykyt: kotiruutu "ox,oy" → missä se nyt on ja kuinka
      * kauan se on ollut matkalla. Avain on **kotiruutu eikä nykyinen paikka**,
      * koska se on se ainoa asia joka ei muutu — ja se on myös se paikka johon
@@ -1119,6 +1161,22 @@ export class LevelScene {
      * Ovi on siis viimeinen sana eikä ensimmäinen. */
     if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
     this.plantVines();
+    this.plantWarpExits();
+    this.plantLamp();
+    /*
+     * Sytytetty lyhty on lähtöruutu, ja vertailu on saraketta vasten eikä
+     * pelkkää "on käyty" — ks. `lightLamp`. Jos vaikeustaso on vaihtunut, tämä
+     * ei täsmää ja kenttä alkaa alusta, mikä on oikea vastaus: sarake 190 on
+     * eri paikka eri levyisessä kentässä.
+     */
+    const lampSaved = game.state.checks ? game.state.checks[this.id] : undefined;
+    if (this.lampCol !== null && lampSaved === this.lampCol) {
+      const lampRow = this.grid.findIndex((row) => row[this.lampCol] === T.LAMP);
+      if (lampRow >= 0) {
+        this.grid[lampRow][this.lampCol] = T.LAMP_LIT;
+        this.spawn = { x: this.lampCol * TILE, y: (lampRow - 2) * TILE };
+      }
+    }
     this.player = new Player(this, this.spawn.x, this.spawn.y + TILE, game.state.power);
     this.bestX = this.player.x;
     this.centerCamera();
@@ -1305,6 +1363,219 @@ export class LevelScene {
         ty = foot;
       }
     }
+  }
+
+  /*
+   * PUTKESTA TULLAAN ULOS PUTKESTA, ja tämä pystyttää sen toisen pään.
+   *
+   * Omistajan havainto 16.8.2026: luolasta noustessa hahmo "ilmestyy tyhjästä".
+   * Se oli totta ja se oli mitattavissa — **pelin jokainen kymmenestä
+   * kaistamatkasta päättyi paljaaseen ilmaan**, eikä yhdenkään päässä ollut
+   * putkea. Pahimmillaan neljä ruutua lattian yläpuolelle (1-2, sarake 250:
+   * saapuminen rivillä 24, lattia rivillä 28), josta pelaaja tipahti maahan
+   * kuin pudotettuna.
+   *
+   * Syy on `tryWarp`in vanhassa laskussa: se säilyttää **suhteellisen
+   * korkeuden** kaistan sisällä (`arriveY = p.y + shift`) ja tarkistaa vain
+   * että keho mahtuu ja että jotain kiinteää on jossain alla. Kumpikaan ei ole
+   * väärin, mutta yhdessä ne tarkoittavat että matkan pää on se kohta johon
+   * lähtökorkeus sattuu osoittamaan — ei paikka.
+   *
+   * **Ratkaisu on pari, ja se johdetaan datasta eikä kirjoiteta siihen.** Joka
+   * suulle etsitään kohdekaistasta se lattiarivi jolle matka päättyy, ja siihen
+   * upotetaan putken suu. Pelaaja nousee siitä ylös (ks. `tryWarp`in
+   * `farHide`), eli molemmat päät ovat putkia ja matka näyttää matkalta.
+   *
+   * Kolme päätöstä, ja jokainen on rajaus:
+   *
+   *   1. **Suu upotetaan lattiaan, ei rakenneta sen päälle.** Kiinteä laatta
+   *      vaihtuu kiinteään laattaan, joten kentän geometria ei muutu
+   *      pikseliäkään: yksikään reitti, hyppy tai kuilubudjetti ei tiedä että
+   *      tässä tapahtui mitään. Kaksi ruutua korkea putki lattian päällä olisi
+   *      ollut uusi este keskellä todistettua reittiä.
+   *   2. **Uloskäynti on tavallinen putki eikä lämpöputki.** Se ei vie
+   *      minnekään, ja juuri siksi se ei saa näyttää siltä että veisi:
+   *      lämpöputken oma piirros (`drawWarpPipe`) tarkoittaa tässä pelissä
+   *      "tästä pääsee", ja alimmasta kaistasta ei pääse alaspäin mihinkään.
+   *      Tavallisia putkia kenttä on täynnä, eikä yksikään niistä lupaa
+   *      matkaa. DESIGN.md kohta 8.
+   *   3. **Vain kohtauksessa, kuten kaasulyhty.** Kenttädata ja sen
+   *      validaattorit näkevät saman kentän kuin ennen; tämä on johdettua
+   *      maisemaa jonka kiinteys on identtinen sen kanssa mitä se korvasi.
+   */
+  plantWarpExits() {
+    /** avain `"tx,ty"` (suun vasen ruutu) → se rivi jolle matka päättyy. */
+    this.warpExits = new Map();
+    const bands = this.def.bands;
+    if (!bands) return;
+    for (let ty = 0; ty < this.h; ty++) {
+      for (let tx = 0; tx < this.w; tx++) {
+        if (!info(this.grid[ty][tx]).warp) continue;
+        // Suun suunta on se puoli jolla on ilmaa: lattiassa oleva suu vie alas,
+        // katosta roikkuva ylös. Sama kysymys kuin `tryWarp`issa, toisin päin.
+        const up = ty > 0 && this.grid[ty - 1][tx] === T.EMPTY;
+        const down = ty + 1 < this.h && this.grid[ty + 1][tx] === T.EMPTY;
+        if (up === down) continue;              // umpiputken keskiosa
+        const dir = up ? 1 : -1;                // ilmaa päällä = matka alaspäin
+        const to = ty + dir * bands.rows;
+        if (to < 0 || to >= this.h) continue;
+        const bandEnd = (Math.floor(to / bands.rows) + 1) * bands.rows - 1;
+        let floor = -1;
+        for (let y = to; y <= bandEnd; y++) {
+          if (isSolid(this.grid[y][tx])) { floor = y; break; }
+        }
+        if (floor < 0) continue;
+        // Suu on kaksi ruutua leveä, kuten jokainen putki tässä pelissä.
+        const left = info(this.grid[ty][tx - 1]).warp ? tx - 1 : tx;
+        for (const [x, ch] of [[left, T.PIPE_TL], [left + 1, T.PIPE_TR]]) {
+          if (x < 0 || x >= this.w) continue;
+          // Vain tavallinen maa vaihdetaan. Palkintolohko, mureneva lauta tai
+          // toinen putki on jonkun muun päätös, eikä sitä kirjoiteta yli.
+          const at = this.grid[floor][x];
+          if (at === T.GROUND || at === T.HARD || at === T.ICE) this.grid[floor][x] = ch;
+        }
+        this.warpExits.set(`${tx},${ty}`, floor);
+      }
+    }
+  }
+
+  /*
+   * KAASULYHTY — kentän puolivälin tarkistuspiste, ja se pystytetään tässä
+   * eikä kirjoiteta kenttädataan.
+   *
+   * Perustelu on sama kuin pavunvarrella, mutta toisin päin: varsi on
+   * *piirretty* kenttään ja `plantVines` ottaa sen pois, koska validaattorin
+   * pitää nähdä se reitti jonka varsi avaa. Lyhty ei avaa mitään — se ei ole
+   * kiinteä, ei vaarallinen, eikä se muuta yhtään hyppyä, kuilua tai kattoa —
+   * joten yksikään portti ei tarvitse sitä nähdäkseen kentän oikein. Sen
+   * kirjoittaminen 17 kentän palikkalistaan olisi maksanut 17 muutosta
+   * kenttädataan, uuden vaikeustaulun ja uuden opetusjärjestyksen tarkistuksen,
+   * eikä yksikään niistä olisi mitannut mitään uutta.
+   *
+   * **Kolme ehtoa, ja jokainen on mitattu eikä valittu.**
+   *
+   *   1. **`LAMP_MIN_COLS` = 340 saraketta.** Täydellä juoksuvauhdilla (2,5
+   *      px/frame = 9,4 laattaa sekunnissa) 340 laattaa on ~36 s, eli
+   *      puoliväliin kävelee ~18 s. Se on se aika joka kuolemasta menee
+   *      uudelleen, ja 18 s on jo pitempi kuin koko linnakkeen käytävä (19–24
+   *      s), jonka toisto perusteli oven. Mediaanikenttä on 314 saraketta ja
+   *      jää siis ilman lyhtyä tarkoituksella: lyhty ei ole palkinto vaan
+   *      korjaus pituuteen. Rajan yli menee 17 kenttää 64:stä.
+   *   2. **Vain kerran, ja puolivälissä.** Kaksi lyhtyä tekisi kentästä
+   *      jonon huoneita, ja se on eri peli. Puoliväli on ainoa piste joka ei
+   *      ole mielipide: se puolittaa pisimmän mahdollisen uusinnan.
+   *   3. **Ei pomokentissä.** Siellä on jo ovi, ja ovella on oma perustelunsa
+   *      (`arenaCol`). Kaksi tarkistuspistettä samassa kentässä olisi kaksi
+   *      vastausta samaan kysymykseen.
+   *
+   * Ja se mitä lyhty **ei** tee, on yhtä tärkeää: kuolema vie yhä karttaan,
+   * maksaa yhä elämän ja pudottaa yhä voimatason. Lyhty säästää kävelyn, ei
+   * kenttää — sama lause kuin linnakkeen ovella, ja samasta syystä.
+   */
+  plantLamp() {
+    this.lampCol = null;
+    if (this.w < LAMP_MIN_COLS || this.def.boss || this.game.timeAttack) return;
+    const mid = Math.floor(this.w / 2);
+    /* Ulospäin puolivälistä, ja ensimmäinen kelpaava voittaa. Reunat on
+     * rajattu pois: alku on jo tarkistuspiste ja loppu on maalitolppa. */
+    for (let d = 0; d < Math.floor(this.w / 2) - LAMP_EDGE; d++) {
+      for (const tx of d === 0 ? [mid] : [mid - d, mid + d]) {
+        if (tx < LAMP_EDGE || tx >= this.w - LAMP_EDGE) continue;
+        const ty = this.lampFooting(tx);
+        if (ty === null) continue;
+        this.grid[ty - 1][tx] = T.LAMP;
+        this.lampCol = tx;
+        return;
+      }
+    }
+  }
+
+  /**
+   * The row a lamp post can stand on in column `tx`, or null.
+   *
+   * Ehdot ovat sen paikan ehtoja johon *herätään*, eivät koristeen. Pelaaja
+   * ilmestyy tähän ruutuun **paikaltaan, vauhdittomana**, ja siitä seuraa se
+   * vaatimus jonka ensimmäinen versio jätti pois ja jonka botti mittasi:
+   *
+   * **Herätyspaikan edessä pitää olla rauhallista, ja pitkälti.** Ensimmäinen
+   * versio vaati kaksi laattaa tasaista molempiin suuntiin, ja portti kaatui
+   * viiteen kenttään: 3-3:n lyhty oli kolme laattaa ennen kuuden laatan
+   * laavalampea, 3-1:n kolme laattaa ennen kuilua, 3-7:n neljä ennen piikkejä.
+   * Kentän alusta juostessa ne kaikki ylitetään täydellä vauhdilla;
+   * seisaaltaan ei yhtäkään.
+   *
+   * `LAMP_RUNUP` = 24 laattaa oikealle, ja luku on mitattu botilla eikä
+   * johdettu kiihtyvyydestä. Kiihtyvyys sanoo että täyteen juoksuvauhtiin
+   * (`MAX_RUN` 2,5 px/frame, `ACC` 0,0547) menee 46 framea ja 57 px eli 3,6
+   * laattaa — ja se osoittautui vääräksi kysymykseksi. Kahdeksalla laatalla
+   * neljä viidestä kentästä korjaantui ja 2-1 ei: sen kuilu on kuusi laattaa
+   * eli kuilubudjetin maksimi, ja se ylitetään vain oikealla irtoamishetkellä.
+   * Lyhdyltä lähtevä juoksu osuu siihen eri vaiheessa kuin kentän alusta
+   * lähtevä, ja mitattuna se putosi. 24 laattaa siirtää lyhdyn niin kauas
+   * seuraavasta kuilusta ettei vaihe ratkaise.
+   *
+   * Sama luku on myös oikea pelaajalle eikä vain botille: paikka johon
+   * herätään ilman muistia siitä mitä edessä on, ei saa olla kuilun reunalla.
+   * Vasemmalle riittää `LAMP_CLEAR`, koska taaksepäin ei tarvitse ottaa
+   * vauhtia mihinkään — se suunta on jo pelattu.
+   *
+   * Hinta on kirjattava: lyhty ei ole enää puolivälissä vaan **lähimmässä
+   * rauhallisessa paikassa** puolivälin ympärillä, ja mitattuna se on 35–72 %
+   * kentästä. Rajattu haku (±15 % puolivälistä) olisi pitänyt luvun siistinä,
+   * mutta se olisi jättänyt pelin pisimmän kentän (3-3, 425 saraketta) kokonaan
+   * ilman tarkistuspistettä. Se on väärä vaihtokauppa: siisti luku ei auta
+   * ketään, tarkistuspiste auttaa.
+   *
+   * Kolme riviä ilmaa ylöspäin: iso pelaaja on 26 px eli kaksi laattaa, ja
+   * kolmas rivi on se jossa hypätään.
+   */
+  lampFooting(tx) {
+    // Rivistä 3 alkaen, koska kolme riviä ilmaa luetaan ylöspäin: rivi 2 luki
+    // `grid[-1]`ia, ja kaatui ensimmäiseen kenttään jonka katto oli ylhäällä.
+    for (let ty = 3; ty < this.h; ty++) {
+      if (!isSolid(this.grid[ty][tx])) continue;
+      for (let y = ty - 3; y < ty; y++) if (this.grid[y][tx] !== T.EMPTY) return null;
+      for (let x = tx - LAMP_CLEAR; x <= tx + LAMP_RUNUP; x++) {
+        if (x < 0 || x >= this.w) return null;
+        // Sama lattiarivi koko matkalta, ja mitään ei roiku sen päällä.
+        if (!isSolid(this.grid[ty][x])) return null;
+        if (info(this.grid[ty - 1][x]).hazard || info(this.grid[ty][x]).hazard) return null;
+        if (info(this.grid[ty][x]).crumble || info(this.grid[ty][x]).falls) return null;
+        // Eikä seinää vasten juoksemista: kaksi alinta riviä ovat sitä tilaa
+        // jonka keho vie, ja kolikko niissä on eri asia kuin palikka.
+        if (isSolid(this.grid[ty - 1][x]) || isSolid(this.grid[ty - 2][x])) return null;
+      }
+      return ty;
+    }
+    return null;
+  }
+
+  /**
+   * Sytyttää lyhdyn, kerran.
+   *
+   * Tallennus on `game.state`issa eikä kohtauksessa, koska kuolema tuhoaa
+   * kohtauksen — sama syy kuin linnakkeen ovella. Talteen menee **sarake**
+   * eikä `true`, ja se on tahallinen turvalukko: vaikeustaso venyttää kentän
+   * (`scale.js`), joten HELPOSSA sytytetty sarake ei ole NORMAALIssa sama
+   * paikka. Sisääntulo vertaa lukua tämänhetkiseen lyhtyyn ja unohtaa
+   * tarkistuspisteen jos ne eivät täsmää: menetetty lyhty maksaa yhden
+   * kävelyn, väärään paikkaan herätetty pelaaja maksaisi kentän.
+   */
+  lightLamp(tx, ty) {
+    this.setTile(tx, ty, T.LAMP_LIT);
+    const st = this.game.state;
+    if (st.checks) {
+      st.checks[this.id] = tx;
+      if (this.game.persist) this.game.persist();
+    }
+    /* Ääni ja kuva samasta tapahtumasta, ja molemmat kertovat "päällä": liekki
+     * jää palamaan ruudulle, sytytys kuuluu kerran. Tärinää ei ole — tärinä on
+     * tässä pelissä iskun sana (ks. `shake`), eikä lyhty osu mihinkään. */
+    Sfx.play('lamp');
+    for (let i = 0; i < 5; i++) {
+      this.spawnPuff(tx * TILE + 2 + i * 3, ty * TILE + 2 + (i % 2) * 4);
+    }
+    this.addScorePop(tx * TILE + 8, ty * TILE - 2, 'PUOLIVÄLI');
   }
 
   enter() {
@@ -1601,6 +1872,48 @@ export class LevelScene {
         // Same rules as a fart ball, so tough customers stay tough.
         e.hitByProjectile(Math.sign(e.cx - x) || 1);
       }
+    }
+  }
+
+  /**
+   * PONNAHDUSLAUTA: se frame jolla jalat osuvat ritilään.
+   *
+   * Sama muoto kuin `updateCrumbles`illa ja samasta syystä: laatta jonka päällä
+   * seistään luetaan jalkojen alta eikä kehon sisältä, ja `p.onGround` on se
+   * yksi ehto joka erottaa seisomisen ohi lentämisestä. Alta puskeminen tai
+   * kyljestä koskeminen ei siis laukaise mitään — lauta on lattia, ja lattia
+   * työntää vain sitä joka seisoo sillä.
+   *
+   * Nosto luetaan vauhtimittarista sillä framella jolla se tapahtuu, eikä
+   * mittaria kuluteta: lauta myy korkeutta vauhdista, ja vauhti on jo maksettu
+   * juoksemalla. Mittarin nollaaminen tekisi laudasta toisen `pSpent`-tapahtuman
+   * ja veisi pelaajalta sen edun jonka hän juuri osti — ja se etu (`MAX_P`,
+   * lento kaasulehdellä) on olemassa erikseen tästä laatasta.
+   *
+   * `jumpHeld` asetetaan, kuten pieruhypyssäkin: nousu on `GRAVITY_HELD`in
+   * varassa, ja ilman tätä lauta antaisi kolmanneksen siitä mitä se lupaa
+   * sille pelaajalle joka ei satu pitämään nappia pohjassa laskeutuessaan.
+   */
+  updateSprings() {
+    const p = this.player;
+    if (p.dying || p.transit || !p.onGround) return;
+    const ty = Math.floor((p.y + p.h) / TILE);
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    for (let tx = x0; tx <= x1; tx++) {
+      if (!info(this.tileAt(tx, ty)).spring) continue;
+      const fill = Math.min(1, p.pMeter / P_METER_MAX);
+      p.vy = SPRING_LOW + (SPRING_HIGH - SPRING_LOW) * fill;
+      p.onGround = false;
+      p.jumpHeld = true;
+      p.airJumps = 0;
+      p.airJumpCd = 0;
+      this.shake(1 + fill * 2, 'y');
+      Sfx.play(fill >= 1 ? 'bigfart' : 'fart');
+      for (let i = 0; i < 4; i++) {
+        this.spawnPuff(tx * TILE + 4 + i * 3, ty * TILE + 8);
+      }
+      return;
     }
   }
 
@@ -2061,10 +2374,13 @@ export class LevelScene {
 
     /** The world edge the body disappears behind: the mouth's own near lip. */
     let hide;
+    /** The row of the mouth being entered — the key its far end is filed under. */
+    let mouthRow;
     if (dir > 0) {
       const under = Math.floor((p.y + p.h) / TILE);
       if (!this.warpMouthAt(under)) return;
       hide = under * TILE;                       // the mouth's top edge
+      mouthRow = under;
     } else {
       /* Every row that lies wholly above the head and whose lower lip is within
        * reach of the ground being stood on. The lowest lip wins: the mouth of a
@@ -2076,6 +2392,7 @@ export class LevelScene {
       for (let ty = first; ty <= last; ty++) if (this.warpMouthAt(ty)) mouth = ty;
       if (mouth < 0) return;
       hide = (mouth + 1) * TILE;                 // the ceiling mouth's bottom edge
+      mouthRow = mouth;
     }
 
     const shift = dir * bands.rows * TILE;
@@ -2084,21 +2401,48 @@ export class LevelScene {
     const bandEnd = (Math.floor(feet / bands.rows) + 1) * bands.rows - 1;
     if (!this.footingWithin(p.x, p.w, feet, bandEnd)) return;
 
+    /*
+     * Matkan pää on se putki jonka `plantWarpExits` pystytti, ja siitä
+     * noustaan ylös — myös alaspäin kuljetulta matkalta.
+     *
+     * **Ylös molemmissa suunnissa, ja se on tahallista.** Meno ja tulo ovat
+     * saman matkan päät eivätkä saman liikkeen jatko: kaista vaihtuu leikkauksena
+     * (`updateTransit`, 'hold'), eikä leikkauksen yli kuljeteta liikesuuntaa.
+     * Molemmissa päissä tapahtuu siis sama luettava asia — keho häviää suuhun,
+     * keho nousee suusta — ja se on tämän genren oma kielioppi. Alaspäin
+     * tuleminen olisi vaatinut katosta roikkuvan putken jokaiseen määränpäähän,
+     * eikä sellaista kattoa ole kuin osassa niistä.
+     *
+     * Jos paria ei jostain syystä ole (`exitRow === undefined`), matka menee
+     * vanhalla tavalla: suhteellinen korkeus säilyy. Se on huonompi mutta ei
+     * rikki, ja se on oikea vara kentälle jonka lattiaa ei voinut vaihtaa.
+     */
+    let exitRow;
+    for (let tx = Math.floor(p.x / TILE); tx <= Math.floor((p.x + p.w - 1) / TILE); tx++) {
+      const at = this.warpExits ? this.warpExits.get(`${tx},${mouthRow}`) : undefined;
+      if (at !== undefined) { exitRow = at; break; }
+    }
+    const arriveY = exitRow === undefined ? p.y + shift : exitRow * TILE - p.h;
+    const rise = p.h + 4;
+
     p.beginTransit({
       kind: 'warp',
       axis: 'y',
       slide: dir * (p.h + 4),
-      out: dir * (p.h + 4),
+      out: exitRow === undefined ? dir * (p.h + 4) : -rise,
       arriveX: p.x,
-      arriveY: p.y + shift,
+      arriveY,
       hide,
       hideDir: dir,
+      // Kaukopään oma leikkuri: keho nousee lattialinjan alta näkyviin, eikä
+      // ole hetkeäkään maalattuna maan päälle. Ks. `drawPlayerInto`.
+      farHide: exitRow === undefined ? null : exitRow * TILE,
     });
     /* Arriving in a hidden band *is* finding the secret, so the find is written
      * here, where the journey is decided, rather than by something watching the
      * scene from outside. `noteSecret` filters against the level's own key
      * list, so this writes nothing in a level that has no hidden band. */
-    this.noteBand(p.y + shift + p.h);
+    this.noteBand(arriveY + p.h);
     /* Going in gets the falling sweep and coming out gets the rising one, so
      * the two ends of the journey do not sound like the same event happening
      * twice (DESIGN.md §8). Ne ovat nyt oikeasti pari: ulostulo soitti pitkään
@@ -2213,7 +2557,12 @@ export class LevelScene {
       p.climbing = false;
       this.centerCamera();
       p.y = t.arriveY - t.out;
-      t.hide = null;
+      /* Kaukopäässä on oma leikkuri jos matkan päässä on putki: keho nousee
+       * sen suusta ylös eikä ole hetkeäkään maalattuna lattian päälle. Ilman
+       * paria leikkuria ei ole, ja silloin `null` on oikea vastaus — sama kuin
+       * ennen. */
+      t.hide = t.farHide === undefined ? null : t.farHide;
+      t.hideDir = 1;
       this.spawnPuff(p.cx, t.arriveY + p.h);
       /* Putken oma ulostuloääni, ei oven laina. Tässä soi `door` siihen asti
        * kunnes se huomattiin: sama ääni tarkoitti oven aukeamista, ovesta
@@ -2638,6 +2987,8 @@ export class LevelScene {
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
+    this.updateShelves();
+    this.updateSprings();
     this.updateFalls();
     this.updateSwitch();
     if (this.goal && this.state === 'play') this.cardIndex = Math.floor(this.tick / 9) % 3;
@@ -2804,6 +3155,86 @@ export class LevelScene {
       }
       this.crumbles.set(key, next);
     }
+  }
+
+  /**
+   * PIERUHYLLY: seinään litistynyt laukaus jää askelmaksi kahdeksi sekunniksi.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee". Kukka on pelin ainoa ase, ja
+   * ampuminen oli tähän asti vain vahinkoa: tämä antaa sille **rakennusverbin**
+   * ilman että pelistä tulee rakennuspeli.
+   *
+   * Neljä ehtoa, ja jokainen niistä on raja eikä koriste:
+   *
+   *   1. **Vain seinä laukaisee sen.** Pallo pomppii lattiaa pitkin koko
+   *      matkansa (`FartBall.update`, `hit.ground`), joten lattiaosumasta
+   *      syntyvä hylly tarkoittaisi hyllyä joka toinen ruutu koko juoksun ajan.
+   *      Seinä on se harvinainen ja tahallinen osuma — ja se on myös se paikka
+   *      jossa askelma on jotain: seinän vieressä.
+   *   2. **Hylly kasvaa seinästä poispäin**, eli sitä kohti josta ammuttiin.
+   *      Se on ainoa suunta jossa se on saavutettavissa: seinän toisella
+   *      puolella oleva askelma on toisen huoneen askelma.
+   *   3. **Vain tyhjään ruutuun.** Mitään ei kirjoiteta yli — ei palkintolohkoa,
+   *      ei lavaa, ei toista hyllyä. Kolmen ruudun leveys on maksimi eikä
+   *      lupaus; yksikin ruutu riittää hyllyksi.
+   *   4. **Ja se katoaa itsestään.** `SHELF_LIFE` on kaksi sekuntia, mikä on
+   *      mitattu eikä valittu: juoksuhypyn koko kaari on ~50 framea, joten 120
+   *      framea riittää ampumiseen, kääntymiseen ja yhteen hyppyyn — muttei
+   *      siihen että pelaaja kävelee pois ja tulee takaisin. Hylly on liike,
+   *      ei rakennelma.
+   */
+  gasShelf(ball) {
+    const dir = ball.vx >= 0 ? 1 : -1;
+    const ty = Math.floor(ball.cy / TILE);
+    const wallX = Math.floor((dir > 0 ? ball.x + ball.w : ball.x) / TILE);
+    let made = 0;
+    for (let i = 1; i <= SHELF_TILES; i++) {
+      const tx = wallX - dir * i;
+      if (tx < 0 || tx >= this.w) break;
+      if (this.tileAt(tx, ty) !== T.EMPTY) break;
+      this.setTile(tx, ty, T.SHELF);
+      this.shelves.set(`${tx},${ty}`, SHELF_LIFE);
+      made++;
+    }
+    if (!made) return false;
+    /* Ääni on `sylkaisy` eikä `fart`: pallo lähti jo pieruäänellä, ja sama ääni
+     * matkan molemmissa päissä olisi yksi merkki kahdelle tapahtumalle
+     * (DESIGN.md kohta 8). Tämä on litsahdus seinää vasten. */
+    Sfx.play('sylkaisy');
+    for (let i = 0; i < made * 2; i++) {
+      this.spawnPuff(wallX * TILE - dir * i * 6, ty * TILE + 8);
+    }
+    return true;
+  }
+
+  /**
+   * Hyllyjen kello. Sama muoto kuin murenevalla laudalla, ja sama turvallisuus:
+   * ruutu palautetaan tyhjäksi vain jos se on yhä hylly — jokin muu on voinut
+   * kirjoittaa siihen sillä välin, eikä tämän kellon tehtävä ole pyyhkiä sitä.
+   *
+   * Pelaajan sisään ei tarvitse varoa mitään: hylly on puolikiinteä, joten
+   * poistuva hylly ei voi jättää ketään seinän sisään. Se on sama ero joka
+   * teki `updateCrumbles`ista varovaisen ja tästä yksinkertaisen.
+   */
+  updateShelves() {
+    if (this.shelves.size === 0) return;
+    for (const [key, left] of this.shelves) {
+      const [tx, ty] = key.split(',').map(Number);
+      if (this.tileAt(tx, ty) !== T.SHELF) { this.shelves.delete(key); continue; }
+      if (left <= 1) {
+        this.setTile(tx, ty, T.EMPTY);
+        this.shelves.delete(key);
+        this.spawnPuff(tx * TILE + 8, ty * TILE + 8);
+        continue;
+      }
+      this.shelves.set(key, left - 1);
+    }
+  }
+
+  /** 1→0 sen mukaan kuinka paljon hyllyä on jäljellä, piirtoa varten. */
+  shelfLeft(tx, ty) {
+    const left = this.shelves.get(`${tx},${ty}`);
+    return left === undefined ? 1 : Math.min(1, left / SHELF_LIFE);
   }
 
   startSwitch() {
@@ -3328,6 +3759,8 @@ export class LevelScene {
             x: tx * TILE, y: ty * TILE + SPIKE_TOP, w: TILE, h: TILE - SPIKE_TOP,
           };
           if (overlaps(p.box, box) && p.hurt('spike')) p.vy = -3;
+        } else if (ch === T.LAMP && this.state === 'play') {
+          this.lightLamp(tx, ty);
         } else if (info(ch).door && this.doorOpen >= 1) {
           this.enterDoor(tx, ty);
           return;
@@ -3793,6 +4226,7 @@ export class LevelScene {
             // How far, not whether: the leaves swing. See DOOR_OPEN_FRAMES.
             doorOpen: this.doorOpen,
             crumble: this.crumbleProgress(tx, ty),
+            shelf: ch === T.SHELF ? this.shelfLeft(tx, ty) : undefined,
             /* Möykyn varoitustärinä. Sama kanava kuin murenevalla laudalla,
              * koska se on sama lupaus: se mikä on lähdössä, näyttää siltä. */
             fall: this.fallWobble(tx, ty),

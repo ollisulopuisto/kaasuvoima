@@ -108,6 +108,10 @@ export function captureState(game) {
         wonCard: scene.wonCard,
         bumps: [...scene.bumps.entries()],
         crumbles: [...scene.crumbles.entries()],
+        /* Pieruhyllyt. Sama muoto ja sama syy kuin murenevilla laudoilla:
+         * hylly on kentän tilaa jolla on kello, ja ruudukko yksin palauttaisi
+         * sen ikuisena. Kello on se mikä tekee siitä liikkeen. */
+        shelves: [...scene.shelves.entries()],
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -171,6 +175,7 @@ export function restoreState(game, snap) {
   scene.bumps = new Map(data.bumps);
   // Older snapshots predate crumbling platforms; an absent list is not an error.
   scene.crumbles = new Map(data.crumbles || []);
+  scene.shelves = new Map(data.shelves || []);
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

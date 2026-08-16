@@ -7,6 +7,229 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.91 — pieruhylly: kukalla on nyt rakennusverbi
+
+IDEAS-synteesi A, tuomio 16.8.2026 "tee". Seinään litistynyt laukaus jää
+**kolmen ruudun kaasuhyllyksi kahdeksi sekunniksi**, ja sen päälle voi astua.
+Kukka on pelin ainoa ase, ja ampuminen oli tähän asti vain vahinkoa; tämä antaa
+sille rakennusverbin ilman että pelistä tulee rakennuspeli.
+
+| väite | mitattu |
+| --- | --- |
+| seinäosuma jättää hyllyn seinän omalle puolelle | `3 ruutua rivillä 12, sarakkeet 27–29 (seinä 30)` |
+| sen päällä seistään | `jalat 192, hyllyn pinta 192` |
+| se haihtuu kahdessa sekunnissa | `0 ruutua jäljellä` |
+| lattiaosuma ei jätä mitään | `0 hyllyä ilman seinää` |
+
+Neljä rajaa, ja kolme niistä on kielto — mikä on oikea suhde, koska ainoa tapa
+jolla tämä voi rikkoa pelin on tekemällä *liikaa*:
+
+**Vain seinä laukaisee sen.** Pallo pomppii lattiaa pitkin koko matkansa, joten
+lattiaosumasta syntyvä hylly tarkoittaisi hyllyä joka toinen ruutu koko juoksun
+ajan. Seinä on harvinainen ja tahallinen osuma — ja se on myös se paikka jossa
+askelma on jotain.
+
+**Hylly kasvaa seinästä poispäin**, eli sitä kohti josta ammuttiin: seinän
+toisella puolella oleva askelma on toisen huoneen askelma.
+
+**Puolikiinteä eikä kiinteä.** Sen läpi mennään alhaalta ylös ja sen päälle
+laskeudutaan, joten hylly ei voi sulkea käytävää, tukkia hyppyä eikä puristaa
+ketään seinää vasten. Kiinteänä se olisi ollut ammuttava seinä, ja ammuttava
+seinä on eri peli.
+
+**Ja se katoaa itsestään.** Kaksi sekuntia on mitattu: juoksuhypyn koko kaari
+on ~50 framea, joten 120 framea riittää ampumiseen, kääntymiseen ja yhteen
+hyppyyn — muttei siihen että pelaaja kävelee pois ja tulee takaisin. Hylly on
+liike, ei rakennelma. Sama perustelu kuin murenevan laudan paluulla: tilapäinen
+tapahtuma staattisessa kentässä on turvallinen, pysyvä muutos maastoon ei ole.
+
+Korkeus tulee ilmaiseksi ja on tämän parasta: pallo pomppii kaarina, joten se
+osuu seinään eri korkeuksilla sen mukaan **milloin** laukaus lähti. Hyllyn
+korkeus on siis ajoitusta.
+
+---
+
+## v26.08.16.90 — kaasulehti tekee hänestä paineastian
+
+Omistajan tuomio 16.8.2026: *"muuta tanooki-design, keksi jotain pierumaisempaa
+ja kaasuisempaa"*.
+
+Tämä on **neljäs** korjaus samaan tasoon, ja kolme edellistä osui muotoon
+muttei väriin: pesukarhun häntä vaihtui kaasuletkuksi, korvat lehdiksi, ja
+puku jäi ruskeanbeigeksi — eli tarkalleen sen yhden puvun väriskaalaan jota
+tämä genre ei omista. Muoto oli korjattu, luenta ei.
+
+| ennen | nyt |
+| --- | --- |
+| `suit: C.tan, shade: C.brownDark, legs: C.brown` | messinki `#b8862c` / `#5c3c0c` / `#8c6414` |
+| kaksi lehteä pään päällä korvien paikalla | kaksi messinkiventtiiliä samoissa pikseleissä |
+
+**Hän ei muutu eläimeksi vaan laitteeksi.** Messinki on jo pelin oma metalli —
+vyön paineventtiili, letkun suutin, torven torvi — ja kun sama metalli tulee
+haalariin ja kahteen venttiiliin pään päälle, lentäminen lakkaa olemasta
+"lentopuku" ja alkaa olla painetta jota päästetään ulos hallitusti.
+
+Venttiilit ovat **samat kaksi 2x3-palikkaa samoissa pikseleissä** kuin lehdet
+ja korvat ennen niitä: ne koskettavat pään yläreunaa täsmälleen kuten ennen, ja
+se vierekkäisyys on se mikä pitää hahmon yhtenä kappaleena. Vaihtui väri ja
+sisärakenne (vaalea laippa alas, tumma rako ylös — rako on se yksi yksityiskohta
+joka tekee tolpasta venttiilin), ei silhuetti. Portti vahvistaa: *"the player is
+one piece in every pose at every power level — 0 broken"*.
+
+Vihreä hiuspohja jää tarkoituksella: se on tason ainoa vihreä, ja se sitoo
+laitteen siihen kaasuun jota se käsittelee.
+
+---
+
+## v26.08.16.89 — putkesta tullaan ulos putkesta
+
+Omistajan havainto 16.8.2026: luolasta noustessa hahmo "ilmestyy tyhjästä".
+Se oli totta, ja mitattuna se oli pahempaa kuin miltä kuulosti: **pelin
+jokainen kymmenestä kaistamatkasta päättyi paljaaseen ilmaan**, eikä yhdenkään
+päässä ollut putkea. Pahimmillaan neljä ruutua lattian yläpuolelle (1-2, sarake
+250: saapuminen rivillä 24, lattia rivillä 28), josta pelaaja tipahti maahan
+kuin pudotettuna.
+
+| väite | ennen | nyt |
+| --- | --- | --- |
+| matkan päässä on putki | `0/10` | `10/10` |
+| jalat osuvat sen suulle | `–` | `10/10` |
+| ja siitä noustaan ylös | `–` | `10/10` |
+
+Syy oli `tryWarp`in laskussa: se säilyttää **suhteellisen korkeuden** kaistan
+sisällä (`arriveY = p.y + shift`) ja tarkistaa vain että keho mahtuu ja että
+jotain kiinteää on jossain alla. Kumpikaan ei ole väärin, mutta yhdessä ne
+tarkoittivat että matkan pää on se kohta johon lähtökorkeus sattuu osoittamaan
+— ei paikka.
+
+Korjaus on pari, ja se **johdetaan datasta eikä kirjoiteta siihen**
+(`plantWarpExits`): joka suulle etsitään kohdekaistasta se lattiarivi jolle
+matka päättyy, ja siihen upotetaan putken suu. Kolme rajausta:
+
+**Suu upotetaan lattiaan eikä rakenneta sen päälle.** Kiinteä laatta vaihtuu
+kiinteään laattaan, joten kentän geometria ei muutu pikseliäkään — yksikään
+reitti, hyppy tai kuilubudjetti ei tiedä että tässä tapahtui mitään. Kaksi
+ruutua korkea putki olisi ollut uusi este keskellä todistettua reittiä.
+
+**Uloskäynti on tavallinen putki eikä lämpöputki.** Se ei vie minnekään, ja
+juuri siksi se ei saa näyttää siltä että veisi: lämpöputken oma piirros
+tarkoittaa tässä pelissä "tästä pääsee", eikä alimmasta kaistasta pääse
+alaspäin mihinkään. Tavallisia putkia kenttä on täynnä eikä yksikään niistä
+lupaa matkaa (DESIGN.md kohta 8).
+
+**Ja perillä noustaan ylös, myös alaspäin kuljetulta matkalta.** Meno ja tulo
+ovat saman matkan päät eivätkä saman liikkeen jatko: kaista vaihtuu
+leikkauksena, eikä leikkauksen yli kuljeteta liikesuuntaa. Molemmissa päissä
+tapahtuu siis sama luettava asia — keho häviää suuhun, keho nousee suusta —
+ja kaukopäähän tuli oma leikkuri (`farHide`), joten keho ei ole hetkeäkään
+maalattuna lattian päälle.
+
+---
+
+## v26.08.16.88 — kaasulyhty: pitkä kenttä ei ala enää alusta
+
+Omistajan kysymys 16.8.2026: onko kentän puolivälissä tarkistuspisteitä, ettei
+tarvitse aina aloittaa alusta. **Ei ollut.** Pelissä oli tasan yksi lähtöruutua
+siirtävä asia, linnakkeen ovi, ja se on eri asia: se koskee vain linnakkeita ja
+sen perustelu on pomon jälkeen toistuva käytävä.
+
+Nyt jokainen **yli 340 saraketta pitkä** kenttä saa yhden kaasulyhdyn, ja siitä
+kuolema jatkuu. Mitattuna se on 15 kenttää 64:stä.
+
+| väite | mitattu |
+| --- | --- |
+| pitkä kenttä saa lyhdyn, lyhyt ei | `400 saraketta: 1, 300 saraketta: 0` |
+| ohi käveleminen sytyttää sen ja merkitsee sarakkeen | `laatta palaa, muistiin jäi sarake 200, ääni soi kerran` |
+| uusi yritys alkaa lyhdyltä, ja lyhty palaa jo | `aloitus sarakkeesta 200/400` |
+| vaikeustason vaihto unohtaa pisteen | `420 sarakkeen kentässä aloitus sarakkeesta 1` |
+| ja jokaisesta lyhdystä pääsee maaliin voimatasolla 0 | `15/15 kenttää botilla` |
+
+**Raja 340 saraketta on aikaa eikä pituutta.** Täydellä juoksuvauhdilla se on
+~36 s, eli puoliväliin kävelee ~18 s — pitempään kuin koko linnakkeen käytävä
+(19–24 s), jonka toisto perusteli oven. Mediaanikenttä on 314 saraketta ja jää
+tarkoituksella ilman: lyhty ei ole palkinto vaan korjaus pituuteen.
+
+**Se mitä lyhty ei tee, on yhtä tärkeää.** Kuolema vie yhä karttaan, maksaa yhä
+elämän ja pudottaa yhä voimatason. Lyhty säästää kävelyn, ei kenttää — sama
+lause kuin linnakkeen ovella. Ja **läpäisy tyhjentää sen**: tarkistuspiste on
+yhden yrityssarjan muisti, ei pysyvä oikotie. Muuten kentän alkupuolisko
+pelattaisiin kerran eikä koskaan enää.
+
+Kolme asiaa ratkesi tekemällä:
+
+**Lyhty pystytetään kohtauksessa, ei kirjoiteta kenttädataan.** Se ei ole
+kiinteä, ei vaarallinen eikä se muuta yhtään hyppyä, kuilua tai kattoa, joten
+yksikään validaattori ei tarvitse sitä nähdäkseen kentän oikein. Vaihtoehto oli
+17 muutosta kenttädataan, uusi vaikeustaulu ja uusi opetusjärjestyksen
+tarkistus, eikä yksikään niistä olisi mitannut mitään uutta.
+
+**Talteen menee sarake eikä `true`.** Vaikeustaso venyttää kentän (`scale.js`),
+joten HELPOSSA sytytetty sarake ei ole NORMAALIssa sama paikka. Sisääntulo
+vertaa lukua tämänhetkiseen lyhtyyn ja unohtaa pisteen jos ne eivät täsmää:
+menetetty lyhty maksaa yhden kävelyn, väärään paikkaan herätetty pelaaja
+maksaisi kentän.
+
+**Ja herätyspaikan edessä pitää olla 24 laattaa rauhallista.** Tämä on se luku
+jonka portti opetti. Ensimmäinen versio vaati kaksi laattaa tasaista, ja botti
+kuoli viidessä kentässä heti lyhdyn jälkeen: 3-3:n lyhty oli kolme laattaa
+ennen kuuden laatan laavalampea, 3-1:n kolme ennen kuilua, 3-7:n neljä ennen
+piikkejä. Kentän alusta juostessa ne ylitetään täydellä vauhdilla, seisaaltaan
+ei yhtäkään. Kahdeksan laattaa korjasi neljä viidestä; 2-1 vaati 24, koska sen
+kuilu on kuusi laattaa eli budjetin maksimi ja ylittyy vain oikealla
+irtoamishetkellä. Hinta on kirjattu: lyhty ei ole enää tarkassa puolivälissä
+vaan lähimmässä rauhallisessa paikassa, mitattuna 35–72 % kentästä.
+
+Kaksi merkkiä eikä yksi (`L` sammunut, `l` palava), koska sytytys on ruudukon
+kirjoitus samalla tavalla kuin kolikon poiminta — jolloin pikatallennus muistaa
+liekin ilmaiseksi, `savestate.js` kun tallentaa ruudukon.
+
+---
+
+## v26.08.16.87 — ponnahduslauta: vauhtimittari ostaa korkeutta
+
+IDEAS-synteesi H, tuomio 16.8.2026 "tee", ja se on kohdan 1 (*vauhti
+korkeudeksi*, omistajan vahvimmaksi arvioima verbi) halpa muoto: rinteitä ei
+ole eikä niitä kannata rakentaa, mutta **täysi vauhtimittari voi ostaa
+korkeutta ponnahduslaudalta**.
+
+| väite | mitattu |
+| --- | --- |
+| tyhjällä mittarilla lauta antaa jotain | `100 px` |
+| täysi mittari antaa enemmän | `192 px` |
+| ...ja enemmän kuin mikään muu tässä pelissä | `paras hyppy on 174 px` |
+
+Laatta on `J`, kiinteä, ja se asetetaan **lattiariviin**. Nosto on
+`SPRING_LOW` (-4,0) ja `SPRING_HIGH` (-5,4) väliltä mittarin täyttöasteen
+mukaan, ja molemmat luvut on johdettu nousun kaavasta eikä valittu: kun
+hyppynappi on pohjassa, lähtönopeus `v` nostaa `(v² - 4) × 8 + 6,4` pikseliä.
+Tyhjä mittari on siis suunnilleen tallauspomppu (`STOMP_BOUNCE` on sama -4,0)
+— laatta joka ei tekisi mitään ilman mittaria olisi pelaajalle rikki eikä
+ehdollinen — ja täysi on kolmetoista ruutua.
+
+Kolme asiaa ratkesi tekemällä, ja kaksi niistä oli virhe jonka mittaus näytti:
+
+**Lauta on lattiarivissä eikä sen päällä.** Laatta on kiinteä, joten lattian
+päälle pantuna se on yhden ruudun seinä jota vasten juostaan. Mitattu: nosto
+0 px, koska kukaan ei koskaan seissyt sen päällä.
+
+**Mittari luetaan siltä frameelta jolla lauta lukee sen.** Ensimmäinen koe otti
+suurimman arvon koko ajolta ja raportoi molemmille tapauksille 100 %, koska kun
+lauta ei laukea, pelaaja juoksee sen ohi ja täyttää mittarin myöhemmin. Koe
+kertoi siis mittarista eikä laudasta.
+
+**Ja se ei kuluta mittaria.** Lauta myy korkeutta vauhdista, ja vauhti on jo
+maksettu juoksemalla; mittarin nollaaminen veisi pelaajalta sen edun (`MAX_P`,
+lento kaasulehdellä) jonka hän juuri osti, ja tekisi laudasta toisen
+`pSpent`-tapahtuman.
+
+Paikka on **3-1**, ja se on valinta: jäämaailma on se jossa vauhti jo
+merkitsee, ja kolmentoista ruudun nousu päättyy siellä liukkaaseen
+laskeutumiseen. Opetusjärjestys sanoi missä se *ei* voi olla — 1-3 esitteli jo
+kolme asiaa ja neljäs olisi kaatanut portin, ja lauta olisi ollut neljäntoista
+laatan päässä piikkien ensiesittelystä.
+
+---
+
 ## v26.08.16.86 — kupla kantaa, ja pierupompusta tuli panos
 
 Kaksi ensimmäistä kohtaa 16.8.2026 tehdystä läpikäynnistä ([IDEAS.md](IDEAS.md),

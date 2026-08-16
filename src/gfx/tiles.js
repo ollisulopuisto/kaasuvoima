@@ -31,6 +31,10 @@ export const T = {
   WARP_R: ')',
   LUMP: 'C',
   ICE: 'I',
+  SPRING: 'J',
+  LAMP: 'L',
+  LAMP_LIT: 'l',
+  SHELF: 'G',
 };
 
 const S = { solid: true };
@@ -63,6 +67,19 @@ export const TILE_INFO = {
    * `TILE_INFO` describes what a character *is*, never what it is doing. */
   [T.CRUMBLE]: { ...S, crumble: true },
   [T.SWITCH]: { ...S, bumpable: true, switch: true },
+  /*
+   * PONNAHDUSLAUTA — kaasusuihku lattiassa, ja se on kiinteä laatta eikä oma
+   * lajinsa. Kiinteä siksi että sen päällä *seistään*: se on lattiaa jolla on
+   * mielipide siitä mihin suuntaan lattian kuuluu työntää. Kaikki mikä lukee
+   * lattiaa — kuiluvalidointi, seinien korkeus, botti, hyppyratkaisija —
+   * lukee sen oikein ilman että yhdellekään niistä opetetaan mitään.
+   *
+   * `spring` on lippu eikä käytös, kuten `crumble`: `TILE_INFO` kertoo mikä
+   * laatta *on*, eikä koskaan mitä se juuri nyt tekee. Nosto on
+   * `LevelScene.updateSprings`in asia, koska vain se tietää kuka laatan päällä
+   * seisoo ja kuinka täynnä hänen vauhtimittarinsa on.
+   */
+  [T.SPRING]: { ...S, spring: true },
   [T.COIN]: { coin: true },
   [T.SPIKE]: { hazard: true },
   [T.LAVA]: { hazard: true },
@@ -152,6 +169,51 @@ export const TILE_INFO = {
    */
   [T.ICE]: { ...S, surface: 'ice' },
   [T.QUICKSAND]: { quicksand: true },
+  /*
+   * KAASULYHTY — kentän puolivälin tarkistuspiste, ja **kaksi merkkiä eikä
+   * yksi**, koska sammunut ja palava lyhty ovat kentän kannalta eri laattoja.
+   *
+   * Sytytys on siis ruudukon kirjoitus (`L` → `l`) eikä kohtauksen kirjanpitoa,
+   * ja se on sama ratkaisu kuin kolikolla ja rikotulla tiilellä. Siitä seuraa
+   * kolme asiaa ilmaiseksi:
+   *
+   *   1. **Pikatallennus muistaa sen.** `savestate.js` tallentaa ruudukon, joten
+   *      palautettu tilannekuva palauttaa myös liekin. Kohtauksen omana
+   *      muuttujana se olisi pitänyt lisätä erikseen, ja se on juuri se laji
+   *      unohdusta jonka `save.js`:n `doors` jo maksoi kerran.
+   *   2. **Piirto ei tarvitse tilaa.** `drawTile` saa merkin ja tietää kumpi
+   *      kuva piirretään; vaihtoehto olisi ollut kuljettaa kohtauksen tila
+   *      `opts`issa asti niin kuin kytkimellä, ja kytkin tekee niin siksi että
+   *      se on koko kentän laajuinen — lyhty on yksi ruutu.
+   *   3. **Kysymys "onko tämä sytytetty" on merkkivertailu** eikä hakua
+   *      listasta, ja `plantLamp` löytää molemmat muodot samasta ruudusta.
+   *
+   * Kumpikaan ei ole kiinteä eikä vaarallinen: lyhty on koriste jonka läpi
+   * kävellään. Se on tahallista. Tarkistuspiste jonka voi *ohittaa hyppäämällä*
+   * olisi ansa jota ei näe, ja tarkistuspiste jota vasten törmätään olisi este
+   * jonka kenttä sai lahjaksi keskeltä juoksuaan.
+   */
+  [T.LAMP]: { lamp: true },
+  [T.LAMP_LIT]: { lamp: true, lit: true },
+  /*
+   * PIERUHYLLY — se mitä seinään osunut laukaus jättää jälkeensä.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee". Kukka antaa pelille sen ainoan
+   * rakennusverbin: laukaus joka litistyy seinää vasten jää kolmen ruudun
+   * kaasupatjaksi kahdeksi sekunniksi, ja sen päälle voi astua.
+   *
+   * **Puolikiinteä eikä kiinteä**, ja se on koko laatan turvallisuus. Sen läpi
+   * mennään alhaalta ylös ja sen päälle laskeudutaan, joten hylly ei voi
+   * sulkea käytävää, tukkia hyppyä eikä puristaa ketään seinää vasten —
+   * pahimmillaan se on askelma jota ei tarvinnut. Kiinteänä se olisi ollut
+   * ammuttava seinä, ja ammuttava seinä on eri peli.
+   *
+   * Ja se **katoaa itsestään** (`SHELF_LIFE`), samasta syystä kuin mureneva
+   * lauta kasvaa takaisin: tilapäinen tapahtuma staattisessa kentässä on
+   * turvallinen, pysyvä muutos maastoon ei ole. Kenttä jonka voi rakentaa
+   * umpeen ei ole enää se kenttä jonka portit todistivat läpäistäväksi.
+   */
+  [T.SHELF]: { ...SEMI, shelf: true },
   [T.GOAL]: { goal: true },
   /* The fortress exit. The flag is what the scene asks — "is this tile a
    * door" — in `playerTiles` and in the edge test that shapes the drawing; it
@@ -1629,6 +1691,145 @@ function drawSwitch(ctx, x, y, th, tick, pressed) {
 }
 
 /**
+ * PONNAHDUSLAUTA: ritilä lattiassa ja kaasua sen läpi.
+ *
+ * Laatta ei tiedä kuka sen päällä seisoo eikä kuinka täynnä kenenkään mittari
+ * on — se tieto on kohtauksella — joten piirros ei yritä kertoa nostoa vaan
+ * sen että **tästä tulee kaasua**. Suihku sykkii jaetulla kellolla samaan
+ * tahtiin kuin muukin pelin kaasu, ja ritilä on terästä samasta syystä kuin
+ * pönttö ja törähdystorvi ovat: tämä on tehty eikä kasvanut.
+ *
+ * Suihku piirretään laatan **sisään** eikä sen yli. Laatan ulkopuolelle
+ * vuotava piirros olisi kuva siitä että jotain tapahtuu jossain missä mitään
+ * ei ole, ja ruudukossa se tarkoittaa naapurilaatan päälle maalaamista.
+ */
+function drawSpring(ctx, x, y, th, tick) {
+  // Kotelo: sama teräs kuin muillakin tehdyillä esineillä.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x, y + 6, TILE, 10);
+  ctx.fillStyle = '#2050c0';
+  ctx.fillRect(x + 1, y + 7, TILE - 2, 8);
+  ctx.fillStyle = '#a8c8f0';
+  ctx.fillRect(x + 1, y + 7, TILE - 2, 1);
+  // Ritilä: kolme rakoa joista kaasu tulee.
+  ctx.fillStyle = '#10306c';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 3 + i * 4, y + 8, 2, 6);
+  // Ja kaasu, kolmessa vaiheessa: matala, korkea, matala.
+  const phase = Math.floor(tick / 6) % 3;
+  const tall = phase === 1;
+  ctx.fillStyle = tall ? '#a8e04a' : '#5c9c28';
+  for (let i = 0; i < 3; i++) {
+    const h = tall ? 6 : 3;
+    ctx.fillRect(x + 3 + i * 4, y + 8 - h, 2, h);
+  }
+  if (tall) {
+    ctx.fillStyle = '#f4ffd0';
+    for (let i = 0; i < 3; i++) ctx.fillRect(x + 3 + i * 4, y + 2, 2, 2);
+  }
+  // Ja laatan oma pohja, jotta se istuu lattiaan eikä leiju siinä.
+  ctx.fillStyle = th.groundDark || '#3a2a18';
+  ctx.fillRect(x, y + 15, TILE, 1);
+}
+
+/**
+ * PIERUHYLLY: kaasupatja jolla on kiinteä pinta ja haihtuva ruumis.
+ *
+ * Kaksi asiaa pitää lukea yhdellä silmäyksellä, ja ne ovat vastakkaisia:
+ * **tämän päällä voi seistä** ja **tämä on menossa pois**. Ratkaisu on jako
+ * ylä- ja alaosaan. Ylin rivi on vaalea ja tiivis pinta joka pysyy paikallaan
+ * koko keston ajan — se on se viiva jolle jalka osuu, ja jos se ohenisi
+ * mukana, hylly näyttäisi pettävän ennen kuin se pettää. Sen alla oleva kaasu
+ * sen sijaan ohenee ja kuplii, ja se on kello.
+ *
+ * `k` on jäljellä oleva osuus (1 → 0), ja se tulee kohtaukselta samalla tavalla
+ * kuin murenevan laudan oma eteneminen: laatta ei tiedä kelloaan, `TILE_INFO`
+ * kertoo mikä laatta *on* eikä mitä se juuri nyt tekee.
+ *
+ * Kiinteät värit eivätkä teeman omat, kuten jäällä ja lyhdyllä: hylly on
+ * pelaajan tekemä esine eikä maastoa, ja pelaajan tekemän esineen pitää näkyä
+ * jokaisessa maailmassa samana.
+ */
+function drawShelf(ctx, x, y, tick, k) {
+  const fade = Math.min(1, Math.max(0, k));
+  // Pinta: vaalea, tiivis, ja aina yhtä leveä.
+  ctx.fillStyle = '#e8ffc0';
+  ctx.fillRect(x, y, TILE, 2);
+  ctx.fillStyle = '#a8e04a';
+  ctx.fillRect(x, y + 2, TILE, 2);
+  // Ruumis: ohenee kellon mukana, ja kuplii kahdessa vaiheessa.
+  const body = Math.round(4 * fade);
+  if (body > 0) {
+    ctx.fillStyle = '#5c9c28';
+    ctx.fillRect(x, y + 4, TILE, body);
+    ctx.fillStyle = '#a8e04a';
+    const phase = Math.floor(tick / 5) % 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(x + 2 + i * 5 + phase, y + 4, 2, Math.max(1, body - 1));
+    }
+  }
+}
+
+/**
+ * KAASULYHTY, sammuneena ja palavana.
+ *
+ * Kiinteät värit eivätkä teeman omat, ja samasta syystä kuin jäällä ja
+ * juoksuhiekalla: lyhty tarkoittaa joka maailmassa täsmälleen samaa asiaa, eikä
+ * merkki joka *tarkoittaa* samaa saa *näyttää* joka maailmassa eri asialta.
+ * Teeman paletilla maalattu lyhty olisi luumaailmassa luunvärinen tolppa ja
+ * tehtaassa yksi teräsputki muiden joukossa.
+ *
+ * Ero sammuneen ja palavan välillä on tahallisen iso — tumma lasi vs. valkoinen
+ * ydin, ja kaksi kertaa leveämpi pää — koska tämä on ainoa laatta pelissä joka
+ * kertoo *jotain jonka pelaaja saa vasta kuollessaan*. Sen pitää näkyä
+ * ruudulla myös silloin kun se on jo takana ja kamera vetää sitä pois: siksi
+ * liekki on kirkkain piste koko laatassa eikä varjoisa yksityiskohta.
+ *
+ * Muoto on lyhty eikä lippu, ja se on lajivalinta: lippu tässä pelissä on jo
+ * varattu (maalitolppa), ja kaksi eri asiaa jotka molemmat ovat "tolppa jossa
+ * on jotain päällä" olisi tasan se sekaannus jota DESIGN.md kohta 8 kieltää.
+ * Kaasu palaa liekkinä, ja liekki on tämän pelin oma kuva siitä että jokin on
+ * *päällä*.
+ */
+function drawLamp(ctx, x, y, lit, tick) {
+  // Tolppa: sama teräs kuin ponnahduslaudalla, koska molemmat ovat rakennettuja
+  // esineitä kentässä eivätkä maastoa.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x + 6, y + 7, 4, 9);
+  ctx.fillStyle = '#2050c0';
+  ctx.fillRect(x + 7, y + 7, 2, 9);
+  // Jalka, jotta tolppa seisoo eikä pääty ilmaan.
+  ctx.fillStyle = '#10306c';
+  ctx.fillRect(x + 4, y + 14, 8, 2);
+
+  if (!lit) {
+    // Sammunut: umpinainen tumma lasi ja yksi vaalea heijastus, jotta se lukee
+    // lyhdyksi eikä tolpan päähän jääneeksi mustaksi ruuduksi.
+    ctx.fillStyle = '#3a4356';
+    ctx.fillRect(x + 4, y + 2, 8, 6);
+    ctx.fillStyle = '#5a6478';
+    ctx.fillRect(x + 5, y + 3, 6, 4);
+    ctx.fillStyle = '#8a94a8';
+    ctx.fillRect(x + 5, y + 3, 2, 1);
+    return;
+  }
+
+  // Palava: kotelo aukeaa ja liekki hengittää kahdessa vaiheessa.
+  const tall = Math.floor(tick / 8) % 2 === 1;
+  ctx.fillStyle = '#f07818';
+  ctx.fillRect(x + 3, y + 1, 10, 8);
+  ctx.fillStyle = '#ffc040';
+  ctx.fillRect(x + 4, y + 2, 8, 6);
+  ctx.fillStyle = '#fffbe0';
+  ctx.fillRect(x + 6, y + (tall ? 1 : 3), 4, tall ? 6 : 4);
+  // Ja kipinät, jotka kertovat että liekki elää eikä ole maalattu.
+  ctx.fillStyle = '#ffc040';
+  if (tall) {
+    ctx.fillRect(x + 2, y, 2, 2);
+    ctx.fillRect(x + 12, y + 1, 2, 2);
+  }
+}
+
+/**
  * Hazard stripes painted into the lip of the ground tile beside a spike bed.
  *
  * Spikes sit flush in the floor and are the same pale grey as half the tilesets,
@@ -1738,6 +1939,10 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.LUMP: drawLump(ctx, x, y, th, tx, ty, opts.fall || 0); break;
     case T.ICE: drawIce(ctx, x, y, !isSolid(above), tx, ty); break;
     case T.SWITCH: drawSwitch(ctx, x, y, th, tick, opts.switchOn); break;
+    case T.SPRING: drawSpring(ctx, x, y, th, tick); break;
+    case T.LAMP: drawLamp(ctx, x, y, false, tick); break;
+    case T.LAMP_LIT: drawLamp(ctx, x, y, true, tick); break;
+    case T.SHELF: drawShelf(ctx, x, y, tick, opts.shelf === undefined ? 1 : opts.shelf); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:

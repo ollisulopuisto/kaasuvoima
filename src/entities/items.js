@@ -234,6 +234,11 @@ export class FartBall extends Entity {
       return;
     }
     if (moveX(this, this.level)) {
+      /* Seinään litistynyt laukaus jättää askelman, ks. `LevelScene.gasShelf`.
+       * Se on tässä eikä `pop`issa, koska `pop` on myös se mitä loppuun palanut
+       * laukaus tekee keskellä ilmaa — ja ilmaan jäävä hylly olisi eri asia ja
+       * eri lupaus. Seinä on ehto. */
+      this.level.gasShelf(this);
       this.pop();
       return;
     }

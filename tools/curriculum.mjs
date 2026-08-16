@@ -78,7 +78,7 @@ const { ROWS, FLOOR, HEAD } = RULE_CONSTANTS;
  * is `pound`, which asks whether a body can stand somewhere: a möykky left out
  * of the set is a ledge the tool cannot see and a ceiling it will not count.
  */
-const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I']);
+const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I', 'J']);
 const SEMI = new Set(['-']);
 
 /**
@@ -236,6 +236,12 @@ const FEATURES = [
   { key: 'star', name: 'supertähti (tähtilohko)', chars: '*' },
   { key: 'switch', name: 'kytkinruutu', chars: 'S' },
   { key: 'crumble', name: 'mureneva lava', chars: '%' },
+  /* PONNAHDUSLAUTA. Rivi tähän tauluun on osa laatan lisäämistä eikä
+   * jälkityötä: tämä työkalu on se joka valvoo ettei yksikään kenttä esittele
+   * kolmea uutta asiaa kerralla eikä kahta samassa ruudussa, ja taulusta
+   * puuttuva laatta on laatta jonka esittelyä mikään ei katso. Sama vika
+   * tehtiin kerran kurnuttajalla — ks. `ENEMY_NAMES`in kommentti. */
+  { key: 'spring', name: 'ponnahduslauta', chars: 'J' },
   /*
    * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`).
    *

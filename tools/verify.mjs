@@ -985,6 +985,210 @@ const report = await page.evaluate(async () => {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
+  /* -------------------------- ponnahduslauta ----------------------------- */
+  /*
+   * PONNAHDUSLAUTA MYY KORKEUTTA VAUHDISTA, ja se on väite mittarista.
+   *
+   * IDEAS-synteesi H: rinteitä ei ole eikä niitä kannata rakentaa, mutta täysi
+   * vauhtimittari voi ostaa korkeutta. Väitteessä on kolme osaa ja jokainen
+   * niistä voi mennä rikki yksin:
+   *
+   *   1. **Tyhjällä mittarilla lauta antaa jotain.** Laatta joka ei tee mitään
+   *      ilman mittaria olisi pelaajalle rikki eikä ehdollinen.
+   *   2. **Täysi mittari antaa enemmän.** Ilman tätä koko laatta on
+   *      tallauspomppu jolla on hieno piirros.
+   *   3. **Ja enemmän kuin mikään muu.** Mitattu paras nousu tässä pelissä on
+   *      juoksu + pieruhyppy, 174 px. Jos lauta jää sen alle, se ei osta mitään
+   *      jota ei jo saa — ja koko synteesin peruste oli että mittarille pitää
+   *      saada kolmas käyttötapa.
+   *
+   * Mitataan kentästä eikä vakioista: koe täyttää mittarin juoksemalla, ei
+   * asettamalla.
+   */
+  try {
+    const { P_METER_MAX } = await import('/src/entities/player.js');
+    const { T } = await import('/src/gfx/tiles.js');
+
+    /** Koekenttä: pitkä lattia ja yksi lauta, ei muuta. */
+    const springDef = () => {
+      const W = 60;
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      put(9, 4, '!');
+      put(13, 40, T.SPRING);   // lattiariviin, ks. `grass_jet`
+      put(12, 58, 'F');
+      return {
+        id: 'jFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+
+    /** Juoksee laudalle ja kertoo kuinka korkealle se heitti. */
+    const launch = (runUp) => {
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, 'jFix', springDef());
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 6; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const p = s.player;
+      // Lähtöpaikka valitaan vauhdinoton mukaan: pitkä matka täyttää mittarin,
+      // lyhyt ei ehdi. Mittaria ei aseteta käsin — se on se asia jota mitataan.
+      p.x = (40 - runUp) * 16;
+      p.y = 13 * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = true;
+      s.centerCamera();
+      /* Mittari luetaan **maasta**, eli siitä hetkestä jolla lauta lukee sen.
+       * Ensimmäinen versio otti suurimman arvon koko ajolta, ja se raportoi
+       * molemmille tapauksille 100 % — koska kun lauta ei laukea, pelaaja
+       * juoksee sen ohi ja täyttää mittarin myöhemmin. Mittaus kertoi siis
+       * mittarista eikä laudasta. */
+      let meter = 0;
+      let peak = 0;
+      const floor = p.y;
+      for (let f = 0; f < 400; f++) {
+        i.held = blank();
+        i.held.right = true;
+        i.held.run = true;
+        i.held.jump = true;
+        i.pressed = blank();
+        if (p.onGround) meter = p.pMeter;
+        s.update(i);
+        peak = Math.max(peak, floor - p.y);
+        if (peak > 4 && p.onGround) break;
+      }
+      return { peak: Math.round(peak), fill: Math.round((meter / P_METER_MAX) * 100) };
+    };
+
+    const empty = launch(3);
+    const full = launch(38);
+    expect('ponnahduslauta myy korkeutta vauhdista, ja täysi mittari ostaa eniten',
+      empty.peak > 60 && full.peak > empty.peak + 60 && full.peak > 174,
+      `tyhjä mittari (${empty.fill} %) nosti ${empty.peak} px, `
+      + `täysi (${full.fill} %) nosti ${full.peak} px `
+      + '— vertailuna mitattu paras hyppy 174 px (juoksu + pieruhyppy)');
+  } catch (e) {
+    expect('ponnahduslaudan testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
+  /* ----------------------------- kaasulyhty ------------------------------ */
+  /*
+   * TARKISTUSPISTE ON TAPAHTUMA, EI ESINE, ja siksi tässä mitataan neljä eri
+   * asiaa eikä yhtä. Jokainen niistä voi mennä rikki yksin, ja kolme neljästä
+   * menee rikki hiljaa — peli näyttää oikealta ja pelaaja huomaa vasta
+   * kuollessaan:
+   *
+   *   1. **Pitkä kenttä saa lyhdyn ja lyhyt ei.** Raja on `LAMP_MIN_COLS`, ja
+   *      sen perustelu on ajassa (ks. `plantLamp`). Ilman alarajaa jokainen
+   *      kenttä olisi puolitettu.
+   *   2. **Ohi kävely sytyttää sen** ja kirjoittaa sarakkeen `game.state`iin.
+   *      Tämä on ainoa osa jonka pelaaja näkee heti.
+   *   3. **Uusi yritys alkaa lyhdyltä**, ja lyhty palaa jo valmiiksi. Sammunut
+   *      lyhty herätyspaikan kohdalla olisi kutsu sytyttää se uudelleen.
+   *   4. **Vaikeustason vaihto unohtaa pisteen** eikä herätä pelaajaa väärään
+   *      sarakkeeseen. `scale.js` venyttää kenttää, joten sarake 190 on eri
+   *      paikka eri levyisessä kentässä — ja tämä on se kohta jossa
+   *      tarkistuspiste voisi tappaa pelaajan seinän sisällä.
+   */
+  try {
+    const { T } = await import('/src/gfx/tiles.js');
+    const { Sfx } = await import('/src/core/audio.js');
+
+    /** Koekenttä, jonka leveys annetaan: tasainen lattia ja maali lopussa. */
+    const lampDef = (W) => {
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      put(12, W - 2, 'F');
+      return {
+        id: 'lFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+    const build = (W) => {
+      const s = new LevelScene(game, 'lFix', lampDef(W));
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      return s;
+    };
+    const lampsIn = (s) => {
+      const at = [];
+      for (let ty = 0; ty < s.h; ty++) {
+        for (let tx = 0; tx < s.w; tx++) {
+          const ch = s.grid[ty][tx];
+          if (ch === T.LAMP || ch === T.LAMP_LIT) at.push({ tx, ty, lit: ch === T.LAMP_LIT });
+        }
+      }
+      return at;
+    };
+
+    reset();
+    const long = build(400);
+    const longLamps = lampsIn(long);
+    reset();
+    const short = build(300);
+    const shortLamps = lampsIn(short);
+    const off = longLamps.length === 1 ? Math.abs(longLamps[0].tx - 200) : -1;
+    expect('pitkä kenttä saa yhden lyhdyn puolivälistä, lyhyt ei yhtään',
+      longLamps.length === 1 && shortLamps.length === 0 && off <= 4,
+      `400 saraketta: ${longLamps.length} lyhtyä (sarake ${longLamps.length ? longLamps[0].tx : '-'}, `
+      + `${off} päässä puolivälistä), 300 saraketta: ${shortLamps.length} — raja on 340`);
+
+    // 2. Kävele lyhdyn ohi ja katso mitä tapahtui.
+    reset();
+    const walk = build(400);
+    const lamp = lampsIn(walk)[0];
+    const p = walk.player;
+    p.x = (lamp.tx - 3) * 16;
+    p.y = (lamp.ty - 1) * 16;
+    walk.centerCamera();
+    const i2 = mkInput();
+    let sfx = 0;
+    const realPlay = Sfx.play;
+    Sfx.play = (n) => { if (n === 'lamp') sfx++; return realPlay.call(Sfx, n); };
+    for (let f = 0; f < 90; f++) {
+      i2.held = blank();
+      i2.held.right = true;
+      i2.pressed = blank();
+      walk.update(i2);
+    }
+    Sfx.play = realPlay;
+    const litNow = walk.grid[lamp.ty][lamp.tx] === T.LAMP_LIT;
+    const saved = game.state.checks ? game.state.checks.lFix : undefined;
+    expect('lyhdyn ohi käveleminen sytyttää sen ja merkitsee sarakkeen muistiin',
+      litNow && saved === lamp.tx && sfx === 1,
+      `laatta ${litNow ? 'palaa' : 'on sammunut'}, muistiin jäi ${saved} `
+      + `(lyhty on sarakkeessa ${lamp.tx}), sytytysääni soi ${sfx} kertaa`);
+
+    // 3. Sama kenttä uudelleen, samalla tallennuksella: mistä se alkaa?
+    const again = build(400);
+    const startCol = Math.floor(again.player.cx / 16);
+    const againLamp = lampsIn(again)[0];
+    expect('kuoleman jälkeen kenttä alkaa lyhdyltä, ja lyhty palaa jo',
+      Math.abs(startCol - lamp.tx) <= 1 && againLamp && againLamp.lit
+        && again.player.y < 13 * 16,
+      `pelaaja aloitti sarakkeesta ${startCol} (lyhty ${lamp.tx}), `
+      + `lyhty ${againLamp && againLamp.lit ? 'palaa' : 'on sammunut'}, `
+      + `rivillä ${Math.round(again.player.y / 16)}`);
+
+    // 4. Sama muisti, eri levyinen kenttä: piste unohdetaan.
+    const stretched = build(420);
+    const stretchedCol = Math.floor(stretched.player.cx / 16);
+    expect('venytetty kenttä unohtaa tarkistuspisteen eikä herätä väärään sarakkeeseen',
+      stretchedCol <= 4,
+      `muistissa sarake ${saved}, 420 sarakkeen kentässä lyhty on `
+      + `${lampsIn(stretched)[0].tx}, ja pelaaja aloitti sarakkeesta ${stretchedCol}`);
+  } catch (e) {
+    expect('kaasulyhdyn testit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* ---------------------------- ilmahypyt -------------------------------- */
   /*
    * PIERUPOMPUISTA TULI PANOKSIA, JA SE ON KAKSI VÄITETTÄ EIKÄ YKSI.
@@ -4587,6 +4791,128 @@ const report = await page.evaluate(async () => {
         : 'ei 6-, 7- eikä 8-kenttiä lainkaan');
   }
 
+  /* --------------------- kaasulyhty oikeissa kentissä -------------------- */
+  /*
+   * TARKISTUSPISTE ON UUSI LÄHTÖRUUTU, JA SIITÄ ON PÄÄSTÄVÄ MAALIIN.
+   *
+   * Tämä on se ainoa tapa jolla lyhty voi rikkoa kentän, ja se rikkoisi sen
+   * pahimmalla mahdollisella tavalla: pelaaja kuolee, herää lyhdyltä, eikä
+   * pääse siitä eteenpäin — eli kenttä on umpikuja jonka kaikki *muut* portit
+   * kertovat läpäistäväksi, koska ne mittaavat sitä alusta.
+   *
+   * `plantLamp` yrittää estää sen etukäteen (tasainen lattia, kolme riviä
+   * ilmaa, ei vaaroja vieressä), mutta se on paikallinen ehto. Reitti eteenpäin
+   * on kentän mittainen kysymys, ja kentän mittaiseen kysymykseen vastaa botti.
+   * Sama botti, sama lupaus voimatasolla 0 kuin kentän alussa — vain lähtöruutu
+   * on eri.
+   */
+  {
+    const { runGround } = await import('/tools/level-bot.js');
+    const rows = [];
+    for (const id of levelIds()) {
+      reset({ type: null, level: 0 });
+      // Ensin kenttä sellaisenaan: onko siinä lyhtyä, ja missä.
+      const probe = new LevelScene(game, id);
+      if (probe.lampCol === null) continue;
+      // Ja sitten sama kenttä niin kuin se avataan kuoleman jälkeen.
+      game.state.checks[id] = probe.lampCol;
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      if (s.def.boss) s.bossDefeated = true;
+      s.time = 9999;
+      const startCol = Math.floor(s.player.cx / 16);
+      /* Puolet kentästä on jäljellä, joten puolet kehysbudjetista: 4000 framea
+       * on 67 s, ja mitattu koko kentän juoksu on ~36 s. */
+      const got = runGround(s, isSolid, 4000, () => finished);
+      rows.push({ id, col: startCol, w: s.w, cleared: got.cleared, reach: got.reach });
+      game.finishLevel = () => {};
+    }
+    const stuck = rows.filter((r) => !r.cleared);
+    expect('jokaisesta kaasulyhdystä pääsee maaliin voimatasolla 0',
+      rows.length > 0 && stuck.length === 0,
+      rows.length
+        ? `${rows.length} kenttää lyhdyllä: `
+          + rows.map((r) => `${r.id} ${r.col}/${r.w}${r.cleared ? '' : ` JUMISSA ${r.reach} %`}`).join(', ')
+        : 'yhdessäkään kentässä ei ole lyhtyä — raja LAMP_MIN_COLS on liian korkea');
+  }
+
+  /* ------------------ putkesta tullaan ulos putkesta --------------------- */
+  /*
+   * OMISTAJAN HAVAINTO 16.8.2026: luolasta noustessa hahmo ilmestyy tyhjästä.
+   *
+   * Se oli totta, ja se oli mitattavissa: pelin **jokainen kymmenestä
+   * kaistamatkasta päättyi paljaaseen ilmaan**, pahimmillaan neljä ruutua
+   * lattian yläpuolelle. `tryWarp` säilytti suhteellisen korkeuden ja tarkisti
+   * vain että keho mahtuu ja että jotain kiinteää on jossain alla — kumpikaan
+   * ei ole väärin, mutta yhdessä ne tarkoittivat että matkan pää on se kohta
+   * johon lähtökorkeus sattuu osoittamaan.
+   *
+   * Tämä portti mittaa tapahtumaa eikä ruudukkoa: **matkustetaan oikeasti** ja
+   * katsotaan mitä jalkojen alla on perillä. Kaksi ehtoa, ja molemmat ovat
+   * pelaajan näkemiä asioita: jalat ovat sen putken päällä joka matkan päähän
+   * pystytettiin, ja siitä noustaan (`farHide`) eikä pudota siihen.
+   */
+  {
+    const { T, info } = await import('/src/gfx/tiles.js');
+    const { getLevel: levelDefOf } = await import('/src/data/levels.js');
+    const trips = [];
+    for (const id of levelIds()) {
+      if (!levelDefOf(id).bands) continue;
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      for (const [key, exitRow] of s.warpExits) {
+        const [tx, ty] = key.split(',').map(Number);
+        if (info(s.grid[ty][tx - 1]).warp) continue;   // sama suu vain kerran
+        const down = s.grid[ty - 1][tx] === T.EMPTY;   // ilmaa päällä = matka alas
+        const p = s.player;
+        p.x = tx * 16;
+        if (down) p.y = ty * 16 - p.h;
+        else {
+          let f = ty + 1;
+          while (f < s.h && !isSolid(s.grid[f][tx])) f++;
+          p.y = f * 16 - p.h;
+        }
+        p.vx = 0; p.vy = 0; p.onGround = true; p.warpLock = 0; p.transit = null;
+        s.centerCamera();
+        const i = mkInput();
+        i.held = blank();
+        i.held[down ? 'down' : 'up'] = true;
+        let travelled = false;
+        let rose = false;
+        for (let f = 0; f < 200; f++) {
+          s.update(i);
+          i.pressed = blank();
+          if (p.transit) {
+            travelled = true;
+            // Noustaanko perillä ylös? Kaukopään leikkuri on se joka sen tekee.
+            if (p.transit.phase === 'out' && p.y > p.transit.arriveY) rose = true;
+          } else if (travelled) break;
+        }
+        const feet = Math.floor((p.y + p.h) / 16);
+        const under = s.grid[Math.min(s.h - 1, feet)][Math.floor(p.cx / 16)];
+        trips.push({
+          id, tx, ty, down, exitRow, feet, rose, travelled,
+          onPipe: info(under).pipe,
+          ok: travelled && rose && info(under).pipe && feet === exitRow,
+        });
+      }
+    }
+    const bad = trips.filter((t) => !t.ok);
+    expect('jokainen kaistamatka päättyy putkeen, ja siitä noustaan ylös',
+      trips.length >= 10 && bad.length === 0,
+      bad.length
+        ? bad.map((t) => `${t.id} ${t.tx},${t.ty}: jalat ${t.feet} (pari ${t.exitRow}), `
+          + `putki ${t.onPipe}, nousi ${t.rose}`).join('; ')
+        : `${trips.length} matkaa, jokainen päättyi putken suulle `
+          + `(${trips.filter((t) => t.down).length} alas, ${trips.filter((t) => !t.down).length} ylös)`);
+  }
+
   /* ----------------------------- pilvimaailma ---------------------------- */
   /*
    * Maailma 7, KAASUKEHÄ, ja kaksi ongelmaa jotka se on olemassa ratkaistakseen.
@@ -6557,7 +6883,17 @@ const report = await page.evaluate(async () => {
        * the way in, and `applySize` pins the bottom of the body and moves `y`;
        * the feet are the thing that is actually one band lower afterwards. */
       const before = s.player.y + s.player.h;
-      const shift = 15 * 16;
+      /*
+       * Matkan pää luetaan parista eikä siirtymästä, ja tämä rivi on korjaus.
+       *
+       * Tässä luki `before + 15 * 16`, eli "liuku päättyy sinne mihin hetkessä
+       * tapahtunut siirto päättyi". Se oli tosi niin kauan kuin matkan pää oli
+       * lähtökorkeus siirrettynä — ja juuri se oli se vika jonka omistaja näki
+       * (hahmo ilmestyi tyhjään ilmaan). Nyt pää on se putken suu jonka
+       * `plantWarpExits` pystytti, ja koe kysyy sitä samasta paikasta kuin peli.
+       */
+      const exitRow = s.warpExits.get('229,26');
+      const target = exitRow * 16;
       let frames = 0;
       let acted = 0;
       let hurtLanded = 0;
@@ -6577,17 +6913,17 @@ const report = await page.evaluate(async () => {
         if (Math.abs(s.player.x - px) > 0.001 || s.player.vx !== 0 || s.player.vy !== 0) acted++;
       }
       // Measured where the slide left him and not a moment later: the arrival
-      // is two tiles above the cave floor and gravity has it from here.
+      // is the mouth of the paired pipe, and he is standing on it.
       // `controllable` is in here because taking the controls away is easy and
       // giving them back is the half that gets forgotten.
       expect('entering a pipe is a slide, and nothing reaches the player during it',
         started && frames > 20 && frames < 60 && acted === 0 && hurtLanded === 0
         && s.player.powerLevel === 1 && s.player.controllable === true
-        && Math.abs((s.player.y + s.player.h) - (before + shift)) < 1,
+        && Math.abs((s.player.y + s.player.h) - target) < 1,
         `${frames} framea, liikkui ${acted}, osumia ${hurtLanded}, `
         + `ohjattavissa ${s.player.controllable}, jalat `
         + `${Math.round(before)} -> ${Math.round(s.player.y + s.player.h)} `
-        + `(odotus ${before + shift})`);
+        + `(odotus ${target}, eli putken suu rivillä ${exitRow})`);
     }
 
     /*
@@ -6600,7 +6936,7 @@ const report = await page.evaluate(async () => {
     {
       const s = mk({ type: 'shroom', level: 1 });
       put(s, 229, 26);
-      const target = s.player.y + s.player.h + 15 * 16;      // feet, see above
+      const target = s.warpExits.get('229,26') * 16;         // putken suu, ks. yllä
       game.setScene(s);
       i.held = blank(); i.held.down = true; i.pressed = blank();
       for (let f = 0; f < 8; f++) s.update(i);
@@ -7285,6 +7621,115 @@ const report = await page.evaluate(async () => {
       Music.stop();
       Music.current = null;
     }
+  }
+
+  /* ------------------------------- pieruhylly --------------------------- */
+  /*
+   * KUKALLA ON NYT RAKENNUSVERBI, ja tämä portti on se rajaus jonka se tarvitsee.
+   *
+   * IDEAS-synteesi A, tuomio 16.8.2026 "tee": seinään litistynyt laukaus jää
+   * askelmaksi kahdeksi sekunniksi. Neljä väitettä, ja kolme niistä on kielto —
+   * mikä on oikea suhde, koska ainoa tapa jolla tämä ominaisuus voi rikkoa
+   * pelin on tekemällä *liikaa*:
+   *
+   *   1. **Seinäosuma jättää hyllyn, ja sen päällä seistään.** Hylly jonka
+   *      päälle ei voi astua on kuvaefekti eikä verbi.
+   *   2. **Lattiaosuma ei jätä mitään.** Pallo pomppii lattiaa pitkin koko
+   *      matkansa, joten tämä on se toteutus joka täyttäisi kentän hyllyillä
+   *      yhdestä laukauksesta.
+   *   3. **Mitään ei kirjoiteta yli.** Tyhjä ruutu tai ei mitään.
+   *   4. **Ja se katoaa.** Pysyvä hylly on maasto jonka pelaaja rakensi, ja
+   *      silloin kenttä ei ole enää se kenttä jonka portit todistivat.
+   */
+  try {
+    const { FartBall } = await import('/src/entities/items.js');
+    const { T, isSemi } = await import('/src/gfx/tiles.js');
+
+    /** Koekenttä: tasainen lattia ja yksi seinä sarakkeessa 30. */
+    const shelfDef = (wall = true) => {
+      const W = 60;
+      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+      put(13, 0, '#'.repeat(W));
+      put(14, 0, '#'.repeat(W));
+      put(12, 1, '1');
+      if (wall) for (let y = 8; y <= 12; y++) put(y, 30, '#');
+      put(12, 58, 'F');
+      return {
+        id: 'gFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+        boss: false, bossVariant: 0, bands: null, rows,
+      };
+    };
+    const shelvesIn = (s) => {
+      const at = [];
+      for (let ty = 0; ty < s.h; ty++) {
+        for (let tx = 0; tx < s.w; tx++) if (s.grid[ty][tx] === T.SHELF) at.push({ tx, ty });
+      }
+      return at;
+    };
+    const shoot = (wall) => {
+      reset({ type: 'flower', level: 2 });
+      const s = new LevelScene(game, 'gFix', shelfDef(wall));
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      s.time = 9999;
+      const p = s.player;
+      p.x = 20 * 16;
+      p.y = 13 * 16 - p.h;
+      p.vx = 0; p.vy = 0; p.onGround = true;
+      s.centerCamera();
+      s.add(new FartBall(s, p.x + p.w, p.y + p.h * 0.45, 1));
+      const i = mkInput();
+      for (let f = 0; f < 120; f++) { i.pressed = blank(); s.update(i); }
+      return s;
+    };
+
+    const hit = shoot(true);
+    const made = shelvesIn(hit);
+    const row = made.length ? made[0].ty : -1;
+    const cols = made.map((m) => m.tx).sort((a, b) => a - b);
+    expect('seinään osunut laukaus jättää kaasuhyllyn, seinän omalle puolelle',
+      made.length >= 1 && made.length <= 3
+      && made.every((m) => m.ty === row) && cols[cols.length - 1] === 29
+      && cols[cols.length - 1] - cols[0] === made.length - 1
+      && isSemi(T.SHELF),
+      made.length
+        ? `${made.length} ruutua rivillä ${row}, sarakkeet ${cols.join(',')} (seinä 30)`
+        : 'ei yhtään hyllyä');
+
+    // Sen päälle astuminen: ilmasta, putoavana, hyllyn keskimmäisen ruudun yllä.
+    const stood = (() => {
+      if (!made.length) return null;
+      const p = hit.player;
+      p.x = cols[0] * 16;
+      p.y = row * 16 - p.h - 20;
+      p.vx = 0; p.vy = 2; p.onGround = false;
+      const i = mkInput();
+      for (let f = 0; f < 40; f++) {
+        i.pressed = blank();
+        hit.update(i);
+        if (p.onGround) return Math.round(p.y + p.h);
+      }
+      return null;
+    })();
+    expect('kaasuhyllyn päällä seistään',
+      stood !== null && Math.abs(stood - row * 16) <= 1,
+      stood === null ? 'ei kantanut' : `jalat ${stood}, hyllyn pinta ${row * 16}`);
+
+    // Ja se haihtuu itsestään.
+    const idle2 = mkInput();
+    for (let f = 0; f < 140; f++) { idle2.pressed = blank(); hit.update(idle2); }
+    expect('kaasuhylly haihtuu kahdessa sekunnissa eikä jää kentän maastoksi',
+      shelvesIn(hit).length === 0 && hit.shelves.size === 0,
+      `${shelvesIn(hit).length} ruutua jäljellä, kello ${hit.shelves.size}`);
+
+    // Lattiaa pitkin pomppiva laukaus ei rakenna mitään.
+    const floorOnly = shoot(false);
+    expect('lattiaa pitkin pomppiva laukaus ei jätä hyllyjä perässään',
+      shelvesIn(floorOnly).length === 0,
+      `${shelvesIn(floorOnly).length} hyllyä ilman seinää — pallo pomppii lattiaa koko matkansa`);
+  } catch (e) {
+    expect('pieruhyllyn testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
   /* ------------------------------ kuplaloukku -------------------------- */
@@ -9951,9 +10396,11 @@ const report = await page.evaluate(async () => {
       '255,208,72', '156,106,40', '224,76,60', '200,200,208', '192,90,36',
       '140,60,28', '74,28,10', '42,74,106', '127,200,240',
       '232,248,255',
-      // POWER_LOOKS, the gas hose and the leaves.
+      // POWER_LOOKS, the gas hose and the valves.
       '168,224,74', '160,76,160', '106,44,106', '60,24,64',
       '106,116,136', '57,65,79', '76,86,102', '232,255,192', '216,168,96',
+      // Kaasulehden messinki (puku, vyö, housut), ks. POWER_LOOKS.leaf.
+      '184,134,44', '92,60,12', '140,100,20',
     ]);
 
     const poses = [
@@ -20157,8 +20604,23 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   const { scoreRows } = await import('./difficulty.mjs');
 
   const HURTS = ['hazard', 'quicksand', 'falls'];
+  /* `spring` on vaarattomien listalla, ja se on väite eikä oletus: laatta
+   * heittää pelaajaa ylöspäin eikä koske häneen. Se voi tietysti heittää
+   * jonnekin ikävään, mutta niin voi lauttakin — vaara on siinä mihin
+   * laskeudutaan, ja sen mittaa jo kuilu- ja piikkihinnoittelu. */
   const HARMLESS = ['solid', 'semi', 'breakable', 'bumpable', 'question', 'note',
-    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door', 'surface'];
+    'pipe', 'warp', 'climb', 'crumble', 'switch', 'coin', 'goal', 'door', 'surface',
+    'spring',
+    /* Kaasulyhty ja sen liekki. Vaaraton on tässä vahvempi väite kuin
+     * "koriste": lyhty ei ole kiinteä eikä sen läpi kävelemisestä seuraa
+     * mitään muuta kuin tarkistuspiste — liekki on kuva, ei laji tulta. Jos
+     * jonain päivänä palava lyhty polttaa, se rivi kuuluu `HURTS`iin ja
+     * `playerTiles`iin, ei tänne. */
+    'lamp', 'lit',
+    /* Pieruhylly. Vaaraton, ja se on rakenteellista eikä toiveajattelua: hylly
+     * on puolikiinteä, eli sen läpi mennään alhaalta ja sen päälle
+     * laskeudutaan. Se ei voi sulkea käytävää eikä puristaa ketään. */
+    'shelf'];
 
   /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
   const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]

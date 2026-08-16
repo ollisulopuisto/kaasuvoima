@@ -235,7 +235,7 @@ class Game {
     this.state = {
       lives: 1, coins: 0, score: 0, power: makePower(), reserve: null,
       world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [], secrets: {}, doors: {},
-      continues: 0, usedSaveState: false,
+      checks: {}, continues: 0, usedSaveState: false,
     };
     this.setScene(new InterludeScene(this, level.def.id, () => {
       this.setScene(new LevelScene(this, level.def.id, level.def));
@@ -472,6 +472,10 @@ class Game {
     // cleared
     this.state.power = scene.player ? scene.player.power : this.state.power;
     this.state.cleared[node.id] = true;
+    /* Läpäisty kenttä unohtaa lyhtynsä: tarkistuspiste on yhden yrityssarjan
+     * muisti eikä pysyvä oikotie (ks. `save.js`, `checks`). Ilman tätä riviä
+     * kentän alkupuolisko pelattaisiin kerran eikä koskaan enää. */
+    if (this.state.checks) delete this.state.checks[node.id];
     if (result.card) this.collectCard(result.card);
     this.persist();
 
