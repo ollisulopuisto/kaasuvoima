@@ -7,6 +7,82 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.16.86 — kupla kantaa, ja pierupompusta tuli panos
+
+Kaksi ensimmäistä kohtaa 16.8.2026 tehdystä läpikäynnistä ([IDEAS.md](IDEAS.md),
+"Omistajan tuomiot 16.8.2026"). Ne ovat samassa erässä koska ne ovat molemmat
+**ilmassa olemista**, ja koska ne vetävät samaan suuntaan: ilmaan pääsee yhä,
+mutta siellä on nyt sekä uusi askelma että hinta.
+
+| väite | punainen | vihreä |
+| --- | --- | --- |
+| kuplan päälle voi astua | `kosketus puhkaisi sen heti` | `kantoi 18 framea, sitten puhkesi ja pomppasi` |
+| kupla ei ole hissi | — | `18 framea < lyhin hyppy 22 framea` |
+| sivulta kupla puhkeaa yhä heti | — | `puhkesi, carried 0` |
+| viisi panosta ei nosta kuin yksi | `124 px vs 165 px` | `124 px vs 134 px` |
+| viisi panosta ei kanna kuin yksi | `205 px vs 402 px` | `205 px vs 250 px` |
+| panoksia ehtii silti käyttää | — | `4 panosta viidestä pitkässä pudotuksessa` |
+
+### Kupla kantaa
+
+Kuplaan vangittu vihollinen oli jo leijuva ja jo vaaraton, eli kaikki mitä
+askelma tarvitsee oli valmiina — puuttui vain se että kuplalla saisi seistä
+hetken. Nyt saa 18 framea, joiden ajan pelaaja istuu kuplan katolla ja kulkee
+sen mukana, ja sitten se puhkeaa alta.
+
+Luku on hypyn mitasta eikä tunnelmasta: lyhin mitattu hyppy on paikaltaan
+näpäytetty 22 framea, joten **kupla kantaa vähemmän aikaa kuin kestää hypätä
+sen yli**. Se on askelma jonka ajoittaa, ei taso jolla odotetaan, ja se on koko
+ero kuplaloukun ja hissin välillä.
+
+Sivulta ja alta kupla on merkilleen se mitä se on aina ollut, ja se on portissa
+regressiona: uusi tapa kaataa kupla ei saa viedä pois vanhaa.
+
+Kannon toteutus on istuttaminen eikä fysiikka. `moveY` tuntee laatat eikä
+olioita, ja sen opettaminen tuntemaan olioita olisi ollut fysiikkaremontti
+yhden kuplan takia; sen sijaan pelaaja asetetaan kuplan katolle joka framella,
+mikä on myös se mikä tekee tästä *kannettavana olemisen* eikä paikallaan
+seisomisen — kupla keinuu ja tuore kupla nousee.
+
+### Pierupompusta tuli panos, ja se maksoi kaksi väärää korjausta
+
+Vika oli mitattu ja se oli talouden vika: `airJumpsMax` on pierusienellä sama
+kuin voimataso, eli tasolla 5 ilmassa on viisi ponnistusta — ja kenttägeometria
+on hinnoiteltu **yhtä** hyppyä vasten. Kuilubudjetti on 6 ruutua eli 96 px ja
+mitattu juoksuhypyn kantama 155 px, joten viidellä ponnistuksella pelin levein
+kuilu on lyhyempi kuin yksi ponnistus. Palkinto ei tehnyt hypystä parempaa vaan
+poisti kysymyksen.
+
+Korjaus tuli kolmessa osassa, ja **kaksi ensimmäistä olivat vääriä**. Ne ovat
+tässä siksi että molemmat kuulostivat oikealta:
+
+1. **Jäähdytys** (`AIR_JUMP_CD` 40 framea, johdettu nousun kestosta: 2,3 /
+   0,0625 = 37 framea plus loput ≈ 43 framen huippu). Se kesytti korkeuden
+   41 px:stä 41:een… eli ei mitään, mutta esti kasaamisen. Mitattuna korkeus
+   putosi mutta **kantama ei**: 402 px viidellä panoksella vastaan 205 yhdellä.
+2. **Vauhdin leikkaus** (`vx *= 0,55` toisesta panoksesta), perusteluna että
+   alaspäin purkava kaasu ei saa työntää eteenpäin. Se teki asian
+   **pahemmaksi**: kantama nousi 402:sta **554:ään**. Syy on että tässä pelissä
+   on ilmaohjaus — `ACC` toimii myös ilmassa — joten leikattu vauhti palaa
+   kattoon neljässäkymmenessä framessa ja ainoa saavutus oli pidempi kaari
+   (160 framesta 240:een). **Kantaman ajuri ei ole vauhti vaan ilma-aika.**
+3. **Suppeneva nosto** (`AIR_JUMP_DECAY` 0,5): jokainen panos nostaa puolet
+   edellisestä. Ketju suppenee, kaari ei veny, ja mitattu kantamaero on
+   197 px:stä **45 px:ään** ja korkeusero 41:stä **10:een**.
+
+**Ensimmäinen panos on tasan entisensä**, ja se on ehto eikä armo: mitattu
+tapaus *juoksu + pieruhyppy* (174 px nousua, 285 px kantamaa) on se josta
+`softGapTiles` on johdettu ja jota vasten jokainen kenttä on validoitu.
+Ensimmäisen panoksen hinnoittelu olisi liikuttanut kaikkien kenttien sääntöjä;
+toisesta eteenpäin ei liikuta mitään, koska yksikään mitattu tapaus ei käytä
+kahta.
+
+Ja se mitä voimatasosta yhä ostetaan on portissa omana rivinään: pitkässä
+pudotuksessa panoksia ehtii käyttää neljä viidestä. **Panos on pelastus, ei
+lento** — ja se on nyt kaksi mitattua lukua eikä yksi lause.
+
+---
+
 ## v26.08.16.85 — maahaniskun kyykky, neljä uutta vihollista, mitatut hyppysarjat ja tähden oma raita
 
 Omistajan viisi pyyntöä 16.8.2026, yhtenä eränä. Neljä niistä on samaa asiaa

@@ -72,6 +72,12 @@ export class Enemy extends Entity {
     this.facing = -1;
     this.bubbleTimer = 0;
     this.angry = false;
+    /* Frameja jäljellä siitä hetkestä jona pelaaja astui tämän kuplan päälle.
+     * Tavallinen luku ja konstruktorissa, samasta syystä kuin `sunk` ja
+     * `drift`: `savestate.js` sarjallistaa jokaisen olion jokaisen oman
+     * kentän, joten kuplan päällä otettu pikatallennus palautuu kuplan päälle
+     * eikä vaadi riviäkään tallennuskoodia. */
+    this.carried = 0;
     /* Frames with the whole body under the surface of a quicksand pool — the
      * same counter, the same name and the same units as the player's `sunk`,
      * and a plain number for the same reason his is one: `savestate.js`

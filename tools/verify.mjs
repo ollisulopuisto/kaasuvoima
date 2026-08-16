@@ -985,6 +985,119 @@ const report = await page.evaluate(async () => {
     expect('maahanisku-testit pääsevät ajoon asti', false, String(e && e.message));
   }
 
+  /* ---------------------------- ilmahypyt -------------------------------- */
+  /*
+   * PIERUPOMPUISTA TULI PANOKSIA, JA SE ON KAKSI VÄITETTÄ EIKÄ YKSI.
+   *
+   * Omistajan päätös 16.8.2026. Vika oli mitattu: kenttägeometria on
+   * hinnoiteltu yhtä hyppyä vasten (kuilubudjetti 6 ruutua = 96 px, mitattu
+   * juoksuhypyn kantama 155 px), ja viisi peräkkäistä ponnistusta teki pelin
+   * levimmästä kuilusta lyhyemmän kuin yksi ponnistus.
+   *
+   * Korjaus ei saa mennä liian pitkälle kumpaankaan suuntaan, joten molemmat
+   * reunat mitataan:
+   *
+   *   1. **Panoksia ei voi ladata yhdeksi kaareksi.** Sama napinhakkaus samalta
+   *      lattialta, yksi panos vastaan viisi: korkeuseron on oltava pieni.
+   *      Vertailu eikä vakio — koe ei tiedä mitään lukua jonka se tarkistaa,
+   *      joten se ei voi hyväksyä sitä mitä koodissa sattuu lukemaan.
+   *   2. **Panokset ovat yhä olemassa.** Pitkässä pudotuksessa niitä on
+   *      käytettävissä useampi kuin yksi, koska juuri se on se mitä
+   *      voimatasosta ostetaan: pelastuksia, ei lentoa.
+   */
+  try {
+    const { PLAYER_SIZES: SZ } = await import('/src/gfx/sprites.js');
+
+    /** Napinhakkaus paikaltaan: montako pikseliä ylös päästään yhdellä kaarella. */
+    const mash = (level) => {
+      reset({ type: 'shroom', level });
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const p = s.player;
+      /* Vauhtiin ensin: kantama mitataan juoksusta, koska juuri sitä vasten
+       * kuilubudjetti on hinnoiteltu. */
+      i.held = blank();
+      i.held.right = true;
+      i.held.run = true;
+      for (let f = 0; f < 90; f++) { s.update(i); i.pressed = blank(); }
+      const y0 = p.y;
+      const x0 = p.x;
+      let peak = 0;
+      let spent = 0;
+      let air = 0;
+      for (let f = 0; f < 400; f++) {
+        i.held = blank();
+        i.held.right = true;
+        i.held.run = true;
+        i.held.jump = true;
+        i.pressed = blank();
+        i.pressed.jump = true;
+        s.update(i);
+        peak = Math.max(peak, y0 - p.y);
+        spent = Math.max(spent, p.airJumps);
+        air = f;
+        if (f > 4 && p.onGround) break;
+      }
+      return {
+        peak: Math.round(peak), reach: Math.round(p.x - x0), frames: air,
+        spent, max: p.airJumpsMax,
+      };
+    };
+
+    const one = mash(1);
+    const five = mash(5);
+    /* Kaksi lukua eikä yksi, ja **kantama on se tärkeämpi**: kuilubudjetti on
+     * hinnoiteltu vaakasuoraan (`softGapTiles` 9 = 144 px, johdettu mitatusta
+     * juoksu + pieruhyppy 285 px:stä), joten korkeuden kesyttäminen ei auta
+     * mitään jos panokset venyttävät kaarta sivusuunnassa.
+     *
+     * Rajat ovat kaksi ja neljä ruutua, ja ne on asetettu mitattuun eikä
+     * toivottuun: korjauksen jälkeen erot ovat 10 px ja 45 px. Ennen sitä ne
+     * olivat 41 px ja **197 px**, eli kaksitoista ruutua kantamaa siinä missä
+     * koko kuilubudjetti on kuusi — se on se luku jonka tämä rivi estää
+     * palaamasta. */
+    expect('viisi pierupanosta ei nosta eikä kanna kauemmas kuin yksi',
+      five.max === 5 && one.max === 1
+      && five.peak - one.peak < 32 && five.reach - one.reach < 64,
+      `yksi panos: ${one.peak} px ylös, ${one.reach} px sivuun, ${one.frames} framea`
+      + ` — viisi panosta: ${five.peak} px ylös, ${five.reach} px sivuun,`
+      + ` ${five.frames} framea (käytti ${five.spent})`
+      + ` — erot ${five.peak - one.peak} px ja ${five.reach - one.reach} px`);
+
+    /* Ja toinen reuna: pitkä pudotus, jossa panoksia ehtii käyttää useampi.
+     * Kenttä on 1-2, koska se on pelin korkein (katto 432 px). */
+    {
+      reset({ type: 'shroom', level: 5 });
+      const s = new LevelScene(game, '1-2');
+      game.setScene(s);
+      const i = mkInput();
+      for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      const p = s.player;
+      p.y = 8;
+      p.vy = 0;
+      p.onGround = false;
+      let spent = 0;
+      for (let f = 0; f < 400 && !p.dying; f++) {
+        i.held = blank();
+        i.held.jump = true;
+        i.pressed = blank();
+        i.pressed.jump = true;
+        s.update(i);
+        spent = Math.max(spent, p.airJumps);
+        if (f > 4 && p.onGround) break;
+      }
+      expect('pitkässä pudotuksessa panoksia ehtii käyttää useampi',
+        spent >= 3,
+        `käytti ${spent} panosta viidestä pudotessaan`);
+    }
+  } catch (e) {
+    expect('ilmahyppytestit pääsevät ajoon asti', false, String(e && e.message));
+  }
+
   /* --------------------------- neljä uutta lajia ------------------------ */
   /*
    * NELJÄ UUTTA VIHOLLISTA, JA SE MITÄ NIISTÄ VOI MENNÄ RIKKI.
@@ -7206,6 +7319,64 @@ const report = await page.evaluate(async () => {
       expect('a bubbled enemy is harmless and a bigger target than the enemy in it',
         e.harmless === true && e.box.w > e.w && e.box.h > e.h,
         `${e.box.w}x${e.box.h} vs ${e.w}x${e.h}`);
+    }
+
+    /*
+     * KUPLA KANTAA, JA SE ON ASKELMA EIKÄ HISSI.
+     *
+     * Kaksi väitettä samassa kokeessa, koska ne ovat saman säännön kaksi
+     * puoliskoa eivätkä kaksi ominaisuutta:
+     *
+     *   **Se kantaa.** Kuplan päälle laskeutunut pelaaja ei putoa. Ilman tätä
+     *   riviä "kupla kantaa" menisi läpi myös toteutuksella joka vain
+     *   viivästää puhkeamista yhdellä framella.
+     *
+     *   **Eikä kanna kauan.** Kupla puhkeaa itsestään `BUBBLE_CARRY`n jälkeen
+     *   vaikkei mihinkään koskettaisi. Yläraja mitataan siksi että juuri se
+     *   erottaa askelman lautasta: kannettava kupla jolla voi odottaa on
+     *   hissi, ja hissi on eri peli.
+     *
+     * Mitataan frameina eikä vakiota vastaan: koe ei saa tietää lukua jonka
+     * se tarkistaa, tai se hyväksyy sen mitä koodissa sattuu lukemaan.
+     */
+    {
+      const { s, e, p } = setup(40);
+      e.trap();
+      // Kuplan katolle ilmasta, putoavana. Sivulta tullut kosketus on eri
+      // tapaus ja se on kokeessa alempana.
+      const top = e.box.y;
+      p.x = e.cx - p.w / 2;
+      p.y = top - p.h - 6;
+      p.vy = 3;
+      p.onGround = false;
+      let held = 0;
+      let bounced = false;
+      for (let f = 0; f < 90; f++) {
+        s.update(idle);
+        if (e.bubbled && !e.dying) { held++; continue; }
+        bounced = p.vy < 0;
+        break;
+      }
+      expect('kuplan päälle voi astua, ja se kantaa hetken ennen kuin puhkeaa',
+        held >= 8 && held <= 40 && (e.dying || e.remove) && bounced,
+        `kantoi ${held} framea, kupla ${e.dying || e.remove ? 'puhkesi' : 'jäi'}`
+        + `, pomppu ${bounced} (vy ${p.vy.toFixed(2)})`);
+    }
+
+    /* Ja sivulta se on yhä se mitä se on aina ollut: koko kaato yhdestä
+     * kosketuksesta. Tämä on regressio eikä uusi väite — astuminen ei saa
+     * vievä pois sitä tapaa jolla kupla on tähän asti kaadettu. */
+    {
+      const { s, e, p } = setup(40);
+      e.trap();
+      p.x = e.box.x - p.w + 2;
+      p.y = e.cy - p.h / 2;
+      p.vy = 0;
+      p.onGround = false;
+      s.update(idle);
+      expect('kuplaan kävelemällä se puhkeaa heti, kuten ennenkin',
+        e.dying || e.remove,
+        `kupla ${e.dying || e.remove ? 'puhkesi' : 'jäi'}, carried ${e.carried}`);
     }
 
     {
