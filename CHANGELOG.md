@@ -7,6 +7,89 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.93 — demo näyttää tempun, ja puhetestit mittaavat oikeaa kelloa
+
+Kaksi työtä, ja jälkimmäinen ei näy pelaajalle mutta poistaa esteen
+pomoäänten tieltä.
+
+### Puhetestit: neljä satunnaista kaatumista, yksi syy
+
+Neljä äänitestiä kaatui noin joka toisessa ajossa. Vikaa oli etsitty **kolme
+kertaa testin omista luvuista**; se ei ollut siellä.
+
+| väite | mitattu |
+| --- | --- |
+| kaatuneessa ajossa äänikello ei edennyt lainkaan | `äänikello 0.00 s / seinäkello 0.47 s` |
+| eikä se edennyt täyttä vauhtia vihreässäkään | `2.65 s / 6.14 s` eli 43 % |
+| jäätynyt puskuri näkyy toistuvina lukemina | `s 24.82 š 24.82 f 24.82` |
+| ja jäätyneeseen hetkeen kasautuneet äänet pohjakohinana | `15.3 · 25.1 · 46.0` |
+
+Renderöijä seisoi kesken mittauksen, ja `ctx.state` sanoi koko ajan `running`.
+Silloin analysaattori palauttaa saman vanhan puskurin uudestaan, sillä välin
+soitetut äänet ajastuvat samaan hetkeen ja soivat yhtä aikaa kun renderöijä
+herää, ja juuri soitettu ääni lukee 0,000. **Kolme neljästä kaatuvasta testistä
+oli oire eikä oma vikansa.**
+
+Korjaus on kaksiosainen, eikä kumpikaan osa löysää yhtään kynnystä:
+mittausikkuna odottaa **äänikellossa** sen verran soitettua ääntä kuin siltä
+pyydettiin (seinäkello on väärä kello äänelle), ja väylällä pidetään mittausten
+ajan äänetön oskillaattori joka pitää renderöijän töissä. Jos se silti seisoo,
+rivi sanoo *"ei mitattu"* eikä väitä lukua joka ei ole mittaus — ja oma
+tarkistuksensa kaatuu jos yksikään äänimittaus ei toteutunut, jottei portti voi
+kadota huomaamatta.
+
+**Peli ei vuoda ääntä.** Tämä on headless-Chromiumin renderöijä eikä
+`audio.js`: oikealla koneella äänilaite pyytää näytteitä 48 000 kertaa
+sekunnissa riippumatta siitä mitä sivu tekee.
+
+### Demo näyttää tempun, kentässä jota ei ole olemassa
+
+Salaisuuksien löydettävyyden kolmas ja viimeinen osa (ROADMAP kohta 9).
+Alkuruudun esittely **pysähtyy putken kannelle, painaa alas ja katoaa siihen**
+— ja tulee samaa tietä takaisin painamalla ylös katosta roikkuvaa suuta.
+
+| väite | mitattu |
+| --- | --- |
+| demo menee putkesta alas ja tulee takaisin | `kaistat 1 -> 2 -> 1, alas framella 389, ylös framella 546` |
+| eikä sen löytämä kaista päädy pelaajan kirjanpitoon | `ei merkintöjä` |
+| esittelykenttä läpäisee samat säännöt kuin pelin kentät | `ei huomautuksia` |
+| ja saman botin voimatasolla 0 | `läpi` |
+
+**Verbi opetetaan, paikkaa ei.** Alas painaminen putken päällä on ainoa verbi
+jota peli ei pyydä missään, eikä sitä voi arvata näppäimistä. Mutta kaksi
+ensimmäistä osaa lupaavat että kartta kertoo vain *että* salaisuuksia on ja
+kolikkojono osoittaa vain sitä yhtä johon ei voi kompastua — eli demo ei saa
+paljastaa mitään paikkaa. Ristiriita ratkesi omalla **esittelykentällä**
+(`src/data/demo-level.js`) jota ei ole pelin kentissä: temppu tehdään oikeasti,
+oikealla moottorilla ja oikealla putkella, mutta se putki ei ole missään
+kentässä jonka pelaaja pelaa. Paljastettavaa ei ole.
+
+Kolme hylättyä vaihtoehtoa, ja jokainen kaatuu samaan ehtoon: **1-1:n tavallinen
+putki** ei tekisi mitään ja näyttäisi rikkinäiseltä; **demo 1-2:ssa** paljastaisi
+sarakkeen 229; **salaisuus 1-1:een** panisi sen peliin ainoaan kenttään jonka
+jokainen pelaa ennen kuin tietää mitään.
+
+Kenttä ei ole `LEVEL_DEFS`:ssä (sama ratkaisu kuin päivän pierulla), koska
+`levelIds()` on se lista jonka päällä kartta, vaikeusmittari, opetusjärjestys ja
+vaihtelumittari lasketaan — näyteikkuna ei ole osa opetusjärjestystä. Se on
+silti kenttä jonka pelaaja näkee, joten `verify.mjs` ajaa sille `validateLevel`in
+ja maabotin erikseen: näyteikkuna jonka läpi ei pääse on huonompi mainos kuin ei
+näyteikkunaa lainkaan.
+
+Temppu on **ehdollinen asentoon eikä kelloon**. Ensimmäinen versio jarrutti
+mitatusti (juoksusta 19 px vastaan kääntymällä, 56 px otetta irrottamalla) ja
+epäonnistui joka kerta: se pysähtyi putken *viereen* maahan ja painoi alas
+siellä missä jalkojen alla oli maata — mitattu 30 framea sarakkeessa 52 kun suu
+on 53. Ehto on nyt sama kysymys jonka `tryWarp` kysyy: ovatko jalat sillä
+rivillä jossa suu on. Kannen päälle noustaan tavallisella seinähypyllä, ja
+siihen botti osaa itse.
+
+Jos temppu ei onnistu — botti kuolee matkalla tai putki kieltäytyy — demo
+jatkaa tavallisena demona: puolen sekunnin jälkeen suu jätetään rauhaan.
+Katsoja näkee silloin demon eikä keskeytynyttä esitystä.
+
+---
+
 ## v26.08.16.92 — hiekka tottelee painovoimaa, ja portti mittaa lopputilan
 
 IDEAS-synteesi E, tuomio 16.8.2026 *"tee, ennen pomoa"*. Riko hiekkalammikon

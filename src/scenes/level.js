@@ -4489,8 +4489,13 @@ export class LevelScene {
 
     /* Päivän kenttä ei ole missään maailmassa, joten se kertoo nimensä. Mitattu
      * että se mahtuu: 12 merkkiä * 6 px = 72 px, 196 + 72 = 268, ja oikealle
-     * tasattu 7-numeroinen pistelukema alkaa 272:sta. */
-    drawText(ctx, this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`, 196, y + 6, { color: '#8fe04a' });
+     * tasattu 7-numeroinen pistelukema alkaa 272:sta.
+     *
+     * `title` on sama poikkeus toista kautta: esittelykenttä (`demo-level.js`)
+     * ei ole sekään missään maailmassa, ja "MAAILMA esittely" olisi väärä väite
+     * eikä puuttuva tieto. Kenttä joka tietää nimensä kertoo sen. */
+    const title = this.def.title || (this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`);
+    drawText(ctx, title, 196, y + 6, { color: '#8fe04a' });
     const timeColor = this.time <= 100 ? (Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff') : '#ffffff';
     drawText(ctx, `AIKA ${padNum(this.time, 3)}`, 196, y + 17, { color: timeColor });
     if (this.race) this.drawSplit(ctx, y);

@@ -1,7 +1,8 @@
 import { LevelScene } from './level.js';
 import { drawText } from '../gfx/font.js';
-import { TILE, T, isSolid } from '../gfx/tiles.js';
+import { TILE, T, info, isSolid } from '../gfx/tiles.js';
 import { makePower } from '../entities/player.js';
+import { DEMO_ID, demoLevel } from '../data/demo-level.js';
 
 /**
  * Attract mode: after a while on the title screen the cabinet plays itself.
@@ -16,9 +17,48 @@ import { makePower } from '../entities/player.js';
  *      own `finishLevel` — so a robot cannot spend a life, write the save,
  *      reach the score table or leave a mark on anything the player owns. It
  *      is not a promise to be careful; the writes land somewhere else.
+ *
+ * ## Demo tekee tempun (salaisuuksien löydettävyys, kolmas osa)
+ *
+ * Kaksi ensimmäistä osaa kertovat *että* salaisuuksia on (kartan laskuri) ja
+ * osoittavat yhtä niistä (kolikkojono). Kolmas on tämä: alas painaminen putken
+ * päällä on verbi jota peli ei pyydä missään, eikä sitä voi arvata näppäimistä.
+ * Demo näyttää sen kerran, molempiin suuntiin — sisään lattian suusta ja ulos
+ * katosta roikkuvasta — koska bonushuone josta ei pääse pois on ansa.
+ *
+ * **Verbi opetetaan, paikkaa ei.** Kenttä jota demo pelaa ei ole pelin
+ * kentissä (`src/data/demo-level.js`), joten se putki jonka pelaaja näkee ei
+ * ole yhdessäkään kentässä jonka hän pelaa. Se on ainoa tapa näyttää temppu
+ * oikeasti — moottori, putki, kaista — ilman että näyttää *minne mennä*.
+ *
+ * Temppu on **ehdollinen paikkaan eikä kelloon** (`aim()` alla): botti kuolee
+ * usein ennen minuutin täyttymistä, ja framelaskuriin sidottu temppu menisi ohi
+ * heti kun se viivähtää yhden vihollisen takia. Jos temppu ei onnistu — botti
+ * kuolee matkalla, tai putki kieltäytyy — demo jatkaa tavallisena demona eikä
+ * keskeytyneenä esityksenä. Sitä varten on `TRICK_PATIENCE`.
  */
 
-const DEMO_LEVEL = '1-1';
+const DEMO_LEVEL = DEMO_ID;
+
+/**
+ * Kuinka korkealta katosta roikkuva suu vielä niellään, pikseleinä.
+ *
+ * Sama luku kuin `WARP_UP_REACH` `src/scenes/level.js`:ssä, ja se on **sama
+ * kysymys toistettuna eikä uusi sääntö**: jos botti painaisi ylös kauempaa,
+ * mitään ei tapahtuisi. Kolme ruutua on se korkeus jossa suurin keho mahtuu ja
+ * pienin yltää.
+ */
+const WARP_REACH = 3 * TILE;
+
+/**
+ * Kuinka monta framea suuntaa painetaan ennen kuin suu jätetään rauhaan.
+ *
+ * Lämpöputki voi kieltäytyä (kiveä nousukohdassa, ei jalansijaa), ja silloin
+ * botti seisoisi putken päällä loppuminuutin painamassa alas. Puoli sekuntia
+ * on enemmän kuin `tryWarp` tarvitsee — se lukee syötteen joka framella — ja
+ * vähemmän kuin katsoja ehtii pitää jumina.
+ */
+const TRICK_PATIENCE = 30;
 
 /**
  * How long the show runs before it hands back. A minute is what an arcade loop
@@ -56,7 +96,7 @@ export class DemoScene {
     };
     stand.finishLevel = () => { this.done = true; };
 
-    this.level = new LevelScene(stand, DEMO_LEVEL);
+    this.level = new LevelScene(stand, DEMO_LEVEL, demoLevel());
     // Telemetry answers "where do people die". A robot is not people, and its
     // deaths would sit on top of the heatmap the levels are tuned from.
     this.level.recordDeath = () => {};
@@ -75,6 +115,18 @@ export class DemoScene {
     };
     this.prevJump = false;
     this.hold = 0;
+
+    /* Suut luetaan ruudukosta eikä kirjoiteta tähän: demo ei tiedä mitään
+     * *paikoista* vaan tunnistaa suun samasta lipusta jonka `tryWarp` lukee.
+     * Kenttä saa siis muuttua ilman että tämä tiedosto tietää siitä. */
+    this.mouths = this.findMouths();
+    /** Suut jotka on jo käytetty tai luovutettu, avaimena `"tx,ty"`. */
+    this.usedMouths = new Set();
+    /** Se suu jota parhaillaan tavoitellaan, ja montako framea on painettu. */
+    this.aimed = null;
+    this.press = 0;
+    /** Montako kertaa temppu onnistui — `verify.mjs` lukee tämän. */
+    this.tricks = 0;
 
     /* Mapped keys already end the demo through `Input`, but an attract mode
      * that argues about which keys count is a broken attract mode. Anything at
@@ -108,10 +160,65 @@ export class DemoScene {
     this.tick++;
     try {
       this.level.update(this.drive());
+      /* Onnistuminen luetaan matkasta eikä siitä että nappia painettiin: sen
+       * jälkeen tähtäys nollataan, jottei sama suu jää tavoitteeksi kun keho
+       * on jo toisessa kaistassa. */
+      if (this.aimed && this.level.player.transit) {
+        this.usedMouths.add(`${this.aimed.tx},${this.aimed.ty}`);
+        this.aimed = null;
+        this.press = 0;
+        this.tricks++;
+      }
     } catch {
       this.done = true;
     }
     if (this.done || this.tick >= DEMO_FRAMES) this.game.endDemo();
+  }
+
+  /**
+   * Jokaisen lämpöputken suu ruudukosta, ja kumpaan suuntaan siitä mennään.
+   *
+   * Suunta on se puoli jolla on ilmaa — sama kysymys kuin `tryWarp`issa ja
+   * `plantWarpExits`issa, ja se on kysyttävä samalla tavalla: lattiaan upotettu
+   * suu niellään alas painamalla, katosta roikkuva ylös. Vain suun vasen ruutu
+   * otetaan talteen, koska suu on aina kaksi ruutua leveä.
+   */
+  findMouths() {
+    const g = this.level.grid;
+    const out = [];
+    for (let ty = 0; ty < g.length; ty++) {
+      for (let tx = 0; tx < g[ty].length; tx++) {
+        if (!info(g[ty][tx]).warp) continue;
+        if (tx > 0 && info(g[ty][tx - 1]).warp) continue;
+        const above = ty > 0 ? g[ty - 1][tx] : ' ';
+        out.push({ tx, ty, dir: isSolid(above) ? -1 : 1 });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Lähin käyttämätön suu samassa kaistassa, joka ei ole jo takanapäin.
+   *
+   * Kaista on ehto eikä koriste: kentässä on kolme päällekkäistä huonetta, ja
+   * pinnan suu on luolasta katsottuna viisitoista riviä ylempänä samassa
+   * sarakkeessa. Ilman kaistaehtoa botti jarruttaisi luolassa sen putken
+   * kohdalla jota se juuri käytti.
+   */
+  aim() {
+    const p = this.level.player;
+    const bands = this.level.def.bands;
+    if (!bands) return null;
+    const band = Math.floor(Math.floor((p.y + p.h - 1) / TILE) / bands.rows);
+    let best = null;
+    for (const m of this.mouths) {
+      if (this.usedMouths.has(`${m.tx},${m.ty}`)) continue;
+      if (Math.floor(m.ty / bands.rows) !== band) continue;
+      const right = (m.tx + 2) * TILE;
+      if (right <= p.x) continue;                      // jo ohitettu
+      if (!best || m.tx < best.tx) best = m;
+    }
+    return best;
   }
 
   draw(ctx) {
@@ -184,6 +291,78 @@ export class DemoScene {
     pad.pressed = blank();
     pad.pressed.jump = (takeOff || airSave) && !this.prevJump;
     this.prevJump = wantJump;
+    return this.perform(pad);
+  }
+
+  /**
+   * Onko suu siinä asennossa jossa `tryWarp` sen nielee.
+   *
+   * Sama kysymys kuin siellä, ja se kysytään tässä siksi että vastaus ratkaisee
+   * mitä botin pitää tehdä: lattian suulle **noustaan** (siihen asti tavallinen
+   * seinähyppy hoitaa homman), katon suun alle vain kävellään. Ilman tätä
+   * botti jarruttaisi putken viereen maassa ja painaisi alas siinä kohtaa
+   * missä jalkojen alla on maata — eli tekisi tempun väärässä paikassa ja
+   * näyttäisi rikkinäiseltä.
+   */
+  reaches(m) {
+    const p = this.level.player;
+    const feet = Math.floor((p.y + p.h) / TILE);
+    if (m.dir > 0) return feet === m.ty;
+    const head = Math.floor(p.y / TILE);
+    return m.ty < head && (p.y + p.h) - (m.ty + 1) * TILE <= WARP_REACH;
+  }
+
+  /**
+   * Temppu: pysähdy suulle ja paina sitä suuntaa johon suu aukeaa.
+   *
+   * Tämä on ainoa kohta jossa demo tekee jotain mitä `tools/playable.mjs`:n
+   * botti ei tee, ja se on tarkoituksella **päällekirjoitus eikä uusi botti**:
+   * juokseminen, hyppääminen ja ilmapelastus tulevat yhä samasta heuristiikasta
+   * kuin kenttien läpäisytodistuksissa, joten esittely ei ole eri peli kuin se
+   * jota mitataan.
+   *
+   * Kolme ehtoa, ja jokainen on rajaus:
+   *
+   *   1. **Kaista ja sarake, ei kello.** Ks. `aim()`.
+   *   2. **Asento ratkaisee, ei etäisyys.** Ks. `reaches()`. Tässä oli ensin
+   *      mitattu jarrutus (juoksusta 19 px vastaan kääntymällä, 56 px otetta
+   *      irrottamalla) — ja se oli vastaus väärään kysymykseen: botti jarrutti
+   *      putken *viereen* maahan ja painoi alas siinä, missä jalkojen alla oli
+   *      maata. Mitattu: temppu epäonnistui 30 framea putkea vasten
+   *      seisottuaan, sarakkeessa 52 kun suu on 53. Kannen päälle noustaan
+   *      tavallisella seinähypyllä, ja siihen botti osaa itse.
+   *   3. **Luovutus on osa temppua.** Jos suu ei niele `TRICK_PATIENCE`in
+   *      sisällä, se merkitään käytetyksi ja demo jatkaa matkaa. Katsoja näkee
+   *      silloin tavallisen demon eikä jumittunutta esitystä.
+   */
+  perform(pad) {
+    const p = this.level.player;
+    if (p.transit || p.dying) return pad;
+    const m = this.aim();
+    if (!m) { this.aimed = null; this.press = 0; return pad; }
+
+    const left = m.tx * TILE;
+    const right = (m.tx + 2) * TILE;
+    const over = p.x + p.w > left && p.x < right;
+    if (!over || !p.onGround || !this.reaches(m)) { this.aimed = null; this.press = 0; return pad; }
+
+    // Suulla ollaan: ei juoksua eteenpäin eikä hyppyä pois siitä.
+    pad.held.right = false;
+    pad.held.run = false;
+    pad.held.jump = false;
+    pad.pressed.jump = false;
+    this.prevJump = false;
+
+    this.aimed = m;
+    this.press++;
+    if (this.press > TRICK_PATIENCE) {
+      this.usedMouths.add(`${m.tx},${m.ty}`);
+      this.aimed = null;
+      this.press = 0;
+      return pad;
+    }
+    if (m.dir > 0) pad.held.down = true;
+    else pad.held.up = true;
     return pad;
   }
 }

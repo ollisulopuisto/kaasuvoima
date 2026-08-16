@@ -11931,8 +11931,11 @@ const report = await page.evaluate(async () => {
       game.step();
       if (game.scene instanceof DemoScene) startedAt = f + 1;
     }
+    /* Kenttä on `esittely` eikä `1-1`, ja se on koko kolmannen löydettävyyden
+     * osan ehto: demo tekee tempun kentässä jota ei ole pelissä, joten verbi
+     * opetetaan paljastamatta paikkaa. Ks. `src/data/demo-level.js`. */
     expect('the title screen starts playing by itself when left alone',
-      startedAt > 60 && startedAt <= 1300 && game.scene.level.id === '1-1',
+      startedAt > 60 && startedAt <= 1300 && game.scene.level.id === 'esittely',
       `${startedAt} framea, ${game.scene.level && game.scene.level.id}`);
 
     const back = [];
@@ -11950,16 +11953,43 @@ const report = await page.evaluate(async () => {
     const lives = game.state.lives;
     const score = game.state.score;
     const started = toDemo();
-    let died = false;
+    /*
+     * Kuolema tapetaan tässä eikä odoteta sitä, ja se on tarkennus eikä
+     * löysennys.
+     *
+     * Tässä ajettiin demoa kunnes botti sattui kuolemaan, ja lupaus todistui
+     * vain jos se sattui. Esittelykenttä on lyhyt ja botti pääsee sen läpi —
+     * mitattu 920 framea maaliin — joten sattuma kääntyi toisin päin ja portti
+     * olisi alkanut kaatua siitä että demo onnistuu. Lupaus on silti sama:
+     * botin kuolema päättää demon eikä peliä. Nyt se kysytään suoraan.
+     */
     let frames = 0;
-    for (; frames < 6000 && game.scene instanceof DemoScene; frames++) {
-      game.step();
-      game.render();
-      if (game.scene instanceof DemoScene && game.scene.level.state === 'dead') died = true;
+    let died = false;
+    if (started) {
+      game.scene.level.player.die('testi');
+      for (; frames < 600 && game.scene instanceof DemoScene; frames++) {
+        game.step();
+        game.render();
+        if (game.scene instanceof DemoScene && game.scene.level.state === 'dead') died = true;
+      }
     }
     expect('the demo survives the bot dying and returns to the title',
       started && died && game.scene.constructor.name === 'TitleScene',
       `${frames} framea, kuoli ${died}, ${game.scene.constructor.name}`);
+
+    /* Ja sama lupaus toisesta päästä: demo joka pääsee maaliin palauttaa koneen
+     * yhtä lailla. `stand.finishLevel` on demon oma, joten läpäisy ei saa
+     * vuotaa pelaajan omaan sen enempää kuin kuolemakaan. */
+    reset();
+    const cleared = toDemo();
+    let clearFrames = 0;
+    for (; clearFrames < 6000 && game.scene instanceof DemoScene; clearFrames++) {
+      game.step();
+      game.render();
+    }
+    expect('the demo hands the machine back when the bot finishes the level',
+      cleared && game.scene.constructor.name === 'TitleScene',
+      `${clearFrames} framea, ${game.scene.constructor.name}`);
     expect('the demo writes nothing and spends nothing',
       storage() === before && game.state.lives === lives && game.state.score === score,
       `${lives}/${score} -> ${game.state.lives}/${game.state.score}`);
@@ -11970,6 +12000,80 @@ const report = await page.evaluate(async () => {
     expect('an error inside the demo ends the demo, not the game',
       game.scene.constructor.name === 'TitleScene', game.scene.constructor.name);
     game.toTitle();
+
+    /* ------------------------ demo näyttää tempun ------------------------ */
+    /*
+     * Salaisuuksien löydettävyyden kolmas osa, ja se mitataan **tapahtumana**:
+     * "demo on olemassa" ei todista mitään, ja "demossa on lämpöputki" ei
+     * myöskään — kysymys on meneekö botti siitä sisään ja tuleeko se takaisin.
+     * Kaista luetaan jaloista samalla laskutoimituksella kuin `LevelScene`
+     * itse tekee, eli 1 on pinta ja 2 on luola.
+     */
+    {
+      reset();
+      const { TILE: TZ } = await import('/src/gfx/tiles.js');
+      const demo = new DemoScene(game);
+      demo.enter();
+      const bands = demo.level.def.bands;
+      const bandOf = () => {
+        const p = demo.level.player;
+        return Math.floor(Math.floor((p.y + p.h - 1) / TZ) / bands.rows);
+      };
+      const path = [];
+      let down = -1;
+      let up = -1;
+      for (let f = 0; f < 3600 && !demo.done; f++) {
+        demo.update();
+        const b = bandOf();
+        if (path[path.length - 1] !== b) {
+          path.push(b);
+          if (down < 0 && b === 2) down = f;
+          else if (down >= 0 && up < 0 && b === 1) up = f;
+        }
+      }
+      demo.dispose();
+      expect('esittely tekee tempun: putkesta alas ja samaa tietä takaisin',
+        demo.tricks >= 2 && down > 0 && up > down && path.join('') === '121',
+        `temppuja ${demo.tricks}, kaistat ${path.join('->')}, `
+        + `alas framella ${down}, ylös framella ${up}`);
+      /* Sama lupaus kuin muullakin demolla: temppu kirjoittaa kentän tilaan,
+       * eikä kentän tila ole pelaajan. Kaistan löytyminen on tavallisesti
+       * salaisuuskirjanpitoa (`noteSecret`), joten tämä on se rivi joka
+       * varmistaa ettei esittely kerää salaisuuksia pelaajan puolesta. */
+      const secrets = game.state.secrets && game.state.secrets.esittely;
+      expect('esittelyn löytämät kaistat eivät päädy pelaajan kirjanpitoon',
+        !secrets, secrets ? JSON.stringify(secrets) : 'ei merkintöjä');
+    }
+
+    /*
+     * Esittelykenttä ei ole pelin sisällysluettelossa, joten se ei tule
+     * mukaan siihen lohkoon joka ajaa säännöt ja botin joka kentälle. Se on
+     * oikein — se ei ole osa opetusjärjestystä — mutta se on silti kenttä jonka
+     * pelaaja näkee, ja näyteikkuna jonka läpi ei pääse on huonompi mainos kuin
+     * ei näyteikkunaa lainkaan. Siis samat säännöt, sama botti, tässä.
+     */
+    {
+      const { demoLevel } = await import('/src/data/demo-level.js');
+      const { validateLevel } = await import('/src/data/rules.js');
+      const { runGround } = await import('/tools/level-bot.js');
+      const { isSolid } = await import('/src/gfx/tiles.js');
+      const budget = await (await fetch('/tools/jump-budget.json')).json();
+      const def = demoLevel();
+      const problems = validateLevel(def.rows, budget);
+      reset({ type: null, level: 0 });
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const s = new LevelScene(game, def.id, def);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const got = runGround(s, isSolid, 7000, () => finished);
+      expect('esittelykenttä läpäisee samat säännöt ja saman botin kuin pelin kentät',
+        problems.length === 0 && got.cleared,
+        `säännöt: ${problems.join(' / ') || 'ei huomautuksia'}, `
+        + `botti: ${got.cleared ? 'läpi' : `jumissa ${got.reach} %`}`);
+      game.toTitle();
+    }
   }
 
   /* ------------------------------- piikit ------------------------------- */
@@ -14556,6 +14660,161 @@ const report = await page.evaluate(async () => {
   /* -------------------------------- audio ------------------------------ */
   const { Sfx, Music, audioTap } = await import('/src/core/audio.js');
 
+  /*
+   * ÄÄNIMITTAUKSEN KAKSI APURIA, ja miksi ne ovat olemassa.
+   *
+   * Neljä puhetestiä kaatui satunnaisesti noin joka toisessa ajossa, ja vikaa
+   * etsittiin **kolme kertaa testin omista luvuista**: ensin kiinteä 900 ms:n
+   * odotus vaihdettiin hiljaisuuden odottamiseen, sitten yksi ikkuna kahdeksi
+   * peräkkäiseksi. Kumpikin korjasi oikean asian ja kumpikaan ei auttanut,
+   * koska vika ei ollut siinä mitä mitattiin vaan siinä **mittasiko kone
+   * ollenkaan**.
+   *
+   * Mitattu, ja tämä on se rivi joka päätti asian:
+   *
+   *     hiljeni 465 ms, äänikello 0.00 s / seinäkello 0.47 s, ikkunat 0.00 0.00
+   *
+   * Eli seinäkello eteni puoli sekuntia ja **äänikello ei lainkaan**.
+   * `ctx.state` sanoi koko ajan `running`. Kun renderöijä seisoo:
+   *
+   *   1. `getFloatTimeDomainData` palauttaa saman vanhan puskurin uudestaan ja
+   *      uudestaan — siitä ne toistuvat *täsmälleen* yhtä suuret lukemat
+   *      (`s 24.82 š 24.82 f 24.82`), joita elävä ääni ei voi tuottaa;
+   *   2. kaikki mitä sillä välillä soitetaan ajastetaan samaan jäätyneeseen
+   *      hetkeen, ja kun renderöijä herää, ne soivat **yhtä aikaa** — siitä ne
+   *      mahdottomat pohjakohinat 15,3 · 25,1 · 46,0, jotka eivät ole yhden
+   *      äänen häntä vaan sata ääntä samassa näytteessä;
+   *   3. juuri soitettu ääni lukee 0,000, koska sitä ei ole vielä renderöity.
+   *
+   * Sama yksi syy tuottaa siis molemmat oireet — sekä "väylä ei rauhoitu" että
+   * "puhetta ei kuulu" — ja siksi kolme neljästä kaatuvasta testistä oli koko
+   * ajan oire eikä oma vikansa.
+   *
+   * **Peli ei vuoda ääntä.** Tämä on headless-Chromiumin renderöijä, ei
+   * `audio.js`: oikealla koneella on oikea äänilaite joka pyytää näytteitä 48
+   * kertaa sekunnissa riippumatta siitä mitä sivu tekee. Se on tärkeä ero,
+   * koska toinen johtopäätös olisi ollut paljon isompi.
+   *
+   * Vastaus on kaksiosainen, eikä kumpikaan osa löysää yhtään kynnystä:
+   *
+   *   - `keepRendering()` panee väylälle **äänettömän** oskillaattorin
+   *     mittausten ajaksi. Elävä lähde on se mikä pitää renderöijän töissä, ja
+   *     nollavahvistus tarkoittaa ettei se lisää mittaukseen mitään.
+   *   - `metered()` vertaa äänikelloa seinäkelloon. Jos kone ei renderöinyt,
+   *     rivi sanoo **"ei mitattu"** samalla tavalla kuin se sanoo sen
+   *     jäähtyneelle äänikontekstille — se ei väitä mitään lukua joka ei ole
+   *     mittaus. Ja jotta portti ei voi kadota huomaamatta, alempana on
+   *     tarkistus joka kaatuu jos *yksikään* äänimittaus ei toteutunut.
+   */
+  let audioSkipped = 0;
+  let audioMeasured = 0;
+  /**
+   * Mittausikkuna **äänikellossa**, ei seinäkellossa.
+   *
+   * Tämä on se toinen puolisko, ja mitattuna se on tärkeämpi kuin oskillaattori:
+   * vihreässäkin ajossa renderöijä jäi jälkeen — *äänikello 2,65 s / seinäkello
+   * 6,14 s*, eli 43 % nopeudella — ja 420 ms:n seinäkelloikkuna oli silloin
+   * 180 ms ääntä. Puhuttu rivi on 400 ms pitkä, joten portti mittasi puolikkaan
+   * sanan ja vertasi sitä kokonaisen sanan kynnykseen.
+   *
+   * Ikkuna odottaa nyt sen verran **soitettua** ääntä kuin siltä pyydettiin.
+   * Katto on seinäkellossa ja väljä (kuusinkertainen): jos renderöijä on
+   * kokonaan seisonut, ikkuna ei koskaan täyty, ja silloin `stalled()` kertoo
+   * sen eikä lukua julisteta mittaukseksi.
+   */
+  const meterFor = (tap, an) => {
+    const buf = new Float32Array(an.fftSize);
+    /** Kuinka pitkän pätkän ääntä analysaattori muistaa kerralla. */
+    const windowSec = an.fftSize / tap.ctx.sampleRate;
+    let stalled = false;
+    const peakFor = async (ms) => {
+      let peak = 0;
+      const c0 = tap.ctx.currentTime;
+      const w0 = performance.now();
+      const cap = ms * 6 + 500;
+      let last = c0;
+      while ((tap.ctx.currentTime - c0) * 1000 < ms) {
+        an.getFloatTimeDomainData(buf);
+        for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+        /*
+         * Renderöijä ei ainoastaan seiso — se **ottaa kiinni ryöppyinä**:
+         * mitattu `äänikello 12.18 s / seinäkello 3.99 s`, eli neljässä
+         * sekunnissa renderöitiin kaksitoista sekuntia ääntä. Analysaattori
+         * muistaa vain viimeiset `windowSec` sekuntia, joten ryöpyn yli
+         * hypätty ääni ei ole hiljaisuutta vaan **ohi mennyttä**: juuri siitä
+         * tulivat lukemat `ääni 0.000` ja `s 0.000` silloin kun äänikello
+         * eteni ihan normaalisti. Jos kahden näytteen väliin mahtui enemmän
+         * ääntä kuin ikkunaan mahtuu, tämä ei ole mittaus.
+         */
+        const now = tap.ctx.currentTime;
+        if (now - last > windowSec) stalled = true;
+        last = now;
+        if (performance.now() - w0 > cap) { stalled = true; break; }
+        await new Promise((r) => setTimeout(r, 8));
+      }
+      return peak;
+    };
+    /**
+     * Odota väylän rauhoittumista, ja odota se **äänikellossa**.
+     *
+     * Tämä oli se viimeinen reikä: hiljaisuutta odotettiin seinäkellolla, ja
+     * kun renderöijä seisoi, silmukka luovutti kuudessa sekunnissa ehtimättä
+     * kuunnella kuin *kaksi kymmenesosaa sekuntia ääntä* — mitattu
+     * `äänikello 0.20 s / seinäkello 6.88 s`, ja kasautuneen ryöpyn jäänne
+     * 7,90 luettiin pohjakohinaksi. Nyt budjetti on soitettua ääntä, ja
+     * seinäkellossa on vain väljä varmistus jottei ajo voi jäädä roikkumaan;
+     * jos siihen mennään, luku ei ole mittaus vaan `stalled`.
+     */
+    const settle = async (seconds = 4, quiet = 0.02) => {
+      let calm = 0;
+      let level = 1;
+      const c0 = tap.ctx.currentTime;
+      const w0 = performance.now();
+      while (calm < 2 && tap.ctx.currentTime - c0 < seconds) {
+        level = await peakFor(200);
+        calm = level > quiet ? 0 : calm + 1;
+        if (performance.now() - w0 > seconds * 6000 + 2000) { stalled = true; break; }
+      }
+      return level;
+    };
+    /* Nollaus ennen sitä ikkunaa jonka luku väitetään, ja se on tarkoituksella
+     * mahdollista: mitattu, että renderöijä laahaa nimenomaan lohkon alussa —
+     * *ikkunat 302.78 302.78 12.30 3.60 1.55 0.11 0.00* — eli juuri silloin kun
+     * odotetaan väylän rauhoittumista. Jos yksikin hidas odotusikkuna
+     * mitätöisi koko lohkon, portti ohittaisi mittauksen joka onnistui. */
+    return { peakFor, settle, stalled: () => stalled, clear: () => { stalled = false; } };
+  };
+  const keepRendering = (tap) => {
+    if (!tap) return () => {};
+    const osc = tap.ctx.createOscillator();
+    const silent = tap.ctx.createGain();
+    silent.gain.value = 0;
+    osc.connect(silent).connect(tap.bus);
+    osc.start();
+    return () => {
+      try { osc.stop(); } catch { /* jo pysäytetty */ }
+      osc.disconnect();
+      silent.disconnect();
+    };
+  };
+  /**
+   * Toteutuiko mittaus: konteksti käy **ja** äänikello eteni sen aikana.
+   *
+   * Puolet seinäkellosta on raja eikä maku: renderöijä joka on hereillä pysyy
+   * mitatusti sadasosan päässä seinäkellosta (12 ikkunaa, suurin ero 6 ms), ja
+   * seissyt renderöijä jää nollaan. Väliä ei ole, joten raja saa olla väljä.
+   */
+  const metered = (tap, stalled) => {
+    /* Kone jolla ei ole ääntä lainkaan ei ole ohitus vaan eri kone, eikä sitä
+     * lasketa kumpaankaan lukuun: alempi tarkistus kysyy "mitattiinko mitään
+     * niistä joista olisi voinut mitata", eikä sen pidä kaatua siitä että
+     * ajoympäristössä ei ole äänilaitetta. */
+    if (!tap || tap.ctx.state !== 'running') return false;
+    if (stalled) audioSkipped++;
+    else audioMeasured++;
+    return !stalled;
+  };
+
   /* The vocals are synthesised through two narrow bandpass filters, so their
    * `gain` argument is applied to whatever survives the filters — it never
    * meant what it said. Measured, a nominal 0.44 came out at a third the
@@ -14566,6 +14825,8 @@ const report = await page.evaluate(async () => {
     let voice = 0;
     let floorNoise = 0;
     let note = '';
+    let stalled = false;
+    const stopWake = keepRendering(tap);
     if (tap && tap.ctx.state === 'running') {
       Music.stop();
       /* Punainen ennen vihreää, ja satunnaiselle vialle se tarkoittaa että
@@ -14577,19 +14838,14 @@ const report = await page.evaluate(async () => {
        * 19,450:n eli vian jota suite ei koskaan tuota itse. */
       for (const s of ['sprout', 'bigfart', 'burst', 'flight']) Sfx.play(s);
       const an = tap.ctx.createAnalyser();
-      an.fftSize = 2048;
+      /* 743 ms yhtäjaksoista aaltoa eikä 46 ms, ja syy on renderöijän ryöppy:
+       * lyhyt ikkuna ei muista kuin murusen siitä mitä yhden ryöpyn aikana
+       * soitettiin, ja ohi mennyt ääni luetaan nollaksi. Sama luku kuin
+       * konsonanttilohkolla. */
+      an.fftSize = 32768;
       tap.bus.connect(an);
-      const buf = new Float32Array(an.fftSize);
-      const peakFor = async (ms) => {
-        let peak = 0;
-        const t0 = performance.now();
-        while (performance.now() - t0 < ms) {
-          an.getFloatTimeDomainData(buf);
-          for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
-          await new Promise((r) => setTimeout(r, 8));
-        }
-        return peak;
-      };
+      const meter = meterFor(tap, an);
+      const peakFor = meter.peakFor;
       /* Odota hiljaisuutta, älä kelloa.
        *
        * Tässä oli kiinteä 900 ms odotus ja perustelu "suite on soittanut ääniä
@@ -14617,26 +14873,51 @@ const report = await page.evaluate(async () => {
        * päällä. Neljäsataa millisekuntia yhtäjaksoista hiljaisuutta on
        * pidempi kuin yksikään pelin äänen sisäinen tauko.
        *
-       * Jos väylä ei rauhoitu kuudessa sekunnissa, sekin on tulos eikä
-       * oletus: silmukka päättyy, `tausta` jää suureksi ja rivi kaatuu
-       * kertoen syyn. */
+       * Jos väylä ei rauhoitu kuudessa sekunnissa **soitettua ääntä**, sekin on
+       * tulos eikä oletus: silmukka päättyy, `tausta` jää suureksi ja rivi
+       * kaatuu kertoen syyn. Budjetti on äänikellossa, ks. `meterFor`. */
       const QUIET = 0.02;
       const t0 = performance.now();
+      const ct0 = tap.ctx.currentTime;
       let calm = 0;
-      while (calm < 2 && performance.now() - t0 < 6000) {
+      /* Kun väylä ei rauhoitu, se ei ole mittausvirhe vaan *joku soittaa*. Siksi
+       * tähän kerätään ikkunoiden sarja ja se näyttämö joka oli elossa silloin
+       * kun luovutettiin: kolme edellistä korjausyritystä etsi vikaa testin
+       * omista luvuista, ja jokainen niistä olisi loppunut minuutissa jos rivi
+       * olisi kertonut kuka ääntä piti. */
+      const windows = [];
+      while (calm < 2 && tap.ctx.currentTime - ct0 < 6) {
         floorNoise = await peakFor(200);
+        windows.push(floorNoise.toFixed(2));
         calm = floorNoise > QUIET ? 0 : calm + 1;
+        if (performance.now() - t0 > 40000) break;      // renderöijä seisoo, ks. alla
       }
+      /* Rauhoittumaton väylä on tulos vain jos kone ehti kuunnella sen: jos
+       * äänikello ei edennyt, luku on kasautuneen ryöpyn jäänne eikä
+       * pohjakohina. Mitattu kaatuneesta ajosta: `äänikello 0.20 s /
+       * seinäkello 6.88 s`, tausta 7,90. */
+      const heard = calm >= 2 || tap.ctx.currentTime - ct0 >= 5.5;
       const waited = Math.round(performance.now() - t0);
+      const ctWaited = tap.ctx.currentTime - ct0;
+      /* Näyttämö ja ikkunoiden sarja mukaan riville: jos väylä ei rauhoitu,
+       * kysymys on kuka ääntä pitää, ja kolme edellistä korjausyritystä olisi
+       * loppunut minuutissa jos rivi olisi kertonut sen. */
+      const live = game.scene ? game.scene.constructor.name : 'ei mitään';
+      meter.clear();
       Sfx.play('yeah');
       voice = await peakFor(420);
       an.disconnect();
-      note = ` (hiljeni ${waited} ms)`;
+      stalled = meter.stalled() || !heard;
+      note = ` (hiljeni ${waited} ms, näyttämö ${live}`
+        + `, äänikello ${ctWaited.toFixed(2)} s / seinäkello ${(waited / 1000).toFixed(2)} s`
+        + `, ikkunat ${windows.slice(-8).join(' ')})`;
     }
-    const measured = tap && tap.ctx.state === 'running';
+    stopWake();
+    const measured = metered(tap, stalled);
     expect('a spoken line is loud enough to hear',
       !measured || (floorNoise < 0.1 && voice > 0.25),
-      measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}${note}` : 'ei mitattu');
+      measured ? `ääni ${voice.toFixed(3)}, tausta ${floorNoise.toFixed(3)}${note}`
+        : `ei mitattu${note}`);
   }
 
   /*
@@ -14722,32 +15003,40 @@ const report = await page.evaluate(async () => {
       game.toTitle();
       Music.stop();
       Ambience.stop();                       // no room tail across the closures
+      const stopWake = keepRendering(tap);
       const an = tap.ctx.createAnalyser();
       an.fftSize = 32768;                    // 743 ms of contiguous waveform at 44.1k
       tap.bus.connect(an);
       const wave = new Float32Array(an.fftSize);
       const rate = tap.ctx.sampleRate;
-      const peakFor = async (ms) => {
-        let peak = 0;
-        const t0 = performance.now();
-        while (performance.now() - t0 < ms) {
-          an.getFloatTimeDomainData(wave);
-          for (let i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i]));
-          await new Promise((r) => setTimeout(r, 8));
-        }
-        return peak;
+      const meter = meterFor(tap, an);
+      const peakFor = meter.peakFor;
+      /* Tauko ei ole kello vaan ehto: odota kunnes väylä on oikeasti hiljaa,
+       * ja jos se ei rauhoitu, tämä ei ollut mittaus. Seinäkellon 300 ms oli
+       * arvaus edellisen sanan hännästä, ja ryöppyävällä renderöijällä myös
+       * kasautunut jäänne ehti sen sisään — mitattu `s 7.582`. */
+      let noisy = false;
+      const quiet = async () => {
+        const floor = await meter.settle(2);
+        if (floor > 0.02) noisy = true;
       };
-      const quiet = async () => new Promise((r) => setTimeout(r, 300));
       const say = async (word, gain = 0.44, dur = 0.34, ms = 420) => {
         await quiet();
         vox({ word, dur, gain });
         return peakFor(ms);
       };
 
+      /* Jokainen näistä kolmesta on mittaus, ja mittaus on tulos vasta jos kone
+       * renderöi sen ajan. Ks. `metered` ylempänä: kolme näistä neljästä
+       * puhetestistä oli oire eikä oma vikansa, ja tämä on se rivi jolla ero
+       * tehdään. */
       const checkA = async (name, fn) => {
         try {
+          meter.clear();
+          noisy = false;
           const [ok, detail] = await fn();
-          expect(name, ok, detail);
+          const real = metered(tap, meter.stalled() || noisy);
+          expect(name, !real || ok, real ? detail : `ei mitattu (äänikello seisoi): ${detail}`);
         } catch (err) {
           expect(name, false, `heitti: ${err.message}`);
         }
@@ -14779,9 +15068,13 @@ const report = await page.evaluate(async () => {
        * there the envelope never comes down between the two vowels. */
       await checkA('a plosive keeps its silence in the waveform', async () => {
         await quiet();
-        await new Promise((r) => setTimeout(r, 200));
+        await peakFor(200);
         vox({ word: 'ata', dur: 0.42, gain: 0.44 });
-        await new Promise((r) => setTimeout(r, 560));
+        /* 560 ms **soitettua** ääntä ennen kuin puskuri luetaan: sana on 420 ms
+         * pitkä, ja seinäkellossa odotettuna se olisi puolikas sana silloin kun
+         * renderöijä laahaa. Juuri se teki tästä testistä oireen: se luki
+         * aaltomuodon josta puolet ei ollut vielä olemassa. */
+        await peakFor(560);
         an.getFloatTimeDomainData(wave);
         const block = 64;                    // 1.45 ms per step
         const env = [];
@@ -14822,6 +15115,7 @@ const report = await page.evaluate(async () => {
           + `purskeen jälkeen ${after.toFixed(2)}`];
       });
       an.disconnect();
+      stopWake();
     }
   }
 
@@ -14846,10 +15140,12 @@ const report = await page.evaluate(async () => {
     game.toTitle();
     const { Ambience } = await import('/src/core/audio.js');
     const tap = audioTap();
-    const measured = tap && tap.ctx.state === 'running';
+    const running = tap && tap.ctx.state === 'running';
     const peaks = {};
     let floorAfter = 0;
-    if (measured) {
+    let stalled = false;
+    const stopWake = keepRendering(tap);
+    if (running) {
       Music.stop();
       Ambience.stop();
       const an = tap.ctx.createAnalyser();
@@ -14864,27 +15160,10 @@ const report = await page.evaluate(async () => {
        */
       an.fftSize = 16384;
       tap.bus.connect(an);
-      const buf = new Float32Array(an.fftSize);
-      const peakFor = async (ms) => {
-        let peak = 0;
-        const t0 = performance.now();
-        while (performance.now() - t0 < ms) {
-          an.getFloatTimeDomainData(buf);
-          for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
-          await new Promise((r) => setTimeout(r, 8));
-        }
-        return peak;
-      };
-      const settle = async () => {
-        let calm = 0;
-        let level = 1;
-        const t0 = performance.now();
-        while (calm < 2 && performance.now() - t0 < 4000) {
-          level = await peakFor(200);
-          calm = level > 0.02 ? 0 : calm + 1;
-        }
-        return level;
-      };
+      const meter = meterFor(tap, an);
+      const peakFor = meter.peakFor;
+      /* Neljä sekuntia **soitettua ääntä**, ei seinäkelloa: ks. `meterFor`. */
+      const settle = () => meter.settle(4);
       for (const name of ['pfull', 'pspent', 'pipeout', 'reserve', 'pipe', 'coin', 'powerup']) {
         /*
          * Jouten olon kello nollataan **jokaisen** äänen edeltä, eikä kerran
@@ -14910,12 +15189,18 @@ const report = await page.evaluate(async () => {
           Ambience.stop();
         }
         await settle();
+        /* Odotusikkunat eivät ratkaise, mitattava ikkuna ratkaisee: nollaus
+         * tähän ja luku heti sen jälkeen. Ks. `meterFor`. */
+        meter.clear();
         Sfx.play(name);
         peaks[name] = await peakFor(600);
+        stalled = stalled || meter.stalled();
       }
       floorAfter = await settle();
       an.disconnect();
     }
+    stopWake();
+    const measured = running && metered(tap, stalled);
     const n = (name) => (peaks[name] === undefined ? 0 : peaks[name]);
     const shown = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
     expect('uudet merkit kuuluvat, eivät huuda, eivätkä jätä väylää soimaan',
@@ -15358,10 +15643,12 @@ const report = await page.evaluate(async () => {
       game.toTitle();
       const { Ambience: Amb } = await import('/src/core/audio.js');
       const tap = audioTap();
-      const measured = tap && tap.ctx.state === 'running';
+      const running = tap && tap.ctx.state === 'running';
       const peaks = {};
       let floorAfter = 0;
-      if (measured) {
+      let stalled = false;
+      const stopWake = keepRendering(tap);
+      if (running) {
         Music.stop();
         Amb.stop();
         const an = tap.ctx.createAnalyser();
@@ -15370,36 +15657,22 @@ const report = await page.evaluate(async () => {
         // jonka kaiuttimet soittavat.
         an.fftSize = 16384;
         tap.bus.connect(an);
-        const buf = new Float32Array(an.fftSize);
-        const peakFor = async (ms) => {
-          let peak = 0;
-          const t0 = performance.now();
-          while (performance.now() - t0 < ms) {
-            an.getFloatTimeDomainData(buf);
-            for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
-            await new Promise((r) => setTimeout(r, 8));
-          }
-          return peak;
-        };
-        const settle = async () => {
-          let calm = 0;
-          let level = 1;
-          const t0 = performance.now();
-          while (calm < 2 && performance.now() - t0 < 4000) {
-            level = await peakFor(200);
-            calm = level > 0.02 ? 0 : calm + 1;
-          }
-          return level;
-        };
+        const meter = meterFor(tap, an);
+        const peakFor = meter.peakFor;
+        const settle = () => meter.settle(4);     // äänikellossa, ks. `meterFor`
         for (const name of [arriveSfx, 'stomp', 'coin', 'powerup']) {
           if (!name || !Sfx.has(name)) continue;
           await settle();
+          meter.clear();                     // ks. `meterFor`: vain mitattava ikkuna ratkaisee
           Sfx.play(name);
           peaks[name] = await peakFor(600);
+          stalled = stalled || meter.stalled();
         }
         floorAfter = await settle();
         an.disconnect();
       }
+      stopWake();
+      const measured = running && metered(tap, stalled);
       const n = (name) => (name && peaks[name] !== undefined ? peaks[name] : 0);
       const shown = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
       expect('saapumisen ääni kuuluu, ei huuda, eikä jätä väylää soimaan',
@@ -15410,6 +15683,19 @@ const report = await page.evaluate(async () => {
     }
   }
   /* ---- kuninkaan muodonvaihto loppuu ---- */
+
+  /*
+   * Ja se rivi joka pitää huolen ettei äänimittaus voi kadota huomaamatta.
+   *
+   * "Ei mitattu" on rehellinen vastaus yhdelle mittaukselle jonka aikana kone
+   * ei renderöinyt — mutta jos se olisi vastaus *jokaiseen*, koko ääniportti
+   * olisi sammunut ilman että kukaan huomaa, ja se on tasan se tapa jolla
+   * portteja hiljaisesti menetetään. Sama vaatimus kuin missä tahansa
+   * poikkeuslistassa tässä tiedostossa: sen pituus on itsessään mitattava luku.
+   */
+  expect('äänimittaukset todella mitattiin eikä vain ohitettu',
+    audioSkipped === 0 || audioMeasured > 0,
+    `mitattu ${audioMeasured}, ohitettu ${audioSkipped} (äänikello ei edennyt)`);
 
   /* A backgrounded tab throttles setTimeout, so the sequencer can wake up
    * seconds behind the audio clock. Playing that backlog would build thousands
@@ -16669,10 +16955,29 @@ const report = await page.evaluate(async () => {
        * olisi julistanut kuulumattomaksi äänen jonka kaiuttimet soittavat.
        */
       const tap2 = audioTap();
-      const measured = tap2 && tap2.ctx.state === 'running';
+      const running = tap2 && tap2.ctx.state === 'running';
       const peaks = {};
       let after = 0;
-      if (measured) {
+      let stalled = false;
+      /* Sama kahtia jaettu korjaus kuin aamun erässä (`meterFor` ja
+       * `keepRendering` ylempänä), omana kappaleenaan koska tämä lohko ajetaan
+       * eri `page.evaluate`ssa eikä siis näe niitä. Perustelu on kirjoitettu
+       * kerran sinne: ikkuna mitataan **äänikellossa**, ja väylällä pidetään
+       * äänetön lähde jotta renderöijä pysyy töissä. */
+      let wake = () => {};
+      if (running) {
+        const osc = tap2.ctx.createOscillator();
+        const silent = tap2.ctx.createGain();
+        silent.gain.value = 0;
+        osc.connect(silent).connect(tap2.bus);
+        osc.start();
+        wake = () => {
+          try { osc.stop(); } catch { /* jo pysäytetty */ }
+          osc.disconnect();
+          silent.disconnect();
+        };
+      }
+      if (running) {
         const { Ambience: Amb } = await import('/src/core/audio.js');
         Music.stop();
         Amb.stop();
@@ -16682,21 +16987,29 @@ const report = await page.evaluate(async () => {
         const buf = new Float32Array(an.fftSize);
         const peakFor = async (ms) => {
           let peak = 0;
-          const t0 = performance.now();
-          while (performance.now() - t0 < ms) {
+          const c0 = tap2.ctx.currentTime;
+          const w0 = performance.now();
+          const cap = ms * 6 + 500;
+          while ((tap2.ctx.currentTime - c0) * 1000 < ms) {
             an.getFloatTimeDomainData(buf);
             for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+            if (performance.now() - w0 > cap) { stalled = true; break; }
             await new Promise((r) => setTimeout(r, 8));
           }
           return peak;
         };
+        /* Neljä sekuntia soitettua ääntä, sama kuin aamun erässä. Seinäkellossa
+         * on vain väljä varmistus jottei ajo jää roikkumaan seisovaan
+         * renderöijään; siihen meneminen tarkoittaa ettei tämä ollut mittaus. */
         const settle = async () => {
           let calm = 0;
           let level = 1;
-          const t0 = performance.now();
-          while (calm < 2 && performance.now() - t0 < 4000) {
+          const c0 = tap2.ctx.currentTime;
+          const w0 = performance.now();
+          while (calm < 2 && tap2.ctx.currentTime - c0 < 4) {
             level = await peakFor(200);
             calm = level > 0.02 ? 0 : calm + 1;
+            if (performance.now() - w0 > 26000) { stalled = true; break; }
           }
           return level;
         };
@@ -16712,12 +17025,16 @@ const report = await page.evaluate(async () => {
             game.toTitle(); Music.stop(); Amb.stop();
           }
           await settle();
+          stalled = false;                   // vain mitattava ikkuna ratkaisee
           A.play(name);
           peaks[name] = await peakFor(600);
+          if (stalled) break;
         }
         after = await settle();
         an.disconnect();
       }
+      wake();
+      const measured = running && !stalled;
       const pk = (name) => (peaks[name] === undefined ? 0 : peaks[name]);
       const shownPeaks = Object.entries(peaks).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', ');
       expect('uudet merkit kuuluvat, eivät huuda, eivätkä jätä väylää soimaan',
