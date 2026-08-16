@@ -94,30 +94,42 @@ const POUND_SHAKE_MIN = 1.5;
 const POUND_SHAKE_RANGE = 4.5;
 
 /*
- * MAAHANISKU RIKKOO LATTIAN, JA VASTA KUN SE ON ANSAITTU KAHDESTI.
+ * MAAHANISKU RIKKOO LATTIAN, JA EHTO ON KATON EHTO YLÖSALAISIN.
  *
  * Kaksi ehtoa, ja ne ovat tarkoituksella eri lajia — toinen on se mitä pelaaja
  * on kerännyt, toinen se mitä hän juuri teki:
  *
- *   - **POUND_BREAK_LEVEL** on voimataso. Tämä on ainoa asia koko liikkeessä
- *     jonka voimataso *avaa* eikä vain vahvista, ja siksi se on kirjoitettu
- *     tähän eikä pujahtanut sisään: `poundImpact`in oma lupaus on "voimataso
- *     vain vahvistaa", ja tämä on siihen poikkeus jonka omistaja pyysi
- *     ("at least when the character is sufficiently powered up"). Kolme on se
- *     taso jolla peli muutenkin lakkaa olemasta varovainen — `shotsPerPress`
- *     nousee kahteen ja pierusta tulee `bigfart` samalla luvulla.
- *   - **POUND_BREAK_AT** on pudotuksen korkeus, ja se on tasan sama raja kuin
- *     `POUND_KILL_AT`: se jolla isku muuttuu kaadosta tapoksi. Yksi raja eikä
- *     kaksi, koska "tämä isku oli tosissaan" on yksi asia, ja pelaajan pitää
- *     pystyä oppimaan se kerran.
+ *   - **Kasvanut keho.** `p.big`, eli täsmälleen sama ehto jonka `bumpTile`
+ *     asettaa päänpuskulle: pieni Pieruprinssi kolauttaa tiiltä alta eikä se
+ *     hajoa, ja nyt hän myös laskeutuu sen päälle eikä se hajoa. Omistajan
+ *     pyyntö 16.8.2026 oli tämä symmetria sanasta sanaan — *"if there's a brick
+ *     that can be broken from below by jumping, then you should be able to
+ *     break it from above by a ground pound"* — ja se on parempi sääntö kuin se
+ *     joka tässä ennen oli (voimataso 3), koska se ei ole tämän liikkeen oma
+ *     luku lainkaan. Pelaaja on jo oppinut kerran kuka rikkoo tiilen; tämä ei
+ *     opeta sitä toiseen kertaan toisella numerolla.
+ *
+ *     Se on yhä poikkeus `poundImpact`in lupaukseen "voimataso vain vahvistaa",
+ *     ja se on kirjoitettu tähän eikä pujahtanut sisään. Poikkeus vain on nyt
+ *     yhden askeleen mittainen viiden sijaan, eli se koskee jokaista pelaajaa
+ *     joka on koskaan poiminut yhdenkin tehostuksen — ja DESIGN.md kohta 5:n
+ *     mielessä se on sama ovi jonka päänpusku jo avasi, ei uusi.
+ *   - **POUND_BREAK_AT** on pudotuksen korkeus, ja *tämä* on se ehto joka
+ *     maksaa. Se on korkeampi kuin `POUND_KILL_AT`, eli lattian rikkominen on
+ *     tiukempi vaatimus kuin tappaminen: syöksy joka tappaa vihollisen ei vielä
+ *     riitä tiileen, vaan sen päälle tarvitaan vielä reilusti lisää putoamista.
+ *     Omistajan sanoin "maybe you have to do it from pretty far up". Mitattu
+ *     `verify.mjs`:ssä molemmista suunnista: tavallisen kentän lattialla tämä
+ *     on noin 130 px pudotusta, eli enemmän kuin yksikään hyppy tuottaa
+ *     tasamaalta (mitattu paras 100 px, PHYSICS.md) — se on siis aina joko
+ *     korokkeelta tai pieruhypyllä ansaittu.
  *
  * Ei siis uutta reittiä tiilen läpi ohi sen sopimuksen jonka `burstBricks`
  * kirjoittaa: mitään muuta kuin `B` tämä ei koske, eikä `B`:tä joka piilottaa
  * jotain. Leveys on iskun oma `reach`, eli sama luku joka päättää ketkä
  * kaatuvat — reikä lattiassa on tasan sen levyinen kuin isku näytti olevan.
  */
-const POUND_BREAK_LEVEL = 3;
-const POUND_BREAK_AT = POUND_KILL_AT;
+const POUND_BREAK_AT = 0.72;
 
 /* Camera feel. The dead zone is what keeps a hop from shaking the screen; the
  * look-ahead is what lets you see the gap you are running at. */
@@ -796,6 +808,8 @@ const BAND_MUSIC_DWELL = 24;
  */
 const CAVE_BAND = 2;
 const CAVE_TRACK = 'cave';
+/** Ks. `trackFor` ja `updateStarMusic`, ja raita itse `core/audio.js`:ssä. */
+const STAR_TRACK = 'star';
 
 /*
  * The fortress door, from the boss falling over to the level ending.
@@ -971,6 +985,10 @@ export class LevelScene {
      * is somewhere it is not. See BAND_MUSIC_DWELL. */
     this.placeBand = 1;
     this.bandHold = 0;
+    /* Onko tähtiraita se joka soi. Johdettu ja tallentamaton kuten `placeBand`:
+     * `enter` lukee sen pelaajan tähdestä, joten pikatallennus kesken tähden
+     * palaa kesken tähteä eikä jää soittamaan huoneen raitaa. */
+    this.starMusic = false;
     this.bar = this.def.letterbox ? LETTERBOX_BAR : 0;
     /** How much level the view actually shows. Everything vertical reads this. */
     this.viewH = VIEW_H - 2 * this.bar;
@@ -1287,6 +1305,7 @@ export class LevelScene {
      * A boss level gets its own theme until the thing is beaten. */
     this.placeBand = this.player ? this.bandAt(this.player.y + this.player.h) : 1;
     this.bandHold = 0;
+    this.starMusic = !!(this.player && this.player.star > 0);
     Music.play(this.trackFor(this.placeBand));
     Music.setHurry(this.time <= HURRY_TIME);
     // The room and the weather, from the theme — the audio half of what
@@ -1598,11 +1617,10 @@ export class LevelScene {
    *
    *     The one exception is **breaking the floor**, and it is written as an
    *     exception rather than smuggled in as a stronger version of something:
-   *     under `POUND_BREAK_LEVEL` a lethal dive lands on a brick and stays on
-   *     it. That is the owner's ask — the smash goes through tiles "at least
-   *     when the character is sufficiently powered up" — and it is also the
-   *     only reading that keeps the move from replacing the tail and the
-   *     charge, both of which are power-ups you have to go and find.
+   *     a small Pieruprinssi lands a lethal dive on a brick and stays on it,
+   *     exactly as he bumps that brick from below and stays under it. What buys
+   *     the hole is the fall — `POUND_BREAK_AT`, and it is a harder bar than the
+   *     one that makes the dive lethal at all. See the constants for both.
    *
    * And spines beat all of it. `e.spiky` is skipped outright rather than merely
    * doing nothing, so a spiky walker under the landing is left standing and the
@@ -1619,7 +1637,7 @@ export class LevelScene {
     const waveAt = Math.max(POUND_WAVE_FLOOR, POUND_WAVE_AT - p.powerLevel * POUND_WAVE_PER_LEVEL);
     const wave = t >= waveAt;
     const shake = POUND_SHAKE_MIN + t * POUND_SHAKE_RANGE;
-    const breaks = p.powerLevel >= POUND_BREAK_LEVEL && t >= POUND_BREAK_AT;
+    const breaks = p.big && t >= POUND_BREAK_AT;
     const feet = p.y + p.h;
 
     /* The numbers, kept where they can be read back. The sound, the shake, the
@@ -2249,9 +2267,56 @@ export class LevelScene {
    * seven.
    */
   trackFor(band) {
+    /*
+     * SUPERTÄHTI VOITTAA KAIKEN, MYÖS POMON.
+     *
+     * Ensimmäisenä, ja se on koko sääntö: jokainen muu rivi tässä metodissa
+     * vastaa kysymykseen *missä olen* — kenttä, luola, linnake, pomohuone — ja
+     * tähti vastaa kysymykseen *mitä minulle tapahtuu*. Kun molemmilla on
+     * sanottavaa, jälkimmäinen on aina uudempi tieto, ja uudempi tieto voittaa.
+     * Se on täsmälleen sama järjestys jonka ruudun väri jo noudattaa
+     * (`PALETTE`: osuma > tähti > huone), ja kahden signaalin eri järjestys
+     * olisi kaksi eri väitettä samasta hetkestä.
+     *
+     * Nimenomaan **myös pomon**, koska se on se kohta joka näyttää
+     * kyseenalaiselta ja on silti ainoa johdonmukainen: tähti pomohuoneessa on
+     * juuri se hetki jona pelaaja tekee sen mitä tähti lupaa, eli kävelee
+     * suoraan päin. Raita joka jättäisi sen kertomatta olisi vaiti pelin
+     * harvinaisimmasta asiasta.
+     */
+    if (this.player && this.player.star > 0) return STAR_TRACK;
     if (this.def.boss && !this.bossDefeated) return this.def.bossMusic || 'boss';
     const own = this.def.music || 'level';
     return band >= CAVE_BAND ? CAVE_TRACK : own;
+  }
+
+  /**
+   * Tähden alku ja loppu, kuultuna.
+   *
+   * Oma metodinsa ja oma lippunsa eikä `updateBandMusic`in kylkeen kirjoitettu
+   * ehto, ja syy on se että ne kaksi mittaavat eri asiaa eri tarkkuudella.
+   * Kaistanvaihto on *paikka*, ja paikka vaatii `BAND_MUSIC_DWELL` framea
+   * viivettä ettei putkesta kurkkaaminen vaihda raitaa; tähti on *tapahtuma*,
+   * ja tapahtuma kuuluu sillä framella jolla se tapahtuu. Sama pari, sama ero
+   * kuin `noteBand`illa ja `updateBandMusic`illa vierekkäin.
+   *
+   * Lippu eikä `Music.current`in vertailu, koska mykistetty peli ei aseta
+   * `current`ia lainkaan siihen mitä soisi: mykkänä pelattu tähti jättäisi
+   * silloin raidan vaihtamatta silloinkin kun ääni palaa.
+   *
+   * `Music.play` on tyhjä kutsu kun nimi ei muutu, joten kaistanvaihto tähden
+   * aikana ei katkaise raitaa — ja kun tähti loppuu, tämä palauttaa sen raidan
+   * joka *nyt* kuuluu tähän paikkaan eikä sitä joka kuului siihen mistä tähti
+   * alkoi. Kiire pannaan takaisin päälle samasta syystä kuin kaistanvaihdossa:
+   * tuore raita alkaa aina rauhallisena.
+   */
+  updateStarMusic() {
+    if (this.state !== 'play' || !this.player) return;
+    const on = this.player.star > 0;
+    if (on === this.starMusic) return;
+    this.starMusic = on;
+    Music.play(this.trackFor(this.placeBand));
+    Music.setHurry(this.time <= HURRY_TIME);
   }
 
   /**
@@ -2540,6 +2605,7 @@ export class LevelScene {
     if (this.player) {
       this.noteBand(this.player.y + this.player.h);
       this.updateBandMusic();
+      this.updateStarMusic();
     }
   }
 

@@ -743,15 +743,16 @@ const report = await page.evaluate(async () => {
         + `; eri ruutuja 12 framessa: isku ${waveFrames}, pomo ${bossFrames}`);
     }
 
-    /* 12. MAAHANISKU RIKKOO LATTIAN, ja kolme asiaa siinä voi mennä rikki:
-     *     liike joka ei riko mitään, liike joka rikkoo aina, ja liike joka
-     *     rikkoo sen mitä se ei saa rikkoa.
+    /* 12. MAAHANISKU RIKKOO LATTIAN, ja neljä asiaa siinä voi mennä rikki:
+     *     liike joka ei riko mitään, liike joka rikkoo aina, liike joka rikkoo
+     *     sen mitä se ei saa rikkoa, ja — 16.8.2026 alkaen — liike joka on
+     *     eri mieltä päänpuskun kanssa siitä kuka tiilen rikkoo.
      *
-     *     Koekenttä on tässä eikä oikea kenttä, koska ehto on korkeus JA
-     *     voimataso, ja se vaatii tiiliriviä täsmälleen jalkojen alla. Riviä ei
-     *     valita silmällä vaan mitataan: `brickSecret` päättää salaisuuden
-     *     paikan hajautuksesta, joten koe etsii sarakkeen jossa yksikään tiili
-     *     ei piilota mitään — muuten kokeen tulos riippuisi siitä mihin kohtaan
+     *     Koekenttä on tässä eikä oikea kenttä, koska ehto on korkeus JA keho,
+     *     ja se vaatii tiiliriviä täsmälleen jalkojen alla. Riviä ei valita
+     *     silmällä vaan mitataan: `brickSecret` päättää salaisuuden paikan
+     *     hajautuksesta, joten koe etsii sarakkeen jossa yksikään tiili ei
+     *     piilota mitään — muuten kokeen tulos riippuisi siitä mihin kohtaan
      *     ruudukkoa se sattui kirjoittamaan.
      */
     {
@@ -804,17 +805,85 @@ const report = await page.evaluate(async () => {
       };
 
       const weak = dive({ type: 'shroom', level: 5 }, 24);
+      /* Tappava muttei rikkova. Tämä on se väli jonka `POUND_BREAK_AT`
+       * `POUND_KILL_AT`in yläpuolella tarkoittaa, ja ilman tätä riviä koko
+       * väite "lattian rikkominen on tiukempi vaatimus kuin tappaminen" ei ole
+       * mitattu vaan kirjoitettu. */
+      const lethal = dive({ type: 'shroom', level: 1 }, 110);
       const strongLow = dive({ type: 'shroom', level: 1 }, 150);
       const strong = dive({ type: 'shroom', level: 5 }, 150);
 
-      expect('maahanisku rikkoo tiilen vain korkealta ja vain kyllin vahvana',
+      expect('maahanisku rikkoo tiilen vain kyllin korkealta, ja se raja on tappamisen rajaa ylempänä',
         !!weak.lastPound && !weak.lastPound.broke
-        && !!strongLow.lastPound && !strongLow.lastPound.broke
+        && !!lethal.lastPound && lethal.lastPound.kills && !lethal.lastPound.broke
+        && !!strongLow.lastPound && strongLow.lastPound.broke > 0
         && !!strong.lastPound && strong.lastPound.broke > 0,
         `matala voima 5: ${weak.lastPound && weak.lastPound.broke} tiiltä`
         + ` (voima ${weak.lastPound && weak.lastPound.strength.toFixed(2)})`
+        + `, tappava voima 1: ${lethal.lastPound && lethal.lastPound.broke} tiiltä`
+        + ` (voima ${lethal.lastPound && lethal.lastPound.strength.toFixed(2)}`
+        + `, tappaa ${lethal.lastPound && lethal.lastPound.kills})`
         + `, korkea voima 1: ${strongLow.lastPound && strongLow.lastPound.broke} tiiltä`
+        + ` (voima ${strongLow.lastPound && strongLow.lastPound.strength.toFixed(2)})`
         + `, korkea voima 5: ${strong.lastPound && strong.lastPound.broke} tiiltä`);
+
+      /*
+       * JA SE ON KATON EHTO YLÖSALAISIN, eli sama vastaus kuin päänpuskulla.
+       *
+       * Sama tiilirivi, sama pudotus, kaksi kehoa: pieni ei riko sitä altakaan
+       * (`bumpTile` vaatii `player.big`), joten se ei saa rikkoa sitä
+       * päältäkään. Mitattuna molemmat suunnat samassa kokeessa, koska väite ei
+       * ole "pieni ei riko" vaan "**nämä kaksi ovat sama sääntö**" — ja se
+       * hajoaa hiljaa sinä päivänä kun jompaakumpaa säädetään yksin.
+       */
+      {
+        /* Puskukoe tarvitsee oman kenttänsä: iskukokeen tiilirivi on lattiassa
+         * ja lattian alla on lattiaa, eli sen alle ei mahdu päätä. Tässä sama
+         * tiili on ilmassa rivillä 9 — kolme tyhjää riviä lattian yllä, eli
+         * tasan se bumppirivi johon peli muutenkin panee lohkonsa. */
+        const bumpAt = 20;
+        const bumpDef = () => {
+          const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+          const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
+          put(13, 0, '#'.repeat(W));
+          put(14, 0, '#'.repeat(W));
+          put(12, 1, '1');
+          put(9, 6, '!');
+          put(12, 44, 'F');
+          put(9, bumpAt, 'B'.repeat(4));
+          return {
+            id: 'bBump', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+            boss: false, bossVariant: 0, bands: null, rows,
+          };
+        };
+        const bump = (power) => {
+          reset(power);
+          const s = new LevelScene(game, 'bBump', bumpDef());
+          game.setScene(s);
+          const i = mkInput();
+          for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+          // Suoraan tiilen alle lattialle, ja hyppy pohjaan.
+          const p = s.player;
+          p.x = (bumpAt + 1) * 16;
+          p.y = 13 * 16 - p.h;
+          p.vy = 0;
+          p.onGround = true;
+          i.pressed.jump = true;
+          i.held.jump = true;
+          let f = 0;
+          while (f < 60 && s.tileAt(bumpAt + 1, 9) === 'B') { s.update(i); i.pressed = blank(); f++; }
+          return s.tileAt(bumpAt + 1, 9) !== 'B';
+        };
+        const smallDive = dive({ type: null, level: 0 }, 150);
+        const smallBump = bump({ type: null, level: 0 });
+        const bigBump = bump({ type: 'shroom', level: 1 });
+        expect('lattian rikkoo se keho joka rikkoo katon: pieni kumpaakaan, kasvanut molemmat',
+          !smallBump && !smallDive.lastPound.broke && bigBump && strongLow.lastPound.broke > 0,
+          `pieni: puskee ${smallBump}, iskee ${smallDive.lastPound.broke} tiiltä`
+          + ` (voima ${smallDive.lastPound.strength.toFixed(2)}, eli korkeus riitti)`
+          + ` — kasvanut: puskee ${bigBump}, iskee ${strongLow.lastPound.broke} tiiltä`);
+      }
 
       /* Ja se ei saa syödä salaisuutta. Sama sopimus kuin puskulla ja
        * hännällä — `LevelScene.burstBricks` — mitattuna eikä luvattuna.
@@ -6750,6 +6819,60 @@ const report = await page.evaluate(async () => {
       Music.stop();
       Music.current = null;
     }
+
+    /*
+     * 10. SUPERTÄHTI — pelin ainoa raita joka ei ole paikka.
+     *
+     * Kaikki yllä oleva mittaa sitä että raita seuraa jalkoja. Tämä mittaa
+     * päinvastaista: raitaa joka ei välitä jaloista lainkaan, ja jonka koko
+     * merkitys on siinä että se **loppuu**. Kolme väitettä, ja jokainen niistä
+     * on sellainen jonka voi rikkoa vahingossa ilman että mikään muu näkyy:
+     *
+     *   a) tähti vaihtaa raidan sillä framella jolla se alkaa, ja **palauttaa
+     *      sen huoneen raidan joka silloin kuuluu tähän paikkaan** — ei sitä
+     *      jossa tähti alkoi. Mitataan luolassa, koska se on ainoa paikka jossa
+     *      nuo kaksi voivat erota;
+     *   b) tähti voittaa pomoraidan. Se on `trackFor`in ensimmäinen rivi ja
+     *      samalla se rivi joka näyttää kyseenalaiselta, eli juuri se jonka joku
+     *      joskus kääntää toisin päin;
+     *   c) raita on datana se mitä siitä väitetään: pelin nopein. Tempo on luku
+     *      taulussa, joten tämä on tarkistus eikä mielipide.
+     */
+    {
+      const { STAR_FRAMES } = await import('/src/entities/player.js');
+      const s = mk('1-1', { type: 'shroom', level: 1 });
+      const own = Music.current;
+      s.player.collect('star');
+      s.update(i);
+      const onStar = Music.current;
+      // Loppuun asti, ja sitten muutama frame yli.
+      s.player.star = 2;
+      for (let f = 0; f < 6; f++) { i.pressed = blank(); s.update(i); }
+      expect('supertähti soi omaa raitaansa ja antaa huoneen takaisin kun se loppuu',
+        own === 'level' && Music.has('star') && onStar === 'star'
+        && s.player.star === 0 && Music.current === 'level',
+        `${own} -> ${onStar} -> ${Music.current} (tähteä jäljellä ${s.player.star},`
+        + ` täysi mitta ${STAR_FRAMES} framea)`);
+
+      const boss = mk('1-F', { type: 'shroom', level: 1 });
+      const bossOwn = Music.current;
+      boss.player.collect('star');
+      boss.update(i);
+      const bossStar = Music.current;
+      boss.player.star = 1;
+      for (let f = 0; f < 4; f++) { i.pressed = blank(); boss.update(i); }
+      expect('tähti voittaa pomoraidan, ja pomo saa raitansa takaisin',
+        bossOwn === 'boss' && bossStar === 'star' && Music.current === 'boss',
+        `${bossOwn} -> ${bossStar} -> ${Music.current}`);
+
+      const tempos = Music.names().map((n) => [n, Music.tempoOf(n)]);
+      const fastest = tempos.reduce((a, b) => (b[1] > a[1] ? b : a));
+      expect('tähtiraita on pelin nopein: kello on osa sen sisältöä',
+        fastest[0] === 'star',
+        tempos.sort((a, b) => b[1] - a[1]).map(([n, t]) => `${n} ${t}`).join(', '));
+      Music.stop();
+      Music.current = null;
+    }
   }
 
   /* ------------------------------ kuplaloukku -------------------------- */
@@ -9382,6 +9505,22 @@ const report = await page.evaluate(async () => {
       { n: 'run 2', s: { state: 'walk', frame: 2, running: true } },
       { n: 'jump', s: { state: 'jump', frame: 0 } },
       { n: 'duck', s: { state: 'duck', ducking: true } },
+      /*
+       * MAAHANISKU, kolme näytettä. Ne ovat tässä listassa eivätkä omassa
+       * kokeessaan siksi että tämän listan kaksi porttia ovat juuri ne jotka
+       * uusi asento voi rikkoa: kyykky piirretään laatikon *pohjalle* eikä sen
+       * ylälaitaan, joten se on kaikista asennoista lähimpänä sitä riviä jonka
+       * alle mikään ei saa mennä (`below: 0` — lattiaviiva on lattiaviiva), ja
+       * se on myös ainoa asento jossa pää ja vartalo on siirretty yhdessä eikä
+       * erikseen, eli ainoa jossa hahmo voisi katketa kahtia.
+       *
+       * `ducking` on tarkoituksella `false` kaikissa kolmessa: syöksy ei kutistu
+       * laatikkoaan, ja jos joku joskus panee sen kutistumaan, tämä lista mittaa
+       * asennon väärää laatikkoa vasten ja kertoo siitä.
+       */
+      { n: 'pound charge', s: { state: 'jump', pound: 'charge', poundT: 12 } },
+      { n: 'pound lag', s: { state: 'idle', pound: 'lag', poundT: 20 } },
+      { n: 'pound rise', s: { state: 'idle', pound: 'lag', poundT: 3 } },
       /* Hand over hand up a vine, seen from behind. Nothing leaves the box
        * that the standing pose does not already send out: the raised arms sit
        * on the same columns the hanging ones do. */
@@ -9417,6 +9556,10 @@ const report = await page.evaluate(async () => {
     const leaks = [];
     const pieces = [];
     const hashes = {};
+    /* Kuinka monta pikseliä laatikon ylälaidasta alaspäin piirros alkaa. Yksi
+     * luku per asento, ja se on koko kyykyn mitta: kyykky *on* se että pää on
+     * alempana. */
+    const tops = {};
     for (const level of [0, 1, 2, 3, 4, 5]) {
       for (const type of [null, 'shroom', 'flower', 'leaf', 'pop']) {
         for (const p of poses) {
@@ -9445,7 +9588,10 @@ const report = await page.evaluate(async () => {
                 if (y > y1) y1 = y;
               }
             }
-            if (facing === 1) hashes[`${level}|${type}|${p.n}`] = hash;
+            if (facing === 1) {
+              hashes[`${level}|${type}|${p.n}`] = hash;
+              tops[`${level}|${type}|${p.n}`] = y0 - OY;
+            }
             const where = `L${level} ${type || 'none'} ${p.n} f${facing}`;
             if (x1 < 0) { leaks.push(`${where}: nothing drawn at all`); continue; }
 
@@ -9501,6 +9647,44 @@ const report = await page.evaluate(async () => {
       leaks.length === 0, `${leaks.length} poses leak: ${leaks.slice(0, 4).join('; ')}`);
     expect('the player is one piece in every pose at every power level',
       pieces.length === 0, `${pieces.length} broken: ${pieces.slice(0, 4).join('; ')}`);
+
+    /*
+     * MAAHANISKUN KYYKKY ON KYYKKY, JA SE MITATAAN PÄÄN PAIKASTA.
+     *
+     * Asento tuli siksi että liikkeen hinta — ne 12 + n framea joina pelaaja ei
+     * ohjaa mitään — oli koko ajan olemassa mutta näkymätön: ilmassa `state()`
+     * sanoi `jump` ja maassa `idle`, eli lataus näytti leijumiselta ja
+     * laskeutumisen jälkeinen jäykkyys siltä että hahmo seisoo tumput suorina.
+     * "Piirsimme asennon" ei ole tarkistettavissa; **"pää on alempana"** on.
+     *
+     * Kolme lukua ja kaksi väitettä: kyykyssä pää on alempana kuin seistessä,
+     * ja nousussa se on matkalla takaisin ylös muttei vielä perillä. Jokaisella
+     * voimatasolla ja jokaisella tehostuksella, koska piirros skaalataan
+     * tasoille 2–5 samasta 26 rivin pohjasta eikä yksikään niistä ole erikseen
+     * piirretty — ja juuri siksi yksikään niistä ei myöskään ole erikseen
+     * katsottu.
+     */
+    {
+      const flat = [];
+      for (const level of [0, 1, 2, 3, 4, 5]) {
+        for (const t of [null, 'shroom', 'flower', 'leaf', 'pop']) {
+          const key = (n) => tops[`${level}|${t}|${n}`];
+          const stand = key('idle');
+          const lag = key('pound lag');
+          const rise = key('pound rise');
+          if (!(lag > stand && rise < lag && rise >= stand)) {
+            flat.push(`L${level} ${t || 'none'}: seisten ${stand}, kyykyssä ${lag}, noustessa ${rise}`);
+          }
+        }
+      }
+      expect('maahaniskun kyykky on kyykky: pää laskee ja nousee takaisin',
+        flat.length === 0,
+        flat.length ? flat.slice(0, 4).join('; ')
+          : `L1 none seisten ${tops['1|null|idle']}, kyykyssä ${tops['1|null|pound lag']}`
+            + `, noustessa ${tops['1|null|pound rise']}`
+            + ` — L5 none ${tops['5|null|idle']}/${tops['5|null|pound lag']}`
+            + `/${tops['5|null|pound rise']}`);
+    }
 
     /* The paukkupapu landed as the fourth power type on the day this audit was
      * written, and a new type that inherits another one's drawing looks exactly

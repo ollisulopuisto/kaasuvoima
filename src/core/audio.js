@@ -2428,6 +2428,81 @@ const TRACKS = {
     },
   },
 
+  /*
+   * SUPERTÄHTI — se yksi raita joka ei kuulu paikkaan vaan tilaan.
+   *
+   * Jokainen muu raita tässä taulussa vastaa kysymykseen *missä olen*: kenttä,
+   * luola, linnake, luulaakso, pomohuone. Tämä vastaa kysymykseen *mitä minulle
+   * juuri nyt tapahtuu*, ja siksi se on ainoa joka voi soida minkä tahansa
+   * niistä päällä. DESIGN.md kohta 8: musiikki on kertojan ääntä, ja tämä on
+   * kertoja huutamassa yhden lauseen — **et voi kuolla juuri nyt** — jonka
+   * jokainen tämän lajin pelaaja tunnistaa kuulematta sanaakaan.
+   *
+   * Se on siis myös ainoa raita jolla on **loppu jonka pelaaja kuulee**: tähti
+   * kestää `STAR_FRAMES` framea ja sitten huone palaa. Kaikki alla on
+   * kirjoitettu sen loppumista vasten:
+   *
+   *   - **Nopein tempo koko pelissä**, 208 vastaan pomon 176. Kiireen tuntu on
+   *     tässä sisältöä eikä koristetta: liikkumaton kello on juuri se asia joka
+   *     tekee haavoittumattomuudesta hetken eikä tilan.
+   *   - **Yksi kahden tahdin riffi ja ei yhtään taukoa.** Sävelet ovat kaikki
+   *     kuudestoistaosia, eli ääni ei nosta jalkaansa kertaakaan. Melodia on
+   *     A-duurin pentatoninen (0 2 4 7 9) ylös ja alas — ei yhtään puolisävelen
+   *     riitasointua, koska tämä on ainoa raita jonka on tarkoitus kuulostaa
+   *     siltä että kaikki menee hyvin.
+   *   - **Basso kävelee kromaattisesti ylös** ja putoaa takaisin pohjalle joka
+   *     toinen tahti. Se on se osa joka ei anna riffin jäädä paikalleen: sama
+   *     kuvio kolmella eri pohjalla kuulostaa kolmelta eri kuviolta.
+   *   - **Bassorumpu kahdeksasosille ja hi-hat joka kuudestoistaosalle.** Sama
+   *     tiheys kuin *Yö Autiovuorella* -raidalla, ja se on tässä tarkoituksella:
+   *     ne kaksi ovat pelin ainoat raidat joissa mikään ei jää odottamaan.
+   *
+   * Omaa sävellystä, ei `source`-kenttää. Vapautuneesta sävelmistöstä ei löydy
+   * teosta joka olisi *tämä lause*; klassikot ovat paikkoja ja tunnelmia, eikä
+   * kuudentoista sekunnin voittoputki ole kumpikaan.
+   */
+  star: {
+    tempo: 208,
+    lead: {
+      wave: 'square', gain: 0.13, detune: 8, octave: 12, staccato: 0.9,
+      notes: [
+        [0, 1], [4, 1], [7, 1], [9, 1], [12, 1], [9, 1], [7, 1], [4, 1],
+        [2, 1], [5, 1], [9, 1], [11, 1], [14, 1], [11, 1], [9, 1], [5, 1],
+        [4, 1], [7, 1], [11, 1], [12, 1], [16, 1], [12, 1], [11, 1], [7, 1],
+        [5, 1], [9, 1], [12, 1], [14, 1], [16, 2], [19, 2],
+      ],
+    },
+    harm: {
+      // Offbeat, ja vain kvinttejä: sointu joka ei sano duuria eikä mollia
+      // jaksaa toistua kuusitoista sekuntia ilman että se alkaa väittää.
+      wave: 'triangle', gain: 0.05, octave: 0, staccato: 0.4,
+      notes: [
+        [null, 1], [[0, 7], 1], [null, 1], [[0, 7], 1],
+        [null, 1], [[0, 7], 1], [null, 1], [[0, 7], 1],
+        [null, 1], [[2, 9], 1], [null, 1], [[2, 9], 1],
+        [null, 1], [[2, 9], 1], [null, 1], [[2, 9], 1],
+        [null, 1], [[4, 11], 1], [null, 1], [[4, 11], 1],
+        [null, 1], [[4, 11], 1], [null, 1], [[4, 11], 1],
+        [null, 1], [[5, 12], 1], [null, 1], [[5, 12], 1],
+        [null, 1], [[7, 14], 1], [null, 1], [[7, 14], 1],
+      ],
+    },
+    bass: {
+      wave: 'sawtooth', gain: 0.16, staccato: 0.55,
+      notes: [
+        [-24, 2], [-24, 2], [-24, 2], [-12, 2], [-22, 2], [-22, 2], [-20, 2], [-20, 2],
+        [-22, 2], [-22, 2], [-22, 2], [-10, 2], [-20, 2], [-20, 2], [-19, 2], [-19, 2],
+        [-20, 2], [-20, 2], [-20, 2], [-8, 2], [-19, 2], [-19, 2], [-17, 2], [-17, 2],
+        [-19, 2], [-19, 2], [-17, 2], [-17, 2], [-15, 2], [-14, 2], [-12, 2], [-24, 2],
+      ],
+    },
+    drums: {
+      kick: 'x.x.x.x.x.x.x.x.',
+      snare: '....x.......x.x.',
+      hat: 'xxxxxxxxxxxxxxxx',
+    },
+  },
+
   boss: {
     tempo: 176,
     lead: {
@@ -2599,6 +2674,11 @@ export const Music = {
 
   has: (name) => Object.prototype.hasOwnProperty.call(TRACKS, name),
   names: () => Object.keys(TRACKS),
+  /* Kirjoitettu tempo, ei soiva: `_applyVariation` venyttää askelta osion ja
+   * kiireen mukaan, ja tämä on se luku joka taulussa lukee. Ulkona siksi että
+   * "tähtiraita on pelin nopein" on väite tästä taulusta, ja väitteen pitää
+   * olla tarkistettavissa taulusta eikä muistista (ks. `verify.mjs`). */
+  tempoOf: (name) => (TRACKS[name] || {}).tempo || 0,
   variation: () => Music._variation.label + (Music._changing ? ' >>' : ''),
   /** Where the accelerando has got to, as a multiple of the written tempo. */
   pace: () => paceAt(Music._track, Music._step, Music._loopLen),
