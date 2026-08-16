@@ -112,6 +112,9 @@ export function captureState(game) {
          * hylly on kentän tilaa jolla on kello, ja ruudukko yksin palauttaisi
          * sen ikuisena. Kello on se mikä tekee siitä liikkeen. */
         shelves: [...scene.shelves.entries()],
+        /* Liikkeellä oleva hiekka. Joukko eikä kartta, koska hiekasta ei
+         * tarvitse muistaa muuta kuin että se on matkalla — ks. `pourAbove`. */
+        pours: [...scene.pours],
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -176,6 +179,7 @@ export function restoreState(game, snap) {
   // Older snapshots predate crumbling platforms; an absent list is not an error.
   scene.crumbles = new Map(data.crumbles || []);
   scene.shelves = new Map(data.shelves || []);
+  scene.pours = new Set(data.pours || []);
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

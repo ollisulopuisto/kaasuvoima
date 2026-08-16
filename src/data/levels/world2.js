@@ -524,7 +524,7 @@ export const WORLD2_LEVELS = {
     chunks: [
       'start', 'power', 'clay_cut', 'walkers', 'pit_twin', 'clay_vault',
       'shell', 'spikes', 'flyer', 'pit_plat', 'clay_rim', 'plat_steps',
-      'clay_boards', 'pit_l', 'heartburn_pair', 'note_pair', 'clay_cut', 'power',
+      'clay_boards', 'pit_l', 'heartburn_pair', 'note_pair', 'dune_pour', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },

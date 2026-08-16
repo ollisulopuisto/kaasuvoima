@@ -923,6 +923,22 @@ const SFX = {
     noise({ dur: 0.1, from: 1700, to: 460, q: 2, gain: 0.13, attack: 0.004 });
   },
   /*
+   * VALUVA HIEKKA: pelkkää kohinaa, ja se on koko pointti.
+   *
+   * Hiekka on ainoa ääni tässä pelissä jossa ei ole yhtään säveltä. Se on
+   * tarkoituksellista: sävel on tässä pelissä tapahtuman merkki (kolikko,
+   * lyhty, kytkin), ja valuminen ei ole tapahtuma vaan **tila** joka jatkuu
+   * niin kauan kuin hiekkaa riittää. Sointi tekisi siitä sarjan tapahtumia,
+   * ja kolmekymmentä pientä kilahdusta peräkkäin on hälytys.
+   *
+   * Kaistanpäästö on kapea ja matalalla (`q` 1,1), koska hiekka on massaa
+   * eikä suihkua: ylös avattuna sama kohina on kaasua, ja kaasua tässä
+   * pelissä on jo kaikki muu.
+   */
+  hiekka: () => {
+    noise({ dur: 0.16, from: 900, to: 300, q: 1.1, gain: 0.1, attack: 0.02 });
+  },
+  /*
    * KAASULYHDYN SYTYTYS: sihahdus ja kaksi nousevaa säveltä.
    *
    * Kohinasta soinnuksi, ja siinä järjestyksessä, koska tapahtuma on juuri se:
