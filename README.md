@@ -577,7 +577,8 @@ tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
 mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
 ummetuskorkki, `x` piikkiukko, `A` vihainen aurinko, `H` närästys, `U`
 kurnuttaja (kuilun ensimmäiselle lattiariville, tyhjään sarakkeeseen), `O` kuu,
-`P` papuparooni, `b` pomo. Aloituspaikka on `1`.
+`P` papuparooni, `b` pomo, `T` törähdystorvi, `Z` paarma (ilmaan, ei lattialle),
+`Y` yökki, `m` paukkupöhö. Aloituspaikka on `1`.
 
 Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 

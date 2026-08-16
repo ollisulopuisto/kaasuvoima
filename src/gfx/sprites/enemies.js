@@ -1150,16 +1150,25 @@ function torahdysBody(ctx, x, y, tick, facing) {
   const px = Math.round(x);
   const py = Math.round(y);
   flip(ctx, px, 16, facing < 0, (bx) => {
-    // Pyrstö: kaasu joka työntää, ja se vilkkuu omalla tahdillaan.
+    /* Pyrstö: kaasu joka työntää, ja se vilkkuu omalla tahdillaan.
+     *
+     * Kolmannes koko rungosta eikä pelkkä nokare, ja se on mittaus: pelkällä
+     * messingillä ammus erottui **aavikon maasta 2,6 prosentilla** (kynnys
+     * 8,6) — sama vika ja sama syy kuin torvella tehtaan lattiaa vasten, eli
+     * lämmin esine lämpimällä maalla. Kaasunvihreä on ainoa väri tässä pelissä
+     * joka ei ole yhdenkään teeman maata, ja se on tässä sitä paitsi se osa
+     * joka *kertoo mikä tämän liikkeelle panee*. */
     ctx.fillStyle = Math.floor(tick / 2) % 2 ? C.gas : C.gasDark;
-    ctx.fillRect(bx, py + 4, 4, 4);
+    ctx.fillRect(bx, py + 2, 6, 8);
+    ctx.fillStyle = C.gasDark;
+    ctx.fillRect(bx, py + 8, 6, 2);
     // Runko.
     ctx.fillStyle = BRASS;
-    ctx.fillRect(bx + 2, py + 1, 13, 10);
+    ctx.fillRect(bx + 5, py + 1, 10, 10);
     ctx.fillStyle = BRASS_LIT;
-    ctx.fillRect(bx + 2, py, 12, 2);
+    ctx.fillRect(bx + 4, py, 10, 2);
     ctx.fillStyle = BRASS_DARK;
-    ctx.fillRect(bx + 2, py + 9, 13, 3);
+    ctx.fillRect(bx + 5, py + 9, 10, 3);
     // Kärki: sama nokka kuin torven suulla, eli tästä näkee mistä se tuli.
     ctx.fillStyle = BRASS_DARK;
     ctx.fillRect(bx + 13, py + 2, 3, 8);
@@ -1167,7 +1176,7 @@ function torahdysBody(ctx, x, y, tick, facing) {
     ctx.fillRect(bx + 13, py + 3, 3, 3);
     // Sauma keskellä, jotta kuori lukee kuoreksi eikä palikaksi.
     ctx.fillStyle = BRASS_DARK;
-    ctx.fillRect(bx + 8, py + 2, 1, 8);
+    ctx.fillRect(bx + 9, py + 2, 1, 8);
   });
 }
 

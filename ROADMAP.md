@@ -10,6 +10,33 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
+## Tila 16.8.2026 (ilta)
+
+Omistajan viisi pyyntöä yhtenä eränä (v26.08.16.85): **maahaniskun kyykky**,
+**tiilen rikkominen ylhäältä**, **neljä uutta vihollista**, **mitatut
+hyppysarjat** ja **supertähden oma raita**. Kaikki perustelut ovat
+muutoslokissa; tähän jää se mikä koskee tulevaa työtä eikä näitä viittä.
+
+**Vaikeus on sanastokysymys ennen kuin se on määräkysymys.** Peli oli
+normaalilla liian helppo, ja syy ei ollut vihollisten määrä vaan se että
+jokainen niistä kysyi samaa kysymystä: milloin hyppään sen yli tai päälle.
+`scale.js` pidentää kenttää ja tihentää vihollisia, eli se kysyy sitä samaa
+kysymystä useammin — se ei voi tehdä muuta. Uusi kysymys tulee vain uudesta
+lajista tai uudesta geometriasta, ja siksi tämä erä toi molempia.
+
+**Vaikeus on mitattava tai se on makuasia.** Hyppysarjojen "vaikea muttei
+mahdoton" ratkaistiin kahtena laskettavana väitteenä — ratkaisijan löytämä
+syötejono (ei mahdoton) ja niiden ponnistuskohtien määrä jotka osuvat, ikkuna
+(vaikea). Sama muoto kelpaa muuhunkin kuin hyppyihin: jokainen "tämä tuntuu
+liian helpolta" voidaan kysyä numerona jos joku kirjoittaa sille ratkaisijan.
+
+**Kahdella todistajalla on oltava raja, ja se raja on kirjattava.** Maareitin
+botti ei osaa lankkusarjaa, ja hyppyratkaisija osaa. Raja niiden välillä on nyt
+koodissa lukuna (tyhjä leveämpi kuin kaksi mitattua hyppyä, vähintään kolme
+lankkua) eikä sopimuksena — ja ylitysten määrä tulostetaan joka kentästä, jotta
+hiljainen kasvu näkyy. Sama erä paljasti että maailmojen 6–8 portilla oli oma
+kopio botista; kopioita ei enää ole.
+
 ## Tila 16.8.2026
 
 Kuvaefektit saivat kaksi jonossa ollutta kohtaa (v26.08.16.84): **tärinällä on

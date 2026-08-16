@@ -61,8 +61,7 @@
  * (DESIGN.md kohta 5), tässä yhden hypyn tarkkuudella.
  */
 
-/** Yksi ruutu pikseleinä. Sama luku kuin `gfx/tiles.js`:n `TILE`. */
-const TILE = 16;
+import { TILE, isSolid, isSemi } from '../src/gfx/tiles.js';
 
 /**
  * Kuinka monta framea yhtä loikkaa simuloidaan ennen kuin se on epäonnistunut.
@@ -70,17 +69,26 @@ const TILE = 16;
  * framea (PHYSICS.md); 200 on siitä reilusti yli ja silti niin lyhyt että
  * täysi haku pysyy sekunneissa.
  */
-const FLIGHT_CAP = 200;
+const FLIGHT_CAP = 110;
 
 /**
  * Ponnistuskohtien haku: montako pikseliä tasanteen oikeasta reunasta
  * taaksepäin kokeillaan.
  *
- * Yksi pikseli kerrallaan, koska ikkuna *on* tämän haun tulos: kahden pikselin
- * askel puolittaisi jokaisen mitatun ikkunan ja tekisi luvusta hakuparametrin
- * eikä kentän ominaisuuden.
+ * Haku on kaksivaiheinen ja se on nopeuskysymys eikä tarkkuuskysymys.
+ * **Karkea seula** (`COARSE`) etsii yhdenkin osuman neljän pikselin välein, ja
+ * useimmat pito/vauhti-yhdistelmät kaatuvat siihen neljäntoista simulaation
+ * jälkeen viidenkymmenenseitsemän sijaan. Vasta jos osuma löytyy, sen
+ * ympäristö luetaan **pikselin tarkkuudella** — ja se on se osa jossa ikkuna
+ * mitataan.
+ *
+ * Tarkka luku siis mitataan tarkasti; karkea vaihe päättää vain mitä kannattaa
+ * mitata. Osumajoukko on yhtenäinen (kaari on jatkuva ponnistuskohdan
+ * suhteen), joten karkea seula ei voi ohittaa ikkunaa joka on sitä leveämpi —
+ * ja sitä kapeammat hylätään joka tapauksessa reseptin alarajassa.
  */
 const TAKEOFF_MAX = 56;
+const COARSE = 4;
 
 /**
  * Hyppynapin pitoajat, ja niitä on neljä eikä jatkumo.
@@ -126,13 +134,28 @@ export function makeInput() {
  *
  * Lauta (`-`) kelpaa jalansijaksi kuten kivikin, koska sille lasketaan
  * ylhäältä — ja hyppysarja on lautoja.
+ *
+ * **Jalansija on pinta jonka yllä on ilmaa**, eikä vain ylin kiinteä ruutu. Ero
+ * on katto: linnakkeen holvissa rivit 0 ja 1 ovat kiveä koko leveydeltä, ja
+ * pelkkä ylin kiinteä lukisi jokaisesta sarakkeesta rivin 0 — jolloin koko
+ * huone olisi yksi tasanne eikä yhtään loikkaa. Mitattuna se oli tasan se:
+ * katetun sarjan ratkaisija löysi nolla loikkaa ja ilmoitti sarjan
+ * mahdottomaksi, vaikka katossa ei ole mitään mihin se koskisi.
+ *
+ * `y - 1` luetaan kentältä eikä ruudukolta, koska moottori vastaa taivaasta
+ * (`ty < 0`) kiinteän: ylin rivi ei siis ole jalansija myöskään avoimessa
+ * kentässä, mikä on oikein — kukaan ei seiso ruudun katolla.
  */
 export function footingMap(scene) {
   const cols = [];
   for (let x = 0; x < scene.w; x++) {
     let top = null;
     for (let y = 0; y < scene.h; y++) {
-      if (scene.solidAt(x, y) || scene.semiAt(x, y)) { top = y; break; }
+      const ch = scene.tileAt(x, y);
+      if (!isSolid(ch) && !isSemi(ch)) continue;
+      if (isSolid(scene.tileAt(x, y - 1))) continue;
+      top = y;
+      break;
     }
     cols.push(top);
   }
@@ -245,28 +268,50 @@ function flight(scene, fromX, hold, running) {
  */
 export function solveHop(mk, from, to, entry) {
   const edge = (from.x1 + 1) * TILE;
+  const floor = from.x0 * TILE;
   let best = { ok: false, window: 0, plan: null, exit: 0, tried: 0 };
   let tried = 0;
+
+  /** Yksi koe: osuiko tästä ponnistuskohdasta, ja millä vauhdilla perillä. */
+  const shot = (back, hold, running) => {
+    const fromX = edge - back;
+    if (fromX < floor) return null;
+    const scene = mk();
+    tried++;
+    const end = flight(scene, fromX, hold, running);
+    const hit = end.landed && end.col >= to.x0 && end.col <= to.x1 && end.row === to.row;
+    return hit ? end : null;
+  };
+
   for (const hold of HOLDS) {
     for (const running of [false, true]) {
-      let win = 0;
-      let first = null;
-      let exit = 0;
-      for (let back = 0; back <= TAKEOFF_MAX; back++) {
-        const fromX = edge - back;
-        if (fromX < from.x0 * TILE) break;
-        const scene = mk();
-        tried++;
-        const end = flight(scene, fromX, hold, running);
-        const hit = end.landed && end.col >= to.x0 && end.col <= to.x1 && end.row === to.row;
-        if (!hit) continue;
-        win++;
-        if (first === null) {
-          first = { takeoff: back, hold, running, entry };
-          exit = end.vx;
-        }
+      // 1. Karkea seula: löytyykö osumaa lainkaan.
+      let seed = -1;
+      for (let back = 0; back <= TAKEOFF_MAX; back += COARSE) {
+        if (shot(back, hold, running)) { seed = back; break; }
       }
-      if (win > best.window) best = { ok: true, window: win, plan: first, exit, tried };
+      if (seed < 0) continue;
+
+      // 2. Ikkuna pikselin tarkkuudella, siemenestä molempiin suuntiin.
+      let lo = seed;
+      let hi = seed;
+      let exit = 0;
+      while (lo - 1 >= 0) {
+        const got = shot(lo - 1, hold, running);
+        if (!got) break;
+        lo--;
+      }
+      while (hi + 1 <= TAKEOFF_MAX) {
+        const got = shot(hi + 1, hold, running);
+        if (!got) break;
+        hi++;
+      }
+      const win = hi - lo + 1;
+      if (win > best.window) {
+        const got = shot(lo, hold, running);
+        exit = got ? got.vx : 0;
+        best = { ok: true, window: win, plan: { takeoff: lo, hold, running, entry }, exit, tried };
+      }
     }
   }
   best.tried = tried;
@@ -337,6 +382,13 @@ export function replay(mkScene, hops, plans) {
   const p = scene.player;
   const i = makeInput();
   const last = hops[hops.length - 1].to;
+  /* Alkuun samaan paikkaan ja samalla vauhdilla kuin ensimmäinen mittaus.
+   * Ilman tätä juoksu alkaisi siitä mihin kenttä sattuu pelaajan panemaan —
+   * koekentässä ei ole lähtöruutua — ja "ei kulkenut" tarkoittaisi "ei ollut
+   * missään". Se oli tämän funktion ensimmäinen versio, ja se oli aina
+   * epätosi. */
+  place(scene, hops[0].from.x0 * TILE, hops[0].from.row,
+    (plans[0] && plans[0].plan && plans[0].plan.entry) || 0);
   let at = 0;
   let held = 0;
   for (let f = 0; f < 3000; f++) {
@@ -350,11 +402,19 @@ export function replay(mkScene, hops, plans) {
     if (held > 0) {
       i.held.jump = true;
       held--;
-    } else if (plan && p.onGround && p.x >= takeoffX) {
+    } else if (plan && p.x >= takeoffX) {
+      /* Ei `p.onGround`-ehtoa, ja se on tämän funktion tärkein rivi.
+       *
+       * Ratkaisija ponnistaa siitä pisteestä johon se juoksi, ja mitattu paras
+       * ponnistuskohta on hyvin usein **tasan reuna** (`takeoff` 0) — eli piste
+       * jossa jalat ovat jo ilmassa ja hyppy lähtee `COYOTE_FRAMES`in armosta.
+       * Toisinto joka vaatisi jalkoja maassa ei siis toistaisi mitattua hyppyä
+       * vaan jotain muuta, ja ensimmäinen versio tästä hylkäsi juuri siksi
+       * jokaisen sarjan jonka se itse oli äsken ratkaissut. */
       i.pressed.jump = true;
       i.held.jump = true;
       held = plan.hold;
-      at = Math.min(at + 1, plans.length - 1);
+      at++;
     }
     scene.update(i);
     if (p.dying || p.y > scene.heightPx) return false;

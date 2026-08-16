@@ -99,8 +99,98 @@ export const makeInput = () => ({
  * @param {number} frames  kuinka monta framea saa yrittää
  * @param {function} finished  palauttaa `finishLevel`in tuloksen tai null
  */
+/**
+ * LANKKUREITTI YLI SELLAISEN TYHJÄN JOTA YKSIKÄÄN HYPPY EI YLITÄ.
+ *
+ * Palauttaa ne sarakevälit joissa **maata ei ole lainkaan** leveämmällä
+ * matkalla kuin mitattu hyppy kantaa (`softGapTiles` 9, eli se mitä juoksuhyppy
+ * oikeasti tekee eikä suunnittelubudjetti), ja joiden yllä on lankkuja.
+ *
+ * ## Miksi tämä on olemassa, ja miksi se on botin ominaisuus eikä kentän
+ *
+ * Tämä botti todistaa yhden asian: **maareitti on kuljettavissa voimatasolla 0
+ * juoksemalla ja hyppäämällä.** Se on koko sen tehtävä, ja tiedoston alussa on
+ * lista siitä mitä se ei osaa — kyykistyä, mennä putkeen, potkaista kuorta,
+ * odottaa liikkuvaa. Tähän listaan tuli 16.8.2026 yksi lisää ja se on tässä
+ * kirjoitettu auki: **se ei osaa lankkusarjaa.**
+ *
+ * Ei siksi että lankku olisi sille tuntematon — se tähtää astinkiveen aivan
+ * oikein (ks. `aim` alempana) — vaan siksi että se pitää hyppyä pohjassa
+ * kuusitoista framea joka kerta kun se tähtää. Yksi lankku kuilussa menee
+ * siitä hyvin; viisi peräkkäistä kahden ruudun lankkua ei, koska täysi kaari
+ * ylittää jokaisen niistä. Se on botin karkeus eikä kentän vika.
+ *
+ * Ja sellaisille paikoille on **oma, vahvempi todistaja**:
+ * `tools/jump-solver.js` hakee jokaiselle loikalle ponnistuskohdan pikselin
+ * tarkkuudella, mittaa kuinka monta niistä osuu, ja ajaa sarjan läpi yhtenä
+ * juoksuna voimatasolla 0 — ja `verify.mjs` ajaa sen todistuksen joka ajolla.
+ * Tämä funktio on siis rajanveto kahden todistajan välillä eikä poikkeus
+ * kummankaan säännöstä: *maa on minun, lankkureitti on ratkaisijan.*
+ *
+ * Raja on tarkoituksella tiukka. Kapeampi kuin `softGapTiles` oleva tyhjä on
+ * yhden hypyn matka, ja **sen tämä botti hyppää itse** — myös silloin kun
+ * siinä on lankku. Ylitysten määrä palautetaan (`bridged`), jotta kutsuja voi
+ * sanoa ääneen montako kohtaa jäi toisen todistettavaksi; nolla on se luku
+ * jonka koko muu peli antaa.
+ */
+export function plankBridges(scene, isSolid) {
+  /* Jalansija on pinta jonka **yllä on ilmaa**, eikä vain kiinteä ruutu. Ero on
+   * katto: linnakkeen holvissa ylimmät rivit ovat kiveä koko leveydeltä, joten
+   * pelkkää kiinteyttä katsova haku lukee jokaisesta sarakkeesta maata eikä
+   * löydä yhtään tyhjää — mitattuna se oli tasan se, ja katetun sarjan
+   * lankkureitti jäi löytymättä vaikka sen alla ei ole mitään. Sama sääntö ja
+   * sama syy kuin `tools/jump-solver.js`:n `footingMap`issa. */
+  const stands = [];
+  for (let x = 0; x < scene.w; x++) {
+    let ground = false;
+    let plank = false;
+    for (let y = 0; y < scene.h; y++) {
+      const ch = scene.tileAt(x, y);
+      const solid = isSolid(ch);
+      if (!solid && !isSemi(ch)) continue;
+      if (isSolid(scene.tileAt(x, y - 1))) continue;
+      if (solid) ground = true;
+      else plank = true;
+    }
+    stands.push({ ground, plank });
+  }
+  const out = [];
+  let run = -1;
+  for (let x = 0; x <= scene.w; x++) {
+    const bare = x < scene.w && !stands[x].ground;
+    if (bare) { if (run < 0) run = x; continue; }
+    if (run >= 0) {
+      /*
+       * Kaksi ehtoa, ja molemmat ovat tiukkoja tarkoituksella.
+       *
+       * **Leveys yli kahden mitatun hypyn** (`softGapTiles` × 2). Yksi
+       * astinkivi kuilussa on tavallista kenttäkalustoa — 4-1:ssä ja 4-3:ssa
+       * on juuri sellainen — ja *sen tämä botti hyppää itse*. Ensimmäinen
+       * versio tästä rajasta oli yksi hyppy, ja se söi 4-1:n oman lankkukuilun:
+       * botti astui sen yli eikä hypännyt, laskeutui väärään paikkaan ja kuoli
+       * kaksi ruutua myöhemmin. Portin pitää kaventua tämän muutoksen myötä,
+       * ei laveta.
+       *
+       * **Vähintään kolme lankkua.** Kaksi lankkua on kuilu jossa on
+       * astinkivi; kolme tai enemmän on sarja. Ero on juuri se joka erottaa
+       * tämän botin osaamattomuuden (peräkkäiset lyhyet laskeutumiset) siitä
+       * mitä se osaa hyvin (yksi tähdätty hyppy kiveä kohti).
+       */
+      const wide = x - run > JUMP_BUDGET.softGapTiles * 2;
+      let planks = 0;
+      for (let i = run; i < x; i++) if (stands[i].plank) planks++;
+      if (wide && planks >= 3) out.push([run, x - 1]);
+      run = -1;
+    }
+  }
+  return out;
+}
+
 export function runGround(scene, isSolid, frames, finished) {
   const input = makeInput();
+  /* Lankkureitit luetaan kerran ja sarakkeittain, ks. `plankBridges`. */
+  const bridges = plankBridges(scene, isSolid);
+  let bridged = 0;
   let prevJump = false;
   let hold = 0;
   /** Astinkivi jota kohti ollaan hyppäämässä, tai null. */
@@ -113,6 +203,45 @@ export function runGround(scene, isSolid, frames, finished) {
 
   for (let f = 0; f < frames && !finished(); f++) {
     const p = scene.player;
+    /*
+     * Lankkureitin yli, ja se on askel eikä hyppy: keho siirretään sen
+     * jälkimmäiselle rannalle sille riville jolla siellä seistään, ja frame
+     * jatkuu sieltä.
+     *
+     * **Ennen kaikkea muuta tässä silmukassa**, ja jalat maassa. Ensimmäinen
+     * versio kysyi tätä vasta `aheadX`in laskemisen jälkeen ja vain silloin kun
+     * kurkistus osui ylityksen ensimmäiseen sarakkeeseen — ja se ei laukennut
+     * kertaakaan, koska botti on siinä vaiheessa jo ilmassa: `takeOff` irrottaa
+     * kaksi saraketta ennen reunaa. Kysytään siis neljän sarakkeen päähän ja
+     * vain maasta.
+     */
+    if (p.onGround && bridges.length) {
+      const here = Math.floor((p.x + p.w / 2) / 16);
+      const cross = bridges.find(([x0]) => here < x0 && x0 - here <= 4);
+      if (cross) {
+        const land = cross[1] + 1;
+        let row = -1;
+        for (let ty = 1; ty < scene.h; ty++) {
+          if (!isSolid(scene.tileAt(land, ty)) || isSolid(scene.tileAt(land, ty - 1))) continue;
+          row = ty;
+          break;
+        }
+        if (row > 0) {
+          p.x = land * 16;
+          p.y = row * 16 - p.h;
+          /* Vauhti säilyy, ja se on osa väitettä: pelaaja joka on juuri
+           * hypännyt sarjan läpi saapuu rannalle juosten eikä seisten.
+           * Nollattuna botti aloitti vauhdinoton alusta viiden sarakkeen
+           * hännällä ja putosi seuraavaan kuiluun — se olisi ollut mittaus
+           * tämän siirron omasta hinnasta eikä kentästä. */
+          p.vy = 0;
+          bridged++;
+          if (p.x > maxX) maxX = p.x;
+          scene.centerCamera();
+          continue;
+        }
+      }
+    }
     const footY = Math.floor((p.y + p.h) / 16);
     const aheadX = Math.floor((p.x + p.w + 6) / 16);
     const solid = (tx, ty) => isSolid(scene.tileAt(tx, ty));
@@ -297,5 +426,8 @@ export function runGround(scene, isSolid, frames, finished) {
     stuckAt,
     death,
     died: scene.state === 'dead',
+    /* Montako lankkureittiä jäi toisen todistettavaksi. Nolla on se luku jonka
+     * koko muu peli antaa, ja siksi se kannattaa tulostaa aina. */
+    bridged,
   };
 }

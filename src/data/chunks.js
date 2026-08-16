@@ -36,6 +36,10 @@ import { FORTRESS_CHUNKS } from './chunks/fortress.js';
 import { FORTRESS_WORLD_CHUNKS } from './chunks/fortresses.js';
 import { KEEP_CHUNKS } from './chunks/keep.js';
 import { SECRET_CHUNKS } from './chunks/secrets.js';
+/* Generoidut hyppysarjat. Ne ovat palikoita siinä missä muutkin — assemble ei
+ * tiedä eroa — mutta niiden vaikeus on mitattu eikä arvioitu: ks. tiedoston oma
+ * alku ja `tools/gen-jumps.mjs`. */
+import { JUMP_CHUNKS } from './chunks/jumps.js';
 
 export { CHUNK_ROWS };
 
@@ -51,6 +55,7 @@ export const CHUNKS = {
   ...FORTRESS_WORLD_CHUNKS,
   ...KEEP_CHUNKS,
   ...SECRET_CHUNKS,
+  ...JUMP_CHUNKS,
 };
 
 /** Expands a chunk name list into one padded grid of characters. */
