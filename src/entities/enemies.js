@@ -12,7 +12,9 @@ import {
   drawWalker, drawShell, drawFlyer, drawPlant, drawBoss, bossSize,
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
-  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS } from '../gfx/sprites.js';
+  SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS,
+  drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
+  drawPaukkupoho } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -2641,6 +2643,718 @@ export class Moon extends Enemy {
   }
 }
 
+/* ========================= NELJÄ UUTTA VIHOLLISTA =========================
+ *
+ * Omistajan tilaus 16.8.2026: peli on normaalilla liian helppo, ja syy ei ole
+ * määrä vaan **sanasto**. Siihen asti jokainen vihollinen tässä tiedostossa
+ * vastasi samaan kysymykseen — *milloin hyppään sen yli tai päälle* — ja kun
+ * yksi kysymys osataan, kenttien pidentäminen kysyy sitä useammin eikä
+ * vaikeammin. Neljä alla olevaa kysyvät kukin eri kysymyksen, ja ne on valittu
+ * niin että ne peittävät neljä eri **etäisyyttä**:
+ *
+ *   TÖRÄHDYSTORVI  kaukaa vaakasuoraan — reitti täyttyy, vauhti on ainoa vara
+ *   PAARMA         ylhäältä alas — turvallinen paikka ei ole enää paikka
+ *   YÖKKI          lattiaa pitkin — este tulee sinne missä jalat ovat
+ *   PAUKKUPÖHÖ     lähietäisyydeltä, ja vasta kun siihen on koskettu
+ *
+ * Kaikki neljä ovat tämän pelin omia otuksia (DESIGN.md kohta 1 c): mekaniikat
+ * ovat genren yhteistä omaisuutta ja siksi vapaita, mutta se *mikä* ne ovat on
+ * kirjoitettu tämän pelin omasta rekisteristä — kaasua, ruoansulatusta ja
+ * sisuskaluja — samasta sanastosta kuin pöhö, pönttö, nielu ja kurnuttaja.
+ *
+ * Ja kaikki neljä noudattavat sitä yhtä sääntöä joka pitää tämän pelin kasassa:
+ * **jokaisella on vastaus jonka pelaaja jo osaa.** Yksikään ei ole seinä.
+ */
+
+/* --------------------------- törähdystorvi ------------------------------- */
+
+/**
+ * Framet laukausten välillä, ja se osa siitä joka on varoitusta.
+ *
+ * `TORVI_PERIOD` on mitoitettu ammuksen omasta vauhdista: 2,2 px/frame kantaa
+ * 145 framessa yhden ruudun leveyden (320 px), joten tällä välillä ruudulla on
+ * kerrallaan korkeintaan yksi ja puoli törähdystä samasta torvesta. Tiheämpi
+ * olisi seinä eikä este.
+ *
+ * `TORVI_WARN` on se aika jona torvi on jo pullollaan muttei vielä päästänyt.
+ * Puoli sekuntia on sama varoitus kuin närästysliekillä (40 framea), ja se on
+ * tässä samasta syystä: ammus lähtee vaakasuoraan eikä pelaaja voi nähdä sitä
+ * tulevan ennen kuin se on jo matkalla, joten se hetki jona liikkeen voi vielä
+ * peruuttaa on ostettava ennen laukausta eikä sen jälkeen.
+ *
+ * `TORVI_NEAR` on lähiraja. Torvi ei ammu pelaajaa joka seisoo sen kyljessä:
+ * ammus syntyy 16 px sivuun, eli sitä lähempänä se syntyisi pelaajan sisään.
+ * Se on myös se seikka joka tekee torvesta *paikan* eikä ansan — sen viereen
+ * pääsee, ja sen päälle voi hypätä.
+ */
+const TORVI_PERIOD = 150;
+const TORVI_WARN = 40;
+const TORVI_NEAR = 40;
+const TORVI_RANGE = 200;
+/**
+ * Ammuksen vauhti ja ikä. 2,2 px/frame on nopeampi kuin mikään mikä tässä
+ * pelissä kävelee (kuori 3,4 on ainoa nopeampi, ja se on pelaajan potkaisema)
+ * ja hitaampi kuin pelaajan juoksu 2,5 — eli **siitä pääsee karkuun eteenpäin
+ * juoksemalla**, mikä on koko sen tasapaino: se painostaa reittiä pitkin eikä
+ * pysäytä sitä.
+ */
+const TORAHDYS_SPEED = 2.2;
+const TORAHDYS_LIFE = 400;
+
+/**
+ * TÖRÄHDYS — se mikä torvesta tulee. Tiivistettyä suolikaasua teräksisessä
+ * kuoressa, ja se kulkee suoraan: ei painovoimaa, ei ohjausta, ei väsymistä.
+ *
+ * Se on `Enemy` eikä `hazard`, ja se on tämän olion koko suunnittelupäätös.
+ * Papupommi ja happopisara ovat vaaroja — niitä väistetään ja siinä kaikki —
+ * mutta törähdys on **tallattava**, eli se on samalla kertaa este ja askelma.
+ * Juuri se tekee siitä pelin ensimmäisen vihollisen joka *auttaa* pelaajaa:
+ * kuilun yli lentävä törähdys on silta jos sen päälle uskaltaa hypätä.
+ *
+ * Ei kuplaan (`bubbleable`), koska se ei ole elävä: kupla on ansa jossa jotain
+ * odottaa pääsyä ulos, ja tämä on ammus jolla ei ole aikomuksia. Ei hiekkaan
+ * (`sinks`), koska se ei koskaan koske maahan. Ei tuuleen (`windborne`), koska
+ * se on ammuttu eikä kannettu — puuska joka kääntäisi luodin tekisi torvesta
+ * arpapelin sillä puolella kenttää jossa tuulee.
+ */
+export class Torahdys extends Enemy {
+  constructor(level, x, y, dir) {
+    super(level, x, y, 16, 12);
+    this.facing = dir;
+    this.vx = TORAHDYS_SPEED * dir;
+    this.life = TORAHDYS_LIFE;
+    this.score = 200;
+    /* Ammuttu on ammuttu: se ei odota kameraa herätäkseen. Ilman tätä torven
+     * laukaus ruudun reunalla jäisi leijumaan paikalleen siihen asti kunnes
+     * pelaaja tulee katsomaan, ja saapuisi silloin päin naamaa. */
+    this.active = true;
+  }
+
+  get bubbleable() { return false; }
+
+  get sinks() { return false; }
+
+  get windborne() { return false; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (--this.life <= 0) {
+      this.burst();
+      return;
+    }
+    /* `moveX` eikä `x += vx`: seinä pysäyttää sen. Ammus joka menisi kiven
+     * läpi opettaisi että kivi ei ole este, ja se on kalliimpi valhe kuin
+     * yksikään yksittäinen osuma. */
+    if (moveX(this, this.level)) {
+      this.burst();
+      return;
+    }
+    // Kaasuvana perässä, joka kolmas frame — sama tiheys kuin maahaniskun
+    // syöksyllä, koska se on sama asia: paine joka työntää.
+    if (this.tick % 3 === 0) this.level.spawnPuff(this.cx - this.facing * 8, this.cy);
+  }
+
+  burst() {
+    this.remove = true;
+    this.level.spawnPuff(this.cx, this.cy, true);
+    Sfx.play('pop');
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawTorahdys(ctx, this.x, this.y, this.tick, this.facing));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawTorahdys(g, this.x, this.y, this.tick, this.facing));
+  }
+}
+
+/**
+ * TÖRÄHDYSTORVI — messinkinen venttiili joka on ruuvattu kiinni siihen mihin se
+ * on pantu, ja joka päästää paineen ulos vaakasuoraan.
+ *
+ * **Se on tallattava, ja se on päätös eikä unohdus.** Torvi joka ei kuole olisi
+ * kello jonka rytmiä pelaaja vain sietää; tallattava torvi on *kohde*, ja koko
+ * kysymys muuttuu siitä "milloin pääsen ohi" siihen "kannattaako minun mennä
+ * sen päälle". Vastaus ei ole ilmainen: sen päälle pääsee vain siitä suunnasta
+ * josta ammukset tulevat, ja hyppy sen päälle on hyppy suoraan siihen linjaan.
+ * Palkkio on 500 — enemmän kuin mikään muu tallaus tässä pelissä — koska se on
+ * ainoa tallaus joka sammuttaa lähteen eikä yhtä otusta.
+ *
+ * Se ei kuple eikä uppoa: se on pultattu paikalleen, samoin perustein kuin
+ * nielu on pultattu putkeensa. Papuparoonin `homeX`-perustelu sanoo saman
+ * asian toisesta suunnasta — laite joka voidaan kävelyttää pois paikaltaan ei
+ * enää vartioi mitään.
+ */
+export class Torvi extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.score = 500;
+    this.timer = TORVI_PERIOD;
+    this.charge = 0;
+    /* Osa kentän tilaa eikä kameran lähellä olevaa maisemaa: torvi on rakenne,
+     * ja rakenne ei katoa siksi että pelaaja peruutti sen ohi. Ammukset sen
+     * sijaan ovat lyhytikäisiä ja siivoutuvat itse. */
+    this.alwaysActive = true;
+    this.active = true;
+  }
+
+  get bubbleable() { return false; }
+
+  get sinks() { return false; }
+
+  get windborne() { return false; }
+
+  /** Kummalle puolelle ammutaan, tai 0 kun ei kummallekaan. */
+  aim() {
+    const p = this.level.player;
+    if (!p || p.dying || p.transit) return 0;
+    const dx = p.cx - this.cx;
+    if (Math.abs(dx) < TORVI_NEAR || Math.abs(dx) > TORVI_RANGE) return 0;
+    // Samassa kerroksessa: ammus kulkee vaakasuoraan, joten kaksi ruutua
+    // ylempänä juokseva pelaaja ei ole tämän torven asia.
+    if (Math.abs(p.cy - this.cy) > 40) return 0;
+    return Math.sign(dx);
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    const dir = this.aim();
+    if (dir === 0) {
+      /* Tähtäyksen katketessa lataus purkautuu takaisin, muttei ajastin. Ilman
+       * tätä pelaaja voisi seisoa rajan takana kunnes torvi on täynnä ja astua
+       * sitten sisään valmiiseen laukaukseen. */
+      this.charge = 0;
+      this.timer = Math.max(this.timer, TORVI_WARN);
+      return;
+    }
+    this.facing = dir;
+    if (--this.timer > TORVI_WARN) return;
+    this.charge = 1 - this.timer / TORVI_WARN;
+    if (this.timer > 0) return;
+    this.fire(dir);
+  }
+
+  fire(dir) {
+    this.timer = TORVI_PERIOD;
+    this.charge = 0;
+    const slug = new Torahdys(this.level, this.cx + dir * 8 - 8, this.y + 2, dir);
+    this.level.add(slug);
+    this.level.spawnPuff(this.cx + dir * 10, this.cy);
+    Sfx.play('torvi');
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawTorvi(ctx, this.x, this.y, this.tick, this.facing, 0));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawTorvi(g, this.x, this.y, this.tick, this.facing, this.charge));
+  }
+}
+
+/* ------------------------------- paarma ---------------------------------- */
+
+/**
+ * Paarman luvut, ja ne ovat kaikki samasta lauseesta: **se ampuu sinne missä
+ * seisot, ei sinne minne olet menossa.**
+ *
+ * `PAARMA_AIM` on se pystysuora käytävä jonka yli lentäessään se sitoutuu
+ * laukaukseen, ja se on kapea (yksi ruutu ja vähän) juuri siksi että pisara
+ * putoaa suoraan alas: leveämpi käytävä tarkoittaisi ammusta joka osuu paikkaan
+ * jossa pelaaja *oli*, ja sellainen on arpaa eikä ansaa.
+ *
+ * `PAARMA_WARN` on se puoli sekuntia jona se pysähtyy paikalleen ja kerää.
+ * Pysähtyminen on koko varoitus — lentävä hyönteinen on pelin ainoa asia joka
+ * liikkuu tasaisesti, joten sen pysähtyminen erottuu ilman että sitä tarvitsee
+ * opetella. Sen jälkeen `PAARMA_COOL` estää sitä seuraamasta pelaajaa
+ * pisaraputkena: yhden pisaran jälkeen sen on lennettävä kierroksensa loppuun.
+ */
+const PAARMA_SPEED = 0.75;
+const PAARMA_RANGE = 72;
+const PAARMA_AIM = 20;
+const PAARMA_WARN = 30;
+const PAARMA_COOL = 150;
+const PISARA_GRAVITY = 0.28;
+const PISARA_MAX = 4;
+
+/**
+ * HAPPOPISARA — se mikä paarmasta tulee. Ei elävä, ei tallattava, ei
+ * poistettava: se putoaa, ja siitä on väistyttävä.
+ *
+ * `kind: 'hazard'` on tässä sama valinta kuin papupommilla ja samoin perustein:
+ * pelaajan törmäystarkistus kohtelee vaaroja yhtenä asiana (`p.hurt('hazard')`,
+ * ja tähti suojaa siltä koska se osuu sinuun eikä ole paikka johon menet).
+ * Erona papupommiin on että tällä ei ole `hitByShell`iä — pisaraa ei voi
+ * pyyhkiä pois kuorella, koska se on nestettä eikä kappale, ja koska paarman
+ * vastaus on lentää sen alta pois eikä ampua sitä alas.
+ */
+export class Happopisara extends Entity {
+  constructor(level, x, y) {
+    super(level, x, y, 6, 8);
+    this.kind = 'hazard';
+    this.active = true;
+  }
+
+  update() {
+    this.tick++;
+    this.vy = Math.min(this.vy + PISARA_GRAVITY, PISARA_MAX);
+    const hit = moveY(this, this.level);
+    if (hit.ground || this.y > this.level.heightPx + 16) this.splash();
+  }
+
+  splash() {
+    this.remove = true;
+    this.level.spawnPuff(this.cx, this.y + this.h, true);
+  }
+
+  draw(ctx) {
+    drawPisara(ctx, this.x, this.y, this.tick);
+  }
+}
+
+/**
+ * PAARMA — turvonnut paarma joka partioi ilmassa ja pudottaa happopisaran sen
+ * päälle joka kävelee sen ali.
+ *
+ * Se on pelin ensimmäinen vihollinen joka **muuttaa lattian merkitystä**.
+ * Kaikki muu tässä tiedostossa on jotain mitä kohdataan reitillä; tämä tekee
+ * reitistä paikan jossa ei voi seisoa. Sen vastaus on siksi myös uusi: ei
+ * ajoitus vaan *sijainti* — mene sivuun, tai nouse sen tasolle ja talloo se.
+ *
+ * Tallattava, koska se lentää: se on jo pelaajan yläpuolella olevassa
+ * korkeudessa, ja tallaus vaatii nousemisen sinne. Lentäjän (`Flyer`)
+ * tallausperintöä se ei kuitenkaan saa — lentäjästä tulee tallattaessa
+ * kävelijä, koska se on maaotus jolla on siivet. Tämä on ilmaotus, ja
+ * ilmaotuksesta ei jää maahan mitään.
+ */
+export class Paarma extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 12);
+    this.speed = PAARMA_SPEED;
+    this.score = 200;
+    this.homeX = x;
+    this.homeY = y;
+    this.warn = 0;
+    this.cool = 0;
+  }
+
+  get bubbleable() { return true; }
+
+  /**
+   * Ei. Se ei koskaan koske maahan — se leijuu `homeY`:n korkeudella koko
+   * ikänsä — joten hiekkaan uppoaminen olisi tapahtuma jota ei voi tuottaa.
+   * Lentäjä vastaa tähän kyllä siksi että lentäjä on hyppääjä ja hyppy tarvitsee
+   * lattian; tällä ei ole lattiaa missään suunnitelmassaan.
+   */
+  get sinks() { return false; }
+
+  get windborne() { return true; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
+    if (this.cool > 0) this.cool--;
+
+    if (this.warn > 0) {
+      // Paikallaan ja täristen. Ei `steer`iä: pysähtyminen on varoitus, ja
+      // varoitus joka liukuu sivuun ei ole pysähtyminen.
+      this.vx = 0;
+      if (--this.warn === 0) this.spit();
+      return;
+    }
+
+    if (this.cool === 0 && this.aiming()) {
+      this.warn = PAARMA_WARN;
+      this.vx = 0;
+      return;
+    }
+
+    this.vx = this.speed * this.facing;
+    const wall = this.moveSideways();
+    if (wall || Math.abs(this.x - this.homeX) > PAARMA_RANGE) {
+      this.facing *= -1;
+      // Takaisin rajan sisään heti, tai käännös toistuisi joka framella.
+      this.x = Math.max(this.homeX - PAARMA_RANGE, Math.min(this.homeX + PAARMA_RANGE, this.x));
+    }
+    // Leijunta. Sama sinikäyrä kuin ruskealla pilvellä, matalampana: siivet
+    // kannattavat, ne eivät nosta.
+    this.y = this.homeY + Math.sin(this.tick / 18) * 2;
+  }
+
+  /** Onko pelaaja juuri nyt tämän alla ja tähtäysetäisyydellä. */
+  aiming() {
+    const p = this.level.player;
+    if (!p || p.dying || p.transit) return false;
+    if (Math.abs(p.cx - this.cx) > PAARMA_AIM) return false;
+    return p.cy > this.cy && p.cy - this.cy < 176;
+  }
+
+  spit() {
+    this.cool = PAARMA_COOL;
+    this.level.add(new Happopisara(this.level, this.cx - 3, this.y + this.h));
+    Sfx.play('sylkaisy');
+  }
+
+  draw(ctx) {
+    const charge = this.warn > 0 ? 1 - this.warn / PAARMA_WARN : 0;
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawPaarma(ctx, this.x, this.y, this.tick, this.facing, 0));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawPaarma(g, this.x, this.y, this.tick, this.facing, charge));
+  }
+}
+
+/* -------------------------------- yökki ---------------------------------- */
+
+/**
+ * Yökin luvut. `YOKKI_PERIOD` on pitkä ja `YOKKI_WARN` on pitkä, ja molemmat
+ * ovat pitkiä samasta syystä: karvapallo on este joka jää huoneeseen, ja
+ * huone jossa niitä on kolme yhtä aikaa ei ole enää huone vaan käytävä.
+ *
+ * Pallon vauhti alkaa kävelyä hitaampana ja päätyy juoksun tuntumaan
+ * (`KARVA_MAX` 2,6 vastaan pelaajan juoksukatto 2,5), eli **siltä ei voi
+ * juosta karkuun loputtomiin muttei tarvitsekaan**: sen ikä on rajattu, ja se
+ * hajoaa ensimmäiseen seinään. Kiihtyvyys on se osa joka tekee siitä lukemisen
+ * arvoisen — pallo joka on kaukana on hidas ja pallo joka on lähellä on nopea,
+ * eli sama pallo kysyy eri kysymyksen sen mukaan milloin sen kohtaa.
+ */
+const YOKKI_PERIOD = 210;
+const YOKKI_WARN = 45;
+const YOKKI_RANGE = 180;
+const KARVA_SPEED = 0.9;
+const KARVA_ACC = 0.014;
+const KARVA_MAX = 2.6;
+const KARVA_LIFE = 360;
+
+/**
+ * KARVAPALLO — tiivistynyt karvakerä, ja se on tämän pelin oma vastaus siihen
+ * vanhaan ideaan jossa vihollinen ei tule itse vaan lähettää jotain edellään.
+ *
+ * Se ei ole tallattava (`spiky`), ja tässä `spiky` tarkoittaa kirjaimellisesti
+ * sitä mitä se sanoo: pinta on karvaa ja luuta, eikä sen päälle lasketa jalkaa.
+ * Se on kuitenkin nimenomaan **este eikä seinä**, ja ero on kolmessa asiassa,
+ * jotka kaikki ovat pelaajan tiedossa ennen kuin hän kohtaa toisen:
+ *
+ *   - sen yli hypätään, ja se on matala (12 px) juuri siksi;
+ *   - pierupallo, potkaistu kuori ja häntä hajottavat sen kuten minkä tahansa;
+ *   - se hajoaa itsestään seinään, kuoppaan ja aikaan.
+ *
+ * Se seuraa maastoa `moveY`llä eikä leiju: pallo joka menisi kuopan yli olisi
+ * ammus, ja tämän koko idea on että se kulkee samaa lattiaa kuin pelaaja.
+ */
+export class Karvapallo extends Enemy {
+  constructor(level, x, y, dir) {
+    super(level, x, y, 12, 12);
+    this.facing = dir;
+    this.speed = KARVA_SPEED;
+    this.roll = KARVA_SPEED;
+    this.life = KARVA_LIFE;
+    this.score = 100;
+    this.spin = 0;
+    this.active = true;
+  }
+
+  get spiky() { return true; }
+
+  get bubbleable() { return false; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  get driftSpeed() { return this.roll; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.sink()) return;
+    if (--this.life <= 0) {
+      this.burst();
+      return;
+    }
+    this.roll = Math.min(KARVA_MAX, this.roll + KARVA_ACC);
+    this.vx = this.roll * this.facing;
+    // Pyörimiskulma kuljetusta matkasta eikä kellosta: hidastuva pallo pyörii
+    // hitaammin, ja se on ainoa tapa jolla vieritys näyttää vieritykseltä.
+    this.spin += this.roll;
+    if (this.moveSideways()) {
+      this.burst();
+      return;
+    }
+    applyGravity(this, 1);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  burst() {
+    this.remove = true;
+    this.level.spawnPuff(this.cx, this.cy, true);
+    Sfx.play('pop');
+  }
+
+  draw(ctx) {
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawKarvapallo(ctx, this.x, this.y, this.spin, this.facing));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawKarvapallo(g, this.x, this.y, this.spin, this.facing));
+  }
+}
+
+/**
+ * YÖKKI — kumara otus joka ei tule perääsi vaan lähettää jotain edellään.
+ *
+ * Se on hidas (0,3) ja tallattava ja arvoton yksinään, ja se on tarkoitus: koko
+ * uhka on karvapallossa, ja karvapallo tulee niin kauan kuin lähdettä ei ole
+ * kaadettu. Se tekee siitä pelin ensimmäisen vihollisen jonka kohdalla
+ * **kannattaa mennä eteenpäin** — jokainen ohitettu yökki on pallo lisää siellä
+ * mistä pelaaja juuri tuli, ja pallot eivät katoa sillä että niistä juoksee
+ * karkuun.
+ *
+ * Se yökkää vain kun pelaaja on `YOKKI_RANGE`n sisällä ja samassa kerroksessa.
+ * Yökki joka syöksisi palloja tyhjään huoneeseen täyttäisi kentän esineillä
+ * joita kukaan ei ole nähnyt syntyvän — ja pallo jonka syntymää ei nähnyt on
+ * ansa eikä este.
+ */
+export class Yokki extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.speed = 0.3;
+    this.score = 200;
+    this.timer = YOKKI_PERIOD;
+    this.warn = 0;
+  }
+
+  get bubbleable() { return true; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  /** Onko pelaaja niin lähellä ja niin samassa tasossa että pallo kannattaa. */
+  target() {
+    const p = this.level.player;
+    if (!p || p.dying || p.transit) return 0;
+    const dx = p.cx - this.cx;
+    if (Math.abs(dx) > YOKKI_RANGE || Math.abs(p.cy - this.cy) > 48) return 0;
+    return Math.sign(dx) || 1;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.bubbled) return this.updateBubbled();
+    if (this.sink()) return;
+
+    if (this.warn > 0) {
+      this.steer(0);
+      this.moveSideways();
+      if (--this.warn === 0) this.retch();
+    } else {
+      const dir = this.target();
+      if (dir !== 0 && --this.timer <= 0) {
+        this.facing = dir;
+        this.warn = YOKKI_WARN;
+      }
+      this.steer(this.speed * this.facing);
+      if (this.moveSideways()) this.facing *= -1;
+      // Varovainen reunoista, kuten kuorikävelijä ja piikkiukko: yökki on
+      // lähde, ja lähde joka heittäytyy kuoppaan ei ole lähde.
+      if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
+        this.facing *= -1;
+      }
+    }
+    applyGravity(this, 0.9);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  retch() {
+    this.timer = YOKKI_PERIOD;
+    const dir = this.facing;
+    this.level.add(new Karvapallo(this.level, this.cx + dir * 10 - 6, this.y + 4, dir));
+    this.level.spawnPuff(this.cx + dir * 10, this.cy, true);
+    Sfx.play('sylkaisy');
+  }
+
+  draw(ctx) {
+    const heave = this.warn > 0 ? 1 - this.warn / YOKKI_WARN : 0;
+    const frame = Math.floor(this.tick / 8);
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawYokki(ctx, this.x, this.y, frame, this.facing, 0));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawYokki(g, this.x, this.y, frame, this.facing, heave));
+  }
+}
+
+/* ----------------------------- paukkupöhö -------------------------------- */
+
+/**
+ * Sytytetyn pöhön luvut.
+ *
+ * `FUSE_FRAMES` on 48 eli neljä viidesosaa sekunnista, ja se on mitattu
+ * pelaajan omasta vauhdista eikä valittu tunnelmasta: juoksukatolla (2,5
+ * px/frame) siinä ajassa kulkee 120 px, eli **kolme kertaa räjähdyksen säde**.
+ * Sytytetystä pöhöstä siis ehtii aina pois jos lähtee heti, eikä koskaan jos
+ * jää katsomaan. Se on täsmälleen se sopimus jonka räjähtävä vihollinen saa
+ * tehdä.
+ *
+ * `BLAST_R` 40 px on kaksi ja puoli ruutua, eli selvästi enemmän kuin
+ * maahaniskun paras säde (30 + voimataso) — ja se on oikein: maahanisku on
+ * pelaajan liike jonka hän valitsee, tämä on hänen päälleen sytytetty pommi.
+ */
+const FUSE_FRAMES = 48;
+const BLAST_R = 40;
+
+/**
+ * PAUKKUPÖHÖ — pöhö joka on täyttynyt liikaa, ja jonka ainoa mahdollinen loppu
+ * on se että se hajoaa.
+ *
+ * **Tallaus ei tapa sitä, se sytyttää sen.** Se on pelin ensimmäinen otus jolla
+ * pelaajan perusverbi antaa väärän vastauksen — tai tarkemmin: oikean vastauksen
+ * jonka hinta maksetaan vasta puolen sekunnin päästä. Jokainen muu vihollinen
+ * tässä pelissä on käsitelty sillä hetkellä kun siihen on koskettu; tämä alkaa
+ * siitä.
+ *
+ * Ja se on samalla **työkalu**. Räjähdys rikkoo tiiliä `burstBricks`in omalla
+ * sopimuksella (vain `B`, eikä sellaista `B`:tä joka piilottaa jotain), joten
+ * paukkupöhö on tapa avata seinä ilman voimatasoa, ilman häntää ja ilman
+ * maahaniskun korkeutta. Se on myös tapa tappaa se mikä sen vieressä sattuu
+ * seisomaan — mukaan lukien pelaaja itse, jolle se ei tee poikkeusta.
+ *
+ * Kaikki neljä tapaa koskea siihen sytyttävät sen, ja se on tahallinen
+ * yksinkertaistus: tallaus, pierupallo, kuori ja häntä johtavat samaan sytykkeeseen
+ * eikä yksikään niistä poista sitä huoneesta. "Miten tämän saa pois" on tässä
+ * väärä kysymys, ja peli vastaa siihen aina samalla tavalla.
+ */
+export class Paukkupoho extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.speed = 0.4;
+    this.score = 400;
+    this.fuse = 0;
+  }
+
+  get bubbleable() { return false; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  get lit() { return this.fuse > 0; }
+
+  /** Sytytys, mistä tahansa suunnasta ja millä tahansa aseella. */
+  light() {
+    if (this.dying || this.lit) return;
+    this.fuse = FUSE_FRAMES;
+    this.vx = 0;
+    Sfx.play('squeak');
+  }
+
+  stomp() {
+    this.light();
+    // `true` eli pelaaja pomppaa. Tallaus *onnistui* — se vain ei tappanut,
+    // ja pomppu on juuri se liike jolla siitä pääsee pois.
+    return true;
+  }
+
+  hitByProjectile() { this.light(); }
+
+  hitByShell() { this.light(); }
+
+  hitByTail() { this.light(); }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.sink()) return;
+
+    if (this.lit) {
+      this.steer(0);
+      this.moveSideways();
+      if (--this.fuse <= 0) {
+        this.blast();
+        return;
+      }
+    } else {
+      this.steer(this.speed * this.facing);
+      if (this.moveSideways()) this.facing *= -1;
+      if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
+        this.facing *= -1;
+      }
+    }
+    applyGravity(this, 0.9);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  /**
+   * Se mitä paine tekee kun se pääsee kerralla ulos.
+   *
+   * Järjestys on sama kuin maahaniskulla ja samasta syystä: **oliot ensin,
+   * lattia viimeisenä.** Katoava tiili tiputtaa sen mikä sen päällä seisoo, ja
+   * putoaminen kuuluu räjähdykseen eikä sen jälkeiseen frameen.
+   *
+   * Pelaajaa se ei säästä. `hurt` itse tarkistaa kuolemattomuusframet ja
+   * `star` tarkistetaan tässä samalla rajalla kuin kaikella muullakin joka
+   * *osuu sinuun* — papupommi, närästysliekki, piikki (ks. `collisions`).
+   */
+  blast() {
+    this.remove = true;
+    const { level } = this;
+    /* `spawnPuff` eikä oma `Puff`: tämä tiedosto ei tunne tehostetiedostoa
+     * lainkaan, ja kahdeksan pilveä säteen levyisessä rivissä on sama kuva kuin
+     * maahaniskun kuusi — sen leveämpänä. */
+    for (let i = 0; i < 8; i++) {
+      level.spawnPuff(this.cx + ((i - 3.5) / 3.5) * BLAST_R, this.cy, i % 2 === 0);
+    }
+    for (const e of level.entities) {
+      if (e.kind !== 'enemy' || e === this || e.dying || e.remove) continue;
+      if (Math.abs(e.cx - this.cx) > BLAST_R || Math.abs(e.cy - this.cy) > BLAST_R) continue;
+      /* `hitByShell` eikä `hitByProjectile`, samasta syystä kuin tappavalla
+       * maahaniskulla: sitkeät pysyvät sitkeinä, eikä räjähdys ole kupla. */
+      e.hitByShell(Math.sign(e.cx - this.cx) || 1);
+    }
+    const p = level.player;
+    if (p && !p.dying && p.star <= 0
+      && Math.abs(p.cx - this.cx) < BLAST_R && Math.abs(p.cy - this.cy) < BLAST_R) {
+      p.hurt('hazard');
+    }
+    const tiles = [];
+    const x0 = Math.floor((this.cx - BLAST_R) / TILE);
+    const x1 = Math.floor((this.cx + BLAST_R) / TILE);
+    const y0 = Math.floor((this.cy - BLAST_R) / TILE);
+    const y1 = Math.floor((this.cy + BLAST_R) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const dx = (tx + 0.5) * TILE - this.cx;
+        const dy = (ty + 0.5) * TILE - this.cy;
+        if (dx * dx + dy * dy <= BLAST_R * BLAST_R) tiles.push([tx, ty]);
+      }
+    }
+    level.burstBricks(tiles);
+    level.awardScore(this.score, this.cx, this.y);
+    level.shake(4);
+    Sfx.play('jysahdys');
+  }
+
+  draw(ctx) {
+    const fuse = this.lit ? 1 - this.fuse / FUSE_FRAMES : 0;
+    const frame = Math.floor(this.tick / 8);
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawPaukkupoho(ctx, this.x, this.y, frame, this.facing, 0));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawPaukkupoho(g, this.x, this.y, frame, this.facing, fuse));
+  }
+}
+
 export const ENEMY_CHARS = {
   g: (level, tx, ty) => new Walker(level, tx * TILE, ty * TILE),
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),
@@ -2684,4 +3398,19 @@ export const ENEMY_CHARS = {
    * the chunk reads as what it is — a hole with something at the bottom of it —
    * rather than as an enemy floating in a gap. */
   U: (level, tx, ty) => new Kurnuttaja(level, tx * TILE, ty * TILE),
+  /*
+   * Neljä uutta merkkiä, ja niiden kirjaimet ovat muistisääntöjä eivätkä
+   * lyhenteitä: `T` torvi, `Z` sen surina, `Y` yökki, `m` miina. Isot kirjaimet
+   * ovat tässä taulussa niitä jotka eivät kävele tavallista kävelyä (`A`, `H`,
+   * `O`, `P`, `U`), ja kolme näistä neljästä kuuluu siihen joukkoon.
+   *
+   * Kaikki neljä asetetaan sen ruudun *ylänurkasta* johon ne on kirjoitettu,
+   * paitsi paarma, joka on 12 px korkea ja keskitetään ruutuunsa: se leijuu, ja
+   * leijuva otus jonka piirros roikkuu ruudun ylälaidasta lukisi kentässä
+   * rivin verran ylempänä kuin se on.
+   */
+  T: (level, tx, ty) => new Torvi(level, tx * TILE, ty * TILE),
+  Z: (level, tx, ty) => new Paarma(level, tx * TILE, ty * TILE + 2),
+  Y: (level, tx, ty) => new Yokki(level, tx * TILE, ty * TILE),
+  m: (level, tx, ty) => new Paukkupoho(level, tx * TILE, ty * TILE),
 };

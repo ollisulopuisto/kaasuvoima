@@ -189,6 +189,10 @@ const ENEMY_NAMES = {
   P: 'papuparooni',
   b: 'linnakepomo',
   U: 'kurnuttaja',
+  T: 'törähdystorvi',
+  Z: 'paarma',
+  Y: 'yökki',
+  m: 'paukkupöhö',
 };
 
 /**

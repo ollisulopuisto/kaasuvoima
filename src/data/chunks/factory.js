@@ -57,6 +57,55 @@ export const FACTORY_CHUNKS = {
     13: G,
     14: G,
   }),
+  /**
+   * TÖRÄHDYSTORVEN ENSIESITTELY, ja koko ruutu on rakennettu sen ympärille että
+   * ammuksen **yli** pääsee.
+   *
+   * Torvi seisoo käytävän toisessa päässä ja ampuu vaakasuoraan siihen
+   * kerrokseen jossa se itse on (`TORVI`-vakiot, `entities/enemies.js`: ±40 px
+   * pystysuunnassa). Lauta rivillä 7 on siis se vastaus jonka pelaaja saa ennen
+   * kuin hänen tarvitsee keksiä se: sen päällä ammus menee ali. Lauta on
+   * lyhyempi kuin matka torvelle, joten se ei ole silta ohi vaan turvapaikka
+   * jonka reunalla joutuu odottamaan seuraavaa laukausta.
+   *
+   * Kolikot ovat laudan päällä eivätkä lattialla, koska tässä ruudussa
+   * kolikkorivi tarkoittaa "tänne".
+   */
+  fac_torvi: ck(16, {
+    0: G,
+    1: G,
+    6: '    ooooo',
+    7: '   -------',
+    12: '              T',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * TÖRÄHDYSTORVI TOISEN KERRAN, ja nyt kahdessa kerroksessa.
+   *
+   * Kaksi torvea, toinen lattialla ja toinen hyllyllä, eli **ali menemisen
+   * vastaus on nyt jonkun muun kerroksen ongelma.** Ensimmäisellä kerralla
+   * lauta oli turvapaikka; tässä laudan korkeus on tasan ylemmän torven
+   * ampumakorkeus, joten se paikka jossa juuri oltiin turvassa on se jossa
+   * seuraava laukaus kulkee.
+   *
+   * Torvien väli on yhdeksän saraketta eikä vähempää: ammukset lähtevät
+   * `TORVI_PERIOD`in (150 framea) välein kummastakin, ja lähempänä toisiaan
+   * ne muodostaisivat kaksi vuorottelevaa seinää yhden esteen sijaan.
+   */
+  fac_torvit: ck(16, {
+    0: G,
+    1: G,
+    6: '   ooo',
+    7: '  ------',
+    8: '             T',
+    9: '            XXX',
+    12: '   T',
+    13: G,
+    14: G,
+  }),
+
   fac_gap: ck(16, {
     0: G,
     1: G,

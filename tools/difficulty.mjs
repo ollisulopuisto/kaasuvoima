@@ -117,6 +117,44 @@ export const ENEMY_COST = {
              * not after it: the spiky walker shipped at 0 and every level it
              * was in measured easier than it played — see the gate in
              * verify.mjs that now refuses a marker with no price. */
+  /*
+   * NELJÄ UUTTA (16.8.2026), ja niiden hinnat on johdettu yhdestä kysymyksestä:
+   * **poistuuko uhka kun otukseen on koskettu.**
+   *
+   * Se on tämän taulun oma jakolinja jo ennen näitä neljää — kävelijä 1,0
+   * poistuu tallauksella, nielu 1,1 ei poistu ollenkaan mutta ei myöskään
+   * liiku, aurinko 3,0 ei poistu eikä pysy paikallaan. Kaikki neljä uutta
+   * asettuvat sille janalle eivätkä oman asteikkonsa varaan.
+   */
+  T: 2.2,   /* törähdystorvi: tallattava, eli se *voidaan* poistaa — mutta vasta
+             * menemällä siihen linjaan johon se ampuu, ja siihen asti se
+             * täyttää koko käytävän 150 framen välein. Papuparoonin 3,0
+             * yläpuolelle se ei nouse, koska sen ammus on tallattava ja
+             * paroonin pommi ei ole; piikkiukon 1,4 yläpuolelle se nousee,
+             * koska piikkiukko on yksi este yhdessä paikassa ja tämä on este
+             * joka syntyy uudelleen niin kauan kuin lähde on pystyssä. */
+  Z: 1.8,   /* paarma: ampuu suoraan alas siihen mihin pelaaja on pysähtynyt, eli
+             * se ei ota reittiä vaan **pysähtymispaikat**. Ruskean pilven 1,5
+             * yläpuolella koska pilvi vain ajelehtii sinua kohti ja tämän voi
+             * ohittaa vain ajoituksella; suihkun 1,5 yläpuolella koska suihku on
+             * metronomi yhdessä sarakkeessa ja tämä partioi. Alle torven, koska
+             * yksi pisara kerrallaan ja `PAARMA_COOL` on kaksi ja puoli sekuntia. */
+  Y: 2.4,   /* yökki: itse otus on hitain ja haurain koko taulussa, ja hinta on
+             * silti kolmanneksi korkein. Se on tarkoitus: hinta ei ole otus vaan
+             * **sen tuotanto**. Jokainen ohitettu yökki jää selän taakse
+             * lähettämään palloja, ja pallo kulkee samaa lattiaa kuin pelaaja —
+             * eli tämä on ainoa vihollinen tässä pelissä joka tekee *jo
+             * kuljetusta reitistä* uudelleen vaarallisen. Kurnuttajan 2,1
+             * yläpuolella juuri siksi, ja auringon 3,0 alapuolella koska tämän
+             * voi poistaa yhdellä tallauksella jos siihen asti pääsee. */
+  m: 1.9,   /* paukkupöhö: kävelee kuin kävelijä (1,0) mutta pelaajan perusverbi
+             * antaa siihen väärän vastauksen — tallaus sytyttää sen. Hinta on
+             * kävelijän ja kuoriukon (1,3) yläpuolella siitä, ja piikkiukon
+             * (1,4) yläpuolella siitä että piikkiukko vain kieltää yhden
+             * vastauksen kun taas tämä rankaisee siitä. Torven alapuolella,
+             * koska se on kertakäyttöinen ja koska räjähdys hajottaa myös sen
+             * mikä sattuu seisomaan vieressä — se on yhtä usein työkalu kuin
+             * este, ja työkalusta ei veloiteta täyttä hintaa. */
   O: 0.0,   // moon: harmless, it is a trampoline with a power-up in it
   b: 5.0,   /* boss: one entity, but it is the level. The real spread between
              * bosses is bossVariant's move set, which is code and not grid, so

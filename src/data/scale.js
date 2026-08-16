@@ -243,15 +243,29 @@ const UNIQUE = new Set([
   'b', 'A', 'O', 'P',
 ]);
 
-/** The species an added enemy may be: the ones that stand on the ground. */
-const GROUNDLINGS = ['g', 'k', 'c', 'x'];
+/**
+ * The species an added enemy may be: the ones that stand on the ground.
+ *
+ * Yökki ja paukkupöhö tulivat listalle 16.8.2026 ja ne ovat siinä samalla
+ * ehdolla kuin muutkin — vain sellaiseen kenttään jossa laji jo on. Se ehto on
+ * tässä poikkeuksellisen tärkeä juuri näille kahdelle: kumpikin tuottaa jotain
+ * (pallon, räjähdyksen), joten kappalemäärän tuplaaminen ei tuplaa esteitä vaan
+ * niiden lähteitä. Se on nimenomaan se mitä VAIKEA-tason on tarkoitus tehdä, ja
+ * se on myös syy siihen ettei kumpaakaan panna kenttään jossa niitä ei ole.
+ *
+ * Törähdystorvi ja paarma eivät ole listalla, ja se on päätös: torvi on
+ * rakenne joka ampuu vaakasuoraan koko käytävän halki, ja paarma on
+ * ilmaotus, jolla ei ole `SPACING`illa mitattavaa lattiaa alla. Kummankin
+ * paikka on kenttäsuunnittelua eikä satunnaislukua.
+ */
+const GROUNDLINGS = ['g', 'k', 'c', 'x', 'Y', 'm'];
 
 /**
  * Merkit jotka eivät ole maastoa: ne seisovat maaston päällä tai leijuvat sen
  * yllä. Vauhdinoton mittaus (`seamColumns`) lukee ne tyhjänä, koska juoksijaa
  * hidastaa se mitä maastossa on eikä se kuka siinä sattuu seisomaan.
  */
-const LOOSE = new Set([...'gkfprcxAOPHb1', T.COIN, T.GOAL]);
+const LOOSE = new Set([...'gkfprcxAOPHbTZYm1', T.COIN, T.GOAL]);
 
 /* ------------------------------- the seams ------------------------------- */
 

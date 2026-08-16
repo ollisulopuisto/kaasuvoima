@@ -1036,3 +1036,409 @@ function baronBody(ctx, x, y, frame, facing, lift, hurt) {
 export function drawBeanBaron(ctx, x, y, frame, facing, lift = 0, hurt = false) {
   outlined(ctx, (g) => baronBody(g, x, y, frame, facing, lift, hurt));
 }
+
+/* ===================== neljä uutta vihollista, piirrettynä ================
+ *
+ * Sama kolme sääntöä kuin koko muulla vihollisjoukolla, ja ne ovat tässä
+ * tiedostossa kirjattu auki pöhön kohdalle:
+ *
+ *   1. **Piirros täyttää sen laatikon jolla se satuttaa.** Ei kaistaa jota ei
+ *      näe mutta johon voi osua.
+ *   2. **Ylälaita kertoo saako päälle hypätä.** Tallattavalla on leveä tasainen
+ *      lakipinta, tallaamattomalla piikkejä — ja piikit ovat `drawSpines`,
+ *      koska peli saa yhden sanaston sille että tähän ei lasketa.
+ *   3. **Runko erottuu siitä maasta jolla se seisoo.** Sävy valitaan sen
+ *      mukaan mitä pelissä *ei* jo ole, kaikissa kahdeksassa teemassa.
+ *
+ * Ja neljäs joka on näiden neljän oma: **kaksi näistä on tehtaan tekemiä.**
+ * Torvi ja sen ammus ovat samaa terästä kuin pöntön painesäiliö, ja se on
+ * tarkoituksellinen suku — pelaajan pitää nähdä yhdellä silmäyksellä että
+ * ammus tuli tuosta putkesta, ilman että kumpaakaan tarvitsee opetella.
+ */
+
+/* ----------------------------- törähdystorvi ---------------------------- */
+
+/*
+ * MESSINKIÄ LÄPI KOKO ESINEEN, JA SE ON MITTAUS EIKÄ MAKU.
+ *
+ * Ensimmäinen versio näistä kahdesta oli pöntön terästä messinkisin suin, eli
+ * "samaa tehdasta" myös väriltään. Portti mittasi sen: torvi erottui tehtaan
+ * omasta lattiasta **5,4 prosentilla** kynnyksen ollessa 8,6 — pelin
+ * huonoimmin näkyvä otus, ja nimenomaan siinä maailmassa johon se on tarkoitus
+ * panna.
+ *
+ * Syy on kirjoitettu auki jo pöntön kohdalle eikä sitä tarvinnut arvata
+ * uudestaan: mitta on **rungon keskiarvo** maata vasten, ja yhtä paljon lämmintä
+ * ja kylmää keskiarvoistuu tasan siksi keskiharmaaksi joka tehtaan lattia
+ * valmiiksi on. Esineen on siis valittava puoli. Pönttö valitsi teräksen, joten
+ * tämä valitsee messingin — se on myös se mistä torvet tehdään, ja se pitää
+ * nämä kaksi erillään silmässä silloinkin kun ne ovat samassa huoneessa.
+ *
+ * Suku näkyy nyt muodossa eikä värissä: sama nokka, sama laippa, samat pultit.
+ */
+const BRASS_LIT = '#ffe8a0';
+const BRASS = '#ffc84a';
+const BRASS_MID = '#c89018';
+const BRASS_DARK = '#8c5a10';
+
+/**
+ * TÖRÄHDYSTORVI — messinkinen venttiili teräksisellä jalustalla.
+ *
+ * Lakipinta on kolme riviä tasaista messinkiä laidasta laitaan, eli neljätoista
+ * pikseliä sitä yhtä asiaa jonka pelaaja lukee ennen hyppyä. Se on samalla se
+ * osa joka tekee esineestä esineen eikä otusta: laippa, jonka läpi on porattu
+ * pultit. Suu osoittaa siihen suuntaan johon ammutaan ja se **hehkuu ennen
+ * laukausta** — `charge` 0…1 on se puoli sekuntia jona torvi on jo täynnä.
+ *
+ * @param {number} charge 0 = lepää, 1 = laukaisee tällä framella
+ */
+function torviBody(ctx, x, y, tick, facing, charge) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    // Jalusta: valettu kotelo joka kantaa laatikon pohjan ja molemmat sivut.
+    ctx.fillStyle = BRASS_MID;
+    ctx.fillRect(bx, py + 9, 16, 7);
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx, py + 14, 16, 2);
+    ctx.fillRect(bx + 7, py + 9, 2, 5);
+    ctx.fillStyle = BRASS_LIT;
+    ctx.fillRect(bx, py + 9, 16, 1);
+
+    // Suu: kartio joka levenee ulospäin, ja sen sisus on musta kunnes se hehkuu.
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx + 6, py + 4, 10, 6);
+    ctx.fillStyle = BRASS;
+    ctx.fillRect(bx + 6, py + 5, 9, 2);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 12, py + 5, 4, 4);
+    if (charge > 0) {
+      /* Hehku kasvaa suun sisällä ulospäin. Laatikon sisällä pysyminen on
+       * ehto eikä tyyli: liekki joka työntyisi ulos olisi vahinkoalueen
+       * ulkopuolella olevaa taidetta, eli juuri se valhe jota tämä peli ei
+       * piirrä (DESIGN.md kohta 7). */
+      const glow = 1 + Math.round(charge * 3);
+      ctx.fillStyle = Math.floor(tick / 3) % 2 ? '#f4ffd0' : C.gas;
+      ctx.fillRect(bx + 16 - glow, py + 6, glow, 2);
+    }
+
+    // Laippa: laatikon katto, tasainen laidasta laitaan, pultit näkyvissä.
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx + 1, py, 14, 4);
+    ctx.fillStyle = BRASS;
+    ctx.fillRect(bx + 1, py + 1, 14, 2);
+    ctx.fillStyle = BRASS_DARK;
+    for (let i = 0; i < 4; i++) ctx.fillRect(bx + 3 + i * 3, py + 1, 1, 2);
+  });
+}
+
+export function drawTorvi(ctx, x, y, tick, facing, charge = 0) {
+  outlined(ctx, (g) => torviBody(g, x, y, tick, facing, charge));
+}
+
+/**
+ * TÖRÄHDYS — teräskuori jonka sisällä on painetta, ja pyrstössä se mikä sitä
+ * työntää.
+ *
+ * Kaksitoista pikseliä tasaista kantta: leveämpi lakipinta kuin millään muulla
+ * tallattavalla, ja se on tahallista. Tämä on ainoa vihollinen tässä pelissä
+ * jonka päälle *kannattaa* hypätä muustakin syystä kuin pisteistä — se lentää
+ * suoraan, joten sen selkä on liikkuva askelma — ja se lupaus on annettava
+ * pikseleissä eikä ohjekirjassa.
+ */
+function torahdysBody(ctx, x, y, tick, facing) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    // Pyrstö: kaasu joka työntää, ja se vilkkuu omalla tahdillaan.
+    ctx.fillStyle = Math.floor(tick / 2) % 2 ? C.gas : C.gasDark;
+    ctx.fillRect(bx, py + 4, 4, 4);
+    // Runko.
+    ctx.fillStyle = BRASS;
+    ctx.fillRect(bx + 2, py + 1, 13, 10);
+    ctx.fillStyle = BRASS_LIT;
+    ctx.fillRect(bx + 2, py, 12, 2);
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx + 2, py + 9, 13, 3);
+    // Kärki: sama nokka kuin torven suulla, eli tästä näkee mistä se tuli.
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx + 13, py + 2, 3, 8);
+    ctx.fillStyle = BRASS_MID;
+    ctx.fillRect(bx + 13, py + 3, 3, 3);
+    // Sauma keskellä, jotta kuori lukee kuoreksi eikä palikaksi.
+    ctx.fillStyle = BRASS_DARK;
+    ctx.fillRect(bx + 8, py + 2, 1, 8);
+  });
+}
+
+export function drawTorahdys(ctx, x, y, tick, facing) {
+  outlined(ctx, (g) => torahdysBody(g, x, y, tick, facing));
+}
+
+/* --------------------------------- paarma -------------------------------- */
+
+const PAARMA_BODY = '#c8e838';
+const PAARMA_DARK = '#5c6c10';
+
+/**
+ * PAARMA — turvonnut paarma, siivet laatikon kattona.
+ *
+ * Siivet ovat lakipinta, ja se on sekä totta että käytännöllistä: hyönteinen
+ * jonka päälle hypätään on hyönteinen jonka siivet litistyvät, ja siivet ovat
+ * ainoa osa jonka voi piirtää yhtä leveäksi kuin koko laatikko molemmilla
+ * siiveniskun puoliskoilla. Ne täyttävät siis laatikon ylälaidan ja molemmat
+ * kyljet joka framella; runko ja jalat täyttävät pohjan.
+ *
+ * `charge` on se puoli sekuntia jona se on pysähtynyt ja kerää pisaraa. Pisara
+ * kasvaa takaruumiin alle laatikon sisällä — se on varoitus jonka voi lukea
+ * suoraan siitä kohdasta johon se on putoamassa.
+ */
+function paarmaBody(ctx, x, y, tick, facing, charge) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const flap = Math.floor(tick / (charge > 0 ? 2 : 4)) % 2;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    /* Siivet. Ne alkavat aina laatikon ylimmältä riviltä ja ulottuvat aina
+     * molempiin laitoihin — isku on siiven *mitassa* eikä sen paikassa. Se on
+     * ehto eikä tyyli: laatikon katto on tämän otuksen lakipinta, ja lakipinta
+     * joka katoaa joka toisella framella olisi tallauslupaus joka pitää vain
+     * puolet ajasta. */
+    const span = flap ? 3 : 4;
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx, py, 6, span);
+    ctx.fillRect(bx + 10, py, 6, span);
+    ctx.fillStyle = '#c8c8d8';
+    ctx.fillRect(bx, py + span - 1, 6, 1);
+    ctx.fillRect(bx + 10, py + span - 1, 6, 1);
+    // Takaruumis: raidat, koska raita on se merkki jolla pistävä hyönteinen
+    // ilmoittaa itsestään joka toisessa pelissä — ja se lukee opettelematta.
+    ctx.fillStyle = PAARMA_BODY;
+    ctx.fillRect(bx + 3, py + 3, 10, 7);
+    ctx.fillStyle = PAARMA_DARK;
+    ctx.fillRect(bx + 4, py + 4, 2, 6);
+    ctx.fillRect(bx + 8, py + 4, 2, 6);
+    // Pää ja silmä: iso, koska se katsoo alas ja pelaajan on nähtävä se.
+    ctx.fillStyle = PAARMA_DARK;
+    ctx.fillRect(bx + 12, py + 4, 4, 5);
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 13, py + 5, 3, 3);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 14, py + 6, 2, 2);
+    // Jalat: laatikon pohja, ja ne roikkuvat kuten lentävän hyönteisen jalat.
+    ctx.fillStyle = PAARMA_DARK;
+    ctx.fillRect(bx + 4, py + 10, 2, 2);
+    ctx.fillRect(bx + 10, py + 10, 2, 2);
+    if (charge > 0) {
+      const drop = 1 + Math.round(charge * 2);
+      ctx.fillStyle = Math.floor(tick / 3) % 2 ? '#f4ffd0' : C.gas;
+      ctx.fillRect(bx + 6, py + 12 - drop, 3, drop);
+    }
+  });
+}
+
+export function drawPaarma(ctx, x, y, tick, facing, charge = 0) {
+  outlined(ctx, (g) => paarmaBody(g, x, y, tick, facing, charge));
+}
+
+/** HAPPOPISARA — kärki ylös, paino alas, ja yksi kiiltävä pikseli. */
+export function drawPisara(ctx, x, y, tick) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  outlined(ctx, (g) => {
+    g.fillStyle = C.gasDark;
+    g.fillRect(px + 2, py, 2, 3);
+    g.fillRect(px, py + 3, 6, 5);
+    g.fillStyle = C.gas;
+    g.fillRect(px + 1, py + 3, 4, 4);
+    g.fillStyle = Math.floor(tick / 4) % 2 ? '#f4ffd0' : C.gas;
+    g.fillRect(px + 1, py + 4, 2, 2);
+  });
+}
+
+/* --------------------------------- yökki --------------------------------- */
+
+const YOKKI_HIDE = '#e05820';
+const YOKKI_DARK = '#7a2408';
+const YOKKI_LIT = '#f8a050';
+
+/**
+ * YÖKKI — kumara, karvainen, ja rakennettu kurkun ympärille.
+ *
+ * Selkä on laatikon katto: kymmenen pikseliä tasaista laidasta laitaan, eli se
+ * on tallattava ja näyttää siltä. Kaikki muu tässä otuksessa on etupuolella —
+ * kita, kaksi silmää sen yllä ja kaksi tassua sen alla — koska se on se pää
+ * josta karvapallo tulee, ja pelaajan on osattava lukea suunta ennen kuin pallo
+ * on ulkona.
+ *
+ * `heave` 0…1 on yökkäys. Kita aukeaa ja kurkku pullistuu; **selkä ei liiku**,
+ * ja se on sääntö eikä säästö: laatikon katto on se yksi asia jonka on pysyttävä
+ * paikallaan, tai tallaus muuttuisi ajoituskysymykseksi jota mikään ei kerro.
+ */
+function yokkiBody(ctx, x, y, frame, facing, heave, lift = 0) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const b = lift;
+  const gape = Math.round(heave * 3);
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    /* Selkä ja runko. Runko on laidasta laitaan, samasta syystä kuin pöhöllä:
+     * laatikko on 16 leveä ja piirroksen on täytettävä se joka framella, myös
+     * niillä joilla tassut ovat sisäänpäin. */
+    ctx.fillStyle = YOKKI_DARK;
+    ctx.fillRect(bx + 2, py, 12, 4);
+    ctx.fillStyle = YOKKI_HIDE;
+    ctx.fillRect(bx, py + 4, 16, 9 - b);
+    ctx.fillRect(bx + 1, py + 3, 14, 2);
+    ctx.fillStyle = YOKKI_LIT;
+    ctx.fillRect(bx + 2, py + 4, 5, 2);
+    // Karvatupsut selän reunoilla: ne kertovat mistä pallo on tehty.
+    ctx.fillStyle = YOKKI_DARK;
+    for (let i = 0; i < 4; i++) ctx.fillRect(bx + 3 + i * 3, py + 3, 1, 3);
+    // Kurkku, joka pullistuu yökkäyksessä — laatikon oikeaan laitaan asti ja
+    // ei sen yli: pullistuva osa ei ole uusi osumakohta.
+    ctx.fillStyle = YOKKI_LIT;
+    ctx.fillRect(bx + 8, py + 7 + b, 5 + gape, 5 - b);
+    // Kita.
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 12, py + 6 - gape, 4, 5 + gape * 2);
+    ctx.fillStyle = '#a81c1c';
+    ctx.fillRect(bx + 13, py + 8, 3, 2 + gape);
+    // Silmät: pienet ja ylhäällä, jotta kita jää suurimmaksi asiaksi.
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 8, py + 4, 3, 3);
+    ctx.fillRect(bx + 12, py + 3, 3, 3);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 9, py + 5, 2, 2);
+    ctx.fillRect(bx + 13, py + 4, 2, 2);
+    /* Tassut: laatikon pohja ja molemmat alakulmat. Ne kasvavat ylöspäin sen
+     * verran kuin hengitys nostaa runkoa (`py + 13 - b`, korkeus `3 + b`), ja
+     * se on sama temppu kuin pöhön tolpilla — ilman sitä sisäänhengityksen
+     * frameilla runko ja tassut irtoavat toisistaan yhden rivin verran, ja
+     * otus on kolme kappaletta. */
+    ctx.fillStyle = YOKKI_DARK;
+    const swap = frame % 2 === 0;
+    ctx.fillRect(bx + (swap ? 0 : 2), py + 13 - b, 6, 3 + b);
+    ctx.fillRect(bx + (swap ? 10 : 8), py + 13 - b, 6, 3 + b);
+  });
+}
+
+export function drawYokki(ctx, x, y, frame, facing, heave = 0) {
+  const lift = breath(frame * 8, x, y);
+  outlined(ctx, (g) => yokkiBody(g, x, y, frame, facing, heave, lift));
+}
+
+/**
+ * KARVAPALLO — takkuinen kerä jonka pinnasta törröttää se mistä se on tehty.
+ *
+ * Tupsut ovat `drawSpines`, eivät oma piirrokseni: peli on opettanut yhdellä
+ * muodolla että tähän ei lasketa jalkaa — piikkiukolla, nielulla ja pörhistyvällä
+ * pomolla — ja neljäs otus jolla olisi *oman* näköiset piikit olisi neljäs asia
+ * opeteltavaksi siitä samasta yhdestä säännöstä.
+ *
+ * Pyöriminen on kuljetusta matkasta (`spin`) eikä kellosta, joten hidas pallo
+ * pyörii hitaasti. Kierre piirretään rungon sisään eikä sen ääriviivaan: 12
+ * pikselin kiekko jonka reunaa käännetään on suttu, mutta 12 pikselin kiekko
+ * jonka *kuvio* kiertää on pyörivä kerä.
+ */
+function karvapalloBody(ctx, x, y, spin, facing) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const phase = Math.floor(spin / 3) % 4;
+  /* Vaalea eikä tumma, ja se on mittaus: ensimmäinen versio oli takkuisen
+   * ruskea (`#4a2a14`) ja erottui yön maasta **1,7 prosentilla** kynnyksen
+   * ollessa 8,6 — eli se oli käytännössä näkymätön juuri sillä lattialla jota
+   * pitkin se vierii. Vierivä este jota ei näe ei ole este vaan arpa. */
+  ctx.fillStyle = '#a06830';
+  ctx.fillRect(px + 1, py + 5, 10, 7);
+  ctx.fillRect(px, py + 7, 12, 4);
+  ctx.fillStyle = '#d8a860';
+  ctx.fillRect(px + 2, py + 6, 8, 4);
+  // Kierre: kaksi juovaa jotka kiertävät kerän ympäri neljässä asennossa.
+  ctx.fillStyle = '#5a3210';
+  for (let i = 0; i < 2; i++) {
+    const at = (phase + i * 2) % 4;
+    ctx.fillRect(px + 1 + at * 3, py + 6, 2, 6);
+  }
+  ctx.fillStyle = '#f8e0a8';
+  ctx.fillRect(px + 2 + ((phase + 1) % 4) * 2, py + 7, 2, 2);
+  // Tupsut. Sama sanasto kuin piikkiukolla, saman levyisenä kuin kerä.
+  drawSpines(ctx, px + 1, py + 5, 10, 1, Math.floor(spin), false, 4);
+  // Ja yksi alaspäin, jotta kerä ei ole tasapohjainen: se vierii.
+  ctx.fillStyle = '#5a3210';
+  ctx.fillRect(px + 3 + ((phase + 2) % 3) * 2, py + 11, 2, 1);
+  if (facing < 0) ctx.fillRect(px, py + 8, 1, 2);
+  else ctx.fillRect(px + 11, py + 8, 1, 2);
+}
+
+export function drawKarvapallo(ctx, x, y, spin, facing) {
+  outlined(ctx, (g) => karvapalloBody(g, x, y, spin, facing));
+}
+
+/* ------------------------------ paukkupöhö -------------------------------- */
+
+/**
+ * PAUKKUPÖHÖ — pöhö joka on täyttynyt yli äyräiden.
+ *
+ * Se on sukua pöhölle ja sen pitää *näyttää* siltä yhdellä silmäyksellä, mutta
+ * se ei saa olla sama kuva toisella värillä — se on juuri se vika joka löydettiin
+ * poimittavista esineistä (DESIGN.md kohta 1 c) ja jota ei tehdä uudestaan.
+ * Kolme eroa, ja jokainen niistä on myös tieto pelaajalle:
+ *
+ *   - **Muoto on pallo eikä pussi.** Se on täynnä, ei roikkuva; siinä ei ole
+ *     pöhön alaspäin valuvaa saumaa lainkaan.
+ *   - **Solmun tilalla on sytytyslanka**, eli kaasuvana joka nousee päältä. Sama
+ *     paikka, eri esine: pöhössä pussi on sidottu kiinni, tässä se vuotaa.
+ *   - **Väri on kuuma.** Pöhö on suolenvaaleaa vaaleanpunaista, tämä on
+ *     paineen punainen, ja sytytettynä se kirkastuu kohti valkoista.
+ *
+ * `fuse` 0…1 on palava lanka. Keho paisuu ja välkkyy kiihtyvästi — nopeutuva
+ * välke on sama muoto kuin kurnuttajan varoituksessa (`Sfx.kurnutus`), eli
+ * peli sanoo "kohta" samalla tavalla korvalle ja silmälle.
+ */
+function paukkupohoBody(ctx, x, y, frame, facing, fuse, lift = 0) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const b = lift;
+  // Välke tihenee kohti loppua: 8 framen jaksosta 2 framen jaksoon.
+  const beat = Math.max(2, Math.round(8 - fuse * 6));
+  const hot = fuse > 0 && Math.floor(frame * 8 / beat) % 2 === 1;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    /* Sytytyslanka: kaasua, ja siksi läpikuultavaa. Se on samalla se ratkaisu
+     * jolla laki 2 pysyy voimassa — **lakipinta on pallon oma kansi eikä
+     * lanka**. Läpinäkyvä pikseli ei ole runkoa (`verify.mjs` lukee vain
+     * täysin peittävät värit), joten lanka saa nousta laatikon yli olematta
+     * osumakohta, aivan kuten pöntön suihku ja pöhön vuoto. Umpinaisena se
+     * olisi neljä pikseliä leveä huippu keskellä kantta, ja koko piirroksen
+     * lakipinta olisi ne neljä. */
+    const wisp = fuse > 0 ? 'rgba(244,255,208,0.75)' : 'rgba(168,224,74,0.4)';
+    ctx.fillStyle = wisp;
+    const rise = 1 + Math.round(fuse * 2) + (frame % 3);
+    ctx.fillRect(bx + 7, py - rise, 3, rise + 1);
+    // Pallo. Leveimmillään keskeltä, ja tasainen kansi jotta sen päälle voi
+    // laskeutua — tallaus on tämän otuksen ainoa sytytin joka on ilmainen.
+    ctx.fillStyle = hot ? '#ffe8c0' : '#c81820';
+    ctx.fillRect(bx + 2, py, 12, 5);
+    ctx.fillRect(bx, py + 4, 16, 8 - b);
+    ctx.fillStyle = hot ? C.white : '#f04030';
+    ctx.fillRect(bx + 3, py + 5, 6, 3);
+    ctx.fillStyle = hot ? '#ffe8c0' : '#8c0c18';
+    ctx.fillRect(bx, py + 11 - b, 16, 2);
+    // Silmät: pienet ja lähekkäin, koska tämä on täysi eikä valpas.
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 5, py + 7, 3, 3);
+    ctx.fillRect(bx + 9, py + 7, 3, 3);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 6, py + 8, 2, 2);
+    ctx.fillRect(bx + 10, py + 8, 2, 2);
+    // Tassut, laatikon pohjaan ja molempiin alakulmiin — ja ne venyvät
+    // hengityksen mukana, ks. yökin sama kohta.
+    ctx.fillStyle = '#8c0c18';
+    const swap = frame % 2 === 0;
+    ctx.fillRect(bx + (swap ? 0 : 2), py + 13 - b, 6, 3 + b);
+    ctx.fillRect(bx + (swap ? 10 : 8), py + 13 - b, 6, 3 + b);
+  });
+}
+
+export function drawPaukkupoho(ctx, x, y, frame, facing, fuse = 0) {
+  const lift = breath(frame * 8, x, y);
+  outlined(ctx, (g) => paukkupohoBody(g, x, y, frame, facing, fuse, lift));
+}

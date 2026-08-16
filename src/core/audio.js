@@ -892,6 +892,45 @@ const SFX = {
     noise({ dur: 0.14, from: 320, to: 2400, q: 2.2, gain: 0.15, attack: 0.012 });
   },
   kick: () => tone({ type: 'sawtooth', from: 520, to: 150, dur: 0.13, gain: 0.2, hold: 0.2 }),
+  /*
+   * KOLME UUTTA VIHOLLISTA, KOLME ÄÄNTÄ, JA NE ON EROTETTU TOISISTAAN MUODOSTA
+   * EIKÄ SOINTIVÄRISTÄ.
+   *
+   * Kaikki kolme ovat kaasua tai lihaa, eli ne kaikki *voisivat* tulla samasta
+   * `farty`sta ja kuulostaa yhdeltä ja samalta möyseeltä. DESIGN.md kohta 8
+   * sanoo miksi se ei kelpaa: toisen signaalin joka kuulostaa ensimmäiseltä on
+   * huonompi kuin ei signaalia lainkaan. Ne on siksi kirjoitettu kolmeksi eri
+   * *tapahtuman muodoksi*, ja muodon korva oppii ilman että sitä opetetaan:
+   *
+   *   `torvi`     — **paine päästetään**: kova etureuna, sitten matala honotus
+   *                 joka jää soimaan. Alkava ja jatkuva, koska ammus lähtee ja
+   *                 on yhä matkalla.
+   *   `sylkaisy`  — **jotain irtoaa**: märkä, lyhyt, alaspäin. Ei etureunaa
+   *                 lainkaan; se on se ero jolla se ei mene `torvi`n kanssa
+   *                 sekaisin silloinkaan kun molemmat soivat samassa huoneessa.
+   *   `jysahdys`  — **kaikki kerralla**: pisin ja matalin ääni tällä väylällä
+   *                 `burst`in jälkeen, ja tarkoituksella juuri sen naapuri —
+   *                 papupommi hajottaa tiiliä samalla sopimuksella kuin pusku,
+   *                 joten sen pitää kuulua saman perheen jäseneltä mutta
+   *                 isommalta. Puolet pidempi ja oktaavin matalampi.
+   */
+  torvi: () => {
+    tone({ type: 'square', from: 240, to: 150, dur: 0.06, gain: 0.22, hold: 0.15, curve: 'lin' });
+    tone({
+      type: 'sawtooth', from: 128, to: 104, dur: 0.34, gain: 0.2, hold: 0.55,
+      curve: 'lin', vibrato: 5, vibratoRate: 6, delay: 0.02,
+    });
+    noise({ dur: 0.1, from: 1700, to: 460, q: 2, gain: 0.13, attack: 0.004 });
+  },
+  sylkaisy: () => {
+    farty({ dur: 0.15, base: 320, gain: 0.2, wobble: 44, wet: 0.9, vary: 0.25 });
+    noise({ dur: 0.13, from: 2600, to: 700, q: 2.6, gain: 0.12, attack: 0.03 });
+  },
+  jysahdys: () => {
+    tone({ type: 'triangle', from: 200, to: 28, dur: 0.44, gain: 0.34, hold: 0.4, curve: 'lin' });
+    noise({ dur: 0.5, from: 2800, to: 90, q: 0.8, gain: 0.3, attack: 0.003 });
+    farty({ dur: 0.36, base: 58, gain: 0.22, wobble: 15, wet: 0.75, delay: 0.04 });
+  },
   spikes: () => {
     // Bone sliding out of a back. Rising, so it reads as a warning rather than
     // as something that has already happened, and scratchy enough to be heard

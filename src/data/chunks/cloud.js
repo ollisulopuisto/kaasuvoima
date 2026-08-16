@@ -125,6 +125,51 @@ export const CLOUD_CHUNKS = {
    * So the coin arc is the only thing that marks this, which is what this game
    * marks jumps with, and it starts over the lip rather than before it.
    */
+  /**
+   * PAARMAN ENSIESITTELY, ja se on tässä maailmassa eikä missään muualla.
+   *
+   * Kaasukehä on ainoa maailma jossa pelaaja **joutuu seisomaan paikallaan**:
+   * laudat ovat lyhyitä, reiät ovat leveitä, ja jokainen niistä alkaa
+   * odottamisella. Paarma on tehty juuri sitä vastaan — se ampuu suoraan alas
+   * siihen mihin joku on pysähtynyt — joten se kuuluu tänne samalla tavalla
+   * kuin juoksuhiekka kuuluu aavikolle.
+   *
+   * Ensimmäinen on silti tasaisen pilven yllä eikä reiän: opittava asia on
+   * "älä jää tähän", ja jos ensimmäinen pisara osuisi laudalla seisovaan, sen
+   * väistäminen olisi pudottautuminen kuoppaan. Kolikot ovat sivussa
+   * paarmasta, ei sen alla; tämän pelin kolikkorivi tarkoittaa "tänne" eikä
+   * "tässä on ansa".
+   */
+  cloud_paarma: ck(16, {
+    5: '        Z',
+    9: '  ooo',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * PAARMA TOISEN KERRAN, ja nyt reiän yllä.
+   *
+   * Tämä on se ruutu jota varten koko laji on: **vauhdinotto reiän yli, ja sen
+   * yllä jokin joka ampuu suoraan alas.** Reikä on sama viiden ruudun reikä
+   * kuin `cloud_hole`ssa, merkilleen, joten hyppy itse ei ole muuttunut miksikään
+   * — muuttunut on se että sitä ennen ei voi jäädä seisomaan.
+   *
+   * Lautaa reiän yli **ei ole**, ja se on maailman oma sääntö eikä tämän ruudun
+   * valinta: jokaisen `-`:n alla on tässä maailmassa oltava kiinteää pilveä, ja
+   * `verify.mjs` mittaa sen. Paarma on siis vauhdinoton yllä eikä kuilun.
+   *
+   * `PAARMA_RANGE` on 72 px eli neljä ja puoli ruutua kumpaankin suuntaan, joten
+   * sen kierros kattaa vauhdinottoalueen muttei yllä reiän toiselle puolelle.
+   * Odottaminen on siis mahdollista, mutta vain siellä mistä juuri tuli.
+   */
+  cloud_paarma_deck: ck(16, {
+    5: '     Z',
+    9: '   ooo',
+    13: '#########     ##',
+    14: '#########     ##',
+  }),
+
   cloud_hole: ck(16, {
     9: '         o o o',
     12: '               k',

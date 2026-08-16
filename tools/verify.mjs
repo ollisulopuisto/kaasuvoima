@@ -9890,6 +9890,23 @@ const report = await page.evaluate(async () => {
       '216,224,240', '140,156,192',
       // nielu: märkä, lähes musta kurkku ja sen punainen sisus
       '24,16,48', '52,44,104', '104,88,176', '32,24,64', '120,16,60', '200,40,108',
+      /*
+       * Neljä uutta lajia, 16.8.2026. Terästä ei ole tässä listassa kahdesti:
+       * törähdystorvi ja sen ammus on maalattu **pöntön omilla sinisillä**,
+       * koska ne ovat samaa tehdasta — se on piirroksen väite ja tämä lista on
+       * paikka jossa se väite näkyy koodina.
+       */
+      // torvi ja törähdys: messinkiä läpi koko esineen, ja se kaasu joka niistä tulee
+      '255,232,160', '255,200,74', '200,144,24', '140,90,16',
+      '168,224,74', '92,156,40', '244,255,208',
+      // paarma: happamanvihreä raidoitus
+      '200,232,56', '92,108,16',
+      // yökki: kuuma oranssi, jota kukaan muu tässä pelissä ei käytä
+      '224,88,32', '122,36,8', '248,160,80', '168,28,28',
+      // karvapallo: vaalennettu takku, ja se kirkas kohta joka näyttää kierteen
+      '160,104,48', '216,168,96', '90,50,16', '248,224,168',
+      // paukkupöhö: paineen punainen, ja valkoiseksi kirkastuva sytytys
+      '200,24,32', '240,64,48', '140,12,24', '255,232,192',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -9987,6 +10004,43 @@ const report = await page.evaluate(async () => {
       { n: 'kurnuttaja', box: [0, 0, 16, 16], breathes: true, clock: 8,
         stomp: false, pit: true, ...none,
         paint: (ox, t, f) => sprites.drawKurnuttaja(g, ox, OY, t, f) },
+      /*
+       * NELJÄ UUTTA, JA NE OVAT TÄSSÄ LISTASSA SAMALLA RIVILLÄ KUIN MUUTKIN.
+       *
+       * Se on koko pointti: uusi vihollinen ei tule peliin sillä että se toimii
+       * vaan sillä että se kestää samat mitat kuin ne jotka ovat jo siellä.
+       * Kolme näistä on tallattavia ja niiden lakipinnan on siis oltava leveä;
+       * karvapallo ei ole, ja sen on kannettava piikkejä. Kumpaakaan ei
+       * väitetä tässä — ne mitataan alempana samasta piirroksesta.
+       *
+       * Latautuva torvi ja yökkäävä yökki piirretään myös ladatussa asennossaan
+       * (`charge`/`heave` 1), koska varoitusasento on se frame jolla piirros voi
+       * kasvaa ulos laatikostaan huomaamatta: se on se muoto jota kukaan ei
+       * katso kuin sen puolen sekunnin ajan.
+       */
+      { n: 'torvi', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorvi(g, ox, OY, t, f, 0) },
+      { n: 'torvi ladattu', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorvi(g, ox, OY, t, f, 1) },
+      { n: 'törähdys', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawTorahdys(g, ox, OY, t, f) },
+      { n: 'paarma', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaarma(g, ox, OY, t, f, 0) },
+      { n: 'paarma tähtää', box: [0, 0, 16, 12], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaarma(g, ox, OY, t, f, 1) },
+      { n: 'yökki', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawYokki(g, ox, OY, Math.floor(t / 8), f, 0) },
+      { n: 'yökki yökkää', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawYokki(g, ox, OY, Math.floor(t / 8), f, 1) },
+      /* Tupsut nousevat rivin laatikon yli, ja se on sama sallittu ylitys kuin
+       * piikkiukolla: piikki on taidetta joka ei satuta, ja juuri siksi se saa
+       * olla laatikon ulkopuolella. */
+      { n: 'karvapallo', box: [0, 0, 12, 12], stomp: false, ...none,
+        paint: (ox, t, f) => sprites.drawKarvapallo(g, ox, OY, t, f) },
+      { n: 'paukkupöhö', box: [0, 0, 16, 16], breathes: true, clock: 8, stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaukkupoho(g, ox, OY, Math.floor(t / 8), f, 0) },
+      { n: 'paukkupöhö sytytetty', box: [0, 0, 16, 16], stomp: true, ...none,
+        paint: (ox, t, f) => sprites.drawPaukkupoho(g, ox, OY, Math.floor(t / 8), f, 0.9) },
     ];
 
     // One line per distinct fault, not one per frame: 176 frames of the same
@@ -14851,6 +14905,25 @@ const report = await page.evaluate(async () => {
         sprites.drawBeanBomb(g, 20, 40, 12);
         check('beanbomb');
       }
+      // Neljä uutta, ladattuina ja lataamattomina: `charge`-haarat ovat niitä
+      // joissa piirto vaihtaa väriä kesken sprite, eli juuri niitä joissa
+      // composite-tila voi jäädä auki.
+      for (const c of [0, 1]) {
+        sprites.drawTorvi(g, 20, 40, 12, 1, c);
+        check(`torvi ${c}`);
+        sprites.drawPaarma(g, 20, 40, 12, -1, c);
+        check(`paarma ${c}`);
+        sprites.drawYokki(g, 20, 40, 12, 1, c);
+        check(`yökki ${c}`);
+        sprites.drawPaukkupoho(g, 20, 40, 12, -1, c);
+        check(`paukkupöhö ${c}`);
+      }
+      sprites.drawTorahdys(g, 20, 40, 12, 1);
+      check('törähdys');
+      sprites.drawKarvapallo(g, 20, 40, 12, 1);
+      check('karvapallo');
+      sprites.drawPisara(g, 20, 40, 12);
+      check('happopisara');
       /* Kaikki seitsemän, ei viisi. Lista oli `[0,1,2,3,4]` siihen asti kun
        * pomot piirrettiin uusiksi, eli sääherra ja kuningas — ne kaksi jotka
        * tulivat viimeisenä ja joita kukaan ei ollut katsonut — olivat ainoat

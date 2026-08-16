@@ -276,9 +276,9 @@ export const WORLD7_LEVELS = {
   '7-3': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
     chunks: [
-      'start', 'cloud_bank', 'power', 'cloud_hole', 'cloud_hole_deck', 'flat8',
+      'start', 'cloud_bank', 'power', 'cloud_hole', 'cloud_hole_deck', 'cloud_paarma', 'flat8',
       'cloud_hole_wisp', 'cloud_hail', 'cloud_anvil', 'cloud_hole', 'cloud_hole_deck',
-      'flat8', 'cloud_hole_wisp', 'cloud_lattice', 'cloud_flock', 'cloud_hole',
+      'flat8', 'cloud_hole_wisp', 'cloud_lattice', 'cloud_paarma_deck', 'cloud_flock', 'cloud_hole',
       'cloud_squall', 'cloud_blocks', 'cloud_hole_deck', 'cloud_hole', 'cloud_gate',
       'cloud_updraft', 'run_up', 'goal', 'goal_end',
     ],

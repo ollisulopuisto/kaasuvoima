@@ -121,9 +121,9 @@ export const WORLD4_LEVELS = {
   '4-3': {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
-      'start', 'spike_walk', 'fort_power', 'fac_vents', 'fac_belt', 'fac_shaft',
+      'start', 'spike_walk', 'fort_power', 'fac_vents', 'fac_belt', 'fac_torvi', 'fac_shaft',
       'heartburn_pair', 'cloud_run', 'fac_gap', 'fac_press', 'corks', 'fac_belt',
-      'heartburn', 'fac_shaft', 'cloud_run', 'fac_vents', 'fac_switch', 'cork_gap',
+      'heartburn', 'fac_torvit', 'fac_shaft', 'cloud_run', 'fac_vents', 'fac_switch', 'cork_gap',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },

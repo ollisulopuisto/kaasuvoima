@@ -98,6 +98,47 @@ export const BONE_CHUNKS = {
    * the marker — it is what this game marks jumps with — and the one headstone
    * left is past the landing, where it is scenery instead of a starting gate.
    */
+  /**
+   * YÖKIN ENSIESITTELY, ja tässä ruudussa ei ole muuta.
+   *
+   * Yökki itse on hidas ja vaaraton; opeteltava asia on **se mikä siitä
+   * tulee**, ja karvapallo tarvitsee lattiaa kulkeakseen. Siksi tämä on
+   * maailman tasaisin ruutu: koko 16 saraketta on maata, jotta ensimmäinen
+   * pallo ehtii lähteä, kiihtyä ja tulla vastaan siinä missä sen yli myös
+   * pääsee.
+   *
+   * Se seisoo ruudun oikeassa laidassa eikä keskellä, koska `YOKKI_RANGE` on
+   * 180 px eli yksitoista ruutua: pelaaja astuu ruutuun juuri sen rajan
+   * ulkopuolelta ja näkee siis yökkäyksen alusta asti. Ruudun vasempaan päähän
+   * pantuna ensimmäinen pallo olisi jo matkalla ennen kuin sen lähde on
+   * näkynyt, ja se on eri asia opittavaksi.
+   */
+  bone_yokki: ck(16, {
+    9: '   o o o',
+    12: '            Y',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * YÖKKI TOISEN KERRAN, ja nyt korokkeella.
+   *
+   * Karvapallo seuraa maastoa, joten korokkeelta lähtevä pallo **putoaa
+   * reunalta alas ja jatkaa matkaansa** — se tulee siis ylhäältä eikä
+   * edestä, ja ensimmäisen kerran opetus ("hyppää sen yli") ei enää yksin
+   * riitä. Yökki itse on kahden ruudun päässä ylempänä eli tallattavissa, ja
+   * se on tämän ruudun toinen puoli: lähde on saavutettavissa jos sinne
+   * uskaltaa mennä.
+   */
+  bone_yokki_ledge: ck(16, {
+    9: '        X  o o',
+    10: '       XX',
+    11: '      XXX',
+    12: '  g  XXXXY',
+    13: G,
+    14: G,
+  }),
+
   bone_grave: ck(16, {
     7: '             f',
     9: '          o o o',
