@@ -236,6 +236,10 @@ class Game {
       lives: 1, coins: 0, score: 0, power: makePower(), reserve: null,
       world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [], secrets: {}, doors: {},
       checks: {}, continues: 0, usedSaveState: false,
+      /* Opitut eleet **peritään** eikä nollata: päivän pieru on oma
+       * kierroksensa mutta sama pelaaja, ja kerran opittu ele ei saa alkaa
+       * vilkkua uudestaan siksi että kierros on kertakäyttöinen. */
+      taught: (this.state && this.state.taught) || {},
     };
     this.setScene(new InterludeScene(this, level.def.id, () => {
       this.setScene(new LevelScene(this, level.def.id, level.def));

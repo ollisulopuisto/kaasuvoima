@@ -3161,6 +3161,13 @@ export class LevelScene {
     p.pMeter = 0;
     this.peek = PEEK_FRAMES;
     this.peekBand = band;
+    /* Ensimmäinen vilkaisu on myös se hetki jolloin opetus loppuu. Ks.
+     * `drawPeekHint`: nuoli vilkkuu siihen asti ja sen jälkeen ei koskaan. */
+    const st = this.game.state;
+    if (st && !(st.taught && st.taught.peek)) {
+      st.taught = { ...(st.taught || {}), peek: true };
+      if (this.game.persist) this.game.persist();
+    }
     Sfx.play('kurkistus');
     return true;
   }
@@ -4773,6 +4780,7 @@ export class LevelScene {
       const glow = lit ? e.light : null;
       if (glow) PostFX.addLight(glow.x - camX, glow.y - camY + this.bar, glow.r, glow.i);
     }
+    this.drawPeekHint(ctx);
     this.drawPlayerInto(ctx, camX, camY);
 
     ctx.restore();
@@ -4892,6 +4900,58 @@ export class LevelScene {
     if (camY + this.viewH <= top) return;
     ctx.fillStyle = '#150e1c';
     ctx.fillRect(camX, top, VIEW_W, this.heightPx - top);
+  }
+
+  /**
+   * Onko vilkaisu juuri nyt mahdollinen. Sama lause kuin `tryPeek`in ehdoissa,
+   * mutta ilman painallusta — opetus saa näkyä vain silloin kun se pitää
+   * paikkansa, ja kaksi eri versiota samasta ehdosta erkanisi ensimmäisessä
+   * muutoksessa.
+   */
+  peekReady() {
+    const bands = this.def.bands;
+    const p = this.player;
+    if (!bands || this.state !== 'play') return false;
+    if (p.dying || p.transit || !p.onGround || !p.pFullEntry) return false;
+    return this.bandAt(p.y + p.h) + 1 <= Math.floor((this.h - 1) / bands.rows);
+  }
+
+  /**
+   * OPETUS: nuoli pelaajan pään päällä silloin kun vilkaisu on mahdollinen.
+   *
+   * Kyky jota kukaan ei löydä ei ole olemassa, ja tämä on peli jossa mitään ei
+   * selitetä tekstillä. Ratkaisu on siis se ainoa joka jää jäljelle: **ele
+   * näytetään siinä hetkessä jossa se toimii.** Nuoli osoittaa alas eli sitä
+   * nappia jota painetaan, ja se ilmestyy tasan silloin kun mittari on täysi,
+   * jalat ovat maassa ja alla on kaista — eli se ei voi koskaan valehdella.
+   *
+   * Sama syaani kuin haamun pyyhkäisyjuovassa (DESIGN.md 8: yksi signaali,
+   * yksi merkitys). Kun pelaaja painaa alas, hän näkee saman värin leviävän
+   * kaistan yli, ja kaksi asiaa ovat sama asia.
+   *
+   * **Kerran ja lopullisesti.** Ensimmäinen onnistunut vilkaisu kirjaa
+   * `taught.peek`in tallennukseen, eikä nuoli tule enää takaisin. Opastus joka
+   * jää päälle on koriste, ja koriste joka vilkkuu joka juoksussa on häiriö.
+   */
+  drawPeekHint(ctx) {
+    const st = this.game.state;
+    if (!st || (st.taught && st.taught.peek) || !this.peekReady()) return;
+    const p = this.player;
+    // Hidas heilahdus: nuoli hengittää eikä välky. Välkkyvä merkki lukee
+    // varoitukseksi, ja tämä on kutsu.
+    const bob = Math.sin(this.tick / 7) * 2;
+    const x = Math.round(p.cx);
+    const y = Math.round(p.y - 15 + bob);
+    /* Umpinainen kolmio tumman reunuksen kanssa, ei ohut kulmamerkki.
+     * Reunus siksi että sama merkki piirtyy taivasta, tiiltä ja luolan mustaa
+     * vasten; umpinainen siksi että se piirtyy täyttä juoksua, ja täyttä vauhtia
+     * ohi vilahtava ääriviiva ei ole merkki vaan roska. */
+    const tri = (cx, cy, half, color) => {
+      ctx.fillStyle = color;
+      for (let r = 0; r <= half; r++) ctx.fillRect(cx - half + r, cy + r, 2 * (half - r) + 1, 1);
+    };
+    tri(x, y - 1, 5, '#101018');
+    tri(x, y, 4, '#9fe8ff');
   }
 
   /**

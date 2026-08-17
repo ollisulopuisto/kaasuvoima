@@ -12372,6 +12372,91 @@ const report = await page.evaluate(async () => {
         && q.pMeter > PMAX * 0.9,
         `${pipe}; ${deep}`);
     }
+
+    /* 5. OPETUS: nuoli näkyy tasan silloin kun vilkaisu on mahdollinen, ja
+     *    ensimmäinen vilkaisu lopettaa sen lopullisesti.
+     *
+     * Mitataan **saman kohtauksen kahtena piirtona samalla framella**, ja
+     * ainoa muuttuja on `taught.peek`, jonka piirto lukee elävästä pelitilasta.
+     * Erotus on siis tasan ne pikselit jotka nuoli piirtää.
+     *
+     * Väriä ei lasketa, ja se on mittaus eikä mieltymys: mittarin täyttyessä
+     * `drawSpeedPulse` vetää koko ikkunan yli verhon, joka värjää senkin mikä
+     * on jo piirretty — nuoli on ruudulla mutta ei enää `#9fe8ff`. Sama
+     * täysi mittari joka avaa vilkaisun myös sytyttää sen verhon, joten näitä
+     * kahta ei voi nähdä erikseen missään framessa.
+     */
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 320; cv.height = 240;
+      const g = cv.getContext('2d');
+      const shot = (s) => {
+        g.clearRect(0, 0, 320, 240);
+        s.draw(g);
+        return g.getImageData(0, 0, 320, 240).data;
+      };
+      const diff = (a, b) => {
+        let n = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++;
+        }
+        return n;
+      };
+      /* Nuolen pikselit: sama kuva opettamattomalle ja opetetulle pelaajalle. */
+      const arrow = (s) => {
+        const was = game.state.taught;
+        game.state.taught = {};
+        const on = shot(s);
+        game.state.taught = { peek: true };
+        const off = shot(s);
+        game.state.taught = was;
+        return diff(on, off);
+      };
+      /* Täyttä juoksua eikä paikallaan: mittari pysyy täynnä vain vauhdissa
+       * (`atSpeed`), ja juuri se on se hetki jossa opetuksen kuuluu näkyä. */
+      const sprint = () => { const i = mkInput(); i.held.right = true; i.held.run = true; return i; };
+      const running = (id, meter, fresh = true) => {
+        if (fresh) reset({ type: null, level: 0 });
+        const s = new LevelScene(game, id);
+        game.setScene(s);
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        const p = s.player;
+        p.pMeter = meter;
+        p.vx = 2.5;
+        p.onGround = true;
+        s.centerCamera();
+        s.update(sprint());
+        return s;
+      };
+
+      const shown = arrow(running(tallId, PMAX));
+      const idle = arrow(running(tallId, 0));
+      const flat = arrow(running(levelIds().find((id) => !getLevelDef(id).bands), PMAX));
+
+      /* Ensimmäinen vilkaisu kirjaa opetuksen, ja se säilyy seuraavaan kenttään
+       * samassa kierroksessa (`fresh = false` säilyttää pelitilan, koska juuri
+       * se tila on se joka muistaa). */
+      const first = running(tallId, PMAX);
+      first.player.pMeter = PMAX;
+      first.update(down());
+      const learned = !!(game.state.taught && game.state.taught.peek);
+      const next = running(tallId, PMAX, false);
+      const kept = !!(game.state.taught && game.state.taught.peek) && next.peekReady();
+
+      /* Ja se säilyy levylle asti. `Save.load` levittää oletuksen puuttuvan
+       * kentän päälle, joten tämä mittaa nimenomaan `write`in listaa — sitä
+       * käsin kirjoitettua kohtaa jossa `doors` kerran unohtui. */
+      const saveMod = await import('/src/core/save.js');
+      saveMod.Save.write({ ...game.state, taught: { peek: true } });
+      const reloaded = !!(saveMod.Save.load().taught || {}).peek;
+
+      expect('vilkaisun opetus näkyy vain kun se on totta, ja loppuu opittuna',
+        shown > 5 && idle === 0 && flat === 0 && learned && kept && reloaded,
+        `täydellä ${shown} pikseliä, tyhjällä ${idle}, tasakentässä ${flat}, `
+        + `vilkaisu kirjattu ${learned}, muistissa seuraavassa kentässä ${kept}, `
+        + `tallennuksesta ${reloaded}`);
+    }
   }
 
   /* ------------------- kupla, kuittaus ja vihollisen iho ---------------- */

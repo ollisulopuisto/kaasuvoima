@@ -7,6 +7,45 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.10 — nuoli joka opettaa vilkaisun ja katoaa opittuna
+
+Edellinen versio jätti auki sen mikä siinä oli pahinta: **kyky jota kukaan ei
+löydä ei ole olemassa.** Vilkaisu ei ollut näppäinlistassa eikä yksikään kenttä
+johdattanut siihen.
+
+Ratkaisu on se ainoa joka jää jäljelle pelissä jossa mitään ei selitetä
+tekstillä: **ele näytetään siinä hetkessä jossa se toimii.** Syaani nuoli
+pelaajan pään päällä osoittaa alas — sitä nappia jota painetaan — ja se
+ilmestyy tasan silloin kun mittari on täysi, jalat ovat maassa ja alla on
+kaista. Ehto on kirjaimellisesti sama funktio kuin `tryPeek`in ehto
+(`peekReady`), joten opetus ei voi valehdella.
+
+Sama syaani kuin haamun pyyhkäisyjuovassa (DESIGN.md 8: yksi signaali, yksi
+merkitys) — painallus näyttää saman värin leviävän kaistan yli, ja kaksi asiaa
+ovat sama asia.
+
+**Kerran ja lopullisesti.** Ensimmäinen onnistunut vilkaisu kirjaa
+`taught.peek`in tallennukseen eikä nuoli tule enää takaisin — opastus joka jää
+päälle on koriste, ja koriste joka vilkkuu joka juoksussa on häiriö. Kenttä
+menee tallennukseen ilman versionostoa samalla perusteella kuin `secrets`,
+`bestTimes` ja `doors`, ja päivän pieru **perii** opitut eleet: oma kierros,
+sama pelaaja.
+
+| väite | mitattu |
+| --- | --- |
+| nuoli näkyy vain kun vilkaisu on totta | `täydellä 36 pikseliä, tyhjällä 0, tasakentässä 0` |
+| ensimmäinen vilkaisu lopettaa opetuksen | `kirjattu true, muistissa seuraavassa kentässä true` |
+| ja se säilyy levylle asti | `tallennuksesta true` |
+
+**Sivulöydös portista:** nuolta ei voi mitata väristä. Mittarin täyttyessä
+`drawSpeedPulse` vetää koko ikkunan yli verhon joka värjää senkin mikä on jo
+piirretty, joten nuoli on ruudulla muttei enää `#9fe8ff` — ja se on
+väistämätöntä, koska sama täysi mittari joka avaa vilkaisun myös sytyttää sen
+verhon. Portti vertaa siksi samaa kohtausta samalla framella opetettuna ja
+opettamattomana.
+
+---
+
 ## v26.08.18.9 — kaistan vilkaisu: sekunnin juoksu yhdestä silmäyksestä
 
 IDEAS kohta D, tuomio *"tee rajattuna"*, ja rajaus on se joka päätettiin
