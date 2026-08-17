@@ -1230,11 +1230,13 @@ mittarilla alas näyttää alemman kaistan 96 framea läpikuultavana, mittari
 tyhjenee, eikä kentässä muutu mitään muuta — `tools/verify.mjs` lukee ruudukon
 ennen ja jälkeen juuri siksi. Ks. `LevelScene.tryPeek` ja `drawPeek`.
 
-**Yhä auki ja tiedossa: vilkaisua ei opeteta missään.** Se ei ole
-näppäinlistassa (alkuruudun ohjerivi on jo 56 merkkiä), eikä yksikään kenttä
-johdata siihen. Kyky jota kukaan ei löydä ei ole olemassa, joten seuraava askel
-tälle on opetuspaikka — luontevin on maailman 1 ensimmäinen kolmikaistainen
-kenttä, jossa mittarin täyttäminen on jo pakko opetella.
+**Opetus tehty 17.8.2026 (v26.08.18.10), ja se on ele eikä paikka.** Nuoli
+pelaajan pään päällä silloin kun vilkaisu on mahdollinen — sama ehtofunktio
+(`peekReady`) kuin itse kyvyllä, joten opetus ei voi valehdella — ja
+ensimmäinen vilkaisu lopettaa sen lopullisesti (`taught.peek` tallennuksessa).
+Ratkaisu on ele eikä opetuskenttä, koska mittarin täyttäminen tapahtuu joka
+tapauksessa jokaisessa pitkässä suorassa: opetus tulee vastaan siellä missä
+pelaaja jo on, eikä yhtäkään kenttädataa tarvinnut koskea.
 
 ### Päätetty: haarautuva kartta, eriarvoiset haarat
 

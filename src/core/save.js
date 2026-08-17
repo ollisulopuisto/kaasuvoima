@@ -58,6 +58,22 @@ export const DEFAULT_SAVE = () => ({
    */
   doors: {},
   /*
+   * Mitä pelaajalle on jo opetettu: avain -> true. Toistaiseksi yksi avain,
+   * `peek` eli kaistan vilkaisu.
+   *
+   * Tämä on tallennuksessa eikä muistissa, koska opetus jonka peli unohtaa ei
+   * ole opetus vaan vilkkuva valo: kerran opittu ele ei saa alkaa vilkkua
+   * uudestaan seuraavalla latauksella. Sisään samalla perusteella kuin
+   * `secrets`, `bestTimes` ja `doors`, eli **ilman versionostoa** — vanhassa
+   * tallennuksessa ei ole `taught`-kenttää, levitys antaa sille `{}`, ja `{}`
+   * on totuus: kukaan ei ollut oppinut elettä pelissä jossa sitä ei ollut.
+   *
+   * Kartta eikä boolean, jotta seuraava opetettava asia on yksi avain eikä
+   * uusi kenttä — ja jotta vanha build, joka ei kirjoita tätä takaisin, unohtaa
+   * kerralla kaikki opetukset eikä puolet niistä.
+   */
+  taught: {},
+  /*
    * levelId -> se sarake jossa kentän kaasulyhty palaa (ks.
    * `LevelScene.lightLamp`). Sisään samalla perusteella kuin `doors`, eli ilman
    * versionostoa: puuttuva kenttä saa `{}`, ja `{}` on totuus — sytyttämättä
@@ -129,6 +145,7 @@ export const Save = {
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
         doors: state.doors || {},
+        taught: state.taught || {},
         checks: state.checks || {},
         mode: state.mode || 'easy',
       }));
