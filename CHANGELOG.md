@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.9 — kaistan vilkaisu: sekunnin juoksu yhdestä silmäyksestä
+
+IDEAS kohta D, tuomio *"tee rajattuna"*, ja rajaus on se joka päätettiin
+[ROADMAP.md](ROADMAP.md):ssä 10.8.2026 kolmena lauseena. Ne kolme ovat nyt
+kolme mitattua porttia.
+
+| väite | mitattu |
+| --- | --- |
+| maksaa koko mittarin, ei lähde tyhjällä | `tyhjällä 0 framea, täydellä 95 framea, mittari 0, isona kyykyssä 95 framea` |
+| on katsomista eikä kulkemista | `ruudukko sama, kaista 1->1, kamera 272->272` |
+| alempi kaista näkyy ja katoaa itsestään | `haamu 22159 pikseliä (juova yksin olisi 640), lopuksi 0 pikseliä` |
+| ei veloita kun alas tarkoittaa muuta | `putkella matka alkoi, vilkaisu 0, mittari 111` |
+
+**Täydellä vauhtimittarilla alas** näyttää alemman kaistan 1,6 sekunniksi
+läpikuultavana, ja mittari tyhjenee. Sinne ei pääse — putki ja varsi ovat yhä
+ainoat tiet — ja se on koko syy siihen että tämä versio hyväksyttiin: kun
+kukaan ei astu läpi, **kenttägraafi ei muutu**, ja `rules.js` todistaa yhä
+yhden kaistan läpäistävyyden eikä kaistojen välistä graafia. Se raskaampi
+versio olisi pitänyt vastata kysymykseen "voiko pelaaja pudota paikkaan josta
+ei pääse pois", ja se on sama ongelma kuin areenaa muokkaavalla pomolla.
+
+Hinta on mittari kokonaan, koska ilmaisena tämä ei olisi kyky vaan tutka.
+Salaisuusrakenne perustuu siihen että kartta kertoo *että* niitä on muttei
+*missä*; kertakäyttöinen läpinäkyvä alakerros kertoisi missä, ja sen jälkeen
+etsimistä ei enää olisi. Mittari täyttyy 56 framessa täyttä juoksua ja on
+varattu jo kahteen asiaan (nopeuskatto 3,5, kaasulehden lento), joten
+katsominen maksaa juoksemisen.
+
+**Vain muoto, ei sisältöä.** Piirretään laatat eikä olioita: näet *missä*
+kammio on, et mitä siellä on.
+
+Kaksi asiaa jotka portit löysivät ja joita kukaan ei olisi arvannut:
+
+1. **Sama painallus joka maksaa mittarin myös jarruttaa kehon.** Alas isolla
+   keholla aloittaa kyykyn, kyykky jarruttaa 1,4-kertaisella kitkalla, ja
+   mittari luetaan vasta jarrutuksen jälkeen — eli täyttä vauhtia juossut iso
+   pelaaja olisi mittarin lukuhetkellä 2,38:ssa eikä 2,5:ssä ja vilkaisu ei
+   olisi lähtenyt **koskaan**. Pieni keho ei kyykisty, joten vika olisi näkynyt
+   vain isona. Nyt luetaan `pFullEntry`, eli se mikä oli totta silloin kun
+   nappi painettiin.
+
+2. **Kuvaportti melkein mittasi oman pyyhkäisyjuovansa.** Ensimmäinen versio
+   vertasi framea 0 frameen 98 ja sai 2728 pikseliä eroa pelkästä siitä että
+   maailma hengittää; korjattu versio vertaa kahta samasta kentästä rakennettua
+   kohtausta samalla framella. Ja kun ero silti jäi 960 pikseliin — tasan
+   `320 * 2` plus vähän — syy oli että **1-2:n luolakaista on lähtöruudussa
+   tyhjä**: koko kaistan muste on 177 laattaa neljälläsadalla sarakkeella. Se
+   ei ole vika vaan idean ydin, joten portti seisoo nyt siellä missä kammio on.
+
+---
+
 ## v26.08.18.8 — VERBI 6: nielty vihollinen on työkalu
 
 IDEAS kohta 6, tuomio "kyllä": *"syö vihollinen, saat kyvyn — piikkiukko tekee

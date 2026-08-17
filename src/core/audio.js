@@ -1224,6 +1224,20 @@ const SFX = {
     tone({ type: 'sine', from: 180, to: 620, dur: 0.16, gain: 0.16, hold: 0.4, curve: 'lin' });
     tone({ type: 'triangle', from: 900, dur: 0.05, gain: 0.1, delay: 0.16 });
   },
+  /*
+   * KURKISTUS — kaistan vilkaisu, ja se on kaiku eikä efekti.
+   *
+   * Muoto on ainoa tunniste (DESIGN.md 8): kaksi lyhyttä sinipulssia peräkkäin,
+   * toinen kvintin alempaa ja hiljaisempana, kuin sama ääni palaisi jostain
+   * alempaa takaisin. Kaikki muu tässä pelissä alkaa pelaajasta ja lähtee
+   * ulospäin; tämä lähtee ulos ja **tulee takaisin**, koska se on juuri se mitä
+   * kaikuluotaus on. Kohina jätettiin pois tahallaan — se on kosketuksen ääni,
+   * eikä vilkaisussa kosketa mihinkään.
+   */
+  kurkistus: () => {
+    tone({ type: 'sine', from: 1200, to: 900, dur: 0.07, gain: 0.14, hold: 0.3 });
+    tone({ type: 'sine', from: 800, to: 600, dur: 0.11, gain: 0.09, hold: 0.5, delay: 0.13 });
+  },
   upota: () => {
     /*
      * JUOKSUHIEKKA, the moment the sand takes hold — and the whole design of it

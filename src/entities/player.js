@@ -344,6 +344,8 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
+    /* Ks. `update`: mittari framen alussa, ja vain vilkaisu lukee sitä. */
+    this.pFullEntry = false;
     /* Onko täyden mittarin etu voimassa juuri nyt — ja tämä on kenttä eikä
      * johdannainen, koska se on **edellisen framen** vastaus: merkki syntyy
      * reunasta eikä tilasta. Tavallinen oma ominaisuus, joten `savestate.js`
@@ -535,6 +537,22 @@ export class Player extends Entity {
 
   update(input) {
     this.tick++;
+    /*
+     * Mittari sellaisena kuin se oli framen alkaessa.
+     *
+     * Tämä on olemassa yhtä asiaa varten ja se asia on kaistan vilkaisu
+     * (`LevelScene.tryPeek`): **se painallus joka maksaa mittarin myös jarruttaa
+     * kehon**. Alas painaminen isolla keholla aloittaa kyykyn, kyykky jarruttaa
+     * 1,4-kertaisella kitkalla, ja mittari luetaan vasta jarrutuksen jälkeen —
+     * eli täyttä vauhtia juossut iso pelaaja olisi framen lopussa 2,38:ssa eikä
+     * 2,5:ssä, mittari valuisi askeleen, ja vilkaisu ei lähtisi koskaan. Pieni
+     * keho ei kyykisty, joten vika olisi ollut näkyvissä vain isona.
+     *
+     * Luetaan siis se mikä oli totta silloin kun nappi painettiin. Muut mittarin
+     * lukijat (nopeuskatto, kaasulehden lento) lukevat elävää arvoa niin kuin
+     * ennenkin — ne kysyvät "nytkö", tämä kysyy "silloinko".
+     */
+    this.pFullEntry = this.pFull;
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
     if (this.corked > 0) this.corked--;

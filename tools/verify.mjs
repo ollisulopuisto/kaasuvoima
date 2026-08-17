@@ -12155,6 +12155,225 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* --------------------------- kaistan vilkaisu ------------------------- */
+  /*
+   * KAISTAN VILKAISU — IDEAS kohta D, tuomio "tee rajattuna", ja rajaus on
+   * kirjattu ROADMAP.md:hen 10.8.2026 kolmena päätöksenä. Ne kolme päätöstä
+   * ovat tässä kolmena mittauksena, ja neljäs mittaa sen ettei painallus voi
+   * maksaa kahdesti.
+   *
+   * Ratkaiseva on portti 2: **kenttägraafi ei saa muuttua.** Se on koko syy
+   * siihen että tämä versio hyväksyttiin ja se raskaampi (läpi astuminen) ei —
+   * `rules.js` todistaa yhä yhden kaistan läpäistävyyden eikä kaistojen
+   * välistä graafia. Portti lukee ruudukon ennen ja jälkeen eikä luota siihen
+   * että piirtofunktio "ei kai kirjoita mitään".
+   */
+  {
+    const { PEEK_FRAMES, PEEK_IN: PEEK_IN2 } = await import('/src/scenes/level.js');
+    const { P_METER_MAX: PMAX } = await import('/src/entities/player.js');
+
+    /** Ensimmäinen kolmikaistainen kenttä, pelaaja lähtöruudussaan. */
+    const tallId = levelIds().find((id) => getLevelDef(id).bands);
+    const tall = () => {
+      reset({ type: null, level: 0 });
+      const s = new LevelScene(game, tallId);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      return s;
+    };
+    const down = () => { const i = mkInput(); i.pressed.down = true; i.held.down = true; return i; };
+    const gridOf = (s) => s.grid.map((r) => (typeof r === 'string' ? r : r.join(''))).join('\n');
+
+    /* 1. HINTA: tyhjä mittari ei riitä, täysi mittari kuluu kokonaan. */
+    {
+      const empty = tall();
+      empty.player.pMeter = 0;
+      empty.update(down());
+      const poor = `tyhjällä ${empty.peek} framea`;
+
+      const s = tall();
+      s.player.pMeter = PMAX;
+      s.update(down());
+      const paid = `täydellä ${s.peek} framea, mittari ${Math.round(s.player.pMeter)}`;
+
+      /* Ja sama isolla keholla täyttä vauhtia, koska juuri siinä oli ansa: alas
+       * aloittaa kyykyn, kyykky jarruttaa, ja mittari luettaisiin vasta sen
+       * jälkeen. Ks. `Player.pFullEntry` — ilman sitä tämä rivi on nolla. */
+      reset({ type: 'shroom', level: 1 });
+      const big = new LevelScene(game, tallId);
+      game.setScene(big);
+      big.entities = big.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      big.player.pMeter = PMAX;
+      big.player.vx = 2.5;
+      const i = down();
+      i.held.right = true;
+      i.held.run = true;
+      big.update(i);
+      const duck = `isona kyykyssä ${big.peek} framea`;
+
+      expect('vilkaisu maksaa koko vauhtimittarin eikä lähde tyhjällä',
+        empty.peek === 0 && empty.player.pMeter === 0
+        && s.peek > 0 && s.player.pMeter === 0 && big.peek > 0,
+        `${poor}, ${paid}, ${duck}`);
+    }
+
+    /* 2. VAIN KATSOMINEN: ruudukko, kaista ja kamera ovat vilkaisun jälkeen
+     *    tasan siinä missä ennenkin. */
+    {
+      const s = tall();
+      const p = s.player;
+      p.pMeter = PMAX;
+      const before = { grid: gridOf(s), band: s.bandAt(p.y + p.h), cam: s.cam.y, y: p.y };
+      s.update(down());
+      for (let f = 0; f < 30; f++) s.update(mkInput());
+      const after = { grid: gridOf(s), band: s.bandAt(p.y + p.h), cam: s.cam.y, y: p.y };
+      expect('vilkaisu on katsomista eikä kulkemista',
+        before.grid === after.grid && before.band === after.band
+        && before.cam === after.cam && before.y === after.y && s.peek > 0,
+        `ruudukko ${before.grid === after.grid ? 'sama' : 'MUUTTUI'}, kaista `
+        + `${before.band}->${after.band}, kamera ${Math.round(before.cam)}->`
+        + `${Math.round(after.cam)}, vilkaisua jäljellä ${s.peek}`);
+    }
+
+    /* 3. KUVA: alempi kaista näkyy, ja se katoaa itsestään.
+     *
+     * Mitataan pikseleistä eikä lipusta, ja vertailukohta on **kaksoiskohtaus
+     * samalla framella**: kaksi samasta kentästä rakennettua kohtausta saavat
+     * saman syötteen ja maksavat saman mittarin, mutta toiselta vilkaisu
+     * nollataan heti. Kaikki muu — kello, ruoho, pelaajan asento, HUDin
+     * mittari — on niissä silloin identtinen, joten ainoa mahdollinen ero on
+     * haamu. Aiempi versio vertasi framea 0 frameen 98 ja epäonnistui siihen
+     * että maailma hengittää: 2728 pikseliä eroa pelkästä kellosta.
+     */
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 320; cv.height = 240;
+      const g = cv.getContext('2d');
+      const shot = (s) => {
+        g.clearRect(0, 0, 320, 240);
+        s.draw(g);
+        return g.getImageData(0, 0, 320, 240).data;
+      };
+      const diff = (a, b) => {
+        let n = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++;
+        }
+        return n;
+      };
+      /* Seisomapaikaksi se sarake jonka **alla oikeasti on jotain**. Kentän
+       * 1-2 luolakaista on lähtöruudussa tyhjä — koko kaistan muste on 177
+       * laattaa neljälläsadalla sarakkeella — joten lähdöstä vilkaistu haamu
+       * on tyhjä haamu, ja portti mittasi 960 pikseliä joista 640 oli juova.
+       * Se ei ole vika vaan idean ydin: vilkaisu kertoo *missä* kammio on. */
+      const ink = [];
+      {
+        const probe = tall();
+        for (let tx = 0; tx < probe.w; tx++) {
+          let n = 0;
+          for (let ty = probe.def.bands.cave; ty < probe.h; ty++) {
+            if (probe.grid[ty][tx] !== ' ') n++;
+          }
+          ink.push(n);
+        }
+      }
+      let bestCol = 0;
+      let best = -1;
+      for (let tx = 0; tx < ink.length - 20; tx++) {
+        let sum = 0;
+        for (let d = 0; d < 20; d++) sum += ink[tx + d];
+        if (sum > best) { best = sum; bestCol = tx + 10; }
+      }
+      const standAt = (s) => {
+        const bands = s.def.bands;
+        const p = s.player;
+        let ty = bands.main + bands.rows - 1;
+        while (ty > bands.main && !isSolid(s.grid[ty][bestCol])) ty--;
+        p.x = bestCol * 16;
+        p.y = ty * 16 - p.h;
+        p.vx = 0; p.vy = 0; p.onGround = true;
+        p.pMeter = PMAX;
+        s.centerCamera();
+      };
+
+      const a = tall();
+      standAt(a);
+      a.update(down());
+      const b = tall();
+      standAt(b);
+      b.update(down());
+      b.peek = 0;
+      /* Mitataan täydeltä läpikuultavuudelta eikä ensimmäiseltä framelta, ja
+       * se on portin terävin kohta: ensimmäisellä framella nousu on 1/8 ja ero
+       * oli 640 pikseliä — tasan `320 * 2`, eli **pyyhkäisyjuova yksin**.
+       * Sellainen portti olisi mennyt läpi vaikka yhtäkään haamulaattaa ei
+       * olisi piirretty. Kynnys on siksi moninkertainen juovaan nähden. */
+      for (let f = 0; f < PEEK_IN2; f++) { a.update(mkInput()); b.update(mkInput()); }
+      const lit = diff(shot(a), shot(b));
+      for (let f = 0; f < PEEK_FRAMES; f++) { a.update(mkInput()); b.update(mkInput()); }
+      const over = diff(shot(a), shot(b));
+      expect('alempi kaista näkyy haamuna ja katoaa itsestään',
+        lit > 5000 && a.peek === 0 && over === 0,
+        `haamu ${lit} pikseliä (juova yksin olisi 640), lopuksi ${over} pikseliä`);
+    }
+
+    /* 4. SAMA PAINALLUS EI MAKSA KAHDESTI: putken suulla alas on putki, ja
+     *    alimmassa kaistassa alas ei ole mitään.
+     *
+     * Mittari luetaan kynnyksellä eikä yhtäsuuruudella: `Player.update` valuttaa
+     * sitä joka framella (P_DRAIN), joten "koskematon" on 111,3 eikä 112. Se
+     * ero on mittarin oma luonnollinen tyhjeneminen, ei vilkaisun hinta —
+     * hinta on nolla, ja niiden välissä on sata yksikköä. */
+    {
+      const s = tall();
+      const p = s.player;
+      const key = [...s.warpExits.keys()].find((k) => {
+        const [, ty] = k.split(',').map(Number);
+        return s.bandAt(ty * 16) < 2;
+      });
+      let pipe = 'ei putkea kentässä';
+      let pipeOk = !!key;
+      if (key) {
+        const [tx, ty] = key.split(',').map(Number);
+        p.x = tx * 16; p.y = ty * 16 - p.h;
+        p.vx = 0; p.vy = 0; p.onGround = true; p.warpLock = 0; p.transit = null;
+        p.pMeter = PMAX;
+        s.centerCamera();
+        s.update(down());
+        pipeOk = !!p.transit && s.peek === 0 && p.pMeter > PMAX * 0.9;
+        pipe = `putkella matka ${p.transit ? 'alkoi' : 'EI ALKANUT'}, vilkaisu `
+          + `${s.peek}, mittari ${Math.round(p.pMeter)}`;
+      }
+
+      /* Alin kaista: etsitään sieltä oikea lattia, eli kiinteä laatta jonka
+       * päällä on tilaa seistä. Reittikaistan lattia ei kelpaa — koko väite on
+       * että **alimmassa** kaistassa ei ole mitään alempaa katsottavaa. */
+      const c = tall();
+      const q = c.player;
+      const rows = c.def.bands.rows;
+      const lastBand = Math.floor((c.h - 1) / rows);
+      let spot = null;
+      for (let tx = 2; tx < c.w - 2 && !spot; tx++) {
+        for (let ty = c.h - 1; ty >= lastBand * rows + 2; ty--) {
+          if (isSolid(c.grid[ty][tx]) && !isSolid(c.grid[ty - 1][tx])
+            && !isSolid(c.grid[ty - 2][tx])) { spot = [tx, ty]; break; }
+        }
+      }
+      q.x = spot[0] * 16; q.y = spot[1] * 16 - q.h;
+      q.vx = 0; q.vy = 0; q.onGround = true;
+      q.pMeter = PMAX;
+      c.centerCamera();
+      c.update(down());
+      const deep = `kaistassa ${c.bandAt(q.y + q.h)}/${lastBand}: vilkaisu ${c.peek}, `
+        + `mittari ${Math.round(q.pMeter)}`;
+      expect('vilkaisu ei veloita silloin kun alas tarkoittaa jotain muuta',
+        pipeOk && c.bandAt(q.y + q.h) === lastBand && c.peek === 0
+        && q.pMeter > PMAX * 0.9,
+        `${pipe}; ${deep}`);
+    }
+  }
+
   /* ------------------- kupla, kuittaus ja vihollisen iho ---------------- */
   /*
    * Kolme omistajan pyyntöä samasta pelituntumasta, ja jokainen mitataan
