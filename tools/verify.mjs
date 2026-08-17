@@ -15405,6 +15405,91 @@ const report = await page.evaluate(async () => {
   }
 
   /*
+   * JOKAISELLA POMOLLA ON OMA ÄÄNI, ja se mitataan ääneksi eikä tauluksi.
+   *
+   * Päätös 9.8.2026 oli **oma ääni, jaetut toimintaäänet**, ja se odotti
+   * konsonantteja: pelkillä vokaaleilla puhuva ääni ei voi sanoa eri asioita,
+   * se voi vain huutaa eri korkeuksilla. Kolme väitettä:
+   *
+   *   1. jokainen seitsemästä todella puhuu — ääni väylällä, ei taulun rivi;
+   *   2. ne eivät ole sama ääni — mitattu perustaajuus eroaa, ja järjestys on
+   *      se minkä hahmot lupaavat (jättiläinen matalin, rynnäkkö korkein);
+   *   3. kutsupaikkoja on kolme (tulo, osuma, kaatuminen) eikä enempää — sama
+   *      lähdekoodista luettu lista kuin poimittavilla, ja samasta syystä.
+   */
+  {
+    const { bossSay, audioTap: tapOf } = await import('/src/core/audio.js');
+    const tap = tapOf();
+    const running = tap && tap.ctx.state === 'running';
+    const heard = [];
+    let stalled = false;
+    const stopWake = keepRendering(tap);
+    if (running) {
+      game.toTitle();
+      Music.stop();
+      const { Ambience: Amb } = await import('/src/core/audio.js');
+      Amb.stop();
+      const an = tap.ctx.createAnalyser();
+      an.fftSize = 16384;
+      an.smoothingTimeConstant = 0;
+      tap.bus.connect(an);
+      const meter = meterFor(tap, an);
+      const bins = new Float32Array(an.frequencyBinCount);
+      const hz = tap.ctx.sampleRate / an.fftSize;
+      for (let v = 0; v < 7; v++) {
+        await meter.settle(3);
+        meter.clear();
+        bossSay(v, 'arrive');
+        /* Huippu **ja** vahvin taajuus samasta ikkunasta: ensimmäinen kertoo
+         * että hän puhui, toinen kenen äänellä. Kaksi eri mittausta samasta
+         * hetkestä on halvempi ja rehellisempi kuin kaksi eri hetkeä. */
+        let peak = 0;
+        /* Desibelejä eikä amplitudia: `getFloatFrequencyData` palauttaa
+         * negatiivisia lukuja, ja nollasta alkava vertailu ei löytänyt
+         * yhtäkään — mitattu `@ 0 Hz` kaikilla seitsemällä. */
+        let best = -Infinity;
+        let bestBin = 0;
+        const t0 = tap.ctx.currentTime;
+        while (tap.ctx.currentTime - t0 < 0.5) {
+          peak = Math.max(peak, await meter.peakFor(60));
+          an.getFloatFrequencyData(bins);
+          /* Alle 900 Hz: perusääni ja ensimmäinen formantti asuvat siellä, ja
+           * konsonantin kohina ylempänä veisi voiton joka kerta. */
+          for (let i = 1; i < Math.min(bins.length, Math.floor(900 / hz)); i++) {
+            if (bins[i] > best) { best = bins[i]; bestBin = i; }
+          }
+        }
+        heard.push({ v, peak: Number(peak.toFixed(3)), hz: Math.round(bestBin * hz) });
+      }
+      stalled = meter.stalled();
+      an.disconnect();
+    }
+    stopWake();
+    const measured = running && metered(tap, stalled);
+    /* Kuuluu, ei huuda: sama vaatimus ja samat vertailuluvut kuin muillakin
+     * tämän tiedoston äänimittauksilla (kolikko 0,32, kuolema 0,57,
+     * tehostus 0,60). Pomon huuto kuullaan kerran kentässä, joten se saa olla
+     * niiden luokassa muttei niiden yli. */
+    const mute = heard.filter((r) => r.peak < 0.12 || r.peak > 0.62).map((r) => r.v);
+    const giant = heard.find((r) => r.v === 3);
+    const rush = heard.find((r) => r.v === 2);
+    expect('jokainen seitsemästä pomosta puhuu, ja jättiläinen on matalampi kuin rynnäkkö',
+      !measured || (mute.length === 0 && giant.hz < rush.hz),
+      measured ? heard.map((r) => `${r.v}: ${r.peak} @ ${r.hz} Hz`).join(', ') : 'ei mitattu');
+  }
+
+  {
+    /* Ja kolme kutsupaikkaa, luettuna lähdekoodista. Sama tapa kuin
+     * poimittavilla: taulukko joka on olemassa muttei koskaan soi on
+     * ominaisuus jota teeskennellään. */
+    const src = await (await fetch('/src/entities/enemies.js')).text();
+    const kinds = ['arrive', 'hurt', 'die'].filter((k) => src.includes(`'${k}'`));
+    const calls = (src.match(/bossSay\(/g) || []).length;
+    expect('pomoäänellä on kutsupaikka jokaiselle kolmelle tilanteelle',
+      kinds.length === 3 && calls === 3, `${kinds.join(' ')} — ${calls} kutsua`);
+  }
+
+  /*
    * UUDET MERKIT VÄYLÄLLÄ, mitattuna eikä muistettuna.
    *
    * Uusi ääni on regressio kahdella tavalla joita kumpaakaan ei näe koodista:
