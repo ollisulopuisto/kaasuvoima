@@ -21,7 +21,7 @@ import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
 } from '../core/timeattack.js';
-import { clamp, hashNoise, overlaps, padNum } from '../core/utils.js';
+import { clamp, hashNoise, hashPlace, overlaps, padNum } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
 import { DAILY_TITLE } from '../core/daily.js';
 
@@ -3205,8 +3205,8 @@ export class LevelScene {
   brickSecret(tx, ty) {
     // Offset the two draws so a brick can never be both, and so the two rates
     // stay independent of each other.
-    if (hashNoise(tx * 7 + 13, ty * 11 + 5) < SECRET_POWER_RATE) return 'power';
-    if (hashNoise(tx * 3 + 1, ty * 5 + 2) < SECRET_COIN_RATE) return 'coin';
+    if (hashPlace(tx * 7 + 13, ty * 11 + 5) < SECRET_POWER_RATE) return 'power';
+    if (hashPlace(tx * 3 + 1, ty * 5 + 2) < SECRET_COIN_RATE) return 'coin';
     return null;
   }
 

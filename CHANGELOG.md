@@ -7,6 +7,55 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.6 — iho jokaiselle laatalle, ja puolet vaihtelusta joka ei ollut olemassa
+
+Putki sai yksilöllisyytensä; nyt sen saivat **kivi, lauta ja maa**. Ja matkalla
+löytyi se syy miksi vaihtelu näytti aina laimealta.
+
+| väite | mitattu |
+| --- | --- |
+| hash jakaa koko välin nollasta yhteen | `keskiarvo 0.498, viidennekset 19.7/20.5/20.1/19.9/19.7 %` |
+| kivi, lauta, maa ja tiili ovat yksilöitä | `8/8 · 6/8 · 8/8 · 7/8 erilaista` |
+| muttei eri palikoita | `suurimmat erot 4.7 · 5.5 · 20.7 · 8.2 %` |
+| heinä heiluu laatan yläpuolella | `korsia liikkui 140 pikseliä` |
+| eikä maa liiku lainkaan | `0 pikseliä` |
+
+### Puolet arvoalueesta puuttui
+
+`hashNoise` päättyi riviin `h ^ (h >> 16)`, ja `>>` on etumerkillinen: kahden
+negatiivisen XOR nollaa etumerkkibitin, joten tulos oli **aina alle 0,5**.
+Mitattu 8000 pisteen otoksella: keskiarvo `0,254`, yli 0,5 meni **0,0 %**,
+ylimmät kaksi viidennestä tyhjiä.
+
+Seuraus ei ole hienovarainen: **jokainen `hashNoise(...) > 0.55` -haara koko
+pelissä oli kuollutta koodia.** Tiilen oksankohta, kiven halkeama, hiekan
+toinen raita, lumen toinen halkeama — kaikki kirjoitettu, ei koskaan piirretty.
+Korjaus on kaksi merkkiä (etumerkitön siirto, `Math.imul`), ja sen jälkeen
+jakauma on tasan viidenneksissä.
+
+**Mutta paikka ei saanut muuttua.** Sama hash arpoo piilotiilet ja päivän
+pierun kentät, ja korjattu jakauma siirsi jokaisen salaisuuden pelissä
+(mitattu: `39/562 tiiltä`, kolme porttia punaisena, kaksi kenttää ilman yhtään
+salaisuutta) sekä vanhensi päivän alkuperätodisteen, jota ei voi laskea
+uudelleen ilman korpusta. Siksi funktioita on nyt kaksi: **koriste lukee
+korjattua, paikka lukee jäädytettyä** (`hashPlace`), ja nimi sanoo sen ääneen.
+Kun korpus joskus on käsillä, jäädytetty poistuu yhdellä ajolla.
+
+### Ja ihot
+
+Kivi vaihtelee halkeaman paikassa, kulman lohkeamassa ja kiven suunnassa —
+kaksitoista erilaista kiveä. Lauta saa syynsä ja oksankohtansa mutta **ei
+animaatiota**: se on puolikiinteä, ja liikkuva lauta lupaisi olevansa menossa
+jonnekin. Kivestä irtoaa pölyhiukkanen kerran yhdeksässä sekunnissa, laatan
+omassa vaiheessa.
+
+Heinä heiluu, ja se on paras paikka animaatiolle koska korret ovat jo **laatan
+ulkopuolella**: niiden liike ei voi muuttaa sitä siluettia jolla seistään.
+Vaihe on laatan omasta hashista, joten ruohikko aaltoilee sen sijaan että koko
+rivi nykisi kerralla — yhtenäinen nyökkäys lukisi tapahtumana.
+
+---
+
 ## v26.08.18.5 — tehostusportti: segmentti jonka läpi ei pääse ilman voimaa
 
 Omistajan päätös, sanatarkasti: *"voi olla segmenttejä, joissa TARVITAAN

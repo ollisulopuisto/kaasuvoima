@@ -12218,6 +12218,75 @@ const report = await page.evaluate(async () => {
     expect('putken kiilto on pinta eikä merkki: se liikkuu, muttei huuda',
       moved > 0 && biggest < 3,
       `muuttuvia frameja ${moved}/460, suurin muutos ${biggest.toFixed(1)} % laatasta`);
+
+    /*
+     * JA SAMA VAATIMUS JOKAISELLE LAATALLE JOLLA ON IHO.
+     *
+     * Putki oli ensimmäinen; kivi, lauta ja maa saivat saman kohtelun, koska
+     * ne ovat ne kolme joita kentässä on eniten. Väite on sama kolmikko —
+     * **eroa on, eroa on vähän, ja se on sama joka kerta** — mutta mitattuna
+     * jokaiselta erikseen, koska jokaisella on eri määrä pintaa jolla vaihdella.
+     */
+    const kinds = [
+      { name: 'kivi', ch: tiles.T.HARD, above: ' ' },
+      { name: 'lauta', ch: tiles.T.PLATFORM, above: ' ' },
+      { name: 'maa', ch: tiles.T.GROUND, above: ' ' },
+      { name: 'tiili', ch: tiles.T.BRICK, above: ' ' },
+    ];
+    const skinRows = [];
+    for (const k of kinds) {
+      const draw = (tx, tick) => {
+        const { c, g } = shot();
+        g.clearRect(0, 0, 16, 16);
+        tiles.drawTile(g, k.ch, 0, 0, 'grass', tx, 9, tick, k.above, {});
+        return g.getImageData(0, 0, 16, 16).data;
+      };
+      const b = draw(3, 0);
+      const ds = [5, 7, 9, 11, 13, 15, 17, 19].map((tx) => diff(b, draw(tx, 0)));
+      const changed = ds.filter((d) => d > 0.5).length;
+      const worst = Math.max(...ds);
+      const stable = diff(draw(3, 0), draw(3, 0)) === 0;
+      skinRows.push({ name: k.name, changed, worst, stable });
+    }
+    /* Maan katto on 24 % eikä 12 %, ja se on mitattu ero eikä löysennys: maa on
+     * ainoa näistä jonka **koko yläreuna on kasvillisuutta** — korret,
+     * tuppaat ja niiden varjot ovat laatan pinta-alasta viidennes, ja ne ovat
+     * juuri se osa joka saa vaihdella. Kivi, lauta ja tiili vaihtelevat
+     * yksityiskohdissa, ja niiden katto on se sama 12 % kuin putkella. */
+    const roof = (name) => (name === 'maa' ? 24 : 12);
+    expect('jokainen yleinen laatta on yksilö, muttei eri palikka',
+      skinRows.every((r) => r.changed >= 3 && r.worst > 1 && r.worst < roof(r.name) && r.stable),
+      skinRows.map((r) => `${r.name} ${r.changed}/8 erilaista, suurin ${r.worst.toFixed(1)} %`
+        + `${r.stable ? '' : ', EI VAKAA'}`).join(' · '));
+
+    /*
+     * Ja heinä heiluu — mutta vain heinä. Maalaatan **kiinteä osa** (rivit
+     * 0…15 laatan sisällä) ei saa liikkua lainkaan, koska se on se pinta jolla
+     * seistään; liike on sen yläpuolella olevissa korsissa, jotka piirtyvät
+     * laatan ulkopuolelle. Mitataan molemmat erikseen samasta kuvasta.
+     */
+    const grass = (tick) => {
+      const { c, g } = shot();
+      c.height = 20;
+      g.clearRect(0, 0, 16, 20);
+      tiles.drawTile(g, tiles.T.GROUND, 0, 4, 'grass', 6, 9, tick, ' ', {});
+      return g.getImageData(0, 0, 16, 20).data;
+    };
+    let bladesMoved = 0;
+    let bodyMoved = 0;
+    const g0 = grass(0);
+    for (let t = 6; t <= 180; t += 6) {
+      const gt = grass(t);
+      for (let i = 0; i < g0.length; i += 4) {
+        if (g0[i] === gt[i] && g0[i + 1] === gt[i + 1] && g0[i + 2] === gt[i + 2]) continue;
+        const row = Math.floor((i / 4) / 16);
+        if (row < 4) bladesMoved++;
+        else bodyMoved++;
+      }
+    }
+    expect('heinä heiluu laatan yläpuolella, eikä maa liiku lainkaan',
+      bladesMoved > 0 && bodyMoved === 0,
+      `korsia liikkui ${bladesMoved} pikseliä, maata ${bodyMoved}`);
   }
 
   /* ------------------------------ näppäimet ----------------------------- */
