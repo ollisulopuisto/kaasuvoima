@@ -7,6 +7,31 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.18 — sama kolikko, ja täysi putkilo valuu tyhjäksi
+
+Kaksi omistajan huomiota putkilosta, ja molemmat osuivat samaan puutteeseen:
+mittari oli valmis, mutta kolikon **matka** siihen ei ollut.
+
+**"Osa kolikoista ponnahtaa yhä suoraan ylöspäin tiileistä."** Niin ponnahti, ja
+syy oli kaksi oliota yhdestä kolikosta: `CoinPop` pomppasi ja katosi, ja
+samasta paikasta lähti lento putkiloon. Nyt lohkosta lyöty kolikko **on** se
+kolikko joka lentää — lennolla on yksi vaihe lisää alussa (pomppu ylös ja
+takaisin, sama kaari ja sama painovoima kuin ennen), ja vasta sen jälkeen imu
+tarttuu. `CoinPop` poistui kokonaan, myös `savestate`n luettelosta.
+
+**"Mitä putkelle tapahtuu kun se on täynnä?"** Ennen: pinta hyppäsi sadasta
+nollaan yhdellä framella ja lasi välähti — eli se ainoa hetki jonka koko
+mittari on rakennettu lupaamaan meni ohi nopeammin kuin sen ehti nähdä. Nyt
+pinta **valuu** alas 34 framen ajan, lasi hehkuu ja suusta nousee kipinä: sata
+kolikkoa lähtee sinne minne ne olivat menossa. Kolme kuvaa yhdestä
+tapahtumasta, ja jokainen sanoo eri asian — valuva pinta että ne lähtivät,
+hehku että se oli iso, kipinä että ne menivät ylös.
+
+Portti mittaa molemmat puolet: sadas kolikko jättää pinnan täyteen ja aloittaa
+huuhtelun, ja vasta huuhtelun jälkeen putkilo on tyhjä.
+
+---
+
 ## v26.08.18.17 — ilmakartio täydelle mittarille
 
 Omistaja 17.8.2026: *"täyteenlatautuneen voiman koko ruudun välähdys on huono,

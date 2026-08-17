@@ -20365,13 +20365,22 @@ const report = await page.evaluate(async () => {
       s.tubeFill = 99;
       s.addCoin(s.player.x + 40, s.player.y);
       for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
+      /* Sadas kolikko **ei** nollaa pintaa kertaheitolla vaan aloittaa
+       * valumisen (`COIN_FLUSH`): täysi putkilo on se yksi hetki jonka koko
+       * mittari on rakennettu lupaamaan, ja se saa kestää. Väite on siis
+       * kaksiosainen — heti täysi, ja huuhtelun jälkeen tyhjä. */
+      const atFull = s.tubeFill;
+      const draining = s.tubeFlush;
+      for (let f = 0; f < 90 && s.tubeFlush > 0; f++) s.updateCoinFlights();
+      s.updateCoinFlights();
       const flushed = s.tubeFill;
-      expect('poimittu kolikko lentää putkiloon, ja sadas tyhjentää sen',
+      expect('poimittu kolikko lentää putkiloon, ja sadas valuttaa sen tyhjäksi',
         inAir === 1 && fillAtPickup === 0 && landed === 1
-        && flushed === 0 && game.state.lives === livesBefore + 1 && s.tubeFlush > 0,
+        && atFull === 100 && draining > 1 && flushed === 0
+        && game.state.lives === livesBefore + 1,
         `poiminnassa ilmassa ${inAir} pinta ${fillAtPickup}, perillä ${landed};`
-        + ` sadas -> pinta ${flushed}, elämät ${livesBefore} -> ${game.state.lives},`
-        + ` huuhtelu ${s.tubeFlush}`);
+        + ` sadas -> pinta ${atFull} ja huuhtelu ${draining} framea,`
+        + ` valumisen jälkeen ${flushed}, elämät ${livesBefore} -> ${game.state.lives}`);
     }
 
     /* --- 5. aurinko on kello, ei maisemaa --- */

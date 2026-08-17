@@ -5,7 +5,7 @@ import {
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Pyorre, Kummitus,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
-import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
+import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 
 /**
  * Emulator-style save states: a whole snapshot of the running game, taken and
@@ -42,7 +42,10 @@ const REGISTRY = {
    */
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho,
   Pyorre, Kummitus,
-  Puff, ScorePop, BrickPiece, CoinPop, PoundWave,
+  /* `CoinPop` poistui 17.8.2026: lohkosta lyöty kolikko **on** nyt se kolikko
+   * joka lentää putkiloon (`coinToTube`), eikä lentorata ole olio vaan
+   * kohtauksen oma kenttä — ja kohtauksen kentät `savestate` kantaa jo. */
+  Puff, ScorePop, BrickPiece, PoundWave,
 };
 
 export const SLOT_COUNT = 3;
