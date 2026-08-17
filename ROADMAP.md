@@ -307,7 +307,7 @@ tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedo
 | demo näyttää tempun | **tee** |
 | aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
 | jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu (v26.08.17.93) ja äänet tehty (v26.08.17.96) |
-| lisää pomovariaatioita | **kahdeksas variantti**, jotta "jokainen pomo kerran" on totta |
+| lisää pomovariaatioita | **kahdeksas variantti**, jotta "jokainen pomo kerran" on totta — tehty (v26.08.17.97), suolimato 8-5:ssä |
 | kenttäsäännöt käsintehdyille | vanhentunut merkintä: **jo voimassa** |
 | nimen tavaramerkkiriski | vanhentunut merkintä: **nimi on jo vaihdettu** |
 
@@ -337,7 +337,37 @@ verbille käännöstä ei löytynyt siltä istumalta.
 Siksi myös `postfx`-jonon kohta "aaltoilu veden alla" poistuu: se odotti
 jotain jota ei tule.
 
-### Kahdeksas pomovariantti, ja mitä se korjaa
+### ✔ Kahdeksas pomovariantti — tehty (v26.08.17.97)
+
+**SUOLIMATO** on 8-5:ssä pöhön toisen esiintymän tilalla, ja maailman väite on
+nyt merkilleen tosi: uusinnat ovat `0 1 2 3 7 4 5`, eli seitsemän eri pomoa
+seitsemässä huoneessa eikä yhtään kahdesti.
+
+| väite | mitattu |
+| --- | --- |
+| uusinta on järjestyksessä eikä toista ketään | `samassa kohdassa 6/7, toistoja 0` |
+| se kaivautuu kruunun ajaksi | `siirtyi 171 px, vajosi 44 px` |
+| maan alla se ei satuta eikä siihen voi osua | `vaaraton true` |
+| eikä se nouse jalkojen alta | `nousi 3.1 laatan päähän` |
+
+**Uusi numero ei olisi riittänyt, sen piti olla uusi kysymys.** Jokainen muu
+pomo kysyy *milloin* — kruunu nousee, odota, kruunu laskee, lyö. Mato kysyy
+*missä*: se kaivautuu lattiaan tasan siksi aikaa kun kruunu on päässä eli kun
+siihen ei kuitenkaan voi osua, ja nousee jossain muualla siinä hetkessä kun
+siihen taas voi. Pelaajan työ ei ole odottaa ikkunaa vaan **löytää se
+uudestaan**.
+
+Siitä seuraa myös se että vanha lupaus pysyy koskemattomana: avoin ikkuna on
+kokonaan tallottavaa aikaa jokaisella pomolla, ja liikkuva maali avoimen ikkunan
+aikana olisi rikkonut sen hiljaa.
+
+Kaksi poikkeusta jotka on kirjattu nimellä eikä ohitettu: mato on **pelin ainoa
+raajaton pomo** (`LIMBLESS_ON_PURPOSE`, ja poikkeus vanhenee itsestään jos sille
+joskus piirretään raajat), ja sen ääni on ainoa jolla on `level`-kerroin —
+mitattuna sen terävät formantit päästivät läpi 0,065 kun muut tuottivat
+0,23…0,40 samalla nimellisellä voimakkuudella.
+
+### Alkuperäinen perustelu: kahdeksas pomovariantti, ja mitä se korjaa
 
 Variantteja on seitsemän — nyrkkeilijä, jyskyttäjä, syöksyjä, pöhö, luuranko,
 sääherra, pierukuningas — ja jokaisella on oma kokonsa ja runkokaavansa. Yksi

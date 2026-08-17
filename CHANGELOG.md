@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.97 — SUOLIMATO, ja se kysyy missä eikä milloin
+
+Kahdeksas pomovariantti, 8-5:ssä pöhön toisen esiintymän tilalla.
+
+| väite | mitattu |
+| --- | --- |
+| maailma 8 ei uusi ketään kahdesti | `uusinnat 0 1 2 3 7 4 5, toistoja 0` |
+| se kaivautuu kruunun ajaksi | `siirtyi 171 px, vajosi 44 px` |
+| maan alla se ei satuta eikä siihen voi osua | `vaaraton true` |
+| eikä se nouse jalkojen alta | `nousi 3.1 laatan päähän` |
+
+**Maailman 8 väite oli tosi vain jos pöhöä ei laske kahdesti.** Se esiintyi
+neljästi (4-F, 5-F, 8-4, 8-5) kun jokainen muu esiintyy kahdesti, ja "jokainen
+pomo kerran" on koko maailman lause. Nyt uusinnassa on seitsemän eri pomoa
+seitsemässä huoneessa.
+
+**Uusi numero ei olisi riittänyt, sen piti olla uusi kysymys.** Jokainen muu
+pomo kysyy *milloin*: kruunu nousee päähän, odota, kruunu laskee, lyö. Mato
+kysyy **missä**. Se kaivautuu lattiaan tasan siksi aikaa kun kruunu on päässä —
+eli kun siihen ei kuitenkaan voi osua — ja nousee jossain muualla siinä hetkessä
+kun siihen taas voi. Maanalainen matka näkyy pölykasana lattian pinnassa, joten
+se ei katoa vaan menee.
+
+Siitä seuraa että vanha lupaus pysyy koskemattomana: **avoin ikkuna on kokonaan
+tallottavaa aikaa**, aivan kuten jokaisella muulla pomolla. Liikkuva maali
+avoimen ikkunan aikana olisi rikkonut sen hiljaa.
+
+Silhuetti on 56x28 eli 2:1 — pelin littein, kun jokainen muu on vähintään yhtä
+korkea kuin kaksi kolmasosaa leveydestään. Pinnalla se **makaa lattialla** eikä
+seiso sen päällä, ja se on sama valinta toisin päin kuin luurangolla, joka on
+pelin ainoa pystyyn venytetty. Arvomerkkinä nikamat eikä esine: jokainen muu
+kantaa mitalia, satulaa, kelloa tai hermeliiniä, koska jokainen muu on joku joka
+pukeutuu — madolla ei ole mitään mikä ei olisi runkoa.
+
+Kaksi poikkeusta, molemmat kirjattu nimellä eikä ohitettu: se on pelin ainoa
+**raajaton** pomo (poikkeuslista vanhenee itsestään jos sille joskus piirretään
+raajat), ja sen ääni on ainoa jolla on `level`-kerroin — mitattuna sen terävät
+formantit päästivät läpi **0,065** kun muut tuottivat 0,23…0,40 samalla
+nimellisellä voimakkuudella, ja kuulumaton ääni on sama vika kuin puuttuva.
+
+---
+
 ## v26.08.17.96 — jokaisella pomolla on oma ääni
 
 Päätetty 9.8.2026, ja se odotti kahta asiaa: konsonantteja (pelkillä vokaaleilla

@@ -147,6 +147,16 @@ export const BOSS_SIZES = [
   { w: 36, h: 52 },   // 4 luuranko    — 1:1.4, the tall one
   { w: 68, h: 88 },   // 5 sääherra    — decked arena; he flies, so height is his
   { w: 50, h: 52 },   // 6 pierukuningas — square and heavy
+  /*
+   * 7 SUOLIMATO — 2:1, eli pelin littein silhuetti.
+   *
+   * Jokaisella muulla pomolla korkeus on ainakin kaksi kolmasosaa leveydestä;
+   * tämä on kaksi kertaa leveämpi kuin korkea, ja se on koko tunnistettavuus:
+   * kun se on pinnalla, se **makaa lattialla** eikä seiso sen päällä. Sama
+   * asia toisin päin kuin luurangolla, joka on pelin ainoa selvästi pystyyn
+   * venytetty.
+   */
+  { w: 56, h: 28 },   // 7 suolimato — matala ja pitkä, lattian myötäinen
 ];
 /**
  * Bolts along a plate's edge — the cheapest thing that turns a filled rectangle
@@ -250,6 +260,15 @@ export const BOSS_LIMBS = [
   // 6 pierukuningas — ketjunyrkit, ja tämä on se jota varten koko idea on
   [[-14, 24, 6, 4], [-24, 26, 6, 4], [-40, 22, 16, 14],
     [58, 24, 6, 4], [68, 26, 6, 4], [74, 22, 16, 14]],
+  /*
+   * 7 suolimato — **ei raajoja lainkaan, ja se on lista eikä unohdus.**
+   *
+   * Raaja on tässä pelissä se osa joka ulottuu rungon ulkopuolelle ja jonka
+   * saa katkaistua; madolla ei ole sellaista, koska sillä ei ole mitään mikä
+   * ei olisi runkoa. Tyhjä rivi tarkoittaa "kysytty ja vastaus on nolla",
+   * ja `limbBoxes` palauttaa silloin tyhjän listan aivan kuten sen kuuluukin.
+   */
+  [],
 ];
 
 /** The box a variant fights in, before its own `scale`. */
@@ -440,6 +459,33 @@ function bossRank(r, bx, py, variant) {
     r(bx + 9, py + 22, 2, 3, C.ink);
     r(bx + 39, py + 22, 2, 3, C.ink);
     r(bx + 45, py + 22, 2, 3, C.ink);
+    return;
+  }
+  if (variant === 7) {
+    /*
+     * Suolimadon arvomerkki on **nikamat**, eikä mitään ripustettua.
+     *
+     * Jokainen muu kantaa esinettä — mitalia, satulaa, olkalappuja, kelloa,
+     * ilmapuntaria, hermeliiniä — koska jokainen muu on joku joka *pukeutuu*.
+     * Mato ei pukeudu; sillä ei ole mitään mikä ei olisi runkoa (ks. `BOSS_LIMBS`
+     * rivi 7, tyhjä). Sen arvo on siinä mistä se on tehty, ja se piirretään
+     * rungon *päälle* renkaina: neljä kaarta jotka kertovat että tämä on
+     * jaksollinen eläin eikä yksi kappale.
+     *
+     * Kulta on tässäkin varattu kruunulle, joten renkaat ovat tummaa lihaa —
+     * ja juuri siksi ne lukevat vielä silloin kun kruunu on päässä.
+     */
+    const ring = '#8c3450';
+    for (let i = 0; i < 4; i++) {
+      const rx = bx + 8 + i * 11;
+      r(rx, py + 6, 2, 15, ring);
+      r(rx + 1, py + 8, 1, 11, C.ink);
+    }
+    /* Ja suu: yksi vaaleampi soikio kärjessä, jotta pää erottuu hännästä.
+     * Ilman sitä matalasta rungosta ei näe kumpaan suuntaan se on menossa, ja
+     * suunta on ainoa asia joka madosta pitää lukea. */
+    r(bx + 48, py + 9, 7, 9, '#8c3450');
+    r(bx + 50, py + 11, 4, 5, '#f0a0a8');
   }
 }
 
@@ -875,8 +921,16 @@ export function drawBoss(ctx, x, y, frame, facing, hurt, variant = 0, scale = 1,
    * kuin sääherralla (5), joka on tumma vaikka hänen maailmansa on valkoinen,
    * ja samasta syystä.
    */
-  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc', '#3a4472', '#8c1830'];
-  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88', '#1e2444', '#54101e'];
+  /*
+   * Ja kahdeksas on suolimato (7), **lihanpunainen**.
+   *
+   * Maailma on suolisto, ja tämä on ainoa pomo joka on tehty samasta aineesta
+   * kuin huone. Se on tarkoitus: kuningas on viininpunainen eli tummempi ja
+   * kylmempi, joten nämä kaksi eivät sekoitu keskenään edes vilkaisulla — ja
+   * madon väri on juuri se joka kertoo miksi se voi kaivautua lattiaan.
+   */
+  const bodyColors = ['#a04ca0', '#3c7ad0', '#2fa06a', '#c85a20', '#e8e0cc', '#3a4472', '#8c1830', '#d0687c'];
+  const darkColors = ['#6a2c6a', '#24528c', '#1c6a46', '#8c3a0c', '#7c7a88', '#1e2444', '#54101e', '#8c3450'];
   const flashing = hurt && Math.floor(frame / 2) % 2 === 1;
   const body = flashing ? '#e07070' : bodyColors[variant % bodyColors.length];
   const dark = flashing ? body : darkColors[variant % darkColors.length];
