@@ -7,6 +7,39 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.99 — Enter on aina valinta
+
+Omistaja pelistä: *"näppäimet ovat menuissa välillä outoja, mielestäni enter
+voisi aina olla select."* Ja niin ne olivat.
+
+| ruutu | Enter ennen | Enter nyt |
+| --- | --- | --- |
+| alkuruutu, kortit, pistetaulu | valitse | valitse |
+| vaikeustaso, päivän pieru, jako | **peru** | valitse |
+| kartta | **käytä varaesine** | aloita kenttä |
+
+Sama näppäin siis hyväksyi yhdellä ruudulla ja perui seuraavalla. Nyt Enter on
+sama nappi kuin hyppy — se nappi jolla valikoissa on aina valittu — ja
+peruminen on **Escapessa**, joka on ainoa näppäin joka tarkoittaa jo valmiiksi
+"pois täältä". Kentässä Escape on tauko, kuten ennenkin.
+
+Kartan varaesine sai `X`:n (juoksunappi), koska kartalla juoksulle ei ole muuta
+käyttöä ja esineen ottaminen on **toiminto eikä valinta**. Numpadin Enter oli
+`run`; se on nyt sekin valinta, koska se on Enter.
+
+Portti mittaa lupauksen **ruuduilta eikä taulukosta**, ja koko ketjun läpi
+(`event.code` → `KEYMAP` → `Input.pressed` → kohtaus), koska juuri siinä
+ketjussa vika oli: `alkuruutu TitleScene->WorldMapScene, kartta
+->InterludeScene, vaikeustaso DifficultyScene->WorldMapScene, Escape
+->TitleScene`, ja `varasto tyhjeni`.
+
+Ohjetekstit korjattiin samalla, koska ne opettivat vanhan tavan: kartalla luki
+`Z ALOITA   ENTER KAYTA ESINE`, vaikeustasoruudulla `ENTER PERUU`. Alkuruutu
+kertoo nyt myös valinnan näppäimen: `NUOLET/WASD  HYPPY VÄLI/Z  JUOKSU SHIFT/X
+VALINTA ENTER`.
+
+---
+
 ## v26.08.17.98 — luulaakso saa minipomon
 
 Toinen minipomo peliin, ja ensimmäinen sitten maailman 2. `6-M

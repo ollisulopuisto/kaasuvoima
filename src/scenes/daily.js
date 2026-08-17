@@ -128,6 +128,6 @@ export class DailyScene {
         color: '#4a6a4a', align: 'center',
       });
     }
-    drawText(ctx, 'ENTER TAKAISIN', W / 2, 228, { color: '#8890b0', align: 'center' });
+    drawText(ctx, 'ESC TAKAISIN', W / 2, 228, { color: '#8890b0', align: 'center' });
   }
 }

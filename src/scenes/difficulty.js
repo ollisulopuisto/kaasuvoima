@@ -102,7 +102,7 @@ export class DifficultyScene {
       color: '#8fe04a', align: 'center', shadow: '#101018',
     });
 
-    drawText(ctx, 'HYPPY VALITSEE   ENTER PERUU', W / 2, 210, {
+    drawText(ctx, 'ENTER VALITSEE   ESC PERUU', W / 2, 210, {
       color: '#8890b0', align: 'center',
     });
   }

@@ -11943,6 +11943,99 @@ const report = await page.evaluate(async () => {
     game.completeWorld = realComplete;
   }
 
+  /* ------------------------------ näppäimet ----------------------------- */
+  /*
+   * ENTER ON AINA VALINTA, ja se mitataan **ruuduilta eikä taulukosta**.
+   *
+   * Omistajan raportti 17.8.2026: *"näppäimet ovat menuissa välillä outoja,
+   * mielestäni enter voisi aina olla select."* Ja niin se oli: `Enter` oli
+   * `start`, ja `start` tarkoitti kolmea eri asiaa eri ruuduilla — valitse
+   * (alkuruutu, kortit, pistetaulu), peru (vaikeustaso, päivän pieru, jako) ja
+   * käytä varaesine (kartta). Yksi taulukkorivi ei todista että se on ohi;
+   * kolme ruutua todistaa.
+   *
+   * Näppäin painetaan oikeana tapahtumana `window`iin asti, koska juuri se
+   * ketju — `event.code` → `KEYMAP` → `Input.pressed` → kohtaus — on se jossa
+   * vika oli.
+   */
+  {
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+    const { TitleScene } = await import('/src/scenes/title.js');
+    /* Kymmenen framea ennen painallusta, ja se on ruutujen oma sääntö eikä
+     * varovaisuutta: valikot vartioivat ensimmäiset kuusi framea (`tick < 6`)
+     * jottei edellisen ruudun viimeinen painallus valitse tällä. Kaksi framea
+     * mittasi siis vartiointia eikä näppäintä. */
+    const settleUI = (n = 10) => { for (let f = 0; f < n; f++) game.step(); };
+    /* Kartta tarvitsee enemmän: maailman nimilappu (`bannerTimer`) syö
+     * ensimmäisen painalluksen tarkoituksella, jotta edellisen ruudun Enter ei
+     * käynnistä kenttää. Mitattuna kymmenen framea mittasi siis lappua. */
+    const MAP_SETTLE = 160;
+    const tap = (code) => {
+      dispatchEvent(new KeyboardEvent('keydown', { code }));
+      game.step();
+      dispatchEvent(new KeyboardEvent('keyup', { code }));
+      game.step();
+    };
+
+    reset();
+    game.toTitle();
+    settleUI();
+    const fromTitle = game.scene.constructor.name;
+    tap('Enter');
+    const afterTitle = game.scene.constructor.name;
+
+    /* Kartalla kursori pannaan **kentän** solmuun: aloitussolmu ei ole kenttä,
+     * eikä "Enter ei tehnyt mitään aloitusruudulla" ole väite mistään. */
+    reset();
+    game.state.world = 0;
+    const firstLevel = WORLDS[0].nodes.find((n) => n.level);
+    game.state.node = firstLevel.id;
+    game.setScene(new WorldMapScene(game));
+    settleUI(MAP_SETTLE);
+    tap('Enter');
+    const afterMap = game.scene.constructor.name;
+
+    /* Ja se toinen puoli: Escape perääntyy eikä valitse. Alkuruudulta ei ole
+     * mihin perääntyä, joten tämä mitataan vaikeustasoruudulta, joka on se
+     * ruutu jolla Enter ennen perui. */
+    reset();
+    game.chooseDifficulty();
+    settleUI();
+    const inChooser = game.scene.constructor.name;
+    tap('Enter');
+    const chose = game.scene.constructor.name;
+    reset();
+    game.chooseDifficulty();
+    settleUI();
+    tap('Escape');
+    const backed = game.scene.constructor.name;
+
+    expect('Enter valitsee jokaisella ruudulla, ja Escape perääntyy',
+      fromTitle === 'TitleScene' && afterTitle !== 'TitleScene'
+      && afterMap !== 'WorldMapScene'
+      && inChooser === 'DifficultyScene' && chose !== 'DifficultyScene'
+      && backed === 'TitleScene',
+      `alkuruutu ${fromTitle}->${afterTitle}, kartta ->${afterMap}, `
+      + `vaikeustaso ${inChooser}->${chose}, Escape ->${backed}`);
+
+    /* Kartan varaesine on `run`issa, ja se on mitattava erikseen: se on se
+     * toiminto joka Enterin tieltä siirrettiin, ja siirretty toiminto jota
+     * mikään ei enää kutsu on huonompi kuin ennallaan jätetty. */
+    reset();
+    game.state.world = 0;
+    game.state.node = firstLevel.id;
+    game.state.reserve = 'shroom';
+    const map = new WorldMapScene(game);
+    game.setScene(map);
+    settleUI(MAP_SETTLE);
+    tap('KeyX');
+    expect('kartalla X käyttää varaesineen',
+      game.state.reserve === null,
+      `varasto ${game.state.reserve === null ? 'tyhjeni' : game.state.reserve}`);
+    game.toTitle();
+    void TitleScene;
+  }
+
   /* ------------------------------- attract ----------------------------- */
   {
     const { DemoScene } = await import('/src/scenes/demo.js');
