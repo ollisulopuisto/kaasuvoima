@@ -453,4 +453,27 @@ export const KEEP_CHUNKS = {
     13: '#########    %##',
     14: '#########WWWWW##',
   }),
+
+  /**
+   * KUURAN KÄYTÄVÄ — ja se on tahallaan **tasainen**.
+   *
+   * Kuura jäädyttää maan alleen, ja jää on liukas: kitka putoaa 0,4:ään. Se on
+   * uusi asia opeteltavaksi, ja tässä pelissä uusi asia opetellaan siellä missä
+   * väärin lukeminen maksaa vähiten — eli ei kuilun huulella. Kuuran jälki on
+   * mitattu yhdeksän laattaa (0,42 px/frame × 360 framea), joten koko käytävä
+   * mahtuu jäätymään ilman että liukas kohta koskaan ulottuu reunan yli.
+   *
+   * Pysäytin on kaksi laattaa kiveä molemmissa päissä: kuura kääntyy niistä
+   * eikä kävele käytävästä ulos. Se ei ole aita pelaajalle — kaksi laattaa on
+   * askelma — vaan sen jäljen raja.
+   */
+  keep_frost: ck(16, {
+    0: G,
+    1: G,
+    9: '     o o o',
+    11: 'X             X',
+    12: 'X      w      X',
+    13: G,
+    14: G,
+  }),
 };

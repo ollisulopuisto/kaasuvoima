@@ -171,7 +171,10 @@ export const WORLD1_LEVELS = {
     chunks: [
       'start_high', 'plat_hi', 'power', 'sky_run', 'pipe_short', 'plat_float',
       'pit_plat', 'plat_steps', 'walkers', 'corks', 'bricks', 'pit_l',
-      'star_block', 'pipe_pair', 'shell', 'coin_stack', 'spikes', 'steps_up', 'ledge',
+      /* Kolikkovaras `coin_stack`in tilalle: sama kolikkopalkinto, mutta nyt
+       * joku muukin on sitä hakemassa. Vaihto eikä lisäys, koska maailman 1
+       * pituus on mitattu ja sen kello on siihen sovitettu. */
+      'star_block', 'pipe_pair', 'shell', 'coin_thief', 'spikes', 'steps_up', 'ledge',
       'power', 'run_up', 'goal', 'goal_end',
     ],
   },

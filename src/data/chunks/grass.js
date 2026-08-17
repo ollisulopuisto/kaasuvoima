@@ -33,4 +33,24 @@ export const GRASS_CHUNKS = {
     13: G,
     14: G,
   }),
+
+  /**
+   * KOLIKKOVARAS JA SE MITÄ SE ON HAKEMASSA.
+   *
+   * Kolikkorivi edessä ja varas sen takana: pelaaja näkee molemmat samalla
+   * silmäyksellä, ja siitä syntyy koko laji — **kilpajuoksu jonka voi hävitä
+   * ilman että menettää mitään.** Tallattu varas pudottaa kaiken syömänsä, joten
+   * hitaampikin saa kolikkonsa; hän vain saa ne työllä.
+   *
+   * Maailmaan 1, ja se on tarkoituksellinen paikka kahdesta syystä: sen sanasto
+   * on pelin ohuin (mitattu 14 vastaan maailma 3:n 26), ja tämä on laji joka ei
+   * satuta enempää kuin kävelijä — uusi *idea* eikä uusi vaara sopii sinne
+   * missä pelaaja on vielä opettelemassa.
+   */
+  coin_thief: ck(16, {
+    9: '      o o o o',
+    12: '  s',
+    13: G,
+    14: G,
+  }),
 };

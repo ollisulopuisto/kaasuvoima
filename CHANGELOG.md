@@ -7,6 +7,80 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.4 — maahanisku mittaa pudotusta eikä huonetta
+
+Omistaja: *"tee niin että ground pound on sitä voimakkaampi (= leviää
+laajemmalle) mitä korkeammalta pomppaa."* Se **oli jo** — mutta se mittasi
+väärää asiaa.
+
+| väite | mitattu |
+| --- | --- |
+| sama pudotus antaa saman iskun missä tahansa | `100px matalalla 0.575, syvällä 0.575` |
+| täysi isku vaatii pelin pisimmän hypyn | `174 px -> 1` |
+| ja isku leviää laajemmalle | `22…44 px eli 1,4…2,75 laattaa` |
+
+Asteikko oli `(pudotus) / (laskeutumisen y)`, eli **osuus huoneen korkeudesta**.
+Perustelu oli kaunis — taivas on kansi, joten suurin mahdollinen pudotus on se
+y johon päätyy — ja se tekee samasta hypystä eri iskun sen mukaan missä päin
+kenttää seisoo: 100 px pudotus lattialle y=208 antoi 0,48, ja sama hyppy
+luolakaistassa lattialle y=650 antoi **0,15**. Isku siis heikkeni sitä mukaa
+mitä syvemmälle kenttään meni, ja juuri se on se mitä omistaja pelasi.
+
+Nimittäjä on nyt se mitä pelaaja voi tehdä: **174 px, pelin pisin hyppy**
+(PHYSICS.md). Kynnykset pysyvät siellä missä ne mitattiin — tappaminen 0,5 on
+87 px ja tiilen rikkominen 0,72 on 125 px, sama luku joka `POUND_BREAK_AT`in
+perustelussa jo luki — mutta ne pätevät nyt myös luolassa ja pystykentässä.
+
+Ja se mitä pyydettiin: iskun leveys 30 → **44 px**. Vanha kaari oli 15…30 px eli
+yhdestä kahteen laattaa, mikä on liian pieni ero tunnettavaksi; uusi on
+1,4…2,75 laattaa, eli täysi isku ottaa **kaksi vihollista yhden sijaan** ja
+rikkoo kolme tiiltä kahden sijaan.
+
+---
+
+## v26.08.18.3 — kaksi lajia jotka muuttavat kenttää, ja yksi hiljainen vika
+
+Omistaja: *"olisi kiva että oliot voisivat reagoida pelaajaan / maailmaan /
+vaikuttaa maailmaan, se olisi dynaamista."* Taulukko sanoi saman ankarammin:
+`ENEMY_VERBS`-taulun `maailma`-sarakkeessa luki **"ei" jokaisella
+yhdeksällätoista lajilla** — vain pomo koski kenttään.
+
+| väite | mitattu |
+| --- | --- |
+| kuuran jälki jäätyy ja sulaa | `jäätyi 4 ruutua, sulamisen jälkeen 0 kesken` |
+| eikä kenttä jää toisenlaiseksi | `ruudukko ennallaan` |
+| kolikkovaras syö ja antaa takaisin | `söi 1, kolikoita 38 -> 37, kukkaro 0 -> 1` |
+| jokainen laji selviää pikatallennuksesta | `21 merkkiä, kaikki palasivat` |
+
+**KUURA** (`w`, maailma 8) kävelee, ja sen jäljessä maa on jäätä kuuden sekunnin
+ajan. Jää on tässä pelissä laatta eikä teema (päätetty 10.8.2026), joten muutos
+käyttää olemassa olevaa sanaa: kiinteä pysyy kiinteänä, vain kitka muuttuu —
+yksikään reitti, hyppy tai kuilubudjetti ei liiku. Ja se sulaa, eli kentän
+lopputila on sen lähtötila, sama vaatimus jonka valuva hiekka ja areenan
+pilarit jo täyttävät.
+
+**KOLIKKOVARAS** (`s`, maailma 1) etsii lähimmän kolikon, juoksee sen luo ja syö
+sen. Kolikko on ainoa asia kentässä jonka poistaminen ei voi rikkoa mitään —
+se ei kannattele ketään eikä sen puuttuminen sulje reittiä — eli maailmaan
+vaikuttava vihollinen saatiin **ilman yhtäkään uutta läpäisykysymystä**.
+Tallattuna se pudottaa kaiken syömänsä, joten kilpajuoksun hävinnytkään ei
+menetä mitään pysyvästi.
+
+Molemmat menivät maailmoihin joiden sanasto on ohuin (mitattu 14 ja 13).
+
+### Ja se hiljainen vika
+
+`savestate.js` herättää vain ne luokat jotka ovat sen rekisterissä, ja
+**seitsemän lajia oli tullut peliin listan kirjoittamisen jälkeen**: torvi,
+törähdys, paarma, happopisara, yökki, karvapallo ja paukkupöhö. Pikatallennus
+keskellä maailmaa 6 tai 7 palautti kentän ilman niitä. Mikään ei kaatunut, jokin
+vain puuttui — ja peli näytti toimivan, se vain oli helpompi.
+
+Portti kävelee nyt jokaisen kenttämerkin läpi ja vaatii että olio on olemassa
+myös latauksen jälkeen. `21 merkkiä, kaikki palasivat.`
+
+---
+
 ## v26.08.18.2 — sama putki, eri yksilö
 
 Omistajan pyyntö: *"eka putki ei näytä täsmälleen samalta kuin 2. putki… etsi

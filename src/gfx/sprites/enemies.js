@@ -1545,3 +1545,89 @@ function kummitusBody(ctx, x, y, facing, shy, frame) {
 export function drawKummitus(ctx, x, y, facing, shy = 0, frame = 0) {
   outlined(ctx, (g) => kummitusBody(g, x, y, facing, shy, frame));
 }
+
+/* ---------------------------------- kuura --------------------------------- */
+
+/**
+ * KUURA — pieni kylmä otus jonka jäljessä maa on liukas.
+ *
+ * Sen on **näytettävä siltä mitä se tekee**, ja se on tässä pelissä sääntö eikä
+ * tyyli: jokainen laji jolla on vaikutus maailmaan kertoo sen kuvassaan
+ * (paukkupöhön sytytyslanka, kurnuttajan varoitus). Kuuran kuva on kolme asiaa:
+ * **valkoinen huurre selässä**, joka on se aine jota se jättää; **sinertävä
+ * runko**, joka erottaa sen kävelijästä värillä eikä muodolla; ja **kylmä hönkä**
+ * joka tulee ulos joka toisella askeleella, eli sama rytmi kuin sen jaloilla.
+ *
+ * Huurre on valkoista mutta ei puhdasta: `#dff0ff` on sininen valkoinen, eikä
+ * se sekoitu piikkien puhtaaseen valkoiseen — piikki tarkoittaa tässä pelissä
+ * yhtä asiaa, eikä uusi laji saa lainata sitä merkkiä.
+ */
+function kuuraBody(ctx, x, y, frame, facing, lift) {
+  const px = Math.round(x);
+  const py = Math.round(y) + lift;
+  const r = (rx, ry, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(rx, ry, w, h); };
+  const step = Math.floor(frame / 10) % 2;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    r(bx + 2, py + 5, 12, 9, '#6a8cc0');            // runko
+    r(bx + 3, py + 4, 10, 3, '#8fb0dc');            // olkapäät
+    r(bx + 2, py + 3, 12, 2, '#dff0ff');            // huurre selässä
+    r(bx + 4, py + 2, 3, 2, '#dff0ff');
+    r(bx + 9, py + 2, 3, 2, '#dff0ff');
+    r(bx + 5, py + 7, 2, 2, C.ink);                 // silmät
+    r(bx + 9, py + 7, 2, 2, C.ink);
+    // Jalat vuorotellen, sama kahden framen sykli kuin kävelijällä.
+    r(bx + 3 + step, py + 14, 3, 2, '#3c5a8c');
+    r(bx + 10 - step, py + 14, 3, 2, '#3c5a8c');
+    // Hönkä: kaksi pikseliä edessä joka toisella askeleella.
+    if (step) {
+      ctx.globalAlpha = 0.5;
+      r(bx + 14, py + 8, 2, 1, '#dff0ff');
+      r(bx + 16, py + 7, 1, 1, '#dff0ff');
+      ctx.globalAlpha = 1;
+    }
+  });
+}
+
+export function drawKuura(ctx, x, y, frame, facing) {
+  outlined(ctx, (g) => kuuraBody(g, x, y, frame, facing, breath(frame, x, y)));
+}
+
+/* ------------------------------ kolikkovaras ------------------------------ */
+
+/**
+ * KOLIKKOVARAS — ja se kantaa saalistaan näkyvillä.
+ *
+ * Pussi selässä kasvaa jokaisesta syödystä kolikosta, ja se on ainoa numero
+ * jonka pelaajan tarvitsee lukea: **paljonko sen tallaaminen maksaa takaisin.**
+ * Kolme kolikkoa on kolme pikseliä korkeampi pussi, ja kymmenennen jälkeen se
+ * ei enää kasva — mitta on "onko sillä paljon" eikä "montako tasan", ja
+ * kymmenen pikselin pussi 16 pikselin ruudussa olisi jo eri esine.
+ *
+ * Kulta on tässä pelissä kruunun väri, ja siksi pussi on **säkkikangasta**
+ * jonka suusta pilkottaa yksi kolikko: varas ei ole kultainen, sillä on vain
+ * kultaa mukanaan. Sama päätös kuin sääherran tummassa värissä.
+ */
+function varasBody(ctx, x, y, frame, facing, loot, lift) {
+  const px = Math.round(x);
+  const py = Math.round(y) + lift;
+  const r = (rx, ry, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(rx, ry, w, h); };
+  const step = Math.floor(frame / 6) % 2;
+  const bag = Math.min(6, loot);
+  flip(ctx, px, 14, facing < 0, (bx) => {
+    if (bag > 0) {
+      r(bx - 1, py + 4 - Math.floor(bag / 2), 5, 5 + bag, '#8c6a3c');   // säkki
+      r(bx, py + 5 - Math.floor(bag / 2), 3, 2, C.gold);                // kolikko suussa
+    }
+    r(bx + 3, py + 3, 9, 9, '#c85a20');             // runko
+    r(bx + 4, py + 2, 7, 2, '#8c3a0c');             // huppu
+    r(bx + 5, py + 5, 2, 2, C.ink);
+    r(bx + 9, py + 5, 2, 2, C.ink);
+    r(bx + 4, py + 8, 6, 1, '#8c3a0c');             // vyö
+    r(bx + 4 + step, py + 12, 3, 2, '#5a2c0c');
+    r(bx + 8 - step, py + 12, 3, 2, '#5a2c0c');
+  });
+}
+
+export function drawKolikkovaras(ctx, x, y, frame, facing, loot = 0) {
+  outlined(ctx, (g) => varasBody(g, x, y, frame, facing, loot, breath(frame, x, y)));
+}
