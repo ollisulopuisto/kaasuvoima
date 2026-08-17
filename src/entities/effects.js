@@ -2,6 +2,8 @@ import { Entity } from './entity.js';
 import { drawGasPuff } from '../gfx/sprites.js';
 import { drawCoinSprite, drawSplinter, THEMES } from '../gfx/tiles.js';
 import { drawText } from '../gfx/font.js';
+/* Kolikon arvo tulee pistetaulukosta, ei tästä tiedostosta. */
+import { COIN } from '../core/points.js';
 
 export class Puff extends Entity {
   constructor(level, x, y, { spread = 0, size = 4, life = 24, brown = false } = {}) {
@@ -265,7 +267,7 @@ export class CoinPop extends Entity {
     this.vy += 0.32;
     this.life--;
     if (this.life <= 0) {
-      this.level.addScorePop(this.cx, this.y, 200);
+      this.level.addScorePop(this.cx, this.y, COIN);
       this.remove = true;
     }
   }

@@ -160,6 +160,22 @@ const SMALL_HEAD = 1;
 const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}', '%', '(', ')', 'S', 'C', 'I', 'J']);
 const SEMI = new Set(['-']);
 /*
+ * RINTEET (`/` ja `\\`, ks. `T.SLOPE_R`).
+ *
+ * Oma joukkonsa eikä `SOLID`in jäseniä, ja se on sama päätös kuin moottorissa:
+ * rinne on **maata jonka pinta on vinossa**, eli sen päällä seistään mutta sen
+ * läpi kuljetaan vaakasuunnassa. `SOLID` tarkoittaa tässä tiedostossa "keho ei
+ * mahdu läpi", ja se on juuri se mitä rinne ei ole — pääntilan ja hyppyjen
+ * ulottuvuuden laskenta menisi väärin toiseen suuntaan jos rinne olisi seinä.
+ *
+ * Jalansijaksi se kelpaa kaikkialla missä jalansijaa kysytään, ja siksi joukko
+ * on olemassa: ilman sitä rinteen päällä seisova vihollinen "seisoo tyhjän
+ * päällä" ja rinteen sarake luetaan pohjattomaksi kuiluksi.
+ */
+const SLOPE = new Set(['/', '\\']);
+/** Kelpaako tämä merkki jalansijaksi: kiinteä laatta tai rinne. */
+const stands = (ch) => SOLID.has(ch) || SLOPE.has(ch);
+/*
  * MÖYKKY, se yksi laatta joka tottelee painovoimaa (`T.LUMP`, `src/gfx/tiles.js`).
  *
  * Se on `SOLID`issa koska se **on** kiinteä lähtötilassa, ja lähtötila on se
@@ -313,9 +329,9 @@ const reader = (band, w) => (x, y) =>
 function floorProfile(at, w) {
   const floor = [];
   for (let x = 0; x < w; x++) {
-    if (!SOLID.has(at(x, FLOOR + 1)) && !SOLID.has(at(x, FLOOR))) { floor.push(null); continue; }
-    let y = SOLID.has(at(x, FLOOR)) ? FLOOR : FLOOR + 1;
-    while (y > 0 && SOLID.has(at(x, y - 1))) y--;
+    if (!stands(at(x, FLOOR + 1)) && !stands(at(x, FLOOR))) { floor.push(null); continue; }
+    let y = stands(at(x, FLOOR)) ? FLOOR : FLOOR + 1;
+    while (y > 0 && stands(at(x, y - 1))) y--;
     floor.push(y);
   }
   return floor;
@@ -494,7 +510,7 @@ function checkGaps(at, band, from, to, reach, problems, where) {
      * over one would be the validator inventing a requirement. What quicksand
      * *does* have to satisfy is `checkQuicksand` below — it needs a bottom and
      * a rim — and that is the check this exemption is paid for by. */
-    const bottomless = ![FLOOR, FLOOR + 1].some((y) => SOLID.has(at(x, y)))
+    const bottomless = ![FLOOR, FLOOR + 1].some((y) => stands(at(x, y)))
       && at(x, FLOOR) !== 'W'
       && ![FLOOR, FLOOR + 1].some((y) => SINK.has(at(x, y)));
     if (bottomless) { gap++; continue; }
@@ -551,7 +567,7 @@ function checkEnemyFooting(rows, w, problems) {
         continue;
       }
       const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
-      if (!SOLID.has(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
+      if (!stands(below)) problems.push(`${ch} at ${x},${y} is standing on nothing`);
     }
   }
 }
@@ -693,7 +709,7 @@ function checkFalling(rows, w, problems) {
  * kun taas väärään suuntaan toisin päin se on henki.
  */
 function checkIce(rows, w, problems) {
-  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  const footing = (x, y) => stands(rows[y][x]) || SEMI.has(rows[y][x]);
   for (let y = 0; y < rows.length; y++) {
     for (let x = 0; x < w; x++) {
       if (!footing(x, y)) continue;
@@ -721,8 +737,8 @@ export function platformsOf(rows, w) {
     let from = -1;
     for (let x = 0; x <= w; x++) {
       const ch = at(x, y);
-      const stands = x < w && (SOLID.has(ch) || SEMI.has(ch)) && !SOLID.has(at(x, y - 1));
-      if (stands) { if (from < 0) from = x; continue; }
+      const walkable = x < w && (stands(ch) || SEMI.has(ch)) && !SOLID.has(at(x, y - 1));
+      if (walkable) { if (from < 0) from = x; continue; }
       if (from >= 0) out.push({ y, x0: from, x1: x - 1, i: out.length });
       from = -1;
     }
@@ -836,7 +852,7 @@ const WIDEST_BODY_TILES = 2;
  * *mahtuuko siitä* — eikä esitä sitä kysymystä paikoista joissa ei ole reikää.
  */
 function checkClimbWidth(rows, w, problems) {
-  const footing = (x, y) => SOLID.has(rows[y][x]) || SEMI.has(rows[y][x]);
+  const footing = (x, y) => stands(rows[y][x]) || SEMI.has(rows[y][x]);
   for (let y = 0; y < rows.length; y++) {
     let any = false;
     let widest = 0;

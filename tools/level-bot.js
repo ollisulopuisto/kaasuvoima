@@ -77,7 +77,7 @@
  * kymmenen ruutua leveä ja lankullinen, eli täsmälleen sama muoto.
  */
 import { JUMP_BUDGET } from '../src/data/pacing.js';
-import { info, isSemi } from '../src/gfx/tiles.js';
+import { info, isSemi, slopeDir } from '../src/gfx/tiles.js';
 
 export const blankInput = () => ({
   left: false, right: false, up: false, down: false, jump: false, run: false,
@@ -146,7 +146,11 @@ export function plankBridges(scene, isSolid) {
     let plank = false;
     for (let y = 0; y < scene.h; y++) {
       const ch = scene.tileAt(x, y);
-      const solid = isSolid(ch);
+      /* Rinne on maata: sen päällä kävellään, ja sarake jossa on rinne ei ole
+       * kuilu. Ilman tätä botti luki `kumpare`en reiäksi ja hyppäsi päin
+       * mäkeä kunnes kello loppui (mitattu: 1-1 jäi 28 %:iin sarakkeeseen
+       * 103, eli rinteen ensimmäiseen laattaan). */
+      const solid = isSolid(ch) || !!slopeDir(ch);
       if (!solid && !isSemi(ch)) continue;
       if (isSolid(scene.tileAt(x, y - 1))) continue;
       if (solid) ground = true;
@@ -245,13 +249,17 @@ export function runGround(scene, isSolid, frames, finished) {
     const footY = Math.floor((p.y + p.h) / 16);
     const aheadX = Math.floor((p.x + p.w + 6) / 16);
     const solid = (tx, ty) => isSolid(scene.tileAt(tx, ty));
+    /* Maa jonka päällä voi seistä: kiinteä laatta **tai rinne**. Erillään
+     * `solid`ista, koska seinäksi rinne ei kelpaa — sitä pitkin kävellään
+     * ylös eikä siihen törmätä. */
+    const walkable = (tx, ty) => solid(tx, ty) || !!slopeDir(scene.tileAt(tx, ty));
     const lethal = (tx, ty) => '^W'.includes(scene.tileAt(tx, ty));
     /* Jalansija on kiinteä ruutu **tai lankku**. Lankku on puolikiinteä: sen
      * päälle laskeudutaan ja alta mennään läpi, eli se on jalansija täsmälleen
      * siinä suunnassa jossa botti sitä tarvitsee. */
     const stand = (tx, ty) => {
       const ch = scene.tileAt(tx, ty);
-      return isSolid(ch) || isSemi(ch);
+      return isSolid(ch) || isSemi(ch) || !!slopeDir(ch);
     };
     /**
      * Mille riville jalka laskeutuisi sarakkeessa `tx`, jos siitä käveltäisiin
@@ -276,7 +284,7 @@ export function runGround(scene, isSolid, frames, finished) {
       for (let ty = footY; ty <= footY + JUMP_BUDGET.wallTiles; ty++) {
         const t = info(scene.tileAt(tx, ty));
         if (t.hazard || t.quicksand) return null;
-        if (t.solid || t.semi) return ty;
+        if (t.solid || t.semi || t.slope) return ty;
       }
       return null;
     };
@@ -309,7 +317,7 @@ export function runGround(scene, isSolid, frames, finished) {
     for (let d = 0; d <= 5 && obstacle < 0; d++) {
       const tx = aheadX + d;
       if (lethal(tx, walkY) || lethal(tx, walkY - 1)) obstacle = d;
-      else if (!solid(tx, walkY) && !solid(tx + 1, walkY)) obstacle = d;
+      else if (!walkable(tx, walkY) && !walkable(tx + 1, walkY)) obstacle = d;
     }
     /* Two tiles of run-up is where a running jump clears the most.
      *
@@ -375,8 +383,8 @@ export function runGround(scene, isSolid, frames, finished) {
     // Spend an air jump when falling with nothing solid below: that is what
     // the mushroom is for, and a bot that never uses it measures the wrong
     // thing.
-    const groundBelow = solid(Math.floor(p.cx / 16), footY + 1)
-      || solid(Math.floor(p.cx / 16), footY + 2);
+    const groundBelow = walkable(Math.floor(p.cx / 16), footY + 1)
+      || walkable(Math.floor(p.cx / 16), footY + 2);
     const airSave = !p.onGround && p.vy > 1.5 && !groundBelow
       && p.airJumps < p.airJumpsMax;
     /* Suljettu silmukka astinkiveä kohti: pidetään kunnes jalat ovat sen

@@ -73,6 +73,11 @@ export const WORLD1_LEVELS = {
     theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
       'start', 'flat', 'power', 'walker', 'qrow', 'coins',
+      /* Ensimmäinen rinne on 1-1:ssä ja se on `kumpare`: maa jota pitkin
+       * kuljetaan, ei este eikä palkinto. Uusi maastonmuoto opetetaan siellä
+       * missä siihen ei voi kuolla — sama paikka ja sama peruste kuin
+       * ensimmäisellä putkella. */
+      'kumpare',
       'walker', 'pipe_short', 'flat', 'power', 'pit_s', 'plat_hi',
       'walkers', 'pipe_tall', 'coin_stack', 'pit_plat', 'shell', 'steps_up',
       'pipe_short', 'run_up', 'goal', 'goal_end',
@@ -170,11 +175,29 @@ export const WORLD1_LEVELS = {
     theme: 'grass', bg: 'peaks', music: 'level',
     chunks: [
       'start_high', 'plat_hi', 'power', 'sky_run', 'pipe_short', 'plat_float',
-      'pit_plat', 'plat_steps', 'walkers', 'corks', 'bricks', 'pit_l',
+      /*
+       * KAKSI RINNETTÄ, JA MOLEMMAT VAIHTOINA EIVÄT LISÄYKSINÄ.
+       *
+       * `pit_l` (pitkä kuilu) → `rinnehyppy`: sama kysymys, mutta lähestyminen
+       * on ylämäki eikä tasamaa — vauhdilla yli, kävellen ojaan ja ylös.
+       * `steps_up` (porrasnousu) → `ylareitti`: sama nousu, mutta huipulta
+       * pääsee vauhdilla hyllylle jonka päällä on palkinto. IDEAS.md kohta 1:
+       * nopeampi reitti on ylempi reitti.
+       *
+       * Vaihto eikä lisäys, ja se on mitattu syy: maailman 1 käyrä on portti
+       * (`jokainen kävely nousee, hengähtää`), ja kaksi palikkaa lisää nosti
+       * 1-3:n 100:sta 123:een — jolloin käyrään tuli kaksi peräkkäistä notkoa
+       * ja portti punastui. Sama sääntö kuin `coin_thief`illa alempana.
+       *
+       * Eikä 1-2:een, sekin mitattuna: 1-2 on se kenttä jonka sarakkeisiin
+       * portit osoittavat nimeltä (kaistaputki 250,39, warppi, luolahuone),
+       * ja yksi palikka lisää siirtäisi ne kaikki.
+       */
+      'pit_plat', 'plat_steps', 'walkers', 'corks', 'bricks', 'rinnehyppy',
       /* Kolikkovaras `coin_stack`in tilalle: sama kolikkopalkinto, mutta nyt
        * joku muukin on sitä hakemassa. Vaihto eikä lisäys, koska maailman 1
        * pituus on mitattu ja sen kello on siihen sovitettu. */
-      'star_block', 'pipe_pair', 'shell', 'coin_thief', 'spikes', 'steps_up', 'ledge',
+      'star_block', 'pipe_pair', 'shell', 'coin_thief', 'spikes', 'ylareitti', 'ledge',
       'power', 'run_up', 'goal', 'goal_end',
     ],
   },

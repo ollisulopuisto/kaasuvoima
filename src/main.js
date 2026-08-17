@@ -983,6 +983,11 @@ class Game {
     // Effects go over the game but under the developer overlay: a CRT filter
     // on top of debug text would make the one thing you are reading unreadable.
     PostFX.apply(ctx);
+    /* Ilmestyvät lukemat efektien jälkeen: kertojan kerros ei ole ikkuna
+     * maailmaan (DESIGN.md 8), eikä kuumuus siis väreile pistelukeman läpi.
+     * Ennen sen takasi 32 px korkea HUD-nauha jonka efektit jättivät rauhaan;
+     * nauhaa ei enää ole, joten sen takaa piirtojärjestys. */
+    if (this.scene && this.scene.drawOverlay) this.scene.drawOverlay(ctx);
     if (this.debug) this.drawDebug(ctx);
     PostFX.present();
   }

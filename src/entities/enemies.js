@@ -20,6 +20,9 @@ import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx, bossSay, killSound } from '../core/audio.js';
 import { approach, hashNoise } from '../core/utils.js';
 import { Item } from './items.js';
+/* Arvoluokat, ei lukuja: mitä yksi vihollinen maksaa on pistetaulukon asia,
+ * ei tämän tiedoston. Ks. `points.js`. */
+import { PTS, POP_BONUS, bossPoints } from '../core/points.js';
 
 /**
  * Kuinka kovaa tuuli saa kantaa. Sama luku kuin pelaajan kävelykatto
@@ -45,8 +48,21 @@ const BUBBLE_WARN = 72;
 const BUBBLE_CLIMB = 48;
 /** What breaking out is worth to an enemy. Fast, but still slower than a walk. */
 export const ANGRY_SPEED = 1.6;
-/** And what popping one is worth to the player, or the trap is a nerf. */
-const POP_BONUS = 2;
+
+/*
+ * KUMOSSA OLON KESTO. Ks. `knockOver`.
+ *
+ * 210 framea eli kolme ja puoli sekuntia: pidempi kuin yksi ohijuoksu (noin
+ * kaksi sekuntia täyttä vauhtia) ja lyhyempi kuin kuplan neljä, koska kumossa
+ * oleva vihollinen jää siihen mihin se kaatui — se ei ole poissa tieltä kuten
+ * kuplaan noussut, joten sen ei tarvitse kestää yhtä kauan ollakseen yhtä
+ * hyödyllinen. `FLIP_WARN` on se viimeinen sekunti jolloin se heiluu ja
+ * nouseminen näkyy tulevan.
+ */
+export const FLIP_FRAMES = 210;
+/** Korkealta tullut isku pitää kumossa pidempään: korkeus maksaa aikaa. */
+export const FLIP_LONG = 420;
+const FLIP_WARN = 60;
 
 /**
  * The light an enemy is giving off this frame, in the shared-object idiom the
@@ -69,9 +85,13 @@ export class Enemy extends Entity {
     this.kind = 'enemy';
     this.stompable = true;
     this.dying = false;
-    this.score = 100;
+    this.score = PTS.minor;
     this.facing = -1;
     this.bubbleTimer = 0;
+    /* Kumossa: frameja jäljellä ennen kuin tämä kääntyy takaisin jaloilleen.
+     * Ks. `knockOver`. Tavallinen kenttä konstruktorissa, samasta syystä kuin
+     * `bubbleTimer`: `savestate.js` kantaa sen mukanaan ilman omaa riviä. */
+    this.flipTimer = 0;
     this.angry = false;
     /* Frameja jäljellä siitä hetkestä jona pelaaja astui tämän kuplan päälle.
      * Tavallinen luku ja konstruktorissa, samasta syystä kuin `sunk` ja
@@ -332,6 +352,90 @@ export class Enemy extends Entity {
   /** True once the bubble has started warning that it is about to go. */
   get bursting() { return this.bubbleTimer > 0 && this.bubbleTimer < BUBBLE_WARN; }
 
+  /*
+   * KUMOON, EI KUPLAAN — maahanisku kaataa (17.8.2026).
+   *
+   * Isku vangitsi tähän asti kuplaan, ja kupla oli silloin kahden eri verbin
+   * palkinto: kaasupallon *ja* maahaniskun. Kaksi liikettä joilla on sama
+   * lopputulos on yksi liike liikaa, ja kuplan omistaja on pallo — se on
+   * pallon koko idea (`trap`).
+   *
+   * Iskun oma vastaus on **kumoon kaatuminen**: vihollinen kellahtaa
+   * selälleen, sätkii jaloillaan ilmassa ja kääntyy hetken päästä takaisin.
+   * Se on eri asia kuin kupla kolmella tavalla, ja jokainen niistä on syy:
+   *
+   *   - **Se ei nosta ketään ilmaan.** Kupla vie vihollisen sinne minne
+   *     pelaaja ei ole; kumossa oleva jää siihen mihin se kaatui, eli sen ohi
+   *     voi juosta tai sen päälle voi hypätä. Tilanne aukeaa siinä missä
+   *     seisottiinkin.
+   *   - **Se on aikaikkuna eikä varasto.** Kupla kestää neljä sekuntia ja
+   *     palauttaa vihollisen vihaisena; kumossa olo kestää `FLIP_FRAMES` ja
+   *     palauttaa sen ennallaan. Isku ostaa hetken, ei tavaraa.
+   *   - **Se kääntää piikit.** Piikikäs vihollinen on vaarallinen *päältä*.
+   *     Kumossa se on ylösalaisin, eli piikit osoittavat maahan ja se on
+   *     ensimmäistä kertaa tallattavissa. Tämä on koko syy siihen miksi isku
+   *     saa nyt koskea piikikkäisiin (ks. `poundImpact`): shokkiaalto kulkee
+   *     maata pitkin eikä välitä siitä mitä vihollisella on päässään.
+   */
+  get flipped() { return this.flipTimer > 0; }
+
+  /** Kaatuuko tämä kumoon. Sama joukko kuin kuplaan mahtuvat: ne ovat ne
+   * lajit joiden oma päivitys osaa jäädä sivuun (`held`). Pomo, jättiläinen
+   * ja kasvi eivät kaadu, ja ne saavat saman kohtelun kuin ennenkin. */
+  get flippable() { return this.bubbleable; }
+
+  /** Onko yläpuoli juuri nyt vaarallinen. Kumossa ei ole. */
+  get dangerousTop() { return this.spiky && !this.flipped; }
+
+  /** Viimeinen sekunti kumossa: se heiluu, eli nouseminen ei tule yllätyksenä. */
+  get righting() { return this.flipTimer > 0 && this.flipTimer < FLIP_WARN; }
+
+  /**
+   * Kaataa kumoon. Palauttaa `false` jos laji ei kaadu — kutsuja päättää
+   * silloin mitä tekee, koska "ei kaadu" tarkoittaa eri asiaa pomolle ja
+   * kuplassa kelluvalle.
+   */
+  knockOver(dir = 1, frames = FLIP_FRAMES) {
+    if (this.dying || this.bubbled || !this.flippable) return false;
+    this.flipTimer = Math.max(this.flipTimer, frames);
+    this.vx = 0.6 * dir;
+    this.vy = -1.6;
+    this.onGround = false;
+    this.level.spawnPuff(this.cx, this.y + this.h);
+    Sfx.play('squeak');
+    return true;
+  }
+
+  /** Kumossa: painovoima ja sätkiminen, ei omaa tahtoa. */
+  updateFlipped() {
+    if (--this.flipTimer <= 0) {
+      this.flipTimer = 0;
+      /* Nousee siihen suuntaan johon se oli menossa. Ei vihaisena eikä
+       * nopeampana: isku osti hetken, eikä hetkestä saa rangaista. */
+      this.vx = 0;
+      return;
+    }
+    this.vx *= 0.86;
+    applyGravity(this, 1);
+    moveX(this, this.level);
+    moveY(this, this.level);
+  }
+
+  /**
+   * Onko tämä framella jonkun muun kuin oman tahtonsa vallassa.
+   *
+   * Yksi portti kahdelle tilalle, jotta kolmas ei vaadi kahtatoista uutta
+   * riviä lajien päivityksiin: jokainen laji kysyy tämän yhden kysymyksen
+   * heti kuoleman tarkistuksen jälkeen. Kuura ja kolikkovaras eivät ennen
+   * kysyneet kuplaa lainkaan — ne kävelivät kuplan sisällä — ja se korjautui
+   * tässä samalla.
+   */
+  held() {
+    if (this.bubbled) { this.updateBubbled(); return true; }
+    if (this.flipped) { this.updateFlipped(); return true; }
+    return false;
+  }
+
   get box() {
     if (!this.bubbled) return { x: this.x, y: this.y, w: this.w, h: this.h };
     const r = bubbleRadius(this.w, this.h);
@@ -420,7 +524,7 @@ export class Enemy extends Entity {
   }
 
   /** True while the enemy is on screen but can no longer hurt anyone. */
-  get harmless() { return this.bubbled; }
+  get harmless() { return this.bubbled || this.flipped; }
 
   /** An escapee blinks, so a fast one is never mistaken for a fresh one. */
   get tint() { return this.angry && Math.floor(this.tick / 4) % 2 ? TINTS.flash : null; }
@@ -433,6 +537,28 @@ export class Enemy extends Entity {
     if (this.bubbled) {
       drawBubble(ctx, this.cx, this.cy, bubbleRadius(this.w, this.h), this.tick, this.bursting,
         (g) => paint(recolored(g, this.tint)));
+      return;
+    }
+    /*
+     * Kumossa: sama sprite ylösalaisin, ja se on tarkoituksella *sama* eikä
+     * uusi kuva. Ylösalaisin käännetty siluetti lukee kaatuneeksi ilman että
+     * kenenkään pitää tunnistaa uutta hahmoa, ja kävelyruudut jotka pyörivät
+     * omaa tahtiaan lukevat sätkiviksi jaloiksi — jalat ovat nyt ylhäällä, eli
+     * sama animaatio tarkoittaa eri asiaa ilman että siitä on piirretty
+     * riviäkään uutta.
+     *
+     * Kallistus on pieni ja sinimuotoinen: kaatunut keinuu selällään. Viimeisen
+     * sekunnin heilunta (`righting`) on nopeampi, ja se on varoitus.
+     */
+    if (this.flipped) {
+      const rock = Math.sin(this.tick / (this.righting ? 4 : 14)) * (this.righting ? 0.22 : 0.1);
+      ctx.save();
+      ctx.translate(this.cx, this.cy);
+      ctx.rotate(rock);
+      ctx.scale(1, -1);
+      ctx.translate(-this.cx, -this.cy);
+      paint(recolored(ctx, this.tint));
+      ctx.restore();
       return;
     }
     paint(recolored(ctx, this.tint));
@@ -498,13 +624,13 @@ export class Walker extends Enemy {
    * Twelve frames: long enough for the bounce (-4.0 px/frame) to carry the
    * player clear of a 16 px body, short enough that nobody waits for it.
    */
-  get harmless() { return this.bubbled || this.squash > 0 || this.spawnGrace > 0; }
+  get harmless() { return super.harmless || this.squash > 0 || this.spawnGrace > 0; }
 
   update() {
     this.tick++;
     if (this.spawnGrace > 0) this.spawnGrace--;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.squash > 0) {
       if (--this.squash === 0) this.remove = true;
       return;
@@ -548,7 +674,7 @@ export class ShellGuy extends Enemy {
     this.speed = 0.5;
     this.reviveTimer = 0;
     this.kickGrace = 0;
-    this.score = 100;
+    this.score = PTS.minor;
   }
 
   get bubbleable() { return true; }
@@ -646,6 +772,8 @@ export class ShellGuy extends Enemy {
 
   kick(dir) {
     this.mode = 'sliding';
+    /* Mistä tämä liuku alkoi, ks. `runaway`. */
+    this.slideFrom = this.x;
     this.vx = SHELL_SPEED * dir;
     this.facing = dir;
     this.reviveTimer = 0;
@@ -669,13 +797,32 @@ export class ShellGuy extends Enemy {
   }
 
   /** A shell you have just kicked cannot hurt you on its way out of your box. */
-  get harmless() { return this.bubbled || this.kickGrace > 0; }
+  get harmless() { return super.harmless || this.kickGrace > 0; }
+
+  /**
+   * Onko liukuva kuori karannut. **Kaksi ehtoa, ei yhtä.**
+   *
+   * Matkaa potkupaikasta yli ruudun verran *ja* ikkunan ulkopuolella. Pelkkä
+   * kameraehto tappaisi kuoren joka ei ole vielä ehtinyt minnekään — ruudun
+   * ulkopuolella oleva kuori on tavallinen tilanne heti kun kamera on jäljessä
+   * — ja pelkkä matkaehto tappaisi kuoren jota pelaaja juoksee perässä ja
+   * katsoo. Yhdessä ne sanovat sen mitä on tarkoituskin: kuori kaataa sen mitä
+   * pelaaja näkee kaatuvan, ja loppuu siihen missä katse loppuu.
+   */
+  get runaway() {
+    const cam = this.level.cam;
+    const w = this.level.viewW;
+    if (this.slideFrom === null || this.slideFrom === undefined) return false;
+    if (Math.abs(this.x - this.slideFrom) <= w) return false;
+    if (this.x > cam.x + w) return true;
+    return this.x + this.w < cam.x;
+  }
 
   update() {
     this.tick++;
     if (this.kickGrace > 0) this.kickGrace--;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.sink()) return;
 
     if (this.mode === 'walk') {
@@ -686,6 +833,27 @@ export class ShellGuy extends Enemy {
         this.facing *= -1;
       }
     } else if (this.mode === 'sliding') {
+      /*
+       * KUORI EI MATKUSTA RUUTUA PIDEMMÄLLE (17.8.2026).
+       *
+       * Omistajan raportti: *"liikkeelle potkaistu kilpi voi matkustaa vaikka
+       * miten pitkälle ulos ruudusta ja tappaa siellä viholliset… koko kenttä
+       * tyhjenee ennen kuin olen päässyt hahmolla sinne."* Kuori on `active`
+       * ruudun ulkopuolellakin — se on tarkoitus, koska juuri kuljettu rivi
+       * pitää saada kaadettua — mutta ilman kattoa se on kaukolaukaisin joka
+       * kaataa kentän ennen pelaajaa. Potkun palkinto on se mitä *näkee*
+       * kaatuvan.
+       *
+       * Raja on yksi kokonainen ruutu ikkunan ulkopuolella. Se on pituus jonka
+       * pelaaja voi vielä nähdä seurauksena (kaatuvat viholliset ehtivät kuvaan
+       * kun kamera liikkuu perässä), ja samalla se on täsmälleen yksi ruutu eikä
+       * arvattu pikselimäärä: sama luku kuin ikkunan leveys.
+       */
+      if (this.runaway) {
+        this.level.spawnPuff(this.cx, this.cy);
+        this.remove = true;
+        return;
+      }
       // A shell that hits something goes through it or comes back off it, and
       // which one depends on what it hit. Bricks are the soft thing in this
       // game; everything else is masonry.
@@ -749,7 +917,7 @@ export class Flyer extends Enemy {
     super(level, x, y, 16, 16);
     this.speed = 0.5;
     this.hop = -3.4;
-    this.score = 200;
+    this.score = PTS.common;
   }
 
   get bubbleable() { return true; }
@@ -774,7 +942,7 @@ export class Flyer extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.sink()) return;
     this.steer(this.speed * this.facing);
     if (this.moveSideways()) this.facing *= -1;
@@ -822,7 +990,7 @@ export class SpikeGuy extends Enemy {
     // Slower than a walker. It is already the harder one to deal with; making
     // it fast as well would just make it a thing that catches you from behind.
     this.speed = 0.4;
-    this.score = 200;
+    this.score = PTS.common;
   }
 
   get spiky() { return true; }
@@ -839,7 +1007,7 @@ export class SpikeGuy extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.sink()) return;
     this.steer(this.speed * this.facing);
     if (this.moveSideways()) this.facing *= -1;
@@ -876,7 +1044,7 @@ export class Plant extends Enemy {
     super(level, x, pipeTopY, 16, 32);
     this.pipeTopY = pipeTopY;
     this.stompable = false;
-    this.score = 200;
+    this.score = PTS.common;
     this.phase = 'hidden';
     this.timer = 40;
     this.offset = 32;
@@ -893,7 +1061,7 @@ export class Plant extends Enemy {
 
   // Down the pipe means out of play. Its box collapses to zero height, but a
   // zero-height box still straddles the player's, so this has to be explicit.
-  get harmless() { return !this.exposed; }
+  get harmless() { return super.harmless || !this.exposed; }
 
   update() {
     this.tick++;
@@ -1046,7 +1214,7 @@ export class Kurnuttaja extends Enemy {
      * so "hidden" is a fact about the picture and not a flag. */
     this.restY = lipY + 32;
     this.stompable = false;
-    this.score = 400;
+    this.score = PTS.tough;
     this.phase = 'wait';
     this.timer = KURN_WAIT;
   }
@@ -1086,7 +1254,7 @@ export class Kurnuttaja extends Enemy {
   /** True once enough of it is over the rim to be worth being afraid of. */
   get exposed() { return this.y <= this.lipY - KURN_RIM; }
 
-  get harmless() { return !this.exposed; }
+  get harmless() { return super.harmless || !this.exposed; }
 
   update() {
     this.tick++;
@@ -1147,7 +1315,7 @@ export class Kurnuttaja extends Enemy {
 export class StinkCloud extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 20, 14);
-    this.score = 200;
+    this.score = PTS.common;
     this.homeY = y;
     this.phase = Math.random() * Math.PI * 2;
     this.speed = 0.35;
@@ -1169,7 +1337,7 @@ export class StinkCloud extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
 
     const player = this.level.player;
     if (player) {
@@ -1283,7 +1451,7 @@ export class AngrySun extends Enemy {
     /** Where the level put it; the resting height is this, clamped into view. */
     this.homeY = y;
     this.hp = 3;
-    this.score = 1000;
+    this.score = PTS.prize;
     this.stompable = false;
     this.side = -1;
     this.phase = 'hover';
@@ -1491,7 +1659,7 @@ export class AngrySun extends Enemy {
 export class CorkGuy extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 14, 16);
-    this.score = 200;
+    this.score = PTS.common;
     this.corks = true;
     this.speed = 0.7;
     this.hopTimer = 40;
@@ -1506,7 +1674,7 @@ export class CorkGuy extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.sink()) return;
     this.vx = this.speed * this.facing;
     if (moveX(this, this.level)) this.facing *= -1;
@@ -1870,7 +2038,7 @@ export class Boss extends Enemy {
     this.hp0 = this.hp;
     /** Onko tulohuuto huudettu. Ks. `update`: se lähtee heräämisestä. */
     this.greeted = false;
-    this.score = 5000 + variant * 1000;
+    this.score = bossPoints(variant);
     this.invuln = 0;
     this.jumpTimer = 90;
     this.speed = 0.75 + this.form * 0.15;
@@ -2581,7 +2749,7 @@ export class BeanBaron extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 18, 26);
     this.speed = 0.45;
-    this.score = 2000;
+    this.score = PTS.major;
     this.hp = 2;
     this.invuln = 0;
     this.throwTimer = BARON_THROW;
@@ -2739,7 +2907,7 @@ export class Moon extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
-    this.score = 1000;
+    this.score = PTS.prize;
     this.used = false;
     this.alwaysActive = true;
     this.active = true;
@@ -2921,7 +3089,7 @@ export class Torahdys extends Enemy {
     this.facing = dir;
     this.vx = TORAHDYS_SPEED * dir;
     this.life = TORAHDYS_LIFE;
-    this.score = 200;
+    this.score = PTS.common;
     /* Ammuttu on ammuttu: se ei odota kameraa herätäkseen. Ilman tätä torven
      * laukaus ruudun reunalla jäisi leijumaan paikalleen siihen asti kunnes
      * pelaaja tulee katsomaan, ja saapuisi silloin päin naamaa. */
@@ -2988,7 +3156,7 @@ export class Torahdys extends Enemy {
 export class Torvi extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
-    this.score = 500;
+    this.score = PTS.rare;
     this.timer = TORVI_PERIOD;
     this.charge = 0;
     /* Osa kentän tilaa eikä kameran lähellä olevaa maisemaa: torvi on rakenne,
@@ -3132,7 +3300,7 @@ export class Paarma extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 16, 12);
     this.speed = PAARMA_SPEED;
-    this.score = 200;
+    this.score = PTS.common;
     this.homeX = x;
     this.homeY = y;
     this.warn = 0;
@@ -3154,7 +3322,7 @@ export class Paarma extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.cool > 0) this.cool--;
 
     if (this.warn > 0) {
@@ -3252,7 +3420,7 @@ export class Karvapallo extends Enemy {
     this.speed = KARVA_SPEED;
     this.roll = KARVA_SPEED;
     this.life = KARVA_LIFE;
-    this.score = 100;
+    this.score = PTS.minor;
     this.spin = 0;
     this.active = true;
   }
@@ -3323,7 +3491,7 @@ export class Yokki extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.speed = 0.3;
-    this.score = 200;
+    this.score = PTS.common;
     this.timer = YOKKI_PERIOD;
     this.warn = 0;
   }
@@ -3346,7 +3514,7 @@ export class Yokki extends Enemy {
   update() {
     this.tick++;
     if (this.dying) return this.updateDying();
-    if (this.bubbled) return this.updateBubbled();
+    if (this.held()) return;
     if (this.sink()) return;
 
     if (this.warn > 0) {
@@ -3451,7 +3619,7 @@ export class Paukkupoho extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.speed = 0.4;
-    this.score = 400;
+    this.score = PTS.tough;
     this.fuse = 0;
   }
 
@@ -3605,7 +3773,7 @@ export class Pyorre extends Enemy {
     this.ax = x + 8;
     this.ay = y + 8;
     this.angle = 0;
-    this.score = 200;
+    this.score = PTS.common;
     this.noclip = true;
     this.alwaysActive = true;
     this.active = true;
@@ -3665,7 +3833,7 @@ const GHOST_SPEED = 0.55;
 export class Kummitus extends Enemy {
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
-    this.score = 200;
+    this.score = PTS.common;
     this.noclip = true;
     this.shy = 0;
     this.bob = 0;
@@ -3744,7 +3912,7 @@ export class Kuura extends Enemy {
     super(level, x, y, 16, 16);
     this.speed = KUURA_SPEED;
     this.facing = -1;
-    this.score = 200;
+    this.score = PTS.common;
   }
 
   get bubbleable() { return true; }
@@ -3800,7 +3968,7 @@ export class Kolikkovaras extends Enemy {
     super(level, x, y, 14, 14);
     this.speed = THIEF_SPEED;
     this.facing = 1;
-    this.score = 400;
+    this.score = PTS.tough;
     this.loot = 0;
     this.hunt = 0;
   }

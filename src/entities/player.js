@@ -12,8 +12,12 @@ import {
  * would go stale the first time either is tuned. */
 import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
+/* Vauhtimittarin suihku, ks. `ventPlume`. Sama pilvi kuin muuallakin. */
+import { Puff } from './effects.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
+/* Poimitun esineen hinta on pistetaulukon asia, ks. `points.js`. */
+import { PTS } from '../core/points.js';
 import { surfaceUnder, TILE } from '../gfx/tiles.js';
 
 /*
@@ -265,6 +269,79 @@ const P_FILL = P_METER_MAX / P_SEGMENTS / 8;
 const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
 
 /*
+ * PAINE NÄKYY KEHOSSA. Vauhtimittari on tähän asti ollut pelkkä nauhan palkki,
+ * eli lukema jonka lukeminen vaatii katseen pois kentästä juuri siinä hetkessä
+ * jossa katse on tarpeen kentässä. Tämä on sen sama lukema maailman puolella:
+ * mitä täydempi mittari, sitä tiheämpi ja isompi kaasusuihku kantapäiden
+ * takana.
+ *
+ * Miksi juuri tämä pelinsisäinen kuva eikä jokin muu: pelin voima **on**
+ * kaasua. Suihku ei ole kuvake joka pitää opetella vaan sama asia jonka
+ * pelaaja on jo nähnyt pieruhypyssä ja maahaniskussa — mittari ei siis saa
+ * uutta kieltä vaan lakkaa olemasta oma kielensä.
+ *
+ * Kolme rajaa, ja jokainen on päätös:
+ *
+ *   - **Kävely ei savua.** Suihku alkaa vasta `PLUME_START`ista eli reilusti
+ *     yli kolmanneksen mittarista. Alempaa se olisi taustakohinaa, ja mittari
+ *     joka näyttää samalta aina ei näytä mitään.
+ *   - **Vain maassa.** Ilmassa mittari on jäädytetty (ks. yllä), joten ilmassa
+ *     savuava keho valehtelisi kasvavasta paineesta. Lento ja pieruhyppy
+ *     tekevät omat pilvensä omista syistään.
+ *   - **Ummetus ei savua.** `corked` on tila jossa kaasu ei kulje, ja se on
+ *     ensimmäinen paikka jossa se pitää näkyä. Nauhan lähtölaskenta kertoo
+ *     kuinka kauan; keho kertoo *mistä* siinä on kyse.
+ */
+/*
+ * RINNE MUUTTAA VAUHTIA, EI KIIHTYVYYTTÄ.
+ *
+ * Omistajan tuomio 10.8.2026 (IDEAS.md kohta 1, koko listan vahvin): *"Slopes
+ * turn into speed is a VERY good idea, because Mario does sliding on slopes and
+ * this would be different."* Mariossa rinne on liikkeen laatu — luiskahdus,
+ * joka on itsessään palkinto. Tässä rinne on **muunnin**: vaakavauhti
+ * vaihdetaan korkeudeksi, ja korkeus on pääsy ylemmälle reitille.
+ *
+ * Kolme päätöstä, ja kaksi ensimmäistä ovat rajoja jotka olivat olemassa jo
+ * ennen rinteitä:
+ *
+ *   1. **`ACC` ei muutu.** Kiihtyvyys on tässä pelissä yksi vakio sekä
+ *      kävelylle että juoksulle (PHYSICS.md: B ei kiihdytä, se nostaa kattoa),
+ *      ja sama päätös tehtiin uudestaan jäälle. Rinne ei kosketa siihen: se
+ *      lisää **painovoiman komponentin pintaa pitkin**, mikä on eri asia ja
+ *      myös se mikä rinne fysiikassa oikeasti on.
+ *   2. **Katto on `MAX_P`.** Alamäki voi *lainata* pelin ylimmän nopeuden
+ *      (3,5) ilman täyttä mittaria, muttei ylittää sitä. Tämä on se kohta
+ *      jossa "ei täysi Sonic" on luku eikä mielipide.
+ *   3. **Alamäki maksaa enemmän kuin ylämäki vie** (0,14 vs 0,045), ja
+ *      ylämäen luvun on oltava **pienempi kuin `ACC`** (0,0547). Se ei ole
+ *      makuasia vaan ehto: yhtä suuri tai suurempi tarkoittaa että kävelijä
+ *      hidastuu rinteessä nollaan eikä pääse ylös lainkaan. Ensimmäinen
+ *      versio oli 0,06 ja portti löysi sen heti — botti jäi 1-1:n kumpareen
+ *      juureen 28 %:iin kentästä. Alamäki on tarkoituksella selvästi isompi:
+ *      symmetrinen rinne olisi vero, ja veroa ei kannata juosta alas.
+ *
+ * Lähtö rinteen huipulta on se varsinainen muunnin: `SLOPE_LAUNCH` kertaa
+ * vaakavauhti nousuksi, ja pohjassa pidetty hyppynappi saa saman kevyen
+ * painovoiman kuin hypyssä. Siksi lopputulos ei ole lineaarinen vaan
+ * portaittainen: juoksuvauhdilla se on hyppy, täydellä mittarilla se on reitti.
+ *
+ * `SLOPE_LAUNCH_MIN` on 1,8 eikä juoksukatto 2,5, ja se on **mitattu eikä
+ * valittu**: nousu maksaa vauhtia (`SLOPE_UP`), joten juoksukatolla rinteeseen
+ * tullut on huipulla 2,27 — juoksukattoon sidottu raja ei olisi lauennut
+ * kertaakaan ilman täyttä mittaria. 1,8 on kävelykaton (1,5) yläpuolella, eli
+ * kävelijää rinne ei heitä minnekään ja se on tarkoitus.
+ */
+const SLOPE_DOWN = 0.14;
+const SLOPE_UP = 0.045;
+const SLOPE_LAUNCH = 0.85;
+const SLOPE_LAUNCH_MIN = MAX_WALK + 0.3;
+
+const PLUME_START = 0.38;
+/** Framen väli suihkun purskeiden välissä, alarajalla ja täydellä mittarilla. */
+const PLUME_SLOW = 10;
+const PLUME_FAST = 2;
+
+/*
  * Supertähti. Long enough to be worth having — about twelve seconds, three or
  * four chunks at a run — and short enough that the level is not handed over.
  *
@@ -344,6 +421,9 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
+    /* Minkä suuntaisessa rinteessä keho on juuri nyt (1 nousee oikealle, -1
+     * vasemmalle, 0 ei rinnettä). `moveY` kirjoittaa, `slopePull` lukee. */
+    this.onSlope = 0;
     /* Ks. `update`: mittari framen alussa, ja vain vilkaisu lukee sitä. */
     this.pFullEntry = false;
     /* Onko täyden mittarin etu voimassa juuri nyt — ja tämä on kenttä eikä
@@ -485,7 +565,21 @@ export class Player extends Entity {
    */
   get breaker() { return this.type === 'pop' && !this.corked; }
   get shotsPerPress() { return this.power.level >= 5 ? 3 : this.power.level >= 3 ? 2 : 1; }
-  get maxLiveShots() { return 2 + this.power.level; }
+  /*
+   * KAKSI PALLOA ILMASSA, EI ENEMPÄÄ (17.8.2026).
+   *
+   * Katto oli `2 + power.level`, eli täydellä tasolla seitsemän — ja kolme per
+   * painallus. Se teki kukasta ruiskun: ruudulla oli pysyvästi pallomatto, ja
+   * kun kaikki kuolee ilman että mitään tarvitsee tähdätä, aseesta tulee
+   * painike jolla huone tyhjenee. Sama vika kuin karkaavassa kuoressa, eri
+   * kulmasta.
+   *
+   * Kaksi on luku jolla ase on yhä ase: yksi lentää, yksi on lähdössä. Taso ei
+   * enää osta *määrää* vaan `shotsPerPress`in eli sen millaisen kuvion yksi
+   * painallus tekee — ja se kuvio mahtuu nyt kattoon, eli korkeampi taso
+   * tarkoittaa hajontaa eikä ruiskua.
+   */
+  get maxLiveShots() { return 2; }
   get tailReach() { return 10 + this.power.level * 2; }
 
   applySize() {
@@ -755,6 +849,7 @@ export class Player extends Entity {
       this.pMeter = Math.max(0, this.pMeter - P_DRAIN);   // flight burns the gauge
     }
     // Otherwise the gauge is frozen: SMB3 leaves it alone while you are airborne.
+    this.ventPlume();
 
     /* -------------------------------- jump ---------------------------- */
     if (this.onGround) {
@@ -845,6 +940,10 @@ export class Player extends Entity {
     }
 
     /* -------------------------------- move ---------------------------- */
+    /* Rinteen veto **ennen** liikettä ja lähtö sen jälkeen: veto on osa tätä
+     * framea, lähtö on vastaus siihen mitä liike löysi. Ks. `SLOPE_DOWN`. */
+    this.slopePull();
+    const wasSlope = this.onSlope || 0;
     const chargeVx = this.vx;
     moveX(this, this.level);
     if (this.breaker && Math.abs(chargeVx) > 1.4 && this.vx === 0) this.smashThrough(chargeVx);
@@ -852,6 +951,7 @@ export class Player extends Entity {
       onHeadBump: (tx, ty) => this.level.bumpTile(tx, ty, this),
       dropThrough: down && !this.onGround,
     });
+    this.slopeLaunch(wasSlope);
 
     /*
      * Nielty kyky kuluu ajassa, ja **kylmä maksaa jäljen jokaisesta
@@ -1242,11 +1342,28 @@ export class Player extends Entity {
     return false;
   }
 
+  /**
+   * Laukaus. Katto on `maxLiveShots`, ja se **ei kieltäydy** vaan tekee tilaa:
+   * vanhin ruudulla oleva pallo katoaa.
+   *
+   * Kieltäytyminen oli se mitä tässä ennen tehtiin, ja se on huonompi kahdesta
+   * syystä. Nappi joka ei tee mitään lukee rikkinäiseksi ohjaukseksi — pelaaja
+   * ei näe kattoa, hän näkee että peli ei vastannut — ja katto on juuri se
+   * hetki jossa vastaamattomuus sattuu, koska silloin ruudulla on kiire.
+   * Vanhin pallo on myös se joka on jo tehnyt työnsä tai ohittanut kohteensa,
+   * eli se on halvin poistettava. Omistajan ehdotus 17.8.2026, alun perin
+   * vaikeimmalle tasolle; se on tässä kaikille, koska sääntö jonka pelaaja
+   * oppii yhdellä tasolla ei saa vaihtua toisella.
+   */
   shoot() {
-    const live = this.level.entities.filter((e) => e instanceof FartBall && !e.remove).length;
-    if (live >= this.maxLiveShots) return;
+    const live = this.level.entities.filter((e) => e instanceof FartBall && !e.remove);
+    const spread = Math.min(this.shotsPerPress, this.maxLiveShots);
+    const over = live.length + spread - this.maxLiveShots;
+    for (let i = 0; i < over && i < live.length; i++) {
+      live[i].remove = true;
+      this.level.spawnPuff(live[i].cx, live[i].cy);
+    }
     const x = this.facing > 0 ? this.x + this.w : this.x - 8;
-    const spread = this.shotsPerPress;
     for (let i = 0; i < spread; i++) {
       const ball = new FartBall(this.level, x, this.y + this.h * 0.45, this.facing);
       if (i === 1) ball.vy = -2.2;
@@ -1337,6 +1454,81 @@ export class Player extends Entity {
     return true;
   }
 
+  /**
+   * Painovoiman komponentti rinteen pintaa pitkin. Ks. `SLOPE_DOWN`.
+   *
+   * Vain liikkeessä: paikallaan seisova ei valu. Se on päätös eikä
+   * yksinkertaistus — valuva keho tarkoittaisi ettei rinteessä voi seistä, ja
+   * silloin rinne olisi este eikä reitti. Raja on 0,05 px/frame eli alle
+   * yhden pikselin sekunnissa: se on "ei liiku" kaikilla mittareilla.
+   */
+  slopePull() {
+    const dir = this.onSlope || 0;
+    if (!dir || !this.onGround || Math.abs(this.vx) < 0.05) return;
+    /* `dir` on nousun suunta, eli alamäki on sen vastakohta. */
+    const downhill = -dir;
+    const going = Math.sign(this.vx);
+    if (going === downhill) {
+      if (Math.abs(this.vx) < MAX_P) {
+        this.vx = Math.max(-MAX_P, Math.min(MAX_P, this.vx + SLOPE_DOWN * downhill));
+      }
+    } else {
+      /* Ylämäki syö vauhtia muttei koskaan käännä kulkusuuntaa: nollaan asti
+       * ja siihen se jää. Käännetty vauhti olisi rinne joka työntää takaisin,
+       * eikä sitä kukaan halua nousta. */
+      const left = Math.abs(this.vx) - SLOPE_UP;
+      this.vx = left > 0 ? left * going : 0;
+    }
+  }
+
+  /**
+   * Rinteen huipulta lähtö: vaakavauhti nousuksi. Ks. `SLOPE_LAUNCH`.
+   *
+   * Ehto on että keho **oli** rinteessä, ei ole enää, on menossa ylöspäin
+   * rinteen nousun suuntaan ja liikkuu vähintään juoksuvauhtia. Alaspäin
+   * kävelevä ei lennä — se olisi rinne joka sinkoaa väärään suuntaan — eikä
+   * kävelijää heitetä lainkaan.
+   */
+  slopeLaunch(wasSlope) {
+    if (!wasSlope || this.onSlope || this.vy < 0 || this.transit) return;
+    if (Math.sign(this.vx) !== Math.sign(wasSlope)) return;
+    const speed = Math.abs(this.vx);
+    if (speed < SLOPE_LAUNCH_MIN) return;
+    this.vy = -speed * SLOPE_LAUNCH;
+    this.onGround = false;
+    /* Sama kevyt painovoima kuin hypyssä niin kauan kuin nappi on pohjassa:
+     * rinne antaa lähdön, pelaaja päättää kuinka pitkälle sitä venyttää. Ilman
+     * tätä nousu olisi 12 px eikä 40, eli sama liike ilman sitä osaa joka
+     * tekee siitä reitin. */
+    this.jumpHeld = true;
+    this.level.spawnPuff(this.cx, this.y + this.h);
+    Sfx.play('jump');
+  }
+
+  /**
+   * Vauhtimittari maailman puolella: ks. `PLUME_START` yllä.
+   *
+   * Yksi pilvi kerrallaan eikä `spawnPuff`in neljä, koska tämä toistuu joka
+   * toinen frame täydellä mittarilla — neljä kerrallaan olisi sadan hiukkasen
+   * myrsky sekunnissa siinä missä tarkoitus on jälki. Purskeen väli kiihtyy
+   * `PLUME_SLOW`ista `PLUME_FAST`iin ja koko kasvaa kahdesta neljään, eli
+   * *tiheys ja koko* kertovat saman asian kahdella kanavalla samaan tapaan
+   * kuin aika-ajon jako (nuoli ja etumerkki).
+   */
+  ventPlume() {
+    if (!this.onGround || this.corked > 0 || this.dying) return;
+    const t = this.pMeter / P_METER_MAX;
+    if (t < PLUME_START) return;
+    const heat = (t - PLUME_START) / (1 - PLUME_START);
+    const every = Math.max(PLUME_FAST, Math.round(PLUME_SLOW - heat * (PLUME_SLOW - PLUME_FAST)));
+    if (this.tick % every !== 0) return;
+    /* Kantapäiden takaa, ei jalkojen alta: suihku on se mistä ollaan tultu. */
+    const back = this.cx - this.facing * (this.w / 2 + 1);
+    this.level.add(new Puff(this.level, back, this.y + this.h - 3, {
+      spread: 0.9, size: 2 + Math.round(heat * 2), life: 14 + Math.round(heat * 10),
+    }));
+  }
+
   collect(itemKind) {
     switch (itemKind) {
       case 'shroom':
@@ -1367,18 +1559,18 @@ export class Player extends Entity {
           this.corked = 0;
           Sfx.play('powerup');
         }
-        this.level.awardScore(1000, this.cx, this.y);
+        this.level.awardScore(PTS.prize, this.cx, this.y);
         break;
       }
       case 'soup': {
         // Hernekeitto: one more level of whatever you are, and it cures ummetus.
         if (this.power.level >= MAX_POWER_LEVEL) {
-          this.level.awardScore(5000, this.cx, this.y);
+          this.level.awardScore(PTS.jackpot, this.cx, this.y);
         } else {
           this.power = powerAfterItem(this.power, 'soup');
           this.applySize();
           this.frozen = 18;
-          this.level.awardScore(1000, this.cx, this.y);
+          this.level.awardScore(PTS.prize, this.cx, this.y);
         }
         this.corked = 0;
         Sfx.play('soup');
@@ -1389,7 +1581,7 @@ export class Player extends Entity {
         // second star that added twelve seconds to nine would make it a lie.
         this.star = STAR_FRAMES;
         Sfx.play('yeah');
-        this.level.awardScore(1000, this.cx, this.y);
+        this.level.awardScore(PTS.prize, this.cx, this.y);
         break;
       }
       default:

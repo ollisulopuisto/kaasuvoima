@@ -198,6 +198,40 @@ tavaramerkki on eri asia kuin tekijänoikeus, ja parodia suojaa nimeä
 epävarmemmin kuin sisältöä. Jos peli joskus julkaistaan laajemmin tai siitä
 otetaan rahaa, nimi on ensimmäinen asia joka kannattaa harkita uudelleen.
 
+### Pistetaulukko ja HUDin sarakkeet ovat ilmaisua (17.8.2026)
+
+Genrekonventio on "vihollisesta saa pisteitä" ja "ruudun laidassa on nauha joka
+kertoo tilanteen". Se on vapaata. **Se mitä nauhassa lukee, missä järjestyksessä
+ja millä asteikolla, ei ole konventio vaan valinta**, ja tähän asti kumpikin
+valinta oli lainattu ilman että sitä oli koskaan valittu:
+
+- Pisteet kertyivät sadan monikertoina — 100 · 200 · 400 · 1000 · 8000 — eli
+  esikuvan asteikolla. Nyt ne ovat kokonaislukujen neliöitä: 25 · 100 · 256 ·
+  400 · 625 · 1024 · 2500 · 4096, ja myös kertoimet ovat neliöitä, joten
+  ruudulle pomppaava luku on neliö kulki se minkä kertoimen läpi tahansa. Koko
+  taulukko on yhdessä tiedostossa ([src/core/points.js](src/core/points.js)),
+  ja `tools/verify.mjs` vaatii jokaiselta arvolta kokonaisen neliöjuuren sekä
+  sen ettei yhtään pistelukua kirjoiteta lähdekoodiin taulukon ulkopuolelle.
+- HUD-nauhassa oli sama tavara samassa järjestyksessä kuin esikuvassa:
+  varalokero vasemmassa reunassa, P-mittari sen vieressä, elämät ja kolikot
+  keskellä, pisteet oikeassa reunassa. Nyt sarakkeilla on työnjako — kierroksen
+  luvut vasemmalla (pisteet ja aika päällekkäin), omaisuus niiden oikealla,
+  kehon mittarit keskellä, paikka ja lähtölaskennat oikealla, varalokero
+  reunassa — ja **sama työnjako pätee kartan paneelissa**, joten varalokero on
+  molemmilla ruuduilla samassa kulmassa. Rajat ovat mitattuja ja portti lukee
+  ne pikseleistä pahimmalla mahdollisella tilalla.
+
+Kumpikaan muutos ei muuta sitä mitä pelaaja tekee. Ne muuttavat sen mitä peli
+näyttää olevansa, ja se on tämän dokumentin kohta 2 käytännössä.
+
+**Ja saman päivän iltana nauha purettiin kokonaan.** Kun järjestys oli kerran
+katsottu läpi, kysymys vaihtui: mikä näistä pitää olla näkyvissä silloinkin kun
+se ei kerro mitään? Ei mikään. Nyt jokainen lukema on joko maailmassa
+(kolikkoputkilo, aurinko kellona, kentän nimi taivaalla, paine kaasusuihkuna)
+tai ilmestyy nurkkaan kun sillä on asiaa. Kohta 8:n raja ei muuttunut — kertoja
+on yhä kertoja — mutta sen takuu vaihtui varatusta kaistasta piirtojärjestykseen:
+`main.js` piirtää ilmestyvät lukemat vasta `PostFX.apply`n jälkeen.
+
 ## 3. Kenttägenerointi: rytmi kyllä, layout ei
 
 Generoidut kentät rakentaa `tools/gen-levels.mjs` tilastoista, jotka

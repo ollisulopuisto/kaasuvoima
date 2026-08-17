@@ -1230,18 +1230,24 @@ export class WorldMapScene {
     ctx.restore();
   }
 
+  /**
+   * Yläpalkki vastaa yhteen kysymykseen: **missä ja millä säännöillä.**
+   *
+   * Pisteet olivat tässä oikeassa reunassa, eli kartan yläpalkki oli sama
+   * palkki kuin SMB3:n kartalla. Ne siirtyivät alapaneeliin muun kierroksen
+   * omaisuuden viereen (`drawPanel`), ja palkkiin jäi kaksi asiaa jotka
+   * kuuluvat yhteen: mihin maailmaan on tultu ja millä tilalla pelataan.
+   *
+   * Mitattu: pisin maailmannimi on `MAAILMA 8  VIIMEINEN LINNAKE` eli
+   * 28 merkkiä = 167 px kuudesta alkaen (6…173), ja pisin tilateksti
+   * `AIKA-AJO` on 47 px oikeaan reunaan tasattuna (267…314). Väliin jää 94 px.
+   */
   drawTitleBar(ctx) {
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, 0, 320, MAP_Y);
     drawText(ctx, `MAAILMA ${this.game.state.world + 1}  ${this.world.name}`, 6, 3, {
       color: '#8fe04a',
     });
-    drawText(ctx, padNum(this.game.state.score, 7), 314, 3, { color: '#ffffff', align: 'right' });
-    /* Tila näkyy siinä ruudussa jossa kenttä valitaan, koska sieltä siihen
-     * mennään. Paikka on mitattu eikä arvattu: pisin maailmannimi on
-     * `MAAILMA 8  VIIMEINEN LINNAKE` eli 28 merkkiä = 167 px kuudesta
-     * alkaen, ja pisteet vievät oikean reunan 273:sta. Kahdeksan merkkiä
-     * oikeaan reunustettuna 268:aan mahtuu väliin 48 pikselin marginaalilla. */
     /* Yksi paikka ja kaksi ehdokasta, joten järjestys on päätös: AIKA-AJO
      * voittaa. Se on tila johon mennään erikseen ja jonka säännöt yllättävät
      * kesken kierroksen; vaikeustaso on valittu tämän kierroksen alussa ja se
@@ -1249,10 +1255,29 @@ export class WorldMapScene {
      * joka tässä on aina ollut, eikä oletus ole uutinen. */
     const label = this.game.timeAttack ? MODE_NAME : difficultyLabel(this.game.mode);
     if (label) {
-      drawText(ctx, label, 268, 3, { color: SPLIT_COLORS.ahead, align: 'right' });
+      drawText(ctx, label, 314, 3, { color: SPLIT_COLORS.ahead, align: 'right' });
     }
   }
 
+  /**
+   * Alapaneeli vastaa toiseen kysymykseen: **mitä sinulla on ja minne olet
+   * menossa.**
+   *
+   * Sama työnjako kuin kentän HUD-nauhassa (`level.js`, `HUD_X`), ja se on
+   * tässä tarkoituksella: kierroksen omaisuus lukee molemmilla ruuduilla
+   * vasemmassa reunassa ja varalokero on molemmilla oikeassa reunassa, joten
+   * silmä löytää saman asian samasta kulmasta riippumatta siitä kummalla
+   * ruudulla ollaan. Ennen tätä lokero oli kartalla oikealla ja kentässä
+   * vasemmalla, ja kentän nimikilpi oli siinä missä nyt ovat pisteet.
+   *
+   *   vasen  8    pisteet (+10), elämät ja kolikot (+20), salaisuudet (+30).
+   *               Mitattu: `KV *9999` = 47 px (8…55), `KOLIKOT 99` alkaa
+   *               60:stä ja loppuu 118:aan, eli kilpeen jää kuusi pikseliä;
+   *               `EI SALAISUUKSIA` = 89 px (8…97) omalla rivillään.
+   *   keski  124  kentän nimikilpi (156 px: pisin nimi `VIIMEINEN LINNAKE`
+   *               on 17 merkkiä = 101 px, eli kilpeen jää varaa)
+   *   oikea  286  varalokero, kuten ennenkin
+   */
   drawPanel(ctx) {
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, PANEL_Y, 320, 240 - PANEL_Y);
@@ -1261,8 +1286,8 @@ export class WorldMapScene {
 
     // node plaque
     ctx.fillStyle = '#202038';
-    ctx.fillRect(8, PANEL_Y + 8, 190, 20);
-    drawText(ctx, this.node.name, 14, PANEL_Y + 14, { color: '#ffffff' });
+    ctx.fillRect(124, PANEL_Y + 8, 156, 20);
+    drawText(ctx, this.node.name, 130, PANEL_Y + 14, { color: '#ffffff' });
 
     // reserve box
     ctx.fillStyle = '#202038';
@@ -1274,8 +1299,9 @@ export class WorldMapScene {
     ctx.fillRect(309, PANEL_Y + 6, 1, 24);
     if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 290, PANEL_Y + 10, this.tick);
 
-    drawText(ctx, `KV *${this.game.state.lives}`, 208, PANEL_Y + 10, { color: '#ffffff' });
-    drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 208, PANEL_Y + 20, { color: '#ffd048' });
+    drawText(ctx, padNum(this.game.state.score, 7), 8, PANEL_Y + 10, { color: '#ffffff' });
+    drawText(ctx, `KV *${this.game.state.lives}`, 8, PANEL_Y + 20, { color: '#ffffff' });
+    drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 60, PANEL_Y + 20, { color: '#ffd048' });
     this.drawSecretCount(ctx);
 
     const branch = this.branchHere();
@@ -1320,7 +1346,7 @@ export class WorldMapScene {
     const done = tally.total > 0 && tally.found >= tally.total;
     drawText(ctx,
       tally.total === 0 ? 'EI SALAISUUKSIA' : `SALAISUUDET ${tally.found}/${tally.total}`,
-      208, PANEL_Y + 30,
+      8, PANEL_Y + 30,
       { color: tally.total === 0 ? '#5a5a76' : (done ? '#8fe04a' : '#ffd048') });
   }
 

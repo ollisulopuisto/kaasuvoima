@@ -136,7 +136,7 @@ function deadTree(g, x, baseY, h, color) {
 
 /* ------------------------------- the sky ------------------------------- */
 
-function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
+function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
   const grad = ctx.createLinearGradient(0, 0, 0, viewH);
   grad.addColorStop(0, th.sky[0]);
   grad.addColorStop(0.62, mix(th.sky[0], th.sky[1], 0.75));
@@ -159,9 +159,30 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick) {
     }
   }
 
-  // Sun or moon, barely parallaxed so it feels far away.
-  const cx = Math.round(((238 - camX * 0.03) % (viewW + 120) + viewW + 120) % (viewW + 120) - 60);
-  const cy = 34;
+  /*
+   * AURINKO ON KELLO.
+   *
+   * `clock` on kentän jäljellä oleva aika osuutena (1 alussa, 0 kun aika on
+   * loppu). Kun se annetaan, aurinko nousee vasemmalta idästä, käy korkeimmillaan
+   * puolivälissä ja **koskettaa horisonttia täsmälleen silloin kun aika loppuu**.
+   * Se on sama luku kuin `AIKA`-lukema, mutta maailman puolella: kellon voi
+   * lukea nostamatta katsetta kentästä.
+   *
+   * Parallaksi jää tästä pois eikä se ole tappio. Aurinko liikkui ennen kameran
+   * mukana 0,03:n kertoimella, eli hitusen — nyt se liikkuu ajan mukana, ja
+   * kaksi eri syytä liikkua samalle kappaleelle tekisi kummastakin lukukelvottoman.
+   *
+   * Ilman `clock`ia (kartta, esittely, mikä tahansa muu piirtäjä) vanha
+   * parallaksi jää voimaan: aurinko on silloin maisemaa eikä mittari.
+   */
+  const timed = clock !== null && clock !== undefined;
+  const gone = timed ? Math.min(1, Math.max(0, 1 - clock)) : 0;
+  const cx = timed
+    ? Math.round(24 + (viewW - 48) * gone)
+    : Math.round(((238 - camX * 0.03) % (viewW + 120) + viewW + 120) % (viewW + 120) - 60);
+  const cy = timed
+    ? Math.round(viewH * 0.66 - Math.sin(gone * Math.PI) * viewH * 0.52)
+    : 34;
   if (themeName === 'desert') disc(ctx, cx, cy, 15, '#fff2c0', '#ffd070', tick, true);
   else if (themeName === 'grass') disc(ctx, cx, cy, 12, '#fffde0', '#ffe98c', tick, true);
   else if (themeName === 'ice') disc(ctx, cx, cy, 11, '#ffffff', '#cfe6ff', tick, false);
@@ -636,7 +657,7 @@ function cloudSea(ctx, th, camX, viewW, viewH, tick, groundY) {
  * the player's feet twenty tiles up in the air would say the climb never
  * happened. Zero — every ordinary level — is the picture this always drew.
  */
-export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0) {
+export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0, clock = null) {
   const th = THEMES[theme] || THEMES.grass;
 
   if (bg === 'none') {
@@ -644,7 +665,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0)
     return;
   }
 
-  sky(ctx, th, theme, viewW, viewH, camX, tick);
+  sky(ctx, th, theme, viewW, viewH, camX, tick, clock);
 
   if (bg === 'factory') {
     factoryYard(ctx, th, camX, viewW, viewH, tick);

@@ -124,31 +124,42 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0, skin = null) {
   }
   const b = lift;
   flip(ctx, px, 16, facing < 0, (bx) => {
+    const tone = skin ? skin.tone : WALKER_TONES[0];
     // The bag itself, widest across the middle because it is full.
-    ctx.fillStyle = '#e07878';
+    ctx.fillStyle = tone.body;
     ctx.fillRect(bx + 1, py + 2 - b, 14, 10);
     ctx.fillRect(bx, py + 5 - b, 16, 6);
     // The lit side of something under pressure: skin stretched thin enough to
     // shine. It is on the front, so the sprite has a facing even standing still.
-    ctx.fillStyle = '#f8a8a8';
+    ctx.fillStyle = tone.lit;
     ctx.fillRect(bx + 9, py + 3 - b, 5, 3);
     ctx.fillRect(bx + 13, py + 6 - b, 2, 3);
     // The seam it is stitched along, low, with the stitches showing.
-    ctx.fillStyle = '#a83c4c';
+    ctx.fillStyle = tone.seam;
     ctx.fillRect(bx + 1, py + 10 - b, 14, 2);
-    ctx.fillStyle = '#701c30';
+    ctx.fillStyle = tone.dark;
+    /* Ompeleiden väli seuraa niiden määrää, eikä se ole kosmetiikkaa: viisi
+     * ompelta kolmen välein olisi ulottunut sarauteen 15, ja sauma on niin
+     * lähellä laatikon reunaa että ääriviiva olisi kasvanut yhden pikselin
+     * oikealle. Siluettiero mitattiin portissa (`maskPx` 3 px) ennen kuin
+     * kukaan ehti nähdä sitä silmällä — juuri sitä varten se portti on. */
     const stitches = skin ? skin.stitches : 4;
-    for (let i = 0; i < stitches; i++) ctx.fillRect(bx + 3 + i * 3, py + 10 - b, 1, 2);
-    /* Tahra: yksi tummempi läiskä pussin kyljessä. Ei koskaan silmien päällä
-     * eikä sauman päällä — ne kaksi ovat ne kohdat joista tämä otus luetaan. */
-    if (skin && skin.smudge) {
+    const step = stitches >= 5 ? 2 : 3;
+    for (let i = 0; i < stitches; i++) ctx.fillRect(bx + 3 + i * step, py + 10 - b, 1, 2);
+    /* Tahrat: yksi tai kaksi tummempaa läiskää pussin kyljessä. Ei koskaan
+     * silmien päällä eikä sauman päällä — ne kaksi ovat ne kohdat joista tämä
+     * otus luetaan. */
+    if (skin) {
       ctx.fillStyle = 'rgba(112,28,48,0.45)';
-      ctx.fillRect(bx + skin.smudge.x, py + skin.smudge.y - b, 2, 2);
+      for (const sm of skin.smudges) {
+        ctx.fillRect(bx + sm.x, py + sm.y - b, sm.w, sm.h);
+      }
+      ctx.fillStyle = tone.dark;
     }
     // The vent, on the back, and it is where the leak below comes from. A
     // creature that leaks from a hole nobody drew is a creature that leaks by
     // magic; this one has the hole.
-    ctx.fillRect(bx, py + 7 - b, 2, 4);
+    ctx.fillRect(bx, py + 6 - b, 2, skin ? skin.vent : 4);
     /* Half-lidded, and no brows. Both are the same decision: this thing has to
      * look like it is not going to do anything to you, because the lesson it
      * teaches is that you may walk up to it and jump. An angry face on the
@@ -160,20 +171,25 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0, skin = null) {
     ctx.fillStyle = C.ink;
     ctx.fillRect(bx + 4, py + 6 - b, 4, 1);
     ctx.fillRect(bx + 10, py + 6 - b, 4, 1);
-    ctx.fillRect(bx + 5, py + 7 - b, 2, 2);
-    ctx.fillRect(bx + 11, py + 7 - b, 2, 2);
+    /* Pupillit liikkuvat valkuaisen sisällä eivätkä sen yli: `gaze` on -1, 0
+     * tai 1, ja valkuainen on neljä pikseliä leveä kahden pikselin pupillille
+     * — eli katse mahtuu kääntymään kumpaankin suuntaan ilman että mikään
+     * vuotaa laatikon tai silmän ulkopuolelle. */
+    const gaze = skin ? skin.gaze : 0;
+    ctx.fillRect(bx + 5 + gaze, py + 7 - b, 2, 2);
+    ctx.fillRect(bx + 11 + gaze, py + 7 - b, 2, 2);
     /* The knot, painted last so it stays a knot rather than being swallowed by
      * the swell underneath it, and painted flat because flat is the message. */
-    ctx.fillStyle = '#a83c4c';
+    ctx.fillStyle = tone.seam;
     ctx.fillRect(bx + 3, py, 10, 3);
-    ctx.fillStyle = '#701c30';
+    ctx.fillStyle = tone.dark;
     ctx.fillRect(bx + 3, py + 2, 2, 1);
     ctx.fillRect(bx + 11, py + 2, 2, 1);
-    ctx.fillStyle = '#f8a8a8';
+    ctx.fillStyle = tone.lit;
     ctx.fillRect(bx + 5 + (skin ? skin.shine : 1), py + 1, 3, 1);
     // Two stubs. Not shoes, not feet — the bag has to stand on something and
     // this is the least it can get away with.
-    ctx.fillStyle = '#701c30';
+    ctx.fillStyle = tone.dark;
     const swap = frame % 2 === 0;
     ctx.fillRect(bx + (swap ? 0 : 2), py + 12 - b, 6, 4 + b);
     ctx.fillRect(bx + (swap ? 10 : 8), py + 12 - b, 6, 4 + b);
@@ -186,20 +202,63 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0, skin = null) {
 /**
  * Kävelijän yksilölliset piirteet, ja ne ovat kaikki **laatikon sisällä**.
  *
- * Kolme akselia: ompeleiden määrä (kolme vai neljä), tahran paikka pussin
- * kyljessä, ja solmun kallistus yhden pikselin. Yhdessä kaksitoista erilaista
- * kävelijää, eikä yksikään niistä ole eri kokoinen, eri värinen tai eri
- * muotoinen — se on sama otus jolla on ollut oma elämänsä.
+ * Omistaja 17.8.2026: *"skinien vaihteluun joo lisää varianssia, nyt se on
+ * liian hienovarainen."* Se oli oikea huomio ja mitattu: vanha iho muutti
+ * korkeintaan 16 pikseliä 256:sta eli 6 %, ja kuudella prosentilla kaksi
+ * kävelijää ovat sama kävelijä jos niitä ei katso vierekkäin pysäytyskuvasta.
+ *
+ * Nyt akseleita on kuusi, ja tärkein niistä on **sävy**: pussi on punainen,
+ * ruusuinen tai korallinvärinen. Sävy muuttaa koko rungon kerralla, eli se on
+ * ainoa akseli joka näkyy juostessa. Ehto on että kaikki kolme ovat samassa
+ * *kirkkaudessa* — vaihtelu koskee sävyä eikä valoa — koska juuri kirkkaus on
+ * se jolla otus erottuu maasta, ja sitä mittaa oma porttinsa.
+ *
+ * Ja se yksi asia jota iho ei saa koskea on yhä siluetti: siitä luetaan
+ * tallattavuus. `verify.mjs` vaatii nolla pikseliä eroa ääriviivassa ja
+ * vähintään 5 % eroa pinnassa — eli portti kaatuu nyt myös siihen että
+ * vaihtelu on liian hienovaraista, ei vain siihen että se on liian suurta.
  */
+const WALKER_TONES = [
+  /* punainen — alkuperäinen */
+  { body: '#e07878', lit: '#f8a8a8', seam: '#a83c4c', dark: '#701c30' },
+  /* syvä ruusu: sinisempi sävy ja aavistuksen tummempi */
+  { body: '#c86078', lit: '#e88ca0', seam: '#983048', dark: '#601428' },
+  /* ruoste: keltaisempi sävy, sama tummuus kuin ruusulla */
+  { body: '#d07058', lit: '#f0a080', seam: '#a04028', dark: '#682014' },
+];
+
 function walkerSkin(skin) {
+  /* Kuusi riippumatonta lukua yhdestä: siemen on syntymäpaikka (`Enemy.skin`),
+   * ja kertoimet ovat alkulukuja jotta akselit eivät kulje yhdessä. */
+  const n = (k) => (skin * k) % 1;
+  const tone = WALKER_TONES[Math.floor(n(7) * WALKER_TONES.length) % WALKER_TONES.length];
+  const smudges = [];
+  const count = n(13) > 0.66 ? 2 : n(13) > 0.22 ? 1 : 0;
+  for (let i = 0; i < count; i++) {
+    const m = n(17 + i * 11);
+    smudges.push({
+      x: 2 + Math.floor(m * 8),
+      y: 4 + Math.floor(n(23 + i * 7) * 4),
+      w: m > 0.6 ? 3 : 2,
+      h: m > 0.85 ? 2 : 1,
+    });
+  }
   return {
-    stitches: skin > 0.5 ? 4 : 3,
-    smudge: skin > 0.28 ? { x: 2 + Math.floor(skin * 7), y: 4 + Math.floor(skin * 3) } : null,
+    tone,
+    /* Ompeleita kolme, neljä tai viisi. */
+    stitches: 3 + Math.floor(n(29) * 3),
+    smudges,
     /* Solmun **kiilto** siirtyy, ei solmu itse: solmu on siluetin ylin reuna,
      * ja sen liikuttaminen muutti ääriviivaa kahdeksan pikselin verran
      * (mitattu portissa). Siluetista luetaan tallattavuus, joten se on ainoa
      * osa jota iho ei saa koskea. */
-    shine: skin > 0.66 ? 1 : 0,
+    shine: Math.floor(n(31) * 3),
+    /* Katse: pupillit yhden pikselin vasemmalle, keskelle tai oikealle. Se on
+     * pieni luku mutta se on **kasvoissa**, ja kasvot ovat se kohta jota
+     * ihminen katsoo ensin. */
+    gaze: Math.floor(n(37) * 3) - 1,
+    /* Venttiilin korkeus: kolme, neljä tai viisi pikseliä. */
+    vent: 3 + Math.floor(n(41) * 3),
   };
 }
 

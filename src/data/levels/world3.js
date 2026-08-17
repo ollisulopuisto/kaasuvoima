@@ -74,7 +74,7 @@ export const WORLD3_LEVELS = {
    * always supposed to have.
    */
   '3-1': {
-    theme: 'ice', bg: 'peaks', music: 'level',
+    theme: 'ice', bg: 'peaks', music: 'jaatie',
     chunks: [
       'start', 'spike_walk', 'power', 'ice_first', 'walkers', 'ice_pit', 'qrow',
       'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
@@ -119,7 +119,7 @@ export const WORLD3_LEVELS = {
    * and that is checked, not assumed.
    */
   '3-2': {
-    theme: 'ice', bg: 'peaks', music: 'level',
+    theme: 'ice', bg: 'peaks', music: 'jaatie',
     chunks: [
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
       'clouds', 'beanstalk', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell',
@@ -183,7 +183,7 @@ export const WORLD3_LEVELS = {
    * on flat ground is none of the three.
    */
   '3-3': {
-    theme: 'ice', bg: 'peaks', music: 'level',
+    theme: 'ice', bg: 'peaks', music: 'jaatie',
     chunks: [
       'start', 'pipe_short', 'power', 'lava_gap', 'walkers', 'ice_pommi', 'plat_steps',
       'shell', 'lava_wide', 'clouds', 'cork_gap', 'heartburn_pair', 'pipe_plant',
