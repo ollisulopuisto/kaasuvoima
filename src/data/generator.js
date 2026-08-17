@@ -379,6 +379,24 @@ export const PIECES = {
    * maisemaa eikä koekenttä.
    */
   hill(c, x, ctx) {
+    /* Mäki on **ulkoilmamaailmojen** pala (ruoho, aavikko, yö, jää), eikä se
+     * ole makuasia kummallakaan puolella: luumaailmassa maa on luuta ja
+     * tehtaassa lattia, eivätkä nurmikumpareet kuulu kumpaankaan — ja
+     * kummankin vaikeuskäyrä oli mitattu ilman niitä. */
+    /*
+     * MÄKIÄ ON KENTÄSSÄ RAJALLINEN MÄÄRÄ, ja se on mitattu vika eikä varmuuden
+     * vuoksi asetettu katto. Ilman rajaa 5-1 (208 saraketta) sai kaksikymmentä
+     * neljä rinnelaattaa eli kolme mäkeä, ja sen mitattu vaikeus romahti
+     * 191:stä 81:een: mäki on maata jota pitkin kuljetaan, eli se *korvaa*
+     * haasteen eikä lisää sitä. Lyhyt kenttä täynnä maisemaa on kävelyretki.
+     *
+     * Budjetti on yksi mäki 120 saraketta kohti — eli lyhyt kenttä saa yhden
+     * ja levein kolme. Kun budjetti on käytetty, pala kääntyy lepopalaksi:
+     * nolla saraketta olisi jättänyt kokoamissilmukan paikalleen, ja lepo on
+     * se mitä mäen tilalle muutenkin kuuluisi.
+     */
+    ctx.hills = (ctx.hills || 0) + 1;
+    if (ctx.hills > Math.max(1, Math.floor(c.width / 120))) return PIECES.rest(c, x, ctx);
     const h = Math.min(4, Math.max(2,
       sampleHist(stats.stepUp, { min: 2, max: 5 }) - ctx.ease));
     const top = range(2, 6);
@@ -392,6 +410,20 @@ export const PIECES = {
     for (let i = 0; i < top; i++) {
       const col = x + 1 + h + i;
       for (let j = 0; j < h; j++) c.set(col, FLOOR - 1 - j, '#');
+    }
+    /*
+     * Tasanteella seisoo joka toisella mäellä joku, ja se on sekä pelillinen
+     * että mitattu päätös. **Pelillinen:** tyhjä mäki on maisemaa, ja maisema
+     * joka toistuu kymmenen kertaa kentässä on täytettä — vihollinen tekee
+     * siitä kysymyksen (yli, ohi vai päältä). **Mitattu:** vaikeusmittari
+     * lukee saraketta kohti, joten pelkkää maata oleva mäki *laimentaa*
+     * kentän vaikeutta, ja generaattori jäi tavoitteestaan sitä enemmän mitä
+     * useampi mäki osui kohdalle (3-6: tavoite 180, tulos 152). Mäellä seisova
+     * vihollinen palauttaa sen minkä mäki vei.
+     */
+    if (top >= 2 && rnd() < 0.5) {
+      const col = x + 1 + h + Math.floor(top / 2);
+      c.set(col, FLOOR - 1 - h, pick(ctx.enemies));
     }
     for (let i = 0; i < h; i++) {
       const col = x + 1 + h + top + i;
@@ -847,7 +879,7 @@ export const THEME_RULES = {
      * a different level at the same width. */
     enemies: ['g', 'k', 'f', 'c'],
     weights: {
-      gap: 4, enemies: 4, blockRow: 3, platforms: 4, stairs: 2, spikes: 2,
+      gap: 4, enemies: 4, blockRow: 3, platforms: 4, stairs: 2, hill: 2, spikes: 2,
       coins: 2, notes: 1, stinkGap: 3, corkGate: 2, lava: 2, heartburn: 2,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
