@@ -95,6 +95,15 @@ export const ENEMY_COST = {
              * skill on this list — the plant next door is the same deal and
              * costs 1.1; the jet costs more only because it erupts out of open
              * floor instead of a pipe you can see from a screen away. */
+  w: 1.2,   /* kuura: kävelee kuin kävelijä ja kuolee kuin kävelijä (1,0), mutta
+             * jättää jälkeensä liukkaan lattian. Hinta on siis yksikön hinta
+             * plus se että sen ohittaminen ei riitä — maa jolla se kävelee on
+             * toisenlaista vielä kuuden sekunnin ajan. Alle piikkikävelijän
+             * (1,4), koska tallaus tepsii ja koska jää ei satuta. */
+  s: 1.1,   /* kolikkovaras: vaarana se on kävelijä, ja siksi lähellä yhtä. Se
+             * mitä se vie ei ole terveyttä vaan kolikoita, ja tallattuna se
+             * antaa ne takaisin — vaikeusmittari mittaa vaaraa eikä kiirettä,
+             * eikä tämä saa lukea vaarallisemmaksi kuin se on. */
   e: 1.8,   /* pyörre: unkillable by stomp and it is *in the way* — but it is a
              * clock, not a chase. Priced above the heartburn jet (1.5), which
              * is the other bolted-down unkillable thing, because a metronome

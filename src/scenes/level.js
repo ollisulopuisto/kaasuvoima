@@ -232,6 +232,17 @@ const SHELF_TILES = 3;
  *      mielipide.
  */
 /** Pilarin korkeus laattoina. Ks. yllä: tämä on koko turvallisuusargumentti. */
+/**
+ * Kuinka kauan kuuran jälki pysyy jäänä, frameina.
+ *
+ * Kuusi sekuntia, ja se on mitattu kävelynopeudesta: kuura etenee 0,42
+ * px/frame eli 151 px kuudessa sekunnissa, mikä on **yhdeksän laattaa**.
+ * Jälki on siis suunnilleen ruudun levyinen (20 laattaa) puolikas — pitkä
+ * tarpeeksi ollakseen paikka jonka läpi mennään, lyhyt tarpeeksi ettei
+ * kenttä muutu jääkentäksi jos kuuran jättää eloon.
+ */
+const FROST_LIFE = 360;
+
 const PILLAR_H = 2;
 /**
  * Etäisyys areenan reunasta ja ovesta, laattoina.
@@ -1137,6 +1148,9 @@ export class LevelScene {
     this.shelves = new Map();
     /* Liikkeellä oleva hiekka: avaimet "tx,ty". Ks. `updatePours`. */
     this.pours = new Set();
+    /* Kuuran jälki: "tx,ty" → { was, left }. Sama muoto kuin murenevilla
+     * laudoilla, ja samasta syystä — ks. `frostTile`. */
+    this.frost = new Map();
     /* Liikkeellä olevat möykyt: kotiruutu "ox,oy" → missä se nyt on ja kuinka
      * kauan se on ollut matkalla. Avain on **kotiruutu eikä nykyinen paikka**,
      * koska se on se ainoa asia joka ei muutu — ja se on myös se paikka johon
@@ -1797,6 +1811,41 @@ export class LevelScene {
       for (let i = 0; i < 4; i++) {
         this.spawnPuff(left + 2 + i * 4, (s.floor - PILLAR_H) * TILE + 4, i % 2 === 0);
       }
+    }
+  }
+
+  /**
+   * KUURAN JÄLKI: yksi ruutu jäähän, ja se sulaa itsestään.
+   *
+   * Kohtauksessa eikä oliossa, kahdesta syystä. Ensinnäkin sulaminen on
+   * **kentän kello eikä olion**: kuura voi kuolla, uppoa hiekkaan tai jäädä
+   * ruudun ulkopuolelle, eikä sen jälki saa jäädä ikuiseksi sen mukana.
+   * Toiseksi tämä on sama muoto kuin murenevilla laudoilla ja pieruhyllyillä
+   * (`"tx,ty"` → kello + alkuperäinen merkki), joten pikatallennus osaa sen jo.
+   *
+   * Vain maa ja kivi jäätyvät. Lohko, lauta, putki ja hiekka jäävät rauhaan:
+   * niillä on oma merkityksensä, ja jäinen lohko olisi uusi palikka jota
+   * kukaan ei ole opettanut.
+   */
+  frostTile(tx, ty) {
+    const ch = this.tileAt(tx, ty);
+    if (ch !== T.GROUND && ch !== T.HARD) return false;
+    this.frost.set(`${tx},${ty}`, { was: ch, left: FROST_LIFE });
+    this.setTile(tx, ty, T.ICE);
+    return true;
+  }
+
+  /** Sulaminen. Ks. `frostTile`: lopputila on lähtötila. */
+  updateFrost() {
+    if (!this.frost.size) return;
+    for (const [key, state] of this.frost) {
+      if (--state.left > 0) continue;
+      const [tx, ty] = key.split(',').map(Number);
+      /* Jos joku muu on ehtinyt muuttaa ruudun (murtava voima, valuva hiekka),
+       * sulaminen ei saa kirjoittaa jäätä takaisin sen päälle — se palauttaa
+       * vain sen mitä se itse muutti. */
+      if (this.tileAt(tx, ty) === T.ICE) this.setTile(tx, ty, state.was);
+      this.frost.delete(key);
     }
   }
 
@@ -3221,6 +3270,7 @@ export class LevelScene {
       this.player.update(input);
       this.playerTiles();
       this.updatePillars();
+      this.updateFrost();
       this.tryWarp(input);
       this.updateTransit();
       this.updateProgress();

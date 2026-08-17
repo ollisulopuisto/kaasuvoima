@@ -156,7 +156,10 @@ export const WORLD8_LEVELS = {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 0,
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'keep_hole', 'keep_teeth',
-      'fort_gap', 'keep_vault', 'keep_hole', 'keep_watch', 'boss_arena',
+      /* Kuura `keep_watch`in tilalle: maailman 8 sanasto on pelin ohuin
+       * (mitattu 13), ja tämä on ainoa laji joka muuttaa lattiaa jolla
+       * seistään. Vaihto eikä lisäys, kuten maailmassa 1. */
+      'fort_gap', 'keep_vault', 'keep_hole', 'keep_frost', 'boss_arena',
     ],
   },
 

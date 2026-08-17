@@ -2,6 +2,7 @@ import { Player } from '../entities/player.js';
 import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
   Moon, SpikeGuy, BeanBaron, BeanBomb, Kurnuttaja,
+  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Pyorre, Kummitus,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
@@ -25,6 +26,22 @@ const REGISTRY = {
    * this entity's own list. Leaving it out would restore a level with half a
    * vine in it and nothing left to finish the job. */
   Beanstalk,
+  /*
+   * JA LOPUT LAJIT, ja tämä oli **hiljainen vika** eikä lisäys.
+   *
+   * Rekisteri on se lista jonka `entityFromJSON` osaa herättää: luokka jota ei
+   * ole tässä palautuu `null`ina, eli **katoaa pikatallennuksesta**. Torvi,
+   * törähdys, paarma, happopisara, yökki, karvapallo ja paukkupöhö tulivat
+   * peliin listan kirjoittamisen jälkeen, eikä yksikään niistä ollut täällä:
+   * pikatallennus keskellä maailmaa 6 tai 7 palautti kentän ilman niitä, ja
+   * peli näytti toimivan — se vain oli helpompi. Juuri se on tämän vian laji:
+   * mikään ei kaadu, jokin vain puuttuu.
+   *
+   * `verify.mjs` mittaa nyt jokaisen kenttämerkin läpi (`ENEMY_CHARS`), ettei
+   * seuraava laji jää samalla tavalla pois.
+   */
+  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho,
+  Pyorre, Kummitus,
   Puff, ScorePop, BrickPiece, CoinPop, PoundWave,
 };
 
@@ -120,6 +137,11 @@ export function captureState(game) {
          * keskeltä varoitusta antaisi pilarin joka nousee ilman ennakointia, ja
          * ennakointi on koko ominaisuuden ensimmäinen hyväksymiskriteeri. */
         pillars: (scene.pillars || []).map((s) => ({ ...s })),
+        /* Kuuran jälki. Ruudukko palauttaa jään itsestään, mutta ei sitä
+         * **kelloa** joka sulattaa sen eikä sitä mikä ruutu oli ennen — ilman
+         * tätä pikalataus jättäisi jään ikuiseksi ja kentän lopputila olisi eri
+         * kuin sen lähtötila. */
+        frost: [...(scene.frost || new Map()).entries()].map(([k, v]) => [k, { ...v }]),
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -187,6 +209,7 @@ export function restoreState(game, snap) {
   scene.pours = new Set(data.pours || []);
   // Vanhempi tilannekuva on otettu ennen areenapomoa; johdetut paikat jäävät.
   if (data.pillars) scene.pillars = data.pillars.map((s) => ({ ...s }));
+  scene.frost = new Map((data.frost || []).map(([k, v]) => [k, { ...v }]));
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

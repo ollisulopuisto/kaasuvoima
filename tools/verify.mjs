@@ -11943,6 +11943,101 @@ const report = await page.evaluate(async () => {
     game.completeWorld = realComplete;
   }
 
+  /* ------------------------ maailmaan vaikuttavat ----------------------- */
+  /*
+   * OLIO JOKA MUUTTAA KENTTÄÄ, ja kolme väitettä siitä.
+   *
+   * Omistaja 18.8.2026: *"olisi kiva että oliot voisivat reagoida pelaajaan /
+   * maailmaan / vaikuttaa maailmaan."* `ENEMY_VERBS`-taulussa luki silloin
+   * `maailma: 'ei'` jokaisella yhdeksällätoista lajilla. Nämä kaksi ovat
+   * vastaus, ja koska ne kirjoittavat ruudukkoon, ne mitataan samalla
+   * tiukkuudella kuin valuva hiekka ja areenan pilarit: **muutos tapahtuu,
+   * muutos palautuu, eikä kenttä jää toisenlaiseksi.**
+   */
+  {
+    const E3 = await import('/src/entities/enemies.js');
+    const { T: TF } = await import('/src/gfx/tiles.js');
+
+    /* 1. KUURA jäädyttää maan alleen — ja se sulaa. */
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '8-1');
+    game.setScene(s);
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    const before = s.grid.map((row) => row.join('')).join('|');
+    const floorRow = s.grid.findIndex((row, i) => i > 10 && row[20] && isSolid(row[20]));
+    const kuura = new E3.Kuura(s, 20 * 16, (floorRow - 1) * 16);
+    kuura.active = true;
+    kuura.alwaysActive = true;
+    s.add(kuura);
+    const idle = mkInput();
+    for (let f = 0; f < 120; f++) s.update(idle);
+    const frozen = s.frost.size;
+    const iceNow = s.grid.flat().filter((c) => c === TF.ICE).length;
+    kuura.remove = true;
+    for (let f = 0; f < 400; f++) s.update(idle);
+    const after = s.grid.map((row) => row.join('')).join('|');
+    expect('kuuran jälki jäätyy, sulaa, eikä kenttä jää toisenlaiseksi',
+      frozen > 0 && iceNow >= frozen && s.frost.size === 0 && after === before,
+      `jäätyi ${frozen} ruutua, jäätä ruudukossa ${iceNow}, sulamisen jälkeen `
+      + `${s.frost.size} kesken, ruudukko ${after === before ? 'ennallaan' : 'muuttunut'}`);
+
+    /* 2. KOLIKKOVARAS syö kolikon ja antaa sen takaisin tallattuna. */
+    reset({ type: 'shroom', level: 1 });
+    const s2 = new LevelScene(game, '1-3');
+    game.setScene(s2);
+    s2.entities = s2.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    let coinRow = -1;
+    let coinCol = -1;
+    for (let ty = 0; ty < s2.h && coinRow < 0; ty++) {
+      for (let tx = 30; tx < s2.w - 20; tx++) {
+        if (s2.grid[ty][tx] === TF.COIN) { coinRow = ty; coinCol = tx; break; }
+      }
+    }
+    const coins0 = s2.grid.flat().filter((c) => c === TF.COIN).length;
+    const thief = new E3.Kolikkovaras(s2, (coinCol - 2) * 16, (coinRow) * 16);
+    thief.active = true;
+    thief.alwaysActive = true;
+    s2.add(thief);
+    for (let f = 0; f < 200 && thief.loot === 0; f++) s2.update(idle);
+    const coins1 = s2.grid.flat().filter((c) => c === TF.COIN).length;
+    const purse = game.state.coins;
+    thief.stomp();
+    for (let f = 0; f < 60; f++) s2.update(idle);
+    expect('kolikkovaras syö kolikon ja pudottaa saaliin tallattuna',
+      thief.loot > 0 && coins1 < coins0 && game.state.coins >= purse + thief.loot,
+      `söi ${thief.loot}, kolikoita ${coins0} -> ${coins1}, kukkaro ${purse} -> ${game.state.coins}`);
+
+    /*
+     * 3. JA JOKAINEN LAJI SELVIÄÄ PIKATALLENNUKSESTA.
+     *
+     * Tämä löytyi tätä erää tehdessä ja se oli **hiljainen vika**: `savestate.js`
+     * herättää vain ne luokat jotka ovat sen rekisterissä, ja seitsemän lajia
+     * oli tullut peliin listan kirjoittamisen jälkeen. Pikatallennus keskellä
+     * maailmaa 6 tai 7 palautti kentän ilman niitä — mikään ei kaatunut, jokin
+     * vain puuttui. Nyt lista kävellään merkeistä eikä muistista.
+     */
+    const { captureState, restoreState } = await import('/src/core/savestate.js');
+    const lost = [];
+    for (const [ch, make] of Object.entries(E3.ENEMY_CHARS)) {
+      reset({ type: 'shroom', level: 1 });
+      const s3 = new LevelScene(game, '1-1');
+      game.setScene(s3);
+      s3.entities = s3.entities.filter((e) => e.kind !== 'enemy');
+      const made = make(s3, 20, 11, 0);
+      made.active = true;
+      s3.add(made);
+      const name = made.constructor.name;
+      captureState(game, 0);
+      restoreState(game, 0);
+      const back = game.scene.entities.some((e) => e.constructor.name === name);
+      if (!back) lost.push(`${ch} ${name}`);
+    }
+    expect('jokainen vihollislaji selviää pikatallennuksesta',
+      lost.length === 0,
+      lost.length ? `katosi: ${lost.join(', ')}`
+        : `${Object.keys(E3.ENEMY_CHARS).length} merkkiä, kaikki palasivat`);
+  }
+
   /* --------------------------- laattojen ihot --------------------------- */
   /*
    * SAMA ELEMENTTI, ERI YKSILÖ — ja tasapaino mitataan eikä katsota.

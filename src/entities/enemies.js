@@ -14,7 +14,8 @@ import {
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS,
   drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
-  drawPaukkupoho, drawPyorre, drawKummitus } from '../gfx/sprites.js';
+  drawPaukkupoho, drawPyorre, drawKummitus, drawKuura,
+  drawKolikkovaras } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx, bossSay } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -3686,6 +3687,166 @@ export class Kummitus extends Enemy {
   }
 }
 
+/*
+ * KUURA — se joka jättää jälkeensä toisenlaisen lattian.
+ *
+ * Omistaja 18.8.2026: *"olisi kiva että oliot voisivat reagoida pelaajaan /
+ * maailmaan / vaikuttaa maailmaan, se olisi dynaamista."* Se oli tarkka
+ * havainto ja se oli mitattavissa: `ENEMY_VERBS`-taulun `maailma`-sarakkeessa
+ * luki **"ei" jokaisella yhdeksällätoista lajilla**. Vain pomo koski kenttään.
+ *
+ * Kuura on ensimmäinen tavallinen vihollinen joka muuttaa kenttää, ja se
+ * muuttaa sitä siihen suuntaan johon tämä peli osaa jo: **jää on laatta eikä
+ * teema** (päätetty 10.8.2026), joten jäädytetty maa on olemassa oleva ruutu
+ * eikä uusi mekaniikka. Kuura kävelee, ja sen jäljessä maa on liukas.
+ *
+ * Kolme rajausta, ja jokainen tekee muutoksesta turvallisen:
+ *
+ *   1. **Kiinteä pysyy kiinteänä.** `T.ICE` on yhtä kiinteä kuin `T.GROUND`,
+ *      joten yksikään reitti, hyppy tai kuilubudjetti ei muutu. Muuttuva on
+ *      kitka, ja kitkalla on jo oma sanansa pelissä.
+ *   2. **Se sulaa.** `FROST_LIFE` framen jälkeen ruutu palaa siksi mitä se oli,
+ *      eli kentän lopputila on sen lähtötila — sama vaatimus jonka valuva
+ *      hiekka ja areenan pilarit jo täyttävät.
+ *   3. **Se ei jäädytä sitä mitä ei voi jäädyttää.** Vain tavallinen maa ja
+ *      kivi; lohkot, laudat, putket ja hiekka jäävät rauhaan, koska niillä on
+ *      oma merkityksensä ja jäinen lohko lukisi uutena palikkana.
+ */
+const FROST_LIFE = 360;
+const KUURA_SPEED = 0.42;
+
+export class Kuura extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.speed = KUURA_SPEED;
+    this.facing = -1;
+    this.score = 200;
+  }
+
+  get bubbleable() { return true; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.sink()) return;
+    this.vx = this.speed * this.facing;
+    if (this.moveSideways()) this.facing *= -1;
+    applyGravity(this, 1);
+    moveY(this, this.level);
+    /* Jälki jätetään **jalkojen alle** eikä siihen ruutuun jossa keho on: se on
+     * se ruutu jolla pelaaja seisoo, ja se on myös se jonka näkee muuttuvan
+     * kuuran takaa. */
+    if (this.onGround && this.level.frostTile) {
+      this.level.frostTile(Math.floor(this.cx / TILE), Math.floor((this.y + this.h) / TILE));
+    }
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  draw(ctx) {
+    drawKuura(ctx, this.x, this.y, this.tick, this.facing);
+  }
+}
+
+/*
+ * KOLIKKOVARAS — se joka ottaa sen mitä olit hakemassa.
+ *
+ * Toinen puoli samaa vastausta: tämä **reagoi maailmaan** eikä pelaajaan. Se
+ * etsii lähimmän kolikon, juoksee sen luo ja syö sen, ja se on koko laji.
+ *
+ * Miksi juuri kolikko: se on ainoa asia kentässä jonka poistaminen ei voi
+ * rikkoa mitään. Kolikko ei ole kiinteä eikä puolikiinteä, se ei kannattele
+ * ketään eikä sen puuttuminen sulje reittiä — eli maailmaan vaikuttava
+ * vihollinen saadaan **ilman yhtäkään uutta läpäisykysymystä**. Sama peruste
+ * kuin pieruhyllyllä: turvallisuus rakenteesta eikä varovaisuudesta.
+ *
+ * Ja se antaa takaisin. Tallattuna se pudottaa kaiken syömänsä kolikkoina,
+ * joten kilpajuoksun hävinnytkään ei menetä mitään pysyvästi — hän vain saa
+ * palkintonsa myöhemmin ja työllä. Vihollinen joka veisi lopullisesti olisi
+ * rangaistus siitä ettei ehtinyt, ja tämä peli ei rankaise hitaudesta.
+ */
+const THIEF_SPEED = 1.15;
+const THIEF_REACH = 10;
+
+export class Kolikkovaras extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 14, 14);
+    this.speed = THIEF_SPEED;
+    this.facing = 1;
+    this.score = 400;
+    this.loot = 0;
+    this.hunt = 0;
+  }
+
+  get bubbleable() { return true; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  /** Lähin kolikko `THIEF_REACH`in sisällä, tai `null`. */
+  target() {
+    const level = this.level;
+    const cx = Math.floor(this.cx / TILE);
+    const cy = Math.floor(this.cy / TILE);
+    let best = null;
+    for (let ty = cy - 2; ty <= cy + 2; ty++) {
+      for (let tx = cx - THIEF_REACH; tx <= cx + THIEF_REACH; tx++) {
+        if (level.tileAt(tx, ty) !== T.COIN) continue;
+        const d = Math.abs(tx - cx);
+        if (!best || d < best.d) best = { tx, ty, d };
+      }
+    }
+    return best;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.sink()) return;
+    /* Kohde haetaan kolmasti sekunnissa eikä joka framella: kolikkorivi on
+     * rivi, ja jokaisen framen uudelleenvalinta saisi varkaan värisemään
+     * kahden yhtä lähellä olevan välissä. */
+    if (this.tick % 20 === 0 || this.hunt === 0) {
+      const t = this.target();
+      this.hunt = t ? t.tx : 0;
+      if (t) this.facing = t.tx * TILE + 8 < this.cx ? -1 : 1;
+    }
+    this.vx = this.speed * this.facing;
+    if (this.moveSideways()) this.facing *= -1;
+    applyGravity(this, 1);
+    moveY(this, this.level);
+    /* Syöminen on ruudun poisto, ja se tehdään kohtauksen kautta jotta
+     * naapurit (valuva hiekka, murenevat laatat) saavat tietää siitä samalla
+     * tavalla kuin kaikesta muustakin. */
+    const tx = Math.floor(this.cx / TILE);
+    const ty = Math.floor(this.cy / TILE);
+    if (this.level.tileAt(tx, ty) === T.COIN) {
+      this.level.setTile(tx, ty, T.EMPTY);
+      this.loot++;
+      Sfx.play('coin');
+    }
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  /** Tallattuna se pudottaa kaiken minkä ehti. Ks. luokan perustelu. */
+  stomp() {
+    this.remove = true;
+    this.level.chainReward(this.score, this.cx, this.y);
+    for (let i = 0; i < this.loot; i++) {
+      this.level.addCoin(this.cx, this.y - 4 - i * 3);
+    }
+    return true;
+  }
+
+  draw(ctx) {
+    drawKolikkovaras(ctx, this.x, this.y, this.tick, this.facing, this.loot);
+  }
+}
+
 /**
  * MIKÄ TÄSSÄ LAJISSA ON UUTTA — taulukkona, koska muuten se on mielipide.
  *
@@ -3736,6 +3897,14 @@ export const ENEMY_VERBS = {
    */
   e: { move: 'kehä akselin ympäri', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
   q: { move: 'seuraa kun et katso', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
+  /*
+   * Ja nämä kaksi ovat vastaus siihen mitä taulu näytti: `maailma`-sarakkeessa
+   * luki "ei" jokaisella rivillä paitsi pomolla. Kuura muuttaa lattian
+   * kitkan, kolikkovaras vie sen mitä olit hakemassa — ja kumpikin palauttaa
+   * jälkensä, toinen sulamalla ja toinen tallattuna.
+   */
+  w: { move: 'kävely', shot: 'ei', hurt: 'kosketus', stomp: 'kuolee', world: 'jäädyttää maan' },
+  s: { move: 'juoksu kolikolle', shot: 'ei', hurt: 'kosketus', stomp: 'pudottaa saaliin', world: 'syö kolikot' },
 };
 
 export const ENEMY_CHARS = {
@@ -3795,6 +3964,8 @@ export const ENEMY_CHARS = {
   /* Pyörre: merkki on **akseli**, eli se ruutu jonka ympäri pallo kiertää —
    * ei se paikka jossa pallo on. Palikka lukee siis samalla tavalla kuin
    * kurnuttajan kuoppa: merkki kertoo mistä ilmiö lähtee. */
+  w: (level, tx, ty) => new Kuura(level, tx * TILE, ty * TILE),
+  s: (level, tx, ty) => new Kolikkovaras(level, tx * TILE + 1, ty * TILE + 2),
   e: (level, tx, ty) => new Pyorre(level, tx * TILE, ty * TILE),
   q: (level, tx, ty) => new Kummitus(level, tx * TILE, ty * TILE),
   T: (level, tx, ty) => new Torvi(level, tx * TILE, ty * TILE),
