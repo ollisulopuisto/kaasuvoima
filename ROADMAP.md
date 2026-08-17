@@ -763,7 +763,7 @@ Alkuperäiset neljä, tila merkittynä:
    luulaakson notko oli 56 %, koska kuilut ovat 39 % mittarin painosta ja
    niiden poistaminen vie sen kaiken kerralla.
 
-### Salainen alue maailmaan 5
+### Salainen alue maailmaan 5 — YRITETTY 17.8.2026, ja hinta on nyt mitattu
 
 Yksi kenttä per maailma saa salaisen alueen: pavunvarsi ylös taivaalle ja putki
 alas maan alle. Ei joka kenttään — löytö lakkaa olemasta löytö jos sellainen on
@@ -773,8 +773,33 @@ validointi ovat valmiina.
 
 Jäljellä on maailma 5, ja se on eri työ kuin muut: sen numeroidut kentät tulevat
 generaattorista, joten kaista syntyy sinne vain opettamalla `gen-levels.mjs`:lle
-kolmikerroksinen kokoonpano — ja uusi generointiajo arpoo maailman uusiksi, eli
-kolmen kentän mitattu vaikeus muuttuu kerralla. Oma päätöksensä.
+kolmikerroksinen kokoonpano — ja uusi generointiajo arpoo maailman uusiksi.
+
+**Halpa reitti kokeiltiin ja se ei kelpaa, ja se on nyt mitattu eikä arveltu.**
+Ajatus oli tehdä sama asia yhtä askelta myöhemmin: pinota kaista valmiin
+ruudukon ympärille ja **johtaa putken suu kentästä** samalla tavalla kuin
+lämpöputkien uloskäynnit, kaasulyhty ja areenan pilarit. Se toimi pelinä —
+suu syntyi sarakkeeseen 112 ja matka vei luolaan — ja kaatui neljään eri
+sääntöön, jotka kaikki sanovat saman asian eri sanoin: **salaisuus ei ole
+maisemaa, se on kentän dataa.**
+
+| portti | mitattu |
+| --- | --- |
+| kaistavalidointi lukee dataa, ei kohtausta | `5-3: nothing leads into the cave band` |
+| kolikkovihje puuttuu johdetulta suulta | `vihjeettä: 5-3 putki@112` |
+| lyhyt lattiaputki ei saa olla warpin synonyymi | `9/20 = 45,0 %, katto 33,3 %` |
+| ja kaistojen pinoaminen **arpoo piilotiilet uusiksi** | `5-3: 0/5 salaista` |
+
+Se viimeinen on niistä opettavaisin eikä kukaan olisi arvannut sitä: piilotiili
+on paikan tiiviste, ja kaistan lisääminen siirtää koko pääkaistan viisitoista
+riviä alas — eli **jokainen tiili kentässä on eri tiili kuin ennen**.
+
+Jäljelle jää siis alkuperäinen reitti (opeta generaattorille kolmikerroksinen
+kokoonpano) ja sen oma hinta, joka sekin on nyt mitattu toisessa yhteydessä:
+generointiajo ilman `VGLC_DIR`iä vaihtaa jokaisen uudelleen kirjoitetun kentän
+`origin: 'checked'` -merkinnän merkintään `not checked` (ks.
+`tools/gen-levels.mjs`, 6-5:n kohta). **Maailma 5 kannattaa siis generoida
+korpus kädessä tai ei ollenkaan**, ja se on omistajan päätös eikä tekijän.
 
 ### ✔ Tehty (v26.08.09.21): kaikki elävä hengittää
 
