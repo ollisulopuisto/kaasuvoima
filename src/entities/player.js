@@ -1689,6 +1689,11 @@ export class Player extends Entity {
       pound: this.poundPhase || null,
       poundT: this.poundTimer,
       running: Math.abs(this.vx) > MAX_WALK,
+      /* Pyörivät jalat: keho menee kovempaa kuin sen jalat osaavat kävellä.
+       * Ks. `spinLegs` sprite-puolella — ehto on tässä yhtenä lauseena, jotta
+       * piirros ei joudu arvaamaan mitä "vauhdikkaasti" tarkoittaa. Maassa
+       * eikä ilmassa: lentävällä ei ole maata jota vasten pyöriä. */
+      spinLegs: this.onGround && Math.abs(this.vx) > MAX_RUN && !this.ducking,
       tick: this.tick,
       wag: this.wag,
       idle: this.idle,
