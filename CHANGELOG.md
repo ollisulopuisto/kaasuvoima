@@ -7,6 +7,52 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.8 — VERBI 6: nielty vihollinen on työkalu
+
+IDEAS kohta 6, tuomio "kyllä": *"syö vihollinen, saat kyvyn — piikkiukko tekee
+piikikkääksi, lentäjä antaa hypyn — eli jokaisesta lajista tulee työkalu."*
+
+| väite | mitattu |
+| --- | --- |
+| kuplassa oleva niellään ylöspainalluksella | `suussa siivet, kupla poissa` |
+| kyky tekee sen mitä laji teki | `siivet 0->1 ilmahyppyä, piikit tappoivat, kylmä jäädytti 1 ruutua, magneetti veti` |
+| kyky on lainassa ja kuluu loppuun | `480 framea, lopuksi ei mitään` |
+| jokainen kuplattava laji antaa jonkin kyvyn | `g:sylky k:kuori f:siivet r:siivet c:sylky x:piikki w:kylmä s:magneetti Z:siivet Y:sylky` |
+
+**Nieleminen tapahtuu kuplasta**, eikä se ole valinta vaan seuraus: kuplassa
+oleva vihollinen on määritelmän mukaan vaaraton ja paikallaan, eli se on ainoa
+hetki jolloin nieleminen voi olla **päätös** eikä osuma. Suoraan vihollisesta
+nieleminen olisi ollut kolmas tapa koskettaa vihollista, ja kaksi (tallaus,
+kosketus) on jo se määrä jonka pelaaja lukee kerralla.
+
+Ja siitä syntyy ketju joka ei vaatinut yhtään uutta nappia: **maahanisku
+vangitsee kuplaan** (v26.08.18.7) → **kupla niellään** → kyky on kädessä.
+Kolme verbiä yhdeksi lauseeksi.
+
+Kuusi kykyä, ja jokainen on **se mitä laji on**:
+
+| laji | kyky |
+| --- | --- |
+| piikkiukko | kosketus tappaa (muttei suojaa piikeiltä — se on tähden työ) |
+| lentäjä, paarma, pilvi | yksi ilmahyppy lisää |
+| kuura | laskeutuminen jäädyttää maan |
+| kolikkovaras | kolikot tulevat neljän laatan säteeltä |
+| kuoriukko | yksi osuma kestetään |
+| muut | sylky: laji itse ammuksena |
+
+Kahdeksan sekuntia, ja se on mitattu kentän mitasta: juoksuvauhdilla noin
+seitsemänkymmentä laattaa eli kolme ja puoli ruutua. Suunnitelmaksi tarpeeksi,
+varusteeksi liian vähän. HUD kertoo nimen ja kutistuvan palkin, koska pelaajan
+on tiedettävä *mikä* ja *kuinka kauan vielä*.
+
+**Sivulöydös:** `collisions()` luki syötteensä `this.game.input`ista eikä siitä
+mitä sille annettiin. Esittelydemo ajaa oikeaa kenttää **botin ohjaimella**,
+joten jokainen sellainen rivi luki sen ihmisen näppäimistöä joka ei pelaa —
+demon tallauspomppu luki siis satunnaista näppäintä. Syöte kulkee nyt
+parametrina, ja nieleminen olisi perinyt saman vian heti syntyessään.
+
+---
+
 ## v26.08.18.7 — isku vangitsee, tappo kuittaa, ja jokainen otus on oma yksilönsä
 
 Kolme omistajan pyyntöä samasta asiasta: miltä pelaaminen tuntuu.

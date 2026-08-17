@@ -12044,6 +12044,117 @@ const report = await page.evaluate(async () => {
       rows.map((r) => `${r.id} ilman ilmoitusta ${r.declared ? 'kaatuu sääntöön' : 'menee läpi'}`).join(', '));
   }
 
+  /* ------------------------------- verbi 6 ------------------------------ */
+  /*
+   * NIELTY VIHOLLINEN ON TYÖKALU — IDEAS kohta 6, tuomio "kyllä".
+   *
+   * *"Syö vihollinen, saat kyvyn — piikkiukko tekee piikikkääksi, lentäjä
+   * antaa hypyn — eli jokaisesta lajista tulee työkalu."* Neljä väitettä, ja
+   * jokainen mitataan tapahtumana: nieleminen tapahtuu, kyky **tekee jotain**,
+   * kyky loppuu, eikä yksikään laji jää ilman lahjaa.
+   */
+  {
+    const E6 = await import('/src/entities/enemies.js');
+    const { T: T6 } = await import('/src/gfx/tiles.js');
+
+    /** Kenttä, pelaaja maassa, ja yksi kuplassa oleva vihollinen vieressä. */
+    const withBubble = (Ctor, power = { type: null, level: 0 }) => {
+      reset(power);
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      const p = s.player;
+      const e = new Ctor(s, p.x + 6, p.y);
+      e.y = p.y;
+      e.active = true;
+      e.alwaysActive = true;
+      e.spawnGrace = 0;
+      s.add(e);
+      e.trap();
+      return { s, p, e };
+    };
+    const up = () => { const i = mkInput(); i.held.up = true; return i; };
+
+    /* 1. NIELEMINEN: kupla katoaa ja suussa on kyky. */
+    {
+      const { s, p, e } = withBubble(E6.Flyer);
+      s.update(up());
+      expect('kuplassa oleva vihollinen niellään ylöspainalluksella',
+        p.swallowed === 'siivet' && e.remove,
+        `suussa ${p.swallowed || 'ei mitään'}, kupla ${e.remove ? 'poissa' : 'jäljellä'}`);
+    }
+
+    /* 2. KYKY TEKEE JOTAIN, ja jokainen neljästä mitataan omalla tavallaan. */
+    {
+      const wings = withBubble(E6.Flyer);
+      wings.s.update(up());
+      const airBefore = 0;
+      const airAfter = wings.p.airJumpsMax;
+
+      const spikes = withBubble(E6.SpikeGuy);
+      spikes.s.update(up());
+      const victim = new E6.Walker(spikes.s, spikes.p.x + 4, spikes.p.y);
+      victim.y = spikes.p.y;
+      victim.active = true;
+      victim.alwaysActive = true;
+      victim.spawnGrace = 0;
+      spikes.s.add(victim);
+      const powerBefore = spikes.p.powerLevel;
+      for (let f = 0; f < 4; f++) spikes.s.update(mkInput());
+      const killedByTouch = victim.dying || victim.remove;
+
+      const cold = withBubble(E6.Kuura);
+      cold.s.update(up());
+      for (let f = 0; f < 20; f++) cold.s.update(mkInput());
+      const froze = cold.s.frost.size;
+
+      const magnet = withBubble(E6.Kolikkovaras);
+      magnet.s.update(up());
+      const px = Math.floor(magnet.p.cx / 16);
+      const py = Math.floor(magnet.p.cy / 16);
+      magnet.s.setTile(px + 3, py, T6.COIN);
+      const purse = game.state.coins;
+      for (let f = 0; f < 6; f++) magnet.s.update(mkInput());
+      const pulled = game.state.coins > purse && magnet.s.tileAt(px + 3, py) !== T6.COIN;
+
+      expect('nielty kyky tekee sen mitä laji teki',
+        airAfter > airBefore && killedByTouch && spikes.p.powerLevel === powerBefore
+        && froze > 0 && pulled,
+        `siivet ${airBefore}->${airAfter} ilmahyppyä, piikit tappoivat ${killedByTouch} `
+        + `(voimataso ${powerBefore}->${spikes.p.powerLevel}), kylmä jäädytti ${froze} ruutua, `
+        + `magneetti veti ${pulled}`);
+    }
+
+    /* 3. KYKY LOPPUU. Lainattu on lainattu. */
+    {
+      const { s, p } = withBubble(E6.Flyer);
+      s.update(up());
+      const start = p.swallowTimer;
+      for (let f = 0; f < start + 4; f++) s.update(mkInput());
+      expect('nielty kyky on lainassa ja kuluu loppuun',
+        start > 0 && p.swallowed === null,
+        `${start} framea, lopuksi ${p.swallowed || 'ei mitään'}`);
+    }
+
+    /* 4. EIKÄ YKSIKÄÄN KUPLATTAVA LAJI JÄÄ ILMAN LAHJAA. Poikkeuslistaa ei ole:
+     *    laji jolla ei ole omaa kykyä antaa itsensä ammuksena (`sylky`). */
+    {
+      reset();
+      const probe = new LevelScene(game, '1-1');
+      game.setScene(probe);
+      const gifts = [];
+      for (const [ch, make] of Object.entries(E6.ENEMY_CHARS)) {
+        const e = make(probe, 20, 11, 0);
+        if (!e.bubbleable) continue;
+        gifts.push(`${ch}:${probe.swallowGift(e)}`);
+      }
+      const named = gifts.filter((g) => g.split(':')[1]);
+      expect('jokainen kuplattava laji antaa jonkin kyvyn',
+        gifts.length >= 8 && named.length === gifts.length,
+        gifts.join(' '));
+    }
+  }
+
   /* ------------------- kupla, kuittaus ja vihollisen iho ---------------- */
   /*
    * Kolme omistajan pyyntöä samasta pelituntumasta, ja jokainen mitataan

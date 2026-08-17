@@ -14,7 +14,7 @@ import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
-import { surfaceUnder } from '../gfx/tiles.js';
+import { surfaceUnder, TILE } from '../gfx/tiles.js';
 
 /*
  * Movement constants from the SMB3 disassembly. Raw bytes are 4.4 fixed point,
@@ -354,6 +354,17 @@ export class Player extends Entity {
     this.flying = 0;
     this.spin = 0;
     this.invuln = 0;
+    /*
+     * SUUSSA OLEVA KYKY, kaksi tavallista kenttää eikä oliota.
+     *
+     * `swallowKind` on mikä ja `swallowTimer` kuinka kauan. Kaksi lukua eikä
+     * `{ kind, frames }`, koska `savestate.js` sarjallistaa jokaisen oman
+     * kentän sellaisenaan — pikatallennus keskellä kykyä palauttaa sen
+     * jäljellä olevine frameineen ilman riviäkään tallennuskoodia, ja juuri se
+     * on tässä tiedostossa jo kolmesti todettu halvin tapa.
+     */
+    this.swallowKind = null;
+    this.swallowTimer = 0;
     this.frozen = 0;
     this.corked = 0;
     this.star = 0;
@@ -434,7 +445,26 @@ export class Player extends Entity {
   get pBars() { return Math.min(P_SEGMENTS, Math.floor(this.pMeter / (P_METER_MAX / P_SEGMENTS))); }
 
   /** Extra mid-air jumps granted by the fart mushroom, one per level. */
-  get airJumpsMax() { return this.type === 'shroom' && !this.corked ? this.power.level : 0; }
+  /*
+   * VERBI 6: NIELTY VIHOLLINEN ON TYÖKALU — ja tässä on se yksi rivi jolla se
+   * koskee hyppyyn.
+   *
+   * IDEAS kohta 6 (tuomio "kyllä"): *"syö vihollinen, saat kyvyn — piikkiukko
+   * tekee piikikkääksi, lentäjä antaa hypyn — eli jokaisesta lajista tulee
+   * työkalu."* Siivet ovat se osa jonka lentävät lajit antavat, ja se on
+   * **yksi ilmahyppy lisää** eikä uusi lentotila: pierupompun talous on
+   * mitattu ja hinnoiteltu (`AIR_JUMP_CD`), ja uusi hyppytapa olisi uusi
+   * talous. Lisäys nollan päälle on kuitenkin sekin lisäys — voimatasolla 0
+   * nielty lentäjä antaa siis sen ainoan ilmahypyn, mikä on juuri se hetki
+   * jolloin lahja tuntuu eniten.
+   */
+  get airJumpsMax() {
+    const base = this.type === 'shroom' && !this.corked ? this.power.level : 0;
+    return base + (this.swallowed === 'siivet' && !this.corked ? 1 : 0);
+  }
+
+  /** Mikä kyky suussa on juuri nyt, tai `null`. Ks. `swallow`. */
+  get swallowed() { return this.swallowTimer > 0 ? this.swallowKind : null; }
 
   /** True from the moment down + jump is taken until he can steer again. */
   get pounding() { return this.poundPhase !== ''; }
@@ -782,7 +812,14 @@ export class Player extends Entity {
 
     /* -------------------------------- attack -------------------------- */
     if (this.controllable && input.pressed.run && !this.corked) {
-      if (this.type === 'flower') this.shoot();
+      /*
+       * Sylky ennen omaa asetta, ja se on tarkoituksellinen järjestys: nielty
+       * ammus on **lainassa ja kuluu**, joten sen pitää lähteä ensin. Kukalla
+       * on oma laukauksensa takaisin heti kun suu on tyhjä, eikä pelaaja voi
+       * hukata sylkyään painamalla väärään aikaan.
+       */
+      if (this.swallowed === 'sylky') this.shoot();
+      else if (this.type === 'flower') this.shoot();
       else if (this.type === 'leaf') {
         this.spin = 18;
         Sfx.play('squeak');
@@ -797,6 +834,20 @@ export class Player extends Entity {
       onHeadBump: (tx, ty) => this.level.bumpTile(tx, ty, this),
       dropThrough: down && !this.onGround,
     });
+
+    /*
+     * Nielty kyky kuluu ajassa, ja **kylmä maksaa jäljen jokaisesta
+     * laskeutumisesta**: kuura jättää jälkeensä liukasta maata kävellessään,
+     * ja se joka on niellyt kuuran tekee saman hyppiessään. Sama laki, sama
+     * kello, sama sulaminen — kyky on lainattu eikä keksitty.
+     */
+    if (this.swallowTimer > 0) {
+      this.swallowTimer--;
+      if (this.swallowKind === 'kylmä' && this.onGround && this.level.frostTile) {
+        this.level.frostTile(Math.floor(this.cx / TILE), Math.floor((this.y + this.h) / TILE));
+      }
+      if (this.swallowKind === 'magneetti' && this.level.pullCoins) this.level.pullCoins(this);
+    }
 
     /* Ketju katkeaa maakosketukseen, ja se luetaan **liikkeen jälkeen**: se on
      * ainoa hetki jolla `onGround` kertoo tämän framen totuuden. Kohtauksesta
@@ -1233,6 +1284,15 @@ export class Player extends Entity {
      * ole enää pelissä ei ota vastaan mitään, olipa lähettäjä mikä tahansa.
      */
     if (this.level.state !== 'play') return false;
+    /* Kuori ottaa yhden osuman ja katoaa. Se on nielty kuoriukko, ja se tekee
+     * saman minkä sen oma kuori teki: kestää kerran. */
+    if (this.swallowed === 'kuori') {
+      this.swallowTimer = 0;
+      this.invuln = 90;
+      Sfx.play('kick');
+      this.level.addScorePop(this.cx, this.y - 8, 'KUORI MENI');
+      return false;
+    }
     if (this.power.level === 0) {
       this.die(cause);
       return true;
