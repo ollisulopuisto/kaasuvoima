@@ -79,7 +79,11 @@ export const WORLD3_LEVELS = {
       'start', 'spike_walk', 'power', 'ice_first', 'walkers', 'ice_pit', 'qrow',
       'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
       'spikes', 'ice_star', 'cork_gap', 'sky_run', 'spring_jet', 'pit_plat', 'power_hi',
-      'plat_steps', 'steps_up', 'run_up', 'goal', 'goal_end',
+      /* `plat_steps` → `pitkarinne`: sama nousu portaina, mutta alas tullaan
+       * kahdeksan laatan rinnettä. Vaihto eikä lisäys, koska maailman käyrä on
+       * portti — ks. sama perustelu maailmassa 1. Ja juuri jäämaailmaan,
+       * koska se on ainoa jonka maa on jo valmiiksi vauhdista. */
+      'pitkarinne', 'steps_up', 'run_up', 'goal', 'goal_end',
     ],
   },
   /*

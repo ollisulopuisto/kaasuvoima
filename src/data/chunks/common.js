@@ -85,6 +85,35 @@ export const SLOPE_CHUNKS = {
     13: '############     ###',
     14: G + '####',
   }),
+  /**
+   * PITKÄ ALAMÄKI, ja se on olemassa yhtä kuvaa varten.
+   *
+   * Omistaja 17.8.2026: *"jalat pyörivät vauhdikkaasti kuin Sonicilla
+   * alamäkeen mennessä."* Animaatio tehtiin (`spinLegs`), ja sen ehto on
+   * "kovempaa kuin juosten" — mutta pelissä ei ollut yhtään rinnettä joka
+   * ehtii antaa sen vauhdin. `kumpare` on neljä laattaa alas, ja neljässä
+   * laatassa alamäen veto (0,14/frame) ehtii nostaa juoksukatosta noin
+   * kolmanneksen matkaa. Kahdeksan laattaa riittää.
+   *
+   * Ylös noustaan **portaita** (seitsemän askelmaa, yksi laatta kukin) ja alas
+   * tullaan **rinnettä**: nousu ei ole tässä palkinto vaan hinta, ja portaat
+   * sanovat sen suoraan — yhtä laattaa ei kävellä ylös, se hypätään. Alhaalla
+   * on seitsemän saraketta juoksualuetta, koska lainattu vauhti on lainassa
+   * vain hetken: ylinopeus vuotaa pois tasamaalla, ja se osa on yhtä
+   * tarkoituksellinen kuin itse mäki.
+   */
+  pitkarinne: ck(24, {
+    6: '        ##\\',
+    7: '       ####\\',
+    8: '      ######\\',
+    9: '     ########\\',
+    10: '    ##########\\',
+    11: '   ############\\',
+    12: '  ##############\\',
+    13: '########################',
+    14: '########################',
+  }),
+
   ylareitti: ck(20, {
     4: '             o o o',
     5: '            -----',

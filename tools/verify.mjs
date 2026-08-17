@@ -20446,6 +20446,48 @@ const report = await page.evaluate(async () => {
         + ` kello ${p2.swallowTimer}`);
     }
 
+    /* --- 9 c. pyörivät jalat --- */
+    /*
+     * Kolme väitettä, ja ne ovat samat kolme jotka mikä tahansa uusi
+     * animaatio joutuu läpäisemään: **se on eri kuva** kuin se jonka tilalle
+     * se tuli, **se liikkuu**, ja **se ei muuta siluettia** — pelaajan
+     * ääriviivasta luetaan osumalaatikko.
+     */
+    {
+      const sprites = await import('/src/gfx/sprites.js');
+      const shot = (spin, tick) => {
+        const c = document.createElement('canvas');
+        c.width = 32; c.height = 40;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.clearRect(0, 0, 32, 40);
+        sprites.drawPlayer(g, 8, 8, {
+          type: 'shroom', level: 1, facing: 1, state: 'walk', ducking: false,
+          running: true, idle: 0, theme: 'grass', wag: 0, frame: 0, tick, spinLegs: spin,
+        });
+        return g.getImageData(0, 0, 32, 40).data;
+      };
+      const walking = shot(false, 0);
+      const wheelA = shot(true, 0);
+      const wheelB = shot(true, 4);
+      const diff = (a2, b2) => {
+        let n = 0;
+        for (let i = 0; i < a2.length; i += 4) {
+          if (a2[i] !== b2[i] || a2[i + 1] !== b2[i + 1] || a2[i + 2] !== b2[i + 2]
+            || a2[i + 3] !== b2[i + 3]) n++;
+        }
+        return n;
+      };
+      const mask = (a2, b2) => {
+        let n = 0;
+        for (let i = 3; i < a2.length; i += 4) if ((a2[i] > 8) !== (b2[i] > 8)) n++;
+        return n;
+      };
+      expect('kovassa vauhdissa jalat ovat pyörä, ja pyörä pyörii',
+        diff(walking, wheelA) > 12 && diff(wheelA, wheelB) > 3 && mask(walking, wheelA) < 12,
+        `kävely vs pyörä ${diff(walking, wheelA)} px, pyörän kaksi framea`
+        + ` ${diff(wheelA, wheelB)} px, siluettiero ${mask(walking, wheelA)} px`);
+    }
+
     /* --- 9 b. SID-sanasto: pulssi, arpeggio, suodin --- */
     /*
      * Kolme väitettä siitä mitä `tone`en tuli, ja jokainen on luettavissa

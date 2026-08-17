@@ -7,6 +7,41 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.15 — pyörivät jalat, ja mäki joka ansaitsee ne
+
+Omistaja 17.8.2026: *"jalat pyörivät vauhdikkaasti kuin Sonicilla alamäkeen
+mennessä."*
+
+**Ehto on yksi lause:** keho menee kovempaa kuin sen jalat osaavat kävellä
+(`|vx| > MAX_RUN`). Se on tosi täsmälleen kahdessa tilanteessa — alamäessä,
+jossa rinne lainaa ylimmän nopeuden, ja täydellä vauhtimittarilla — eikä
+piirroksen tarvitse arvata mitä "vauhdikkaasti" tarkoittaa.
+
+**Kuva on kiekko ja kolme puolaa** eikä kolmas kävelyruutu, ja se on koko idea:
+kävelyruutuja vaihtamalla nopeammin saa nopeamman kävelyn, ei pyörimistä. Jalat
+lakkaavat olemasta jalkoja ja muuttuvat pyöräksi, jonka liikkeen lukee
+puolista — ja puolat ovat **vaaleita eivätkä tummia**, koska kiekon oma väri on
+housut ja sen alareuna musta: tumma puola katosi omaan taustaansa. Ylälaidassa
+on lisäksi valojuova, koska pyörän yläreuna on se osa joka liikkuu nopeimmin.
+Siluetti ei muutu — pelaajan ääriviivasta luetaan osumalaatikko.
+
+**Ja sitten se mikä puuttui:** pelissä ei ollut yhtään alamäkeä joka ehtii antaa
+sen vauhdin. `kumpare` on neljä laattaa alas, ja neljässä laatassa alamäen veto
+ei ehdi juoksukatosta ylös. `pitkarinne` on kahdeksan: seitsemän askelman
+portaat ylös, kahdeksan laatan rinne alas ja seitsemän saraketta juoksualuetta
+pohjalla — ylinopeus vuotaa pois tasamaalla, ja se osa on yhtä tarkoituksellinen
+kuin itse mäki. Mitattu huippunopeus alamäessä 2,74, eli pyörä pyörii.
+
+Jäämaailmaan (3-1) ja vaihtona `plat_steps`in tilalle, samasta syystä kuin
+maailmassa 1: maailman käyrä on portti, ja lisäys olisi siirtänyt sitä. Jää on
+myös se maailma jonka maa on jo valmiiksi vauhdista.
+
+Portti mittaa kolme asiaa, ja ne ovat samat kolme jotka mikä tahansa uusi
+animaatio joutuu läpäisemään: se on eri kuva kuin se jonka tilalle se tuli, se
+liikkuu, eikä se muuta siluettia.
+
+---
+
 ## v26.08.18.14 — SID-sanasto: pulssi, arpeggio ja jäämaailman oma raita
 
 Omistaja 17.8.2026: *"take inspiration from the SID chip of the Commodore 64 …

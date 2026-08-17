@@ -171,6 +171,66 @@ function legs(ctx, x, y, w, pal, frame, running) {
   }
 }
 
+/*
+ * PYÖRIVÄT JALAT: se yksi kuva jonka Sonic keksi ja jota tämä peli tarvitsi.
+ *
+ * Omistaja 17.8.2026: *"jalat pyörivät vauhdikkaasti kuin Sonicilla alamäkeen
+ * mennessä."* Ehto on kirjoitettu `player.js`:ssä yhdeksi lauseeksi — **keho
+ * menee kovempaa kuin sen jalat osaavat kävellä** — eli `|vx| > MAX_RUN`. Se
+ * on tosi täsmälleen kahdessa tilanteessa: alamäessä (`slopePull` lainaa
+ * ylimmän nopeuden) ja täydellä vauhtimittarilla. Rinne on niistä se jonka
+ * pelaaja näkee ensin, ja se on myös se joka pyydettiin.
+ *
+ * Kuva on **kiekko ja kaksi puolaa** eikä kolmas kävelyruutu, ja se on koko
+ * idea: kävelyruutuja vaihtamalla nopeammin saa nopeamman kävelyn, ei
+ * pyörimistä. Jalat lakkaavat olemasta jalkoja ja muuttuvat pyöräksi, jonka
+ * liikkeen lukee **puolista** — kaksi tummaa merkkiä jotka kiertävät kehää.
+ * Sama keino kuin sarjakuvassa, ja se toimii samasta syystä: silmä ei seuraa
+ * sumeaa muotoa vaan sitä ainoaa kohtaa jossa on kontrastia.
+ *
+ * Kiekko täyttää laatikon pohjan reunasta reunaan (x+1 … x+w-1) ja koskettaa
+ * ylhäältä runkoa. Se ei ole koristeellinen valinta vaan portin ehto: pelaajan
+ * piirroksesta luetaan sekä osumalaatikko että se, onko hahmo yhtä kappaletta.
+ */
+function spinLegs(ctx, x, y, w, pal, tick) {
+  const cx = x + w / 2;
+  const rx = w / 2 - 1;
+  const cy = y + 2;
+  ctx.fillStyle = pal.legs;
+  for (let dy = -2; dy <= 2; dy++) {
+    const k = Math.sqrt(Math.max(0, 1 - (dy / 2.6) ** 2));
+    const half = Math.round(rx * k);
+    ctx.fillRect(Math.round(cx - half), cy + dy, half * 2, 1);
+  }
+  /* Pohjarivi läpi laatikon: pyörä koskettaa maata koko leveydeltään, ja
+   * silhuetti pysyy samana kuin kävelevällä. */
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(Math.round(cx - rx), y + 4, Math.round(rx * 2), 1);
+  /*
+   * Kaksi puolaa vastakkain, kierros noin seitsemässä framessa. Nopeampi
+   * kierto olisi välkyntää 60 Hz:n ruudulla eikä liikettä.
+   *
+   * **Vaaleat eikä tummat**, ja se on mitattu silmällä kuvasta: kiekon oma
+   * väri on housut (tumma) ja sen alareuna on musta, joten tumma puola katosi
+   * omaan taustaansa. Liike luetaan kontrastista, ja ainoa kontrasti joka
+   * tästä kiekosta on saatavilla on valo.
+   */
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let i = 0; i < 3; i++) {
+    const a = tick * 0.9 + (i * 2 * Math.PI) / 3;
+    for (const r of [0.45, 0.8]) {
+      const sx = Math.round(cx + Math.cos(a) * rx * r) - 1;
+      const sy = Math.round(cy + Math.sin(a) * 1.7 * r);
+      ctx.fillRect(sx, sy, 2, 1);
+    }
+  }
+  /* Ylälaidan valokaari: pyörän yläreuna on se osa joka liikkuu nopeimmin, ja
+   * pysyvä vaalea juova siinä on koko sarjakuvakikan toinen puoli — puolat
+   * kertovat *että* pyörii, juova kertoo *kuinka kovaa*. */
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.fillRect(Math.round(cx - rx * 0.8), cy - 2, Math.round(rx * 1.6), 1);
+}
+
 /**
  * The kaasulehti's gas hose, drawn behind the body (the sprite always faces
  * +x), swinging on the same sine the leaf power has always swung.
@@ -793,7 +853,8 @@ function drawPlayerBase(ctx, x, y, s, small) {
         // small body was 19px tall in a 16px box, so he walked and stood with
         // his boots three pixels down in the floor at every power level 0 —
         // idle as well as walking, since standing borrows the same cycle.
-        legs(ctx, px, py + 11, 12, pal, WALK_ORDER[s.frame % WALK_FRAMES], s.running);
+        if (s.spinLegs) spinLegs(ctx, px, py + 11, 12, pal, s.tick || 0);
+        else legs(ctx, px, py + 11, 12, pal, WALK_ORDER[s.frame % WALK_FRAMES], s.running);
       } else {
         /* Standing still uses the walk cycle's closed-legs frame rather than a
          * pose of its own. The pose of its own was two 2x2 stubs of trouser
@@ -881,7 +942,8 @@ function drawPlayerBase(ctx, x, y, s, small) {
       // 26 - 5, for the same reason, and it lines the walking sole up with the
       // standing one below — those were a pixel apart, so the feet twitched
       // down every time he started moving.
-      legs(ctx, px, py + 21, 14, pal, WALK_ORDER[s.frame % WALK_FRAMES], s.running);
+      if (s.spinLegs) spinLegs(ctx, px, py + 21, 14, pal, s.tick || 0);
+      else legs(ctx, px, py + 21, 14, pal, WALK_ORDER[s.frame % WALK_FRAMES], s.running);
     } else {
       ctx.fillStyle = pal.legs;
       ctx.fillRect(px + 3, py + 22, 3, 2);
