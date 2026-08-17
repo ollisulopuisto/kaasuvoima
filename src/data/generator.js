@@ -356,6 +356,51 @@ export const PIECES = {
     return w;
   },
 
+  /**
+   * MÄKI, eli se yksi asia jota tässä generaattorissa ei ollut: **maan pinta
+   * liikkuu.**
+   *
+   * Omistaja 17.8.2026: *"kentissä on edelleen liian vähän varianssia! Ne
+   * tuntuvat tasaisilta ja toisteisilta."* Syy oli rakenteellinen ja se näkyy
+   * `Canvas.ground`issa: jokainen pala kirjoittaa lattian riveille 13-14, eli
+   * **maan korkeus oli vakio koko pelin ajan** ja kaikki vaihtelu oli sen
+   * päälle kasattua tavaraa. Portaat (`stairs`) nostivat kyllä, mutta portaat
+   * ovat este jonka yli kiivetään; mäki on maata jota pitkin kuljetaan.
+   *
+   * Muoto on sama kuin käsintehdyllä `kumpare`ella: rinne ylös, tasanne,
+   * rinne alas — ja koska rinne on nyt moottorissa (v26.08.18.13), tämä on
+   * pelkkää dataa eikä uutta fysiikkaa. Alamäki lainaa vauhtia ja huipulta
+   * lähtee lentoon se joka tulee kovaa, eli sama palikka on kolme eri asiaa
+   * riippuen siitä miten siihen tullaan.
+   *
+   * Korkeus tulee mitatusta askelmajakaumasta (`stats.stepUp`) kuten portailla
+   * ja katto on neljä laattaa: viisi laattaa maata nostaisi pelaajan niin
+   * ylös että teeman katto (`ceilingPass`) alkaisi olla kysymys, ja mäki on
+   * maisemaa eikä koekenttä.
+   */
+  hill(c, x, ctx) {
+    const h = Math.min(4, Math.max(2,
+      sampleHist(stats.stepUp, { min: 2, max: 5 }) - ctx.ease));
+    const top = range(2, 6);
+    const w = h * 2 + top + 2;
+    c.ground(x, w);
+    for (let i = 0; i < h; i++) {
+      const col = x + 1 + i;
+      c.set(col, FLOOR - 1 - i, '/');
+      for (let j = 0; j < i; j++) c.set(col, FLOOR - 1 - j, '#');
+    }
+    for (let i = 0; i < top; i++) {
+      const col = x + 1 + h + i;
+      for (let j = 0; j < h; j++) c.set(col, FLOOR - 1 - j, '#');
+    }
+    for (let i = 0; i < h; i++) {
+      const col = x + 1 + h + top + i;
+      c.set(col, FLOOR - h + i, '\\');
+      for (let j = FLOOR - h + i + 1; j <= FLOOR - 1; j++) c.set(col, j, '#');
+    }
+    return w;
+  },
+
   /** A cluster of walkers, shells or flyers, sized from the mined clustering. */
   enemies(c, x, ctx) {
     const count = Math.min(4, Math.max(1, sampleHist(stats.enemyCluster, { min: 1, max: 4 })));
@@ -756,7 +801,7 @@ export const THEME_RULES = {
     bg: 'hills',
     enemies: ['g', 'g', 'k', 'f'],
     weights: {
-      gap: 4, enemies: 5, blockRow: 4, stairs: 2, pipe: 2, platforms: 3,
+      gap: 4, enemies: 5, blockRow: 4, stairs: 2, hill: 3, pipe: 2, platforms: 3,
       coins: 2, notes: 1, stinkGap: 2, corkGate: 1, highReward: 2,
       crumbleWalk: 2, switchWall: 2,
     },
@@ -767,7 +812,7 @@ export const THEME_RULES = {
     bg: 'dunes',
     enemies: ['g', 'k', 'f', 'r'],
     weights: {
-      gap: 3, enemies: 4, blockRow: 3, stairs: 2, platforms: 3, spikes: 2,
+      gap: 3, enemies: 4, blockRow: 3, stairs: 2, hill: 3, platforms: 3, spikes: 2,
       heartburn: 3, sun: 1, coins: 2, stinkGap: 2, corkGate: 2, lava: 1,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
@@ -784,7 +829,7 @@ export const THEME_RULES = {
     bg: 'dunes',
     enemies: ['g', 'k', 'f', 'r'],
     weights: {
-      gap: 3, enemies: 4, blockRow: 3, stairs: 2, platforms: 3, spikes: 2,
+      gap: 3, enemies: 4, blockRow: 3, stairs: 2, hill: 2, platforms: 3, spikes: 2,
       heartburn: 2, coins: 2, stinkGap: 3, corkGate: 2, lava: 1,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },

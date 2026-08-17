@@ -46,20 +46,32 @@ function rampFill(entity, level, tx, ty) {
  * on framen verran jäljessä reunasta — ja ruudukkotörmäys pysäytti sen
  * tasanteen kulmaan. Mitattu: juoksija jumittui rampin päähän joka kerta.
  *
- * `STEP_UP` on **kuusi pikseliä**, ja se on valittu niin ettei tästä tule
- * porrasautomaattia: pienin laatta tässä pelissä on kuusitoista, eli yksikään
- * seinä tai askelma ei mahdu tähän ikkunaan. Ehto vaatii lisäksi että keho on
- * juuri nyt rinteessä, joten tasamaalla sääntöä ei ole olemassa.
+ * **Askelman korkeus tulee kehon leveydestä eikä vakiosta**, ja se on tämän
+ * säännön koko juju. Rinteen pinta luetaan kehon **keskikohdasta**, mutta
+ * törmäyksen tekee sen **etureuna** — joka on `w/2` edempänä, ja 45 asteen
+ * rinteessä siis `w/2` pikseliä ylempänä. Iso Pieruprinssi on 21 px leveä,
+ * eli hänen etureunansa on kymmenen pikseliä korkeammalla kuin se kohta jota
+ * moottori mittaa.
+ *
+ * Tässä luki kiinteä kuusi, ja se riitti pienimmälle keholle (12 px → 6) ja
+ * **vain sille**: omistajan raportti 17.8.2026 oli että hahmo pysähtyy 1-1:n
+ * rinteen huipulle kuin seinään. Niin se pysähtyikin — tasanteen ensimmäinen
+ * laatta oli kahdeksan pikseliä jalkojen yläpuolella, eli kaksi liikaa.
+ *
+ * `w / 2 + 2` on siis mitattu geometriasta eikä valittu: puolikas leveys on se
+ * virhe jonka mittapiste tekee, ja kaksi pikseliä on framen liike sen päälle.
+ * Isoimmallakin keholla se on 12 px eli selvästi alle laatan — yksikään seinä
+ * tai askelma ei mahdu ikkunaan, eikä tästä siis tule porrasautomaattia. Ehto
+ * vaatii yhä että keho on **juuri nyt rinteessä**, joten tasamaalla sääntöä ei
+ * ole olemassa.
  */
-const STEP_UP = 6;
-
 function stepUp(entity, level, tx, ty) {
   if (!entity.onSlope || !entity.onGround) return false;
   void level;
   void tx;
   const feet = entity.y + entity.h;
   const top = ty * TILE;
-  return feet > top && feet - top <= STEP_UP;
+  return feet > top && feet - top <= entity.w / 2 + 2;
 }
 
 /**

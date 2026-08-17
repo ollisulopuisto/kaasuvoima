@@ -20774,6 +20774,56 @@ const report = await page.evaluate(async () => {
           + ` kävelijä nousi ${climbed.toFixed(0)} px`);
       }
 
+      /* 3 b. RINNE ON KULJETTAVA JOKA KOOSSA.
+       *
+       * Omistajan raportti 17.8.2026: *"kun juoksen rinnettä ylös (1-1),
+       * hahmo PYSÄHTYY tähän ylänurkkaan."* Niin pysähtyikin, ja vika oli
+       * askelma-avussa: rinteen pinta luetaan kehon **keskikohdasta**, mutta
+       * törmäyksen tekee sen **etureuna** — joka on `w/2` edempänä ja 45
+       * asteen rinteessä siis `w/2` pikseliä ylempänä. Kiinteä kuuden
+       * pikselin askelma riitti pienimmälle keholle (12 px) ja vain sille.
+       *
+       * Miksi mikään ei huomannut: `playable.mjs` ajaa botin **voimatasolla
+       * 0**, eli sillä ainoalla koolla joka mahtui. Siksi tämä väite ajaa
+       * jokaisen neljän kokoluokan läpi oikean kentän oikean mäen — mitattu
+       * vika oli sarakkeessa 103, eli rampin viimeisen laatan ja tasanteen
+       * saumassa.
+       */
+      {
+        const sizes = [[null, 0], ['shroom', 1], ['shroom', 3], ['leaf', 5]];
+        const stuck = [];
+        for (const [type, level] of sizes) {
+          game.state = {
+            lives: 3, coins: 0, score: 0, power: { type, level }, reserve: null,
+            world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+            usedSaveState: false, continues: 0, bestTimes: {},
+          };
+          const s = new LevelScene(game, '1-1');
+          s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+          s.time = 9999;
+          const p = s.player;
+          const col = s.grid[12].indexOf('/');
+          p.x = (col - 6) * 16;
+          p.y = 12 * 16 - p.h;
+          let last = p.x;
+          let still = 0;
+          let stalledAt = null;
+          for (let f = 0; f < 400; f++) {
+            s.update(press(1, true));
+            if (p.x - last < 0.2) {
+              still++;
+              if (still > 30 && stalledAt === null) stalledAt = Math.round(p.x / 16);
+            } else still = 0;
+            last = p.x;
+            if (p.x / 16 > col + 20) break;
+          }
+          if (stalledAt !== null) stuck.push(`taso ${level} (${p.w} px) sarakkeessa ${stalledAt}`);
+        }
+        expect('rinteen yli pääsee jokaisessa koossa, ei vain pienimmässä',
+          stuck.length === 0,
+          stuck.length ? stuck.join(', ') : '4/4 kokoa nousi 1-1:n kumpareen yli');
+      }
+
       /* 4. Muunnin: huipulta lähtevä vaihtaa vauhdin korkeudeksi, ja
        *    palkinto on portaittainen — kävelijä ei lennä, juoksija hyppää,
        *    täysi mittari pääsee reitille. */
