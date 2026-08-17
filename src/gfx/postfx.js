@@ -133,11 +133,20 @@ for (let i = 0; i < MAX_WORLD_LIGHTS; i++) EMPTY_LIGHTS[i * 4 + 2] = 1;
 const SPOT_DIM = 0.24;
 
 /**
- * Height of the HUD strip along the bottom, mirroring `HUD_H` in
- * scenes/level.js. Atmosphere stops here: the HUD is not air and not a window,
- * and a wobbling timer is just a hard-to-read timer.
+ * Mitä alareunasta jää ilmakehän ulkopuolelle. **Nolla 17.8.2026 alkaen.**
+ *
+ * Tässä oli 32 px, eli HUD-nauhan korkeus: ilmakehä pysähtyi nauhan yläreunaan,
+ * koska nauha ei ole ilmaa eikä ikkuna ja väreilevä kello on vain vaikeasti
+ * luettava kello. Nauhaa ei enää ole — jokainen lukema joko on maailmassa tai
+ * ilmestyy tarvittaessa — ja **sama sääntö pätee yhä**, mutta se on nyt
+ * piirtojärjestyksessä: `main.js` piirtää `drawOverlay`in vasta `apply`n
+ * jälkeen, joten lukemat ovat efektien ulkopuolella ilman varattua kaistaa.
+ *
+ * Vakio jäi nollana eikä poistettu, koska sen alla oleva laskenta on oikeaa
+ * geometriaa (`h - HUD_H`) eikä kiertotie: jos ruudun alalaitaan joskus tulee
+ * jotain jonka ilmakehä ei saa koskea, luku on tässä yhdessä paikassa.
  */
-const HUD_H = 32;
+const HUD_H = 0;
 
 /*
  * KUNINKAAN VERHO — se hetki jolloin ruutu pukee saapuvan maailman värin.

@@ -92,14 +92,91 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 
 /* ----------------------------- primitives ------------------------------ */
 
+/*
+ * SID-SANASTO: pulssi, leveysmodulaatio, rengasmodulaatio ja arpeggio.
+ *
+ * Omistaja 17.8.2026: *"take inspiration from the SID chip of the Commodore 64
+ * … look at the ways Martin Galway, Rob Hubbard and people like that drove it.
+ * They only had a few channels, so they got creative."* Se on tarkka pyyntö ja
+ * se koskee kahta eri asiaa, jotka on syytä pitää erillään:
+ *
+ *   - **Aaltomuodot.** WebAudion neljä perusaaltoa ovat sine, square, sawtooth
+ *     ja triangle. SIDin oma valikoima on saha, kolmio, **säädettävä pulssi**
+ *     ja kohina — ja juuri pulssin leveys on se jota ei tässä moottorissa
+ *     ollut. `square` on pulssi jonka leveys on tasan 50 %, eli yksi piste
+ *     koko akselilta jolla SID-ääni elää.
+ *   - **Kanavapula keinona.** Kolmella äänellä ei soiteta sointuja, joten
+ *     niitä *arpeggioidaan*: sama kanava käy soinnun sävelet läpi ruutuvauhtia
+ *     (50 Hz PAL), ja korva kuulee soinnun. Sama pula synnytti myös
+ *     rengasmodulaation käytön kelloihin ja lyömäsoittimiin.
+ *
+ * Neljä lisäystä `tone`en, ja jokainen on **oma parametrinsa eikä uusi
+ * soitin**: sama kutsupaikka, sama envelope, sama väylä.
+ *
+ *   `duty`   0…1, pulssin leveys. 0,5 on `square`.
+ *   `pwm`    kuinka paljon leveys liikkuu noten aikana (ja `pwmRate` kuinka
+ *            nopeasti). Tämä on se "paksuuntuva" SID-lyijy jota ei saa
+ *            millään staattisella aallolla.
+ *   `ring`   rengasmodulaation kerroin: toinen oskillaattori kertoo tämän
+ *            amplitudin. Kellot, ksylofonit ja metalliset lyömäsoittimet.
+ *   `arp`    puolisävelaskeleet joita kierretään `arpRate` kertaa sekunnissa.
+ *            Oletus 50 on PAL-ruutuvauhti, eli se luku jolla nämä tehtiin.
+ *
+ * Suodin (`cutoff`, `resonance`, `sweep`) on viides ja se on SIDin toinen
+ * allekirjoitus: yksi soi läpi koko sirun, ja sen pyyhkäisy on puolet siitä
+ * mitä Hubbardin basso on.
+ */
+
+/** Pulssiaallot muistissa: leveys pyöristetään kahdeksasosaan ja jaetaan. */
+const pulseWaves = new Map();
+const PULSE_HARMONICS = 32;
+
+/**
+ * Pulssin osaäänet: `a_n = 2/(n*pi) * sin(n*pi*d)`.
+ *
+ * Ulos viety, koska tämä on se kohta jonka portti voi mitata ilman
+ * äänikorttia: **50 %:n pulssilla joka toinen osaääni on nolla** (siitä
+ * kanttiaalto on ontto), ja mikä tahansa muu leveys tuo ne takaisin. Se on
+ * koko ero `square`n ja SID-pulssin välillä yhtenä lauseena, ja portti lukee
+ * sen luvuista eikä korvasta.
+ *
+ * Kolmekymmentäkaksi osaääntä riittää — enempää ei kuulu 8 kHz:n yläpuolella
+ * eikä pikselipelin miksauksessa — ja se pitää aliasoinnin poissa matalilla
+ * nuoteilla.
+ */
+export function pulseHarmonics(duty) {
+  const d = Math.max(1, Math.min(15, Math.round(duty * 16))) / 16;
+  const imag = new Float32Array(PULSE_HARMONICS + 1);
+  for (let n = 1; n <= PULSE_HARMONICS; n++) {
+    imag[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * d);
+  }
+  return imag;
+}
+
+function pulseWave(duty) {
+  const key = Math.max(1, Math.min(15, Math.round(duty * 16)));
+  const hit = pulseWaves.get(key);
+  if (hit) return hit;
+  const imag = pulseHarmonics(duty);
+  const real = new Float32Array(imag.length);
+  const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+  pulseWaves.set(key, wave);
+  return wave;
+}
+
 /**
  * One oscillator with an ADSR-ish envelope. `bend` sweeps the pitch, `vibrato`
  * adds an LFO, `detune` layers a second slightly-off oscillator for thickness.
+ *
+ * SID-lisät (`duty`, `pwm`, `ring`, `arp`, `cutoff`) ovat yllä olevassa
+ * kommentissa.
  */
 function tone({
   type = 'square', from, to = from, dur = 0.1, gain = 0.3, delay = 0,
   attack = 0.006, hold = 0.55, detune = 0, vibrato = 0, vibratoRate = 6,
   bus = null, curve = 'exp',
+  duty = 0, pwm = 0, pwmRate = 3, ring = 0, arp = null, arpRate = 50,
+  cutoff = 0, resonance = 0, sweep = 1,
 }) {
   if (muted || !ensure()) return;
   const out = bus || sfxBus;
@@ -111,18 +188,85 @@ function tone({
   env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   env.connect(out);
 
+  /* Suodin ennen envelopea, jotta pyyhkäisy kuuluu myös sammuvassa nuotissa.
+   * Ilman `cutoff`ia ei suodinta rakenneta lainkaan: yksi solmu vähemmän per
+   * nuotti on kuultavissa vasta tuhannessa, mutta se on ilmainen. */
+  let sink = env;
+  if (cutoff > 0) {
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.max(60, cutoff), t0);
+    lp.Q.value = resonance;
+    if (sweep !== 1) {
+      lp.frequency.exponentialRampToValueAtTime(
+        Math.max(60, Math.min(18000, cutoff * sweep)), t0 + dur);
+    }
+    lp.connect(env);
+    sink = lp;
+  }
+
+  /* Rengasmodulaatio: kantoaallon amplitudia kerrotaan toisella
+   * oskillaattorilla, jonka lepoarvo on nolla — eli tulo eikä sekoitus. Se on
+   * täsmälleen se rakenne joka SIDissä on, ja siksi se kuulostaa siltä. */
+  if (ring > 0) {
+    const ringGain = ctx.createGain();
+    ringGain.gain.setValueAtTime(0, t0);
+    const mod = ctx.createOscillator();
+    mod.type = 'sine';
+    mod.frequency.setValueAtTime(from * ring, t0);
+    mod.connect(ringGain.gain);
+    mod.start(t0);
+    mod.stop(t0 + dur + 0.03);
+    ringGain.connect(sink);
+    sink = ringGain;
+  }
+
   const oscs = [];
   const voices = detune ? [0, detune] : [0];
   for (const cents of voices) {
     const osc = ctx.createOscillator();
-    osc.type = type;
+    if (type === 'pulse') osc.setPeriodicWave(pulseWave(duty || 0.5));
+    else osc.type = type;
     osc.detune.value = cents;
     osc.frequency.setValueAtTime(from, t0);
     if (to !== from) {
       if (curve === 'lin') osc.frequency.linearRampToValueAtTime(Math.max(1, to), t0 + dur);
       else osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + dur);
     }
-    osc.connect(env);
+    /*
+     * ARPEGGIO: sama ääni käy soinnun läpi ruutuvauhtia. Askel on
+     * `setValueAtTime` eikä ramp — portaaton liuku olisi glissando, ja juuri
+     * portaikko on se mikä tekee siitä soinnun eikä liukuman.
+     */
+    if (arp && arp.length > 1) {
+      const stepDur = 1 / arpRate;
+      for (let i = 0; i * stepDur < dur; i++) {
+        const semi = arp[i % arp.length];
+        osc.frequency.setValueAtTime(from * Math.pow(2, semi / 12), t0 + i * stepDur);
+      }
+    }
+    /*
+     * PULSSIN LEVEYSMODULAATIO. Aalto vaihdetaan portaittain, koska
+     * `setPeriodicWave` ei ole automatisoitava parametri — ja koska SIDissäkin
+     * leveys on rekisteri jota ajuri kirjoittaa ruutu kerrallaan, portaikko on
+     * oikea muoto eikä kompromissi. Kahdeksan porrasta jaksoa kohti riittää:
+     * korva kuulee liikkeen eikä portaita.
+     */
+    if (type === 'pulse' && pwm > 0) {
+      const steps = Math.max(2, Math.round(dur * pwmRate * 8));
+      for (let i = 1; i <= steps; i++) {
+        const at = t0 + (dur * i) / steps;
+        const phase = Math.sin(2 * Math.PI * pwmRate * (at - t0));
+        const d = Math.max(0.06, Math.min(0.94, (duty || 0.5) + pwm * phase));
+        const wave = pulseWave(d);
+        /* `setValueAtTime` ei ole olemassa aalloille, joten aikataulutus
+         * tehdään ajastimella: se on epätarkempi kuin äänikello, mutta
+         * leveysmodulaatio on tekstuuria eikä rytmiä. */
+        const when = Math.max(0, (at - ctx.currentTime) * 1000);
+        setTimeout(() => { try { osc.setPeriodicWave(wave); } catch { /* stopped */ } }, when);
+      }
+    }
+    osc.connect(sink);
     osc.start(t0);
     osc.stop(t0 + dur + 0.03);
     oscs.push(osc);
@@ -2058,6 +2202,77 @@ function compile(notes) {
 }
 
 const TRACKS = {
+  /*
+   * JÄÄTIE — maailman 3 oma raita, ja pelin ensimmäinen joka on kirjoitettu
+   * SID-sanastolla (`tone`: `duty`, `pwm`, `arp`, `cutoff`).
+   *
+   * Omistaja 17.8.2026 pyysi ottamaan mallia siitä miten Martin Galway, Rob
+   * Hubbard ja muut ajoivat Commodore 64:n ääntä kolmella kanavalla. Se ei ole
+   * tyylilaji vaan **tekniikkalista**, ja kolme sen kohdista on tässä
+   * raidassa nimeltä:
+   *
+   *   - **Arpeggio soinnun sijaan.** `comp` on yksi ääni joka käy mollikolmikon
+   *     läpi viisikymmentä kertaa sekunnissa — PAL-ruutuvauhti, eli se luku
+   *     jolla nämä kappaleet oikeasti tehtiin. Korva kuulee soinnun, mutta
+   *     kanavia kuluu yksi. Tämä on koko idea: kanavapula ei ollut rajoite
+   *     jota kierrettiin vaan se mistä tyyli syntyi.
+   *   - **Pulssin leveysmodulaatio.** `lead` on kapea pulssi (25 %) jonka
+   *     leveys hengittää hitaasti. Staattinen kanttiaalto on ohut; liikkuva
+   *     pulssi on se ääni jonka kuulee C64-lyijynä tunnistamatta yhtään
+   *     kappaletta.
+   *   - **Suodinpyyhkäisy bassossa.** Saha jonka alipäästö sulkeutuu nuotin
+   *     aikana (`sweep` 0,35) — se on Hubbardin basso yhtenä lukuna, ja se on
+   *     myös syy miksi basso ei tarvitse omaa rumpuaan kuuluakseen.
+   *
+   * Sävellys on oma (DESIGN.md 1 b: lainattu sävelmistö nimetään, eikä tässä
+   * ole mitään lainattua). A-molli, neljä sointua — Am, F, G, Em — ja melodia
+   * joka nousee kolmessa fraasissa ja laskee neljännessä. Jäämaailmaan siksi
+   * että sen kentät soittivat tähän asti yleisraitaa `level`, eli maailma
+   * jolla on oma teema, oma vihollinen ja oma laattaviritys oli ainoa jolla ei
+   * ollut omaa ääntä.
+   */
+  jaatie: {
+    tempo: 142,
+    lead: {
+      wave: 'pulse', duty: 0.25, pwm: 0.16, pwmRate: 1.4,
+      gain: 0.12, octave: 12, vibrato: 3, vibratoRate: 6.5, staccato: 0.9,
+      notes: [
+        [0, 2], [7, 2], [3, 2], [5, 2], [7, 4], [5, 2], [3, 2],
+        [2, 2], [5, 2], [7, 2], [10, 2], [12, 4], [10, 2], [7, 2],
+        [3, 2], [7, 2], [10, 2], [12, 2], [14, 4], [12, 2], [10, 2],
+        [7, 2], [5, 2], [3, 2], [2, 2], [0, 8],
+      ],
+    },
+    comp: {
+      /* Yksi ääni, kolme säveltä: mollikolmikko ruutuvauhtia. */
+      wave: 'pulse', duty: 0.5, gain: 0.055, octave: -12,
+      arp: [0, 3, 7], arpRate: 50, staccato: 0.95,
+      notes: [
+        [0, 8], [-4, 8], [-2, 8], [-5, 8],
+        [0, 8], [-4, 8], [-2, 8], [-5, 8],
+      ],
+    },
+    bass: {
+      wave: 'sawtooth', gain: 0.17, octave: -24,
+      cutoff: 900, resonance: 9, sweep: 0.3, staccato: 0.8,
+      notes: [
+        [0, 2], [0, 2], [12, 2], [7, 2],
+        [-4, 2], [-4, 2], [8, 2], [3, 2],
+        [-2, 2], [-2, 2], [10, 2], [5, 2],
+        [-5, 2], [-5, 2], [7, 2], [2, 2],
+        [0, 2], [0, 2], [12, 2], [7, 2],
+        [-4, 2], [-4, 2], [8, 2], [3, 2],
+        [-2, 2], [-2, 2], [10, 2], [5, 2],
+        [-5, 2], [7, 2], [-5, 4],
+      ],
+    },
+    drums: {
+      kick: 'x.......x...x...',
+      snare: '....x.......x...',
+      hat: 'x.xxx.xxx.xxx.xx',
+    },
+  },
+
   title: {
     tempo: 128,
     lead: {
@@ -3172,6 +3387,18 @@ export const Music = {
           detune: voice.detune || 0,
           vibrato: voice.vibrato || 0,
           vibratoRate: voice.vibratoRate || 6,
+          /* SID-sanasto kulkee ääneltä läpi sellaisenaan, ks. `tone`. Ei
+           * oletuksia tässä: nolla tarkoittaa "ei tätä ominaisuutta", ja
+           * jokainen vanha raita soi täsmälleen kuten ennenkin. */
+          duty: voice.duty || 0,
+          pwm: voice.pwm || 0,
+          pwmRate: voice.pwmRate || 3,
+          ring: voice.ring || 0,
+          arp: voice.arp || null,
+          arpRate: voice.arpRate || 50,
+          cutoff: voice.cutoff || 0,
+          resonance: voice.resonance || 0,
+          sweep: voice.sweep || 1,
           bus: musicBus,
           delay,
         });

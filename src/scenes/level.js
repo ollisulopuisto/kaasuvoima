@@ -1,6 +1,7 @@
 import { arenaColumn, getLevel } from '../data/levels.js';
 import {
-  TILE, T, info, isSolid, isSemi, drawTile, THEMES, SWITCH_MAP, SPIKE_TOP, themeTint,
+  TILE, T, info, isSolid, isSemi, drawTile, drawCoinSprite, THEMES, SWITCH_MAP, SPIKE_TOP,
+  themeTint,
 } from '../gfx/tiles.js';
 /* Vain kuninkaan verhoa varten, ks. `onKingForm`: saapuvan muodon maailma on
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
@@ -9,7 +10,7 @@ import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
-import { ENEMY_CHARS } from '../entities/enemies.js';
+import { ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
 import { Music, Sfx, Ambience, killSound } from '../core/audio.js';
@@ -17,6 +18,8 @@ import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY, GRAVITY_HELD_CUTOFF } from '../level/physics.js';
+/* Kaikki pistearvot ovat yhdessä tiedostossa, ks. `points.js`. */
+import { PTS, COIN, TIME_SECOND, GOAL_STEPS, CHAIN } from '../core/points.js';
 import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
@@ -26,8 +29,21 @@ import { clamp, hashNoise, hashPlace, overlaps, padNum } from '../core/utils.js'
 import { DAILY_TITLE } from '../core/daily.js';
 
 export const VIEW_W = 320;
-export const VIEW_H = 208;
-export const HUD_H = 32;
+/*
+ * IKKUNA ON KOKO RUUTU (17.8.2026).
+ *
+ * `VIEW_H` oli 208 ja sen alla oli 32 pikselin HUD-nauha. Nauhaa ei enää ole:
+ * jokainen lukema on joko maailmassa (kolikkoputkilo, aurinko kellona, kentän
+ * nimi taivaalla, paine kehossa) tai ilmestyy vain silloin kun sillä on asiaa
+ * (`drawOverlay`). Ks. DESIGN.md 8 ja CHANGELOG.
+ *
+ * Hinta on kirjattu eikä piilotettu: tavallinen kenttä on 15 riviä eli
+ * täsmälleen 240 px, joten **pystysuuntainen kamera ei enää liiku niissä** —
+ * koko kentän korkeus näkyy kerralla. Pystykentät (40–50 riviä) vierivät kuten
+ * ennen. Omistajan päätös 17.8.2026: hyväksytään 15 rivin näkyvyys nyt, ja
+ * kenttädatan kasvattaminen 16 riviin on ROADMAP.md:ssä omana kohtanaan.
+ */
+export const VIEW_H = 240;
 
 const GOAL_HEIGHT = 6 * TILE;
 
@@ -49,37 +65,114 @@ const GOAL_HEIGHT = 6 * TILE;
  *     pelaajan ketju: sama pelaaja voi olla maassa sillä välin kun kuori
  *     tekee työn, ja niiden yhdistäminen tekisi laskurista sattumaa.
  *
- * Katto on kahdeksas tappo, ja se maksaa elämän. Sama muoto kuin genren
- * alkuperäisessä (100…8000, sitten 1UP): kun palkinto ei enää mahdu
+ * Katto on kahdeksas tappo, ja se maksaa elämän: kun palkinto ei enää mahdu
  * pistelukuun, se muuttuu joksikin muuksi.
+ *
+ * Itse tikapuu (`CHAIN`) on `points.js`:ssä muun pistetaulukon kanssa, koska
+ * se on kerroin pistearvoon eikä sääntö tästä tiedostosta — ja koska sen luvut
+ * ovat neliöitä samasta syystä kuin kaikki muutkin.
  */
-const CHAIN_LADDER = [1, 2, 4, 8, 10, 20, 40, 80];
 /** Seconds left when the music starts pushing. */
 const HURRY_TIME = 100;
 
 /*
- * AIKA-AJON JAKO HUD-NAUHASSA. Nauhassa on jo viisi lukemaa — varaesine,
- * P-mittari ja voimapallot vasemmalla, elämät ja kolikot niiden oikealla,
- * maailma ja aika keskellä oikealla, pisteet reunassa — eikä yhtään vapaata
- * riviä. Jako on kuudes, ja sille on tasan yksi aukko:
+ * ILMESTYVIEN LUKEMIEN NURKAT. Ks. `drawOverlay`.
  *
- *   rivi y+6:  elämärivi `KV *N` alkaa 100:sta ja on 5-8 merkkiä leveä,
- *              eli loppuu viimeistään 153:een; `MAAILMA X-Y` alkaa 196:sta.
- *   levein jako: nuoli 5 px + väli 2 px + `+9999` 29 px = 36 px, eli
- *              156...192, ja käänteisenä vilkkuessaan 155...193.
+ * Nauha oli tähän asti SMB3:n nauha: varalokero vasemmassa reunassa, P-mittari
+ * sen vieressä, elämät ja kolikot keskellä, maailma ja aika niiden oikealla,
+ * pisteet oikeassa reunassa. Se korvattiin ensin omalla sarakejaolla ja sitten
+ * kokonaan: sama tavara samassa järjestyksessä on lainaa siinä missä sama
+ * kuvakin (DESIGN.md 2), ja lainan tilalle ei tarvittu toista nauhaa vaan
+ * kysymys "mikä näistä pitää olla näkyvissä silloinkin kun se ei kerro mitään".
+ * Vastaus oli: ei mikään.
  *
- * Kolme pikseliä jää molemmin puolin. `tools/verify.mjs` piirtää nauhan
- * pahimmalla mahdollisella tilalla (9999 elämää, 99 kolikkoa, seitsennumeroiset
- * pisteet, tähti päällä) tila päällä ja pois, ja vaatii nollaa peitettyä
- * pikseliä — mitattu, ei silmämääräinen.
+ *   `left`  18  Vasen ylänurkka. 18 eikä 6, koska kolikkoputkilo vie reunan
+ *               (`TUBE_X` 3 + `TUBE_W` 10 = 13, ja viisi pikseliä väliin).
+ *   `right` 314 Oikea ylänurkka, oikeaan reunustettuna.
+ *   `box`   294 Varalokero, oikea alanurkka. Sama x kuin kartan paneelissa.
  *
- * Kulunutta aikaa **ei** piirretä, vaikka se on juuri se luku jota ajetaan.
- * Se on jo nauhassa: `AIKA` on sama luku toisin päin, `def.time -
- * floor((ajokello - putkiframet) / 24)`, ja portti mittaa kaavan framelleen.
- * Kaksi lukemaa samasta luvusta on juuri se virhe jota DESIGN.md kohta 8
- * varoo.
+ * Mitat, pahin tapaus: pisteet 7 numeroa = 41 px (18…59), `KV *9999` = 47 px
+ * (18…65), `AIKA 000` = 47 px oikeaan reunaan (267…314), `UMMETUS 9` = 53 px
+ * (261…314), lokero 294…313, nielty kyky `MAGNEETTI` = 53 px lokeron vasemmalla
+ * (235…288). Yksikään pari ei ole samalla rivillä samassa kohdassa.
  */
-const SPLIT_X = 156;
+const OVERLAY = { left: 18, right: 314, box: 294 };
+
+/*
+ * KUINKA KAUAN ILMESTYNYT LUKEMA VIIPYY.
+ *
+ * Pisteet ja elämät ovat lukuja jotka kiinnostavat sillä sekunnilla jona ne
+ * muuttuvat. `HUD_WAKE` 150 framea eli 2,5 sekuntia on pidempi kuin yksi
+ * silmäys ja lyhyempi kuin yksi hyppysarja: kolikko ehditään lukea, muttei
+ * niin että lukema jäisi pysyvästi ruudulle tavallisessa kolikkosateessa.
+ *
+ * `HUD_FADE` 30 framea on häipymä. Puoli sekuntia on riittävän hidas ettei se
+ * nykäise silmää — ilmestyvä ja katoava teksti on juuri se häiriö jota tässä
+ * yritetään välttää — ja `HUD_DIM` on nolla, koska nauhan pohjaa ei ole
+ * jäämässä paikalle: lukema joko on ruudulla tai ei ole.
+ */
+const HUD_WAKE = 150;
+const HUD_FADE = 30;
+const HUD_DIM = 0;
+
+/*
+ * KOLIKKOPUTKILO: mittari jonka täyttyminen **on** se palkinto.
+ *
+ * `KOLIKOT 47` on kertojan luku: se kertoo määrän muttei sitä mitä määrä
+ * tarkoittaa, ja sadan kolikon lupaus — yksi elämä — on tiedossa vain sille
+ * joka on lukenut sen jostain muualta. Putkilo sanoo molemmat yhdellä
+ * kuvalla: **sisätila on tasan sata kolikkoa korkea**, joten "kuinka monta" ja
+ * "kuinka lähellä elämää" ovat sama pinnankorkeus.
+ *
+ * Kolikot eivät katoa ilmaan vaan **imeytyvät mittariin**: poimittu kolikko
+ * lentää kaaressa putkilon suuhun ja putoaa pinon päälle. Se on syy miksi
+ * mittari on säiliö eikä palkki — säiliöön voi pudottaa jotain, palkkiin ei —
+ * ja samalla se on kehys joka erottaa mittarin taustasta ilman että mitään
+ * pitää himmentää.
+ *
+ * Vasen reuna eikä oikea: juostaan oikealle, eli katse elää oikeassa
+ * laidassa. Mittari kuuluu sinne mistä on tultu.
+ *
+ * `COIN_PX` 2 ja `COIN_CAP` 100: 200 px sisätilaa mahtuu 240 px ikkunaan
+ * reilulla marginaalilla, ja se on myös se korkeus jossa yksi kolikko on vielä
+ * nähtävissä yksittäisenä viivana. Kirjekuoripalkitetussa kentässä ikkuna on
+ * matalampi, ja silloin skaala kutistuu (`pxPerCoin`) — sata kolikkoa on aina
+ * koko putkilo.
+ */
+const TUBE_X = 3;
+const TUBE_W = 10;
+const TUBE_PAD = 4;
+const COIN_PX = 2;
+const COIN_CAP = 100;
+/** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
+const COIN_ARC = 26;
+const COIN_DROP_G = 0.6;
+
+/*
+ * SAVUKIRJOITUS: kuinka kauan kentän nimi on taivaalla ja kuinka usein se
+ * palaa. Ks. `drawSkyName`.
+ *
+ * `NAME_INTRO` 240 framea eli neljä sekuntia kentän alussa — sen verran että
+ * nimen ehtii lukea kävellessä eikä niin kauan että se olisi vielä paikalla
+ * ensimmäisessä hypyssä. Sen jälkeen `NAME_SHOW` 240 framea joka `NAME_CYCLE`
+ * 1080 framen (18 s) välein: nimi on näkyvissä noin viidenneksen ajasta, eli
+ * sitä ei tarvitse odottaa kauaa muttei myöskään törmää siihen koko ajan.
+ * `NAME_FADE` 45 framea on pehmeä hiipuminen — ilmestyvä teksti veisi katseen.
+ */
+const NAME_INTRO = 240;
+const NAME_SHOW = 240;
+const NAME_CYCLE = 1080;
+const NAME_FADE = 45;
+/** Kirjoituskorkeus: sen verran ylhäällä ettei se ole mäkien seassa. */
+const NAME_Y = 22;
+
+/*
+ * AIKA-AJON JAKO. Nauhan kadottua tämä on ainoa lukema joka ilmestyy keskelle
+ * ylälaitaa: se on kilpailun oma signaali eikä kentän tila, ja keskellä se on
+ * yhtä kaukana kummastakin nurkasta jotka ovat jo varattuja. Levein jako on
+ * nuoli 5 px + väli 2 px + `+9999` 29 px = 36 px, eli 142…178 keskitettynä.
+ */
+const SPLIT_X = 142;
 
 /*
  * MAAHANISKUN OSUMA. The dive itself lives in player.js; these are the numbers
@@ -1309,6 +1402,24 @@ export class LevelScene {
     this.wonCard = null;
     this.spawn = { x: 2 * TILE, y: 12 * TILE };
 
+    /* HUD-nauhan hereilläolo ja se mitä siitä viimeksi luettiin, ks.
+     * `updateHudWake`. Kenttä alkaa hereillä: ensimmäinen asia jonka pelaaja
+     * tekee kentässä on katsoa mihin hän tuli. */
+    this.hudWake = HUD_WAKE;
+    this.hudSeen = null;
+    /* Kellon virstanpylväs: frameja jäljellä siitä kun AIKA ohitti tasasadan.
+     * Ks. `drawOverlay` — luolassa ei näy aurinkoa, ja silloin tämä on ainoa
+     * kello. */
+    this.timeMark = 0;
+
+    /* Kolikkoputkilo, ks. `TUBE_X`. `tubeFill` on **näkyvä** pinta ja
+     * `game.state.coins` on totuus: lennossa olevat kolikot ovat sen verran
+     * jäljessä, ja `updateCoinFlights` korjaa eron aina kun ilma on tyhjä. */
+    this.tubeFill = (game && game.state ? game.state.coins : 0) || 0;
+    this.coinFlights = [];
+    this.tubeFlash = 0;
+    this.tubeFlush = 0;
+
     /*
      * LINNAKKEEN OVI — mistä kuolema palauttaa, kun areenalle on kerran päästy.
      *
@@ -2346,7 +2457,19 @@ export class LevelScene {
    * ollakseen varuste.
    */
   swallowEnemy(p, e) {
-    if (!e.bubbled || e.dying) return false;
+    /*
+     * Kuplasta **tai kumosta** (17.8.2026). Nieleminen vaati kuplan, ja kupla
+     * tuli tähän asti kahdesta paikasta: kaasupallosta ja maahaniskusta. Kun
+     * isku lakkasi vangitsemasta (`knockOver`), se katkaisi ketjun josta koko
+     * verbi rakennettiin — "isku vangitsee, kupla niellään" — ja jätti
+     * nielemisen kukan varaan.
+     *
+     * Ketju on nyt sama lause uudella keskimmäisellä sanalla: **isku kaataa,
+     * kumossa oleva niellään.** Ehto on kummallakin sama ja se on se joka
+     * tekee nielemisestä valinnan eikä osumaa: kohde on vaaraton ja paikallaan,
+     * pelaaja seisoo sen vieressä ja painaa ylös.
+     */
+    if ((!e.bubbled && !e.flipped) || e.dying) return false;
     const kind = this.swallowGift(e);
     e.remove = true;
     p.swallowKind = kind;
@@ -2425,12 +2548,17 @@ export class LevelScene {
    *     the hole is the fall — `POUND_BREAK_AT`, and it is a harder bar than the
    *     one that makes the dive lethal at all. See the constants for both.
    *
-   * And spines beat all of it. `e.spiky` is skipped outright rather than merely
-   * doing nothing, so a spiky walker under the landing is left standing and the
-   * ordinary collision pass then hurts the player for having landed on it — the
-   * same loss a stomp takes, which is the point. If a ground pound could clear
-   * spines the boss's spike cycle would stop being a cycle and spikiness would
-   * stop meaning anything.
+   * PIIKIT EIVÄT PYSÄYTÄ SHOKKIAALTOA (17.8.2026). Isku ohitti aiemmin jokaisen
+   * piikikkään (`e.spiky`) kokonaan, eli piikkiukon vieressä maahanisku ei
+   * tehnyt mitään ja pelaaja söi vielä osuman kaupan päälle. Se oli sääntö
+   * väärästä paikasta: piikit ovat suoja **päältä** — ne ovat vastaus
+   * tallaukselle — eikä hatulla ole mitään tekemistä sen kanssa mitä maata
+   * pitkin kulkeva isku tekee. Nyt piikikäs kaatuu kumoon siinä missä muutkin,
+   * ja kumossa se on ylösalaisin eli ensimmäistä kertaa tallattavissa: liike
+   * ei ohita piikkiä vaan **kääntää sen**.
+   *
+   * Pomo ei kaadu (`flippable` on epätosi), joten pomon piikkikierto on yhä
+   * kierto ja piikikkyys tarkoittaa siellä täsmälleen mitä se on tarkoittanut.
    */
   poundImpact(p, strength) {
     const t = clamp(strength, 0, 1);
@@ -2460,7 +2588,6 @@ export class LevelScene {
 
     for (const e of this.entities) {
       if (e.kind !== 'enemy' || e === p || e.dying || e.remove) continue;
-      if (e.spiky) continue;
       /*
        * Whatever he landed on top of is always in range, however the reach came
        * out. A shallow dive whose radius fell short of the body directly under
@@ -2477,27 +2604,32 @@ export class LevelScene {
       // customers stay tough: the boss still spends one of his three, the sun
       // still needs her hits, and one path serves every species.
       /*
-       * MAAHANISKU VANGITSEE, EI TAPA — omistajan päätös 18.8.2026:
-       * *"ground stomp voisi vangita viholliset kupliin, ei tappaa suorilta."*
+       * MAAHANISKU KAATAA KUMOON — omistajan päätös 17.8.2026:
+       * *"ehkä ground stomp KAATAA VIHOLLISEN eli sprite menee ylösalaisin."*
        *
-       * Se on parempi kuin se oli, ja syy on mekaniikoiden ketjussa. Tappava
-       * isku **poistaa** kaiken ulottuviltaan, eli se on painike jolla huone
-       * tyhjenee; kuplaan vanginnut isku **muuttaa** ne joksikin muuksi, ja se
-       * jokin on tässä pelissä jo kolmen muun verbin raaka-ainetta: kuplan
-       * päälle voi astua (v26.08.16.86), kuplan voi puhkaista, ja kupla kantaa
-       * hetken. Yksi liike ei siis enää lopeta tilannetta vaan avaa sen.
+       * Isku vangitsi tähän asti kuplaan, ja se oli väärä omistaja: kupla on
+       * kaasupallon palkinto (`trap`), ja kaksi liikettä joilla on sama
+       * lopputulos on yksi liike liikaa. Nyt isku kaataa (`knockOver`), ja
+       * kaatuminen on eri asia kuin kupla kolmella tavalla — ne on lueteltu
+       * `Enemy.flipped`in kommentissa.
        *
-       * Kuka vangitaan: se joka **voidaan** vangita (`bubbleable`). Pomo,
-       * jättiläinen ja piikikkäät eivät mahdu kuplaan, ja ne saavat saman
-       * kohtelun kuin ennenkin — muuten liikkeestä tulisi tyhjä juuri niitä
-       * vastaan joita varten se on kovin.
-       *
-       * Ja voimakkuus ratkaisee yhä: heikko isku (`!kills`) ei vangitse vaan
-       * kaataa kumoon kuten ennen, eli korkeus maksaa myös tässä.
+       * Ja voimakkuus ratkaisee yhä: heikko isku kaataa, tappava isku tappaa,
+       * eli korkeus maksaa myös tässä.
        */
-      if (kills && e.bubbleable && !e.bubbled && typeof e.trap === 'function') e.trap();
-      else if (kills) e.hitByShell(dir);
-      else e.hitByProjectile(dir);
+      /*
+       * Isku ei tapa ketään — se kaataa. Korkeus ostaa **aikaa** eikä
+       * kuolemaa: matalalta tullut isku pitää kumossa `FLIP_FRAMES`, katosta
+       * tullut `FLIP_LONG`. Se on sama päätös kuin kuplan aikana (yksi liike
+       * ei saa lopettaa tilannetta) mutta ilman kuplaa, joka kuuluu pallolle.
+       *
+       * Se joka ei kaadu — pomo, jättiläinen — saa saman kohtelun kuin ennen:
+       * tappava isku on osuma, heikko isku on ammuksen veroinen. Muuten liike
+       * olisi tyhjä juuri niitä vastaan joita varten se on kovin.
+       */
+      if (!e.knockOver(dir, kills ? FLIP_LONG : FLIP_FRAMES)) {
+        if (kills) e.hitByShell(dir);
+        else e.hitByProjectile(dir);
+      }
     }
 
     /*
@@ -2596,7 +2728,7 @@ export class LevelScene {
     this.add(new BrickPiece(this, px + 8, py, 1.4, -3.4, this.theme));
     this.add(new BrickPiece(this, px, py + 8, -1.1, -2.2, this.theme));
     this.add(new BrickPiece(this, px + 8, py + 8, 1.1, -2.2, this.theme));
-    this.awardScore(50);
+    this.awardScore(PTS.brick);
     // Tiili hajoaa nyrkiltä alhaalta: liike on pystyssä.
     this.shake(1.5, 'y');
     Sfx.play('brick');
@@ -2650,8 +2782,8 @@ export class LevelScene {
     if (!owner) return this.awardScore(points, x, y);
     const n = owner.chain || 0;
     owner.chain = n + 1;
-    if (n >= CHAIN_LADDER.length) return this.gainLife(x, y);
-    return this.awardScore(points * CHAIN_LADDER[n], x, y);
+    if (n >= CHAIN.length) return this.gainLife(x, y);
+    return this.awardScore(points * CHAIN[n], x, y);
   }
 
   gainLife(x, y) {
@@ -2662,17 +2794,154 @@ export class LevelScene {
 
   addCoin(x, y) {
     this.game.state.coins++;
-    this.game.state.score += 200;
+    this.game.state.score += COIN;
     Sfx.play('coin');
-    if (this.game.state.coins >= 100) {
-      this.game.state.coins -= 100;
+    this.coinToTube(x, y);
+    if (this.game.state.coins >= COIN_CAP) {
+      this.game.state.coins -= COIN_CAP;
       this.gainLife(x, y);
+    }
+  }
+
+  /* ---------------------------- kolikkoputkilo --------------------------- */
+
+  /**
+   * Putkilon mitat juuri nyt, ruutukoordinaateissa. Ks. `TUBE_X`.
+   *
+   * Lasketaan eikä talleteta, koska ikkunan korkeus (`viewH`) ja
+   * kirjekuoripalkki (`bar`) ovat kentän ominaisuuksia eivätkä vakioita: 2-1
+   * on kirjekuoritettu, ja siellä sata kolikkoa on yhtä lailla koko putkilo,
+   * vain tiheämmässä.
+   */
+  /** Ikkunan leveys pikseleinä. Sama luku kuin `viewH` toisin päin: olioiden
+   * ei kuulu tuntea `VIEW_W`-vakiota, ne kysyvät kohtaukselta. */
+  get viewW() { return VIEW_W; }
+
+  tubeBox() {
+    const top = this.bar + TUBE_PAD;
+    const bottom = this.bar + this.viewH - TUBE_PAD;
+    return { x: TUBE_X, w: TUBE_W, top, bottom, pxPerCoin: (bottom - top) / COIN_CAP };
+  }
+
+  /** Sen kolikon lentorata joka juuri poimittiin: maailmasta ruudulle. */
+  coinToTube(x, y) {
+    this.coinFlights.push({
+      phase: 'arc',
+      t: 0,
+      x0: x - Math.round(this.cam.x),
+      y0: y - Math.round(this.cam.y) + this.bar,
+      x: 0,
+      y: 0,
+      vy: 0,
+    });
+  }
+
+  /**
+   * Lentävät kolikot ja putkilon pinta.
+   *
+   * Kaksi vaihetta ja yksi korjaus:
+   *
+   *   - **kaari** ruudun poikki putkilon suulle, `COIN_ARC` framea. Nosto on
+   *     sinikäyrä eikä painovoima: kolikon on määrä näyttää *imetyltä* eikä
+   *     heitetyltä, ja imu on tasainen.
+   *   - **pudotus** putkilon sisällä pinon päälle. Tämä on se hetki joka
+   *     kertoo mihin kolikko meni, ja siksi se on painovoimainen: se putoaa
+   *     kasaan kuten kolikko putoaisi purkkiin.
+   *   - **korjaus**: kun ilmassa ei ole yhtään kolikkoa, näkyvä pinta on aina
+   *     `state.coins`. Se kattaa pikalatauksen, elämän vaihtumisen ja kaiken
+   *     muun joka muuttaa lukua ohi tämän polun — mittarin ei tarvitse tietää
+   *     niistä mitään, koska se tarkistaa itsensä joka framella.
+   */
+  updateCoinFlights() {
+    const box = this.tubeBox();
+    if (this.tubeFlash > 0) this.tubeFlash--;
+    if (this.tubeFlush > 0) this.tubeFlush--;
+    const mouthX = box.x + box.w / 2;
+    const mouthY = box.top - 2;
+    for (const f of this.coinFlights) {
+      if (f.phase === 'arc') {
+        f.t++;
+        const k = Math.min(1, f.t / COIN_ARC);
+        f.x = f.x0 + (mouthX - f.x0) * k;
+        f.y = f.y0 + (mouthY - f.y0) * k - Math.sin(k * Math.PI) * 26;
+        if (k >= 1) { f.phase = 'drop'; f.vy = 0.6; }
+      } else {
+        f.vy += COIN_DROP_G;
+        f.y += f.vy;
+        f.x = mouthX;
+        const surface = box.bottom - this.tubeFill * box.pxPerCoin;
+        if (f.y >= surface - 1) {
+          f.phase = 'done';
+          this.tubeFill++;
+          this.tubeFlash = 8;
+          if (this.tubeFill >= COIN_CAP) {
+            this.tubeFill = 0;
+            /* Täysi putkilo tyhjenee: se on 1UP nähtynä. Ääni ja kuva ovat
+             * jo olemassa (`gainLife`), tämä on sama tapahtuma mittarin
+             * puolella eikä toinen tapahtuma. */
+            this.tubeFlush = 24;
+          }
+        }
+      }
+    }
+    if (this.coinFlights.length) {
+      this.coinFlights = this.coinFlights.filter((f) => f.phase !== 'done');
+    }
+    if (!this.coinFlights.length && this.tubeFill !== this.game.state.coins) {
+      this.tubeFill = this.game.state.coins;
+    }
+  }
+
+  /**
+   * Putkilo ruutukoordinaateissa: lasi, pino ja lennossa olevat kolikot.
+   *
+   * Joka kymmenes kolikko on kirkkaampi viiva. Se on sama keino kuin
+   * mittanauhan senttimerkit ja se on tässä yhtä käytännöllisestä syystä:
+   * pinta kertoo yhdellä silmäyksellä "yli puolivälin", ja merkit kertovat
+   * halutessa tarkan luvun ilman että lukua tarvitsee kirjoittaa mihinkään.
+   */
+  drawCoinTube(ctx) {
+    const box = this.tubeBox();
+    const h = box.bottom - box.top;
+    // lasi
+    ctx.fillStyle = 'rgba(12,12,22,0.55)';
+    ctx.fillRect(box.x, box.top, box.w, h);
+    ctx.fillStyle = '#50506e';
+    ctx.fillRect(box.x, box.top, 1, h);
+    ctx.fillRect(box.x + box.w - 1, box.top, 1, h);
+    ctx.fillRect(box.x, box.bottom - 1, box.w, 1);
+    // suu: kaksi lyhyttä kärkeä, jotta putkilo on suppilo eikä umpinainen
+    ctx.fillStyle = '#7a7a9e';
+    ctx.fillRect(box.x - 1, box.top - 2, 3, 2);
+    ctx.fillRect(box.x + box.w - 2, box.top - 2, 3, 2);
+
+    // pino
+    const inner = box.x + 1;
+    const innerW = box.w - 2;
+    for (let i = 0; i < this.tubeFill; i++) {
+      const y = box.bottom - (i + 1) * box.pxPerCoin;
+      const tenth = (i + 1) % 10 === 0;
+      ctx.fillStyle = tenth ? '#ffe070' : '#f0b000';
+      ctx.fillRect(inner, Math.round(y), innerW, Math.max(1, Math.round(box.pxPerCoin)));
+    }
+    if (this.tubeFlash > 0 && this.tubeFill > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${(this.tubeFlash / 8) * 0.7})`;
+      ctx.fillRect(inner, Math.round(box.bottom - this.tubeFill * box.pxPerCoin), innerW, 2);
+    }
+    if (this.tubeFlush > 0) {
+      ctx.fillStyle = `rgba(255,240,160,${(this.tubeFlush / 24) * 0.8})`;
+      ctx.fillRect(inner, box.top, innerW, h - 1);
+    }
+
+    // lennossa
+    for (const f of this.coinFlights) {
+      drawCoinSprite(ctx, Math.round(f.x) - 8, Math.round(f.y) - 8, this.tick * 2);
     }
   }
 
   storeReserve(kind) {
     if (!this.game.state.reserve) this.game.state.reserve = kind;
-    else this.awardScore(1000);
+    else this.awardScore(PTS.prize);
   }
 
   dropReserve() {
@@ -3567,6 +3836,11 @@ export class LevelScene {
       this.updateBandMusic();
       this.updateStarMusic();
     }
+    if (this.timeMark > 0) this.timeMark--;
+    this.updateCoinFlights();
+    /* Viimeisenä, jotta framen kaikki muutokset ovat jo tapahtuneet: nauha
+     * herää siitä mitä tällä framella tuli, ei siitä mitä edellisellä. */
+    this.updateHudWake();
   }
 
   /**
@@ -3612,6 +3886,10 @@ export class LevelScene {
     if (++this.timeSub >= 24) {
       this.timeSub = 0;
       this.time--;
+      /* Tasasata on virstanpylväs: kello käy näyttäytymässä, ks.
+       * `drawOverlay`. Luolassa aurinkoa ei näy, ja silloin tämä on ainoa
+       * kello — mutta se on yhä tapahtuma eikä pysyvä lukema. */
+      if (this.time > 0 && this.time % 100 === 0) this.timeMark = HUD_FADE * 3;
       if (this.time <= 0) {
         this.time = 0;
         this.player.die('time');
@@ -4599,13 +4877,18 @@ export class LevelScene {
        * nothing. The star is deliberately not covered here — it falls through
        * to the shell hit below, because protection from the inhabitants is
        * exactly what it promises.
+       *
+       * `dangerousTop` eikä `spiky`: piikit ovat vaarallisia niin kauan kuin ne
+       * osoittavat ylöspäin. Kumossa oleva piikkiukko (`knockOver`) on
+       * ylösalaisin, ja silloin sen päälle saa hypätä — se on maahaniskun koko
+       * palkinto ja ainoa tapa tallata piikikästä.
        */
-      if (stomping && e.spiky && p.star <= 0) {
+      if (stomping && e.dangerousTop && p.star <= 0) {
         if (p.hurt('spike')) p.vy = -3;
         continue;
       }
 
-      if (stomping && e.stompable && !e.spiky) {
+      if (stomping && e.stompable && !e.dangerousTop) {
         /* Ketjun lenkki luetaan **ennen** tappoa: `chainReward` kasvattaa sen,
          * ja ääni kertoo monesko tämä oli eikä montako niitä on nyt. */
         const step = p.chain || 0;
@@ -4620,7 +4903,7 @@ export class LevelScene {
        * satuttaisi. Se on tähden puolikas — tappaa kosketuksesta muttei suojaa
        * piikeiltä eikä laavalta — ja juuri se ero pitää tähden omana asianaan
        * (DESIGN.md kohta 8: kaksi merkkiä samasta asiasta on yksi liikaa). */
-      if (p.swallowed === 'piikki' && !e.spiky) {
+      if (p.swallowed === 'piikki' && !e.dangerousTop) {
         e.hitByShell(e.cx >= p.cx ? 1 : -1);
         continue;
       }
@@ -4672,9 +4955,9 @@ export class LevelScene {
    * Nyt tartuntakorkeus luetaan ja maksetaan kahdella tavalla, ja jako on
    * tarkoituksellinen:
    *
-   *   - **Pisteet portaittain** (100 · 400 · 800 · 2000 · 5000). Viisi
+   *   - **Pisteet portaittain** (`GOAL_STEPS`, ks. `points.js`). Viisi
    *     porrasta eikä liukuva luku, koska palkinto pitää pystyä *lukemaan*
-   *     ruudulta: pelaaja näkee että tuli 800 eikä 2000, ja tietää mitä
+   *     ruudulta: pelaaja näkee että tuli 900 eikä 2500, ja tietää mitä
    *     yrittää ensi kerralla.
    *   - **Ylin porras antaa tähden.** Se on se osa jonka omistaja pyysi
    *     ("parempi tehostus, mitä paremmin hyppäät"): kortti on tähän asti ollut
@@ -4690,15 +4973,14 @@ export class LevelScene {
     const p = this.player;
     const feet = p.y + p.h;
     const height = clamp((pole.y + pole.h - feet) / pole.h, 0, 1);
-    const steps = [100, 400, 800, 2000, 5000];
-    const idx = Math.min(steps.length - 1, Math.floor(height * steps.length));
-    this.awardScore(steps[idx], p.cx, p.y - 10);
+    const idx = Math.min(GOAL_STEPS.length - 1, Math.floor(height * GOAL_STEPS.length));
+    this.awardScore(GOAL_STEPS[idx], p.cx, p.y - 10);
     /* Kaksi kutsua eikä yksi muuttuja, ja se on portin takia: `verify.mjs`
      * lukee lähdekoodista mitkä esineet peli osaa antaa, ja se lukee sen
      * `completeLevel(...)`-riviltä. Muuttujan taakse piilotettu kortti olisi
      * kuva ilman lähdettä — eli tasan se vika jonka portti on olemassa
      * löytääkseen. */
-    if (idx === steps.length - 1) return this.completeLevel('star');
+    if (idx === GOAL_STEPS.length - 1) return this.completeLevel('star');
     return this.completeLevel(['shroom', 'flower', 'star'][this.cardIndex]);
   }
 
@@ -4711,7 +4993,7 @@ export class LevelScene {
     this.player.controllable = false;
     this.player.autoWalk = true;
     this.player.ducking = false;
-    this.awardScore(Math.max(0, this.time) * 50);
+    this.awardScore(Math.max(0, this.time) * TIME_SECOND);
     this.recordRace();
     Music.stop();
     Ambience.stop();
@@ -4744,7 +5026,17 @@ export class LevelScene {
      * twenty tiles in the air looks like it is standing on them. */
     const bandDrop = this.def.bands
       ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
-    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick, bandDrop);
+    /* Aurinko on kentän kello, ks. `sky` backdropissa. Osuus lasketaan tässä
+     * eikä siellä, koska `def.time` on kentän ominaisuus ja taustan piirtäjä
+     * ei tiedä kentistä mitään — se saa yhden luvun väliltä 0…1. */
+    const total = this.def.time || 0;
+    const clock = total > 0 ? Math.max(0, Math.min(1, this.time / total)) : null;
+    drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
+      bandDrop, clock);
+    /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
+     * taustan päälle ja ennen kameraa: savukirjoitus on kaukana, eikä kaukana
+     * oleva liiku kameran mukana kuin nimeksi. */
+    this.drawSkyName(ctx);
 
     const jitter = this.shakeOffset();
     const camX = Math.round(this.cam.x) + jitter.x;
@@ -4784,9 +5076,15 @@ export class LevelScene {
     this.drawPlayerInto(ctx, camX, camY);
 
     ctx.restore();
+    /* Putkilo on ruutukoordinaateissa kuten vauhtisykäys: se ei ole maailmassa
+     * vaikka maailman kolikot lentävät siihen. */
+    this.drawCoinTube(ctx);
     this.drawSpeedPulse(ctx);
     if (this.bar) this.drawLetterbox(ctx);
-    this.drawHud(ctx);
+    /* Lippu- ja korttikuvat kuuluvat kuvaan (ne ovat kentän oma tapahtuma),
+     * ilmestyvät lukemat eivät — ne piirretään `main.js`:ssä kuvaefektien
+     * jälkeen, ks. `drawOverlay`. */
+    this.drawBanners(ctx);
   }
 
   /**
@@ -4843,6 +5141,56 @@ export class LevelScene {
     else ctx.rect(l, t.hide, r - l, b - t.hide);
     ctx.clip();
     this.player.draw(ctx);
+    ctx.restore();
+  }
+
+  /**
+   * Kentän nimi. Yksi lähde kahdelle piirtäjälle (taivas ja nauha), jotta
+   * päivän kenttä ja esittelykenttä eivät voi kertoa kahta eri nimeä.
+   */
+  get title() {
+    return this.def.title || (this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`);
+  }
+
+  /**
+   * NIMI TAIVAALLE KIRJOITETTUNA.
+   *
+   * Kentän nimi oli HUD-nauhassa pysyvästi, ja se on tieto jonka tarvitsee
+   * kerran: mihin minä tulin. Pysyvä lukema pysyvästä asiasta on juuri sitä
+   * mustetta jota tässä ollaan purkamassa.
+   *
+   * Nyt se on **maisemassa**: lentokoneen savukirjoitus kaukana taivaalla,
+   * samaan tapaan kuin HOLLYWOOD-kyltti rinteessä tai mainoslaivan kylki. Se
+   * on siellä missä kentän nimi kuuluu olla — paikassa itsessään — ja se on
+   * *kaukana*, eli kirjaimet ovat pilviä eivätkä käyttöliittymää.
+   *
+   * Yksi koneisto ja kaksi tehtävää. Kentän ensimmäiset `NAME_INTRO` framea se
+   * on **otsikkokortti**: nimi on paikalla heti kun kenttä alkaa. Sen jälkeen
+   * se palaa `NAME_CYCLE`n välein `NAME_SHOW`n ajaksi, eli nimen voi *käydä
+   * katsomassa* ilman että se on koskaan pysyvästi tiellä. Kaksi eri kuvaa
+   * samasta asiasta olisi kaksi asiaa opeteltavaksi.
+   *
+   * Ei linnakkeessa eikä muissa sisätiloissa (`bg === 'none'`): siellä ei ole
+   * taivasta johon kirjoittaa, ja seinään ilmestyvä teksti olisi taas HUD.
+   */
+  drawSkyName(ctx) {
+    if (this.def.bg === 'none') return;
+    const t = this.tick;
+    let a = 0;
+    if (t < NAME_INTRO) {
+      a = Math.min(1, t / NAME_FADE, (NAME_INTRO - t) / NAME_FADE);
+    } else {
+      const c = (t - NAME_INTRO) % NAME_CYCLE;
+      if (c < NAME_SHOW) a = Math.min(1, c / NAME_FADE, (NAME_SHOW - c) / NAME_FADE);
+    }
+    if (a <= 0) return;
+    const text = this.title;
+    const w = textWidth(text, 2);
+    /* Hidas ajelehtiminen, jotta kirjoitus on ilmassa eikä lasissa. */
+    const x = VIEW_W / 2 + Math.sin(t / 260) * 16 - w / 2;
+    ctx.save();
+    ctx.globalAlpha = a * 0.55;
+    drawText(ctx, text, x, NAME_Y, { color: '#ffffff', scale: 2 });
     ctx.restore();
   }
 
@@ -5087,7 +5435,7 @@ export class LevelScene {
    */
   drawSplit(ctx, y) {
     const r = this.race;
-    const ty = y + 6;
+    const ty = y + 17;
     const has = r.delta !== null;
     const ahead = has && r.delta <= 0;
     const color = has ? (ahead ? SPLIT_COLORS.ahead : SPLIT_COLORS.behind) : SPLIT_COLORS.none;
@@ -5141,112 +5489,171 @@ export class LevelScene {
     });
   }
 
-  drawHud(ctx) {
-    const th = THEMES[this.theme] || THEMES.grass;
-    const y = VIEW_H;
-    ctx.fillStyle = '#101018';
-    ctx.fillRect(0, y, VIEW_W, HUD_H);
-    ctx.fillStyle = th.hardDark;
-    ctx.fillRect(0, y, VIEW_W, 1);
-
-    // reserve item box
-    ctx.fillStyle = '#202038';
-    ctx.fillRect(6, y + 6, 20, 20);
-    ctx.fillStyle = '#50506e';
-    ctx.fillRect(6, y + 6, 20, 1);
-    ctx.fillRect(6, y + 25, 20, 1);
-    ctx.fillRect(6, y + 6, 1, 20);
-    ctx.fillRect(25, y + 6, 1, 20);
-    if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 8, y + 8, this.tick);
-
-    // P-meter
-    drawText(ctx, 'P', 34, y + 6, { color: '#ffffff' });
-    const bars = this.player.pBars;
-    const full = this.player.pMeter >= P_METER_MAX;
-    for (let i = 0; i < 7; i++) {
-      const lit = i < bars;
-      const blink = full && Math.floor(this.tick / 4) % 2 === 0;
-      ctx.fillStyle = lit ? (full && blink ? '#ffffff' : '#f0b000') : '#3a3a52';
-      const bx = 42 + i * 7;
-      ctx.fillRect(bx, y + 6, 5, 7);
-      ctx.fillStyle = '#101018';
-      ctx.fillRect(bx + 5, y + 6, 2, 7);
-    }
-    // power level pips — one per collected power-up, colour shows the type
+  /**
+   * Herättää nauhan kun jokin sen lukemista muuttuu. Ks. `HUD_WAKE`.
+   *
+   * Muutos luetaan **lukemista itsestään** eikä tapahtumista: jokainen
+   * `awardScore`, `addCoin`, `gainLife`, `storeReserve` ja tehostus olisi oma
+   * kutsupaikkansa, ja lista kutsupaikkoja on juuri se rakenne joka jää
+   * jälkeen ensimmäisestä uudesta esineestä. Yksi merkkijono framea kohti
+   * vertailtuna edelliseen kattaa ne kaikki, myös ne joita ei vielä ole.
+   */
+  updateHudWake() {
+    const st = this.game.state;
     const p = this.player;
-    const typeColor = { shroom: '#e04c3c', flower: '#f8f8f8', leaf: '#c88c40' }[p.type] || '#3a3a52';
-    for (let i = 0; i < 5; i++) {
-      const bx = 34 + i * 7;
-      ctx.fillStyle = i < p.powerLevel ? typeColor : '#2a2a3e';
-      ctx.fillRect(bx, y + 18, 5, 5);
-      if (i < p.powerLevel) {
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillRect(bx, y + 18, 5, 1);
-      }
+    const seen = `${st.score} ${st.coins} ${st.lives} ${st.reserve} ${p.powerLevel}`
+      + ` ${p.type} ${p.swallowed || ''}`;
+    if (seen !== this.hudSeen) {
+      this.hudSeen = seen;
+      this.hudWake = HUD_WAKE;
+    } else if (this.hudWake > 0) this.hudWake--;
+    /* Kriisi pitää nauhan hereillä ilman että mikään muuttuu: loppuva kello ja
+     * käynnissä oleva lähtölaskenta ovat lukemia joita katsotaan juuri siksi
+     * ettei niissä tapahdu mitään ennen kuin on liian myöhäistä. */
+    const urgent = this.state !== 'play' || this.time <= 100 || this.player.star > 0
+      || this.switchTimer > 0 || this.player.corked > 0 || (this.race && this.race.flash > 0);
+    if (urgent) this.hudWake = Math.max(this.hudWake, HUD_FADE);
+  }
+
+  /** Nauhan musteen peitto juuri nyt: 1 hereillä, `HUD_DIM` nukkuessa. */
+  hudInk() {
+    if (this.hudWake >= HUD_FADE) return 1;
+    return HUD_DIM + (1 - HUD_DIM) * (this.hudWake / HUD_FADE);
+  }
+
+  /**
+   * ILMESTYVÄT LUKEMAT. Ei nauhaa, ei pohjaa, ei pysyvää mustetta.
+   *
+   * Piirretään `main.js`:ssä **kuvaefektien jälkeen** (`PostFX.apply`), ja se
+   * on koko DESIGN.md 8:n sääntö uudessa muodossa: kertojan kerros ei ole
+   * ikkuna maailmaan, joten kuumuus, huurre, hehku ja palettisiirto eivät
+   * väreile sen läpi. Ennen sen takasi 32 px korkea nauha jonka efektit
+   * jättivät rauhaan; nyt sen takaa piirtojärjestys.
+   *
+   * Neljä nurkkaa, ja jokaisella on syynsä:
+   *
+   *   vasen ylä    pisteet ja elämät — **vain kun ne muuttuvat**, ks.
+   *                `updateHudWake`. Ne ovat lukuja jotka kiinnostavat sillä
+   *                sekunnilla jona ne kasvavat.
+   *   oikea ylä    AIKA kun se on kriisi (alle 100) ja lähtölaskennat
+   *                (tähti, kytkin, ummetus, auennut ovi). Kello muuten:
+   *                aurinko taivaalla, ks. `sky` backdropissa.
+   *   vasen ala    kolikkoputkilo (`drawCoinTube`) — ainoa pysyvä, ja se on
+   *                säiliö eikä lukema.
+   *   oikea ala    varalokero ja nielty kyky: se mitä sinulla on mukana.
+   *
+   * Varjo jokaiseen tekstiin. Nauha oli oma tumma pohjansa; ilman sitä valkoinen
+   * teksti seisoo taivasta vasten, ja yksi pikseli varjoa on halvempi kuin
+   * laatikko tekstin takana — laatikko olisi nauha uudestaan, pienempänä.
+   */
+  drawOverlay(ctx) {
+    const st = this.game.state;
+    const ink = this.hudInk();
+    const S = '#101018';
+
+    /* Pisteet ja elämät ilmestyvät ja katoavat kokonaan: `hudInk` menee tässä
+     * nollaan asti, koska nauhan pohjaa ei ole jäämässä paikalle. */
+    if (ink > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = ink;
+      drawText(ctx, padNum(st.score, 7), OVERLAY.left, 6, { color: '#ffffff', shadow: S });
+      drawText(ctx, `KV *${st.lives}`, OVERLAY.left, 17, { color: '#ffffff', shadow: S });
+      ctx.restore();
     }
+
     /*
-     * NIELTY KYKY HUDISSA, ja se on **nimi ja palkki** eikä kuvake.
+     * AIKA vain kriisissä ja virstanpylväissä. Aurinko on kello (`sky`), mutta
+     * luolassa ei ole taivasta ja loppuhetkellä sekunnit ovat sekunteja: alle
+     * sadan lukema on koko ajan esillä, ja jokaisen sadan kohdalla se käy
+     * näyttäytymässä `HUD_FADE`n ajan. Kaksi tapaa saada sama luku, ja
+     * kumpikaan ei ole pysyvä.
+     */
+    const urgent = this.time <= 100;
+    if (urgent || this.timeMark > 0) {
+      const a = urgent ? 1 : Math.min(1, this.timeMark / HUD_FADE);
+      ctx.save();
+      ctx.globalAlpha = a;
+      const color = urgent && Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff';
+      drawText(ctx, `AIKA ${padNum(this.time, 3)}`, OVERLAY.right, 6,
+        { color, align: 'right', shadow: S });
+      ctx.restore();
+    }
+
+    if (this.race) this.drawSplit(ctx, 0);
+
+    /* Kellokulma: tähti, kytkin ja ummetus ovat kaikki lähtölaskentoja, ja ne
+     * ovat samassa kolossa AIKAn alla. Vain yksi kerrallaan — kolo on yksi,
+     * koska kaksi lähtölaskentaa yhtä aikaa on tila jossa kumpaakaan ei ehdi
+     * lukea. Nämä eivät himmene: käynnissä oleva lähtölaskenta on aina asiaa. */
+    if (this.player.star > 0) {
+      const secs = Math.ceil(this.player.star / 60);
+      drawText(ctx, `TÄHTI ${secs}`, OVERLAY.right, 17, {
+        color: STAR_HUD_COLORS[Math.floor(this.tick / 4) % STAR_HUD_COLORS.length],
+        align: 'right',
+        shadow: S,
+      });
+    } else if (this.switchTimer > 0) {
+      const secs = Math.ceil(this.switchTimer / 60);
+      drawText(ctx, `KYTKIN ${secs}`, OVERLAY.right, 17, {
+        color: this.switchTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2
+          ? '#ff8040' : '#8fd0ff',
+        align: 'right',
+        shadow: S,
+      });
+    } else if (this.player.corked > 0) {
+      const secs = Math.ceil(this.player.corked / 60);
+      drawText(ctx, `UMMETUS ${secs}`, OVERLAY.right, 17, {
+        color: Math.floor(this.tick / 6) % 2 ? '#ff8040' : '#c85820',
+        align: 'right',
+        shadow: S,
+      });
+    } else if (this.bossDefeated) {
+      drawText(ctx, 'OVI AUKI', OVERLAY.right, 17, { color: '#ffd048', align: 'right', shadow: S });
+    }
+
+    /* Varalokero oikeaan alanurkkaan. Se on ainoa laatikko joka jäi, ja se on
+     * laatikko siksi että sen sisältö on **esine**: tyhjä lokero on tieto
+     * siinä missä täysikin, ja pelkkä esine ilman kehystä ei voisi olla tyhjä.
+     * Sama kulma kuin kartan paneelissa (`worldmap.js`). */
+    const by = VIEW_H - 26;
+    ctx.save();
+    ctx.globalAlpha = st.reserve ? 0.95 : 0.4;
+    ctx.fillStyle = '#202038';
+    ctx.fillRect(OVERLAY.box, by, 20, 20);
+    ctx.fillStyle = '#50506e';
+    ctx.fillRect(OVERLAY.box, by, 20, 1);
+    ctx.fillRect(OVERLAY.box, by + 19, 20, 1);
+    ctx.fillRect(OVERLAY.box, by, 1, 20);
+    ctx.fillRect(OVERLAY.box + 19, by, 1, 20);
+    ctx.restore();
+    if (st.reserve) drawItem(ctx, st.reserve, OVERLAY.box + 2, by + 2, this.tick);
+
+    /*
+     * NIELTY KYKY, ja se on **nimi ja palkki** eikä kuvake.
      *
      * Kyky kestää kahdeksan sekuntia, eli pelaajan on tiedettävä kaksi asiaa
      * yhdellä silmäyksellä: *mikä* ja *kuinka kauan vielä*. Kuvake vastaisi
      * ensimmäiseen ja vaatisi opettelua; nimi vastaa siihen suoraan, ja
-     * kutistuva palkki on sama kello jonka pelaaja on jo oppinut lukemaan
-     * vauhtimittarista. Sijainti on elämien vieressä, koska sekin on asia joka
-     * sinulla joko on tai ei ole.
+     * kutistuva palkki on sama kello jonka pelaaja on jo oppinut lukemaan.
+     * Paikka on varalokeron vieressä, koska molemmat vastaavat kysymykseen
+     * "mitä minulla on mukana".
      */
     const gift = this.player.swallowed;
     if (gift) {
       const left = this.player.swallowTimer / SWALLOW_FRAMES;
-      drawText(ctx, SWALLOW_NAMES[gift] || gift, 100, y + 17, { color: '#a8e04a' });
+      drawText(ctx, SWALLOW_NAMES[gift] || gift, OVERLAY.box - 6, by + 2,
+        { color: '#a8e04a', align: 'right', shadow: S });
+      const bw = 44;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(100, y + 25, 44, 3);
+      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, bw, 3);
       ctx.fillStyle = '#a8e04a';
-      ctx.fillRect(100, y + 25, Math.round(44 * left), 3);
-    } else {
-      drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
-    }
-    drawText(ctx, `KV *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
-
-    /* Päivän kenttä ei ole missään maailmassa, joten se kertoo nimensä. Mitattu
-     * että se mahtuu: 12 merkkiä * 6 px = 72 px, 196 + 72 = 268, ja oikealle
-     * tasattu 7-numeroinen pistelukema alkaa 272:sta.
-     *
-     * `title` on sama poikkeus toista kautta: esittelykenttä (`demo-level.js`)
-     * ei ole sekään missään maailmassa, ja "MAAILMA esittely" olisi väärä väite
-     * eikä puuttuva tieto. Kenttä joka tietää nimensä kertoo sen. */
-    const title = this.def.title || (this.def.daily ? DAILY_TITLE : `MAAILMA ${this.id}`);
-    drawText(ctx, title, 196, y + 6, { color: '#8fe04a' });
-    const timeColor = this.time <= 100 ? (Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff') : '#ffffff';
-    drawText(ctx, `AIKA ${padNum(this.time, 3)}`, 196, y + 17, { color: timeColor });
-    if (this.race) this.drawSplit(ctx, y);
-
-    drawText(ctx, padNum(this.game.state.score, 7), VIEW_W - 6, y + 6, {
-      color: '#ffffff', align: 'right',
-    });
-    if (this.player.star > 0) {
-      // Top of the pile: it is the shortest-lived of the three and the only one
-      // whose ending gets you killed.
-      const secs = Math.ceil(this.player.star / 60);
-      drawText(ctx, `TÄHTI ${secs}`, VIEW_W - 6, y + 17, {
-        color: STAR_HUD_COLORS[Math.floor(this.tick / 4) % STAR_HUD_COLORS.length],
-        align: 'right',
-      });
-    } else if (this.switchTimer > 0) {
-      const secs = Math.ceil(this.switchTimer / 60);
-      drawText(ctx, `KYTKIN ${secs}`, VIEW_W - 6, y + 17, {
-        color: this.switchTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2
-          ? '#ff8040' : '#8fd0ff',
-        align: 'right',
-      });
-    } else if (this.player.corked > 0) {
-      const secs = Math.ceil(this.player.corked / 60);
-      drawText(ctx, `UMMETUS ${secs}`, VIEW_W - 6, y + 17, {
-        color: Math.floor(this.tick / 6) % 2 ? '#ff8040' : '#c85820', align: 'right',
-      });
-    } else if (this.bossDefeated) {
-      drawText(ctx, 'OVI AUKI', VIEW_W - 6, y + 17, { color: '#ffd048', align: 'right' });
+      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, Math.round(bw * left), 3);
     }
 
+  }
+
+  /** Kentän omat ilmoitukset: maali, kortti, aika-ajon tulos ja kuolema. */
+  drawBanners(ctx) {
     if (this.state === 'clear' && this.wonCard) {
       this.drawBanner(ctx, 'KENTTÄ SELVÄ!', 54, ['#ffd048', '#ffffff', '#8fe04a']);
       drawItem(ctx, this.wonCard, VIEW_W / 2 - 8, 84, this.tick);

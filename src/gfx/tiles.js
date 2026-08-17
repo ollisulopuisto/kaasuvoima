@@ -39,12 +39,47 @@ export const T = {
   LAMP: 'L',
   LAMP_LIT: 'l',
   SHELF: 'G',
+  /*
+   * RINTEET, 45°. `/` nousee oikealle, `\` nousee vasemmalle.
+   *
+   * Nämä ovat pelin ensimmäiset laatat joiden pinta ei ole laatan reunassa:
+   * kaikki muu maasto on laatikoita, ja rinne on **korkeuskäyrä sarakkeittain**
+   * (`slopeTop`). Siksi ne eivät ole `solid`: ruudukkotörmäys osaa vain
+   * laatikoita, ja rinteen ratkaisu on omansa `physics.js`:ssä. Vaakatörmäys
+   * ohittaa ne kokonaan — rinteeseen ei törmätä, se kävellään ylös.
+   *
+   * Alle kuuluu kiinteä laatta. Rinteen oma pinta on sen yläreuna, ja mikä
+   * tahansa sen alla oleva reikä olisi reikä johon putoaa rinteen läpi.
+   */
+  SLOPE_R: '/',
+  SLOPE_L: '\\',
 };
+
+/**
+ * Rinteen pinnan korkeus laatan sisällä: paikallinen y sarakkeelle `lx`.
+ *
+ * Palauttaa `null` jos laatta ei ole rinne. Nollasta viiteentoista, eli
+ * `/`-laatan vasen reuna on laatan pohjassa ja oikea sen katossa.
+ */
+export function slopeTop(ch, lx) {
+  const dir = info(ch).slope;
+  if (!dir) return null;
+  const x = Math.max(0, Math.min(TILE - 1, Math.floor(lx)));
+  return dir > 0 ? TILE - 1 - x : x;
+}
+
+/** Kumpaan suuntaan rinne nousee: 1 oikealle, -1 vasemmalle, 0 ei rinne. */
+export const slopeDir = (ch) => info(ch).slope || 0;
 
 const S = { solid: true };
 const SEMI = { semi: true };
+/* Rinne ei ole `solid`: ks. `T.SLOPE_R`. `slope` on nousun suunta. */
+const SLOPE_UP_R = { slope: 1, standable: true };
+const SLOPE_UP_L = { slope: -1, standable: true };
 
 export const TILE_INFO = {
+  [T.SLOPE_R]: { ...SLOPE_UP_R },
+  [T.SLOPE_L]: { ...SLOPE_UP_L },
   [T.GROUND]: { ...S },
   [T.HARD]: { ...S },
   [T.BRICK]: { ...S, breakable: true, bumpable: true },
@@ -2080,6 +2115,44 @@ function drawIce(ctx, x, y, capped, tx, ty) {
   }
 }
 
+/**
+ * RINNE, ja se piirretään **sarakkeittain** eikä kolmiona.
+ *
+ * Yksi pikselin levyinen suorakulmio per sarake on sama tapa jolla koko peli
+ * on piirretty (DESIGN.md 1: kokonaislukusuorakulmioita canvasille), ja se on
+ * tässä myös ainoa tapa joka pitää pinnan portaana eikä antialiasoituna
+ * viivana — canvasin `lineTo` olisi tuottanut harmaita välipikseleitä, ja
+ * harmaa välipikseli on tässä pelissä väärä väri riippumatta siitä miltä se
+ * näyttää.
+ *
+ * Pinta saa saman ruohon/lumen/hiekan kuin tavallisen maalaatan yläreuna
+ * (`groundTop`), koska se **on** sama pinta: rinne on maata joka sattuu
+ * olemaan vinossa, eikä se saa lukea eri materiaaliksi. Kaksi pikseliä paksu
+ * pystysuunnassa, jotta viisto viiva näyttää yhtä paksulta kuin vaakasuora.
+ */
+function drawSlope(ctx, ch, x, y, th, tx, ty, tick = 0) {
+  for (let lx = 0; lx < TILE; lx++) {
+    const top = slopeTop(ch, lx);
+    ctx.fillStyle = th.ground;
+    ctx.fillRect(x + lx, y + top, 1, TILE - top);
+    ctx.fillStyle = th.groundTop;
+    ctx.fillRect(x + lx, y + top, 1, Math.min(2, TILE - top));
+    ctx.fillStyle = th.groundTopDark;
+    ctx.fillRect(x + lx, y + top + 2, 1, Math.min(1, Math.max(0, TILE - top - 2)));
+  }
+  /* Sama kohina kuin maalaatalla, jotta rinne ei ole tasainen läiskä kentässä
+   * jonka jokaisella laatalla on oma pintansa. */
+  ctx.fillStyle = th.groundDark;
+  for (let i = 0; i < 3; i++) {
+    const n = hashNoise(tx * 3 + i, ty * 5 + i);
+    const lx = 2 + Math.floor(n * 12);
+    const top = slopeTop(ch, lx);
+    const dy = top + 4 + Math.floor(hashNoise(tx + i, ty) * Math.max(1, TILE - top - 5));
+    if (dy < TILE) ctx.fillRect(x + lx, y + dy, 2, 1);
+  }
+  void tick;
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
@@ -2117,6 +2190,8 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.LAMP: drawLamp(ctx, x, y, false, tick); break;
     case T.LAMP_LIT: drawLamp(ctx, x, y, true, tick); break;
     case T.SHELF: drawShelf(ctx, x, y, tick, opts.shelf === undefined ? 1 : opts.shelf); break;
+    case T.SLOPE_R:
+    case T.SLOPE_L: drawSlope(ctx, ch, x, y, th, tx, ty, tick); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:

@@ -68,6 +68,46 @@ lattiaruudun rajalle eikä sub-pikselin painovoima ylitä sitä. Se on korjattu
 (`footingBelow` tiedostossa `src/level/physics.js`); jos coyote joskus nollataan
 uudelleen, tuo korjaus on se joka pitää hypyt toimivina.
 
+## Rinteet: vauhti korkeudeksi (17.8.2026)
+
+Rinne on tässä pelissä **muunnin eikä liukumäki**. Ero on kirjattu
+[IDEAS.md](IDEAS.md):n kohtaan 1 omistajan sanoin: Mariossa rinne on liikkeen
+laatu — luiskahdus, joka on itsessään palkinto — ja täällä se vaihtaa
+vaakavauhdin korkeudeksi, joka on pääsy ylemmälle reitille.
+
+| luku | arvo | mitä se on |
+| --- | --- | --- |
+| alamäen veto | **0.14**/frame | painovoiman komponentti pintaa pitkin |
+| ylämäen veto | **0.045**/frame | pienempi kuin `ACC` — ks. alla |
+| alamäen katto | **3.5** (`MAX_P`) | rinne *lainaa* ylimmän nopeuden, ei ylitä sitä |
+| lähdön kerroin | **0.85** × \|vx\| | huipulta irtoava vaihtaa vauhdin nousuksi |
+| lähdön alaraja | **1.8** | kävelykaton (1.5) yläpuolella, juoksukaton alla |
+| tarttuminen alamäkeen | **8 px** | ks. `SLOPE_SNAP`, `src/level/physics.js` |
+| askelma rampin päässä | **6 px** | ks. `STEP_UP`, ei riitä mihinkään seinään |
+
+**Kiihtyvyys ei muutu.** `ACC` on yhä yksi vakio sekä kävelylle että juoksulle,
+ja se on sama päätös joka tehtiin jäälle (alempana). Rinne ei kosketa siihen —
+se lisää painovoiman komponentin pintaa pitkin, mikä on eri asia ja myös se
+mitä rinne fysiikassa oikeasti on.
+
+**Ylämäen veto on pakko olla pienempi kuin `ACC` (0.0547).** Ensimmäinen versio
+oli 0.06 ja portti löysi sen samana iltana: kävelijä hidastui rinteessä nollaan
+eikä 1-1 ollut enää läpäistävissä voimatasolla 0 — botti jäi kumpareen juureen
+28 %:iin kentästä. Tämä on se rivi joka kannattaa lukea ennen kuin lukua
+säädetään.
+
+**Lähtö on portaittainen eikä lineaarinen**, ja se on tarkoitus: mitattuna
+kävely ei heitä lainkaan (0 px), juoksu heittää 9 px ja täysi vauhtimittari
+39 px. Syy on hypyn kevyt painovoima — lähtö asettaa `jumpHeld`in, joten
+pohjassa pidetty nappi venyttää nousua täsmälleen kuten hypyssä, ja se osa
+alkaa vasta kun lähtönopeus ylittää `GRAVITY_HELD_CUTOFF`in (−2.0).
+
+Rinteen laatat (`/` ja `\`) **eivät ole kiinteitä**: ruudukkotörmäys osaa vain
+laatikoita, ja rinteen pinta on korkeuskäyrä sarakkeittain. Pystyratkaisu
+kysyy siltä yhden asian — millä korkeudella maa on tässä kohtaa — kehon
+**keskikohdasta**, koska kaksi mittapistettä antaisi kaksi eri korkeutta ja
+korkeampi voittaisi.
+
 ## Mitattu hyppybudjetti
 
 `node tools/measure-jump.mjs` ajaa hypyt oikeassa moottorissa ja kirjoittaa

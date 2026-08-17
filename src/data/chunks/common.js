@@ -40,6 +40,63 @@ export function ck(w, spec) {
   return { w, rows };
 }
 
+/**
+ * RINTEET, ja miksi ne ovat yhteistä sanastoa eivätkä yhden maailman temppu.
+ *
+ * `/` nousee oikealle, `\\` vasemmalle, ja kummankin alla on kiinteää täytettä
+ * lattiaan asti — rinne on maan **pinta**, ei kelluva viiva. Rinne on tässä
+ * pelissä muunnin eikä liukumäki (IDEAS.md kohta 1, omistajan tuomio 10.8.2026
+ * "kyllä, vahvin"): alamäki lainaa vauhtia ylimpään nopeuteen asti ja huipulta
+ * lähtevä vaihtaa vauhdin korkeudeksi. Siksi palikoita on kolme eikä yksi, ja
+ * ne opettavat sen kolmessa askeleessa:
+ *
+ *   `kumpare`    molemmat suunnat peräkkäin ja tasanne välissä. Tämä on se
+ *                jossa rinne opitaan: siihen ei voi kuolla eikä sitä voi
+ *                ohittaa, koska se on maa jota pitkin kuljetaan.
+ *   `rinnehyppy` ylämäki joka päättyy kuiluun. Vauhdilla tullut lentää yli,
+ *                kävelijä putoaa — ja kuilun pohjalla on lattia, joten hinta
+ *                on aika eikä henki.
+ *   `ylareitti`  ylämäki jonka huipulta pääsee **vain vauhdilla** hyllylle
+ *                jonka päällä on palkinto. Tämä on se lupaus jonka kohta 1
+ *                antaa: nopeampi reitti on ylempi reitti.
+ */
+export const SLOPE_CHUNKS = {
+  kumpare: ck(16, {
+    9: '       /###\\',
+    10: '      /#####\\',
+    11: '     /#######\\',
+    12: '    /#########\\',
+    13: G,
+    14: G,
+  }),
+  rinnehyppy: ck(20, {
+    8: '      /#####',
+    9: '     /######',
+    10: '    /#######',
+    11: '   /########',
+    12: '  /#########',
+    /* Kuilu on viisi saraketta ja sen **pohjalla on lattia**: hyppybudjetti
+     * on kuusi (`tools/jump-budget.json`), ja rinteen palkinto on se että yli
+     * pääsee ilman hyppyä. Pohjaton kuilu olisi tehnyt siitä pakon eikä
+     * palkintoa — ja mitattuna se oli tappava: kävelyvauhdilla rinteen
+     * huipulta ei lähdetä lentoon (`SLOPE_LAUNCH_MIN`), joten portti löysi
+     * heti kentän jota ei voi läpäistä voimatasolla 0. Nyt hinta on aika:
+     * hitaampi tippuu ojaan ja kävelee ylös. */
+    13: '############     ###',
+    14: G + '####',
+  }),
+  ylareitti: ck(20, {
+    4: '             o o o',
+    5: '            -----',
+    9: '       /####',
+    10: '      /#####',
+    11: '     /######',
+    12: '    /#######',
+    13: '############        ',
+    14: '############        ',
+  }),
+};
+
 export const COMMON_CHUNKS = {
   /* ------------------------------ openings ----------------------------- */
   start: ck(16, {

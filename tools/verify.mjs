@@ -471,8 +471,17 @@ const report = await page.evaluate(async () => {
         + `, isku tainnutti ${slamStunned}`);
     }
 
-    /* 4. Piikit voittavat senkin — sekä sen alle jäänyt piikkiukko että se joka
-     *    seisoo säteen sisällä. Muuten piikikkyys lakkaa tarkoittamasta mitään. */
+    /* 4. PIIKIT JA MAAHANISKU, ja tässä sääntö kääntyi 17.8.2026.
+     *
+     *    Ennen: isku ohitti jokaisen piikikkään kokonaan. Nyt: shokkiaalto
+     *    kulkee maata pitkin eikä välitä siitä mitä vihollisella on päässään,
+     *    joten piikkiukko **kaatuu kumoon** siinä missä muutkin — ja kumossa
+     *    se on ylösalaisin eli ensimmäistä kertaa tallattavissa.
+     *
+     *    Piikikkyys ei silti lakkaa tarkoittamasta mitään, ja se on tämän
+     *    väitteen b-puoli: jaloilleen seisovan piikkiukon **päälle** syöksyvä
+     *    pelaaja häviää yhä täsmälleen kuten tallaajakin. Piikit ovat suoja
+     *    päältä, eivät suoja kaikelta. */
     {
       /* a) Säteen sisällä mutta ei alla. Isku osuu maahan asti, joten säde on
        *    mitattavissa, ja piikkiukon pitää seistä siinä ehjänä vaikka aalto
@@ -486,10 +495,13 @@ const report = await page.evaluate(async () => {
       pound(beside.s, beside.i, 400);
       const lp = beside.s.lastPound;
       const gap = Math.round(guard.cx - bp.cx);
-      expect('maahaniskun aalto ei kaada piikkiukkoa vaikka se yltää sen yli',
-        !!lp && lp.reach >= gap && !guard.remove && !guard.dying && !guard.bubbled,
+      expect('maahaniskun aalto kaataa piikkiukon kumoon eikä tapa sitä',
+        !!lp && lp.reach >= gap && guard.flipped && !guard.remove && !guard.dying
+        && !guard.bubbled && guard.harmless && !guard.dangerousTop,
         lp ? `säde ${lp.reach} px, piikkiukko ${gap} px päässä, voima`
-          + ` ${lp.strength.toFixed(2)}, hengissä ${!guard.remove && !guard.dying}`
+          + ` ${lp.strength.toFixed(2)}, kumossa ${guard.flipped}, hengissä`
+          + ` ${!guard.remove && !guard.dying}, vaarallinen päältä`
+          + ` ${guard.dangerousTop}`
           : 'iskua ei tullut');
 
       /* b) Ja suoraan piikkien päälle syöksyminen häviää täsmälleen kuten
@@ -512,7 +524,12 @@ const report = await page.evaluate(async () => {
         onto.i.held.jump = false;
         if (op.poundPhase === 'dive') sawDive = true;
       }
-      expect('piikit voittavat maahaniskun täsmälleen kuten ne voittavat tallauksen',
+      /* Suoraan piikkien **päälle** syöksyminen häviää yhä, ja se on tämän
+       * muutoksen raja: aalto lähtee vasta laskeutumisesta, ja keho ehtii
+       * koskettaa piikkejä ennen sitä. Piikikkään yli pääsee siis iskemällä
+       * sen *viereen* (a-kohta yllä) — ei sen päälle. Piikit ovat yhä suoja
+       * päältä, ja se on niiden koko merkitys. */
+      expect('piikit voittavat päälle syöksymisen täsmälleen kuten ne voittavat tallauksen',
         sawDive && !target.remove && !target.dying && !target.bubbled
         && op.powerLevel === levelBefore - 1,
         `syöksy nähtiin ${sawDive}, piikkiukko hengissä`
@@ -7317,7 +7334,10 @@ const report = await page.evaluate(async () => {
       const box = () => {
         g.clearRect(0, 0, 320, 240);
         s3.draw(g);
-        return g.getImageData(6, 208 + 6, 20, 20).data;
+        s3.drawOverlay(g);
+        /* Lokero on oikeassa **alanurkassa** (`OVERLAY.box` = 294, y =
+         * VIEW_H - 26): nauhaa ei enää ole, ks. `drawOverlay`. */
+        return g.getImageData(294, 240 - 26, 20, 20).data;
       };
       game.state.reserve = null;
       const emptyBox = box();
@@ -11022,6 +11042,15 @@ const report = await page.evaluate(async () => {
       '160,104,48', '216,168,96', '90,50,16', '248,224,168',
       // paukkupöhö: paineen punainen, ja valkoiseksi kirkastuva sytytys
       '200,24,32', '240,64,48', '140,12,24', '255,232,192',
+      /* Kävelijän kaksi muuta ihosävyä (17.8.2026). Lista on tarkoituksella
+       * käsin kirjoitettu rekisteri piirroksen omasta paletista — juuri siksi
+       * se huomasi uudet sävyt heti ja ilmoitti kävelijän hajonneeksi kahteen
+       * osaan: valkolistan ulkopuolinen väri ei ole tälle portille kuvaa
+       * lainkaan. Ks. `WALKER_TONES`. */
+      // syvä ruusu
+      '200,96,120', '232,140,160', '152,48,72', '96,20,40',
+      // ruoste
+      '208,112,88', '240,160,128', '160,64,40', '104,32,20',
     ]);
     const shot = (paint) => {
       g.clearRect(0, 0, W, H);
@@ -12469,9 +12498,11 @@ const report = await page.evaluate(async () => {
     const gfx4 = await import('/src/gfx/sprites.js');
 
     /*
-     * 1. MAAHANISKU VANGITSEE, EI TAPA. *"Ground stomp voisi vangita
-     *    viholliset kupliin, ei tappaa suorilta."* Väite on että kävelijä on
-     *    iskun jälkeen **elossa ja kuplassa** — ei poissa.
+     * 1. MAAHANISKU KAATAA KUMOON. *"Ehkä ground stomp KAATAA VIHOLLISEN eli
+     *    sprite menee ylösalaisin, jalat sätkivät ilmassa."* (17.8.2026, ja
+     *    samalla kupla palasi kaasupallon yksinoikeudeksi.) Väite on että
+     *    kävelijä on iskun jälkeen **elossa ja kumossa** — ei poissa eikä
+     *    kuplassa.
      */
     reset({ type: 'shroom', level: 2 });
     const s5 = new LevelScene(game, '1-1');
@@ -12502,9 +12533,11 @@ const report = await page.evaluate(async () => {
     s5.poundImpact(p5, 1);
     const bubbled = victims.filter((e) => e.bubbled).length;
     const gone = victims.filter((e) => e.remove || e.dying).length;
-    expect('maahanisku vangitsee kuplaan eikä tapa suoralta',
-      bubbled === victims.length && gone === 0,
-      `${victims.length} kävelijää: kuplassa ${bubbled}, poissa ${gone}`);
+    const flipped = victims.filter((e) => e.flipped).length;
+    expect('maahanisku kaataa kumoon eikä tapa suoralta eikä vangitse kuplaan',
+      flipped === victims.length && gone === 0 && bubbled === 0,
+      `${victims.length} kävelijää: kumossa ${flipped}, kuplassa ${bubbled},`
+      + ` poissa ${gone}`);
 
     /*
      * 2. VIHOLLISELLA ON IHO, JA SE ON VAIN PINTAA. Sama kolmikko kuin
@@ -12540,8 +12573,19 @@ const report = await page.evaluate(async () => {
       diffPx = Math.max(diffPx, d);
     }
     const area = 16 * 16;
+    /* Kaksisuuntainen raja (17.8.2026). Alaraja nousi kahdesta pikselistä
+     * viiteen prosenttiin, koska omistajan huomio oli mitattavissa: vanha iho
+     * muutti korkeintaan 6 % pinnasta, ja se on liian vähän erottuakseen
+     * juostessa. Yläraja on 75 % eikä 12 % — sävy muuttaa koko rungon kerralla
+     * ja se on tarkoitus — mutta se on yhä olemassa, koska "kokonaan toinen
+     * kuva" on eri asia kuin "sama otus omalla ihollaan" — mutta yläraja on
+     * 90 % eikä 75 %, koska sävynvaihto maalaa rungon kokonaan ja mitattu
+     * suurin ero on 83 %. Se mikä oikeasti estää "eri otuksen" on kaksi muuta
+     * porttia: siluetin on oltava identtinen (nolla pikseliä, koska siitä
+     * luetaan tallattavuus) ja jokaisen sävyn on oltava piirroksen omassa
+     * palettirekisterissä, jota `laatikko`-portti ylläpitää käsin. */
     expect('kävelijällä on yksilöllinen pinta, muttei yksilöllistä siluettia',
-      changed >= 3 && diffPx > 2 && diffPx < area * 0.12 && maskPx === 0,
+      changed >= 3 && diffPx > area * 0.05 && diffPx < area * 0.9 && maskPx === 0,
       `erilaisia ${changed}/5, suurin ero ${diffPx} pikseliä (${(100 * diffPx / area).toFixed(1)} %), `
       + `siluettiero ${maskPx} pikseliä`);
   }
@@ -13271,8 +13315,10 @@ const report = await page.evaluate(async () => {
       const before = game.state.score;
       land(c);
       const third = game.state.score - before;
+      /* Suhde on ketjun järjestysluvun neliö (`CHAIN` = [1, 4, 9, …],
+       * ks. `src/core/points.js`), eli toinen tappo maksaa nelinkertaisesti. */
       expect('ilmassa ketjutettu tallaus maksaa enemmän, ja maakosketus katkaisee ketjun',
-        first > 0 && second === first * 2 && third === first,
+        first > 0 && second === first * 4 && third === first,
         `1. ${first}, 2. ${second}, maahan käynnin jälkeen ${third}`
         + `, maassa ${landed}`);
     }
@@ -13301,8 +13347,9 @@ const report = await page.evaluate(async () => {
         s.shellSweep(shell);
         paid.push(game.state.score - before);
       }
+      /* Kertoimet ovat järjestysluvun neliöitä (`CHAIN`), eli 1 · 4 · 9. */
       expect('potkaistun kuoren jono maksaa nousevasti, ja ketju alkaa potkusta',
-        paid[0] > 0 && paid[1] === paid[0] * 2 && paid[2] === paid[0] * 4,
+        paid[0] > 0 && paid[1] === paid[0] * 4 && paid[2] === paid[0] * 9,
         paid.join(' -> '));
     }
 
@@ -14149,45 +14196,30 @@ const report = await page.evaluate(async () => {
         inDesert === 'heat' && onMap === null, `${inDesert} -> ${onMap}`);
     }
 
-    /* The HUD is not air and not a window. Heat used to wobble the timer and
-     * frost used to grow over the score, which is the kind of atmosphere that
-     * makes a game harder to read rather than better to look at. */
+    /*
+     * ILMAKEHÄ EI KOSKE KERTOJAAN, ja tämä on sama väite kuin ennen mutta
+     * toisella takuulla.
+     *
+     * Kuumuus väreili aikanaan kelloa ja huurre kasvoi pisteluvun päälle, mikä
+     * on juuri sitä tunnelmaa joka tekee pelistä vaikealukuisen eikä
+     * kauniimman. Takuu oli 32 px korkea HUD-nauha jonka ilmakehä jätti
+     * rauhaan (`HUD_H`). Nauhaa ei ole enää olemassa, joten takuu on nyt
+     * **piirtojärjestys**: `main.js` piirtää kohtauksen, ajaa `PostFX.apply`n
+     * ja piirtää vasta sitten `drawOverlay`in.
+     *
+     * Se luetaan lähdetekstistä eikä pikseleistä, koska väite koskee
+     * järjestystä eikä väriä: kaksi riviä väärässä järjestyksessä ei näy
+     * yhdessäkään yksittäisessä kuvassa vaan vasta siinä kentässä jossa
+     * sattuu olemaan kuumuutta.
+     */
     {
-      const fx = makeFX();
-      const c = testCanvas();
-      fx.init(c);
-      fx.setPreset('hehku');
-      const g = c.getContext('2d');
-      const hudRow = (canvas) => {
-        const d = canvas.getContext('2d').getImageData(0, 232, 320, 1).data;
-        return [...d].join(',');
-      };
-      // Force the Canvas 2D path: that is where the atmosphere is drawn by
-      // hand, and where getting the vertical direction wrong is easy.
-      fx.mode = '2d';
-      const shot = (theme) => {
-        const t = testCanvas();
-        const tg = t.getContext('2d');
-        // Mark the HUD strip so any distortion of it shows as a difference.
-        tg.fillStyle = '#000000';
-        tg.fillRect(0, 208, 320, 32);
-        tg.fillStyle = '#ffffff';
-        for (let x = 0; x < 320; x += 7) tg.fillRect(x, 230, 3, 5);
-        fx.source = t;
-        fx.setAmbience(theme);
-        fx.tick = 40;
-        fx.apply(tg);
-        return hudRow(t);
-      };
-      // The baseline has the same bloom, so only the atmosphere can differ.
-      const plain = shot(null);
-      const results = ['desert', 'ice'].map((theme) => ({
-        theme, same: shot(theme) === plain,
-      }));
-      expect('atmosphere never touches the HUD strip',
-        results.every((r) => r.same),
-        results.map((r) => `${r.theme}:${r.same ? 'ok' : 'muuttui'}`).join(' '));
-      fx.setAmbience(null);
+      const src = await (await fetch('/src/main.js')).text();
+      const applyAt = src.indexOf('PostFX.apply(ctx)');
+      const overlayAt = src.indexOf('drawOverlay(ctx)');
+      const presentAt = src.indexOf('PostFX.present()');
+      expect('ilmestyvät lukemat piirretään kuvaefektien jälkeen',
+        applyAt > 0 && overlayAt > applyAt && presentAt > overlayAt,
+        `apply ${applyAt}, drawOverlay ${overlayAt}, present ${presentAt}`);
     }
 
     // And whatever the live game ended up with, it has to be a working mode.
@@ -14199,7 +14231,7 @@ const report = await page.evaluate(async () => {
 
   /* ------------------------ kuvasuhde ja valokeila --------------------- */
   {
-    const { VIEW_W, VIEW_H, HUD_H } = await import('/src/scenes/level.js');
+    const { VIEW_W, VIEW_H } = await import('/src/scenes/level.js');
     const { PostFX } = await import('/src/gfx/postfx.js');
     const { T, TILE } = await import('/src/gfx/tiles.js');
 
@@ -14209,7 +14241,7 @@ const report = await page.evaluate(async () => {
     const shot = () => {
       const c = document.createElement('canvas');
       c.width = VIEW_W;
-      c.height = VIEW_H + HUD_H;
+      c.height = VIEW_H;
       const g = c.getContext('2d', { willReadFrequently: true });
       g.imageSmoothingEnabled = false;
       g.fillStyle = '#000';
@@ -14234,7 +14266,7 @@ const report = await page.evaluate(async () => {
     reset();
     const wide = new LevelScene(game, '2-1');
     expect('2-1 and 2-3 are letterboxed and world 1 is not',
-      wide.bar === 24 && wide.viewH === 160
+      wide.bar === 24 && wide.viewH === VIEW_H - 48
       && new LevelScene(game, '2-3').bar === 24
       && new LevelScene(game, '1-1').bar === 0
       && new LevelScene(game, '1-1').viewH === VIEW_H,
@@ -14278,10 +14310,14 @@ const report = await page.evaluate(async () => {
       s2.viewH = VIEW_H;
       const b = shot();
       s2.draw(b.g);
-      expect('the bars sit in the playfield only and leave the HUD alone',
-        bars && reaches && strip(d, VIEW_H, VIEW_H + HUD_H)
-          === strip(data(b.c), VIEW_H, VIEW_H + HUD_H),
-        `bars ${bars}, picture at both band edges ${reaches}`);
+      /* Nauhaa ei enää ole, joten väite on se mikä siitä jäi jäljelle: palkit
+       * ovat ikkunan ylä- ja alareunassa ja kuva ulottuu kumpaankin reunaan
+       * asti. `b` piirretään yhä vertailun vuoksi — sama kenttä ilman palkkeja
+       * — jotta rikkinäinen palkkilogiikka erottuu tyhjästä kuvasta. */
+      const plainDrawn = !rowBlack(data(b.c), Math.floor(VIEW_H / 2));
+      expect('kirjekuoripalkit ovat ikkunassa ja kuva ylettyy kumpaankin reunaan',
+        bars && reaches && plainDrawn,
+        `bars ${bars}, picture at both band edges ${reaches}, ilman palkkeja ${plainDrawn}`);
     }
 
     /* A narrower window must still hold the highest jump in the game — 100 px,
@@ -14866,9 +14902,18 @@ const report = await page.evaluate(async () => {
        * just over the 12.5 px the ease produces on its first frame, so it is
        * the cut that cannot come back rather than the mechanism being frozen.
        * 12.5 is `CAM_V_EASE` × 50 and nothing else, which is exactly what an
-       * ordinary level's 32 px landing already does at 8 px. */
+       * ordinary level's 32 px landing already does at 8 px.
+       *
+       * **Liikkumaton näkymä ei ole tässä vika, vaan tulos** (17.8.2026):
+       * ikkuna on nauhan poistuttua 240 px ja tavallinen kenttä on 15 riviä
+       * eli täsmälleen yhtä korkea, joten siellä ei ole mitään mihin kamera
+       * voisi nousta. Väite koskee siis niitä näkymiä joilla on varaa liikkua
+       * — kirjekuoripalkitetut ja pystykentät — ja liikkumattomat luetellaan
+       * silti riville, jottei kadonnut liike voi piiloutua tyhjään joukkoon. */
+      const movers = rows.filter((r) => r.step > 0.01);
       expect('a view that has to rise on landing animates instead of cutting',
-        rows.length >= 5 && rows.every((r) => r.step < 13 && r.settle > 4),
+        rows.length >= 5 && movers.length >= 2
+        && movers.every((r) => r.step < 13 && r.settle > 4),
         rows.map((r) => `${r.id} taso ${r.level}: ${r.step.toFixed(2)} px/frame, `
           + `asettui ${r.settle || '>40'} framessa`).join(', '));
     }
@@ -15890,8 +15935,6 @@ const report = await page.evaluate(async () => {
       expect('without WebGL the lamp still lights the player and darkens the distance',
         fx.mode === '2d' && keptNear > 0.95 && keptFar < 0.45,
         `mode ${fx.mode}, lähellä ${keptNear.toFixed(2)}, kaukana ${keptFar.toFixed(2)}`);
-      expect('the lamp never touches the HUD strip',
-        strip(before, VIEW_H, VIEW_H + HUD_H) === strip(after, VIEW_H, VIEW_H + HUD_H));
 
       /* Darkness may hide the route and the rewards. It may not hide a spike:
        * a hazard you can only learn by dying is the one thing this game is not
@@ -18175,8 +18218,13 @@ const report = await page.evaluate(async () => {
      * vain että hyppy ei yltänyt pelivaraan asti — joten vähintään yhden rivin
      * on oikeasti ajanut mekanismin. Se ehto on koko kattavuuskorjaus yhdellä
      * rivillä: väite joka lakkaa mittaamasta kaatuu sen sijaan että vihertäisi. */
+    /* Kolme riviä eikä neljä (17.8.2026): ikkuna kasvoi 208:sta 240:een kun
+     * HUD-nauha poistui, ja yksi tapaus siirtyi `free`stä `capped`iin — sen
+     * yläpuolelta loppui kuva. Se ei ole mittauksen kaventuminen vaan sama
+     * kenttä toisessa ikkunassa, ja `capped` mittaa sen omalla väitteellään
+     * heti alla. */
     expect('hyllyltä lähtevä hyppy ei maksa pelivaraa niin kauan kuin kuvaa riittää',
-      free.length >= 4 && free.some((r) => r.moved > 8)
+      free.length >= 3 && free.some((r) => r.moved > 8)
       && free.every((r) => r.head > 16 && r.seen === r.air),
       free.map((r) => `${say(r)}, näkymä liikkui ${r.moved.toFixed(2)} px`).join(', '));
 
@@ -19315,7 +19363,7 @@ const report = await page.evaluate(async () => {
       if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
     };
     const game = window.sfb3;
-    const { LevelScene, VIEW_W, VIEW_H, HUD_H } = await import('/src/scenes/level.js');
+    const { LevelScene, VIEW_W, VIEW_H } = await import('/src/scenes/level.js');
     const { MAX_RUN } = await import('/src/entities/player.js');
     const { getLevel, levelIds } = await import('/src/data/levels.js');
     const { Save } = await import('/src/core/save.js');
@@ -19412,14 +19460,16 @@ const report = await page.evaluate(async () => {
         + ` aika-ajossa ${timed.scene.race ? 'on' : 'PUUTTUU'}`);
     }
 
-    /* 2. HUD-nauhassa on jo viisi lukemaa. Kuudes mitataan pikseleinä: paljonko
-     * uutta mustetta, paljonko peitettyä, ja kuinka lähelle vanhaa se tulee. */
+    /* 2. Ilmestyviä lukemia on jo neljä nurkassa. Aika-ajon jako on viides, ja
+     * se mitataan pikseleinä: paljonko uutta mustetta, paljonko peitettyä, ja
+     * kuinka lähelle vanhaa se tulee. Mittaus on nyt koko ikkuna eikä nauha —
+     * `drawOverlay` piirtää läpinäkyvälle pohjalle, joten "vanhaa mustetta" on
+     * täsmälleen se mitä muut lukemat piirsivät. */
     {
       const c = document.createElement('canvas');
       c.width = VIEW_W;
-      c.height = VIEW_H + HUD_H;
+      c.height = VIEW_H;
       const g = c.getContext('2d');
-      const BG = [0x10, 0x10, 0x18];
       const shot = (timeAttack, tweak) => {
         reset({ lives: 9999, coins: 99, score: 9999999 });
         game.timeAttack = timeAttack;
@@ -19431,10 +19481,10 @@ const report = await page.evaluate(async () => {
         scene.player.powerLevel = 3;
         scene.player.type = 'leaf';
         if (tweak) tweak(scene);
-        g.clearRect(0, 0, VIEW_W, VIEW_H + HUD_H);
-        scene.drawHud(g);
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.drawOverlay(g);
         game.timeAttack = false;
-        return g.getImageData(0, VIEW_H, VIEW_W, HUD_H).data;
+        return g.getImageData(0, 0, VIEW_W, VIEW_H).data;
       };
       const plain = shot(false, null);
       const variants = [
@@ -19452,9 +19502,9 @@ const report = await page.evaluate(async () => {
       for (const tweak of variants) {
         const shotB = shot(true, tweak);
         for (let i = 0; i < plain.length; i += 4) {
-          const wasInk = plain[i] !== BG[0] || plain[i + 1] !== BG[1] || plain[i + 2] !== BG[2];
+          const wasInk = plain[i + 3] > 0;
           const same = plain[i] === shotB[i] && plain[i + 1] === shotB[i + 1]
-            && plain[i + 2] === shotB[i + 2];
+            && plain[i + 2] === shotB[i + 2] && plain[i + 3] === shotB[i + 3];
           if (same) continue;
           if (wasInk) { covered++; continue; }
           added++;
@@ -19474,13 +19524,11 @@ const report = await page.evaluate(async () => {
       for (let i = 0; i < plain.length; i += 4) {
         const py = Math.floor((i / 4) / VIEW_W);
         if (py < box.y0 || py > box.y1) continue;
-        if (plain[i] !== BG[0] || plain[i + 1] !== BG[1] || plain[i + 2] !== BG[2]) {
-          oldCols.add((i / 4) % VIEW_W);
-        }
+        if (plain[i + 3] > 0) oldCols.add((i / 4) % VIEW_W);
       }
       let gap = 1e9;
       for (const nx of newCols) for (const ox of oldCols) gap = Math.min(gap, Math.abs(nx - ox));
-      expect('aika-ajon lukema ei peitä yhtään olemassa olevaa HUD-pikseliä',
+      expect('aika-ajon jako ei peitä yhtään olemassa olevaa lukemaa',
         added > 0 && covered === 0 && gap >= 2,
         added ? `uutta mustetta ${added} px, peitettyä ${covered} px, laatikko x`
           + ` ${box.x0}-${box.x1} y ${box.y0}-${box.y1} (HUD-nauhan sisällä),`
@@ -19494,7 +19542,7 @@ const report = await page.evaluate(async () => {
     {
       const c = document.createElement('canvas');
       c.width = VIEW_W;
-      c.height = VIEW_H + HUD_H;
+      c.height = VIEW_H;
       const g = c.getContext('2d');
       const shot = (result, age) => {
         reset({ lives: 4, coins: 37, score: 128400 });
@@ -19506,10 +19554,10 @@ const report = await page.evaluate(async () => {
         scene.stateTimer = age;
         scene.wonCard = 'shroom';
         if (result) scene.raceResult = result;
-        g.clearRect(0, 0, VIEW_W, VIEW_H + HUD_H);
-        scene.drawHud(g);
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.drawBanners(g);
         game.timeAttack = false;
-        return g.getImageData(0, 0, VIEW_W, VIEW_H + HUD_H).data;
+        return g.getImageData(0, 0, VIEW_W, VIEW_H).data;
       };
       const results = [
         { frames: 4823, best: null, record: true },
@@ -19524,9 +19572,8 @@ const report = await page.evaluate(async () => {
         const plain = shot(null, age);
         for (const r of results) {
           const timed = shot(r, age);
-          /* Vain pelikenttä: HUD-nauha on maalattu umpeen, joten siellä
-           * jokainen pikseli olisi "vanhaa mustetta" ja jokainen uusi lukema
-           * näyttäisi peitolta. Nauhan oma mitta on väitteessä 2. */
+          /* Vain lippu ja kortti: `drawBanners` piirtää nimenomaan ne, ja
+           * ilmestyvien lukemien oma mitta on väitteessä 2. */
           for (let i = 0; i < VIEW_H * VIEW_W * 4; i += 4) {
             const wasInk = plain[i + 3] > 0;
             const same = plain[i] === timed[i] && plain[i + 1] === timed[i + 1]
@@ -19933,6 +19980,671 @@ const report = await page.evaluate(async () => {
   });
   report.checks.push(...race.checks);
   report.failures.push(...race.failures);
+}
+
+/* ------------------------- HUD-nauhan sarakkeet -------------------------- */
+/*
+ * KUKAAN EI SAA VUOTAA SARAKKEESTAAN.
+ *
+ * HUDin uusi jako (`HUD_X` `level.js`:ssä, `drawPanel` kartalla) on sarakkeita
+ * joilla on mitatut rajat, ja mitattu raja vanhenee juuri niin hiljaa kuin
+ * kaikki muutkin: yksi merkki lisää lukemaan, ja teksti kävelee naapurin
+ * päälle ilman että mikään punastuu. Kirjoittaessa tämä tapahtui oikeasti —
+ * kartan `KOLIKOT 99` ylsi 118:aan ja nimikilpi alkoi 112:sta.
+ *
+ * Väite luetaan pikseleistä eikä koodista: nauha piirretään **pahimmalla
+ * mahdollisella tilalla** (9999 elämää, 99 kolikkoa, seitsennumeroiset
+ * pisteet, pisin nielty kyky, pisin lähtölaskenta, pisin kentän nimi), ja
+ * jokaisen musteellisen sarakkeen on osuttava johonkin sille riville
+ * ilmoitettuun väliin. Väli on tässä tiedostossa käsin kirjoitettuna, koska
+ * sen tehtävä on olla se *toinen* lähde: jos joku siirtää lukeman, tämä
+ * punastuu ja pakottaa siirtämään myös perustelun.
+ */
+{
+  const hud = await page.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name, ok, detail });
+      if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+    };
+    const game = window.sfb3;
+    const { LevelScene, VIEW_W, VIEW_H } = await import('/src/scenes/level.js');
+    const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+
+    const BG = [0x10, 0x10, 0x18];
+    /** Ne sarakkeet joilla on mustetta annetulla rivikaistalla. */
+    const inkCols = (data, w, y0, y1) => {
+      const cols = new Set();
+      for (let y = y0; y <= y1; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          if (data[i + 3] === 0) continue;
+          if (data[i] === BG[0] && data[i + 1] === BG[1] && data[i + 2] === BG[2]) continue;
+          cols.add(x);
+        }
+      }
+      return cols;
+    };
+    /** Sarakkeet jotka eivät mahdu yhteenkään sallittuun väliin. */
+    const strays = (cols, ranges) => [...cols]
+      .filter((x) => !ranges.some(([a, b]) => x >= a && x <= b))
+      .sort((a, b) => a - b);
+    const runs = (list) => {
+      const out = [];
+      for (const x of list) {
+        const last = out[out.length - 1];
+        if (last && x === last[1] + 1) last[1] = x;
+        else out.push([x, x]);
+      }
+      return out.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(' ');
+    };
+
+    /* --- 1. kentän nurkat --- */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g = c.getContext('2d');
+      game.timeAttack = false;
+      game.state = {
+        lives: 9999, coins: 99, score: 9999999, power: { type: 'leaf', level: 3 },
+        reserve: 'flower', world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1,
+        cards: [], secrets: {}, usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const scene = new LevelScene(game, '1-1');
+      scene.tick = 12;
+      scene.time = 90;                    // kello kriisissä eli näkyvissä
+      scene.player.pMeter = 999;
+      scene.player.powerLevel = 5;
+      scene.player.type = 'leaf';
+      /* Pisin nielty kyky ja pisin lähtölaskenta yhtä aikaa: kumpikin varaa
+       * oman kolonsa, eivätkä ne ole toistensa vaihtoehtoja. */
+      scene.player.swallowed = 'magneetti';
+      scene.player.swallowTimer = 480;
+      scene.player.corked = 9 * 60;
+      g.clearRect(0, 0, VIEW_W, VIEW_H);
+      scene.drawOverlay(g);
+      const d = g.getImageData(0, 0, VIEW_W, VIEW_H).data;
+
+      /* Sallitut välit riveittäin, ks. `OVERLAY`. Varjo vie yhden pikselin
+       * oikealle ja alas, joten jokainen väli on yhtä leveämpi kuin teksti. */
+      const top1 = strays(inkCols(d, VIEW_W, 6, 13), [[18, 60], [260, 315]]);
+      const top2 = strays(inkCols(d, VIEW_W, 17, 24), [[18, 66], [255, 315]]);
+      expect('kentän ilmestyvät lukemat pysyvät ylänurkissaan pahimmallakin tilalla',
+        top1.length === 0 && top2.length === 0,
+        `ylin rivi ${top1.length ? runs(top1) : 'siisti'}, toinen rivi`
+        + ` ${top2.length ? runs(top2) : 'siisti'}`);
+
+      /* Alanurkka: nielty kyky ja varalokero. Ja **koko keskikaista on
+       * tyhjä** — se on koko muutoksen väite yhtenä mittana: pelialueen
+       * keskellä ei ole kertojan mustetta lainkaan. */
+      const bottom = strays(inkCols(d, VIEW_W, VIEW_H - 26, VIEW_H - 1), [[235, 315]]);
+      const middle = strays(inkCols(d, VIEW_W, 30, VIEW_H - 30), []);
+      expect('alanurkka on varattu ja ruudun keskeltä ei löydy yhtään lukemaa',
+        bottom.length === 0 && middle.length === 0,
+        `alanurkka ${bottom.length ? runs(bottom) : 'siisti'}, keskikaista`
+        + ` ${middle.length ? runs(middle) : 'tyhjä'}`);
+    }
+
+    /* --- 2. kartan paneeli ja yläpalkki --- */
+    {
+      const c = document.createElement('canvas');
+      c.width = 320;
+      c.height = 240;
+      const g = c.getContext('2d');
+      game.state = {
+        lives: 9999, coins: 99, score: 9999999, power: { type: 'leaf', level: 3 },
+        reserve: 'flower', world: 7, node: null, cleared: {}, worldsOpen: 8,
+        cards: [], secrets: {}, usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      game.timeAttack = true;                 // pisin tilateksti yläpalkkiin
+      const map = new WorldMapScene(game);
+      map.tick = 12;
+      g.clearRect(0, 0, 320, 240);
+      map.draw(g);
+      const d = g.getImageData(0, 0, 320, 240).data;
+      game.timeAttack = false;
+
+      /* Yläpalkki on 14 px korkea ja teksti alkaa kolmosesta. */
+      const title = strays(inkCols(d, 320, 3, 9), [[6, 173], [267, 314]]);
+      expect('kartan yläpalkissa on tilaa maailman nimen ja tilatekstin välissä',
+        title.length === 0, title.length ? runs(title) : 'siisti');
+
+      /* Paneelin kaksi ylintä riviä. Nimikilpi on täytetty suorakaide, joten
+       * se on mustetta koko leveydeltään (124…279). */
+      const panelY = 158;
+      const prow1 = strays(inkCols(d, 320, panelY + 10, panelY + 16),
+        [[8, 48], [124, 279], [286, 309]]);
+      const prow2 = strays(inkCols(d, 320, panelY + 20, panelY + 26),
+        [[8, 55], [60, 118], [124, 279], [286, 309]]);
+      expect('kartan paneelin lukemat pysyvät sarakkeissaan',
+        prow1.length === 0 && prow2.length === 0,
+        `ylärivi ${prow1.length ? runs(prow1) : 'siisti'}, alarivi`
+        + ` ${prow2.length ? runs(prow2) : 'siisti'}`);
+    }
+
+    /* --- 3. nauha nukkuu, keho puhuu --- */
+    /*
+     * Kaksi puolta samasta päätöksestä (ks. `HUD_WAKE` ja `PLUME_START`):
+     * kertojan kerros vetäytyy kun sillä ei ole asiaa, ja se lukema jota
+     * luetaan kesken juoksun siirtyy maailmaan. Jos nauha himmenee muttei
+     * mikään korvaa sitä, muutos on pelkkää poistoa.
+     */
+    {
+      const { P_METER_MAX } = await import('/src/entities/player.js');
+      const blank2 = () => ({
+        left: false, right: false, up: false, down: false, jump: false, run: false,
+        start: false, mute: false, quicksave: false, quickload: false, slot: false, reset: false,
+      });
+      const idle = () => ({
+        held: blank2(), pressed: blank2(), released: blank2(), consume() {},
+      });
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const s = new LevelScene(game, '1-1');
+      const fresh = s.hudInk();
+      for (let f = 0; f < 200; f++) s.update(idle());
+      const slept = s.hudInk();
+      game.state.coins++;
+      s.update(idle());
+      const woke = s.hudInk();
+      /* Kello alle sadan on kriisi eikä tapahtuma: nauha ei saa nukahtaa
+       * silloin vaikka mikään lukema ei muutu. */
+      s.time = 90;
+      for (let f = 0; f < 200; f++) s.update(idle());
+      const urgent = s.hudInk();
+      expect('HUD-nauha himmenee itsekseen ja herää lukeman muutoksesta',
+        fresh === 1 && slept < 0.75 && woke === 1 && urgent === 1,
+        `alussa ${fresh}, 200 framen jälkeen ${slept.toFixed(2)}, kolikosta ${woke},`
+        + ` kello 90 ${urgent.toFixed(2)}`);
+
+      /* Suihku: mitä täydempi mittari, sitä tiheämpi pilvi — ja kolme tilaa
+       * joissa sitä ei tule lainkaan. */
+      const p = s.player;
+      const plumes = (setup, frames = 60) => {
+        p.onGround = true;
+        p.corked = 0;
+        p.dying = false;
+        setup();
+        const before = s.entities.length;
+        for (let f = 0; f < frames; f++) { p.tick++; p.ventPlume(); }
+        return s.entities.length - before;
+      };
+      const walking = plumes(() => { p.pMeter = P_METER_MAX * 0.2; });
+      const halfway = plumes(() => { p.pMeter = P_METER_MAX * 0.7; });
+      const full = plumes(() => { p.pMeter = P_METER_MAX; });
+      const airborne = plumes(() => { p.pMeter = P_METER_MAX; p.onGround = false; });
+      const corked = plumes(() => { p.pMeter = P_METER_MAX; p.corked = 120; });
+      expect('paine näkyy kehossa: suihku tihenee mittarin mukana eikä tule tyhjästä',
+        walking === 0 && halfway > 0 && full > halfway && airborne === 0 && corked === 0,
+        `kävely ${walking}, puolikas ${halfway}, täysi ${full}, ilmassa ${airborne},`
+        + ` ummetus ${corked} (60 framea kutakin)`);
+    }
+
+    /* --- 4. kolikkoputkilo: pinta on luku, ja kolikot menevät sinne --- */
+    /*
+     * Putkilon koko väite on suhde: **sisätila on sata kolikkoa korkea**, eli
+     * pinnan korkeus kertoo sekä määrän että etäisyyden elämään. Jos se suhde
+     * lipsuu, mittari valehtelee näyttäen silti oikealta — juuri se vika jota
+     * silmä ei löydä. Siksi se mitataan pikseleinä eikä luettuna koodista.
+     */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g = c.getContext('2d');
+      const goldRows = (coins) => {
+        game.state = {
+          lives: 3, coins, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+          usedSaveState: false, continues: 0, bestTimes: {},
+        };
+        const s = new LevelScene(game, '1-1');
+        s.updateCoinFlights();
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        s.drawCoinTube(g);
+        const d = g.getImageData(0, 0, VIEW_W, VIEW_H).data;
+        const rows = new Set();
+        for (let y = 0; y < VIEW_H; y++) {
+          for (let x = 0; x < 16; x++) {
+            const i = (y * VIEW_W + x) * 4;
+            if (d[i] > 200 && d[i + 1] > 130 && d[i + 2] < 140 && d[i + 3] > 200) rows.add(y);
+          }
+        }
+        return { rows: rows.size, fill: s.tubeFill };
+      };
+      const zero = goldRows(0);
+      const ten = goldRows(10);
+      const fifty = goldRows(50);
+      const ninetynine = goldRows(99);
+      /* Kaksi pikseliä per kolikko, ja sata kolikkoa on koko sisätila. */
+      const ok = zero.rows === 0 && ten.rows === 20 && fifty.rows === 100
+        && ninetynine.rows === 198;
+      expect('putkilon pinta on tasan kaksi pikseliä per kolikko, sata täyttää sen',
+        ok,
+        `0 -> ${zero.rows} px, 10 -> ${ten.rows} px, 50 -> ${fifty.rows} px,`
+        + ` 99 -> ${ninetynine.rows} px (sisätila 200 px)`);
+
+      /* Kolikko ei katoa ilmaan: se lentää putkiloon ja pinta nousee vasta kun
+       * se on perillä. Sata kolikkoa tyhjentää putkilon, ja se on 1UP nähtynä. */
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const s = new LevelScene(game, '1-1');
+      s.addCoin(s.player.x + 40, s.player.y);
+      const inAir = s.coinFlights.length;
+      const fillAtPickup = s.tubeFill;
+      for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
+      const landed = s.tubeFill;
+      const livesBefore = game.state.lives;
+      game.state.coins = 99;
+      s.tubeFill = 99;
+      s.addCoin(s.player.x + 40, s.player.y);
+      for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
+      const flushed = s.tubeFill;
+      expect('poimittu kolikko lentää putkiloon, ja sadas tyhjentää sen',
+        inAir === 1 && fillAtPickup === 0 && landed === 1
+        && flushed === 0 && game.state.lives === livesBefore + 1 && s.tubeFlush > 0,
+        `poiminnassa ilmassa ${inAir} pinta ${fillAtPickup}, perillä ${landed};`
+        + ` sadas -> pinta ${flushed}, elämät ${livesBefore} -> ${game.state.lives},`
+        + ` huuhtelu ${s.tubeFlush}`);
+    }
+
+    /* --- 5. aurinko on kello, ei maisemaa --- */
+    /*
+     * Väite on kaksiosainen ja toinen puoli on se tärkeä: aurinko liikkuu
+     * **ajan** mukana ja **ei** kameran. Jos se liikkuisi molempien, se ei
+     * kertoisi kumpaakaan — ja juuri sitä se ennen teki (parallaksi 0,03).
+     *
+     * Kameraväite mitataan **vaakasuunnassa**, koska parallaksi on vaakasuora
+     * ilmiö: vanha kerroin 0,03 olisi siirtänyt aurinkoa 900 px kameralla 27
+     * px sivuun. Pystysuunta jätetään mittaamatta, ja syy on mitattu eikä
+     * arvattu: pilvikerros ajelehtii kameran mukana ja voi peittää kiekon
+     * ylä- tai alareunasta muutaman pikselin, mikä siirtää painopistettä
+     * pystyssä ilman että aurinko itse liikkuu.
+     */
+    {
+      const { drawBackdrop } = await import('/src/gfx/backdrop.js');
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g = c.getContext('2d');
+      const sunAt = (clock, camX) => {
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        drawBackdrop(g, 'hills', 'grass', camX, VIEW_W, VIEW_H, 0, 0, clock);
+        const d = g.getImageData(0, 0, VIEW_W, VIEW_H).data;
+        let sx = 0; let sy = 0; let n = 0;
+        for (let y = 0; y < VIEW_H; y++) {
+          for (let x = 0; x < VIEW_W; x++) {
+            const i = (y * VIEW_W + x) * 4;
+            if (d[i] > 250 && d[i + 1] > 245 && d[i + 2] > 195 && d[i + 2] < 245) {
+              sx += x; sy += y; n++;
+            }
+          }
+        }
+        return n ? { x: Math.round(sx / n), y: Math.round(sy / n), n } : null;
+      };
+      const dawn = sunAt(1, 0);
+      const noon = sunAt(0.5, 0);
+      const dusk = sunAt(0.02, 0);
+      const moved = sunAt(0.5, 900);
+      const rises = dawn && noon && dusk && moved
+        && dawn.x < noon.x && noon.x < dusk.x
+        && noon.y < dawn.y && noon.y < dusk.y
+        && moved.x === noon.x;
+      expect('aurinko kulkee kellon mukana eikä kameran mukana',
+        rises,
+        `alku ${dawn ? `${dawn.x},${dawn.y}` : 'ei löytynyt'},`
+        + ` puoliväli ${noon ? `${noon.x},${noon.y}` : 'ei löytynyt'},`
+        + ` loppu ${dusk ? `${dusk.x},${dusk.y}` : 'ei löytynyt'};`
+        + ` sama aika toisella kameralla ${moved ? `${moved.x},${moved.y}` : 'ei löytynyt'}`);
+    }
+
+    /* --- 6. kentän nimi on taivaalla, ja se lähtee sieltä --- */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g = c.getContext('2d');
+      const inkAt = (scene, tick) => {
+        scene.tick = tick;
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.drawSkyName(g);
+        const d = g.getImageData(0, 0, VIEW_W, VIEW_H).data;
+        let n = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+        return n;
+      };
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const sky = new LevelScene(game, '1-1');
+      const intro = inkAt(sky, 100);
+      const after = inkAt(sky, 600);
+      const back = inkAt(sky, 240 + 1080 + 120);
+      const room = new LevelScene(game, '1-F');
+      const inside = inkAt(room, 100);
+      expect('kentän nimi kirjoitetaan taivaalle, käy pois ja palaa — muttei sisätiloissa',
+        intro > 100 && after === 0 && back > 100 && inside === 0,
+        `alussa ${intro} px, 600 framen kohdalla ${after} px, kierroksen jälkeen ${back} px,`
+        + ` linnakkeessa ${inside} px`);
+    }
+
+    /* --- 7. karannut kuori ja pallojen katto --- */
+    /*
+     * Kaksi omistajan raporttia samasta viasta eri suunnista: liike joka
+     * jatkuu siellä missä kukaan ei ole. Kuori tyhjensi kentän ennen pelaajaa,
+     * ja kukka piti ruudulla pysyvää pallomattoa. Kumpikin mitataan
+     * tapahtumana.
+     */
+    {
+      const E = await import('/src/entities/enemies.js');
+      const { FartBall } = await import('/src/entities/items.js');
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: 'flower', level: 5 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const s = new LevelScene(game, '1-1');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const shell = new E.ShellGuy(s, 6 * 16, 12 * 16);
+      shell.y = 12 * 16 - shell.h;
+      shell.active = true;
+      shell.alwaysActive = true;
+      s.add(shell);
+      shell.toShell();
+      shell.kick(1);
+      const w = s.viewW;
+      /* a) Ruudun sisällä, matkaa vasta vähän: elossa. */
+      const near = shell.runaway;
+      /* b) Matkaa yli ruudun mutta yhä ikkunassa (pelaaja juoksee perässä):
+       *    elossa, koska sen näkee. */
+      shell.x = shell.slideFrom + w + 40;
+      s.cam.x = shell.x - 100;
+      const followed = shell.runaway;
+      /* c) Matkaa yli ruudun ja ikkunan ulkopuolella: karannut. */
+      s.cam.x = shell.slideFrom - 100;
+      const escaped = shell.runaway;
+      shell.update();
+      const cleared = shell.remove;
+      expect('potkaistu kuori loppuu siihen missä katsekin, muttei ennen sitä',
+        near === false && followed === false && escaped === true && cleared === true,
+        `lähellä ${near}, perässä juostuna ${followed}, karanneena ${escaped},`
+        + ` poistui ${cleared}`);
+
+      /* Pallojen katto: kolmas laukaus ei kasvata määrää vaan syö vanhimman. */
+      const s2 = new LevelScene(game, '1-1');
+      s2.entities = s2.entities.filter((e) => e.kind !== 'enemy');
+      const p2 = s2.player;
+      p2.type = 'flower';
+      p2.power = { type: 'flower', level: 5 };
+      const live = () => s2.entities.filter((e) => e instanceof FartBall && !e.remove).length;
+      const counts = [];
+      let first = null;
+      for (let shot = 0; shot < 4; shot++) {
+        p2.shoot();
+        if (!first) first = s2.entities.find((e) => e instanceof FartBall);
+        counts.push(live());
+      }
+      expect('ilmassa on korkeintaan kaksi palloa, ja uusin syö vanhimman',
+        counts.every((n) => n <= p2.maxLiveShots) && counts[counts.length - 1] > 0
+        && !!first && first.remove,
+        `katto ${p2.maxLiveShots}, laukausten jälkeen ${counts.join(' -> ')},`
+        + ` ensimmäinen poistettu ${first ? first.remove : 'ei syntynyt'}`);
+    }
+
+    /* --- 8. kumossa oleva nousee itse ylös, ja sen voi niellä --- */
+    {
+      const E = await import('/src/entities/enemies.js');
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {},
+      };
+      const s = new LevelScene(game, '1-1');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+      const e = new E.Walker(s, 6 * 16, 12 * 16);
+      e.y = 12 * 16 - e.h;
+      e.active = true;
+      e.alwaysActive = true;
+      e.spawnGrace = 0;
+      s.add(e);
+      const ok = e.knockOver(1);
+      const down = e.flipped && e.harmless;
+      let warned = false;
+      for (let f = 0; f < E.FLIP_FRAMES + 5; f++) {
+        e.update();
+        if (e.righting) warned = true;
+      }
+      expect('kumoon kaadettu on vaaraton, varoittaa nousustaan ja nousee itse',
+        ok && down && warned && !e.flipped && !e.harmless && !e.dying && !e.remove,
+        `kaatui ${ok}, vaaraton kumossa ${down}, varoitti ${warned},`
+        + ` nousi ${!e.flipped}, hengissä ${!e.dying && !e.remove}`);
+
+      /* Ja ketju isku → kumoon → nieleminen on ehjä ilman kuplaa: se oli
+       * VERBI 6:n koko rakenne, ja maahanisku lakkasi tänään vangitsemasta. */
+      const e2 = new E.Walker(s, 6 * 16, 12 * 16);
+      e2.y = 12 * 16 - e2.h;
+      e2.active = true;
+      e2.alwaysActive = true;
+      e2.spawnGrace = 0;
+      s.add(e2);
+      e2.knockOver(1);
+      const p2 = s.player;
+      const ate = s.swallowEnemy(p2, e2);
+      expect('kumossa olevan voi niellä: ketju isku → kumoon → kyky on ehjä',
+        ate === true && !!p2.swallowed && p2.swallowTimer > 0 && e2.remove,
+        `nieltiin ${ate}, kyky ${p2.swallowed || 'ei mitään'},`
+        + ` kello ${p2.swallowTimer}`);
+    }
+
+    /* --- 9 b. SID-sanasto: pulssi, arpeggio, suodin --- */
+    /*
+     * Kolme väitettä siitä mitä `tone`en tuli, ja jokainen on luettavissa
+     * luvuista eikä korvasta.
+     *
+     *   1. **Pulssi ei ole kanttiaalto.** 50 %:n pulssilla joka toinen
+     *      osaääni on nolla; 25 %:n pulssilla ne ovat mukana. Se on koko ero,
+     *      ja se on myös se syy miksi leveysmodulaatio kuuluu.
+     *   2. **Uusi raita käyttää sanastoa.** Raita joka olisi kirjoitettu
+     *      vanhoilla aalloilla olisi sama raita uudella nimellä.
+     *   3. **Vanhat raidat eivät muuttuneet.** Jokainen uusi parametri on
+     *      oletuksena nolla, eli `title` soi täsmälleen kuten ennenkin.
+     */
+    {
+      const audio = await import('/src/core/audio.js');
+      const square = audio.pulseHarmonics(0.5);
+      const narrow = audio.pulseHarmonics(0.25);
+      const evensSquare = [2, 4, 6, 8].map((n) => Math.abs(square[n]));
+      const evensNarrow = [2, 4, 6, 8].map((n) => Math.abs(narrow[n]));
+      /* 50 %:llä **jokainen** parillinen osaääni on nolla. 25 %:llä nollia
+       * ovat vain neljän monikerrat (2. ja 6. tulevat takaisin), ja juuri se
+       * on se ero jonka korva kuulee kapeana pulssina. Väite on siis "kaikki
+       * nollaa" vastaan "ei kaikki nollaa" eikä "kaikki mukana" — mitattu,
+       * ensimmäinen versio tästä rivistä oli väärässä. */
+      const hollow = evensSquare.every((v) => v < 1e-9);
+      const back = evensNarrow.filter((v) => v > 0.02).length;
+      expect('pulssiaalto on säädettävä eikä pelkkä kanttiaalto',
+        hollow && back >= 2 && Math.abs(square[1]) > 0.5,
+        `50 %: parilliset ${evensSquare.map((v) => v.toFixed(3)).join(' ')},`
+        + ` 25 %: parilliset ${evensNarrow.map((v) => v.toFixed(3)).join(' ')}`
+        + ` (${back} takaisin), perustaajuus ${Math.abs(square[1]).toFixed(2)}`);
+    }
+
+    /* --- 9. rinteet: maasto jonka pinta on vinossa --- */
+    /*
+     * RINNE ON MUUNNIN EIKÄ LIUKUMÄKI (IDEAS.md kohta 1, omistajan tuomio
+     * 10.8.2026 "kyllä, vahvin"). Väitteitä on neljä, ja ne ovat tässä
+     * järjestyksessä siksi että kolme ensimmäistä ovat ehtoja neljännelle:
+     * rinne on ensin **maata jota pitkin kuljetaan** ja vasta sitten se joka
+     * vaihtaa vauhdin korkeudeksi.
+     *
+     * Koekenttä rakennetaan käsin eikä kentistä: mitattava asia on fysiikka,
+     * ja kenttädata voi muuttua ilman että fysiikka muuttuu.
+     */
+    {
+      const { P_METER_MAX } = await import('/src/entities/player.js');
+      const blank2 = () => ({
+        left: false, right: false, up: false, down: false, jump: false, run: false,
+        start: false, mute: false, quicksave: false, quickload: false, slot: false, reset: false,
+      });
+      const press = (dir, run) => {
+        const i = { held: blank2(), pressed: blank2(), released: blank2(), consume() {} };
+        if (dir > 0) i.held.right = true;
+        if (dir < 0) i.held.left = true;
+        i.held.run = !!run;
+        return i;
+      };
+      const arena = (build) => {
+        game.state = {
+          lives: 3, coins: 0, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+          usedSaveState: false, continues: 0, bestTimes: {},
+        };
+        const s = new LevelScene(game, '1-1');
+        s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s.time = 9999;
+        for (let tx = 0; tx < 40; tx++) {
+          for (let ty = 0; ty < 15; ty++) s.setTile(tx, ty, ' ');
+          s.setTile(tx, 13, '#');
+          s.setTile(tx, 14, '#');
+        }
+        build(s);
+        return s;
+      };
+      /** Nouseva rinne `from`-sarakkeesta `len` laattaa oikealle. */
+      const rampUp = (s, from, len, floor = 12) => {
+        for (let i = 0; i < len; i++) {
+          s.setTile(from + i, floor - i, '/');
+          for (let ty = floor - i + 1; ty <= floor; ty++) s.setTile(from + i, ty, '#');
+        }
+      };
+
+      /* 1. Ylös kävellen: keho nousee, eikä `onGround` vilku kertaakaan. */
+      {
+        const s = arena((sc) => rampUp(sc, 8, 5));
+        const p = s.player;
+        p.x = 3 * 16; p.y = 12 * 16 - p.h; p.vx = 0; p.vy = 0;
+        let air = 0;
+        let startY = null;
+        let topY = null;
+        for (let f = 0; f < 260; f++) {
+          s.update(press(1, false));
+          if (p.onSlope) {
+            if (startY === null) startY = p.y;
+            topY = p.y;
+            if (!p.onGround) air++;
+          }
+        }
+        const rose = startY !== null ? startY - topY : 0;
+        expect('kävelijä nousee rinnettä ylös eikä irtoa maasta kertaakaan',
+          startY !== null && rose > 32 && air === 0,
+          `nousi ${rose.toFixed(0)} px, ilmassa ${air} framea rinteessä`);
+      }
+
+      /* 2. Alas kävellen: sama, ja tässä se on tarttuminen (`SLOPE_SNAP`).
+       *    Ilman sitä alamäki on sarja pieniä putoamisia. */
+      {
+        const s = arena((sc) => {
+          for (let i = 0; i < 5; i++) {
+            sc.setTile(8 + i, 8 + i, '\\');
+            for (let ty = 9 + i; ty <= 12; ty++) sc.setTile(8 + i, ty, '#');
+          }
+          for (let tx = 0; tx < 8; tx++) for (let ty = 8; ty <= 12; ty++) sc.setTile(tx, ty, '#');
+        });
+        const p = s.player;
+        p.x = 5 * 16; p.y = 8 * 16 - p.h; p.vx = 0; p.vy = 0;
+        let air = 0;
+        let seen = 0;
+        for (let f = 0; f < 200; f++) {
+          s.update(press(1, false));
+          if (p.onSlope) { seen++; if (!p.onGround) air++; }
+        }
+        expect('alamäkeen kävelevä pysyy maassa eikä putoile porras kerrallaan',
+          seen > 20 && air === 0,
+          `rinteessä ${seen} framea, ilmassa ${air}`);
+      }
+
+      /* 3. Vauhti: alamäki lainaa ylimmän nopeuden, ylämäki ei pysäytä. */
+      {
+        const down = arena((sc) => {
+          for (let i = 0; i < 8; i++) {
+            sc.setTile(6 + i, 5 + i, '\\');
+            for (let ty = 6 + i; ty <= 12; ty++) sc.setTile(6 + i, ty, '#');
+          }
+          for (let tx = 0; tx < 6; tx++) for (let ty = 5; ty <= 12; ty++) sc.setTile(tx, ty, '#');
+        });
+        const dp = down.player;
+        dp.x = 2 * 16; dp.y = 5 * 16 - dp.h; dp.vx = 0; dp.vy = 0;
+        let flat = 0;
+        let fastest = 0;
+        for (let f = 0; f < 220; f++) {
+          down.update(press(1, true));
+          if (dp.x < 6 * 16) flat = Math.abs(dp.vx);
+          fastest = Math.max(fastest, Math.abs(dp.vx));
+        }
+        const up = arena((sc) => rampUp(sc, 8, 5));
+        const upP = up.player;
+        upP.x = 3 * 16; upP.y = 12 * 16 - upP.h; upP.vx = 0; upP.vy = 0;
+        let climbed = 0;
+        for (let f = 0; f < 300; f++) {
+          up.update(press(1, false));
+          climbed = Math.max(climbed, (12 * 16 - upP.h) - upP.y);
+        }
+        expect('alamäki lainaa ylimmän nopeuden, ylämäki hidastaa muttei pysäytä',
+          fastest > flat + 0.5 && fastest <= 3.5 + 0.001 && climbed > 60,
+          `tasamaa ${flat.toFixed(2)} -> alamäki ${fastest.toFixed(2)} (katto 3.50),`
+          + ` kävelijä nousi ${climbed.toFixed(0)} px`);
+      }
+
+      /* 4. Muunnin: huipulta lähtevä vaihtaa vauhdin korkeudeksi, ja
+       *    palkinto on portaittainen — kävelijä ei lennä, juoksija hyppää,
+       *    täysi mittari pääsee reitille. */
+      {
+        const launch = (mode) => {
+          const s = arena((sc) => {
+            rampUp(sc, 8, 5);
+            for (let tx = 13; tx < 40; tx++) { sc.setTile(tx, 13, ' '); sc.setTile(tx, 14, ' '); }
+            for (let ty = 13; ty <= 14; ty++) for (let tx = 20; tx < 40; tx++) sc.setTile(tx, ty, '#');
+          });
+          const p = s.player;
+          p.x = 2 * 16; p.y = 12 * 16 - p.h; p.vx = 0; p.vy = 0;
+          let peak = 1e9;
+          let lift = null;
+          for (let f = 0; f < 300; f++) {
+            if (mode === 'meter') p.pMeter = P_METER_MAX;
+            const i = press(1, mode !== 'walk');
+            if (lift !== null) i.held.jump = true;
+            s.update(i);
+            if (lift === null && p.vy < -0.2 && !p.onGround && !p.dying) lift = p.y;
+            if (lift !== null && !p.dying) peak = Math.min(peak, p.y);
+            if (p.dying || p.y > 16 * 16) break;
+          }
+          return lift === null ? 0 : lift - peak;
+        };
+        const walk = launch('walk');
+        const run = launch('run');
+        const meter = launch('meter');
+        expect('rinteen huippu vaihtaa vauhdin korkeudeksi, ja kävelijä ei lennä',
+          walk === 0 && run > 0 && meter > run + 8,
+          `kävely ${walk.toFixed(0)} px, juoksu ${run.toFixed(0)} px,`
+          + ` täysi mittari ${meter.toFixed(0)} px`);
+      }
+    }
+
+    game.toTitle();
+    return { checks, failures };
+  });
+  report.checks.push(...hud.checks);
+  report.failures.push(...hud.failures);
 }
 
 /* --------------------- päivän pieru, selaimen puolella -------------------- */
@@ -21973,9 +22685,15 @@ const report = await page.evaluate(async () => {
     expect('kertoveto vie vihreän ja sinisen, ei lisää valoa',
       !out.error && r === 128 && gr < 100 && gr > 60 && b === gr,
       out.error || `pelikenttä rgb(${(out.play || []).join(',')})`);
-    expect('palettisiirto ei ulotu HUD-nauhaan',
-      !out.error && String(out.hud) === '128,128,128',
-      out.error || `HUD rgb(${(out.hud || []).join(',')})`);
+    /* Nauhaa ei enää ole, joten siirron kuuluu ulottua ruudun alalaitaan asti:
+     * se on kuvaa siinä missä keskikin. Kertojan kerros on suojassa
+     * piirtojärjestyksellä (`main.js`: `drawOverlay` `apply`n jälkeen), ja
+     * sitä vartioi oma väitteensä. Tämä rivi kääntyi ympäri 17.8.2026 —
+     * aiemmin se vaati alalaidalta muuttumatonta harmaata. */
+    expect('palettisiirto ulottuu koko kuvaan, myös alalaitaan',
+      !out.error && String(out.hud) === String(out.play),
+      out.error || `alalaita rgb(${(out.hud || []).join(',')}),`
+        + ` keskeltä rgb(${(out.play || []).join(',')})`);
     expect('siirto elää yhden framen: se kuluu piirtoon eikä jää voimaan',
       !out.error && out.left === null && !!out.shown
       && String(out.again) === String(out.play) && String(out.third) === String(out.play),
@@ -22495,6 +23213,72 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   }
 }
 
+/*
+ * PISTEET OVAT NELIÖITÄ, JA NE OVAT YHDESSÄ PAIKASSA.
+ *
+ * Kaksi väitettä, ja kumpikin vartioi eri puolta samasta päätöksestä
+ * (`src/core/points.js`):
+ *
+ *   1. **Jokainen luku on kokonaisluvun neliö.** Myös kertoimet, koska tulo on
+ *      neliö vain jos molemmat tekijät ovat — ketjun kahdeksas tappo kulkee
+ *      kahden kertoimen läpi ennen kuin se pomppaa ruudulle.
+ *   2. **Lähdekoodissa ei ole yhtään pistelukua.** Tämä on se puoli joka
+ *      rapistuu itsestään: uusi vihollinen kirjoitetaan vanhan vieressä, ja
+ *      `this.score = 200` on juuri se rivi joka kopioituu. Portti lukee
+ *      `src/`:n tekstinä eikä moduuleina, koska väite koskee kirjoitusasua.
+ */
+{
+  const pts = await import(join(ROOT, 'src/core/points.js'));
+  const square = (n) => Number.isInteger(n) && n > 0 && Number.isInteger(Math.sqrt(n));
+  const table = [
+    ...Object.entries(pts.PTS).map(([k, v]) => [`PTS.${k}`, v]),
+    ['COIN', pts.COIN],
+    ['TIME_SECOND', pts.TIME_SECOND],
+    ['POP_BONUS', pts.POP_BONUS],
+    ...pts.GOAL_STEPS.map((v, i) => [`GOAL_STEPS[${i}]`, v]),
+    ...pts.CHAIN.map((v, i) => [`CHAIN[${i}]`, v]),
+    ...Array.from({ length: 8 }, (_, v) => [`bossPoints(${v})`, pts.bossPoints(v)]),
+  ];
+  const crooked = table.filter(([, v]) => !square(v));
+  /* Nousevuus on osa väitettä: portaikko joka ei nouse ei ole portaikko, ja
+   * neliöllisyys yksin sallisi sellaisen. */
+  const climbs = (list) => list.every((v, i) => i === 0 || v > list[i - 1]);
+  const rising = climbs(pts.GOAL_STEPS) && climbs(pts.CHAIN)
+    && climbs(Array.from({ length: 8 }, (_, v) => pts.bossPoints(v)));
+  report.checks.push({
+    name: 'jokainen pistearvo on kokonaisluvun neliö ja portaikot nousevat',
+    ok: crooked.length === 0 && rising,
+    detail: crooked.length
+      ? `ei neliö: ${crooked.map(([k, v]) => `${k} = ${v}`).join(', ')}`
+      : `${table.length} arvoa, juuret ${table.map(([, v]) => Math.sqrt(v)).join(' ')}`
+        + `${rising ? '' : ' — MUTTA portaikko ei nouse'}`,
+  });
+  if (crooked.length) {
+    report.failures.push(...crooked.map(([k, v]) => `${k} = ${v} ei ole neliö`));
+  }
+  if (!rising) report.failures.push('pisteportaikko ei nouse');
+
+  const SRC = [
+    'src/scenes/level.js', 'src/entities/enemies.js', 'src/entities/player.js',
+    'src/entities/effects.js', 'src/entities/items.js',
+  ];
+  const loose = [];
+  for (const f of SRC) {
+    const text = await readFile(join(ROOT, f), 'utf8');
+    text.split('\n').forEach((line, i) => {
+      if (/awardScore\(\s*\d/.test(line) || /\bthis\.score = [1-9]/.test(line)) {
+        loose.push(`${f}:${i + 1} ${line.trim()}`);
+      }
+    });
+  }
+  report.checks.push({
+    name: 'pistelukuja ei kirjoiteta muualle kuin pistetaulukkoon',
+    ok: loose.length === 0,
+    detail: loose.length ? loose.join(' | ') : `${SRC.length} tiedostoa luettu`,
+  });
+  if (loose.length) report.failures.push(...loose.map((l) => `irtonainen pisteluku: ${l}`));
+}
+
 /* ---- laattavaarojen hinta ---- */
 /*
  * JA SAMA SÄÄNTÖ SILLE PUOLELLE JOKA EI OLE VIHOLLINEN.
@@ -22582,6 +23366,13 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
      * jonain päivänä palava lyhty polttaa, se rivi kuuluu `HURTS`iin ja
      * `playerTiles`iin, ei tänne. */
     'lamp', 'lit',
+    /* Rinne, ja tämä on vaarattomien listalla vahvana väitteenä eikä
+     * oletuksena: rinne on maata jonka pinta on vinossa, ja maa ei satuta.
+     * Se ei ole `solid` (keho kulkee sen läpi vaakasuunnassa, ks.
+     * `T.SLOPE_R`), joten se tarvitsee oman lippunsa — ja `standable` on se
+     * mikä siitä seuraa: sen päällä seistään. Jos rinteestä joskus tehdään
+     * liukas tai satuttava, se rivi kuuluu `HURTS`iin. */
+    'slope', 'standable',
     /* Pieruhylly. Vaaraton, ja se on rakenteellista eikä toiveajattelua: hylly
      * on puolikiinteä, eli sen läpi mennään alhaalta ja sen päälle
      * laskeudutaan. Se ei voi sulkea käytävää eikä puristaa ketään. */

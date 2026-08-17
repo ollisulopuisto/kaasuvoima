@@ -7,6 +7,254 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.14 — SID-sanasto: pulssi, arpeggio ja jäämaailman oma raita
+
+Omistaja 17.8.2026: *"take inspiration from the SID chip of the Commodore 64 …
+look at the ways Martin Galway, Rob Hubbard and people like that drove it. They
+only had a few channels, so they got creative."*
+
+Se on kaksi eri pyyntöä ja ne kannattaa pitää erillään. **Aaltomuodot**:
+WebAudion valikoima on sine, square, saw ja triangle, kun SIDin oma on saha,
+kolmio, kohina ja **säädettävä pulssi** — ja juuri pulssin leveys puuttui.
+`square` on pulssi jonka leveys on tasan 50 %, eli yksi piste koko siltä
+akselilta jolla C64-ääni elää. **Kanavapula keinona**: kolmella äänellä ei
+soiteta sointuja, joten ne arpeggioidaan.
+
+`tone` sai neljä uutta parametria, ja jokainen on parametri eikä uusi soitin —
+sama kutsupaikka, sama envelope, sama väylä:
+
+- **`duty` ja `pwm`** — pulssin leveys ja sen liike. Aalto vaihdetaan
+  portaittain, koska SIDissäkin leveys on rekisteri jota ajuri kirjoittaa ruutu
+  kerrallaan: portaikko on oikea muoto eikä kompromissi.
+- **`arp`** — soinnun sävelet yhdellä äänellä, `arpRate` oletuksena **50 Hz**
+  eli PAL-ruutuvauhti, se luku jolla nämä kappaleet oikeasti tehtiin. Askel on
+  `setValueAtTime` eikä liuku: portaikko on se mikä tekee siitä soinnun eikä
+  glissandon.
+- **`ring`** — rengasmodulaatio: kantoaallon amplitudia kerrotaan toisella
+  oskillaattorilla jonka lepoarvo on nolla. Sama rakenne kuin sirussa, ja siksi
+  se kuulostaa siltä (kellot, metalliset lyömäsoittimet).
+- **`cutoff` / `resonance` / `sweep`** — resonoiva alipäästö ja sen pyyhkäisy.
+  SIDin toinen allekirjoitus, ja puolet siitä mitä Hubbardin basso on.
+
+**JÄÄTIE**, maailman 3 oma raita, on ensimmäinen joka on kirjoitettu tällä
+sanastolla: kapea pulssi jonka leveys hengittää (lyijy), yksi ääni joka käy
+mollikolmikon läpi viisikymmentä kertaa sekunnissa (soinnut), ja saha jonka
+suodin sulkeutuu nuotin aikana (basso). Sävellys on oma — A-molli, Am–F–G–Em,
+melodia joka nousee kolmessa fraasissa ja laskee neljännessä.
+
+Jäämaailmaan siksi että se oli ainoa jolla on oma teema, oma vihollinen ja oma
+laattaviritys mutta ei omaa ääntä: sen kolme kenttää soittivat yleisraitaa
+`level`.
+
+**Portti mittaa pulssin luvuista eikä korvasta:** 50 %:n pulssilla jokainen
+parillinen osaääni on nolla (siitä kanttiaalto on ontto), 25 %:n pulssilla ne
+tulevat takaisin lukuun ottamatta neljän monikertoja. Ensimmäinen versio siitä
+rivistä väitti "kaikki takaisin" ja oli väärässä — mittaus korjasi sen ennen
+kuin se ehti muutoslokiin asti.
+
+Vanhat raidat eivät muuttuneet: jokainen uusi parametri on oletuksena nolla.
+
+---
+
+## v26.08.18.13 — rinteet, ja vauhti muuttuu korkeudeksi
+
+Listan vahvin tekemätön idea tehtiin. [IDEAS.md](IDEAS.md) kohta 1 sai tuomion
+*"kyllä, vahvin"* jo 10.8.2026 ja jäi seisomaan hintansa taakse: moottorissa ei
+ollut rinteitä lainkaan, `moveX`/`moveY` olivat ruudukkotörmäystä, ja tämä oli
+fysiikkamuutos eikä kenttädataa. Nyt se on tehty, ja erottelu jonka omistaja
+teki säilyi sellaisenaan:
+
+> *"Slopes turn into speed is a VERY good idea, because Mario does sliding on
+> slopes and this would be different."*
+
+Mariossa rinne on **liikkeen laatu** — luiskahdus, joka on itsessään palkinto.
+Täällä se on **muunnin**: vaakavauhti vaihtuu korkeudeksi, ja korkeus on pääsy
+ylemmälle reitille. Rinteessä ei liu'uta eikä siinä tapeta. Siitä lähdetään.
+
+**Kaksi uutta laattaa** (`/` ja `\`), 45°, ja kumpikaan ei ole kiinteä:
+ruudukkotörmäys osaa vain laatikoita, kun rinteen pinta on korkeuskäyrä
+sarakkeittain. Pystyratkaisu kysyy siltä yhden asian — millä korkeudella maa on
+tässä kohtaa — **kehon keskikohdasta**, koska kaksi mittapistettä antaisi kaksi
+eri korkeutta ja korkeampi voittaisi (rinteen vieressä seisova nytkähtäisi ylös
+ilman että kukaan liikkui).
+
+**Vauhti, kolme lukua ja yksi ehto:**
+
+- alamäki vetää 0,14/frame ja **lainaa ylimmän nopeuden** (3,5) ilman täyttä
+  mittaria — muttei ylitä sitä. Tässä "ei täysi Sonic" on luku eikä mielipide.
+- ylämäki vie 0,045/frame, ja **sen on oltava pienempi kuin kiihtyvyys**
+  (0,0547). Ensimmäinen versio oli 0,06, ja portti löysi sen samana iltana:
+  kävelijä hidastui rinteessä nollaan, eikä 1-1 ollut enää läpäistävissä
+  voimatasolla 0 — botti jäi kumpareen juureen 28 %:iin kentästä.
+- **kiihtyvyys itse ei muutu.** `ACC` on yhä yksi vakio kävelylle ja juoksulle,
+  sama päätös joka tehtiin aikanaan jäälle. Rinne lisää painovoiman komponentin
+  pintaa pitkin, mikä on eri asia ja myös se mitä rinne fysiikassa on.
+
+**Ja se muunnin:** huipulta irtoava vaihtaa 0,85 × vaakavauhdin nousuksi, ja
+lähtö asettaa `jumpHeld`in — pohjassa pidetty nappi venyttää nousua kuten
+hypyssä. Siksi palkinto on portaittainen eikä lineaarinen, ja mitattuna se on
+juuri sitä: **kävely ei heitä lainkaan (0 px), juoksu heittää 9 px, täysi
+vauhtimittari 39 px.** Kävelijää rinne ei heitä minnekään, ja se on tarkoitus.
+
+**Kolme palikkaa, ja ne opettavat sen kolmessa askeleessa.** `kumpare` (1-1) on
+maa jota pitkin kuljetaan — siihen ei voi kuolla eikä sitä voi ohittaa.
+`rinnehyppy` (1-3) on kysymys: ylämäki joka päättyy ojaan, jonka yli pääsee
+vauhdilla ja jonka pohjalle kävelijä tippuu. `ylareitti` (1-3) on lupaus
+lunastettuna: huipulta pääsee vain vauhdilla hyllylle jonka päällä on kolikot.
+
+Molemmat 1-3:n palikat ovat **vaihtoja eivätkä lisäyksiä**, ja se on mitattu
+syy: maailman käyrä on portti, ja kaksi palikkaa lisää nosti 1-3:n 100:sta
+123:een — jolloin käyrään tuli kaksi peräkkäistä notkoa ja portti punastui.
+Sama sääntö kuin `coin_thief`illa aikanaan. Eikä 1-2:een lainkaan: se on se
+kenttä jonka sarakkeisiin portit osoittavat nimeltä, ja yksi palikka lisää
+siirtäisi ne kaikki.
+
+**Rinne on maata kaikkialla missä maata kysytään.** Sääntötarkistin
+(`rules.js`) sai oman joukkonsa — rinne ei ole `SOLID`, koska `SOLID` tarkoittaa
+siellä "keho ei mahdu läpi" — ja botti (`level-bot.js`) oppii sen samalla
+rivillä. Ilman jälkimmäistä botti luki kumpareen reiäksi ja hyppäsi päin mäkeä
+kunnes kello loppui.
+
+**Neljä uutta porttia:** kävelijä nousee rinteen eikä irtoa maasta kertaakaan,
+alamäkeen kävelevä pysyy maassa (ei sarjaa pieniä putoamisia), alamäki lainaa
+ylimmän nopeuden eikä ylämäki pysäytä, ja huipulta lähtö on portaittainen.
+Koekentät rakennetaan käsin: mitattava asia on fysiikka, ja kenttädata voi
+muuttua ilman että fysiikka muuttuu.
+
+---
+
+## v26.08.18.12 — nauha pois, mittarit maailmaan, isku kaataa
+
+Jatkoa edelliselle: kun pisteet ja sarakkeet oli kerran katsottu läpi, kävi
+selväksi ettei kysymys ollut järjestyksestä vaan siitä **mikä ylipäätään pitää
+olla näkyvissä silloin kun se ei kerro mitään.** Vastaus oli: ei mikään.
+
+**HUD-nauha purettiin.** Ikkuna on nyt koko 320×240. Jokainen entinen lukema on
+joko maailmassa tai ilmestyy kun sillä on asiaa:
+
+- **Kolikkoputkilo** vasemmassa reunassa. Sisätila on tasan sata kolikkoa
+  korkea (2 px/kolikko, joka kymmenes kirkkaampi mittaviiva), eli pinnankorkeus
+  vastaa yhtä aikaa kysymyksiin "kuinka monta" ja "kuinka lähellä elämää".
+  Poimittu kolikko **lentää kaaressa putkilon suulle ja putoaa pinon päälle** —
+  kolikot eivät katoa ilmaan vaan imeytyvät mittariin. Sadas huuhtelee putkilon
+  tyhjäksi, ja se on 1UP nähtynä.
+- **Aurinko on kello.** Nousee vasemmalta, on korkeimmillaan puolivälissä ja
+  koskettaa horisonttia täsmälleen kun aika loppuu. Auringolta poistettiin
+  kameraparallaksi: kaksi syytä liikkua tekisi kummastakin lukukelvottoman.
+  Luolassa ja viimeisen sadan aikana kello on yhä numero, mutta ilmestyvänä.
+- **Kentän nimi kirjoitetaan taivaalle** savukirjoituksena: neljä sekuntia
+  kentän alussa ja neljä aina 18 sekunnin välein. Ei sisätiloissa — siellä ei
+  ole taivasta johon kirjoittaa.
+- **Paine näkyy kehossa.** Vauhtimittarin palkki poistui; sen tilalla on
+  kaasusuihku kantapäiden takana, joka tihenee ja kasvaa mittarin mukana.
+  Ummetus ei savua, mikä on ensimmäinen kerta kun se tila näkyy kehossa.
+- **Tehostuspallot poistettiin** — keho näyttää tyypin ja koon jo.
+- Loput (pisteet, elämät, lähtölaskennat, varalokero, nielty kyky, aika-ajon
+  jako) ilmestyvät nurkkiin ja katoavat. Pisteet ja elämät näkyvät 2,5 sekuntia
+  siitä kun ne muuttuvat.
+
+**Kertoja on yhä efektien ulkopuolella**, ja se on nyt piirtojärjestys eikä
+varattu kaista: `main.js` ajaa `PostFX.apply`n ja piirtää vasta sitten
+`drawOverlay`in. Kuumuus ei siis väreile pistelukeman läpi, vaikka nauhaa jonka
+efektit väistivät ei enää ole. Portti lukee järjestyksen lähdetekstistä.
+
+**Hyväksytty hinta:** tavallinen kenttä on 15 riviä eli täsmälleen 240 px, joten
+pystysuuntainen kamera ei enää liiku siellä. Se on tietoinen vaihto, ja
+ROADMAP.md kantaa sen ison refaktoroinnin (kenttädata 16 riviin, vaikeusmittarin
+ruutukorkeus, ylimpien rivien läpikäynti).
+
+**Maahanisku kaataa kumoon.** Vihollinen kellahtaa selälleen, sätkii ja kääntyy
+takaisin — matalalta tullut isku pitää kumossa 3,5 s, katosta tullut 7 s. Isku
+ei enää tapa eikä vangitse kuplaan: **kupla on kaasupallon yksinoikeus**, koska
+kaksi liikettä joilla on sama lopputulos on yksi liike liikaa. Ja piikit eivät
+enää pysäytä shokkiaaltoa: piikikäs kaatuu siinä missä muutkin, ja kumossa se on
+ylösalaisin eli ensimmäistä kertaa tallattavissa. Piikkien merkitys säilyy —
+suoraan niiden **päälle** syöksyminen häviää yhä kuten tallauskin.
+
+**Ja nielemisen ketju korjattiin samalla.** VERBI 6 rakennettiin lauseesta
+"isku vangitsee kuplaan, kupla niellään" — kun isku lakkasi vangitsemasta, ketju
+olisi jäänyt kukan varaan. Nyt lause on "isku kaataa, kumossa oleva niellään":
+ylös-nappi nielee sekä kuplassa kelluvan että kumossa makaavan, ja ehto on
+kummallakin sama — kohde on vaaraton ja paikallaan, eli nieleminen on valinta
+eikä osuma.
+
+**Vihollisen iho näkyy vihdoin.** Yksilöllinen pinta oli mitattu liian
+hienovaraiseksi — korkeintaan 6 % pikseleistä — eli kaksi kävelijää olivat sama
+kävelijä ellei niitä katsonut vierekkäin pysäytyskuvasta. Nyt akseleita on
+kuusi: **sävy** (punainen, syvä ruusu, ruoste), ompeleiden määrä ja väli,
+tahrojen määrä ja koko, solmun kiillon paikka, katseen suunta ja venttiilin
+korkeus. Sävy on niistä ainoa joka näkyy juostessa, ja siksi se on se joka
+lisättiin.
+
+Portti kääntyi samalla **kaksisuuntaiseksi**: se vaatii nyt vähintään 5 % eroa
+pinnassa, eli liian hienovarainen iho kaatuu punaisena sen sijaan että
+vihertäisi. Siluettiehto ei jousta (nolla pikseliä — siitä luetaan
+tallattavuus), ja se maksoi itsensä heti takaisin: viisi ompelta kolmen välein
+kasvatti ääriviivaa yhden pikselin, ja portti näki sen ennen kuin kukaan ehti
+katsoa kuvaa.
+
+**Kaksi liikettä joka jatkui siellä missä kukaan ei ole.** Potkaistu kuori
+katosi ruudun ulkopuolelle ja tyhjensi kentän ennen pelaajaa; nyt se häviää kun
+se on kulkenut yli ruudun verran **ja** on ikkunan ulkopuolella (kaksi ehtoa,
+jotta perässä juostu kuori ei katoa katseen alta). Tulipalloja oli katossa
+`2 + voimataso` eli seitsemän; nyt kaksi, ja uusi laukaus syö vanhimman sen
+sijaan että nappi lakkaisi vastaamasta.
+
+---
+
+## v26.08.18.11 — pisteet ovat neliöitä, ja HUD on oma
+
+Kaksi lainaa jotka olivat jääneet huomaamatta, koska ne eivät ole kuvaa eivätkä
+ääntä: **pisteiden asteikko** ja **HUD-nauhan järjestys**. Kumpikin oli
+esikuvan, eikä kumpaakaan ollut koskaan valittu.
+
+**Pisteet ovat kokonaislukujen neliöitä.** 100 · 200 · 400 · 1000 oli genren
+yhteisomaisuutta niin vahvasti, että sen kirjoittaminen on lainaamista
+silloinkin kun sen keksisi itse. Uusi asteikko on 25 · 100 · 256 · 400 · 625 ·
+1024 · 2500 · 4096, ja kanta kasvaa eikä eksponentti: kakkosen potenssit
+kasvavat alussa liian hitaasti ja lopussa liian nopeasti, neliöissä juuri on se
+luku jota säädetään. Myös kertoimet ovat neliöitä — ketjun n:s tappo maksaa n²
+kertaa ja kuplan puhkaisu 2² kertaa — joten **jokainen ruudulle pomppaava luku
+on neliö** riippumatta siitä minkä monen kertoimen läpi se tuli. Asteikko on
+tarkoituksella lähellä vanhaa (100 pysyi 100:na, 400 400:na), eli pelin
+arvojärjestystä ei tarvitse opetella uudestaan.
+
+Samalla koko taulukko muutti yhteen tiedostoon (`src/core/points.js`). Ennen
+sitä hinnat olivat siellä missä ne maksettiin — `this.score = 200`
+kahdessakymmenessä vihollisluokassa — eikä kukaan nähnyt taulukkoa kerralla,
+mikä on juuri se syy miksi kukaan ei myöskään nähnyt sen olevan lainattu.
+
+**HUD-nauha jaettiin uudestaan.** Vanha järjestys oli esikuvan järjestys:
+varalokero vasemmassa reunassa, P-mittari sen vieressä, elämät ja kolikot
+keskellä, maailma ja aika niiden oikealla, pisteet reunassa. Uusi jako on
+työnjako, ei sekoitus:
+
+- **vasen** kierroksen kaksi lukua päällekkäin, pisteet ja AIKA — ne ovat samaa
+  lajia ja esikuvassa nauhan eri päissä
+- **sen oikealla** mitä sinulla on: elämät ja kolikot
+- **keskellä** mitä keho osaa nyt: P-mittari ja tehostuspallot, siellä minne
+  silmä poikkeaa kesken juoksun
+- **oikealla** missä ollaan, ja lähtölaskennat (tähti, kytkin, ummetus) omassa
+  kolossaan
+- **reunassa** varalokero — **samassa kulmassa kuin kartan paneelissa.** Se oli
+  kartalla oikealla ja kentässä vasemmalla, eli sama esine kahdessa eri
+  kulmassa riippuen siitä kummalla ruudulla katsoit.
+
+Kartan yläpalkkiin jäi kaksi asiaa jotka kuuluvat yhteen — mihin maailmaan on
+tultu ja millä tilalla pelataan — ja pisteet siirtyivät alapaneeliin muun
+omaisuuden viereen. Kentän nimikilpi siirtyi paneelin keskelle.
+
+**Portti mittaa sarakkeet pikseleinä.** Nauha ja paneeli piirretään pahimmalla
+mahdollisella tilalla (9999 elämää, 99 kolikkoa, seitsennumeroiset pisteet,
+pisin nielty kyky, pisin lähtölaskenta) ja jokaisen musteellisen sarakkeen on
+osuttava sille riville ilmoitettuun väliin. Tämä ei ole varmuuden vuoksi: kesken
+työtä kartan `KOLIKOT 99` ylsi 118:aan ja nimikilpi alkoi 112:sta, ja portti
+kertoi sen. Pistetaulukolla on oma porttinsa: jokaisen arvon neliöjuuren on
+oltava kokonaisluku, portaikkojen on noustava, eikä lähdekoodissa saa olla
+yhtään irrallista pistelukua.
+
+---
+
 ## v26.08.18.10 — nuoli joka opettaa vilkaisun ja katoaa opittuna
 
 Edellinen versio jätti auki sen mikä siinä oli pahinta: **kyky jota kukaan ei

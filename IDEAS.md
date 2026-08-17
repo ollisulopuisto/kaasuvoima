@@ -111,7 +111,7 @@ siirtyy [ROADMAP.md](ROADMAP.md):hen.
 
 | # | verbi | lähde | tuomio |
 | --- | --- | --- | --- |
-| 1 | vauhti korkeudeksi | Sonic | **kyllä, vahvin** |
+| 1 | vauhti korkeudeksi | Sonic | **kyllä, vahvin** — tehty 17.8.2026 |
 | 2 | ammus joka on lava | Rainbow Islands | ei |
 | 3 | maailman vaihto lennossa | Giana Sisters | ei |
 | 4 | litteä maailma käännetään | Super Paper Mario | **päätetty 10.8.** → ROADMAP |
@@ -140,6 +140,18 @@ Hinta ei muutu miksikään: moottorissa ei ole rinteitä lainkaan, `moveX`/`move
 ovat ruudukkotörmäystä, ja tämä on fysiikkamuutos eikä kenttädataa. Se on
 kuitenkin nyt tiedossa oleva hinta tunnetusta syystä, mikä on eri asia kuin
 epämääräinen "korkea".
+
+**Tehty 17.8.2026, ja se maksoi sen minkä yllä lukee.** Rinteet ovat kaksi
+uutta laattaa (`/` ja `\`), oma pystyratkaisunsa `physics.js`:ssä (rinne ei ole
+kiinteä, vaan korkeuskäyrä jota kysytään kehon keskikohdasta), painovoiman
+komponentti pintaa pitkin ja lähtö joka vaihtaa vauhdin korkeudeksi. Kaikki
+neljä lukua ja niiden perustelut ovat [PHYSICS.md](PHYSICS.md):n omassa
+kohdassaan. Erottelu jonka omistaja teki — muunnin eikä luiskahdus — säilyi
+sellaisenaan: rinteessä ei liu'uta eikä siinä tapeta, siitä lähdetään.
+
+Ja se yksi asia joka piti mitata ennen kuin luku oli oikea: **ylämäen veto on
+oltava pienempi kuin kiihtyvyys.** 0.06 pysäytti kävelijän rinteeseen, 0.045 ei.
+Portti löysi sen ennen kuin kukaan ehti pelata.
 
 ---
 

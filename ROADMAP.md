@@ -10,6 +10,50 @@ ennen pushia on `node tools/verify.mjs`.
 
 ---
 
+## Tila 17.8.2026 — HUD purettiin, ja mitä siitä seuraa
+
+**Tehty tänään** (yksi erä, `node tools/verify.mjs` vihreä):
+
+- Pisteet ovat neliöitä (`src/core/points.js`), koko pistetaulukko yhdessä
+  tiedostossa ja portti joka vaatii jokaiselta arvolta kokonaisen neliöjuuren.
+- Kolikkoputkilo vasemmassa reunassa: sisätila on tasan sata kolikkoa, ja
+  poimitut kolikot lentävät siihen. `KOLIKOT nn` poistui.
+- Aurinko on kentän kello, kentän nimi kirjoitetaan taivaalle savuna,
+  vauhtimittari näkyy kaasusuihkuna kehossa, tehostuspallot poistuivat.
+- **HUD-nauha purettiin kokonaan.** Ikkuna on 320×240, ja lukemat joko ovat
+  maailmassa tai ilmestyvät nurkkaan silloin kun niillä on asiaa
+  (`drawOverlay`, piirretään kuvaefektien jälkeen).
+- Maahanisku kaataa kumoon (piikikkäät mukaan lukien), kupla jäi kaasupallon
+  yksinoikeudeksi, karannut kuori katoaa, ilmassa on korkeintaan kaksi palloa.
+
+### Hyväksytty hinta: 15 riviä näkyvissä
+
+Ikkuna kasvoi 208 → 240 px. **Tavallinen kenttä on 15 riviä eli täsmälleen 240
+px**, joten pystysuuntainen kamera ei enää liiku niissä: koko kentän korkeus
+näkyy kerralla, myös ne kaksi ylintä riviä jotka ennen jäivät ruudun
+ulkopuolelle. Pystykentät (40–50 riviä) ja kirjekuoripalkitetut (2-1, 2-3)
+vierivät kuten ennen.
+
+Omistajan päätös 17.8.2026: **hyväksytään tämä nyt.** Se on tietoinen vaihto —
+ilmestyvät lukemat ja koko ruudun kuva vastaan pystyvieritys tavallisessa
+kentässä — eikä vahinko.
+
+**Isompi refactor on jonossa, ei unohdettu.** Kolme asiaa jotka se sisältäisi:
+
+1. **Kenttädata 15 → 16 riviin.** Yksi rivi lisää palauttaa pystyvierityksen
+   ilman että mitään muuta tarvitsee muuttaa. Koskee jokaista käsintehtyä
+   kenttää, generaattoria (`tools/gen-levels.mjs`), sääntöjä (`data/rules.js`)
+   ja päivän kentän sormenjälkeä.
+2. **Vaikeusmittarin ruutukorkeus.** `tools/difficulty.mjs` laskee ruudun
+   13 laatan korkuiseksi (208/16). Todellinen luku on nyt 15, ja sen
+   korjaaminen ajaa koko vaikeustaulun uusiksi — eli myös kartan pipit ja
+   maailmojen käyrät.
+3. **Ylimmät rivit kenttäsuunnittelussa.** Rivit 0–1 olivat käytännössä
+   piilossa; nyt ne näkyvät. Salaisuudet jotka on piilotettu ruudun yläpuolelle
+   kannattaa käydä läpi (`secrets.js`, `SKY`-kaista).
+
+---
+
 ## Tila 16.8.2026 (ilta)
 
 Omistajan viisi pyyntöä yhtenä eränä (v26.08.16.85): **maahaniskun kyykky**,
@@ -407,6 +451,41 @@ satunnaisesti, kolmesti 16.8.2026 aikana ja aina eri lukemin. Kuuden uuden
 mitään. **Korjataan mittaus ensin.**
 
 ## Jonossa
+
+### Ääni: mitä SID-sanastosta jäi tekemättä
+
+`tone` osaa nyt pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja
+suodinpyyhkäisyn (v26.08.18.14), ja JÄÄTIE käyttää niistä kolmea. Loput
+Galway/Hubbard-tekniikat ovat kirjattuina eivätkä tehtyinä:
+
+1. **Kanavan varastaminen rummulle.** Klassinen kikka: basso vaikenee kahdeksi
+   framea ja sama kanava soittaa rummun. Vaatii sekvensseriin käsitteen
+   "tämä ääni on varattu" — nyt jokainen ääni on oma polkunsa.
+2. **Rengasmodulaatio käyttöön.** Parametri on olemassa muttei yhdessäkään
+   raidassa: se on kellojen ja metallisten lyömäsoitinten ääni, ja luulaakso
+   (maailma 6) on sille luonteva koti.
+3. **Hard sync.** SIDin kolmas allekirjoitus, ja ainoa jota WebAudiolla ei saa
+   suoraan — vaatisi joko `AudioWorklet`in tai jaksotetun uudelleenkäynnistyksen.
+4. **Vibrato- ja portamento-taulukot** nuottikohtaisesti (nyt vibrato on koko
+   äänen ominaisuus, ei nuotin).
+
+### Omistajan pyynnöt 17.8.2026 — vielä tekemättä
+
+1. ✔ **Vinot kentät — tehty 17.8.2026** (v26.08.18.13). 45° rinteet, oma
+   pystyratkaisu, vauhti korkeudeksi. Perustelut ja luvut: PHYSICS.md ja
+   CHANGELOG. **Mitä rinteistä jäi tekemättä:** loivempi 30° rinne (kaksi
+   laattaa yhtä korkeuseroa kohti), rinteet generaattorin sanastoon (nyt vain
+   käsintehdyissä kentissä), ja vihollisten oma suhde rinteeseen — kuori
+   kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä *suunnitellut*
+   sitä, ks. `slopePull` joka on tällä hetkellä vain pelaajan.
+2. **Hirviö joka vie ohjauksen.** Osuma → hahmo juoksee itsekseen eteenpäin
+   muutaman sekunnin, pelaaja voi vain hypätä ja ampua. Tarvitsee uuden lajin,
+   sen sprite-työn ja pelaajan puolelle "pakkojuoksu"-tilan (`autoWalk` on jo
+   olemassa maalikävelyä varten, se on lähtökohta).
+3. **Latautuva iso tulipallo.** Ongelma on nappi: ammunta on `run`in
+   painalluksessa (B), ja B on myös juoksu — pohjassa pitäminen ei voi
+   tarkoittaa latausta ilman että juoksu maksaa siitä. Vaihtoehdot: lataus
+   alas-napilla seisten, tai oma näppäin. Päätös puuttuu.
 
 ### Ruutuefektit ja neljännen seinän rikkominen
 
