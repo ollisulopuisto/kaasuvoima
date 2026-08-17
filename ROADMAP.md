@@ -196,8 +196,26 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 3. ✔ **Spritejen animaatiokierrokset** käyty läpi kaikilla viidellä
    voimatasolla (v26.08.09.18) ja loputkin korjattu (v26.08.09.22): kävely
    kulkee nyt ohitusasennon kautta, ja tarkistus on portissa.
-4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
-   (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
+4. ✔ **Minipomot muihin maailmoihin** — luulaakso sai omansa (v26.08.17.98):
+   `6-M LUUVALTAISTUIMET`, kaksi yökkiä korokkeilla ja muurattu holvi heti
+   perässä. Koneisto oli olemassa (`2-M`), mutta kenttädata ja karttasolmut
+   eivät olleet koko työ — kolme sääntöä sanoi mitä haara saa olla, ja jokainen
+   niistä löytyi vasta kun portti kaatui:
+
+   - **Kahdeksan kenttää per maailma on luku eikä tapa.** Yhdeksäs solmu olisi
+     tehnyt luulaaksosta muita pidemmän, joten haaran palkittu tie **korvasi**
+     kentän (6-5 jää dataan kartan ulkopuolelle; ks. `gen-levels.mjs`, siellä on
+     kirjattu miksi sitä ei poistettu myös sieltä).
+   - **Haaran kaksi tietä lähtevät eri nuolella.** Kartalla liikutaan yhdellä
+     suunnalla kerrallaan, ja ensin valittu ylös oli jo varattu paluulinkille —
+     mitattuna `w6-2->w6-3 askel (0,-1)` jäi umpikujaksi.
+   - **Palkittu tie on mitatusti vaikeampi.** 6-M 259,2 vastaan 6-K 245,9, ja
+     kolme välivedosta (210,0 · 238,6 · 241,8) jäi alle.
+
+   Ja luulaakson oma rakennesääntö sanoi mistä holvi saa olla tehty: `X` ja `#`
+   nojaavat aina johonkin suoraan allaan, joten ontto kivihuone on mahdoton.
+   Holvi on siis **tiiltä**, ja se on parempi kuva kuin aavikon kalliohylly:
+   murtava voima ei avaa ovea vaan syö seinän.
 5. ✔ **Luumaailma ja luurankopomo** — tehty (v26.08.09.33). Maailma 6
    LUULAAKSO: `THEMES.bone`, `bg: 'bones'`, `chunks/bone.js`, kentät 6-1…6-F,
    kartta ja `bossVariant: 4`. Musiikki on Saint-Saëns'n *Danse macabre*
@@ -303,7 +321,7 @@ tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedo
 | --- | --- |
 | pomo järjestää kentän uusiksi | **pysyy, ja tehdään heti** — ei odota valuvaa hiekkaa |
 | salainen alue maailmaan 5 | **tee**, opettamalla generaattorille kolmikerroksinen kokoonpano |
-| minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen |
+| minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen — luulaakso sai omansa (v26.08.17.98) |
 | demo näyttää tempun | **tee** |
 | aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
 | jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu (v26.08.17.93) ja äänet tehty (v26.08.17.96) |

@@ -440,14 +440,14 @@ const WORLD_DEFS = [
     theme: 'bone',
     terrain: [
       'bbbbbbbbKbbbbbbbbbbb',
-      'bbKbbbbbbKRbbKRbKbbR',
+      'bbKbbbbbbbbbbbRbKbbR',
       'bbKbbbbbbbbbbbbbbKbb',
       'bbbbbbbbbbbbbbbbbbbb',
       'bbbbbbbbbbbbbbbbbbbb',
       'KbbbbbbbbbbbbbbbbbbR',
       'bbbbbbbbbbbbbbbbbbbb',
-      'bbbbbbbbbbbbRbbbbbbb',
-      'bbbbbRbbbbRRbbbbbbbb',
+      'bbbbbbbbbbbbbbbbbbbb',
+      'bbbbbbbbbbbRbbbbRbbR',
     ],
     nodes: [
       { id: 'w6-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
@@ -460,7 +460,18 @@ const WORLD_DEFS = [
       { id: 'w6-3', tx: 7, ty: 4, type: 'level', level: '6-K', name: 'KAIVAUTUMINEN' },
       { id: 'w6-h', tx: 7, ty: 1, type: 'house', name: 'HERNETALO' },
       { id: 'w6-4', tx: 9, ty: 6, type: 'level', level: '6-4', name: 'KYLKILUUT' },
-      { id: 'w6-5', tx: 11, ty: 4, type: 'level', level: '6-5', name: 'HAUTAHOLVI' },
+      /*
+       * Luulaakson minipomo, ja se on **6-5:n paikalla eikä sen lisäksi.**
+       *
+       * Jokainen maailma on kahdeksan kentän mittainen, ja se on portissa
+       * lukuna eikä tapana — yhdeksäs solmu olisi tehnyt tästä maailmasta
+       * pidemmän kuin muut, mikä on eri asia kuin haara. Haara jakaa kahdeksan
+       * kenttää kahdelle tielle; se ei kasvata niitä yhdeksään.
+       */
+      /* Luulaakson minipomo, alatietä. Ylätie (6-5) on koskematon, eli se joka
+       * ei halua tappelua pelaa täsmälleen sen mitä ennenkin — ja `worldProblems`
+       * vaatii mitatusti että palkittu reitti on se kalliimpi. */
+      { id: 'w6-m', tx: 7, ty: 8, type: 'level', level: '6-M', name: 'LUUVALTAISTUIMET' },
       { id: 'w6-6', tx: 13, ty: 6, type: 'level', level: '6-6', name: 'KALLOKENTTÄ' },
       { id: 'w6-7', tx: 15, ty: 4, type: 'level', level: '6-7', name: 'VIIMEINEN LEPO' },
       { id: 'w6-f', tx: 17, ty: 7, type: 'fortress', level: '6-F', name: 'LUURANKO' },
@@ -468,13 +479,49 @@ const WORLD_DEFS = [
     links: [
       { a: 'w6-s', b: 'w6-1', path: [[3, 6]] },
       { a: 'w6-1', b: 'w6-2', path: [[5, 4]] },
+      /* Oikealle ja sitten ylös, eikä suoraan ylös: **ylös on jo varattu.**
+       * Kartalla liikutaan yhdellä nuolella, ja paluulinkki 6-1:een lähtee
+       * w6-2:sta ylöspäin — mitattuna `tryMove` valitsi sen ensin ja tämä
+       * linkki jäi umpikujaksi. Haaran toinen tie lähtee siis oikealle ja
+       * toinen alas. */
       { a: 'w6-2', b: 'w6-3', path: [[7, 6]] },
+      { a: 'w6-2', b: 'w6-m', path: [[5, 8]] },
+      { a: 'w6-m', b: 'w6-4', path: [[9, 8]] },
       { a: 'w6-3', b: 'w6-h' },
+      /*
+       * Haaran kaksi tietä lähtevät **eri suuntiin**, ja se on navigointisääntö
+       * eikä sommittelu: kartalla liikutaan yhdellä nuolella kerrallaan, joten
+       * kaksi samaan suuntaan lähtevää linkkiä tekisi toisesta saavuttamattoman.
+       * Sama muoto kuin maailman 2 risteyksessä — toinen alas, toinen ylös.
+       */
       { a: 'w6-3', b: 'w6-4', path: [[9, 4]] },
-      { a: 'w6-4', b: 'w6-5', path: [[11, 6]] },
-      { a: 'w6-5', b: 'w6-6', path: [[13, 4]] },
+      /* Haara: 6-4 on suora tie, 6-5 + 6-M on se kalliimpi. Vanhat linkit
+       * 6-4→6-5 ja 6-5→6-6 ovat poissa, koska ne tekisivät molemmista
+       * reiteistä saman tien eri kohdista — haara on kaksi ketjua tai se ei
+       * ole haara. */
+      { a: 'w6-4', b: 'w6-6', path: [[11, 6]] },
       { a: 'w6-6', b: 'w6-7', path: [[15, 6]] },
       { a: 'w6-7', b: 'w6-f', path: [[17, 4]] },
+    ],
+    /*
+     * Luulaakson haara, ja se on pelin toinen. Muoto on tarkoituksella sama
+     * kuin maailmassa 2 — kaksi tietä, toinen palkittu — koska haara on tässä
+     * pelissä kartan kielioppia eikä yhden maailman erikoisuus, ja toistuva
+     * muoto on juuri se joka tekee siitä luettavan ennen sitoutumista.
+     *
+     * `HAUTATIE` on se joka on aina ollut: 6-5 koskemattomana. `LUUTIE` on uusi
+     * ja se maksaa enemmän, mitattuna eikä väitettynä — `worldProblems` kaataa
+     * kartan jos palkittu reitti ei ole vaikeampi.
+     */
+    branches: [
+      {
+        from: 'w6-2',
+        to: 'w6-4',
+        routes: [
+          { name: 'KAIVAUTUMINEN', via: ['w6-3'] },
+          { name: 'LUUTIE', via: ['w6-m'], reward: 'break' },
+        ],
+      },
     ],
   },
   /*
