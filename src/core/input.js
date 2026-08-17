@@ -124,6 +124,9 @@ const PADMAP = {
 /** How far a stick has to leave the middle before it is a direction. */
 const DEADZONE = 0.4;
 
+/** Frameja suuntaa pohjassa ennen kuin kosketusohjain alkaa juosta itsestään. */
+const AUTORUN = 20;
+
 const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'confirm', 'mute',
   'quicksave', 'quickload', 'slot', 'debug', 'export', 'fx', 'touch', 'warp', 'reset'];
 
@@ -139,6 +142,10 @@ export const Input = {
   released: blank(),
   _raw: blank(),
   _latched: blank(),
+  /** Toiminnot jotka ovat pohjassa ilman painallusreunaa, ks. `setAction`. */
+  _silent: blank(),
+  /** Frameja joina kosketusohjain on pitänyt suuntaa pohjassa, ks. `AUTORUN`. */
+  _touchHeld: 0,
   _prev: blank(),
   /** Touch controls write here; see src/core/touch.js. */
   _touch: blank(),
@@ -160,10 +167,35 @@ export const Input = {
    * same way keys are, so a tap that starts and ends inside one frame still
    * counts — on a touchscreen that is not an edge case, it is how tapping works.
    */
-  setAction(action, down) {
+  setAction(action, down, edge = true) {
     if (!(action in this._touch)) return;
     this._touch[action] = !!down;
-    if (down) this._latched[action] = true;
+    if (!down) { this._silent[action] = false; return; }
+    if (edge) {
+      this._silent[action] = false;
+      this._latched[action] = true;
+    } else if (!this._latched[action]) {
+      /*
+       * REUNATON PAINALLUS, ja se on korjaus omistajan iPhone-raporttiin
+       * 17.8.2026: *"default layoutilla ei voinut käynnistää kenttää, molemmat
+       * napit käynnistivät jako-toiminnon."*
+       *
+       * Syy oli oletusmallin (`rulla`) koko idea: hyppyympyrä on juoksukentän
+       * **sisällä**, joten yksi sormi antaa molemmat — juuri niin että
+       * juoksuhyppy onnistuu ilman toista sormea. Pelissä se on oikein. Mutta
+       * `run` ei ole valikoissa juoksu vaan komento (alkuruudulla jako,
+       * kartalla varaesine), ja ne luetaan **reunasta** (`pressed`) — joten
+       * jokainen hyppy oli myös komento, ja alkuruudulla se komento oli jako.
+       * Kenttää ei siis päässyt aloittamaan lainkaan.
+       *
+       * Korjaus erottaa nämä kaksi: mukana tuleva juoksu asetetaan *pidoksi
+       * ilman reunaa*. `held.run` on tosi — juoksuhyppy toimii kuten ennenkin —
+       * mutta `pressed.run` ei koskaan välähdä, joten yksikään valikko ei näe
+       * painallusta jota kukaan ei tehnyt. Yksin painettu juoksukenttä antaa
+       * reunan normaalisti, eli ampuminen ja varaesine toimivat.
+       */
+      this._silent[action] = true;
+    }
   },
 
   /**
@@ -176,6 +208,8 @@ export const Input = {
   clearTouch() {
     this._touch = blank();
     this._latched = blank();
+    this._silent = blank();
+    this._touchHeld = 0;
   },
 
   install() {
@@ -279,11 +313,39 @@ export const Input = {
     this.pads = live;
     this.padInput = fromPad;
 
+    /*
+     * KOSKETUKSESSA JUOKSU TULEE AJASTA EIKÄ NAPISTA.
+     *
+     * Omistaja 17.8.2026: *"kosketusnäytön ohjainlayoutilla on vaikea juosta
+     * samalla kun hyppää."* Se on totta jokaisella mallilla eikä vain yhdellä:
+     * puhelimessa on kaksi peukaloa, ja kolmas asia — suunta, juoksu, hyppy —
+     * on aina jonkun toisen päällä.
+     *
+     * Sääntö on **napautus kävelee, pito juoksee**: kun suuntaa on pidetty
+     * `AUTORUN` framea, juoksu menee itsestään pohjaan ja pysyy siellä niin
+     * kauan kuin suunta on pohjassa — myös hypyn yli, koska hyppy ei koske
+     * suuntaan. Tarkkuus säilyy, koska se mitä tarkkuus tarvitsee on lyhyitä
+     * korjausliikkeitä, ja lyhyt liike ei ehdi kynnykseen.
+     *
+     * Kaksikymmentä framea eli kolmasosa sekunnista: pidempi kuin yksikään
+     * hipaisu ja lyhyempi kuin yksikään matka. Ja **reunatta**, koska `run` on
+     * myös ampumisnappi: reunallinen automaatti olisi ampunut kaasupallon joka
+     * kerta kun pelaaja lähtee kävelemään.
+     */
+    const walking = this._touch.left || this._touch.right;
+    this._touchHeld = walking ? this._touchHeld + 1 : 0;
+    const autoRun = this._touchHeld > AUTORUN;
+    if (autoRun) state.run = true;
+
     this.anyKeyPressed = false;
     for (const a of ACTIONS) {
       this.pressed[a] = state[a] && !this._prev[a];
       this.released[a] = !state[a] && this._prev[a];
       this.held[a] = state[a];
+      /* Pito ilman reunaa: ks. `setAction`. Automaattijuoksu on sama tapaus. */
+      if ((this._silent[a] && this._touch[a]) || (a === 'run' && autoRun && !this._touch.run)) {
+        this.pressed[a] = false;
+      }
       if (this.pressed[a]) this.anyKeyPressed = true;
     }
     this._prev = state;

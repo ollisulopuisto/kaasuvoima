@@ -197,7 +197,11 @@ export const WORLD1_LEVELS = {
       /* Kolikkovaras `coin_stack`in tilalle: sama kolikkopalkinto, mutta nyt
        * joku muukin on sitä hakemassa. Vaihto eikä lisäys, koska maailman 1
        * pituus on mitattu ja sen kello on siihen sovitettu. */
-      'star_block', 'pipe_pair', 'shell', 'coin_thief', 'spikes', 'ylareitti', 'ledge',
+      /* Kolikkovaras ja piikit **eri ruuduissa**: portti mittaa ensiesittelyjen
+       * väliä kahdellakymmenellä laatalla, ja peräkkäisinä ne olivat 19:n
+       * päässä toisistaan. Varas siirtyi kahden palikan verran aikaisemmaksi,
+       * eli sama kenttä, sama järjestys, yksi ruutu väliin. */
+      'star_block', 'pipe_pair', 'coin_thief', 'shell', 'spikes', 'ylareitti', 'ledge',
       'power', 'run_up', 'goal', 'goal_end',
     ],
   },

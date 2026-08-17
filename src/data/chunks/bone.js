@@ -139,6 +139,29 @@ export const BONE_CHUNKS = {
     14: G,
   }),
 
+  /**
+   * KUMMITUS LUUMAAILMAAN (17.8.2026).
+   *
+   * Laji liikkuu vain kun pelaaja **ei katso sitä** ja jähmettyy heti kun
+   * katsoo (`Kummitus.update`: `looked` on suunta eikä näkökenttä). Sen
+   * ensiesittely oli 7-3 — pilvimaailmassa — vaikka aavemainen laji kuuluu
+   * siihen maailmaan jonka nimi on luu ja jonka musiikki on *Danse macabre*.
+   * Omistaja 17.8.2026: uusia lajeja saisi ripotella varhaisempiin kenttiin,
+   * kunhan esittelyidea säilyy.
+   *
+   * Esittely on **tasamaalla ja pelaajan edessä**, koska laji opitaan yhdellä
+   * asialla: käänny, niin se pysähtyy. Kuilun reunalla tai kapealla hyllyllä
+   * sama oppitunti maksaisi hengen, ja silloin se ei ole oppitunti. Kolikot
+   * ovat sen takana, jotta pelaajalla on syy kääntyä pois — juuri se hetki
+   * jona laji tekee sen mitä se tekee.
+   */
+  bone_kummitus: ck(16, {
+    8: '           q',
+    9: '   o o o',
+    13: G,
+    14: G,
+  }),
+
   bone_grave: ck(16, {
     7: '             f',
     9: '          o o o',

@@ -193,6 +193,22 @@ const ENEMY_NAMES = {
   Z: 'paarma',
   Y: 'yökki',
   m: 'paukkupöhö',
+  /*
+   * NELJÄ LAJIA JOTKA OLIVAT TÄSTÄ TAULUSTA POIS (17.8.2026), ja se on sama
+   * vika joka kurnuttajalla tehtiin kerran jo: taulusta puuttuva laji on laji
+   * jonka ensiesittelyä mikään ei katso. Ne olivat siis pelissä ilman että
+   * yksikään portti kysyi *milloin* pelaaja tapaa ne ensi kertaa — eli juuri
+   * se tieto jonka varassa koko opetusjärjestys on.
+   *
+   * Merkit luetaan `ENEMY_CHARS`ista (`src/entities/enemies.js`), ja tämä
+   * taulu on nyt sen kanssa yhtä pitkä. Jos joku lisää kahdennenkymmenennen
+   * lajin ja unohtaa tämän rivin, `verify.mjs` huomaa sen ennen kuin kenttä
+   * on kirjoitettu — vertailu on merkkijoukkona eikä muistin varassa.
+   */
+  w: 'kuura',
+  s: 'kolikkovaras',
+  e: 'pyörre',
+  q: 'kummitus',
 };
 
 /**
@@ -275,6 +291,20 @@ const FEATURES = [
    * seistä.
    */
   { key: 'ice', name: 'jää (liukas laatta)', chars: 'I' },
+  /*
+   * RINNE (`T.SLOPE_R` ja `T.SLOPE_L`, 17.8.2026).
+   *
+   * Yksi rivi kahdelle merkille, koska pelaajan on opittava **yksi** asia: maa
+   * voi olla vinossa. Kumpaan suuntaan se on vinossa ei ole uusi asia vaan
+   * sama asia peilattuna, ja peilikuvan esittely omana ominaisuutenaan olisi
+   * kertonut opetusjärjestykselle valheen (kaksi uutta asiaa siellä missä
+   * niitä on yksi).
+   *
+   * **Ei `hazard`**, samasta syystä kuin jäällä: rinteessä seisominen ei
+   * satuta, joten ensiesittelyltä on lupa vaatia se mitä muiltakin — lattia
+   * jolle astua sivuun.
+   */
+  { key: 'slope', name: 'rinne (vino maa)', chars: '/\\' },
   { key: 'vine', name: 'pavunvarsi', chars: 'v' },
   { key: 'warp', name: 'warp-putki', chars: '()' },
   { key: 'note', name: 'nuottipalikka', chars: 'N' },

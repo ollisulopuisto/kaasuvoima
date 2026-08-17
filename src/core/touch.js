@@ -297,7 +297,17 @@ export const Touch = {
     const before = previous ? previous.actions : new Set();
     const next = new Set(actions);
     this._pointers.set(pointerId, { actions: next, ...extra });
-    for (const action of next) this.input.setAction(action, true);
+    /*
+     * Mukana tuleva juoksu on **pito ilman reunaa**, ks. `Input.setAction`.
+     * `rulla`-mallissa hyppyympyrä on juoksukentän sisällä, joten yksi sormi
+     * antaa molemmat — se on mallin koko idea. Reunan antaisi vain se sormi
+     * joka osui juoksukenttään *yksin*, koska valikoissa `run` on komento ja
+     * komento kuuluu sille joka sitä pyysi.
+     */
+    const rides = next.has('run') && next.has('jump');
+    for (const action of next) {
+      this.input.setAction(action, true, !(rides && action === 'run'));
+    }
     for (const action of before) if (!next.has(action)) this._refresh(action);
   },
 

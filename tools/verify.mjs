@@ -18669,6 +18669,71 @@ const report = await page.evaluate(async () => {
       resting === 'run' && rolled === 'jump,run' && back === 'run',
       `lepo "${resting}" ylös "${rolled}" alas "${back}"`);
 
+    /*
+     * HYPPY EI SAA OLLA KOMENTO, ja tämä on omistajan iPhone-raportti
+     * 17.8.2026 porttina: *"default layoutilla ei voinut käynnistää kenttää,
+     * molemmat napit käynnistivät jako-toiminnon."*
+     *
+     * Syy oli oletusmallin idea — hyppyympyrä on juoksukentän sisällä, joten
+     * yksi sormi antaa molemmat — ja se on oikein pelissä. Valikoissa `run` on
+     * komento (alkuruudulla jako, kartalla varaesine) ja komennot luetaan
+     * reunasta, joten jokainen hyppy oli myös komento.
+     *
+     * Väite on siis kaksiosainen ja molemmat puolet ovat välttämättömiä:
+     * ympyrään osuva sormi **pitää** juoksun (juoksuhyppy säilyy) muttei anna
+     * sille **reunaa** (valikko ei näe painallusta). Ja juoksukenttään yksin
+     * osuva sormi antaa reunan normaalisti, koska ampuminen ja varaesine ovat
+     * oikeita painalluksia.
+     */
+    const edges = () => {
+      Input.poll();
+      return Object.entries(Input.pressed).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    };
+    touch._releaseAll();
+    Input.poll();
+    Input.poll();
+    send('pointerdown', 31, jumpPad.left + jumpPad.width / 2, jumpPad.top + jumpPad.height / 2);
+    const jumpEdges = edges();
+    const jumpHeld = Object.entries(Input.held).filter(([, v]) => v).map(([k]) => k).sort().join(',');
+    send('pointerup', 31, jumpPad.left + jumpPad.width / 2, jumpPad.top + jumpPad.height / 2);
+    Input.poll();
+    Input.poll();
+    send('pointerdown', 32, runPad.right - 16, runPad.bottom - 16);
+    const runEdges = edges();
+    send('pointerup', 32, runPad.right - 16, runPad.bottom - 16);
+    Input.poll();
+    expect('hyppyympyrä pitää juoksun muttei paina sitä — ja pelkkä juoksukenttä painaa',
+      jumpEdges === 'jump' && jumpHeld === 'jump,run' && runEdges === 'run',
+      `ympyrä: reunat "${jumpEdges}" pidot "${jumpHeld}", kenttä yksin: reunat "${runEdges}"`);
+
+    /*
+     * NAPAUTUS KÄVELEE, PITO JUOKSEE. Omistaja: *"kosketusnäytön
+     * ohjainlayoutilla on vaikea juosta samalla kun hyppää."* Kolmas asia
+     * kahdelle peukalolle on aina jonkun toisen päällä, joten juoksu tulee
+     * ajasta. Väitteessä on kolme osaa: lyhyt kosketus ei juokse, pitkä
+     * juoksee, eikä automaatti **paina** juoksua (se on myös ampumisnappi, ja
+     * reunallinen automaatti ampuisi joka kerta kun pelaaja lähtee liikkeelle).
+     */
+    touch._releaseAll();
+    Input.poll();
+    Input.poll();
+    const right = rect('right');
+    send('pointerdown', 33, right.left + right.width / 2, right.top + right.height / 2);
+    let short = '';
+    let shot = '';
+    for (let f = 0; f < 12; f++) { Input.poll(); if (Input.pressed.run) shot = 'ampui'; }
+    short = Input.held.run ? 'juoksee' : 'kävelee';
+    for (let f = 0; f < 20; f++) { Input.poll(); if (Input.pressed.run) shot = 'ampui'; }
+    const long = Input.held.run ? 'juoksee' : 'kävelee';
+    send('pointerup', 33, right.left + right.width / 2, right.top + right.height / 2);
+    Input.poll();
+    Input.poll();
+    const after = Input.held.run ? 'juoksee' : 'kävelee';
+    expect('kosketuksessa napautus kävelee ja pito juoksee, eikä automaatti ammu',
+      short === 'kävelee' && long === 'juoksee' && after === 'kävelee' && shot === '',
+      `12 framea: ${short}, 32 framea: ${long}, irrotuksen jälkeen: ${after},`
+      + ` ampumisreunoja: ${shot || 'ei yhtään'}`);
+
     return { checks, failures };
   });
   report.checks.push(...mobile.checks);
@@ -23583,18 +23648,42 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    * on mitattu pelistä eikä valittu. Se sanoo "1-2 ei saa olla poikkeus", ei
    * "kolme on oikea luku". Perussanasto ei ole mukana samasta syystä kuin
    * työkalussa: ensimmäisen ruudun aakkosia ei voi aikatauluttaa.
+   *
+   * MITÄ RAJA LASKEE (17.8.2026). Omistaja kysyi voisiko uusia ominaisuuksia
+   * ripotella varhaisiin kenttiin niin että esittelyidea säilyy, ja vastaus
+   * löytyi tästä rivistä: raja laski **maaston samaan lukuun vihollisen
+   * kanssa**, ja siksi maailman 1 kolme käsintehtyä kenttää olivat "täynnä"
+   * yhdeksällä esittelyllä joista kuusi ei ollut kenellekään vaarallinen.
+   *
+   * Nyt kolmen raja koskee sitä mitä pelaaja voi **hävitä**: vihollisia ja
+   * vaaroja. Maasto ja työkalut — rinne, puulava, pavunvarsi, warp-putki,
+   * tähtilohko, ponnahduslauta — eivät kuluta samaa budjettia, ja perustelu on
+   * se mikä erottaa ne toisistaan: uusi vihollinen on kysymys jonka väärä
+   * vastaus maksaa hengen, ja uusi maastonmuoto on kysymys jonka väärä vastaus
+   * maksaa sekunnin. Ne eivät ole sama oppimiskustannus, joten niiden ei kuulu
+   * jakaa samaa kolmea.
+   *
+   * **Mikään ei löystynyt siltä puolelta joka mittaa turvallisuutta.** YKSIN
+   * (20 laatan väli) koskee yhä jokaista esittelyä lajista riippumatta, ja
+   * `tools/curriculum.mjs`:n turvallisuusehdot (lattia alla, tilaa väistää)
+   * pätevät maastoon täsmälleen kuten ennenkin. Löysempi on vain se yksi luku
+   * joka kysyi "montako uutta asiaa", ja se kysyy nyt "montako uutta tapaa
+   * kuolla".
    */
-  const over = CURRICULUM_INTRO.filter((l) => l.features.length > 3);
-  const busiest = CURRICULUM_INTRO.reduce((a, b) => (b.features.length > a.features.length ? b : a));
+  const risky = (l) => l.features.filter((f) => f.feature.hazard
+    || f.feature.key.startsWith('enemy_') || f.feature.key === 'bosscycle');
+  const over = CURRICULUM_INTRO.filter((l) => risky(l).length > 3);
+  const busiest = CURRICULUM_INTRO.reduce((a, b) => (risky(b).length > risky(a).length ? b : a));
   report.checks.push({
-    name: 'yksikään kenttä ei esittele yli kolmea uutta asiaa',
+    name: 'yksikään kenttä ei esittele yli kolmea uutta vaaraa',
     ok: over.length === 0,
     detail: over.length
-      ? over.map((l) => `${l.id} ${l.features.length}: ${l.features.map((f) => f.feature.key).join(' ')}`).join(' — ')
-      : `eniten ${busiest.id} ${busiest.features.length} kpl`,
+      ? over.map((l) => `${l.id} ${risky(l).length}: ${risky(l).map((f) => f.feature.key).join(' ')}`).join(' — ')
+      : `eniten ${busiest.id} ${risky(busiest).length} vaaraa`
+        + ` (${busiest.features.length} esittelyä kaikkiaan)`,
   });
   if (over.length) {
-    report.failures.push(...over.map((l) => `${l.id} esittelee ${l.features.length} uutta asiaa kerralla`));
+    report.failures.push(...over.map((l) => `${l.id} esittelee ${risky(l).length} uutta vaaraa kerralla`));
   }
 }
 

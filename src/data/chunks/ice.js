@@ -76,6 +76,30 @@ export const ICE_CHUNKS = {
   spike_walk: ck(16, { 9: '   o o o', 12: '        x', 13: G, 14: G }),
 
   /**
+   * KUURA JÄÄMAAILMAAN, eli se laji joka oli väärässä maailmassa (17.8.2026).
+   *
+   * Kuura kävelee ja **jättää jälkeensä jäätä** (`frostTile`): se on ainoa
+   * vihollinen pelissä joka muuttaa maastoa pysyvästi kuuden sekunnin ajaksi.
+   * Sen ensiesittely oli 8-1 — pelin viimeisessä maailmassa — vaikka kaikki
+   * mitä se tekee on jäämaailman oma aihe. Omistaja 17.8.2026: uusia lajeja
+   * saisi ripotella varhaisiin kenttiin, kunhan esittelyidea säilyy.
+   *
+   * Tämä palikka on se esittely, ja se on kirjoitettu samalla säännöllä kuin
+   * `spike_walk` sen yläpuolella: opetus on **"katso mitä se jättää"** eikä
+   * "kuole yllätykseen". Kuura kävelee kohti pelaajaa tasaisella maalla,
+   * takana on tilaa perääntyä, alla on lattia koko matkalta, eikä kuilua ole
+   * — jäljen ehtii nähdä ennen kuin sen päälle astuu. Kolikkorivi on jäljen
+   * kohdalla, koska se on se syy jonka takia sinne kuitenkin mennään: liukas
+   * maa on hinta palkinnosta eikä ansa.
+   */
+  ice_kuura: ck(18, {
+    9: '        o o o',
+    12: '           w',
+    13: G + '##',
+    14: G + '##',
+  }),
+
+  /**
    * The world's own pit, and the reason it is not `pit_s`.
    *
    * A gap is scored — and played — against what the jump carries, and the

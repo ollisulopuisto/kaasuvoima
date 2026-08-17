@@ -128,7 +128,10 @@ export const WORLD3_LEVELS = {
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
       'clouds', 'beanstalk', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell',
       'plat_float', 'pipe_short', 'warp_pipe', 'flyer', 'pit_plat', 'heartburn_pair',
-      'corks', 'walkers', 'ledge', 'power', 'run_up', 'goal', 'goal_end',
+      /* `corks` → `ice_kuura`: kuuran ensiesittely siirtyi 8-1:stä tänne, ja
+       * tämä on se maailma jonka oma aihe se on — laji joka jättää jäätä
+       * jälkeensä kuuluu jäämaailmaan. Vaihto eikä lisäys, kuten aina. */
+      'ice_kuura', 'walkers', 'ledge', 'power', 'run_up', 'goal', 'goal_end',
     ],
     sky: [[112, 'sky_garden']],
     cave: [[228, 'cave_room']],

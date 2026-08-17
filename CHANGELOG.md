@@ -7,6 +7,66 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.16 — iPhonen jumi, kosketusjuoksu ja opetusjärjestyksen budjetti
+
+Kolme asiaa jotka kaikki lähtivät samasta kysymyksestä: mitä peli oikeasti
+opettaa ja missä järjestyksessä — ja pääseekö sitä pelaamaan puhelimella.
+
+**Kenttää ei päässyt aloittamaan iPhonella.** Omistajan raportti: *"default
+layoutilla ei voinut käynnistää kenttää, molemmat napit käynnistivät
+jako-toiminnon."* Syy oli oletusmallin (`rulla`) koko idea: hyppyympyrä on
+juoksukentän **sisällä**, joten yksi sormi antaa molemmat — juuri niin että
+juoksuhyppy onnistuu ilman toista sormea. Pelissä se on oikein. Mutta `run` ei
+ole valikoissa juoksu vaan **komento** (alkuruudulla jako, kartalla varaesine),
+ja komennot luetaan reunasta — joten jokainen hyppy oli myös komento, ja
+alkuruudulla se komento oli jako.
+
+Korjaus erottaa nämä kaksi: mukana tuleva juoksu on **pito ilman reunaa**.
+`held.run` on tosi (juoksuhyppy säilyy), `pressed.run` ei välähdä (valikko ei
+näe painallusta jota kukaan ei tehnyt), ja yksin painettu juoksukenttä antaa
+reunan normaalisti (ampuminen ja varaesine toimivat).
+
+**Napautus kävelee, pito juoksee.** Omistaja: *"kosketusnäytön ohjainlayoutilla
+on vaikea juosta samalla kun hyppää."* Se on totta jokaisella mallilla eikä
+vain yhdellä: puhelimessa on kaksi peukaloa, ja kolmas asia on aina jonkun
+toisen päällä. Nyt juoksu tulee ajasta — kun suuntaa on pidetty kaksikymmentä
+framea, juoksu menee itsestään pohjaan ja pysyy siellä hypyn yli. Tarkkuus
+säilyy, koska lyhyt korjausliike ei ehdi kynnykseen. Ja **reunatta**, koska
+`run` on myös ampumisnappi: reunallinen automaatti olisi ampunut kaasupallon
+joka kerta kun pelaaja lähtee liikkeelle.
+
+**Opetusjärjestys näki vihdoin kaiken mitä pelissä on.** `tools/curriculum.mjs`
+ei tuntenut rinteitä eikä neljää lajia — kuura, kolikkovaras, pyörre, kummitus
+olivat pelissä ilman että yksikään portti kysyi *milloin* pelaaja tapaa ne.
+Sama vika tehtiin kerran kurnuttajalla. Ne ovat nyt taulussa, ja taulu paljasti
+heti kaksi asiaa: 1-3 esitteli neljä asiaa ja kolikkovaras seisoi 19 laatan
+päässä piikkien esittelystä.
+
+**Ja se raja itse laski väärää asiaa.** Omistaja kysyi voisiko uusia
+ominaisuuksia ripotella varhaisempiin kenttiin niin että esittelyidea säilyy —
+vastaus löytyi portista: se laski **maaston samaan lukuun vihollisen kanssa**,
+joten maailman 1 kolme käsintehtyä kenttää olivat "täynnä" yhdeksällä
+esittelyllä joista kuusi ei ollut kenellekään vaarallinen. Nyt kolmen raja
+koskee sitä mitä pelaaja voi **hävitä**: vihollisia ja vaaroja. Rinne, puulava,
+pavunvarsi, warp-putki ja tähtilohko eivät kuluta samaa budjettia, koska uusi
+vihollinen on kysymys jonka väärä vastaus maksaa hengen ja uusi maastonmuoto
+kysymys jonka väärä vastaus maksaa sekunnin.
+
+**Mikään ei löystynyt turvallisuuden puolelta:** 20 laatan väli koskee yhä
+jokaista esittelyä lajista riippumatta, ja `curriculum.mjs`:n turvaehdot (lattia
+alla, tilaa väistää) pätevät maastoon kuten ennenkin.
+
+**Ripottelu, ensimmäiset kaksi:** kuura muutti 8-1:stä **3-2:een** (laji joka
+jättää jäätä jälkeensä kuuluu jäämaailmaan) ja kummitus 7-3:sta **6-2:een**
+(aavemainen laji kuuluu siihen maailmaan jonka musiikki on *Danse macabre*).
+Molemmat vaihtoina eikä lisäyksinä, ja molemmille kirjoitettiin oman maailmansa
+sanastolla palikka jonka opetus on turvallinen: kuura tasamaalle jonka jäljen
+ehtii nähdä ennen kuin sen päälle astuu, kummitus tasamaalle pelaajan eteen
+kolikot takanaan — juuri se hetki jona pelaaja kääntyy pois ja laji tekee sen
+mitä se tekee.
+
+---
+
 ## v26.08.18.15 — pyörivät jalat, ja mäki joka ansaitsee ne
 
 Omistaja 17.8.2026: *"jalat pyörivät vauhdikkaasti kuin Sonicilla alamäkeen

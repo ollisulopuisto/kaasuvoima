@@ -89,7 +89,11 @@ export const WORLD6_LEVELS = {
     theme: 'bone', bg: 'bones', music: 'bone',
     chunks: [
       'start', 'bone_stones', 'power', 'bone_jaws', 'bone_yokki', 'bone_dance', 'bone_marrow',
-      'bone_grave', 'bone_dance', 'bone_coffins', 'bone_yokki_ledge', 'bone_marrow', 'bone_jaws',
+      /* `bone_grave` → `bone_kummitus`: kummituksen ensiesittely siirtyi
+       * 7-3:sta tänne, eli siihen maailmaan jonka nimi on luu. Vaihto eikä
+       * lisäys, ja etäisyys yökin esittelyyn on kokonainen palikkajono —
+       * `verify.mjs` mittaa sen 20 laatan säännöllä. */
+      'bone_kummitus', 'bone_dance', 'bone_coffins', 'bone_yokki_ledge', 'bone_marrow', 'bone_jaws',
       'bone_dance', 'bone_grave', 'bone_stones', 'bone_ridge', 'run_up',
       'goal', 'goal_end',
     ],
