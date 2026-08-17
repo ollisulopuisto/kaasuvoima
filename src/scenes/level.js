@@ -12,7 +12,7 @@ import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js'
 import { ENEMY_CHARS } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
-import { Music, Sfx, Ambience } from '../core/audio.js';
+import { Music, Sfx, Ambience, killSound } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
@@ -2357,7 +2357,27 @@ export class LevelScene {
       // `hitByShell` rather than `flipDie` for the lethal tier, so the tough
       // customers stay tough: the boss still spends one of his three, the sun
       // still needs her hits, and one path serves every species.
-      if (kills) e.hitByShell(dir);
+      /*
+       * MAAHANISKU VANGITSEE, EI TAPA — omistajan päätös 18.8.2026:
+       * *"ground stomp voisi vangita viholliset kupliin, ei tappaa suorilta."*
+       *
+       * Se on parempi kuin se oli, ja syy on mekaniikoiden ketjussa. Tappava
+       * isku **poistaa** kaiken ulottuviltaan, eli se on painike jolla huone
+       * tyhjenee; kuplaan vanginnut isku **muuttaa** ne joksikin muuksi, ja se
+       * jokin on tässä pelissä jo kolmen muun verbin raaka-ainetta: kuplan
+       * päälle voi astua (v26.08.16.86), kuplan voi puhkaista, ja kupla kantaa
+       * hetken. Yksi liike ei siis enää lopeta tilannetta vaan avaa sen.
+       *
+       * Kuka vangitaan: se joka **voidaan** vangita (`bubbleable`). Pomo,
+       * jättiläinen ja piikikkäät eivät mahdu kuplaan, ja ne saavat saman
+       * kohtelun kuin ennenkin — muuten liikkeestä tulisi tyhjä juuri niitä
+       * vastaan joita varten se on kovin.
+       *
+       * Ja voimakkuus ratkaisee yhä: heikko isku (`!kills`) ei vangitse vaan
+       * kaataa kumoon kuten ennen, eli korkeus maksaa myös tässä.
+       */
+      if (kills && e.bubbleable && !e.bubbled && typeof e.trap === 'function') e.trap();
+      else if (kills) e.hitByShell(dir);
       else e.hitByProjectile(dir);
     }
 
@@ -4379,9 +4399,12 @@ export class LevelScene {
       }
 
       if (stomping && e.stompable && !e.spiky) {
+        /* Ketjun lenkki luetaan **ennen** tappoa: `chainReward` kasvattaa sen,
+         * ja ääni kertoo monesko tämä oli eikä montako niitä on nyt. */
+        const step = p.chain || 0;
         if (this.chained(p, () => e.stomp())) {
           p.bounce(this.game.input.held.jump);
-          Sfx.play('stomp');
+          killSound(step);
         }
         continue;
       }

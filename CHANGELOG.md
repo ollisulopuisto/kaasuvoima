@@ -7,6 +7,41 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.7 — isku vangitsee, tappo kuittaa, ja jokainen otus on oma yksilönsä
+
+Kolme omistajan pyyntöä samasta asiasta: miltä pelaaminen tuntuu.
+
+| väite | mitattu |
+| --- | --- |
+| maahanisku vangitsee kuplaan eikä tapa | `2 kävelijää: kuplassa 2, poissa 0` |
+| tapon kuittaus nousee ketjun mukana | `ensimmäinen 580 Hz, neljäs 724 Hz` |
+| kävelijällä on yksilöllinen pinta | `erilaisia 5/5, suurin ero 6,3 %` |
+| muttei yksilöllistä siluettia | `siluettiero 0 pikseliä` |
+
+**Maahanisku vangitsee.** Tappava isku *poistaa* kaiken ulottuviltaan, eli se on
+painike jolla huone tyhjenee; kuplaan vanginnut isku **muuttaa** ne joksikin
+muuksi — ja se jokin on tässä pelissä jo kolmen muun verbin raaka-ainetta:
+kuplan päälle voi astua, sen voi puhkaista, ja se kantaa hetken. Yksi liike ei
+siis enää lopeta tilannetta vaan avaa sen. Pomo, jättiläinen ja piikikkäät eivät
+mahdu kuplaan ja saavat saman kohtelun kuin ennen; heikko isku kaataa kumoon
+kuten ennenkin, eli korkeus maksaa yhä.
+
+**Tappo kuittaa.** Vanha `stomp` oli isku muttei palkinto: se kertoi että
+jotain osui, ei että jotain onnistui. Uusi ääni on kolme kerrosta — napsahdus,
+runko ja **nouseva kuittaus** — ja kuittaus on *ketjun mittainen*: puolisävelaskel
+per lenkki, tasan sama laskuri joka maksaa pisteet. Neljäs tallaus samalla
+kaarella kuulostaa neljänneltä. Katto on oktaavi, koska sen yli mentäessä
+kuittaus asuisi kolikon korkeudella.
+
+**Jokainen otus on yksilö.** Sama sääntö kuin laatoilla, mutta yhdellä
+lisäehdolla: **siluetti ei saa muuttua**, koska siitä luetaan tallattavuus.
+Kävelijällä vaihtelee ompeleiden määrä, tahran paikka ja solmun kiilto — ja
+ensimmäinen versio siirsi itse solmua, mikä muutti ääriviivaa kahdeksan
+pikselin verran. Portti kertoi sen suoraan, ja se ehto on nyt lukuna:
+`siluettiero 0 pikseliä`.
+
+---
+
 ## v26.08.18.6 — iho jokaiselle laatalle, ja puolet vaihtelusta joka ei ollut olemassa
 
 Putki sai yksilöllisyytensä; nyt sen saivat **kivi, lauta ja maa**. Ja matkalla
