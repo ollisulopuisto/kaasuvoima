@@ -7,6 +7,40 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.20 — rinne oli kuljettava vain pienimmällä keholla
+
+Omistajan raportti 17.8.2026 kuvakaappauksen kanssa: *"kun juoksen rinnettä ylös
+(1-1), hahmo PYSÄHTYY tähän ylänurkkaan."*
+
+Niin pysähtyikin, ja vika oli askelma-avussa (`stepUp`). Rinteen pinta luetaan
+kehon **keskikohdasta**, mutta törmäyksen tekee sen **etureuna** — joka on `w/2`
+edempänä ja 45 asteen rinteessä siis `w/2` pikseliä ylempänä. Askelma oli
+kiinteä kuusi pikseliä, mikä riitti pienimmälle keholle (12 px → 6) ja **vain
+sille**: iso Pieruprinssi on 21 px leveä, eli hänen etureunansa oli kymmenen
+pikseliä korkeammalla kuin se kohta jota moottori mittasi. Rampin viimeisen
+laatan ja tasanteen sauma oli siis seinä kaikille paitsi pienimmälle.
+
+Nyt askelma tulee kehon leveydestä: `w / 2 + 2`. Puolikas leveys on se virhe
+jonka mittapiste tekee, ja kaksi pikseliä on framen liike sen päälle. Isoimmalla
+keholla 12 px eli yhä selvästi alle laatan — porrasautomaattia tästä ei tule, ja
+ehto vaatii yhä että keho on juuri nyt rinteessä.
+
+**Miksi mikään ei huomannut:** `tools/playable.mjs` ajaa botin voimatasolla 0,
+eli sillä ainoalla koolla joka mahtui. Uusi portti ajaa kaikki neljä kokoluokkaa
+1-1:n oikean mäen yli, ja se oli punainen ennen korjausta täsmälleen siellä
+missä omistaja seisoi: sarakkeessa 103.
+
+**Mäki generaattoriin, mutta ei vielä päivän kenttään.** Generaattori sai
+`hill`-palan — rinne ylös, tasanne, rinne alas — eli sen saman maastonmuodon
+jota käsintehdyt kentät jo käyttävät. Se on kirjoitettu ja odottaa korpusta:
+generoidut kentät kirjoitetaan uusiksi vasta kun `tools/gen-levels.mjs` ajetaan
+`VGLC_DIR`in kanssa, koska ilman korpusta jokainen uudelleen kirjoitettu kenttä
+menettäisi alkuperätarkistuksensa. Päivän kenttä **pudottaa** mäen erikseen
+(`dailySpec`): sen 1096 kentän todistus on committoitu sormenjälkenä, ja vain
+korpuksen haltija voi uusia sen.
+
+---
+
 ## v26.08.18.19 — kaksi reittiä limittäin
 
 Omistaja 17.8.2026: *"kiva olisi jos niissä vois mennä limittäin."* Ensimmäinen
