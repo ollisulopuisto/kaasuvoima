@@ -441,7 +441,168 @@ export const VOICES = {
     hiss: 2,
     jitter: [0.86, 1.18],
   },
+  /*
+   * JOKAISELLE POMOLLE OMA ÄÄNI (päätetty 9.8.2026, tehty 17.8.2026).
+   *
+   * Pomoja oli kuusi ja ääniä yksi: `Sfx.play('boss')` soi jokaiselle. Päätös
+   * oli **oma ääni, jaetut toimintaäänet** — pomo saa oman huutonsa, oman
+   * murahduksensa ja oman parkaisunsa, mutta iskuaalto, laskeutuminen ja piikit
+   * kuulostavat samalta joka pomolla, jotta "tuo tarkoittaa iskuaaltoa" opitaan
+   * kerran eikä kuutta kertaa (DESIGN.md kohta 8).
+   *
+   * Jokainen luku alla on **sama luku kuin pelaajalla, siirrettynä siihen
+   * suuntaan johon hahmo on**, eikä uusi keksitty ääni:
+   *
+   *   - `pitchScale` on koko. Isompi keho, matalampi ääni.
+   *   - `formant` on pään koko. Alle 1 siirtää molemmat formantit alas, eli
+   *     ontto ja iso; yli 1 kaventaa, eli pieni ja kireä.
+   *   - `q` on kudos. Terävät formantit ovat märkä suu; loivat ovat luuta,
+   *     ilmaa tai peltiä.
+   *   - `hiss` on se osa joka ei ole ääni vaan kohina: hengitys, kalina, tuuli.
+   *
+   * Näiden päällä puhuvat sanat (`BOSS_WORDS`) ovat konsonantteja, ja juuri
+   * siksi tämä odotti niitä: pelkillä vokaaleilla puhuva ääni ei voi sanoa eri
+   * asioita, se voi vain huutaa eri korkeuksilla.
+   */
+  /** Variantti 0 — linnan ensimmäinen. Pelaajan ääni yhtä miestä isompana. */
+  pomo0: {
+    wave: 'sawtooth',
+    pitchScale: 0.62,
+    formant: 0.9,
+    q: [6, 8],
+    vibRate: 5,
+    vibDepth: 0.035,
+    hiss: 1.1,
+    jitter: [0.9, 1.12],
+  },
+  /** Variantti 1 — iskuaalto. Rintaääni: matala, leveä, ja se tärisee. */
+  pomo1: {
+    wave: 'sawtooth',
+    pitchScale: 0.5,
+    formant: 0.78,
+    q: [4.5, 6],
+    vibRate: 3.5,
+    vibDepth: 0.06,
+    hiss: 0.9,
+    jitter: [0.88, 1.1],
+  },
+  /** Variantti 2 — rynnäkkö. Kireä ja nopea: pieni pää, tiheä värinä. */
+  pomo2: {
+    wave: 'square',
+    pitchScale: 0.8,
+    formant: 1.12,
+    q: [9, 11],
+    vibRate: 8,
+    vibDepth: 0.02,
+    hiss: 1.3,
+    jitter: [0.94, 1.14],
+  },
+  /** Variantti 3 — jättiläinen. Pelin matalin: kaksi oktaavia pelaajan alta. */
+  pomo3: {
+    wave: 'sawtooth',
+    pitchScale: 0.34,
+    formant: 0.66,
+    q: [3, 4],
+    vibRate: 2.5,
+    vibDepth: 0.05,
+    hiss: 0.8,
+    jitter: [0.9, 1.06],
+  },
+  /**
+   * Variantti 5 — sääherra. Enemmän ilmaa kuin ääntä: kohina kaksinkertainen,
+   * formantit loivat, vibrato hidas ja syvä kuin puuska.
+   */
+  pomo5: {
+    wave: 'triangle',
+    pitchScale: 0.72,
+    formant: 1.05,
+    q: [2.5, 3.5],
+    vibRate: 1.8,
+    vibDepth: 0.09,
+    hiss: 2.2,
+    jitter: [0.85, 1.2],
+  },
+  /**
+   * Variantti 6 — PIERUKUNINGAS, ja hän puhuu omalla äänellään **vain
+   * saapuessaan ja kaatuessaan**.
+   *
+   * Osuma vaihtaa hänet joksikin toiseksi (`KING_FORMS`), ja siitä hetkestä
+   * eteenpäin hän murahtaa sen linnakkeen äänellä jonka muodon hän juuri otti.
+   * Se on sama lause äänenä kuin se mikä hän on: jokainen numero jonka kuningas
+   * kantaa on jonkun toisen numero.
+   */
+  pomo6: {
+    wave: 'sawtooth',
+    pitchScale: 0.44,
+    formant: 0.72,
+    q: [5, 7],
+    vibRate: 4,
+    vibDepth: 0.045,
+    hiss: 1.6,
+    jitter: [0.88, 1.14],
+  },
 };
+
+/**
+ * Kuka puhuu millekin variantille. Luuranko (4) on jo olemassa omanaan, ja se
+ * on tässä sama olio eikä kopio — yksi ääni, yksi määritelmä.
+ */
+const BOSS_VOICES = [
+  VOICES.pomo0, VOICES.pomo1, VOICES.pomo2, VOICES.pomo3,
+  VOICES.luuranko, VOICES.pomo5, VOICES.pomo6,
+];
+
+/**
+ * Mitä kukin sanoo, ja kolme tilannetta.
+ *
+ * Sanat ovat tavuja eivätkä suomea, ja ne on kirjoitettu `voxPlan`in
+ * äännevalikoimalla: vokaalit sekä `s š f h p t k m n`. Jokaisella on sama
+ * kolmen kohdan kaari — tulo, osuma, kaatuminen — koska ne ovat kolme eri
+ * tietoa eivätkä kolme koristetta:
+ *
+ *   - **tulo** on pitkä ja nouseva: "tässä olen".
+ *   - **osuma** on lyhyt ja laskeva: "tuo tuntui", ja se on ainoa jonka
+ *     pelaaja kuulee toistuvasti — siksi se on lyhin.
+ *   - **kaatuminen** on pisin ja laskee eniten.
+ */
+const BOSS_WORDS = [
+  { arrive: 'hoohoo', hurt: 'oh', die: 'hooaa' },      // 0 linnan ensimmäinen
+  { arrive: 'humhum', hurt: 'hm', die: 'muoaa' },      // 1 iskuaalto
+  { arrive: 'tsahaa', hurt: 'kah', die: 'takaa' },     // 2 rynnäkkö
+  { arrive: 'moohoo', hurt: 'muh', die: 'mooaa' },     // 3 jättiläinen
+  { arrive: 'hehheh', hurt: 'kek', die: 'kehkeh' },    // 4 luuranko
+  { arrive: 'suuhuu', hurt: 'hus', die: 'suuoo' },     // 5 sääherra
+  { arrive: 'puuhaa', hurt: 'puh', die: 'puuoo' },     // 6 kuningas
+];
+
+/** Kaaren muoto kullekin tilanteelle. Ks. `BOSS_WORDS`. */
+const BOSS_LINE = {
+  /*
+   * Voimakkuudet mitattiin ja laskettiin: 0,5 nimellistä tuotti väylällä
+   * huiput 0,68…1,17, eli pomon huuto oli **kaksi kertaa pelin kovin ääni**
+   * (kuolema 0,57, tehostus 0,60, kolikko 0,32). Ääni joka on kovempi kuin
+   * kuolema opettaa väärän tärkeysjärjestyksen, ja rajoitin olisi vielä
+   * litistänyt kaiken muun sen alle. Kolmasosa siitä osuu samaan luokkaan
+   * kuin muut kerran kentässä kuultavat merkit.
+   */
+  arrive: { dur: 0.6, bend: 1.25, gain: 0.17 },
+  hurt: { dur: 0.24, bend: 0.7, gain: 0.15 },
+  die: { dur: 0.85, bend: 0.4, gain: 0.17 },
+};
+
+/**
+ * Pomo sanoo jotain.
+ *
+ * @param {number} variant kuka tämä on — ääni ja sanat luetaan tästä
+ * @param {'arrive'|'hurt'|'die'} kind mikä tilanne
+ * @param {number} [speaker] kenen äänellä, jos eri kuin `variant` (kuningas)
+ */
+export function bossSay(variant, kind, speaker = variant) {
+  const words = BOSS_WORDS[variant] || BOSS_WORDS[0];
+  const voice = BOSS_VOICES[speaker] || BOSS_VOICES[0];
+  const line = BOSS_LINE[kind] || BOSS_LINE.hurt;
+  vox({ word: words[kind], pitch: 250, voice, ...line });
+}
 
 /**
  * Makeup gain for the formant filters.

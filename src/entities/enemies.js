@@ -16,7 +16,7 @@ import {
   drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
   drawPaukkupoho } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
-import { Sfx } from '../core/audio.js';
+import { Sfx, bossSay } from '../core/audio.js';
 import { approach } from '../core/utils.js';
 import { Item } from './items.js';
 
@@ -1813,6 +1813,8 @@ export class Boss extends Enemy {
      * osumasta, ja "onko häneen osuttu" on juuri tämä vertailu. Ks.
      * `wakePillar`. */
     this.hp0 = this.hp;
+    /** Onko tulohuuto huudettu. Ks. `update`: se lähtee heräämisestä. */
+    this.greeted = false;
     this.score = 5000 + variant * 1000;
     this.invuln = 0;
     this.jumpTimer = 90;
@@ -2067,6 +2069,19 @@ export class Boss extends Enemy {
       this.x += this.facing * 2;
     }
 
+    /*
+     * Tulohuuto, ja se on tässä eikä kentän aloituksessa.
+     *
+     * Pomo herää siinä kohtaa kun pelaaja astuu areenaan (`active`), ja juuri
+     * se on se hetki jolloin "tässä olen" on tietoa: aiemmin soitettuna se
+     * kuuluisi käytävään jossa pelaaja ei vielä näe ketään, ja ääni ilman
+     * näkyvää syytä opettaa katsomaan väärään suuntaan.
+     */
+    if (!this.greeted && this.active) {
+      this.greeted = true;
+      bossSay(this.variant, 'arrive');
+    }
+
     const fallSpeed = this.onGround ? 0 : this.vy;
     if (this.onGround && --this.jumpTimer <= 0) {
       this.vy = -5.6;
@@ -2271,13 +2286,25 @@ export class Boss extends Enemy {
     } else {
       this.speed += 0.35;
     }
+    /*
+     * Murahdus ja parkaisu, ja **kuningas puhuu sen äänellä joka hän juuri on**.
+     *
+     * Muille `variant` ja `speaker` ovat sama luku, eli mikään ei muutu. Kuningas
+     * ottaa osumasta seuraavan linnakkeen muodon (`KING_FORMS`), ja siitä
+     * hetkestä eteenpäin hänen murahduksensa on sen linnakkeen murahdus — sama
+     * lause äänenä kuin se mikä hän on. Oman äänensä hän saa takaisin
+     * kaatuessaan, koska se on hetki jolloin hän on taas vain oma itsensä.
+     */
     if (this.hp <= 0) {
       this.dying = true;
       this.noclip = true;
       this.vy = -5;
       this.vx = this.facing * -1.2;
+      bossSay(this.variant, 'die');
       this.level.awardScore(this.score, this.cx, this.y);
       this.level.onBossDefeated();
+    } else {
+      bossSay(this.variant, 'hurt', this.king ? this.form : this.variant);
     }
     return true;
   }

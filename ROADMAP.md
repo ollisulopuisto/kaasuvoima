@@ -306,7 +306,7 @@ tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedo
 | minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen |
 | demo näyttää tempun | **tee** |
 | aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
-| jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu 17.8.2026 (v26.08.17.93), eli este on poissa |
+| jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu (v26.08.17.93) ja äänet tehty (v26.08.17.96) |
 | lisää pomovariaatioita | **kahdeksas variantti**, jotta "jokainen pomo kerran" on totta |
 | kenttäsäännöt käsintehdyille | vanhentunut merkintä: **jo voimassa** |
 | nimen tavaramerkkiriski | vanhentunut merkintä: **nimi on jo vaihdettu** |
@@ -1433,7 +1433,20 @@ on kalliimpi kuin diffinsä.**
 
 ## Myöhemmin
 
-- **Päätetty 9.8.2026: jokaiselle pomolle oma ääni.** Nyt niitä on yksi:
+- ✔ **Jokaiselle pomolle oma ääni** — tehty (v26.08.17.96). Seitsemän ääntä,
+  kolme tilannetta kullakin (tulo, osuma, kaatuminen), ja mitattuna seitsemän
+  eri vahvinta taajuutta: `0: 498 Hz · 1: 281 · 2: 735 · 3: 352 · 4: 396 ·
+  5: 208 · 6: 243`, huiput 0,23…0,40 eli kolikon (0,32) luokassa.
+  **Kuningas puhuu sen äänellä joka hän juuri on**: osuma vaihtaa hänet
+  seuraavaksi linnakkeeksi, ja murahdus vaihtuu mukana — oman äänensä hän saa
+  takaisin kaatuessaan. Toimintaäänet (iskuaalto, laskeutuminen, piikit) jäivät
+  jaetuiksi, kuten päätettiin.
+
+  Ensimmäinen versio mitattiin liian kovaksi: nimellinen 0,5 tuotti väylällä
+  0,68…1,17 eli **kaksi kertaa pelin kovimman äänen** (kuolema 0,57). Ääni joka
+  on kovempi kuin kuolema opettaa väärän tärkeysjärjestyksen.
+
+  Alkuperäinen päätösteksti oli: niitä on yksi,
   `Sfx.play('boss')` soi kaikille neljälle linnakevariantille, nyrkkeilijälle ja
   jättiläiselle.
 

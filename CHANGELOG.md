@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.96 — jokaisella pomolla on oma ääni
+
+Päätetty 9.8.2026, ja se odotti kahta asiaa: konsonantteja (pelkillä vokaaleilla
+puhuva ääni ei voi sanoa eri asioita, se voi vain huutaa eri korkeuksilla) ja
+luotettavaa mittausta (v26.08.17.93).
+
+| väite | mitattu |
+| --- | --- |
+| jokainen seitsemästä puhuu | `huiput 0.23 … 0.40` |
+| eivätkä ne ole sama ääni | `0: 498 Hz · 1: 281 · 2: 735 · 3: 352 · 4: 396 · 5: 208 · 6: 243` |
+| kuuluu muttei huuda | `kolikko 0.32, kuolema 0.57 — kaikki niiden luokassa` |
+| ja kutsupaikkoja on kolme | `arrive hurt die — 3 kutsua` |
+
+**Oma ääni, jaetut toimintaäänet.** Pomo saa oman tulohuutonsa, oman
+murahduksensa ja oman kuolinparkaisunsa — mutta iskuaalto, laskeutuminen ja
+piikit kuulostavat samalta joka pomolla, jotta "tuo tarkoittaa iskuaaltoa"
+opitaan kerran eikä kuutta kertaa (DESIGN.md kohta 8).
+
+Jokainen ääni on **pelaajan ääni siirrettynä siihen suuntaan johon hahmo on**,
+ei uusi keksitty ääni: `pitchScale` on koko, `formant` on pään koko, `q` on
+kudos (terävä = märkä suu, loiva = luuta tai ilmaa), `hiss` on se osa joka ei
+ole ääni vaan kohinaa. Iskuaallon pomo on rintaääntä, rynnäkkö on kireä ja
+pieni, jättiläinen on pelin matalin, sääherrassa on enemmän ilmaa kuin ääntä.
+
+**Kuningas puhuu sen äänellä joka hän juuri on.** Osuma vaihtaa hänet
+seuraavaksi linnakkeeksi (`KING_FORMS`), ja siitä hetkestä eteenpäin hänen
+murahduksensa on sen linnakkeen murahdus. Oman äänensä hän saa takaisin
+kaatuessaan, koska se on hetki jolloin hän on taas vain oma itsensä. Se on sama
+lause äänenä kuin se mikä hän on: jokainen numero jonka kuningas kantaa on
+jonkun toisen numero.
+
+Tulohuuto lähtee **heräämisestä eikä kentän alusta**: pomo herää kun pelaaja
+astuu areenaan, ja aiemmin soitettuna huuto kuuluisi käytävään jossa ei vielä
+näy ketään — ääni ilman näkyvää syytä opettaa katsomaan väärään suuntaan.
+
+Kaksi mittausvirhettä matkan varrelta, molemmat kirjattuina koodiin: nimellinen
+voimakkuus 0,5 tuotti väylällä 0,68…1,17 eli kaksi kertaa pelin kovimman äänen,
+ja taajuusmittaus vertaili desibelejä nollaan (`getFloatFrequencyData` palauttaa
+negatiivisia lukuja) eli raportoi `0 Hz` kaikilta seitsemältä.
+
+---
+
 ## v26.08.17.95 — pomo järjestää huoneen uusiksi
 
 ROADMAP kohta 4, päätetty 9.8.2026 ja "tehdään heti" 16.8.2026. Iskuaallon pomo
