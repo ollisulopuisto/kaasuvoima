@@ -5594,12 +5594,26 @@ const report = await page.evaluate(async () => {
     const kingVariant = kGet('8-F').bossVariant;
     const elsewhereKing = kIds.filter((id) => id !== '8-F' && kGet(id).boss
       && kGet(id).bossVariant === kingVariant);
-    expect('maailma 8 uusii seitsemän linnaketta siinä järjestyksessä kuin ne tulivat',
-      rematchIds.length === 7 && got.join(',') === wanted.join(',')
+    /*
+     * Jono on sama kuin linnakkeiden, **paitsi siinä yhdessä kohdassa jossa
+     * linnakkeiden oma jono toistaa itseään.**
+     *
+     * Jättiläinen on sekä 4-F että 5-F, joten suora uusinta antoi hänet myös
+     * kahdesti maailmassa 8 — ja koko maailman väite on "jokainen pomo kerran".
+     * Se oli siis totta vain jos pöhöä ei laske kahdesti (mitattu: neljä
+     * esiintymää, kun jokainen muu esiintyy kaksi). Toinen osuma korvattiin
+     * kahdeksannella variantilla, ja tämä rivi tarkistaa nyt kaksi asiaa
+     * yhden sijaan: **järjestys pitää** ja **uusinnassa ei ole kahta samaa**.
+     * Jälkimmäinen on se joka vasta tekee väitteestä mitattavan.
+     */
+    const dup = got.filter((v, i) => got.indexOf(v) !== i);
+    const order = got.filter((v, i) => v === wanted[i]).length;
+    expect('maailma 8 uusii linnakkeet järjestyksessä, eikä yhtäkään kahdesti',
+      rematchIds.length === 7 && order === wanted.length - 1 && dup.length === 0
       && elsewhereKing.length === 0,
       `linnakkeet ${wanted.join(' ')} — uusinnat ${got.join(' ')} `
-      + `(${rematchIds.join(' ')}), 8-F variantti ${kingVariant} `
-      + `muualla ${elsewhereKing.length} kertaa`);
+      + `(${rematchIds.join(' ')}), samassa kohdassa ${order}/7, toistoja ${dup.length}`
+      + `, 8-F variantti ${kingVariant} muualla ${elsewhereKing.length} kertaa`);
 
     /* Kuninkaan tappelu ajetaan kerran ja kaikki neljä väitettä lukevat samaa
      * ajoa. Osumat annetaan `stomp()`illa suoraan: kysymys on siitä mitä pomo
@@ -8697,6 +8711,9 @@ const report = await page.evaluate(async () => {
      *      koriste jolla on kello, mikä on huonompi kuin ei raajaa.
      */
     {
+      /** Ks. alempaa: raajaton pomo on päätös, ja päätöksen nimi on tässä. */
+      const LIMBLESS_ON_PURPOSE = [7];
+      const kGetDef = (await import('/src/data/levels.js')).getLevel;
       const bad = [];
       const grew = [];
       for (const id of BOSS_LEVELS) {
@@ -8707,7 +8724,21 @@ const report = await page.evaluate(async () => {
         const idle = mkInput();
         for (let f = 0; f < 90 && !(boss.onGround && f > 2); f++) s3.update(idle);
         const boxes = boss.limbBoxes();
-        if (!boxes.length) { bad.push(`${id}: ei raajoja lainkaan`); continue; }
+        /*
+         * Raajaton pomo on **päätös jonka nimi on tässä**, ei unohdus.
+         *
+         * Suolimadolla (7) ei ole mitään mikä ei olisi runkoa: raaja on tässä
+         * pelissä se osa joka ulottuu rungon ulkopuolelle ja jonka voi
+         * katkaista, ja madolla sellaista ei ole. Poikkeuslista on yksi rivi ja
+         * se vanhenee itsestään — jos madolle joskus piirretään raajat, alempi
+         * `stale`-rivi kaatuu ja tämä poikkeus on poistettava.
+         */
+        if (!boxes.length) {
+          if (!LIMBLESS_ON_PURPOSE.includes(kGetDef(id).bossVariant)) {
+            bad.push(`${id}: ei raajoja lainkaan`);
+          }
+          continue;
+        }
 
         // 2. landing strip: nothing may sit above the head inside its columns.
         for (const b of boxes) {
@@ -8757,7 +8788,8 @@ const report = await page.evaluate(async () => {
        */
       const gfx = await import('/src/gfx/sprites.js');
       const drawn = gfx.BOSS_LIMBS.map((limbs, v) => {
-        if (!limbs.length) return `${v}: ei raajoja`;
+        // Sama nimetty poikkeus kuin laatikkopuolella, ks. `LIMBLESS_ON_PURPOSE`.
+        if (!limbs.length) return LIMBLESS_ON_PURPOSE.includes(v) ? null : `${v}: ei raajoja`;
         const M = 96;
         const size = gfx.bossSize(v);
         const c = document.createElement('canvas');
@@ -8779,6 +8811,13 @@ const report = await page.evaluate(async () => {
         return empty.length ? `${v}: ${empty.length} raajaa ilman pikseleitä` : null;
       }).filter(Boolean);
       drawn.forEach((d) => bad.push(d));
+      /* Ja poikkeus joka ei ole enää poikkeus on virhe: jos raajattomaksi
+       * merkitylle varianttille piirretään raajat, tämä rivi kaatuu ja lista
+       * on siivottava. Sama sääntö kuin äänten `SILENT_ON_PURPOSE`illa. */
+      const staleLimbless = LIMBLESS_ON_PURPOSE.filter((v) => (gfx.BOSS_LIMBS[v] || []).length > 0);
+      if (staleLimbless.length) {
+        bad.push(`vanhentunut poikkeus: variantilla ${staleLimbless.join(', ')} on raajat`);
+      }
 
       expect('raajat kasvattavat läsnäoloa, satuttavat, näkyvät, eivätkä tule laskeutumiskaistalle',
         bad.length === 0, bad.length ? bad.join(' | ') : grew.join(', '));
@@ -12074,6 +12113,47 @@ const report = await page.evaluate(async () => {
         + `botti: ${got.cleared ? 'läpi' : `jumissa ${got.reach} %`}`);
       game.toTitle();
     }
+  }
+
+  /* ----------------------------- suolimato ------------------------------ */
+  /*
+   * Kahdeksas variantti, ja sen väite on **missä** eikä **milloin**: se
+   * kaivautuu lattiaan siksi aikaa kun kruunu on päässä, ja nousee jossain
+   * muualla. Kolme mittausta, ja jokainen on tapahtuma:
+   *
+   *   1. kruunu päässä = maan alla, ja matka näkyy sarakkeina;
+   *   2. maan alla se ei satuta eikä siihen voi osua;
+   *   3. nousukohta on vähintään `BURROW_CLEAR` laattaa pelaajasta — sama
+   *      turvaväli ja sama syy kuin areenan pilareilla.
+   */
+  {
+    const E2 = await import('/src/entities/enemies.js');
+    reset({ type: 'shroom', level: 1 });
+    const s = new LevelScene(game, '8-5');
+    game.setScene(s);
+    const worm = s.entities.find((e) => e instanceof E2.Boss);
+    const idle = mkInput();
+    for (let f = 0; f < 90 && !(worm.onGround && f > 2); f++) s.update(idle);
+    const startX = worm.cx;
+    const surfaceY = worm.y;
+    worm.spikePhase = 'spiky';
+    worm.spikeTimer = 999;
+    for (let f = 0; f < 90; f++) s.update(idle);
+    const under = worm.under;
+    const moved = Math.abs(worm.cx - startX);
+    const sank = worm.y - surfaceY;
+    const cannotTouch = worm.harmless;
+    /* Nousu tilataan vaihtamalla vaihe, kuten pelissäkin: kruunu laskee ja
+     * runko on pinnalla samalla framella. */
+    s.player.x = worm.cx - 8;
+    worm.spikePhase = 'open';
+    worm.spikeTimer = 999;
+    s.update(idle);
+    const gap = Math.abs(worm.cx - s.player.cx) / 16;
+    expect('suolimato kaivautuu kruunun ajaksi, ei satuta maan alla, eikä nouse jalkojen alta',
+      under && moved > 16 && sank > 16 && cannotTouch && !worm.under && gap >= 3,
+      `maan alla ${under}, siirtyi ${Math.round(moved)} px, vajosi ${Math.round(sank)} px, `
+      + `vaaraton ${cannotTouch}, nousi ${gap.toFixed(1)} laatan päähän`);
   }
 
   /* --------------------------- areenapomo ------------------------------- */
@@ -15436,7 +15516,7 @@ const report = await page.evaluate(async () => {
       const meter = meterFor(tap, an);
       const bins = new Float32Array(an.frequencyBinCount);
       const hz = tap.ctx.sampleRate / an.fftSize;
-      for (let v = 0; v < 7; v++) {
+      for (let v = 0; v < 8; v++) {
         await meter.settle(3);
         meter.clear();
         bossSay(v, 'arrive');
@@ -15473,7 +15553,7 @@ const report = await page.evaluate(async () => {
     const mute = heard.filter((r) => r.peak < 0.12 || r.peak > 0.62).map((r) => r.v);
     const giant = heard.find((r) => r.v === 3);
     const rush = heard.find((r) => r.v === 2);
-    expect('jokainen seitsemästä pomosta puhuu, ja jättiläinen on matalampi kuin rynnäkkö',
+    expect('jokainen kahdeksasta pomosta puhuu, ja jättiläinen on matalampi kuin rynnäkkö',
       !measured || (mute.length === 0 && giant.hz < rush.hz),
       measured ? heard.map((r) => `${r.v}: ${r.peak} @ ${r.hz} Hz`).join(', ') : 'ei mitattu');
   }

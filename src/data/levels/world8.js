@@ -311,8 +311,22 @@ export const WORLD8_LEVELS = {
    * tuo neljä. Jokaisen väliin menee täysi lattia, joka kerta — ahtain koko
    * maailmassa on tässä kentässä, 15 saraketta.
    */
+  /*
+   * 8-5 sai kahdeksannen variantin, ja se on koko maailman väitteen korjaus.
+   *
+   * Maailma 8 sanoo olevansa "jokainen pomo kerran", ja se oli totta vain jos
+   * pöhöä ei laske kahdesti: pöhö oli 4-F, 5-F, 8-4 **ja 8-5**, kun jokainen
+   * muu esiintyy kahdesti. Nyt tässä on suolimato (7), joka kysyy ainoana
+   * *missä* eikä *milloin*.
+   *
+   * Areena jää isoksi (`boss_arena_big`) vaikka mato on pieni, ja se on päätös
+   * eikä jäänne: kaivautuva pomo tarvitsee matkaa, ja 48 saraketta on juuri se
+   * mikä tekee "se nousi jossain muualla" -lauseesta toden. Vaihto 32 sarakkeen
+   * areenaan olisi myös lyhentänyt kenttää ja siirtänyt sen vaikeusluvun ilman
+   * että yksikään palikka muuttui.
+   */
   '8-5': {
-    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
+    theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 7,
     chunks: [
       'keep_start', 'fort_power', 'keep_pour', 'keep_watch', 'hyppy_harjoitus', 'fort_gap',
       'keep_teeth', 'keep_pour', 'keep_yoke', 'fort_gap', 'boss_arena_big',

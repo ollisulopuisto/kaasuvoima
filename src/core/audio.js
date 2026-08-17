@@ -541,6 +541,34 @@ export const VOICES = {
     hiss: 1.6,
     jitter: [0.88, 1.14],
   },
+  /**
+   * Variantti 7 — SUOLIMATO. Märkä ja kapea: terävimmät formantit koko
+   * taulussa, koska mato on pelkkää pehmytkudosta — se on luurangon vastakohta
+   * täsmälleen siinä numerossa jolla luuranko on luuta. Kolmioaalto on
+   * pyöreämpi kuin saha, ja `hiss` on matala, koska tällä ei ole mitään mikä
+   * kalisisi.
+   */
+  pomo7: {
+    wave: 'triangle',
+    pitchScale: 0.58,
+    formant: 1.18,
+    q: [12, 14],
+    vibRate: 6.5,
+    vibDepth: 0.07,
+    hiss: 0.5,
+    jitter: [0.9, 1.16],
+    /*
+     * Ja `level`, jota kenelläkään muulla ei ole.
+     *
+     * Terävä formantti päästää läpi kapean kaistan, ja kolmioaallossa on
+     * vähemmän yläsäveliä sen kaistalle osumaan: mitattuna tämä kurkku tuotti
+     * väylällä **0,065** kun muut tuottivat 0,23…0,40 samalla nimellisellä
+     * voimakkuudella. Se on kuulumaton, ja kuulumaton ääni on sama vika kuin
+     * puuttuva. Kerroin on siis mittaustulos eikä säätö: se korjaa sen minkä
+     * suodattimet ottivat, eikä muuta sitä miltä ääni kuulostaa.
+     */
+    level: 3.4,
+  },
 };
 
 /**
@@ -549,7 +577,7 @@ export const VOICES = {
  */
 const BOSS_VOICES = [
   VOICES.pomo0, VOICES.pomo1, VOICES.pomo2, VOICES.pomo3,
-  VOICES.luuranko, VOICES.pomo5, VOICES.pomo6,
+  VOICES.luuranko, VOICES.pomo5, VOICES.pomo6, VOICES.pomo7,
 ];
 
 /**
@@ -573,6 +601,8 @@ const BOSS_WORDS = [
   { arrive: 'hehheh', hurt: 'kek', die: 'kehkeh' },    // 4 luuranko
   { arrive: 'suuhuu', hurt: 'hus', die: 'suuoo' },     // 5 sääherra
   { arrive: 'puuhaa', hurt: 'puh', die: 'puuoo' },     // 6 kuningas
+  /* 7 suolimato — sihisevä, koska se on ainoa jolla ei ole keuhkoja. */
+  { arrive: 'sissii', hurt: 'sih', die: 'siihaa' },
 ];
 
 /** Kaaren muoto kullekin tilanteelle. Ks. `BOSS_WORDS`. */
@@ -601,7 +631,12 @@ export function bossSay(variant, kind, speaker = variant) {
   const words = BOSS_WORDS[variant] || BOSS_WORDS[0];
   const voice = BOSS_VOICES[speaker] || BOSS_VOICES[0];
   const line = BOSS_LINE[kind] || BOSS_LINE.hurt;
-  vox({ word: words[kind], pitch: 250, voice, ...line });
+  vox({
+    word: words[kind], pitch: 250, voice, ...line,
+    /* `level` on kurkun oma läpäisy, ks. `VOICES.pomo7`. Oletus 1 tarkoittaa
+     * "tämä kurkku päästää läpi sen mitä siihen laitetaan". */
+    gain: line.gain * (voice.level || 1),
+  });
 }
 
 /**

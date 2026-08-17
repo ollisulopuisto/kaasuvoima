@@ -1715,6 +1715,29 @@ const DUST_REACH = 14;
  *   GIANT_STEP_SHAKE  voimakkuus kokoa kohti. Kolmen kokoisena 1,05 px eli
  *                     viidesosa saman pomon laskeutumisesta (2 + koko = 5).
  */
+/*
+ * SUOLIMADON kaivautuminen, neljä lukua. Ks. `Boss.updateBurrow`.
+ *
+ *   BURROW_DEPTH  kuinka syvälle runko vajoaa. Yksi laatta yli oman korkeuden,
+ *                 eli mitään ei jää näkyviin — pölykasa on ainoa merkki, ja
+ *                 sen pitää olla ainoa merkki.
+ *   BURROW_SINK   vajoamisvauhti. 2 px/frame eli kaksikymmentä framea alas:
+ *                 nopeampi lukisi katoamisena, hitaampi söisi kruunun ajan.
+ *   BURROW_SPEED  maanalainen vauhti. Pelaajan kävely on 1,5 ja juoksu 2,5;
+ *                 1,9 on siltä väliltä, eli maton voi juosten karistaa muttei
+ *                 kävellen.
+ *   BURROW_CLEAR  kuinka kaukana pelaajasta se saa nousta, laattoina. Kolme on
+ *                 sama turvaväli kuin areenan pilareilla.
+ */
+const BURROW_DEPTH = 44;
+const BURROW_SINK = 2;
+const BURROW_SPEED = 1.9;
+const BURROW_CLEAR = 3;
+/** Ks. `updateBurrow`: yksi askel mahtuu tähän, ja se mitattiin. */
+const BURROW_MARGIN = 4;
+/** Kuinka usein maanalainen matka jättää pölyä. Rytmi, ei jatkuva pilvi. */
+const BURROW_PUFF = 6;
+
 const GIANT_STEP_AT = 2;
 const GIANT_STEP_PX = 22;
 const GIANT_STEP_SHAKE = 0.35;
@@ -1809,6 +1832,13 @@ export class Boss extends Enemy {
      */
     this.hp = this.king ? KING_FORMS.length
       : variant === 3 ? 5 : variant === 4 ? 4 : 3 + Math.min(1, variant);
+    /* Suolimato: neljä osumaa, sama kuin luurangolla ja samasta syystä toisin
+     * päin. Luurangolla on neljä koska hän hajoaa itse; madolla on neljä koska
+     * jokainen osuma maksaa yhden etsimisen, ja viides olisi sama etsiminen
+     * kerran liikaa. */
+    if (variant === 7) this.hp = 4;
+    /** Onko runko maan alla. Ks. `updateBurrow`. */
+    this.under = false;
     /* Lähtöpisteet talteen: areenapomon toinen vaihe alkaa ensimmäisestä
      * osumasta, ja "onko häneen osuttu" on juuri tämä vertailu. Ks.
      * `wakePillar`. */
@@ -1889,6 +1919,10 @@ export class Boss extends Enemy {
 
   get spiky() { return this.spikePhase === 'spiky'; }
 
+  /* Maan alla oleva runko ei ole huoneessa: siihen ei voi osua eikä se voi
+   * osua. Sama sääntö kuin putkessa olevalla pelaajalla. */
+  get harmless() { return this.under; }
+
   /**
    * 0..1 for the drawing: one clock for the whole crown, run up through the
    * telegraph and back down through the doff. The sprite reads every keyframe
@@ -1929,6 +1963,81 @@ export class Boss extends Enemy {
        * saisi muutenkin kuvasta, ja siksi ääni saa olla luonnetta eikä ohjetta.
        */
       if (this.form === 4) Sfx.play('luuranko');
+    }
+  }
+
+  /**
+   * SUOLIMATO — kahdeksas variantti, ja sen koko idea on **missä** eikä
+   * **milloin**.
+   *
+   * Maailma 8 väittää olevansa "jokainen pomo kerran", ja se oli totta vain jos
+   * pöhöä ei laske kahdesti: pöhö on 4-F, 5-F, 8-4 ja 8-5, kun jokainen muu on
+   * kahdesti. Tämä on se kahdeksas joka tekee väitteestä toden — mutta uusi
+   * numero ei riitä, sen pitää olla uusi kysymys.
+   *
+   * Jokainen tämän pelin pomo kysyy *milloin*: kruunu nousee päähän, odota,
+   * kruunu laskee, lyö. Mato kysyy **missä**. Se kaivautuu lattiaan siksi
+   * aikaa kun kruunu on päässä — eli tasan sen ajan jolloin siihen ei kuitenkaan
+   * voi osua — ja nousee jossain muualla siinä hetkessä kun siihen taas voi.
+   * Pelaajan työ ei ole odottaa ikkunaa vaan **löytää se uudestaan**.
+   *
+   * Kolme päätöstä, ja jokainen on rajaus:
+   *
+   *   1. **Se liikkuu vain kruunu päässä.** Avoin ikkuna on siis kokonaan
+   *      tallottavaa aikaa, aivan kuten jokaisella muulla pomolla — se lupaus
+   *      on portissa lukuna (*"voimataso 0 tallaa yhden ikkunan sisällä"*), ja
+   *      liikkuva maali avoimen ikkunan aikana rikkoisi sen hiljaa.
+   *   2. **Kulkusuunta näkyy.** Maanalainen matka piirtyy pölykasana lattian
+   *      pinnassa joka framella; mato ei siis katoa vaan menee. Ilman sitä tämä
+   *      olisi arvontaa eikä seuraamista.
+   *   3. **Se ei nouse jalkojen alta.** `BURROW_CLEAR` pitää nousukohdan
+   *      vähintään kolmen laatan päässä pelaajasta. Sama sääntö ja sama syy
+   *      kuin areenan pilareilla.
+   */
+  updateBurrow() {
+    const p = this.level.player;
+    const wantUnder = this.spikePhase !== 'open' && !this.dying;
+    if (wantUnder && !this.under) {
+      this.under = true;
+      this.noclip = true;
+      this.surfaceY = this.y;
+      this.level.shake(2, 'y');
+      Sfx.play('upota');
+    }
+    if (this.under) {
+      /* Alas ensin, sitten sivuttain: kaivautuminen on liike eikä katoaminen,
+       * ja pelaajan pitää nähdä kumpi tapahtui. */
+      this.y = Math.min(this.surfaceY + BURROW_DEPTH, this.y + BURROW_SINK);
+      this.vy = 0;
+      const dir = p && p.cx < this.cx ? -1 : 1;
+      this.facing = dir;
+      this.x += BURROW_SPEED * dir;
+      /* Pölykasa siihen kohtaan lattiaa jonka alla se juuri on. */
+      if (this.tick % BURROW_PUFF === 0) {
+        this.level.spawnPuff(this.cx, this.surfaceY + this.h - 2, this.tick % (BURROW_PUFF * 2) === 0);
+      }
+      if (!wantUnder) {
+        /* Nousu: riittävän kaukana pelaajasta, ja mieluummin sillä puolella
+         * jolla se jo on kuin hypäten hänen ylitseen. */
+        if (p) {
+          /* Turvaväli **plus yksi askel**: runko alkaa kävellä samalla
+           * framella kun se nousee, ja mitattuna se söi juuri sen verran —
+           * nousukohta oli 2,9 laattaa kun luvattiin kolme. Neljä pikseliä on
+           * kaksinkertainen yhden framen liikkeeseen (1,6 px) nähden. */
+          const clear = BURROW_CLEAR * TILE + BURROW_MARGIN;
+          const dx = this.cx - p.cx;
+          if (Math.abs(dx) < clear) this.x += (Math.sign(dx) || 1) * (clear - Math.abs(dx));
+        }
+        this.x = Math.max(TILE, Math.min(this.x, this.level.widthPx - this.w - TILE));
+        this.y = this.surfaceY;
+        this.under = false;
+        this.noclip = false;
+        this.level.shake(3, 'y');
+        Sfx.play('jysahdys');
+        for (let i = 0; i < 5; i++) {
+          this.level.spawnPuff(this.x + 4 + i * 10, this.y + this.h - 2, i % 2 === 0);
+        }
+      }
     }
   }
 
@@ -2036,6 +2145,13 @@ export class Boss extends Enemy {
     if (this.deckDust > 0) this.updateDeckDust();
 
     this.updateSpikes();
+
+    /* SUOLIMATO kaivautuu, ja se tekee sen tasan silloin kun siihen ei voi
+     * osua. Ks. `updateBurrow`. */
+    if (this.form === 7) {
+      this.updateBurrow();
+      if (this.under) return;
+    }
 
     /*
      * While the spines are out it stops hunting and just barrels along, turning
