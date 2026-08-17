@@ -3686,6 +3686,58 @@ export class Kummitus extends Enemy {
   }
 }
 
+/**
+ * MIKÄ TÄSSÄ LAJISSA ON UUTTA — taulukkona, koska muuten se on mielipide.
+ *
+ * Omistajan kysymys 18.8.2026: *"onhan niiden liikkeissä ja projektiileissa /
+ * damagessa jotain uutta?"* Se on oikea kysymys ja se ansaitsee mitatun
+ * vastauksen: uusi sprite vanhalla verbillä on sanaston kasvattamista
+ * numerona eikä pelinä, ja juuri sitä tämä taulu estää.
+ *
+ * Viisi akselia, ja jokainen niistä on jotain jonka pelaaja **huomaa**:
+ *
+ *   liike     miten se kulkee
+ *   ammus     mitä se lähettää (jos mitään)
+ *   osuma     miten se satuttaa
+ *   tallaus   mitä tallaaminen tekee
+ *   maailma   muuttaako se kenttää
+ *
+ * `tools/verify.mjs` vaatii kaksi asiaa: **jokaisella lajilla on rivi**, ja
+ * **kahdella lajilla ei ole samaa viisikkoa**. Jälkimmäinen on se joka pitää
+ * lupauksen: jos uusi laji täsmää vanhaan joka sarakkeessa, se ei ole uusi
+ * laji vaan uusi väri.
+ */
+export const ENEMY_VERBS = {
+  g: { move: 'kävely', shot: 'ei', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  k: { move: 'kävely', shot: 'ei', hurt: 'kosketus', stomp: 'jää kuoreksi', world: 'ei' },
+  f: { move: 'loikkalento', shot: 'ei', hurt: 'kosketus', stomp: 'menettää siivet', world: 'ei' },
+  p: { move: 'putkesta esiin', shot: 'ei', hurt: 'kosketus', stomp: 'ei tepsi', world: 'ei' },
+  r: { move: 'keinuva ajelehdus', shot: 'ei', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  c: { move: 'hyppely', shot: 'korkki', hurt: 'ummetus', stomp: 'kuolee', world: 'ei' },
+  x: { move: 'kävely', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
+  A: { move: 'kaartava syöksy', shot: 'ei', hurt: 'kosketus', stomp: 'ei tepsi', world: 'ei' },
+  H: { move: 'paikallaan', shot: 'suihku ylös', hurt: 'liekki', stomp: 'ei tepsi', world: 'ei' },
+  P: { move: 'kävely tasanteella', shot: 'kaaripommi', hurt: 'kosketus', stomp: 'kestää osuman', world: 'ei' },
+  O: { move: 'kiertorata', shot: 'ei', hurt: 'kosketus', stomp: 'pudottaa esineen', world: 'ei' },
+  U: { move: 'loikka kuopasta', shot: 'ei', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  T: { move: 'paikallaan', shot: 'törähdys', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  Z: { move: 'partiolento', shot: 'tähdätty pisara', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  Y: { move: 'kävely', shot: 'sylky', hurt: 'kosketus', stomp: 'kuolee', world: 'ei' },
+  m: { move: 'vieriminen', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
+  b: { move: 'pomon oma', shot: 'iskuaalto', hurt: 'kosketus', stomp: 'kestää osuman', world: 'nostaa pilarit' },
+  /*
+   * Ja nämä ovat ne uudet. Kumpikin tuo yhden sarakkeen jota ei ollut:
+   * pyörteen **kehä** on ainoa suljettu rata jolla mikään ei kulje, ja
+   * kummituksen liike on ainoa joka lukee sitä **mihin pelaaja katsoo**.
+   *
+   * Yhtä rehellisesti: kumpikaan ei tuo uutta ammusta eikä uutta vahingon
+   * lajia. Se on kirjattu tähän eikä kaunisteltu, ja se on myös seuraavan erän
+   * tehtävänanto — ks. `ROADMAP.md`, uudet lajit.
+   */
+  e: { move: 'kehä akselin ympäri', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
+  q: { move: 'seuraa kun et katso', shot: 'ei', hurt: 'piikki', stomp: 'ei tepsi', world: 'ei' },
+};
+
 export const ENEMY_CHARS = {
   g: (level, tx, ty) => new Walker(level, tx * TILE, ty * TILE),
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),

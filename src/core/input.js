@@ -50,11 +50,19 @@ const KEYMAP = {
    * juoksunappi ei tee mitään ja esineen ottaminen on nimenomaan **toiminto
    * eikä valinta**.
    *
-   * Kentässä Enter hyppää. Se on tahaton sivuvaikutus mutta ei haitta: hyppy
-   * on jo neljällä näppäimellä, ja viides ei riko mitään.
+   * **Ja kentässä Enter on tauko.** Ensimmäinen versio antoi sen hypylle, ja
+   * omistaja löysi vian samana iltana: *"nyt enter on hyppy myös pelin sisällä
+   * eli ei toimi pausena."* Se oli oikein — "valitse" ei tarkoita kentässä
+   * mitään, ja Enter on ollut tauko niin kauan kuin peli on ollut olemassa.
+   *
+   * Siksi Enterillä on **oma toimintonsa** eikä lainattu: `confirm` on se mitä
+   * näppäin sanoo, ja `Game.step` kääntää sen sen mukaan mitä ruudulla on —
+   * valikossa valinta, kentässä tauko, taukovalikossa taas valinta. Yksi
+   * käännöskohta, kolme merkitystä, ja jokainen niistä on se mitä pelaaja
+   * odottaa siinä ruudussa.
    */
-  Enter: 'jump',
-  NumpadEnter: 'jump',
+  Enter: 'confirm',
+  NumpadEnter: 'confirm',
   Escape: 'start',
   // Utility keys live on the number row, well away from anything a thumb
   // reaches for mid-jump. These are `event.code` values, i.e. physical keys,
@@ -116,7 +124,7 @@ const PADMAP = {
 /** How far a stick has to leave the middle before it is a direction. */
 const DEADZONE = 0.4;
 
-const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'mute',
+const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'run', 'start', 'confirm', 'mute',
   'quicksave', 'quickload', 'slot', 'debug', 'export', 'fx', 'touch', 'warp', 'reset'];
 
 function blank() {
