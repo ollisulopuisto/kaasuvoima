@@ -637,7 +637,9 @@ kerros voi reagoida maailmaan, kun se on dramaattinen valinta eikä vahinko:
 
 - musiikki vaimenee tai ohenee ennen pomotaistelua — kertoja hiljenee
 - musiikki kääntyy nurin tai vinoon määräaikaisen tehostuksen ajaksi
-- koko ruutu sykkii kun P-mittari täyttyy
+- **kehon ympärille** ilmestyy ilmakartio kun P-mittari täyttyy (17.8.2026:
+  tämä oli aiemmin koko ruudun sykäys, ja se oli väärin — kokoruudun väri on
+  tässä pelissä osuman kieli, joten etu puhui tappion äänensävyllä)
 
 **Kumpikin puoli aina yhdessä.** Ääni ilman kuvaa jää huomaamatta melussa, kuva
 ilman ääntä tuntuu tekniseltä häiriöltä. Ja jokaisen tällaisen efektin pitää

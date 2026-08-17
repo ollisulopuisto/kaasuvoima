@@ -7,6 +7,43 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.17 — ilmakartio täydelle mittarille
+
+Omistaja 17.8.2026: *"täyteenlatautuneen voiman koko ruudun välähdys on huono,
+se tuntuu damagelta. Voisiko ruutu väreillä? Hahmon ympäriltä säteittäin? Tai
+sitten ympärille tulee ilmakartio, sellainen kuin olisi puhkaisemassa
+äänennopeuden."*
+
+Raportin diagnoosi oli oikea, ja se on yleisempi kuin yksi efekti: **koko
+ruudun peittävä väri on tässä pelissä osuman kieli.** Pelaajaa satutettaessa
+ruutu välähtää, joten mikä tahansa muu kokoruudun veto lainaa sen merkityksen
+riippumatta väristä — etu ja tappio puhuivat samalla äänensävyllä.
+
+Nyt täysi mittari piirtää **ilmakartion kehon ympärille**: kärki edessä,
+varret taaksepäin, kirkas nokka siinä kohdassa jossa ilma ensimmäisenä antaa
+periksi. Kolme syytä siihen että se on parempi kuin verho:
+
+1. **Se on kehon ympärillä.** Sama ero kuin kaasusuihkun ja HUD-palkin välillä:
+   asia joka koskee sinua piirretään sinuun.
+2. **Sillä on suunta.** Kartio aukeaa taaksepäin, joten se sanoo myös minne
+   vauhti on menossa. Verho ei sanonut suunnasta mitään.
+3. **Se on sama fiktio kuin kaikki muukin tässä pelissä: paine.** Kaasusuihku
+   näyttää mittarin täyttyvän, kartio näyttää sen olevan täynnä.
+
+Menetyksen merkki on **luhistuva rengas** eikä pimennys — sama napaisuus kuin
+ennen (tuleva aukeaa, menevä sulkeutuu) mutta yhtä paikallisena.
+
+**Portti kääntyi ympäri.** Siinä luki `MOST = 0,6 × pelialue`, eli se *vaati*
+että kolme viidesosaa ruudusta muuttuu — oikea vaatimus verholle, ja samalla se
+mikä piti verhon pystyssä. Nyt väite on kaksiosainen: merkin on näyttävä kehon
+lähellä **ja** jätettävä ruudun vastakkainen laita koskematta. Mitattu: 238 px
+kehon ympärillä, 0 px vastakkaisessa laidassa.
+
+DESIGN.md kohta 8 päivitettiin samalla, koska se nimesi vanhan efektin
+esimerkkinä.
+
+---
+
 ## v26.08.18.16 — iPhonen jumi, kosketusjuoksu ja opetusjärjestyksen budjetti
 
 Kolme asiaa jotka kaikki lähtivät samasta kysymyksestä: mitä peli oikeasti

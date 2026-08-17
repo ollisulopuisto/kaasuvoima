@@ -7111,11 +7111,33 @@ const report = await page.evaluate(async () => {
       }
       return n;
     };
-    /* Kolme viidesosaa pelialueesta. Raja on tarkoituksella karkea: kyse ei ole
-     * siitä osuiko efekti tiettyyn pikseliin vaan siitä muuttuiko ruutu niin
-     * paljon että sen huomaa katsomatta HUDiin. Pelkkä juokseva hahmo ja
-     * vierivä tausta liikuttavat tässä kentässä alle kymmenesosaa. */
-    const MOST = Math.round(PLAY_PX * 0.6);
+    /*
+     * MITTARIN MERKKI ON KEHON YMPÄRILLÄ EIKÄ KOKO RUUDULLA (17.8.2026).
+     *
+     * Tässä luki `MOST = 0,6 × pelialue`, eli portti **vaati** että kolme
+     * viidesosaa ruudusta muuttuu. Se oli oikea vaatimus silloin kun merkki oli
+     * kokoruudun verho, ja se oli myös se vaatimus joka piti verhon pystyssä
+     * pidempään kuin olisi pitänyt: omistaja 17.8.2026 *"koko ruudun välähdys
+     * on huono, se tuntuu damagelta"*. Kokoruudun väri on tässä pelissä osuman
+     * kieli, eikä etu saa puhua tappion äänensävyllä.
+     *
+     * Väite kääntyi siis ympäri ja siitä tuli kaksiosainen: merkin on
+     * **näyttävä kehon lähellä** ja sen on **jätettävä ruudun toinen laita
+     * rauhaan**. `NEAR` on ruutu pelaajan ympärillä (80 px säde) ja `FAR` on
+     * kaista vastakkaisessa reunassa; ensimmäisessä on oltava muutosta, ja
+     * jälkimmäisen on oltava koskematon sen jälkeen kun tavallinen vieritys on
+     * otettu huomioon.
+     */
+    const boxDiff = (a2, b2, x0, x1) => {
+      let n = 0;
+      for (let y = 0; y < 208; y++) {
+        for (let x = x0; x < x1; x++) {
+          const p = (y * 320 + x) * 4;
+          if (a2[p] !== b2[p] || a2[p + 1] !== b2[p + 1] || a2[p + 2] !== b2[p + 2]) n++;
+        }
+      }
+      return n;
+    };
 
     /*
      * 1. MITTARI TÄYTTYY. Kaksi asiaa muuttuu oikeasti — nopeuskatto 2,5 ->
@@ -7144,12 +7166,27 @@ const report = await page.evaluate(async () => {
         after = paint(s);
       } finally { tap.off(); }
       fullSound = atFull[0] || null;
-      const changed = before && after ? differing(before, after) : 0;
-      expect('täyttynyt vauhtimittari kuuluu ja näkyy pelialueella',
+      /* Sama kuva kahdesti samalta framelta: kerran sykäyksen kanssa ja kerran
+       * ilman. Näin mittaus koskee **efektiä** eikä sitä että maailma ehti
+       * liikkua kahden framen välissä — vieritys ja juokseva hahmo muuttavat
+       * pikseleitä kummassakin laidassa ilman että kukaan välähtää. */
+      const withPulse = paint(s);
+      const keep = s.speedPulse;
+      s.speedPulse = 0;
+      const without = paint(s);
+      s.speedPulse = keep;
+      const px = Math.round(s.player.cx - s.cam.x);
+      const near = boxDiff(withPulse, without, Math.max(0, px - 80), Math.min(320, px + 80));
+      const far = px < 160
+        ? boxDiff(withPulse, without, 240, 320)
+        : boxDiff(withPulse, without, 0, 80);
+      expect('täyttynyt vauhtimittari kuuluu ja näkyy kehon ympärillä — muttei koko ruudulla',
         fullAt >= 0 && atFull.length === 1 && Sfx.has(fullSound)
-        && !TAKEN.includes(fullSound) && changed > MOST,
+        && !TAKEN.includes(fullSound) && near > 40 && far === 0,
         `täyttyi framella ${fullAt}, ääni "${atFull.join('+') || '-'}", `
-        + `${changed}/${PLAY_PX} px pelialueesta muuttui (vaadittu ${MOST})`);
+        + `kehon ympärillä ${near} px muuttui, vastakkaisessa laidassa ${far} px`);
+      void differing;
+      void PLAY_PX;
     }
 
     /*
@@ -7186,12 +7223,28 @@ const report = await page.evaluate(async () => {
         after = paint(s);
       } finally { tap.off(); }
       [spentSound] = atSpent;
-      const changed = before && after ? differing(before, after) : 0;
+      /* Sama kaksiosainen mitta kuin täyttymisellä: näkyy kehon ympärillä,
+       * ei kosketa vastakkaista laitaa. Menetyksen merkki on luhistuva rengas
+       * eikä pimennys — ks. `drawSpeedPulse`. */
+      const withPulse = paint(s);
+      const keep = s.speedPulse;
+      s.speedPulse = 0;
+      const without = paint(s);
+      s.speedPulse = keep;
+      const px = Math.round(s.player.cx - s.cam.x);
+      const near = boxDiff(withPulse, without, Math.max(0, px - 80), Math.min(320, px + 80));
+      const far = px < 160
+        ? boxDiff(withPulse, without, 240, 320)
+        : boxDiff(withPulse, without, 0, 80);
       expect('tyhjentynyt vauhtimittari kuuluu, ja eri äänellä kuin täyttynyt',
         spentAt >= 0 && atSpent.length === 1 && Sfx.has(spentSound)
-        && !TAKEN.includes(spentSound) && spentSound !== fullSound && changed > MOST,
+        && !TAKEN.includes(spentSound) && spentSound !== fullSound
+        && near > 20 && far === 0,
         `tyhjeni framella ${spentAt}, ääni "${atSpent.join('+') || '-'}" `
-        + `(täyttyminen "${fullSound || '-'}"), ${changed}/${PLAY_PX} px muuttui`);
+        + `(täyttyminen "${fullSound || '-'}"), kehon ympärillä ${near} px,`
+        + ` vastakkaisessa laidassa ${far} px`);
+      void before;
+      void after;
     }
 
     /*

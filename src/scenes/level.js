@@ -5079,7 +5079,7 @@ export class LevelScene {
     /* Putkilo on ruutukoordinaateissa kuten vauhtisykäys: se ei ole maailmassa
      * vaikka maailman kolikot lentävät siihen. */
     this.drawCoinTube(ctx);
-    this.drawSpeedPulse(ctx);
+    this.drawSpeedPulse(ctx, camX, camY);
     if (this.bar) this.drawLetterbox(ctx);
     /* Lippu- ja korttikuvat kuuluvat kuvaan (ne ovat kentän oma tapahtuma),
      * ilmestyvät lukemat eivät — ne piirretään `main.js`:ssä kuvaefektien
@@ -5088,26 +5088,87 @@ export class LevelScene {
   }
 
   /**
-   * Vauhtimittarin sykäys, ruutukoordinaateissa ja HUDiin koskematta.
+   * VAUHTIMITTARIN SYKÄYS ON KARTIO KEHON YMPÄRILLÄ, EI VÄLÄHDYS RUUDULLA.
    *
-   * Piirretään `restore`n jälkeen, koska tämä ei ole maailmassa: kamera, tärinä
-   * ja kirjekuoripalkit on jo purettu, ja efekti on kertojan puolella siinä
-   * missä musiikki ja HUD. Yksi suorakulmio, ja se rajautuu itse ikkunaan
-   * (`bar`…`viewH`) — kirjekuoripalkit ja HUD jäävät sen ulkopuolelle.
+   * Omistaja 17.8.2026: *"täyteenlatautuneen voiman koko ruudun välähdys on
+   * huono, se tuntuu damagelta. Voisiko ruutu väreillä? Hahmon ympäriltä
+   * säteittäin? Tai sitten ympärille tulee ilmakartio, sellainen kuin olisi
+   * puhkaisemassa äänennopeuden."*
    *
-   * Verho neliöidään: isku on edessä ja häntä pitkä. Tasaisesti hiipuva verho
-   * lukisi himmennykseksi, ja etupainoinen lukee tapahtumaksi — sama muotoilu
-   * kuin `PoundWave`n renkaassa ja samasta syystä. Perustelut väreille ja
-   * kestoille ovat SPEED_PULSE_FULLin kommentissa.
+   * Raportti on tarkka ja sen diagnoosi on oikea. **Koko ruudun peittävä väri
+   * on tässä pelissä osuman kieli**: pelaajaa satutettaessa ruutu välähtää
+   * (`PALETTE`, `hurtFlash`), ja mikä tahansa muu kokoruudun veto lainaa sen
+   * merkityksen riippumatta väristä. Etu ja tappio eivät saa puhua samalla
+   * äänensävyllä.
+   *
+   * Kartio korjaa sen kolmella tavalla, ja jokainen niistä on syy:
+   *
+   *   1. **Se on kehon ympärillä.** Sama ero kuin kaasusuihkun ja HUD-palkin
+   *      välillä: asia joka koskee *sinua* piirretään sinuun. Ruudun laita ei
+   *      ole kenenkään ominaisuus.
+   *   2. **Sillä on suunta.** Kartio aukeaa taaksepäin (`facing`), joten se
+   *      sanoo myös minne vauhti on menossa. Verho ei sano suunnasta mitään.
+   *   3. **Se on sama fiktio kuin kaikki muukin tässä pelissä.** Paine.
+   *      Kaasusuihku näyttää mittarin täyttyvän, kartio näyttää sen olevan
+   *      täynnä, ja äänennopeuden puhkaiseminen on niistä kahdesta se jonka
+   *      kuva on genressä vapaana.
+   *
+   * Vastapari (`speedPulseUp` epätosi) on **luhistuva rengas** eikä pimennys:
+   * sama napaisuus kuin ennen — tuleva aukeaa, menevä sulkeutuu — mutta yhtä
+   * paikallisena. Perustelut kestoille ovat `SPEED_PULSE_FULL`in kommentissa.
+   *
+   * Piirretään vaakariveinä (`fillRect`) eikä polkuina, koska koko peli on
+   * kokonaislukusuorakulmioita (DESIGN.md 1): canvasin viiva olisi tuonut
+   * harmaita välipikseleitä, ja harmaa välipikseli on tässä pelissä väärä väri
+   * riippumatta siitä miltä se näyttää.
    */
-  drawSpeedPulse(ctx) {
-    if (this.speedPulse <= 0) return;
+  drawSpeedPulse(ctx, camX = 0, camY = 0) {
+    if (this.speedPulse <= 0 || !this.player) return;
     const span = this.speedPulseUp ? SPEED_PULSE_FULL : SPEED_PULSE_SPENT;
-    const k = clamp(this.speedPulse / span, 0, 1) ** 2;
-    ctx.fillStyle = this.speedPulseUp
-      ? `rgba(240,176,0,${(0.30 * k).toFixed(3)})`
-      : `rgba(8,8,22,${(0.34 * k).toFixed(3)})`;
-    ctx.fillRect(0, this.bar, VIEW_W, this.viewH);
+    const k = clamp(this.speedPulse / span, 0, 1);
+    const cx = Math.round(this.player.cx - camX);
+    const cy = Math.round(this.player.cy - camY) + this.bar;
+    const dir = this.player.facing >= 0 ? 1 : -1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, this.bar, VIEW_W, this.viewH);
+    ctx.clip();
+
+    if (this.speedPulseUp) {
+      /* Kartio kasvaa ulospäin ja haalistuu: isku on edessä, häntä pitkä. */
+      const grow = 1 - k;
+      const half = Math.round(12 + grow * 30);           // kartion korkeus
+      const lead = Math.round(cx + dir * (10 + grow * 12));
+      for (let i = 0; i < 2; i++) {
+        const back = i * 6;
+        const a = (0.8 * k * (i ? 0.4 : 1)).toFixed(3);
+        ctx.fillStyle = `rgba(236,255,208,${a})`;
+        for (let dy = -half; dy <= half; dy++) {
+          /* Kartion pinta: mitä kauempana keskiviivasta, sitä kauempana
+           * taaksepäin. Kerroin 0,8 on noin 50 asteen puoliskulma — kapeampi
+           * lukisi nuolelta ja leveämpi renkaalta. */
+          const x = lead - dir * Math.round(Math.abs(dy) * 0.8 + back);
+          ctx.fillRect(dir > 0 ? x : x - 3, cy + dy, 4, 1);
+        }
+      }
+      /* Kärki: kaksi pikseliä kirkkaampaa siinä kohdassa jossa ilma
+       * ensimmäisenä antaa periksi. Ilman sitä kartio on kaksi viivaa; sen
+       * kanssa se on jokin joka työntää. */
+      ctx.fillStyle = `rgba(255,255,255,${(0.85 * k).toFixed(3)})`;
+      ctx.fillRect(dir > 0 ? lead : lead - 3, cy - 2, 4, 5);
+      return void ctx.restore();
+    }
+
+    /* Menetys: rengas joka kutistuu kohti kehoa. */
+    const r = Math.round(6 + k * 22);
+    ctx.fillStyle = `rgba(150,190,255,${(0.5 * k).toFixed(3)})`;
+    for (let dy = -r; dy <= r; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, r * r - dy * dy)));
+      if (half < 1) continue;
+      ctx.fillRect(cx - half, cy + dy, 2, 1);
+      ctx.fillRect(cx + half - 1, cy + dy, 2, 1);
+    }
+    ctx.restore();
   }
 
   /**
