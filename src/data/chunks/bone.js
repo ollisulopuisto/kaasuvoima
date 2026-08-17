@@ -273,6 +273,76 @@ export const BONE_CHUNKS = {
     14: G,
   }),
 
+  /* -------------------------- minipomo 6-M --------------------------- */
+  /**
+   * LUUVALTAISTUIMET — luulaakson minipomotaistelu, ja se on `baron_arena`n
+   * sisar eikä sen kopio.
+   *
+   * Rakenne on sama ja **tarkoituksella sama**: kaksi kahden laatan koroketta,
+   * yksi ampuja kummallakin, ja väliä sen verran ettei molempia voi hoitaa
+   * yhdestä paikasta. Papuparoonit opettivat tuon muodon maailmassa 2, ja
+   * minipomotaistelu on siitä lähtien ollut tunnistettava kuva; uusi pohjakaava
+   * olisi uusi asia opeteltavaksi juuri siinä hetkessä jossa palkinto on
+   * pelissä.
+   *
+   * Mikä on eri, on **kuka siellä seisoo**. Yökki sylkee kaaressa ja
+   * paroonit heittävät suoraan, joten koroke tekee tässä eri työn: kaari
+   * lyhenee korkeuden myötä, ja kahden ruudun koroke on juuri se korkeus jolta
+   * sylky yltää korokkeiden väliin muttei niiden yli. Korokkeelle pääsee
+   * voimatasolla 0 (paikaltaan hyppy nostaa 71 px, koroke on 32 px), eli sama
+   * lupaus kuin paroonien kuopassa: taistelun voi voittaa pienimpänä.
+   *
+   * **Mikään tässä ei ole seinä.** Lattia kulkee katkeamatta reunasta reunaan,
+   * eli areenan läpi pääsee myös taistelematta — ja juuri siksi palkinto saa
+   * olla tehostus eikä avain.
+   */
+  bone_arena: ck(32, {
+    9: '            o o o o',
+    10: '        Y            Y',
+    11: '      XXXXX        XXXXX',
+    12: '      XXXXX  g   g XXXXX',
+    13: G + G,
+    14: G + G,
+  }),
+
+  /**
+   * Ja mihin murtava voima on: muurattu holvi hyllyllä, kolikot sisällä.
+   *
+   * Sama ajatus kuin `baron_vault`illa ja samat mitat, koska oppitunti on sama:
+   * palkinto voitetaan neljä sekuntia aiemmin, ja tässä se pääsee heti
+   * käyttöön. Tiilipilari yltää kanteen asti, joten yli ei pääse eikä ympäri —
+   * ainoa tie on läpi, juoksuvauhdilla, ja se on tasan se mitä uusi voima tekee.
+   *
+   * Hylly on rivillä 9 eikä 11: kiinteä laatta kahden rivin päässä maasta on
+   * katto kolmen laatan päässä siitä lattiasta jolla kävellään, ja
+   * kattosääntö hylkää sen. Rivillä 9 se on 64 px ylhäällä, minkä juoksuhyppy
+   * nousee voimatasolla 0.
+   */
+  /*
+   * Holvi on **tiiltä eikä luuta**, ja sen määräsi tämän maailman oma sääntö.
+   *
+   * `baron_vault` on aavikossa kalliohylly ilmassa; täällä jokainen `X` ja `#`
+   * nojaa johonkin suoraan allaan, koska luuranko on määritelmän mukaan asia
+   * joka kannattaa itsensä. Kivikansi kaatoi portin kahdesti — ensin hyllynä
+   * (viisi laattaa ilmassa), sitten seinien päällä lepäävänä kantena (samat
+   * viisi) — ja molemmilla kerroilla vika oli sama: **ontto huone ei voi olla
+   * luuta.** Lohkot sen sijaan saavat leijua kuten kaikkialla muuallakin, eli
+   * holvi on muurattu umpeen joka puolelta.
+   *
+   * Se muuttaa myös lupauksen paremmaksi kuin aavikossa: siellä muurin läpi oli
+   * ainoa tie **sisään**, tässä koko rakennus on sitä samaa tiiltä. Murtava
+   * voima ei siis avaa ovea vaan syö seinän, ja se on tarkempi kuva siitä mitä
+   * se tekee.
+   */
+  bone_vault: ck(16, {
+    9: '      BBBBBBB',
+    10: '      B     B',
+    11: '      B ooo B',
+    12: '      B ooo B',
+    13: G,
+    14: G,
+  }),
+
 };
 
 /*

@@ -7,6 +7,45 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.98 — luulaakso saa minipomon
+
+Toinen minipomo peliin, ja ensimmäinen sitten maailman 2. `6-M
+LUUVALTAISTUIMET`: kaksi yökkiä korokkeilla, muurattu holvi heti perässä, ja
+palkintona murtava voima.
+
+| väite | mitattu |
+| --- | --- |
+| palkittu tie on vaikeampi | `6-M 259.2 vastaan 6-K 245.9` |
+| ja läpäistävissä voimatasolla 0 | `LÄPI 97 %` |
+| maailma on yhä kahdeksan kentän mittainen | `w6 8` |
+| kartta kelpaa sääntöineen | `kaikki kartat kelpaavat` |
+
+**Haara jakaa kahdeksan kenttää kahdelle tielle; se ei kasvata niitä
+yhdeksään.** Se on portissa lukuna, ja siksi minipomo *korvasi* kentän eikä
+lisännyt yhtä: KAIVAUTUMINEN (6-K) on suora tie, LUUTIE on se kalliimpi.
+6-5 jää dataan kartan ulkopuolelle, ja se on kirjattu vaihtokauppa —
+generaattori kirjoittaa koko tiedoston, ja ilman korpusta jokainen uudelleen
+kirjoitettu kenttä menettää `origin: 'checked'` -merkintänsä. Mitattuna 6-5:n
+poisto olisi vaihtanut kolmen muun kentän todistetun alkuperän merkintään
+`not checked`: todiste on kalliimpi kuin siisteys.
+
+**Kaksi tietä lähtevät eri nuolella**, ja se on navigointisääntö eikä
+sommittelu: kartalla liikutaan yhdellä suunnalla kerrallaan. Ensimmäinen
+sommitelma lähetti haaran ylös, ja ylös oli jo varattu paluulinkille — portti
+kertoi sen suoraan (`w6-2->w6-3 askel (0,-1)`).
+
+**Holvi on tiiltä eikä kiveä**, koska luulaaksossa jokainen `X` ja `#` nojaa
+johonkin suoraan allaan — luuranko on määritelmän mukaan asia joka kannattaa
+itsensä. Ontto kivihuone on siis mahdoton, ja portti kaatoi sen kahdesti (ensin
+hyllynä, sitten kantena). Lopputulos on parempi kuva kuin aavikon kalliohylly:
+murtava voima ei avaa ovea vaan **syö seinän**.
+
+Areenan muoto on tarkoituksella sama kuin papuparoonien: kaksi koroketta, yksi
+ampuja kummallakin, ja lattia joka kulkee katkeamatta läpi — tappelun voi siis
+ohittaa, ja juuri siksi palkinto saa olla tehostus eikä avain.
+
+---
+
 ## v26.08.17.97 — SUOLIMATO, ja se kysyy missä eikä milloin
 
 Kahdeksas pomovariantti, 8-5:ssä pöhön toisen esiintymän tilalla.

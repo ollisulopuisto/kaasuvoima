@@ -548,6 +548,23 @@ const WORLD6 = [
     id: '6-4', world: 'w6', theme: 'bone', music: 'bone', width: 300,
     enemiesPer100: 8.4, maxGap: 5, aim: 215, minIntro: 32, intensity: 1.2, attempts: SEARCH,
   },
+  /*
+   * 6-5 on yhä tässä vaikka kartta ei enää käy siellä (ks. `worlds.js`, w6:n
+   * haara ja `6-M`), ja se on **kirjattu vaihtokauppa eikä unohdus.**
+   *
+   * Luulaakso sai minipomon, ja jokainen maailma on kahdeksan kentän mittainen
+   * — portissa lukuna. Yhdeksäs solmu olisi tehnyt tästä maailmasta muita
+   * pidemmän, joten haaran palkittu tie korvasi kentän sen sijaan että olisi
+   * lisännyt yhden. Luonteva jatko olisi poistaa 6-5 myös täältä, ja se
+   * maksaisi enemmän kuin se tuottaa: generaattori kirjoittaa koko tiedoston,
+   * ja ilman `VGLC_DIR`iä jokainen uudelleen kirjoitettu kenttä menettää
+   * `origin: 'checked'` -merkintänsä. Mitattuna 6-5:n poisto vaihtoi kolmen
+   * muun kentän todistetun alkuperän merkintään `not checked`.
+   *
+   * Eli: todiste on kalliimpi kuin siisteys. Kun tämä maailma joskus
+   * generoidaan korpus kädessä, tämä spec poistuu samalla — ja siihen asti se
+   * on tässä, jotta ajo ilman korpusta ei hiljaa hävitä kenttää datasta.
+   */
   {
     id: '6-5', world: 'w6', theme: 'bone', music: 'bone', width: 330,
     enemiesPer100: 9.0, maxGap: 5, aim: 232, minIntro: 32, intensity: 1.45, attempts: SEARCH,

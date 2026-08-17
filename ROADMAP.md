@@ -196,8 +196,26 @@ salaisuuslaskuri debug-ruudussa · telemetria ja sitä lukeva generaattori.
 3. ✔ **Spritejen animaatiokierrokset** käyty läpi kaikilla viidellä
    voimatasolla (v26.08.09.18) ja loputkin korjattu (v26.08.09.22): kävely
    kulkee nyt ohitusasennon kautta, ja tarkistus on portissa.
-4. **Minipomot muihin maailmoihin**, jos niitä halutaan. Koneisto on olemassa
-   (`2-M`, v26.08.09.14), joten tämä on kenttädataa ja karttasolmuja.
+4. ✔ **Minipomot muihin maailmoihin** — luulaakso sai omansa (v26.08.17.98):
+   `6-M LUUVALTAISTUIMET`, kaksi yökkiä korokkeilla ja muurattu holvi heti
+   perässä. Koneisto oli olemassa (`2-M`), mutta kenttädata ja karttasolmut
+   eivät olleet koko työ — kolme sääntöä sanoi mitä haara saa olla, ja jokainen
+   niistä löytyi vasta kun portti kaatui:
+
+   - **Kahdeksan kenttää per maailma on luku eikä tapa.** Yhdeksäs solmu olisi
+     tehnyt luulaaksosta muita pidemmän, joten haaran palkittu tie **korvasi**
+     kentän (6-5 jää dataan kartan ulkopuolelle; ks. `gen-levels.mjs`, siellä on
+     kirjattu miksi sitä ei poistettu myös sieltä).
+   - **Haaran kaksi tietä lähtevät eri nuolella.** Kartalla liikutaan yhdellä
+     suunnalla kerrallaan, ja ensin valittu ylös oli jo varattu paluulinkille —
+     mitattuna `w6-2->w6-3 askel (0,-1)` jäi umpikujaksi.
+   - **Palkittu tie on mitatusti vaikeampi.** 6-M 259,2 vastaan 6-K 245,9, ja
+     kolme välivedosta (210,0 · 238,6 · 241,8) jäi alle.
+
+   Ja luulaakson oma rakennesääntö sanoi mistä holvi saa olla tehty: `X` ja `#`
+   nojaavat aina johonkin suoraan allaan, joten ontto kivihuone on mahdoton.
+   Holvi on siis **tiiltä**, ja se on parempi kuva kuin aavikon kalliohylly:
+   murtava voima ei avaa ovea vaan syö seinän.
 5. ✔ **Luumaailma ja luurankopomo** — tehty (v26.08.09.33). Maailma 6
    LUULAAKSO: `THEMES.bone`, `bg: 'bones'`, `chunks/bone.js`, kentät 6-1…6-F,
    kartta ja `bossVariant: 4`. Musiikki on Saint-Saëns'n *Danse macabre*
@@ -303,7 +321,7 @@ tuomiot ovat siellä omana taulukkonaan; tässä on se mikä koskee tätä tiedo
 | --- | --- |
 | pomo järjestää kentän uusiksi | **pysyy, ja tehdään heti** — ei odota valuvaa hiekkaa |
 | salainen alue maailmaan 5 | **tee**, opettamalla generaattorille kolmikerroksinen kokoonpano |
-| minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen |
+| minipomot muihin maailmoihin | **tee muutamaan**, ei jokaiseen — luulaakso sai omansa (v26.08.17.98) |
 | demo näyttää tempun | **tee** |
 | aaltoilu veden alla / vedenalaiset kentät | **ei** — kohta poistuu jonosta |
 | jokaiselle pomolle oma ääni | **korjaa puhetestit ensin**, sitten äänet — puhetestit korjattu (v26.08.17.93) ja äänet tehty (v26.08.17.96) |
@@ -745,7 +763,7 @@ Alkuperäiset neljä, tila merkittynä:
    luulaakson notko oli 56 %, koska kuilut ovat 39 % mittarin painosta ja
    niiden poistaminen vie sen kaiken kerralla.
 
-### Salainen alue maailmaan 5
+### Salainen alue maailmaan 5 — YRITETTY 17.8.2026, ja hinta on nyt mitattu
 
 Yksi kenttä per maailma saa salaisen alueen: pavunvarsi ylös taivaalle ja putki
 alas maan alle. Ei joka kenttään — löytö lakkaa olemasta löytö jos sellainen on
@@ -755,8 +773,33 @@ validointi ovat valmiina.
 
 Jäljellä on maailma 5, ja se on eri työ kuin muut: sen numeroidut kentät tulevat
 generaattorista, joten kaista syntyy sinne vain opettamalla `gen-levels.mjs`:lle
-kolmikerroksinen kokoonpano — ja uusi generointiajo arpoo maailman uusiksi, eli
-kolmen kentän mitattu vaikeus muuttuu kerralla. Oma päätöksensä.
+kolmikerroksinen kokoonpano — ja uusi generointiajo arpoo maailman uusiksi.
+
+**Halpa reitti kokeiltiin ja se ei kelpaa, ja se on nyt mitattu eikä arveltu.**
+Ajatus oli tehdä sama asia yhtä askelta myöhemmin: pinota kaista valmiin
+ruudukon ympärille ja **johtaa putken suu kentästä** samalla tavalla kuin
+lämpöputkien uloskäynnit, kaasulyhty ja areenan pilarit. Se toimi pelinä —
+suu syntyi sarakkeeseen 112 ja matka vei luolaan — ja kaatui neljään eri
+sääntöön, jotka kaikki sanovat saman asian eri sanoin: **salaisuus ei ole
+maisemaa, se on kentän dataa.**
+
+| portti | mitattu |
+| --- | --- |
+| kaistavalidointi lukee dataa, ei kohtausta | `5-3: nothing leads into the cave band` |
+| kolikkovihje puuttuu johdetulta suulta | `vihjeettä: 5-3 putki@112` |
+| lyhyt lattiaputki ei saa olla warpin synonyymi | `9/20 = 45,0 %, katto 33,3 %` |
+| ja kaistojen pinoaminen **arpoo piilotiilet uusiksi** | `5-3: 0/5 salaista` |
+
+Se viimeinen on niistä opettavaisin eikä kukaan olisi arvannut sitä: piilotiili
+on paikan tiiviste, ja kaistan lisääminen siirtää koko pääkaistan viisitoista
+riviä alas — eli **jokainen tiili kentässä on eri tiili kuin ennen**.
+
+Jäljelle jää siis alkuperäinen reitti (opeta generaattorille kolmikerroksinen
+kokoonpano) ja sen oma hinta, joka sekin on nyt mitattu toisessa yhteydessä:
+generointiajo ilman `VGLC_DIR`iä vaihtaa jokaisen uudelleen kirjoitetun kentän
+`origin: 'checked'` -merkinnän merkintään `not checked` (ks.
+`tools/gen-levels.mjs`, 6-5:n kohta). **Maailma 5 kannattaa siis generoida
+korpus kädessä tai ei ollenkaan**, ja se on omistajan päätös eikä tekijän.
 
 ### ✔ Tehty (v26.08.09.21): kaikki elävä hengittää
 

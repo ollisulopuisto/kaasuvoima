@@ -169,6 +169,38 @@ export const WORLD6_LEVELS = {
    * neljänneksessä lähdöstä kulkusuuntaan mitattuna. Kolikko rivillä 2 maksaa
    * saman lähtötasanteen harjalle.
    */
+  /*
+   * 6-M LUUVALTAISTUIMET — luulaakson minipomo, ja pelin toinen sellainen.
+   *
+   * Maailmassa 2 minipomo on ollut olemassa siitä asti kun haarautuva kartta
+   * tuli (v26.08.09.14), ja se on ollut siellä yksin: koneisto on tehty ja
+   * käytetty kerran. Omistajan päätös 16.8.2026 oli **muutamaan maailmaan, ei
+   * jokaiseen** — löytö lakkaa olemasta löytö jos se on joka kartalla.
+   *
+   * Kenttä on rakennettu haaran ehtoja vasten eikä tunnelmaa vasten, ja ehdot
+   * ovat portissa lukuina (`worldProblems`):
+   *
+   *   - **Palkittu reitti on mitatusti vaikeampi.** Se on koko haaran idea:
+   *     murtava voima maksaa jotain. 6-5:n luku on 232,5, joten tämän on
+   *     oltava sen yli — ja se ostetaan tämän maailman omalla tavalla (lisää
+   *     yksittäisiä kuoppia, ei leveämpiä).
+   *   - **Helppo reitti vie yhä linnakkeeseen.** 6-5 on koskematon, eli se
+   *     joka ei halua tappelua pelaa täsmälleen sen mitä ennenkin.
+   *   - **Areena ei ole seinä.** `bone_arena`n lattia kulkee katkeamatta läpi,
+   *     joten kentän voi pelata tappelu ohittaen.
+   *
+   * `bone_vault` heti areenan jälkeen on sama opetus kuin maailmassa 2: uusi
+   * voima pääsee käyttöön neljä sekuntia sen voittamisen jälkeen, ja siellä
+   * missä oppitunti on halpa — palkinto on kolikoita eikä reitti.
+   */
+  '6-M': {
+    theme: 'bone', bg: 'bones', music: 'bone',
+    chunks: [
+      'start', 'power', 'bone_jaws', 'bone_grave', 'bone_dance', 'bone_wisp',
+      'bone_jaws', 'bone_grave', 'bone_wisp', 'bone_arena', 'bone_vault',
+      'bone_dance', 'bone_grave', 'bone_wisp', 'run_up', 'goal', 'goal_end',
+    ],
+  },
   '6-K': {
     theme: 'bone', bg: 'bones', music: 'bone', vertical: true, time: 400,
     rows: [
