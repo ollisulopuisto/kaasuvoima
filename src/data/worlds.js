@@ -72,7 +72,7 @@ const WORLD_DEFS = [
       { id: 'w1-s', tx: 1, ty: 7, type: 'start', name: 'ALKU' },
       { id: 'w1-1', tx: 3, ty: 7, type: 'level', level: '1-1', name: 'PAPUPELTO' },
       { id: 'w1-2', tx: 5, ty: 5, type: 'level', level: '1-2', name: 'MÖNKIJÄNIITTY' },
-      { id: 'w1-h', tx: 5, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w1-h', tx: 5, ty: 2, type: 'house', name: 'HERNETALO', game: 'items' },
       { id: 'w1-3', tx: 7, ty: 7, type: 'level', level: '1-3', name: 'TUULINEN HARJU' },
       { id: 'w1-4', tx: 9, ty: 5, type: 'level', level: '1-4', name: 'KASTEHEINÄ' },
       { id: 'w1-5', tx: 11, ty: 7, type: 'level', level: '1-5', name: 'OJANPOHJA' },
@@ -178,7 +178,7 @@ const WORLD_DEFS = [
     nodes: [
       { id: 'w2-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
       { id: 'w2-1', tx: 3, ty: 5, type: 'level', level: '2-1', name: 'KUUMA DYYNI' },
-      { id: 'w2-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w2-h', tx: 3, ty: 2, type: 'house', name: 'KRUUNA VAI PIERU', game: 'coinflip' },
       { id: 'w2-2', tx: 7, ty: 5, type: 'level', level: '2-2', name: 'HIEKKAMYRSKY' },
       { id: 'w2-n', tx: 9, ty: 7, type: 'level', level: '2-N', name: 'AAVIKON YÖ' },
       { id: 'w2-3', tx: 9, ty: 3, type: 'level', level: '2-3', name: 'LAAVAKUILU' },
@@ -277,7 +277,7 @@ const WORLD_DEFS = [
       { id: 'w3-2', tx: 5, ty: 4, type: 'level', level: '3-2', name: 'JÄÄPUTOUS' },
       { id: 'w3-3', tx: 7, ty: 2, type: 'level', level: '3-3', name: 'HALKEAMA' },
       { id: 'w3-4', tx: 9, ty: 4, type: 'level', level: '3-4', name: 'AHTOJÄÄ' },
-      { id: 'w3-h', tx: 9, ty: 7, type: 'house', name: 'HERNETALO' },
+      { id: 'w3-h', tx: 9, ty: 7, type: 'house', name: 'KOLME KUPPIA', game: 'cups' },
       { id: 'w3-5', tx: 11, ty: 2, type: 'level', level: '3-5', name: 'TUISKU' },
       { id: 'w3-6', tx: 13, ty: 4, type: 'level', level: '3-6', name: 'SULAMISVESI' },
       { id: 'w3-7', tx: 15, ty: 2, type: 'level', level: '3-7', name: 'IKIROUTA' },
@@ -343,7 +343,7 @@ const WORLD_DEFS = [
     nodes: [
       { id: 'w4-s', tx: 1, ty: 6, type: 'start', name: 'ALKU' },
       { id: 'w4-1', tx: 3, ty: 6, type: 'level', level: '4-1', name: 'HIHNAKULJETIN' },
-      { id: 'w4-h', tx: 3, ty: 3, type: 'house', name: 'HERNETALO' },
+      { id: 'w4-h', tx: 3, ty: 3, type: 'house', name: 'VETOTALO', game: 'bet' },
       { id: 'w4-2', tx: 5, ty: 4, type: 'level', level: '4-2', name: 'KAASUPUTKISTO' },
       { id: 'w4-3', tx: 7, ty: 6, type: 'level', level: '4-3', name: 'PAINEKATTILA' },
       { id: 'w4-4', tx: 9, ty: 4, type: 'level', level: '4-4', name: 'VENTTIILISALI' },
@@ -400,7 +400,7 @@ const WORLD_DEFS = [
       { id: 'w5-s', tx: 1, ty: 5, type: 'start', name: 'ALKU' },
       { id: 'w5-1', tx: 3, ty: 3, type: 'level', level: '5-1', name: 'JÄLKIRUOKA' },
       { id: 'w5-2', tx: 5, ty: 5, type: 'level', level: '5-2', name: 'KUIVA KAUSI' },
-      { id: 'w5-h', tx: 5, ty: 7, type: 'house', name: 'HERNETALO' },
+      { id: 'w5-h', tx: 5, ty: 7, type: 'house', name: 'HERNETALO', game: 'items' },
       { id: 'w5-3', tx: 7, ty: 3, type: 'level', level: '5-3', name: 'VIIMEINEN VETO' },
       { id: 'w5-4', tx: 9, ty: 5, type: 'level', level: '5-4', name: 'YÖPYYKKI' },
       { id: 'w5-5', tx: 11, ty: 3, type: 'level', level: '5-5', name: 'LINKOAMINEN' },
@@ -458,7 +458,7 @@ const WORLD_DEFS = [
        * `6-K` on sen paikalla. Kulmapisteet, väljyys ja kaluston raivattu
        * vyöhyke ovat siksi tavulleen ennallaan. */
       { id: 'w6-3', tx: 7, ty: 4, type: 'level', level: '6-K', name: 'KAIVAUTUMINEN' },
-      { id: 'w6-h', tx: 7, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w6-h', tx: 7, ty: 1, type: 'house', name: 'KRUUNA VAI PIERU', game: 'coinflip' },
       { id: 'w6-4', tx: 9, ty: 6, type: 'level', level: '6-4', name: 'KYLKILUUT' },
       /*
        * Luulaakson minipomo, ja se on **6-5:n paikalla eikä sen lisäksi.**
@@ -556,7 +556,7 @@ const WORLD_DEFS = [
     nodes: [
       { id: 'w7-s', tx: 1, ty: 3, type: 'start', name: 'ALKU' },
       { id: 'w7-1', tx: 3, ty: 5, type: 'level', level: '7-1', name: 'NOUSUVIRTAUS' },
-      { id: 'w7-h', tx: 3, ty: 2, type: 'house', name: 'HERNETALO' },
+      { id: 'w7-h', tx: 3, ty: 2, type: 'house', name: 'KOLME KUPPIA', game: 'cups' },
       /* Sama siirto kuin `w6-3`:ssa ja samasta syystä: `7-2` oli maailman
        * vähiten uusi kenttä (uutuus 17,6 %), ja `7-T` on sen paikalla. Solmu,
        * kulmapisteet ja kaluston vyöhyke ennallaan. */
@@ -637,7 +637,7 @@ const WORLD_DEFS = [
     ],
     nodes: [
       { id: 'w8-s', tx: 1, ty: 4, type: 'start', name: 'ALKU' },
-      { id: 'w8-h', tx: 1, ty: 1, type: 'house', name: 'HERNETALO' },
+      { id: 'w8-h', tx: 1, ty: 1, type: 'house', name: 'VETOTALO', game: 'bet' },
       { id: 'w8-1', tx: 3, ty: 4, type: 'level', level: '8-1', name: 'PORTTIHOLVI' },
       { id: 'w8-2', tx: 5, ty: 2, type: 'level', level: '8-2', name: 'VARTIOKÄYTÄVÄ' },
       { id: 'w8-3', tx: 7, ty: 5, type: 'level', level: '8-3', name: 'TYRMÄ' },

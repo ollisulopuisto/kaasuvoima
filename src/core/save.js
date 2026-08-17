@@ -27,6 +27,14 @@ export const DEFAULT_SAVE = () => ({
    */
   secrets: {},
   /*
+   * Voimassa oleva veto kolikoina, 0 kun vetoa ei ole (ks. `updateBet`
+   * kartalla ja `finishLevel`). Sisään samalla perusteella kuin `secrets` ja
+   * `bestTimes`, eli **ilman versionostoa**: vanhassa tallennuksessa ei ole
+   * `bet`-kenttää, levitys antaa sille nollan, ja nolla ei ole arvaus vaan
+   * totuus — kukaan ei ole lyönyt vetoa siinä pelissä.
+   */
+  bet: 0,
+  /*
    * levelId -> { frames, marks } eli AIKA-AJON paras aika ja sen välipisteet
    * (ks. core/timeattack.js). Sisään samalla perusteella kuin `secrets` ja
    * `continues`, eli **ilman versionostoa**: vanhassa tallennuksessa ei ole
@@ -144,6 +152,7 @@ export const Save = {
         continues: state.continues || 0,
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
+        bet: state.bet || 0,
         doors: state.doors || {},
         taught: state.taught || {},
         checks: state.checks || {},
