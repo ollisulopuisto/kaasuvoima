@@ -371,6 +371,41 @@ menettäminen kesken kentän muuttaa kentän mahdottomaksi, ja peli rankaisee
 osumasta kahdesti. Jos tehostus on valinnainen, sen menettäminen maksaa vain
 palkinnot — ja silloin sen hankkiminen on houkutus eikä velvollisuus.
 
+### Tehostusportti: yksi poikkeus, ja sen hinta (18.8.2026)
+
+Omistajan päätös, sanatarkasti: *"voi olla segmenttejä, joissa TARVITAAN
+powerup, mutta VARMISTA ETTÄ POWERUP on saatavilla sitä ennen!"* Tämä on
+tietoinen poikkeus yllä olevaan sääntöön, ja se on kirjattu tänne eikä
+pujahtanut sisään.
+
+**Lupaus ei väljene vaan täsmentyy.** Vanha muoto oli *"kenttä on läpäistävissä
+voimatasolla 0"*; uusi on **"kenttä on läpäistävissä voimatasolla 0
+aloittaen"** — tehostus saa olla matkan varrella, kunhan se on siellä varmasti.
+Ero on mitattavissa ja se mitataan: sama botti joka ajaa jokaisen kentän
+pienimmällä koolla ajaa myös portilliset, ja se **poimii lahjan matkalla**.
+
+Poikkeus on kapea neljällä tavalla, ja jokainen niistä on koodissa eikä
+lupauksessa:
+
+1. **Lahja makaa maassa** (`i`, ks. `chunks/common.js` → `gate_gift`) eikä
+   lohkossa. Maassa makaava poimitaan kävelemällä; lohkoon pitää osua, ja
+   "pitää osua" ei ole varmuus. Se ei myöskään vieri pois (`still`) — mitattu:
+   vierivä sieni ehti pudota siihen samaan kuiluun jonka se oli tullut
+   ratkaisemaan.
+2. **Portti on ilmoitettava kentän datassa** (`gates: [{ from, to }]`).
+   `rules.js` päästää budjettia leveämmän kuilun läpi tasan noissa
+   sarakkeissa; ilmoittamaton kuilu kaatuu sääntöön kuten ennenkin, ja
+   `verify.mjs` mittaa senkin.
+3. **Ilmoitus ei ole lupa vaan lupaus joka mitataan.** Portti ajaa botin
+   kahdesti: lahjan kanssa sen on päästävä läpi, ja **ilman lahjaa sen on
+   jäätävä jumiin** — muuten portti ei ole portti vaan koriste.
+4. **Lahja on ennen porttia ja sen lähellä** (mitattu enintään 24 saraketta).
+
+Se mikä ei muutu: tehostuksen *menettäminen* ei saa tehdä kentästä mahdotonta.
+Kuolema palauttaa kentän lähtötilaan lahjoineen, ja tarkistuspisteestä
+jatkettaessa lahja on yhä siellä missä se oli — se on ruudukon tilaa eikä
+pelaajan.
+
 ### Perustehostus on aina lähellä alkua
 
 Jokaisessa kentässä on tehostuspalikka ensimmäisen neljänneksen sisällä. Jos

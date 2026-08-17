@@ -4096,7 +4096,7 @@ const report = await page.evaluate(async () => {
        * "PYSTYKENTTÄ, JA KOLME TYÖKALUA…"). */
       const level = getLevel(id);
       const problems = validateLevel(level.rows, budget,
-        { vertical: !!level.vertical, segments: level.segments });
+        { vertical: !!level.vertical, segments: level.segments, gates: level.gates });
       if (problems.length) perLevel.push({ id, problems });
     }
     // Every level is clean as of v26.08.08.15, so any violation from here on is
@@ -4170,7 +4170,7 @@ const report = await page.evaluate(async () => {
            * Ilman `segments`ia 7-P luetaan yhtenä vaakakenttänä, ja sen ensimmäinen
            * käänne mitataan kahdenkymmenen laatan kuiluna joka ei ole kuilu. */
           const problems = validateLevel(l.rows, budget,
-            { vertical: !!l.vertical, segments: l.segments });
+            { vertical: !!l.vertical, segments: l.segments, gates: l.gates });
           if (problems.length) say(problems[0]);
           const starts = marks(l.rows, /1/g);
           const exits = marks(l.rows, /F/g) + marks(l.rows, /b/g);
@@ -11953,6 +11953,95 @@ const report = await page.evaluate(async () => {
       shown && early === 0 && afterKey === 1 && completed === 2,
       `alussa ${early}, näppäimellä ${afterKey}, lopuksi ${completed}`);
     game.completeWorld = realComplete;
+  }
+
+  /* --------------------------- tehostusportti --------------------------- */
+  /*
+   * SEGMENTTI JONKA LÄPI EI PÄÄSE ILMAN TEHOSTUSTA — ja se on tietoinen
+   * poikkeus DESIGN.md kohtaan 5.
+   *
+   * Omistajan päätös 18.8.2026 sanatarkasti: *"voi olla segmenttejä, joissa
+   * TARVITAAN powerup, mutta VARMISTA ETTÄ POWERUP on saatavilla sitä ennen!"*
+   * Poikkeus on siis kaupan, ja tämä lohko on se hinta: **lupaus ei muutu
+   * väljemmäksi vaan täsmällisemmäksi.** Vanha lupaus oli "kenttä on
+   * läpäistävissä voimatasolla 0"; uusi on "kenttä on läpäistävissä
+   * voimatasolla 0 **aloittaen**", eli tehostus on matkan varrella eikä
+   * pelaajan mukana.
+   *
+   * Neljä mittausta, ja kaksi niistä on punaista ennen vihreää:
+   *
+   *   1. botti läpäisee kentän voimatasolla 0 — eli poimii lahjan matkalla;
+   *   2. **ilman lahjaa se ei läpäise**, eli portti on oikeasti portti eikä
+   *      koriste (ilman tätä koko poikkeus voisi olla turha);
+   *   3. lahja on ennen porttia ja lähellä sitä;
+   *   4. **poikkeus koskee vain ilmoitettuja sarakkeita**: sama ruudukko ilman
+   *      ilmoitusta kaatuu sääntöön, eli ilmoitus on se joka tekee eron eikä
+   *      kuilun leveys.
+   */
+  {
+    const { runGround } = await import('/tools/level-bot.js');
+    const { isSolid: solid2, T: TG } = await import('/src/gfx/tiles.js');
+    const { validateLevel: rules2 } = await import('/src/data/rules.js');
+    const budget2 = await (await fetch('/tools/jump-budget.json')).json();
+    const { getLevel: getDef2, levelIds: ids2 } = await import('/src/data/levels.js');
+    /* Portilliset kentät löytyvät **lahjasta ruudukossa** eikä datakentästä,
+     * koska ilmoitus on lahja. Ks. `rules.js`, `giftBefore`. */
+    const gated = ids2().map((id) => ({ id, def: getDef2(id) }))
+      .filter((x) => x.def.rows.some((row) => row.includes(TG.GIFT)));
+
+    const run = (id, strip) => {
+      reset({ type: null, level: 0 });
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      if (strip) s.entities = s.entities.filter((e) => e.kind !== 'item');
+      s.time = 9999;
+      return runGround(s, solid2, 7000, () => finished);
+    };
+
+    const rows = [];
+    for (const { id, def } of gated) {
+      const withGift = run(id, false);
+      const without = run(id, true);
+      /* Lahja on ruudukossa merkkinä `i` ennen kuin kohtaus muuttaa sen
+       * olioksi, joten se luetaan kentän riveistä eikä kohtauksesta. */
+      let giftCol = -1;
+      for (const row of def.rows) {
+        const at = row.indexOf(TG.GIFT);
+        if (at >= 0 && (giftCol < 0 || at < giftCol)) giftCol = at;
+      }
+      /* Sama ruudukko ilman lahjaa: se on se koe joka todistaa ettei kuilun
+       * leveys yksin riitä poikkeukseksi. Lahja pyyhitään riveiltä, eikä
+       * kentästä muuteta mitään muuta. */
+      const nogift = def.rows.map((row) => row.split(TG.GIFT).join(' '));
+      const naked = rules2(nogift, budget2, { vertical: !!def.vertical, segments: def.segments });
+      const gapCol = Number((naked.find((pr) => /^gap of/.test(pr)) || '')
+        .replace(/^gap of \d+ at column (\d+).*/, '$1'));
+      rows.push({
+        id,
+        cleared: withGift.cleared,
+        blocked: !without.cleared,
+        giftCol,
+        gapCol,
+        near: giftCol >= 0 && gapCol > giftCol && gapCol - giftCol <= 24,
+        declared: naked.some((pr) => /^gap of/.test(pr)),
+      });
+    }
+
+    expect('tehostusportti: botti läpäisee voimatasolla 0 poimimalla lahjan',
+      gated.length > 0 && rows.every((r) => r.cleared),
+      rows.map((r) => `${r.id} ${r.cleared ? 'läpi' : 'jumissa'}`).join(', ') || 'ei portteja');
+    expect('tehostusportti on oikeasti portti: ilman lahjaa ei pääse läpi',
+      rows.every((r) => r.blocked),
+      rows.map((r) => `${r.id} ilman lahjaa ${r.blocked ? 'pysähtyy' : 'pääsee silti'}`).join(', '));
+    expect('lahja on ennen porttia ja sen lähellä',
+      rows.every((r) => r.near),
+      rows.map((r) => `${r.id} lahja sarakkeessa ${r.giftCol}, kuilu ${r.gapCol}`).join(', '));
+    expect('kuilun leveys ei riitä poikkeukseksi, ilmoitus riittää',
+      rows.every((r) => r.declared),
+      rows.map((r) => `${r.id} ilman ilmoitusta ${r.declared ? 'kaatuu sääntöön' : 'menee läpi'}`).join(', '));
   }
 
   /* ------------------------ maailmaan vaikuttavat ----------------------- */

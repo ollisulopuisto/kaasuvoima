@@ -31,6 +31,10 @@ export const T = {
   WARP_R: ')',
   LUMP: 'C',
   ICE: 'I',
+  /* Tehostus maassa: poimitaan kävelemällä, ei puskemalla. Ks. `LevelScene`in
+   * kenttäskannaus ja `rules.js`:n `gates` — tämä on se merkki jolla
+   * tehostusportti lunastetaan. */
+  GIFT: 'i',
   SPRING: 'J',
   LAMP: 'L',
   LAMP_LIT: 'l',

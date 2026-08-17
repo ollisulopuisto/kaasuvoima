@@ -380,4 +380,54 @@ export const COMMON_CHUNKS = {
     14: G,
   }),
   goal_end: ck(16, { 13: G, 14: G }),
+  /* --------------------------- tehostusportti --------------------------- */
+  /**
+   * LAHJA JA PORTTI — kaksi palikkaa jotka kuuluvat yhteen, aina.
+   *
+   * Omistajan päätös 18.8.2026, hänen sanoinaan: *"voi olla segmenttejä joissa
+   * TARVITAAN powerup, mutta VARMISTA ETTÄ POWERUP on saatavilla sitä ennen."*
+   * Se on tietoinen poikkeus DESIGN.md kohtaan 5 (jokainen kenttä läpäistävissä
+   * voimatasolla 0), ja poikkeus maksetaan takaisin kahdella asialla:
+   *
+   *   1. **Tehostus makaa maassa** (`i`) eikä lohkossa. Maassa makaava
+   *      poimitaan kävelemällä, eli se on saatavilla samalla varmuudella kuin
+   *      lattia — lohkoon pitäisi osua, ja "pitäisi osua" ei ole varmuus.
+   *   2. **Kuilu on portin sisällä ja portti on kentän datassa.** `rules.js`
+   *      päästää läpi budjettia leveämmän kuilun vain siinä sarakevälissä jonka
+   *      kenttä on ilmoittanut, ja `verify.mjs` vaatii että lahja on ennen
+   *      porttia ja että botti pääsee läpi voimatasolla 0 — eli poimien sen.
+   *
+   * **Lahja ja kuilu ovat samassa palikassa**, ja se on korjaus eikä
+   * sommittelu: vaikeustaso venyttää kenttää lisäämällä sarakkeita, ja kun
+   * lahja oli edellisessä palikassa, venytys erotti ne toisistaan — mitattu
+   * `normal 4-3: gap of 8 at column 199` kun sääntö etsii lahjaa 24 sarakkeen
+   * sisältä. Samassa palikassa ne pysyvät yhdessä mitä tahansa venytys tekee,
+   * ja pelaaja näkee ne yhdellä silmäyksellä: **avain ja ovi samassa
+   * kuvassa.**
+   *
+   * Ja palikka on 32 saraketta eikä 16, koska ensimmäinen versio pani lahjan
+   * kolmen sarakkeen päähän kuilun huulesta: botti poimi sienen ja putosi,
+   * koska **vauhdinotto ei mahtunut väliin** (mitattu `KUOLI 39 %, kuilu
+   * sarakkeessa 155`). Nyt väliä on neljätoista saraketta — enemmän kuin
+   * vaadittu yhdeksän sarakkeen vauhdinotto ja vähemmän kuin säännön 24
+   * sarakkeen etsintäsäde.
+   *
+   * Ja lahja on **kuudennessa sarakkeessa eikä ensimmäisessä**, koska
+   * edellisestä palikasta voi tulla ilmalennossa: mitattu, botti oli ilmassa
+   * sarakkeeseen 148 asti ja laskeutui vasta 149 — lahja sarakkeessa 146 jäi
+   * sen alle eikä sitä poimittu. Lattialla makaava tehostus on varma vain sillä
+   * osalla lattiaa jolla oikeasti kävellään.
+   *
+   * Kuilu on **kahdeksan laattaa** mitattua kuuden budjettia vastaan. Se on
+   * juuri sen verran yli ettei sitä voi hypätä ilman ilmahyppyä (mitattu
+   * juoksuhypyn kantama 155 px = 9,7 laattaa ilmassa, mutta laskeutumisen
+   * jälkeen tarvitaan lattiaa; kuuden laatan budjetti on se raja jolla botti
+   * on luotettava) — ja pierusienen ilmahyppy ylittää sen.
+   */
+  gate_leap: ck(32, {
+    9: '                 o o o o',
+    12: '      i',
+    13: '################        ########',
+    14: '################        ########',
+  }),
 };

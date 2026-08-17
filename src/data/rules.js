@@ -250,6 +250,8 @@ const DEADLY = new Set(['W']);
  * drifted.
  */
 const SINK = new Set(['~']);
+/** Maassa makaava tehostus. Ks. `giftBefore` ja DESIGN.md kohta 5. */
+const GIFT = 'i';
 /*
  * JÄÄ (`T.ICE`, `src/gfx/tiles.js`). `SOLID`in jäsen, koska se **on** tavallinen
  * kiinteä laatta: sen päällä seistään, sen läpi ei mennä, ja se kelpaa
@@ -443,7 +445,43 @@ function checkQuicksand(band, w, reach, problems, where) {
   }
 }
 
-/** Route-only. Every bottomless run fits the measured jump or has a stone. */
+/**
+ * Route-only. Every bottomless run fits the measured jump or has a stone.
+ *
+ * …tai se on **ilmoitetun tehostusportin sisällä**, ja se on tietoinen poikkeus
+ * DESIGN.md kohtaan 5. Omistajan päätös 18.8.2026: kentässä saa olla kohta
+ * jonka läpi ei pääse ilman tehostusta, kunhan tehostus on varmasti saatavilla
+ * juuri ennen sitä.
+ *
+ * Poikkeus on **kapea kolmella tavalla**, ja jokainen niistä on tässä koodissa
+ * eikä lupauksessa: se koskee vain niitä sarakkeita jotka kenttä on
+ * ilmoittanut (`gates`), sen ilmoittaminen ei riitä läpäisyyn (portti ajaa
+ * botin, ks. `verify.mjs`), ja lahjan on oltava maassa poimittavana eikä
+ * lohkossa. Ilman kaikkia kolmea tämä olisi ovi jolla mikä tahansa kuilu voi
+ * kutsua itseään tarkoitukselliseksi.
+ */
+const GATE_REACH = 24;
+
+/**
+ * Onko tämän kuilun edessä lahja — eli onko se **ilmoitettu tehostusportti**.
+ *
+ * Ilmoitus on lahja itse eikä kentän datassa oleva sarakeväli, ja se on
+ * korjaus eikä tyylivalinta: ensimmäinen versio kirjoitti portin rajat
+ * `gates: [{ from, to }]` -kenttään, ja vaikeustaso venyttää kenttää — mitattu
+ * `normal 4-3: gap of 8 at column 199` kun ilmoitus sanoi 160–175. Sarake on
+ * väärä tapa osoittaa paikkaa kentässä joka voi kasvaa; **laatta ruudukossa
+ * ei ole**, koska se venyy mukana.
+ *
+ * Kentän lause on siis: *"tämän kuilun edessä on avain, joten kuilu on
+ * tarkoitettu."* Ilman avainta sama kuilu kaatuu sääntöön kuten ennenkin.
+ */
+function giftBefore(at, start) {
+  for (let x = Math.max(0, start - GATE_REACH); x < start; x++) {
+    for (let y = 0; y <= FLOOR; y++) if (at(x, y) === GIFT) return true;
+  }
+  return false;
+}
+
 function checkGaps(at, band, from, to, reach, problems, where) {
   let gap = 0;
   for (let x = from; x <= to; x++) {
@@ -463,7 +501,9 @@ function checkGaps(at, band, from, to, reach, problems, where) {
     if (gap > reach.gap) {
       const start = x - gap;
       const hasStone = band.slice(0, FLOOR).some((row) => row.slice(start, x).includes('-'));
-      if (!hasStone) problems.push(`gap of ${gap} at column ${start}${where}`);
+      if (!hasStone && !giftBefore(at, start)) {
+        problems.push(`gap of ${gap} at column ${start}${where}`);
+      }
     }
     gap = 0;
   }

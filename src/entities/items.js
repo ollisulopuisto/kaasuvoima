@@ -31,13 +31,25 @@ const FART_LIGHT_I = 0.78;
 
 export class Item extends Entity {
   /** @param {'shroom'|'flower'|'leaf'|'pop'|'soup'|'star'} itemKind */
-  constructor(level, x, y, itemKind, { emerge = true } = {}) {
+  constructor(level, x, y, itemKind, { emerge = true, still = false } = {}) {
     super(level, x, y, 16, 16);
     this.kind = 'item';
     this.itemKind = itemKind;
     this.alwaysActive = true;
     this.active = true;
     this.emerging = emerge ? EMERGE_FRAMES : 0;
+    /*
+     * PAIKALLAAN PYSYVÄ TEHOSTUS, ja se on tehostusportin ehto eikä optio.
+     *
+     * Sieni **vierii** (0,85 px/frame), koska palkinto joka jää sinne mihin
+     * viimeinen vihollinen kaatui voi jäädä hankalaan paikkaan. Se on oikein
+     * palkinnolle ja väärin lupaukselle: maassa makaava tehostus joka lunastaa
+     * kuilun on **se ainoa tapa päästä yli**, eikä se saa vieriä siihen samaan
+     * kuiluun ennen kuin pelaaja ehtii paikalle. Mitattu: 13 laattaa lahjasta
+     * kuilun huulelle on 245 framea vierimistä, ja botti saapui myöhemmin —
+     * sieni oli ehtinyt pudota, ja portti luki "kuilu sarakkeessa 171".
+     */
+    this.still = still;
     this.baseY = y;
     this.facing = 1;
     this.leafPhase = 0;
@@ -61,7 +73,7 @@ export class Item extends Entity {
        * moving through, and a prize that stays exactly where the last enemy
        * fell can land somewhere awkward — a rolling one comes to meet you. */
       case 'pop': {
-        this.vx = 0.85 * this.facing;
+        this.vx = this.still ? 0 : 0.85 * this.facing;
         if (moveX(this, this.level)) this.facing *= -1;
         applyGravity(this, 0.8);
         moveY(this, this.level);
