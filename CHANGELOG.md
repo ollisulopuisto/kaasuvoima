@@ -7,6 +7,49 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.2 — sama putki, eri yksilö
+
+Omistajan pyyntö: *"eka putki ei näytä täsmälleen samalta kuin 2. putki… etsi
+tasapaino, jossa pelaaja tunnistaa heti elementin samaksi, mutta niissä on
+kuitenkin pieni vivahde-ero tekstuurissa."* Ja: *"noihin skin-eroihin voisi
+lisätä pikkuanimaatioita."*
+
+| väite | mitattu |
+| --- | --- |
+| kaksi putkea eroaa toisistaan | `erilaisia 6/12` |
+| muttei niin että ne olisivat eri esineitä | `suurin ero 2,3 % laatan pikseleistä` |
+| sama putki näyttää samalta joka kerta | `kaksi piirtoa identtiset` |
+| kiilto liikkuu, muttei huuda | `17/460 framea, suurin muutos 0,8 %` |
+
+**Tasapaino on sääntönä eikä makuna**, ja se on kolme kieltoa: siluetti ei
+muutu (koko on hyppybudjetin asia), pohjaväri ei muutu (tunnistaminen tapahtuu
+värillä ja muodolla yhdellä silmäyksellä), ja vaihtelu on **paikan funktio eikä
+kellon** — sama putki näyttää samalta joka kerta kun sen näkee, myös
+pikalatauksen jälkeen. Satunnaisluku framella olisi kohinaa; hash paikasta on
+käsityötä.
+
+Siemen on **sarake eikä laatta**, ja se on koko putken ehto: kaksi laattaa
+vierekkäin ja N päällekkäin ovat yksi esine, joten oikea puolisko kysyy
+vasemmalta. Ilman sitä putken puolikkaat olisivat kahdesta eri putkesta.
+
+Vaihtelevat: niittiväli (5 tai 6 px), nokipilkku sauman vieressä (paikka ja
+korkeus), kolhu oikealla puoliskolla, ja pulttien paikka yhden pikselin.
+Animaationa **kiilto** joka laskeutuu saumaa pitkin kerran seitsemässä
+sekunnissa, ja jokaisella putkella on oma vaiheensa — kaksi putkea vierekkäin
+eivät välähdä yhdessä, mikä olisi konemainen.
+
+Kaksi mittausvirhettä matkalla, molemmat kirjattu: portti mittasi ensin
+**suulaattaa**, jonka alla on vain muutama rivi kuilua (ero 0,0 % seitsemällä
+putkella kahdeksasta), ja kiiltoa mitattiin 200 framen ikkunalla kun jakso on
+420 — eli mitattiin vaihetta eikä kiiltoa. Ja ensimmäinen versio vaihteli vain
+niittiväliä, jolloin 12 putkesta oli 2 erilaista: **vaihtoehtojen määrä on
+vaihtelun koko kysymys.**
+
+Lämpöputki saa saman ihon kuin tavallinen putki, ja se on salaisuuden kannalta
+pakollista: jos vain lämpöputkilla olisi kolhuja, kolhu olisi kyltti.
+
+---
+
 ## v26.08.18.1 — kaksi uutta lajia: PYÖRRE ja KUMMITUS
 
 Ensimmäinen erä uusia vihollisia. Omistajan mitta: SMB3:ssa ja SMW:ssä nimettyjä
