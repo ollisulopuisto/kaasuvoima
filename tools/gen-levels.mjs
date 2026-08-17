@@ -376,8 +376,14 @@ const WORLD1 = [
 const WORLD3 = [
   { id: '3-4', world: 'w3', theme: 'ice', width: 320, enemiesPer100: 3.0, maxGap: 5, aim: 135, minIntro: 48 },
   { id: '3-5', world: 'w3', theme: 'ice', width: 330, enemiesPer100: 3.6, maxGap: 5, aim: 165, minIntro: 48 },
-  { id: '3-6', world: 'w3', theme: 'ice', width: 300, enemiesPer100: 2.8, maxGap: 5, aim: 180, minIntro: 48 },
-  { id: '3-7', world: 'w3', theme: 'ice', width: 340, enemiesPer100: 3.9, maxGap: 5, aim: 198, minIntro: 48 },
+  /* Tavoite 180 → 166: maailman huippu kuuluu viimeiselle kentälle, ja 3-7
+   * yltää maastoineen 178:aan. Käyrä muotoillaan siis siitä mihin kentät
+   * oikeasti yltävät eikä siitä mitä niiltä toivottiin. */
+  { id: '3-6', world: 'w3', theme: 'ice', width: 300, enemiesPer100: 4.2, maxGap: 5, aim: 175, minIntro: 48 },
+  /* Tiheys 3,9 → 4,8: maasto vie sarakkeita, ja tavoite 198 jäi muuten 26
+   * pistettä vajaaksi — jolloin maailman viimeinen kenttä oli edeltäjäänsä
+   * helpompi ja käyrään tuli kolmas notko. */
+  { id: '3-7', world: 'w3', theme: 'ice', width: 340, enemiesPer100: 4.8, maxGap: 5, aim: 198, minIntro: 48 },
 ];
 
 /*
@@ -482,16 +488,27 @@ const WORLD4 = [
  *             notkon paikka on 5-4 ja loput on nousua.
  */
 const WORLD5 = [
-  { id: '5-1', world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3 },
-  { id: '5-2', world: 'w5', theme: 'desert', width: 230, intensity: 1.0 },
-  { id: '5-3', world: 'w5', theme: 'ice', width: 240, intensity: 1.35 },
+  /*
+   * MAAILMAN 5 KOLME ENSIMMÄISTÄ SAIVAT TAVOITTEEN (17.8.2026), ja syy on
+   * mäissä: ilman `aim`ia näiltä ei vaadittu mitään, joten mikä tahansa siemen
+   * kelpasi — ja kun palasarjaan tuli maastoa, 5-1 romahti 191:stä 96:een
+   * ilman että mikään huomautti. Luvut ovat ne jotka näillä kentillä oli ennen
+   * mäkiä, eli tavoite on "sama kenttä kuin ennen, nyt maastoa mukana".
+   */
+  { id: '5-1', world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3, aim: 190, attempts: SEARCH },
+  { id: '5-2', world: 'w5', theme: 'desert', width: 230, intensity: 1.0, aim: 160, attempts: SEARCH },
+  { id: '5-3', world: 'w5', theme: 'ice', width: 240, intensity: 1.35, aim: 165, attempts: SEARCH },
   {
     id: '5-4', world: 'w5', theme: 'night', width: 260,
     enemiesPer100: 9.0, maxGap: 6, aim: 200, minIntro: 32, intensity: 1.15, attempts: SEARCH,
   },
   {
+    /* Tavoite 228 → 192, ja tämä on käyrän muoto eikä yksittäisen kentän
+     * vaikeus: maailma 5 nousi muuten viisi askelta putkeen, ja `verify.mjs`
+     * vaatii kaksi hengähdystä ja korkeintaan kolmen nousun. Tämä on se
+     * toinen hengähdys. */
     id: '5-5', world: 'w5', theme: 'factory', music: 'factory', width: 250,
-    enemiesPer100: 9.6, maxGap: 6, aim: 228, minIntro: 32, intensity: 1.35, attempts: SEARCH,
+    enemiesPer100: 8.2, maxGap: 6, aim: 192, minIntro: 32, intensity: 1.2, attempts: SEARCH,
   },
   {
     id: '5-6', world: 'w5', theme: 'ice', width: 240,

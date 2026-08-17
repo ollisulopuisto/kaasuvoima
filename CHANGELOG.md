@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.21 — maa liikkuu myös generoiduissa kentissä
+
+Omistaja pyysi ajamaan korpuksen ja katsomaan mitä siitä saa. Korpus (VGLC, 481
+kenttätiedostoa) ladattiin väliaikaiseen hakemistoon — **ei repoon**, DESIGN.md
+kohta 3 — ja sen kanssa tehtiin se mikä ilman sitä ei ole sallittua: generoidut
+kentät kirjoitettiin uusiksi niin että **alkuperätarkistus säilyi**.
+
+Tulos: 26 generoitua kenttää rakennettiin uudelleen, jokainen tarkistettu
+korpusta vasten (0 osumaa), ja generaattori tuntee nyt **mäen**. Kentissä joissa
+maa liikkuu on yksitoista: aiemmin kolme, ja nekin käsintehtyjä.
+
+**Mäki on pala eikä maastopassi**, ja se on tietoinen rajaus. Se lataa rinteen
+ylös, tasanteen ja rinteen alas — sama muoto kuin käsintehdyllä `kumpare`ella —
+ja perustaso pysyy rivillä 13, joten `rules.js`, hyppybudjetti, botti ja
+vaikeusmittari lukevat lattiaa täsmälleen kuten ennenkin. Koko maailman
+korkeusprofiili on eri työ ja se on ROADMAPissa.
+
+Kolme asiaa jouduttiin mittaamaan matkan varrella, ja jokainen on merkitty
+koodiin:
+
+1. **Mäellä seisoo joka toisella kerralla joku.** Tyhjä mäki on maisemaa, ja
+   maisema laimentaa vaikeutta: mittari lukee saraketta kohti, joten pelkkää
+   maata oleva mäki vei kentältä pisteitä (3-6 jäi tavoitteestaan 28). Mäellä
+   seisova vihollinen palauttaa sen minkä mäki vei — ja tekee mäestä
+   kysymyksen.
+2. **Mäkiä on yksi 120 saraketta kohti.** Ilman kattoa 5-1 (208 saraketta) sai
+   kolme mäkeä ja sen vaikeus romahti 191:stä 96:een. Lyhyt kenttä täynnä
+   maisemaa on kävelyretki.
+3. **Mäki on ulkoilmamaailmojen pala** (ruoho, aavikko, yö, jää). Luumaailmassa
+   maa on luuta ja tehtaassa lattia; nurmikumpare ei kuulu kumpaankaan, eikä
+   kummankaan mitattua käyrää ollut syytä liikuttaa.
+
+Maailmojen 3 ja 5 käyrät muotoiltiin uusiksi siellä missä maasto siirsi niitä:
+5-1…5-3 saivat vihdoin tavoitteet (ilman niitä miltä tahansa siemeneltä
+kelpasi mikä tahansa vaikeus), ja 3-6:n tiheys nousi niin että maailman huippu
+on sen viimeisessä kentässä.
+
+**Päivän kenttä pudottaa mäen yhä** (`dailySpec`): sen 1096 kentän todistus on
+committoitu sormenjälkenä, ja se uusitaan omana työnään.
+
+---
+
 ## v26.08.18.20 — rinne oli kuljettava vain pienimmällä keholla
 
 Omistajan raportti 17.8.2026 kuvakaappauksen kanssa: *"kun juoksen rinnettä ylös
