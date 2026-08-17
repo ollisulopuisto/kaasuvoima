@@ -452,6 +452,48 @@ mitään. **Korjataan mittaus ensin.**
 
 ## Jonossa
 
+### Kenttien varianssi: mitattu tila ja se mitä se vaatii
+
+Omistaja 17.8.2026: *"kentissä on edelleen liian vähän varianssia! Ne tuntuvat
+tasaisilta ja toisteisilta … löytyisikö jostain hyvää kaksiulotteista
+kenttädataa, jota soveltaa? … ehkä Sonicin 2D-kentistä voisi ottaa
+inspiraatiota? Ja kiva olisi jos niissä vois mennä limittäin."*
+
+**Ulkopuolisesta kenttädatasta, ensin se raja.** Reitti on olemassa ja se on jo
+rakennettu: `tools/mine-pacing.mjs` louhii **tilastoja** ulkoisesta korpuksesta
+(`VGLC_DIR`) ja `tools/gen-levels.mjs` rakentaa niistä. DESIGN.md kohta 3 sanoo
+sen yhtenä lauseena — **rytmi kyllä, layout ei** — ja kohta 1 kieltää
+yhdenkään olemassa olevan pelin kenttäkartat. Sonic-korpuksesta saa siis ottaa
+sen mitä Sonicista kannattaakin ottaa: **mitattua rytmiä** (kuinka pitkiä
+suoria, kuinka usein korkeus vaihtuu, minkä mittaisia kaaria) — ei ruudukoita.
+
+**Mitattu tila** (`node tools/variety.mjs`): neljä maailmaa kahdeksasta toistaa
+itseään mediaania enemmän (w1 w2 w3 w8), ja **kuudessa kahdeksasta loppupuoli
+on alkupuolta toistavampi** (w1 58→51, w3 59→47, w8 45→31). Uutuus vaihtelee
+38 %:sta (w8) 82 %:iin (w5). Mittari sanoo suoraan mistä on kyse: *kapea
+sanasto ei ole vika; sen kaluaminen samoiksi ruuduiksi on.*
+
+**Se yksi rakenteellinen syy joka selittää tasaisuuden.** Lähes jokaisessa
+palikassa rivit 13-14 ovat `G` — eli **maan pinta on samalla korkeudella koko
+pelin ajan**. Kaikki vaihtelu on sen yläpuolella olevaa tavaraa. Rinteet
+(v26.08.18.13) ovat ensimmäinen kerta kun maa itse liikkuu, ja niitä on tällä
+hetkellä kolmessa palikassa.
+
+Kolme askelta, halvimmasta kalleimpaan:
+
+1. **Limittäiset reitit palikkasanastoon** (aloitettu: `kaksitie`, 3-1).
+   Ylempi ja alempi reitti kulkevat saman matkan päällekkäin ja yhtyvät;
+   ylempi ostetaan vauhdilla, alempi on aina auki. Halpa, koska se on
+   pelkkää sanastoa — ei moottoria eikä portteja.
+2. **Rinteet generaattorin sanastoon.** Generaattori ei tunne `/`- ja
+   `\`-merkkejä lainkaan, joten 26 generoitua kenttää ovat rakenteellisesti
+   tasamaata. Tämä on se muutos jolla varianssi kasvaa eniten työtä kohti.
+3. **Maastopassi: maan korkeus vaihtelee palikoiden välillä.** Kokoaja
+   päättäisi kullekin palikalle lattiatason ja kirjoittaisi siirtymät
+   rinteinä. Tämä on se joka tekee kentistä maisemaa eikä käytävää — ja se on
+   myös kallein: `rules.js`, hyppybudjetti, vaikeusmittari, botti ja jokainen
+   käsintehty kenttä lukevat tällä hetkellä lattiaa rivinä 13.
+
 ### Ääni: mitä SID-sanastosta jäi tekemättä
 
 `tone` osaa nyt pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja

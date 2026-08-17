@@ -7,6 +7,29 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.19 — kaksi reittiä limittäin
+
+Omistaja 17.8.2026: *"kiva olisi jos niissä vois mennä limittäin."* Ensimmäinen
+palikka joka tekee sen: `kaksitie` (3-1).
+
+Limittäin tarkoittaa tässä sitä mitä se Sonicissa tarkoittaa — **kaksi reittiä
+jotka kulkevat saman matkan päällekkäin ja yhtyvät takaisin.** Alempi on aina
+auki ja se on se jonka jokainen kävelee; ylempi ostetaan vauhdilla rinteen
+huipulta, ja sen palkinto (kolikkorivi) näkyy alhaaltakin — syy yrittää on
+näkyvissä ennen kuin yrittää.
+
+Ylempi reitti on **puulavaa** eikä maata, ja se on se yksityiskohta joka tekee
+limityksestä limityksen: sen läpi pääsee alhaalta hyppäämällä, joten reitit
+voivat vaihtua kesken matkan eivätkä vain kulkea rinnakkain.
+
+ROADMAP.md sai samalla mitatun tilannekuvan varianssista (`tools/variety.mjs`:
+kuudessa maailmassa kahdeksasta loppupuoli toistaa itseään enemmän kuin
+alkupuoli) ja sen yhden rakenteellisen syyn joka selittää tasaisuuden: lähes
+jokaisessa palikassa rivit 13-14 ovat samaa lattiaa, eli **maan pinta on samalla
+korkeudella koko pelin ajan**. Kolme askelta kirjattu, kallein viimeisenä.
+
+---
+
 ## v26.08.18.18 — sama kolikko, ja täysi putkilo valuu tyhjäksi
 
 Kaksi omistajan huomiota putkilosta, ja molemmat osuivat samaan puutteeseen:
