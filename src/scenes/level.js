@@ -12,7 +12,7 @@ import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
 import { ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
-import { Puff, ScorePop, BrickPiece, CoinPop, PoundWave } from '../entities/effects.js';
+import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 import { Music, Sfx, Ambience, killSound } from '../core/audio.js';
 import { PostFX } from '../gfx/postfx.js';
 import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js';
@@ -147,6 +147,17 @@ const COIN_CAP = 100;
 /** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
 const COIN_ARC = 26;
 const COIN_DROP_G = 0.6;
+/*
+ * Lohkosta lyödyn kolikon pomppu: sama lähtönopeus ja sama painovoima kuin
+ * vanhalla `CoinPop`illa, koska se liike oli oikein — vain sen loppu oli
+ * väärä. Neljätoista framea on se piste jossa kolikko on kääntynyt takaisin
+ * alaspäin, eli hetki jolloin imu näyttää tarttuvan johonkin joka putoaa.
+ */
+const COIN_POP_VY = -4.4;
+const COIN_POP_G = 0.32;
+const COIN_POP_FRAMES = 14;
+/** Kuinka kauan täysi putkilo valuu tyhjäksi. Ks. `updateCoinFlights`. */
+const COIN_FLUSH = 34;
 
 /*
  * SAVUKIRJOITUS: kuinka kauan kentän nimi on taivaalla ja kuinka usein se
@@ -2792,11 +2803,11 @@ export class LevelScene {
     if (x !== undefined) this.addScorePop(x, y, '1UP');
   }
 
-  addCoin(x, y) {
+  addCoin(x, y, popped = false) {
     this.game.state.coins++;
     this.game.state.score += COIN;
     Sfx.play('coin');
-    this.coinToTube(x, y);
+    this.coinToTube(x, y, popped);
     if (this.game.state.coins >= COIN_CAP) {
       this.game.state.coins -= COIN_CAP;
       this.gainLife(x, y);
@@ -2823,16 +2834,25 @@ export class LevelScene {
     return { x: TUBE_X, w: TUBE_W, top, bottom, pxPerCoin: (bottom - top) / COIN_CAP };
   }
 
-  /** Sen kolikon lentorata joka juuri poimittiin: maailmasta ruudulle. */
-  coinToTube(x, y) {
+  /**
+   * Sen kolikon lentorata joka juuri poimittiin: maailmasta ruudulle.
+   *
+   * `popped` on lohkosta lyöty kolikko, ja se saa yhden vaiheen lisää alkuun:
+   * pomppu ylös ja takaisin, täsmälleen se liike jonka lohkoon lyöty kolikko
+   * on aina tehnyt. Vasta sen jälkeen imu tarttuu. Näin ponnahdus ja lento
+   * ovat **sama kolikko** eivätkä kaksi — ks. `bumpTile`.
+   */
+  coinToTube(x, y, popped = false) {
+    const sx = x - Math.round(this.cam.x);
+    const sy = y - Math.round(this.cam.y) + this.bar;
     this.coinFlights.push({
-      phase: 'arc',
+      phase: popped ? 'pop' : 'arc',
       t: 0,
-      x0: x - Math.round(this.cam.x),
-      y0: y - Math.round(this.cam.y) + this.bar,
-      x: 0,
-      y: 0,
-      vy: 0,
+      x0: sx,
+      y0: sy,
+      x: sx,
+      y: sy,
+      vy: popped ? COIN_POP_VY : 0,
     });
   }
 
@@ -2859,7 +2879,23 @@ export class LevelScene {
     const mouthX = box.x + box.w / 2;
     const mouthY = box.top - 2;
     for (const f of this.coinFlights) {
-      if (f.phase === 'arc') {
+      if (f.phase === 'pop') {
+        /* Sama kaari kuin lohkokolikolla aina: ylös ja takaisin. Kun se on
+         * käyty, kolikko on siinä mistä imu ottaa kiinni — ja pistepomppu
+         * tulee tässä, koska juuri tämä hetki on se jonka pelaaja lukee
+         * palkinnoksi. */
+        f.t++;
+        f.y += f.vy;
+        f.vy += COIN_POP_G;
+        if (f.t >= COIN_POP_FRAMES) {
+          this.addScorePop(f.x + Math.round(this.cam.x), f.y + Math.round(this.cam.y) - this.bar,
+            COIN);
+          f.phase = 'arc';
+          f.t = 0;
+          f.x0 = f.x;
+          f.y0 = f.y;
+        }
+      } else if (f.phase === 'arc') {
         f.t++;
         const k = Math.min(1, f.t / COIN_ARC);
         f.x = f.x0 + (mouthX - f.x0) * k;
@@ -2875,11 +2911,20 @@ export class LevelScene {
           this.tubeFill++;
           this.tubeFlash = 8;
           if (this.tubeFill >= COIN_CAP) {
-            this.tubeFill = 0;
-            /* Täysi putkilo tyhjenee: se on 1UP nähtynä. Ääni ja kuva ovat
-             * jo olemassa (`gainLife`), tämä on sama tapahtuma mittarin
-             * puolella eikä toinen tapahtuma. */
-            this.tubeFlush = 24;
+            /* TÄYSI PUTKILO TYHJENEE NÄHDEN, ei kertaheitolla.
+             *
+             * Omistaja 17.8.2026: *"mitä putkelle tapahtuu kun se on täynnä?
+             * Voisivatko kolikot kadota jotenkin hienosti animoituna."* Ennen
+             * pinta hyppäsi sadasta nollaan yhdellä framella ja lasi
+             * välähti — eli se ainoa hetki jonka koko mittari on rakennettu
+             * lupaamaan meni ohi nopeammin kuin sen ehti nähdä.
+             *
+             * Nyt pinta **valuu** alas `COIN_FLUSH` framen ajan ja suusta
+             * nousee kipinä: sata kolikkoa lähtee sinne minne ne oli menossa.
+             * Ääni ja 1UP-teksti ovat jo olemassa (`gainLife`), joten tämä on
+             * sama tapahtuma mittarin puolella eikä toinen tapahtuma. */
+            this.tubeFill = COIN_CAP;
+            this.tubeFlush = COIN_FLUSH;
           }
         }
       }
@@ -2887,7 +2932,10 @@ export class LevelScene {
     if (this.coinFlights.length) {
       this.coinFlights = this.coinFlights.filter((f) => f.phase !== 'done');
     }
-    if (!this.coinFlights.length && this.tubeFill !== this.game.state.coins) {
+    /* Korjaus vasta kun huuhtelu on ohi: kesken valumisen `tubeFill` on
+     * tarkoituksella eri kuin `coins`, ja se ero **on** animaatio. */
+    if (!this.coinFlights.length && this.tubeFlush <= 0
+      && this.tubeFill !== this.game.state.coins) {
       this.tubeFill = this.game.state.coins;
     }
   }
@@ -2918,19 +2966,34 @@ export class LevelScene {
     // pino
     const inner = box.x + 1;
     const innerW = box.w - 2;
-    for (let i = 0; i < this.tubeFill; i++) {
+    /* Huuhtelun aikana pinta on `tubeFill` kerrottuna sillä osuudella joka on
+     * vielä valumatta: sata kolikkoa katoaa alaspäin kolmessakymmenessä
+     * framessa. Muulloin kerroin on yksi eikä mitään muutu. */
+    const drain = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 1;
+    const shown = Math.round(this.tubeFill * drain);
+    for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
       ctx.fillStyle = tenth ? '#ffe070' : '#f0b000';
       ctx.fillRect(inner, Math.round(y), innerW, Math.max(1, Math.round(box.pxPerCoin)));
     }
-    if (this.tubeFlash > 0 && this.tubeFill > 0) {
+    if (this.tubeFlash > 0 && shown > 0) {
       ctx.fillStyle = `rgba(255,255,255,${(this.tubeFlash / 8) * 0.7})`;
-      ctx.fillRect(inner, Math.round(box.bottom - this.tubeFill * box.pxPerCoin), innerW, 2);
+      ctx.fillRect(inner, Math.round(box.bottom - shown * box.pxPerCoin), innerW, 2);
     }
     if (this.tubeFlush > 0) {
-      ctx.fillStyle = `rgba(255,240,160,${(this.tubeFlush / 24) * 0.8})`;
+      /* Kolme kuvaa yhdestä tapahtumasta, ja jokainen sanoo eri asian:
+       * **valuva pinta** (yllä) sanoo että ne lähtivät, **hehku lasissa**
+       * sanoo että se oli iso, ja **kipinä suussa** sanoo minne ne menivät —
+       * ylös, sinne mistä 1UP tuli. */
+      const t = this.tubeFlush / COIN_FLUSH;
+      ctx.fillStyle = `rgba(255,240,160,${(t * 0.45).toFixed(3)})`;
       ctx.fillRect(inner, box.top, innerW, h - 1);
+      const sparkY = Math.round(box.top - (1 - t) * 26);
+      ctx.fillStyle = `rgba(255,255,255,${(t * 0.9).toFixed(3)})`;
+      ctx.fillRect(inner, sparkY, innerW, 2);
+      ctx.fillStyle = `rgba(255,224,112,${(t * 0.7).toFixed(3)})`;
+      ctx.fillRect(inner + 1, sparkY + 2, innerW - 2, 3);
     }
 
     // lennossa
@@ -3602,8 +3665,13 @@ export class LevelScene {
         this.add(new Beanstalk(this, tx, ty, seed));
         Sfx.play('sprout');
       } else if (ch === T.QCOIN) {
-        this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
-        this.addCoin(tx * TILE + 8, ty * TILE);
+        /* Lohkosta ponnahtava kolikko **on** se kolikko joka lentää putkiloon,
+         * eikä sen kaksoiskappale: omistaja 17.8.2026 *"osa kolikoista
+         * ponnahtaa yhä suoraan ylöspäin tiileistä sen sijaan että ne
+         * lennähtäisivät putkeen."* Ennen tässä oli kaksi oliota — `CoinPop`
+         * joka pomppasi ja katosi, ja lento joka lähti samasta paikasta — eli
+         * kaksi kolikkoa yhdestä. Nyt lento alkaa pompulla. */
+        this.addCoin(tx * TILE + 8, ty * TILE, true);
       } else {
         // A star block promises a star; everything else rolls.
         const kind = meta.question === 'star' ? 'star' : this.rollPowerup(player);
@@ -3627,8 +3695,7 @@ export class LevelScene {
         this.setTile(tx, ty, T.USED);
         found();
         if (secret === 'coin') {
-          this.add(new CoinPop(this, tx * TILE, ty * TILE - TILE));
-          this.addCoin(tx * TILE + 8, ty * TILE);
+          this.addCoin(tx * TILE + 8, ty * TILE, true);
         } else {
           this.add(new Item(this, tx * TILE, ty * TILE - TILE, this.rollPowerup(player)));
           /* `payout` eikä `powerup`: lohko antoi jotain, mutta kukaan ei vielä

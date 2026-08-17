@@ -1,9 +1,7 @@
 import { Entity } from './entity.js';
 import { drawGasPuff } from '../gfx/sprites.js';
-import { drawCoinSprite, drawSplinter, THEMES } from '../gfx/tiles.js';
+import { drawSplinter, THEMES } from '../gfx/tiles.js';
 import { drawText } from '../gfx/font.js';
-/* Kolikon arvo tulee pistetaulukosta, ei tästä tiedostosta. */
-import { COIN } from '../core/points.js';
 
 export class Puff extends Entity {
   constructor(level, x, y, { spread = 0, size = 4, life = 24, brown = false } = {}) {
@@ -250,29 +248,3 @@ export class PoundWave extends Entity {
   }
 }
 
-/** The coin that pops out of a bumped block. */
-export class CoinPop extends Entity {
-  constructor(level, x, y) {
-    super(level, x, y, 16, 16);
-    this.kind = 'effect';
-    this.alwaysActive = true;
-    this.active = true;
-    this.vy = -4.4;
-    this.life = 32;
-  }
-
-  update() {
-    this.tick++;
-    this.y += this.vy;
-    this.vy += 0.32;
-    this.life--;
-    if (this.life <= 0) {
-      this.level.addScorePop(this.cx, this.y, COIN);
-      this.remove = true;
-    }
-  }
-
-  draw(ctx) {
-    drawCoinSprite(ctx, this.x, this.y, this.tick * 2);
-  }
-}
