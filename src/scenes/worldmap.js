@@ -386,8 +386,11 @@ export class WorldMapScene {
       input.consume('jump');
       this.enterNode();
     }
-    if (input.pressed.start) {
-      input.consume('start');
+    /* Varaesine on `run`issa eikä `start`issa: Enter on aina valinta (ks.
+     * `core/input.js`), ja esineen ottaminen on toiminto eikä valinta. Kartalla
+     * juoksunapille ei ole muuta käyttöä, joten se oli vapaa. */
+    if (input.pressed.run) {
+      input.consume('run');
       this.useReserve();
     }
   }
@@ -1278,7 +1281,7 @@ export class WorldMapScene {
     const branch = this.branchHere();
     const hint = this.messageTimer > 0 && this.message
       ? this.message
-      : 'NUOLET LIIKU   Z ALOITA   ENTER KAYTA ESINE';
+      : 'NUOLET LIIKU   ENTER ALOITA   X ESINE';
     drawText(ctx, hint, 160, PANEL_Y + (branch ? 68 : 40), {
       color: this.messageTimer > 0 ? '#ffd048' : '#8890b0',
       align: 'center',

@@ -4,6 +4,8 @@
  *   arrows + Z/X          steering right hand, actions left hand
  *   WASD + K/L or ,/.     steering left hand, actions right hand
  *   space                 jump, whichever way round you sit
+ *   enter                 the same as jump, i.e. **select** in every menu
+ *   escape                back out of a menu, pause in a level
  *
  * Keys are `event.code`, i.e. physical positions, so a Finnish, US or Dvorak
  * layout all land in the same place. That matters most for the comma and
@@ -31,8 +33,28 @@ const KEYMAP = {
   Comma: 'run',
   ShiftLeft: 'run',
   ShiftRight: 'run',
-  NumpadEnter: 'run',
-  Enter: 'start',
+  /*
+   * ENTER ON AINA VALINTA, ja se on omistajan sääntö 17.8.2026: *"mielestäni
+   * enter voisi aina olla select."*
+   *
+   * Se ei ollut. Enter oli `start`, ja `start` tarkoitti ruudusta riippuen
+   * kolmea eri asiaa: **valitse** (alkuruutu, kortit, pistetaulu), **peru**
+   * (vaikeustaso, päivän pieru, jako) ja **käytä varaesine** (kartta). Sama
+   * näppäin siis hyväksyi yhdellä ruudulla ja perui seuraavalla — ja juuri se
+   * on se "näppäimet ovat menuissa välillä outoja" jonka omistaja pelasi.
+   *
+   * Nyt Enter on sama nappi kuin hyppy, eli sama nappi jolla valikoissa on
+   * aina valittu. Peruminen on **Escapessa**, joka on ainoa näppäimistön
+   * näppäin joka tarkoittaa jo valmiiksi "pois täältä", ja pelissä se on
+   * tauko. Kartan varaesine sai `run`-napin (X/Shift/K/pilkku), koska kartalla
+   * juoksunappi ei tee mitään ja esineen ottaminen on nimenomaan **toiminto
+   * eikä valinta**.
+   *
+   * Kentässä Enter hyppää. Se on tahaton sivuvaikutus mutta ei haitta: hyppy
+   * on jo neljällä näppäimellä, ja viides ei riko mitään.
+   */
+  Enter: 'jump',
+  NumpadEnter: 'jump',
   Escape: 'start',
   // Utility keys live on the number row, well away from anything a thumb
   // reaches for mid-jump. These are `event.code` values, i.e. physical keys,

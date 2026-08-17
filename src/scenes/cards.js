@@ -146,7 +146,7 @@ export class GameOverScene {
     this.drawOption(ctx, 0, 'JATKA', 'PISTEET SAILYVAT, JATKOT LASKETAAN', 110);
     this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'PISTEET PISTETAULUUN', 150);
 
-    drawText(ctx, 'NUOLET VALITSE   Z HYVAKSY', 160, 200, {
+    drawText(ctx, 'NUOLET VALITSE   ENTER HYVAKSY', 160, 200, {
       color: '#8890b0', align: 'center',
     });
   }

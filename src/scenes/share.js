@@ -390,7 +390,7 @@ export class ShareScene {
       drawText(ctx, line, W / 2, 190 + i * 11, { color: '#70708c', align: 'center' });
     });
 
-    drawText(ctx, 'ENTER TAI X TAKAISIN', W / 2, 216, { color: '#8890b0', align: 'center' });
+    drawText(ctx, 'ESC TAI X TAKAISIN', W / 2, 216, { color: '#8890b0', align: 'center' });
     // Testaajalle: mitä versiota hän juuri pelasi. Kysytään joka kerta.
     drawText(ctx, `VERSIO ${GAME_VERSION}`, W - 6, 230, { color: '#40506a', align: 'right' });
   }

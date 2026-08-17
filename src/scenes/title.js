@@ -185,7 +185,7 @@ export class TitleScene {
       }
     });
 
-    drawText(ctx, 'NUOLET/WASD  HYPPY Z/L/VÄLI  JUOKSU X/K', 160, panelY + panelH + 2, {
+    drawText(ctx, 'NUOLET/WASD  HYPPY VÄLI/Z  JUOKSU SHIFT/X  VALINTA ENTER', 160, panelY + panelH + 2, {
       color: '#8890b0', align: 'center',
     });
     /* Ominaisuus jota kukaan ei löydä ei ole olemassa, ja jaon koko tarkoitus on
