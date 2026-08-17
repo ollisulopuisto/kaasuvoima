@@ -1015,7 +1015,68 @@ const PIPE_THROAT = 6;
  * where a joint belongs, so the rhythm is one per tile and cannot drift when
  * the camera scrolls by an odd pixel.
  */
-function ductShaft(ctx, x, y, off, h, th, left, bandAt) {
+/*
+ * SAMA ELEMENTTI, ERI YKSILÖ — putken oma iho.
+ *
+ * Omistajan pyyntö 18.8.2026: *"eka putki ei näytä täsmälleen samalta kuin 2.
+ * putki… etsi tasapaino, jossa pelaaja tunnistaa heti elementin samaksi, mutta
+ * niissä on kuitenkin pieni vivahde-ero."* Tasapaino on tässä sääntönä eikä
+ * makuna, ja se on kolme kieltoa:
+ *
+ *   1. **Siluetti ei muutu.** Vaihtelu on pelkkää pintaa laatan sisällä; yksi
+ *      pikseli reunaa vähemmän tekisi putkesta eri kokoisen, ja koko on
+ *      hyppybudjetin asia eikä koristeen.
+ *   2. **Pohjaväri ei muutu.** Tunnistaminen tapahtuu värillä ja muodolla
+ *      yhdellä silmäyksellä; vaihtelu saa liikuttaa vain yksityiskohtia jotka
+ *      ovat jo valmiiksi pintakuviota — niittejä, saumoja, kolhuja.
+ *   3. **Vaihtelu on paikan funktio eikä kellon.** Sama putki näyttää samalta
+ *      joka kerta kun sen näkee, myös pikalatauksen jälkeen. Satunnaisluku
+ *      framella olisi kohinaa; hash paikasta on käsityötä.
+ *
+ * **Siemen on sarake eikä laatta**, ja se on koko putken ehto: kaksi laattaa
+ * vierekkäin ja N päällekkäin ovat *yksi esine*, joten niiden on saatava sama
+ * yksilöllisyys. Vasen puolisko on ankkuri, ja oikea kysyy samalta sarakkeelta.
+ *
+ * `verify.mjs` mittaa kolme asiaa: että vaihtelua **on** (kaksi putkea eroaa),
+ * että sitä on **vähän** (ero on prosenteissa eikä kymmenissä), ja että se on
+ * **sama joka kerta**.
+ */
+const PIPE_SKINS = 4;
+
+function pipeSkin(tx, left) {
+  /* Ankkuri on parin vasen sarake: oikea puolisko kysyy vasemmalta, jolloin
+   * saman putken molemmat puoliskot saavat saman ihon. Ilman tätä putken
+   * puolikkaat olisivat kahdesta eri putkesta. */
+  const anchor = left ? tx : tx - 1;
+  const n = hashNoise(anchor, 17);
+  const m = hashNoise(anchor, 53);
+  return {
+    /* Niittiväli: 5 tai 6 pikseliä. Yksi pikseli riittää tekemään kahdesta
+     * putkesta eri putket lähietäisyydeltä, eikä sitä huomaa kaukaa. */
+    pitch: 5 + (n > 0.5 ? 1 : 0),
+    /* Nokipilkku saumalle: yksi kolmesta korkeudesta tai ei lainkaan. Tämä on
+     * se joka nostaa vaihtoehtojen määrän kahdesta kahdeksaan — mitattuna
+     * pelkkä niittiväli teki 12 putkesta 2 erilaista, mikä on yhtä hyvä kuin
+     * ei mitään. Vaihtoehtojen määrä on vaihtelun koko kysymys. */
+    soot: m > 0.35 ? { dy: 2 + Math.floor(m * 11), h: m > 0.75 ? 3 : 2 } : null,
+    /* Kolhu: pieni tumma laikku jonka paikka vaihtelee. Kolme neljästä
+     * putkesta saa sellaisen, eli myös ehjä putki on yksi yksilö. */
+    dent: n > 0.25 ? { dy: 3 + Math.floor(hashNoise(anchor, 31) * 8), w: 2 + (n > 0.7 ? 1 : 0) } : null,
+    /* Kiilto laskeutuu saumaa pitkin kerran seitsemässä sekunnissa, ja vaihe on
+     * yksilön oma — kaksi putkea vierekkäin eivät välähdä yhdessä, mikä olisi
+     * konemainen. Yksi pikseli, yksi sävy: se ei saa lukea merkkinä (kohta 8),
+     * vaan sen kuuluu näkyä vasta kun katsoo. */
+    phase: Math.floor(n * 420),
+  };
+}
+
+/** Kiillon paikka tässä putkessa juuri nyt, tai `null`. */
+function pipeGlint(skin, tick) {
+  const t = ((tick + skin.phase) % 420);
+  return t < 24 ? Math.floor(t / 1.5) : null;
+}
+
+function ductShaft(ctx, x, y, off, h, th, left, bandAt, skin = null, tick = 0) {
   ctx.fillStyle = th.pipe;
   ctx.fillRect(x, y + off, TILE, h);
 
@@ -1039,10 +1100,31 @@ function ductShaft(ctx, x, y, off, h, th, left, bandAt) {
     ctx.fillRect(x + 6, y + off, 1, h);
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(x + 7, y + off, 1, h);
-    for (let i = 2; i < h; i += 5) {
+    const pitch = skin ? skin.pitch : 5;
+    for (let i = 2; i < h; i += pitch) {
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(x + 6, y + off + i, 2, 1);
     }
+    /* Noki: himmeä läiskä sauman vieressä, ei koskaan sen päällä — sauma on se
+     * josta putken suunnan lukee, ja lika ei saa peittää rakennetta. */
+    if (skin && skin.soot && skin.soot.dy >= off && skin.soot.dy + skin.soot.h <= off + h) {
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.fillRect(x + 3, y + skin.soot.dy, 3, skin.soot.h);
+    }
+    /* Kiilto: yksi pikseli saumassa, matkalla alas. Ks. `pipeSkin`. */
+    const g = skin ? pipeGlint(skin, tick) : null;
+    if (g !== null && g >= off && g < off + h) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(x + 7, y + g, 1, 2);
+    }
+  }
+  /* Kolhu on oikealla puoliskolla, koska sauma on vasemmalla: kaksi
+   * yksityiskohtaa samassa sarakkeessa lukisi virheenä eikä pintana. */
+  if (!left && skin && skin.dent && skin.dent.dy >= off && skin.dent.dy < off + h - 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(x + 3, y + skin.dent.dy, skin.dent.w, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x + 3, y + skin.dent.dy - 1, skin.dent.w, 1);
   }
 
   if (bandAt === null || bandAt < off || bandAt + 3 > off + h) return;
@@ -1072,7 +1154,7 @@ function ductShaft(ctx, x, y, off, h, th, left, bandAt) {
  * the left-hand tile — the lap seam and the bolt spacing are what make the two
  * halves join, and rotating would swap them.
  */
-function drawPipe(ctx, x, y, ch, th, hanging = false) {
+function drawPipe(ctx, x, y, ch, th, hanging = false, tx = 0, tick = 0) {
   const top = ch === T.PIPE_TL || ch === T.PIPE_TR;
   const left = ch === T.PIPE_TL || ch === T.PIPE_BL;
   /* Only the mouth turns over. A length of shaft is the same object either way
@@ -1082,15 +1164,16 @@ function drawPipe(ctx, x, y, ch, th, hanging = false) {
     ctx.save();
     ctx.translate(x, y + TILE);
     ctx.scale(1, -1);
-    drawPipe(ctx, 0, 0, ch, th);
+    drawPipe(ctx, 0, 0, ch, th, false, tx, tick);
     ctx.restore();
     return;
   }
+  const skin = pipeSkin(tx, left);
   ctx.fillStyle = th.pipe;
   ctx.fillRect(x, y, TILE, TILE);
 
   if (!top) {
-    ductShaft(ctx, x, y, 0, TILE, th, left, 1);
+    ductShaft(ctx, x, y, 0, TILE, th, left, 1, skin, tick);
     return;
   }
 
@@ -1107,11 +1190,16 @@ function drawPipe(ctx, x, y, ch, th, hanging = false) {
   ctx.fillRect(x, y + 5, TILE, 1);
   // Bolts sit symmetrically about the two-tile mouth: 2 and 11 on the left
   // tile, 4 and 13 on the right.
+  /* Pultit siirtyvät yksilön mukana yhden pikselin, ja **molemmat puoliskot
+   * siirtyvät yhdessä**, koska ne kysyvät saman ankkurin ihoa. Yksi pikseli on
+   * se määrä joka näkyy vierekkäin muttei kaukaa — tasan se raja jota tässä
+   * haettiin. */
+  const boltShift = skin.pitch === 6 ? 1 : 0;
   for (const bx of left ? [2, 11] : [4, 13]) {
     ctx.fillStyle = th.pipeDark;
-    ctx.fillRect(x + bx, y + 2, 2, 2);
+    ctx.fillRect(x + bx + boltShift, y + 2, 2, 2);
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillRect(x + bx, y + 2, 1, 1);
+    ctx.fillRect(x + bx + boltShift, y + 2, 1, 1);
   }
 
   // The throat: a hole with walls beside it, not a dark stripe across the tile.
@@ -1128,7 +1216,7 @@ function drawPipe(ctx, x, y, ch, th, hanging = false) {
   ctx.fillStyle = 'rgba(255,255,255,0.14)';       // far wall catching the light
   ctx.fillRect(tx0, y + PIPE_THROAT + 4, tw, 1);
 
-  ductShaft(ctx, x, y, PIPE_THROAT + 5, TILE - PIPE_THROAT - 5, th, left, null);
+  ductShaft(ctx, x, y, PIPE_THROAT + 5, TILE - PIPE_THROAT - 5, th, left, null, skin, tick);
 }
 
 /**
@@ -1172,16 +1260,19 @@ function drawVine(ctx, x, y, tx, ty, tick) {
  * The shine is inside the flip with the throat it belongs to, which is the
  * reason this is one transform around both and not two mouths and two shines.
  */
-function drawWarpPipe(ctx, x, y, ch, th, tick, hanging) {
+function drawWarpPipe(ctx, x, y, ch, th, tick, hanging, tx = 0) {
   if (hanging) {
     ctx.save();
     ctx.translate(x, y + TILE);
     ctx.scale(1, -1);
-    drawWarpPipe(ctx, 0, 0, ch, th, tick, false);
+    drawWarpPipe(ctx, 0, 0, ch, th, tick, false, tx);
     ctx.restore();
     return;
   }
-  drawPipe(ctx, x, y, ch === T.WARP_L ? T.PIPE_TL : T.PIPE_TR, th);
+  /* Lämpöputki saa saman yksilöllisen ihon kuin tavallinen putki, ja se on
+   * salaisuuden kannalta pakollista: jos vain lämpöputkilla olisi kolhuja,
+   * kolho olisi kyltti. Sen oma merkki on hidas kiilto suulla, ei pinta. */
+  drawPipe(ctx, x, y, ch === T.WARP_L ? T.PIPE_TL : T.PIPE_TR, th, false, tx, tick);
   const pulse = 0.1 + 0.12 * Math.sin(tick / 20);
   ctx.fillStyle = `rgba(255,255,255,${pulse})`;
   ctx.fillRect(x, y + PIPE_THROAT, TILE, 3);
@@ -1930,9 +2021,9 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.PIPE_TL:
     case T.PIPE_TR:
     case T.PIPE_BL:
-    case T.PIPE_BR: drawPipe(ctx, x, y, ch, th, info(above).pipe); break;
+    case T.PIPE_BR: drawPipe(ctx, x, y, ch, th, info(above).pipe, tx, tick); break;
     case T.WARP_L:
-    case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick, info(above).pipe); break;
+    case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick, info(above).pipe, tx); break;
     case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
     case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;

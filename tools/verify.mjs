@@ -11943,6 +11943,87 @@ const report = await page.evaluate(async () => {
     game.completeWorld = realComplete;
   }
 
+  /* --------------------------- laattojen ihot --------------------------- */
+  /*
+   * SAMA ELEMENTTI, ERI YKSILÖ — ja tasapaino mitataan eikä katsota.
+   *
+   * Omistajan pyyntö: *"etsi tasapaino, jossa pelaaja tunnistaa heti elementin
+   * samaksi, mutta niissä on kuitenkin pieni vivahde-ero."* Tasapaino on kaksi
+   * lukua samasta mittauksesta — **eroa on** ja **eroa on vähän** — ja
+   * kolmantena se joka tekee siitä käsityötä eikä kohinaa: sama putki näyttää
+   * samalta joka kerta.
+   *
+   * Rajat: 1 % on se raja jonka alle jäävä ero ei näy edes vierekkäin, ja 12 %
+   * on se jonka yli mennessä kaksi putkea eivät enää lue samaksi esineeksi.
+   * Mitattu putkien pintakuviosta: sauma, niitit, pultit ja kolhu ovat yhteensä
+   * noin kymmenesosa laatan pikseleistä, joten koko vaihteluvara mahtuu
+   * yksityiskohtiin ilman että pohjaväri liikkuu lainkaan.
+   */
+  {
+    const tiles = await import('/src/gfx/tiles.js');
+    const shot = () => {
+      const c = document.createElement('canvas');
+      c.width = 16; c.height = 16;
+      return { c, g: c.getContext('2d', { willReadFrequently: true }) };
+    };
+    /* Mitataan **runkolaatta** eikä suuta, ja se on korjaus mittaukseen eikä
+     * kuvaan: suun alla on vain muutama rivi kuilua, joten sauma, niitit ja
+     * kolhu — eli koko se pinta jolla vaihtelu elää — jäävät sen ulkopuolelle.
+     * Mitattuna suusta ero oli 0,0 % kahdeksasta putkesta seitsemällä, ja
+     * silti putket eroavat toisistaan ruudulla. Väärä laatta, ei väärä väite. */
+    const paint = (tx, tick, ch = tiles.T.PIPE_BL) => {
+      const { c, g } = shot();
+      g.clearRect(0, 0, 16, 16);
+      tiles.drawTile(g, ch, 0, 0, 'grass', tx, 12, tick, tiles.T.PIPE_TL, {});
+      return g.getImageData(0, 0, 16, 16).data;
+    };
+    const diff = (a, b) => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++;
+      }
+      return (n * 100) / (a.length / 4);
+    };
+    const base = paint(4, 0);
+    const right = paint(5, 0, tiles.T.PIPE_BR);
+    const others = [6, 8, 10, 12, 14, 16, 18, 20].map((tx) => diff(base, paint(tx, 0)))
+      .concat([7, 9, 11, 13].map((tx) => diff(right, paint(tx, 0, tiles.T.PIPE_BR))));
+    const changed = others.filter((d) => d > 0.5);
+    const loudest = Math.max(...others);
+    expect('kaksi putkea eroaa toisistaan, muttei niin että ne olisivat eri esineitä',
+      changed.length >= 3 && loudest > 1 && loudest < 12,
+      `erot ${others.map((d) => d.toFixed(1)).join(' ')} % — erilaisia ${changed.length}/${others.length}, `
+      + `suurin ${loudest.toFixed(1)} %`);
+
+    /* Sama putki, sama kuva: iho on paikan funktio eikä kellon eikä arvan. */
+    expect('sama putki näyttää samalta joka kerta',
+      diff(paint(4, 0), paint(4, 0)) === 0 && diff(paint(9, 30), paint(9, 30)) === 0,
+      'kaksi piirtoa samasta putkesta samalla framella ovat identtiset');
+
+    /*
+     * Ja pikkuanimaatio on **pikku**: kiilto liikkuu saumaa pitkin, ja jos se
+     * muuttaisi enemmän kuin kourallisen pikseleitä, se lukisi merkkinä
+     * (DESIGN.md kohta 8) eikä pintana. Mitataan koko kierros kahdessadassa
+     * framessa ja otetaan suurin muutos peräkkäisten framejen välillä.
+     */
+    let biggest = 0;
+    let moved = 0;
+    /* Koko kierros ja vähän yli: kiillon jakso on 420 framea eli seitsemän
+     * sekuntia, ja jokaisella putkella on oma vaiheensa. Kahdensadan framen
+     * ikkuna mittasi siis vaihetta eikä kiiltoa — mitattuna 0/200. */
+    let prev = paint(4, 0);
+    for (let t = 1; t <= 460; t += 1) {
+      const now = paint(4, t);
+      const d = diff(prev, now);
+      if (d > 0) moved++;
+      biggest = Math.max(biggest, d);
+      prev = now;
+    }
+    expect('putken kiilto on pinta eikä merkki: se liikkuu, muttei huuda',
+      moved > 0 && biggest < 3,
+      `muuttuvia frameja ${moved}/460, suurin muutos ${biggest.toFixed(1)} % laatasta`);
+  }
+
   /* ------------------------------ näppäimet ----------------------------- */
   /*
    * ENTER ON AINA VALINTA, ja se mitataan **ruuduilta eikä taulukosta**.
