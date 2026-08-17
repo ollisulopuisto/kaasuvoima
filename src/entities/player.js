@@ -212,15 +212,33 @@ const QUICKSAND_PLUNGE_FRAMES = 20;
 const QUICKSAND_PLUNGE_SINK = 1.7;
 
 /**
+ * PUDOTUKSEN PITUUS, JOTA VASTEN MAAHANISKU MITATAAN — 174 px.
+ *
+ * Se on **mitattu eikä valittu**: pelin pisin hyppy nousee 174 px
+ * (PHYSICS.md, `tools/measure-jump.mjs`), eli se on suurin pudotus jonka
+ * pelaaja voi omin voimin tuottaa tasamaalla. Täysi isku vaatii siis
+ * täyden kaaren, ja tavallinen juoksuhyppy (100 px) tuottaa 0,57.
+ */
+const POUND_FULL_FALL = 174;
+
+/**
  * How hard a dive landed, 0…1, and the one number the impact reads.
  *
- * The scale is normalised against something the engine guarantees rather than
- * against a number somebody picked. `LevelScene.tileAt` answers `T.HARD` for
- * every `ty < 0`, so the sky is a lid and no body's top edge can ever be above
- * y = 0. The greatest fall that could possibly end at `toY` is therefore `toY`
- * itself, measured in the same pixels as the fall — which makes 1.0 mean "from
- * the ceiling of this room" in a fifteen-tile level and in a thirty-tile one
- * alike, with no constant to go stale when a level gets taller.
+ * **Pudotus pikseleinä, ei osuutena huoneen korkeudesta.** Tässä luki
+ * `(toY - fromY) / toY`, ja perustelu oli kaunis: taivas on kansi, joten
+ * suurin mahdollinen pudotus on `toY` itse, eikä vakiota tarvita. Se on totta
+ * ja se on silti väärä mitta, koska se tekee **samasta hypystä eri iskun sen
+ * mukaan missä päin kenttää seisoo**: 100 px pudotus lattialle y=208 antaa
+ * 0,48, ja sama hyppy luolakaistassa lattialle y=650 antaa 0,15. Omistaja
+ * pyysi iskua joka on sitä voimakkaampi mitä korkeammalta pomppaa; se oli jo
+ * olemassa, mutta se mittasi väärää asiaa.
+ *
+ * Nyt nimittäjä on se mitä pelaaja voi tehdä (`POUND_FULL_FALL`) eikä se missä
+ * hän sattuu olemaan. Kynnykset pysyvät siellä missä ne mitattiin: tappaminen
+ * 0,5 on 87 px pudotus ja tiilen rikkominen 0,72 on 125 px — jälkimmäinen on
+ * sama luku joka `POUND_BREAK_AT`in perustelussa jo lukee (~130 px), eli
+ * tavallisen kentän lattialla mikään ei muutu. Muuttunut on se että se pätee
+ * nyt myös luolassa ja pystykentässä.
  *
  * Both arguments are the *top* of the body, so the height of the player cancels
  * out of both sides and a big Pieruprinssi and a small one measure the same
@@ -228,7 +246,7 @@ const QUICKSAND_PLUNGE_SINK = 1.7;
  */
 export function poundScale(fromY, toY) {
   if (!(toY > 0)) return 0;
-  return Math.max(0, Math.min(1, (toY - fromY) / toY));
+  return Math.max(0, Math.min(1, (toY - fromY) / POUND_FULL_FALL));
 }
 
 /*

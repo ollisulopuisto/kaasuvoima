@@ -548,11 +548,23 @@ const report = await page.evaluate(async () => {
         ceiling.map((c) => `${c.id} pudotus ${Math.round(c.fall)}/${Math.round(c.room)} px`
           + ` = ${c.t.toFixed(3)}`).join(', ') + ` — ero ${Math.round(spread)} px`);
       // Ja sama väite puhtaana laskutoimituksena, ilman kenttää välissä.
-      expect('asteikon laskukaava kestää kaksi eri kattoa ja puolikkaan pudotuksen',
-        poundScale(0, 176) === 1 && poundScale(0, 400) === 1 && poundScale(88, 176) === 0.5
-        && poundScale(176, 176) === 0,
-        `176px->${poundScale(0, 176)}, 400px->${poundScale(0, 400)}`
-        + `, puolikas ${poundScale(88, 176)}, nolla ${poundScale(176, 176)}`);
+      /*
+       * Ja sama väite puhtaana laskutoimituksena — mutta **uudella väitteellä**,
+       * koska mitta vaihtui: asteikko oli osuus huoneen korkeudesta ja on nyt
+       * pudotus pikseleinä (`POUND_FULL_FALL`, mitattu 174 px = pelin pisin
+       * hyppy). Vanha kaava teki samasta hypystä eri iskun sen mukaan missä
+       * päin kenttää seisoi — 100 px lattialle y=208 antoi 0,48 ja sama hyppy
+       * luolassa y=650 antoi 0,15 — ja juuri se on se mitä omistaja pyysi
+       * korjattavaksi. Tämä rivi mittaa sen: **sama pudotus, sama luku,
+       * riippumatta siitä mihin se päättyy.**
+       */
+      const sameFall = poundScale(0, 100) === poundScale(500, 600);
+      expect('sama pudotus antaa saman iskun riippumatta siitä missä maa on',
+        sameFall && poundScale(0, 174) === 1 && poundScale(0, 400) === 1
+        && poundScale(87, 174) === 0.5 && poundScale(176, 176) === 0,
+        `100px matalalla ${poundScale(0, 100).toFixed(3)} ja syvällä `
+        + `${poundScale(500, 600).toFixed(3)}, täysi ${poundScale(0, 174)}, `
+        + `puolikas ${poundScale(87, 174)}, nolla ${poundScale(176, 176)}`);
     }
 
     /* 6. Mitä korkeammalta, sitä kovempaa — sekä vahingoltaan että ruudulla. */

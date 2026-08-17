@@ -106,7 +106,18 @@ const SPLIT_X = 156;
  * enough to catch what is standing beside the landing, not enough to swat a
  * flyer out of the sky, which would make the move an anti-air weapon as well.
  */
-const POUND_REACH = 30;
+/*
+ * Ja leveys kasvoi 30:stä 44:ään, koska omistaja pyysi iskua joka **leviää
+ * laajemmalle** korkealta tullessa.
+ *
+ * Vanha kaari oli 15…30 px eli yhdestä kahteen laattaa, ja se on liian pieni
+ * ero tunnettavaksi: kahden laatan isku näyttää samalta kuin yhden laatan isku
+ * silloin kun molemmat osuvat siihen samaan viholliseen joka oli jalkojen alla.
+ * 22…44 px on 1,4…2,75 laattaa, eli täysi isku ottaa **kaksi vihollista sen
+ * yhden sijaan** ja rikkoo kolme tiiltä kahden sijaan. Se on se ero jonka
+ * takia korkealta kannattaa tulla.
+ */
+const POUND_REACH = 44;
 const POUND_REACH_FLOOR = 0.5;
 const POUND_REACH_PER_LEVEL = 5;
 const POUND_KILL_AT = 0.5;

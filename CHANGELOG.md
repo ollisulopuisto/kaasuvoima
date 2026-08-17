@@ -7,6 +7,37 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.4 — maahanisku mittaa pudotusta eikä huonetta
+
+Omistaja: *"tee niin että ground pound on sitä voimakkaampi (= leviää
+laajemmalle) mitä korkeammalta pomppaa."* Se **oli jo** — mutta se mittasi
+väärää asiaa.
+
+| väite | mitattu |
+| --- | --- |
+| sama pudotus antaa saman iskun missä tahansa | `100px matalalla 0.575, syvällä 0.575` |
+| täysi isku vaatii pelin pisimmän hypyn | `174 px -> 1` |
+| ja isku leviää laajemmalle | `22…44 px eli 1,4…2,75 laattaa` |
+
+Asteikko oli `(pudotus) / (laskeutumisen y)`, eli **osuus huoneen korkeudesta**.
+Perustelu oli kaunis — taivas on kansi, joten suurin mahdollinen pudotus on se
+y johon päätyy — ja se tekee samasta hypystä eri iskun sen mukaan missä päin
+kenttää seisoo: 100 px pudotus lattialle y=208 antoi 0,48, ja sama hyppy
+luolakaistassa lattialle y=650 antoi **0,15**. Isku siis heikkeni sitä mukaa
+mitä syvemmälle kenttään meni, ja juuri se on se mitä omistaja pelasi.
+
+Nimittäjä on nyt se mitä pelaaja voi tehdä: **174 px, pelin pisin hyppy**
+(PHYSICS.md). Kynnykset pysyvät siellä missä ne mitattiin — tappaminen 0,5 on
+87 px ja tiilen rikkominen 0,72 on 125 px, sama luku joka `POUND_BREAK_AT`in
+perustelussa jo luki — mutta ne pätevät nyt myös luolassa ja pystykentässä.
+
+Ja se mitä pyydettiin: iskun leveys 30 → **44 px**. Vanha kaari oli 15…30 px eli
+yhdestä kahteen laattaa, mikä on liian pieni ero tunnettavaksi; uusi on
+1,4…2,75 laattaa, eli täysi isku ottaa **kaksi vihollista yhden sijaan** ja
+rikkoo kolme tiiltä kahden sijaan.
+
+---
+
 ## v26.08.18.3 — kaksi lajia jotka muuttavat kenttää, ja yksi hiljainen vika
 
 Omistaja: *"olisi kiva että oliot voisivat reagoida pelaajaan / maailmaan /
