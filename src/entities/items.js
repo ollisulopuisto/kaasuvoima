@@ -202,8 +202,29 @@ export class Beanstalk extends Entity {
 const FART_SPEED = 5.0;
 
 export class FartBall extends Entity {
-  constructor(level, x, y, dir) {
-    super(level, x, y, 8, 8);
+  /*
+   * LADATTU LAUKAUS, ja se ladataan **odottamalla** eikä napilla.
+   *
+   * Omistaja 17.8.2026 pyysi latautuvaa isoa palloa. Nappia ei ollut vapaana:
+   * ammunta on `run`in painalluksessa ja `run` on myös juoksu, joten pohjassa
+   * pitäminen ei voi tarkoittaa latausta ilman että juoksu maksaa siitä — ja
+   * alas on jo vilkaisulla.
+   *
+   * Niinpä lataus on **aika ilman laukausta**: kun edellisestä laukauksesta on
+   * `CHARGE_FRAMES` framea, seuraava on iso. Se ratkaisee saman asian kuin
+   * nappi ja korjaa samalla toisen: ruiskuttaminen ei enää ole paras tapa
+   * ampua, koska ruiskuttaja ei koskaan lataa. Malttava saa isomman pallon,
+   * eikä kenenkään tarvitse opetella uutta nappia.
+   *
+   * Iso pallo on kaksinkertainen (16 px), lentää saman matkan mutta **ei
+   * pysähdy ensimmäiseen viholliseen**: se on `pierce`, ja se on ainoa asia
+   * jonka lataus ostaa. Nopeus ja elinaika ovat samat, koska niiden muuttaminen
+   * olisi tehnyt siitä toisen aseen eikä saman aseen ladattuna.
+   */
+  constructor(level, x, y, dir, charged = false) {
+    super(level, x, y, charged ? 16 : 8, charged ? 16 : 8);
+    this.charged = charged;
+    this.pierce = charged;
     this.kind = 'projectile';
     this.alwaysActive = true;
     this.active = true;
@@ -284,7 +305,16 @@ export class FartBall extends Entity {
 
   draw(ctx) {
     // A shot running out of gas stops looking like fresh gas before it pops.
-    drawFart(ctx, this.x, this.y, this.tick,
-      this.life > 40 ? FART_STYLE : FART_STYLE_SPENT);
+    const style = this.life > 40 ? FART_STYLE : FART_STYLE_SPENT;
+    if (!this.charged) {
+      drawFart(ctx, this.x, this.y, this.tick, style);
+      return;
+    }
+    /* Ladattu pallo on **sama kuva neljänä**, ei uusi kuva: neljä pilveä
+     * ristiin tekee siitä ison ilman että pelaajan pitää tunnistaa mitään
+     * uutta. Sama keino kuin tiilen sirpaleilla. */
+    for (const [dx, dy] of [[0, 0], [8, 0], [0, 8], [8, 8]]) {
+      drawFart(ctx, this.x + dx, this.y + dy, this.tick + dx + dy, style);
+    }
   }
 }

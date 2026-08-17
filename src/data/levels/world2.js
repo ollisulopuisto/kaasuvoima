@@ -434,7 +434,10 @@ export const WORLD2_LEVELS = {
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
-      'start', 'power', 'walkers', 'lava_gap', 'note_pair',
+      /* Hössötin maailmaan 2: laji joka ei satuta kuuluu sinne missä pelaaja
+       * on jo oppinut ne jotka satuttavat — ja 2-3 on maailman hengähdys
+       * (yksi ensiesittely ennestään). Ks. `hossotin`-palikka. */
+      'start', 'power', 'walkers', 'hossotin', 'lava_gap', 'note_pair',
       'plat_steps', 'flyer', 'pipe_plant', 'lava_wide', 'lava_gap', 'dune_switch',
       'soup_stop', 'sky_run', 'cork_gap', 'heartburn', 'plat_float', 'dune_sink_deep', 'power',
       'steps_up', 'run_up', 'goal', 'goal_end',

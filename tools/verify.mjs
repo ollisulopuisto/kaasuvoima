@@ -20573,6 +20573,73 @@ const report = await page.evaluate(async () => {
         + ` kello ${p2.swallowTimer}`);
     }
 
+    /* --- 8 a. hätä ja ladattu laukaus --- */
+    /*
+     * Kaksi uutta verbiä, ja molempien väite on **mitä ne eivät tee**: hätä ei
+     * satuta ja ladattu laukaus ei ole uusi nappi.
+     */
+    {
+      const E = await import('/src/entities/enemies.js');
+      const { FartBall } = await import('/src/entities/items.js');
+      const blank3 = () => ({
+        left: false, right: false, up: false, down: false, jump: false, run: false,
+        start: false, mute: false, quicksave: false, quickload: false, slot: false, reset: false,
+      });
+      const mkIn = () => ({
+        held: blank3(), pressed: blank3(), released: blank3(), consume() {},
+      });
+      game.state = {
+        lives: 3, coins: 0, score: 0, power: { type: 'flower', level: 3 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {}, bet: 0,
+      };
+      const s = new LevelScene(game, '1-1');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const p = s.player;
+
+      /* 1. Hössötin: kosketus vie ohjauksen muttei elämää eikä voimatasoa. */
+      const h = new E.Hossotin(s, p.x + 10, p.y);
+      h.active = true;
+      h.alwaysActive = true;
+      h.spawnGrace = 0;
+      s.add(h);
+      const before = { lives: game.state.lives, level: p.powerLevel, x: p.x };
+      s.collisions(mkIn());
+      const panicked = p.panic;
+      /* Vasemmalle painaminen ei auta: jalat vievät eteenpäin. */
+      let moved = 0;
+      for (let f = 0; f < 40; f++) {
+        const i = mkIn();
+        i.held.left = true;
+        s.update(i);
+        moved = p.x - before.x;
+      }
+      expect('hössötin vie ohjauksen muttei elämää — eikä vasemmalle pääse',
+        panicked > 0 && game.state.lives === before.lives && p.powerLevel === before.level
+        && moved > 8,
+        `hätä ${panicked} framea, elämät ${before.lives}->${game.state.lives},`
+        + ` taso ${before.level}->${p.powerLevel}, liike vasemmalle painaen ${moved.toFixed(1)} px`);
+
+      /* 2. Ladattu laukaus: tauko tekee ison pallon, ja peräkkäiset eivät. */
+      p.panic = 0;
+      s.entities = s.entities.filter((e) => !(e instanceof FartBall));
+      p.lastShot = -999;
+      p.tick += 200;
+      p.shoot();
+      const first = s.entities.filter((e) => e instanceof FartBall);
+      const bigFirst = first.length === 1 && first[0].charged && first[0].w === 16;
+      s.entities = s.entities.filter((e) => !(e instanceof FartBall));
+      p.tick += 10;
+      p.shoot();
+      const second = s.entities.filter((e) => e instanceof FartBall);
+      const smallSecond = second.length >= 1 && second.every((b) => !b.charged);
+      expect('tauko lataa laukauksen, ja peräkkäiset laukaukset ovat tavallisia',
+        bigFirst && smallSecond,
+        `tauon jälkeen ${first.length} palloa (ladattu ${first[0] && first[0].charged}),`
+        + ` heti perään ${second.length} (ladattu ${second.some((b) => b.charged)})`);
+    }
+
     /* --- 8 b. neljä taloa, kolme uhkapeliä --- */
     /*
      * Talojen väite on **panos**, ja panos on ainoa asia jonka väärin

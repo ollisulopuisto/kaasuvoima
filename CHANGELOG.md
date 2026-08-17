@@ -7,6 +7,41 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.23 — hössötin, ladattu laukaus ja päivän kentät korpuksella
+
+Kolme tekemätöntä kohtaa ROADMAPista kerralla, ja yksi niistä oli odottanut
+korpusta.
+
+**HÖSSÖTIN** — *"tee monster, johon osuessaan pelaajahahmo menettää kontrolit
+hetkiseksi: juostaan eteenpäin automaattisesti, pelaaja voi vain hyppiä tai
+ampua kuplia."* Pelin ensimmäinen vihollinen jonka kosketus **ei ole tappio**:
+elämä ei mene, voimataso ei putoa, ja tähti ei suojaa siltä koska suojattavaa ei
+ole. Sen sijaan jalat vievät eteenpäin sata framea eikä suuntaa saa vaihtaa —
+hyppy ja laukaus toimivat, eli työkaluja on kaksi ja jarrua ei ole. Vahingosta
+tulee *tilanne* eikä tappio.
+
+Laji **pakenee**: se kääntyy pois pelaajasta kolmen laatan sisällä, joten siihen
+törmätään useimmiten omasta vauhdista. Nurkkaan ajettuna se osuu, ja se on
+oikein — hätä on seurausta kiireestä. Yksi hyppy riittää siihen, eikä siitä saa
+mitään erikoista: laji on este eikä palkinto. Esittely on 2-3:ssa tasamaalla
+kolikkorivin keskellä, ilman kuilua tai piikkejä lähelläkään.
+
+**LADATTU LAUKAUS, ja se ladataan odottamalla.** Nappia ei ollut vapaana:
+ammunta on `run`in painalluksessa ja `run` on myös juoksu, joten pohjassa
+pitäminen olisi maksanut juoksusta. Niinpä lataus on **aika ilman laukausta** —
+puolitoista sekuntia, ja seuraava pallo on kaksinkertainen eikä pysähdy
+ensimmäiseen viholliseen. Se ratkaisee saman asian kuin nappi ja korjaa
+toisen: ruiskuttaminen ei enää ole paras tapa ampua, koska ruiskuttaja ei
+koskaan lataa.
+
+**Päivän kentät ajettiin korpuksella uusiksi.** Todistus oli jäänyt kiinni
+siihen ettei tällä agentilla ollut korpusta; nyt oli. `daily-origin.mjs` rakensi
+1096 päivän ikkunan uudelleen, tarkisti jokaisen säännöillä, botilla ja
+korpusta vasten (0 osumaa) ja kirjoitti uuden sormenjäljen. Samalla `dailySpec`
+lakkasi pudottamasta mäkeä: **päivän kentässä on nyt maastoa** kuten muissakin.
+
+---
+
 ## v26.08.18.22 — neljä taloa, kolme uhkapeliä
 
 Omistaja 17.8.2026: *"hernetalo on kiva, mut lisätään siihen

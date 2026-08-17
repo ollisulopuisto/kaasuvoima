@@ -10,7 +10,7 @@ import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
-import { ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG } from '../entities/enemies.js';
+import { ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 import { Music, Sfx, Ambience, killSound } from '../core/audio.js';
@@ -4774,8 +4774,13 @@ export class LevelScene {
           if (other.kind !== 'enemy' || other.dying || other.remove) continue;
           if (overlaps(e.box, other.box)) {
             other.hitByProjectile(Math.sign(e.vx) || 1);
-            e.pop();
-            break;
+            /* Ladattu pallo ei pysähdy ensimmäiseen: `pierce` on se yksi asia
+             * jonka odottaminen ostaa (ks. `FartBall`). Tavallinen pallo
+             * puhkeaa kuten ennenkin. */
+            if (!e.pierce) {
+              e.pop();
+              break;
+            }
           }
         }
         continue;
@@ -4970,6 +4975,21 @@ export class LevelScene {
        * satuttaisi. Se on tähden puolikas — tappaa kosketuksesta muttei suojaa
        * piikeiltä eikä laavalta — ja juuri se ero pitää tähden omana asianaan
        * (DESIGN.md kohta 8: kaksi merkkiä samasta asiasta on yksi liikaa). */
+      /*
+       * HÖSSÖTIN EI SATUTA VAAN HÄTÄÄNNYTTÄÄ, ja tämä haara on ennen kaikkia
+       * vahinkohaaroja siksi että se **ei ole vahinko**: tähti ei suojaa
+       * siltä, haavoittumattomuus ei estä sitä eikä voimataso muutu. Ks.
+       * `Hossotin` ja `Player.panic`.
+       *
+       * Tallaus menee tämän ohi (`stomping` käsiteltiin yllä), eli lajin voi
+       * hoitaa hyppäämällä — hätä on hinta törmäyksestä eikä lajista.
+       */
+      if (e.panics) {
+        if (p.panic <= 0) Sfx.play('squeak');
+        p.panic = PANIC_FRAMES;
+        continue;
+      }
+
       if (p.swallowed === 'piikki' && !e.dangerousTop) {
         e.hitByShell(e.cx >= p.cx ? 1 : -1);
         continue;
@@ -5727,6 +5747,11 @@ export class LevelScene {
           ? '#ff8040' : '#8fd0ff',
         align: 'right',
         shadow: S,
+      });
+    } else if (this.player.panic > 0) {
+      const secs = Math.ceil(this.player.panic / 60);
+      drawText(ctx, `HÄTÄ ${secs}`, OVERLAY.right, 17, {
+        color: Math.floor(this.tick / 4) % 2 ? '#f0c840' : '#ffffff', align: 'right', shadow: S,
       });
     } else if (this.player.corked > 0) {
       const secs = Math.ceil(this.player.corked / 60);

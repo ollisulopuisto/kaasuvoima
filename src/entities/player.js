@@ -331,6 +331,14 @@ const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
  * kertaakaan ilman täyttä mittaria. 1,8 on kävelykaton (1,5) yläpuolella, eli
  * kävelijää rinne ei heitä minnekään ja se on tarkoitus.
  */
+/*
+ * Kuinka pitkä tauko lataa laukauksen. 90 framea eli puolitoista sekuntia:
+ * pidempi kuin yksikään taistelutauko (kaksi vihollista peräkkäin ammutaan
+ * nopeammin) ja lyhyempi kuin yksikään siirtymä, eli ladattu pallo on se jolla
+ * *aloitetaan* ja tavallinen se jolla jatketaan.
+ */
+const CHARGE_FRAMES = 90;
+
 const SLOPE_DOWN = 0.14;
 const SLOPE_UP = 0.045;
 const SLOPE_LAUNCH = 0.85;
@@ -424,6 +432,9 @@ export class Player extends Entity {
     /* Minkä suuntaisessa rinteessä keho on juuri nyt (1 nousee oikealle, -1
      * vasemmalle, 0 ei rinnettä). `moveY` kirjoittaa, `slopePull` lukee. */
     this.onSlope = 0;
+    /* Frameja jäljellä hätää, ks. `panicking` yllä. Tavallinen kenttä, joten
+     * `savestate.js` kantaa sen ilman omaa riviä. */
+    this.panic = 0;
     /* Ks. `update`: mittari framen alussa, ja vain vilkaisu lukee sitä. */
     this.pFullEntry = false;
     /* Onko täyden mittarin etu voimassa juuri nyt — ja tämä on kenttä eikä
@@ -683,11 +694,33 @@ export class Player extends Entity {
       return;
     }
 
-    const left = this.controllable ? input.held.left : false;
-    const right = this.controllable ? input.held.right || this.autoWalk : this.autoWalk;
+    /*
+     * HÄTÄ VIE OHJAUKSEN MUTTEI PELIÄ (17.8.2026).
+     *
+     * Omistaja: *"tee monster, johon osuessaan pelaajahahmo menettää kontrolit
+     * hetkiseksi: juostaan eteenpäin automaattisesti, pelaaja voi vain hyppiä
+     * tai ampua kuplia."*
+     *
+     * `panic` on siis **osittainen** ohjauksen menetys, ja se on eri asia kuin
+     * `controllable = false` (maali, kuolema, putki) jossa mitään ei voi tehdä.
+     * Jalat menevät eteenpäin itsestään eikä suuntaa saa vaihtaa, mutta hyppy
+     * ja laukaus toimivat — eli pelaajalla on kaksi työkalua ja ei jarrua.
+     *
+     * Se tekee vahingosta *tilanteen* eikä tappiota: hätä ei vie elämää eikä
+     * voimatasoa, se vie sen mitä pelaaja juuri nyt aikoi tehdä. Ja koska
+     * eteenpäin juokseminen on tässä pelissä aina suunta johon halutaan, hätä
+     * ei ole rangaistus jota odotetaan vaan hetki jota kiirehditään.
+     */
+    if (this.panic > 0) this.panic--;
+    const panicking = this.panic > 0 && this.controllable;
+    const left = this.controllable && !panicking ? input.held.left : false;
+    const right = this.controllable
+      ? (panicking ? true : input.held.right || this.autoWalk)
+      : this.autoWalk;
     const up = this.controllable ? input.held.up : false;
     const down = this.controllable ? input.held.down : false;
-    const run = this.controllable ? input.held.run : false;
+    /* Hädässä juostaan, ei kävellä: pakokauhu ei valitse vauhtia. */
+    const run = this.controllable ? (panicking || input.held.run) : false;
     // A press is remembered for a few frames, so asking for a jump just before
     // landing gets you a jump on landing instead of nothing at all.
     if (this.controllable && input.pressed.jump) this.jumpBuffer = JUMP_BUFFER_FRAMES;
@@ -1356,6 +1389,10 @@ export class Player extends Entity {
    * oppii yhdellä tasolla ei saa vaihtua toisella.
    */
   shoot() {
+    /* Lataus on aika ilman laukausta, ks. `FartBall`. Kello nollataan tässä
+     * eikä `update`ssa, koska se mittaa nimenomaan laukausten väliä. */
+    const charged = this.tick - (this.lastShot || -999) >= CHARGE_FRAMES;
+    this.lastShot = this.tick;
     const live = this.level.entities.filter((e) => e instanceof FartBall && !e.remove);
     const spread = Math.min(this.shotsPerPress, this.maxLiveShots);
     const over = live.length + spread - this.maxLiveShots;
@@ -1365,10 +1402,15 @@ export class Player extends Entity {
     }
     const x = this.facing > 0 ? this.x + this.w : this.x - 8;
     for (let i = 0; i < spread; i++) {
-      const ball = new FartBall(this.level, x, this.y + this.h * 0.45, this.facing);
-      if (i === 1) ball.vy = -2.2;
-      if (i === 2) ball.vy = 2.4;
+      /* Ladattu on aina yksi: iso pallo *on* se hajonta. Kolme isoa yhdellä
+       * painalluksella olisi ollut ruisku takaisin toisessa muodossa. */
+      const big = charged && i === 0;
+      const ball = new FartBall(this.level, x, this.y + this.h * 0.45 - (big ? 4 : 0),
+        this.facing, big);
+      if (!big && i === 1) ball.vy = -2.2;
+      if (!big && i === 2) ball.vy = 2.4;
       this.level.add(ball);
+      if (big) break;
     }
   }
 

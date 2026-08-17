@@ -47,6 +47,26 @@ export const GRASS_CHUNKS = {
    * satuta enempää kuin kävelijä — uusi *idea* eikä uusi vaara sopii sinne
    * missä pelaaja on vielä opettelemassa.
    */
+  /**
+   * HÖSSÖTIN, ja esittely on **tasamaalla ja kolikoiden keskellä**.
+   *
+   * Laji ei satuta: kosketus vie ohjauksen sadaksi frameksi (`Hossotin`). Sen
+   * esittelyn on siis oltava paikassa jossa ohjauksen menettäminen *tuntuu*
+   * muttei tapa — tasainen käytävä, kolikkorivi houkuttelemassa eteenpäin ja
+   * lattiaa koko matkan. Pelaaja oppii lajin siinä hetkessä jossa hän juoksee
+   * kolikoiden perässä ja huomaa ettei enää pysty pysähtymään.
+   *
+   * Kuilua tai piikkiä ei ole lähelläkään, ja se on tarkoituksella: hätä on
+   * hauska kun se on tilanne, ja epäreilu kun se on kuolema jota ei voinut
+   * väistää. Yhdistelmä tulee myöhemmin, kun laji on opittu.
+   */
+  hossotin: ck(16, {
+    9: '     o o o o',
+    12: '        h',
+    13: G,
+    14: G,
+  }),
+
   coin_thief: ck(16, {
     9: '      o o o o',
     12: '  s',

@@ -520,14 +520,9 @@ Galway/Hubbard-tekniikat ovat kirjattuina eivätkä tehtyinä:
    käsintehdyissä kentissä), ja vihollisten oma suhde rinteeseen — kuori
    kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä *suunnitellut*
    sitä, ks. `slopePull` joka on tällä hetkellä vain pelaajan.
-2. **Hirviö joka vie ohjauksen.** Osuma → hahmo juoksee itsekseen eteenpäin
-   muutaman sekunnin, pelaaja voi vain hypätä ja ampua. Tarvitsee uuden lajin,
-   sen sprite-työn ja pelaajan puolelle "pakkojuoksu"-tilan (`autoWalk` on jo
-   olemassa maalikävelyä varten, se on lähtökohta).
-3. **Latautuva iso tulipallo.** Ongelma on nappi: ammunta on `run`in
-   painalluksessa (B), ja B on myös juoksu — pohjassa pitäminen ei voi
-   tarkoittaa latausta ilman että juoksu maksaa siitä. Vaihtoehdot: lataus
-   alas-napilla seisten, tai oma näppäin. Päätös puuttuu.
+2. ✔ **Hirviö joka vie ohjauksen — tehty 17.8.2026** (HÖSSÖTIN, v26.08.18.23).
+3. ✔ **Latautuva iso tulipallo — tehty 17.8.2026.** Nappiongelma ratkesi
+   kiertämällä se: lataus on aika ilman laukausta eikä pohjassa pidetty nappi.
 
 ### Ruutuefektit ja neljännen seinän rikkominen
 

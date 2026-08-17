@@ -78,6 +78,19 @@ const STAND_TILES = Math.max(1, Math.floor(
  */
 export const ENEMY_COST = {
   g: 1.0,   // walker: the unit
+  /*
+   * HÖSSÖTIN: 0,8 eli **alle kävelijän**, ja se on väite eikä alennus.
+   *
+   * Sen kosketus ei satuta — se vie ohjauksen sadaksi frameksi — joten
+   * hinnaksi ei kelpaa sama luku kuin sellaiselta joka vie elämän. Mutta
+   * nollaa se ei ole: hätä kestää yli sekunnin ja sen aikana kuilu on yhä
+   * kuilu ja piikki yhä piikki, eli laji siirtää vaaran *muualle* kentässä.
+   * Kahdeksan kymmenesosaa kävelijästä on arvio siitä, ja se on kirjattu tähän
+   * arviona eikä mittauksena — jos hössötin joskus osoittautuu tappavammaksi
+   * kuin kävelijä sen ympäristön kautta, tämä luku on se paikka jossa se
+   * korjataan.
+   */
+  h: 0.8,
   k: 1.3,   // shell: stomping it leaves a shell that comes back at you
   f: 1.6,   // flyer: hops, and a stomp turns it into a walker — two hits
   p: 1.1,   // pipe plant: telegraphed and stationary, but not stompable

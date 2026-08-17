@@ -13,6 +13,7 @@ import {
   drawStinkCloud, drawCorkGuy, drawHeartburn, drawAngrySun, drawSpikeGuy,
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS,
+  drawHossotin,
   drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
   drawPaukkupoho, drawPyorre, drawKummitus, drawKuura,
   drawKolikkovaras } from '../gfx/sprites.js';
@@ -4099,6 +4100,80 @@ export const ENEMY_VERBS = {
   s: { move: 'juoksu kolikolle', shot: 'ei', hurt: 'kosketus', stomp: 'pudottaa saaliin', world: 'syö kolikot' },
 };
 
+/**
+ * HÖSSÖTIN — laji joka ei satuta vaan **vie ohjauksen hetkeksi**.
+ *
+ * Omistaja 17.8.2026: *"tee monster, johon osuessaan pelaajahahmo menettää
+ * kontrolit hetkiseksi: juostaan eteenpäin automaattisesti, pelaaja voi vain
+ * hyppiä tai ampua kuplia."*
+ *
+ * Se on pelin ensimmäinen vihollinen jonka kosketus **ei ole tappio**, ja siinä
+ * on koko laji: elämä ei mene, voimataso ei putoa, mitään ei menetetä paitsi se
+ * mitä pelaaja juuri aikoi tehdä. `PANIC_FRAMES` sekuntia jalat vievät eteenpäin
+ * eikä jarrua ole; hyppy ja laukaus toimivat, eli työkaluja on kaksi ja niillä
+ * pitää tulla toimeen.
+ *
+ * Kaksi päätöstä jotka tekevät siitä reilun:
+ *
+ *   - **Se pakenee.** Hössötin kääntyy pois pelaajasta kun tämä lähestyy, eli
+ *     siihen törmätään useimmiten omasta vauhdista — ja se on oikein: hätä on
+ *     seurausta kiireestä. Nurkkaan ajettuna se ei enää pääse pakoon, ja
+ *     silloin se osuu.
+ *   - **Se on tallattavissa.** Yksi hyppy riittää, eikä siitä saa mitään
+ *     erikoista. Laji on este eikä palkinto.
+ *
+ * `PANIC_FRAMES` on 100 eli reilut puolitoista sekuntia: pitkä tarpeeksi että
+ * ehtii tapahtua jotain (yksi kuilu, yksi vihollinen), lyhyt tarpeeksi ettei se
+ * ole rangaistus jota odotetaan loppuun.
+ */
+export const PANIC_FRAMES = 100;
+
+export class Hossotin extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.speed = 0.9;
+    this.score = PTS.common;
+  }
+
+  get bubbleable() { return true; }
+
+  get sinks() { return true; }
+
+  get windborne() { return true; }
+
+  /** Kosketus hätäännyttää eikä satuta. Luetaan `collisions`issa. */
+  get panics() { return true; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    if (this.held()) return;
+    if (this.sink()) return;
+    /* Pakenee: kääntyy poispäin pelaajasta aina kun tämä on kolmen laatan
+     * sisällä. Kauempana se kävelee omaan suuntaansa kuten kaikki muutkin,
+     * jottei koko laji ole pelkkä pelaajan varjo. */
+    const p = this.level.player;
+    if (p && Math.abs(p.cx - this.cx) < 48) this.facing = p.cx > this.cx ? -1 : 1;
+    this.steer(this.speed * this.facing);
+    if (this.moveSideways()) this.facing *= -1;
+    if (this.onGround && !footingAhead(this.level, this.x + this.facing * 2, this.y, this.w, this.h)) {
+      this.facing *= -1;
+    }
+    applyGravity(this, 1);
+    moveY(this, this.level);
+    if (this.y > this.level.heightPx + 32) this.remove = true;
+  }
+
+  draw(ctx) {
+    const frame = Math.floor(this.tick / 4);
+    if (this.dying) {
+      this.drawFlipped(ctx, () => drawHossotin(ctx, this.x, this.y, frame, this.facing));
+      return;
+    }
+    this.drawSprite(ctx, (g) => drawHossotin(g, this.x, this.y, frame, this.facing));
+  }
+}
+
 export const ENEMY_CHARS = {
   g: (level, tx, ty) => new Walker(level, tx * TILE, ty * TILE),
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),
@@ -4164,4 +4239,5 @@ export const ENEMY_CHARS = {
   Z: (level, tx, ty) => new Paarma(level, tx * TILE, ty * TILE + 2),
   Y: (level, tx, ty) => new Yokki(level, tx * TILE, ty * TILE),
   m: (level, tx, ty) => new Paukkupoho(level, tx * TILE, ty * TILE),
+  h: (level, tx, ty) => new Hossotin(level, tx * TILE, ty * TILE),
 };
