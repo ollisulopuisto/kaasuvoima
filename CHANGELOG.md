@@ -7,6 +7,49 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.5 — tehostusportti: segmentti jonka läpi ei pääse ilman voimaa
+
+Omistajan päätös, sanatarkasti: *"voi olla segmenttejä, joissa TARVITAAN
+powerup, mutta VARMISTA ETTÄ POWERUP on saatavilla sitä ennen!"* Tietoinen
+poikkeus DESIGN.md kohtaan 5, ja sen hinta on maksettu portteina.
+
+| väite | mitattu |
+| --- | --- |
+| botti läpäisee voimatasolla 0 poimimalla lahjan | `4-3 läpi` |
+| ilman lahjaa se ei läpäise | `4-3 ilman lahjaa pysähtyy` |
+| lahja on ennen porttia ja lähellä | `lahja 150, kuilu 160` |
+| kuilun leveys ei riitä poikkeukseksi | `ilman ilmoitusta kaatuu sääntöön` |
+
+Pelin ensimmäinen tehostusportti on **4-3**: kahdeksan laatan kuilu mitattua
+kuuden budjettia vastaan, ja sen edessä pierusieni **makaamassa maassa**.
+
+**Lupaus ei väljene vaan täsmentyy.** Vanha muoto oli "kenttä on läpäistävissä
+voimatasolla 0"; uusi on "kenttä on läpäistävissä voimatasolla 0 **aloittaen**".
+Sama botti joka ajaa jokaisen kentän pienimmällä koolla ajaa myös tämän — se
+vain poimii lahjan matkalla.
+
+Neljä rajausta, ja jokainen on koodissa eikä lupauksessa:
+
+1. **Lahja makaa maassa eikä lohkossa.** Maassa makaava poimitaan kävelemällä;
+   lohkoon pitää osua, ja "pitää osua" ei ole varmuus.
+2. **Se ei vieri pois.** Sieni vierii 0,85 px/frame, ja mitattuna se ehti
+   pudota siihen samaan kuiluun jonka se oli tullut ratkaisemaan.
+3. **Ilmoitus on lahja itse**, ei sarakeväli datassa. Ensimmäinen versio
+   kirjoitti rajat `gates`-kenttään ja kaatui vaikeustasoon: venytetyssä
+   kentässä sama kuilu oli sarakkeessa 199 eikä 164. Laatta ruudukossa venyy
+   mukana, sarakenumero ei.
+4. **Ilmoitus ei ole lupa vaan lupaus joka mitataan.** Portti ajaa botin
+   kahdesti: lahjan kanssa läpi, ilman lahjaa jumiin.
+
+Kaksi mittausta matkan varrelta, molemmat kirjattu palikkaan: lahja kolmen
+sarakkeen päässä kuilun huulesta tappoi botin (vauhdinotto ei mahtunut väliin),
+ja lahja palikan ensimmäisessä sarakkeessa jäi poimimatta koska **edellisestä
+palikasta tullaan ilmalennossa** — botti oli ilmassa sarakkeeseen 148 asti ja
+laskeutui 149. Lattialla makaava tehostus on varma vain sillä osalla lattiaa
+jolla oikeasti kävellään.
+
+---
+
 ## v26.08.18.4 — maahanisku mittaa pudotusta eikä huonetta
 
 Omistaja: *"tee niin että ground pound on sitä voimakkaampi (= leviää

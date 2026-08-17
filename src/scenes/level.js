@@ -1440,6 +1440,25 @@ export class LevelScene {
         } else if (ENEMY_CHARS[ch]) {
           this.entities.push(ENEMY_CHARS[ch](this, tx, ty, this.def.bossVariant || 0));
           this.grid[ty][tx] = ' ';
+        } else if (ch === T.GIFT) {
+          /*
+           * TEHOSTUS MAASSA, ja se on portin ehto eikä koriste.
+           *
+           * Omistajan päätös 18.8.2026: kentässä saa olla kohta jonka **läpi ei
+           * pääse ilman tehostusta**, kunhan tehostus on varmasti saatavilla
+           * juuri ennen sitä. "Varmasti" on tässä se sana joka ratkaisee: `?`
+           * -lohkosta saatava tehostus vaatii että lohkoon osutaan, ja se on
+           * taito jota botti ei osaa eikä pelaajakaan välttämättä huomaa.
+           *
+           * Maassa makaava tehostus poimitaan **kävelemällä**, eli se on
+           * saatavilla samalla varmuudella kuin lattia. Siksi portti voidaan
+           * todistaa: sama botti joka ajaa jokaisen kentän voimatasolla 0
+           * poimii tämän ohi kävellessään, ja jatkaa matkaa sillä voimalla
+           * jonka portti vaatii. Ei uutta botin taitoa, ei uutta arvausta.
+           */
+          this.entities.push(new Item(this, tx * TILE, ty * TILE, 'shroom',
+            { emerge: false, still: true }));
+          this.grid[ty][tx] = ' ';
         } else if (ch === T.GOAL) {
           this.goal = { tx, ty, x: tx * TILE, y: ty * TILE + TILE - GOAL_HEIGHT };
           this.grid[ty][tx] = ' ';

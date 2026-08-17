@@ -118,11 +118,34 @@ export const WORLD4_LEVELS = {
    * platforms) still reports from the same column it always did. Measured:
    * before and after, "kuilu sarakkeessa 235".
    */
+  /*
+   * 4-3 SAI PELIN ENSIMMÄISEN TEHOSTUSPORTIN, ja se on tietoinen poikkeus.
+   *
+   * Omistajan päätös 18.8.2026: *"voi olla segmenttejä joissa TARVITAAN
+   * powerup, mutta VARMISTA ETTÄ POWERUP on saatavilla sitä ennen."* Portti on
+   * kahdeksan laatan kuilu — kaksi yli mitatun kuusi laattaa budjetin — ja sitä
+   * edeltää `gate_gift`, jossa pierusieni **makaa maassa** poimittavana.
+   *
+   * Miksi 4-3 eikä maailma 1: tämä on ensimmäinen kohta pelissä jossa
+   * pelaajalla on jo ilmahyppy tuttuna työkaluna (maailmat 1–3 opettavat sen),
+   * eli portti kysyy taitoa jonka hän osaa eikä opeta kahta asiaa kerralla.
+   *
+   * **Ilmoitus on lahja itse**, ei sarakeväli kentän datassa: `rules.js`
+   * päästää budjettia leveämmän kuilun läpi vain jos sen edessä on lahja
+   * enintään 24 saraketta aiemmin. Ensimmäinen versio kirjoitti rajat
+   * `gates`-kenttään ja kaatui heti vaikeustasoon — venytetyssä kentässä sama
+   * kuilu oli sarakkeessa 199 eikä 164. Laatta ruudukossa venyy mukana;
+   * sarakenumero ei.
+   *
+   * Ilmoitus ei silti ole lupa vaan lupaus joka mitataan: `verify.mjs` ajaa
+   * botin kahdesti, lahjan kanssa (on päästävä läpi) ja ilman (on jäätävä
+   * jumiin).
+   */
   '4-3': {
     theme: 'factory', bg: 'factory', music: 'factory',
     chunks: [
       'start', 'spike_walk', 'fort_power', 'fac_vents', 'fac_belt', 'fac_torvi', 'fac_shaft',
-      'heartburn_pair', 'cloud_run', 'fac_gap', 'fac_press', 'corks', 'fac_belt',
+      'heartburn_pair', 'cloud_run', 'gate_leap', 'fac_press', 'corks', 'fac_belt',
       'heartburn', 'fac_torvit', 'fac_shaft', 'cloud_run', 'fac_vents', 'fac_switch', 'cork_gap',
       'steps_up', 'run_up', 'goal', 'goal_end',
     ],
