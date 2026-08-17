@@ -396,7 +396,37 @@ Riski jonka tiedämme etukäteen: `rules.js` validoi kentän *lähtötilan*, jot
 pomo joka rikkoo lattian voi tehdä areenasta läpäisemättömän. Vaatii saman
 takaisinkasvun kuin mureneva lava, ja samasta syystä.
 
-**4. Pomo järjestää kentän uusiksi — PÄÄTETTY TEHDÄ 9.8.2026.** Omistaja valitsi
+**4. Pomo järjestää kentän uusiksi — ✔ TEHTY (v26.08.17.95).** Iskuaallon pomo
+(`form >= 1`, eli 2-F ja 8-2, ja kuningas perii sen kuudentena muotonaan) nostaa
+**ensimmäisen osuman jälkeen** areenan lattiasta pilareita: sama laskeutuminen
+joka lähettää aallon herättää lähimmän paikan, se pölisee 45 framea, ja sitten
+kaksi laattaa kiveä nousee.
+
+Kolme hyväksymiskriteeriä, kolme mittausta:
+
+| kriteeri | mitattu |
+| --- | --- |
+| ennakoitu | `2-F: varoitus framella 13, nousi framella 59` |
+| palautuva | `8/8 linnaketta palautui laatta laatalta` |
+| validoitu | `1-F:3 2-F:5 3-F:3 4-F:5 5-F:5 6-F:3 7-F:5 8-F:5 paikkaa, kaikki kelpaavat` |
+| ja pahin tapaus | `kaikki pilarit pystyssä: 8 linnaketta läpi voimatasolla 0` |
+
+**Validointi ratkaistiin muodolla eikä laskemalla.** Kaikkien 2^n järjestelyn
+ajaminen botilla olisi ollut sekä hidasta että hauras; sen sijaan pilari on
+**yksi sarake leveä ja kaksi laattaa korkea**, ja mitattu hyppybudjetti on 6
+laattaa kuilua ja 4 laattaa seinää — kaksi laattaa on askelma eikä este.
+Yksikään osajoukko ei siis voi tehdä ovesta saavuttamatonta, koska yksikään
+yksittäinen pilari ei voi. Portti mittaa silti sekä ehdot että pahimman
+tapauksen, koska rakenteellinen argumentti ilman mittausta on mielipide.
+
+Paikat ovat **johdettuja** (`plantPillars`) eikä kenttädatassa: tasainen lattia,
+kolme tyhjää riviä yllä, kuusi laattaa väliä oveen, areenan alkuun ja toisiinsa.
+Se löytyi vasta mittaamalla: ensimmäinen versio etsi lattiaa ylhäältä alas ja
+löysi areenan **katon**, eli nolla paikkaa jokaisessa linnakkeessa.
+
+Alkuperäinen päätösteksti oli:
+
+**Päätetty tehdä 9.8.2026.** Omistaja valitsi
 tämän eikä halvempaa kohtaa 3:a. Kolme ehtoa alla eivät ole toiveita vaan
 hyväksymiskriteerit, ja niistä **validointi on se joka pitää ratkaista ensin**:
 `rules.js` tarkistaa kentän *lähtötilan*, joten areena joka muuttuu kesken

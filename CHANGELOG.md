@@ -7,6 +7,46 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.17.95 — pomo järjestää huoneen uusiksi
+
+ROADMAP kohta 4, päätetty 9.8.2026 ja "tehdään heti" 16.8.2026. Iskuaallon pomo
+nostaa **ensimmäisen osuman jälkeen** areenan lattiasta pilareita.
+
+| väite | mitattu |
+| --- | --- |
+| ennakoitu: varoitus ennen nousua | `2-F: varoitus framella 13, nousi framella 59` |
+| palautuva: pomon kaatuminen palauttaa huoneen | `8/8 linnaketta laatta laatalta` |
+| validoitu: jokainen paikka kelpaa | `1-F:3 2-F:5 3-F:3 4-F:5 5-F:5 6-F:3 7-F:5 8-F:5` |
+| ja pahin tapaus läpäistävissä | `kaikki pystyssä: 8 linnaketta läpi voimatasolla 0` |
+
+Tämä on se kohta jossa vihollinen koskee siihen mitä pelaaja luuli vakioksi:
+lattiaan. Sama laskeutuminen joka lähettää iskuaallon herättää lähimmän paikan,
+se pölisee 45 framea, ja sitten kaksi laattaa kiveä nousee. Pilaria ei anneta
+jalkojen alta: jos pelaaja seisoo juuri siinä sarakkeessa, nousu **odottaa**
+eikä peruunnu — peruuntuminen opettaisi seisomaan pilarin päällä.
+
+**Se on iskuaallon pomon liikettä eikä uusi laji**, koska hänen sanansa on jo
+lattia: aalto juoksee sitä pitkin, ja pilarin nostaminen on sama lause
+voimakkaampana. Siitä seuraa myös että **kuningas perii sen** kuudentena
+muotonaan, mikä on maailma 8:n koko lause — linna lähettää sen mitä se on jo
+lähettänyt.
+
+**Validointi ratkaistiin muodolla eikä laskemalla.** Se oli tämän kohdan este
+kolmen viikon ajan: `rules.js` katsoo kentän lähtötilaa, eikä mikään portti
+katsonut ruudukkoa joka muuttuu kesken taistelun. Kaikkien 2^n järjestelyn
+ajaminen olisi ollut sekä hidasta että hauras. Sen sijaan pilari on **yksi
+sarake leveä ja kaksi laattaa korkea**, ja mitattu hyppybudjetti on 6 laattaa
+kuilua ja 4 laattaa seinää — kaksi laattaa on askelma eikä este. Yksikään
+osajoukko ei voi tehdä ovesta saavuttamatonta, koska yksikään yksittäinen
+pilari ei voi.
+
+Paikat johdetaan ruudukosta (`plantPillars`) eikä kirjoiteta kenttädataan, sama
+tapa kuin lämpöputkien uloskäynneillä ja kaasulyhdyllä. Se maksoi yhden
+mittauksen: ensimmäinen versio etsi lattiaa ylhäältä alas ja löysi areenan
+**katon** — nolla paikkaa jokaisessa linnakkeessa, ja portti sanoi sen suoraan.
+
+---
+
 ## v26.08.17.94 — pomppu, ketju, tanko ja se kuori joka osui maalin jälkeen
 
 Neljä asiaa suoraan pelistä, omistajan raportoimina.

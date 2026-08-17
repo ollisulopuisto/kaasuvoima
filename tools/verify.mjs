@@ -12076,6 +12076,84 @@ const report = await page.evaluate(async () => {
     }
   }
 
+  /* --------------------------- areenapomo ------------------------------- */
+  /*
+   * ROADMAP kohta 4: pomo järjestää kentän uusiksi. Kolme hyväksymiskriteeriä,
+   * kolme mittausta — ja **validointi on se joka piti ratkaista ensin**, koska
+   * `rules.js` katsoo kentän lähtötilaa eikä yksikään portti tähän asti
+   * katsonut ruudukkoa joka muuttuu kesken taistelun.
+   *
+   * Vastaus ei ole ajaa botti kaikilla 2^n järjestelyllä vaan tehdä
+   * järjestelyistä sellaisia ettei niiden lukumäärällä ole väliä: pilari on
+   * yksi sarake leveä ja kaksi laattaa korkea, eli askelma eikä este. Se on
+   * rakenteellinen argumentti, ja siksi tässä mitataan **sekä ehdot että
+   * pahin tapaus** — argumentti ilman mittausta on mielipide.
+   */
+  {
+    const { runGround } = await import('/tools/level-bot.js');
+    const { isSolid: solidTile, T: TT, TILE: TS } = await import('/src/gfx/tiles.js');
+    const forts = levelIds().filter((id) => /-F$/.test(id));
+    const shapes = [];
+    const bad = [];
+    const stuck = [];
+    let restored = 0;
+    for (const id of forts) {
+      reset({ type: null, level: 0 });
+      let finished = null;
+      game.finishLevel = (r) => { finished = r; };
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      const slots = s.pillars || [];
+      shapes.push(`${id}:${slots.length}`);
+
+      /* 1. EHDOT. Jokainen paikka on tasaisella lattialla, sen yllä on tilaa
+       *    isoimmalle keholle, se on kaukana ovesta ja areenan alusta, eikä
+       *    kaksi ole vierekkäin. */
+      let door = -1;
+      for (let tx = s.arenaCol || 0; tx < s.w && door < 0; tx++) {
+        for (let ty = 0; ty < s.h; ty++) if (s.tileAt(tx, ty) === TT.DOOR) { door = tx; break; }
+      }
+      slots.forEach((slot, i) => {
+        if (!solidTile(s.tileAt(slot.tx, slot.floor))) bad.push(`${id}: ${slot.tx} ei ole lattialla`);
+        for (let d = 1; d <= 3; d++) {
+          if (s.tileAt(slot.tx, slot.floor - d) !== TT.EMPTY) bad.push(`${id}: ${slot.tx} ahdas`);
+        }
+        if (door >= 0 && door - slot.tx < 6) bad.push(`${id}: ${slot.tx} liian lähellä ovea`);
+        if (slot.tx - (s.arenaCol || 0) < 6) bad.push(`${id}: ${slot.tx} liian lähellä alkua`);
+        if (i > 0 && slot.tx - slots[i - 1].tx < 6) bad.push(`${id}: ${slot.tx} liian lähellä edellistä`);
+      });
+
+      /* 2. PAHIN TAPAUS. Kaikki pystyssä, ovi auki, botti voimatasolla 0
+       *    areenan alusta ovelle. */
+      for (const slot of slots) {
+        slot.state = 'warn';
+        slot.timer = 0;
+      }
+      s.player.x = (s.arenaCol + 2) * TS;
+      s.updatePillars();
+      const raised = slots.filter((slot) => slot.state === 'up').length;
+      if (raised !== slots.length) bad.push(`${id}: nousi ${raised}/${slots.length}`);
+      s.bossDefeated = s.tick + 1;
+      const got = runGround(s, solidTile, 7000, () => finished);
+      if (!got.cleared) stuck.push(`${id} ${got.reach} %`);
+
+      /* 3. PALAUTUVUUS. Sama huone kuin lähtiessä, laatta laatalta. */
+      const before = new LevelScene(game, id).grid.map((row) => row.join('')).join('|');
+      s.dropPillars();
+      if (s.grid.map((row) => row.join('')).join('|') === before) restored++;
+    }
+    expect('jokaisessa linnakkeessa on areenapaikkoja ja jokainen niistä kelpaa',
+      forts.length > 0 && shapes.every((r) => Number(r.split(':')[1]) > 0) && bad.length === 0,
+      `${shapes.join(' ')}${bad.length ? ` — ${bad.slice(0, 3).join(', ')}` : ''}`);
+    expect('kaikki pilarit pystyssä, ovelle pääsee yhä voimatasolla 0',
+      stuck.length === 0,
+      stuck.length ? stuck.join(', ') : `${forts.length} linnaketta läpi`);
+    expect('pomon kaatuminen palauttaa areenan laatta laatalta',
+      restored === forts.length, `${restored}/${forts.length} palautui`);
+  }
+
   /* ------------------- ketjutappo, pomppu, tanko, maali ----------------- */
   /*
    * Neljä muutosta jotka tulivat suoraan pelistä, ja jokainen mitataan

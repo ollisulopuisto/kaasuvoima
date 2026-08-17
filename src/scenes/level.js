@@ -201,6 +201,62 @@ const SPRING_HIGH = -5.4;
 const SHELF_LIFE = 120;
 const SHELF_TILES = 3;
 
+/*
+ * AREENAPOMO — se vaihe jossa pomo järjestää huoneen uusiksi.
+ *
+ * ROADMAP kohta 4, päätetty 9.8.2026 ja "tehdään heti" 16.8.2026. Idea on
+ * neljännen seinän rikkominen siinä mielessä että vihollinen koskee siihen mitä
+ * pelaaja luuli vakioksi: **lattiaan**. Kolme hyväksymiskriteeriä eivät ole
+ * toiveita, ja ne ratkaisevat jokaisen luvun alla:
+ *
+ *   1. **Ennakoitu.** Pilari ei ilmesty vaan nousee, ja sitä ennen sen kohta
+ *      pölisee `PILLAR_WARN` framea. Sama kielioppi kuin kurnuttajalla, joka
+ *      opettaa 90 framen varoituksen jo maailmassa 3.
+ *   2. **Palautuva.** Pomon kaatuminen laskee jokaisen pilarin takaisin, eli
+ *      kentän lopputila on sen lähtötila. Se ei ole siisteyttä vaan se on se
+ *      syy jonka takia hiekan lopputilaportti (v26.08.16.92) ei kaadu tähän.
+ *   3. **Validoitu.** Tämä on se joka piti ratkaista ensin: `rules.js` katsoo
+ *      kentän *lähtötilaa*, eikä mikään portti tähän asti katsonut ruudukkoa
+ *      joka muuttuu kesken taistelun. Vastaus ei ole ajaa botti kaikilla
+ *      2^n järjestelyllä vaan **tehdä järjestelyistä sellaisia ettei niiden
+ *      lukumäärällä ole väliä**:
+ *
+ *          pilari on yksi sarake leveä ja kaksi laattaa korkea.
+ *
+ *      Mitattu hyppybudjetti on 6 laattaa kuilua ja 4 laattaa seinää, joten
+ *      kaksi laattaa on **askelma eikä este** — voimatasolla 0, ilman
+ *      vauhtia, mistä suunnasta tahansa. Yksikään osajoukko ei siis voi tehdä
+ *      ovesta saavuttamatonta, koska yksikään yksittäinen pilari ei voi. Portti
+ *      tarkistaa silti pahimman tapauksen (kaikki pystyssä) jokaisessa
+ *      linnakkeessa, koska rakenteellinen argumentti ilman mittausta on
+ *      mielipide.
+ */
+/** Pilarin korkeus laattoina. Ks. yllä: tämä on koko turvallisuusargumentti. */
+const PILLAR_H = 2;
+/**
+ * Etäisyys areenan reunasta ja ovesta, laattoina.
+ *
+ * Ovi on kolme laattaa korkea ja kaksi leveä, ja sen eteen pitää mahtua
+ * seisomaan myös isoimmalla keholla (21x43 px). Kuusi laattaa on kolminkertainen
+ * siihen nähden, ja se pitää pilarit myös poissa siitä sarakkeesta johon
+ * pelaaja areenaan saapuu.
+ */
+const PILLAR_EDGE = 6;
+/** Pilarien väli. Aina mahtuu seisomaan kahden väliin, myös isona. */
+const PILLAR_GAP = 6;
+/**
+ * Ennakoinnin pituus frameina.
+ *
+ * Kurnuttajan varoitus on 90 framea ja se on kuilun toisella puolella oleva
+ * asia; tämä on jalkojen alla ja siihen vastataan yhdellä askeleella. 45 on
+ * kolme neljäsosaa sekuntia, eli pidempi kuin yksikään hyppy (mitattu paras
+ * kaari 46 framea nousuun) — pelaaja ehtii nähdä sen myös ilmasta ja valita
+ * mihin laskeutuu.
+ */
+const PILLAR_WARN = 45;
+/** Kuinka usein varoituspöly purskahtaa. Ks. `Ambience`: rytmi, ei välkyntä. */
+const PILLAR_PUFF = 9;
+
 const LAMP_MIN_COLS = 340;
 const LAMP_EDGE = 24;
 const LAMP_CLEAR = 2;
@@ -1222,6 +1278,7 @@ export class LevelScene {
     this.plantVines();
     this.plantWarpExits();
     this.plantLamp();
+    this.plantPillars();
     /*
      * Sytytetty lyhty on lähtöruutu, ja vertailu on saraketta vasten eikä
      * pelkkää "on käyty" — ks. `lightLamp`. Jos vaikeustaso on vaihtunut, tämä
@@ -1635,6 +1692,130 @@ export class LevelScene {
       this.spawnPuff(tx * TILE + 2 + i * 3, ty * TILE + 2 + (i % 2) * 4);
     }
     this.addScorePop(tx * TILE + 8, ty * TILE - 2, 'PUOLIVÄLI');
+  }
+
+  /**
+   * Mihin areenan pilarit voivat nousta, johdettuna ruudukosta.
+   *
+   * Johdettu eikä kirjoitettu, samasta syystä kuin lämpöputkien uloskäynnit ja
+   * kaasulyhty: kenttädata ja sen validaattorit näkevät saman kentän kuin
+   * ennen, ja jos joku muuttaa areenan muotoa, paikat seuraavat perässä ilman
+   * että kukaan muistaa päivittää listaa.
+   *
+   * Ehdot ovat ne kolme jotka tekevät turvallisuudesta rakenteellisen:
+   * tasainen lattia, `PILLAR_H + 1` tyhjää riviä yläpuolella (isoin keho on
+   * kolme riviä), ja `PILLAR_EDGE` laattaa väliä sekä areenan alkuun että
+   * oveen. Väli `PILLAR_GAP` pitää huolen siitä että kahden pilarin väliin
+   * mahtuu aina seisomaan.
+   */
+  plantPillars() {
+    this.pillars = [];
+    if (this.arenaCol === null || !this.def.boss) return;
+    /* Lattia luetaan siitä sarakkeesta johon pelaaja areenaan astuu, eikä
+     * oleteta riviksi 13: jättiläisen areenassa on kannet, ja kansi on eri
+     * korkeudella kuin lattia. */
+    const probe = this.arenaCol + 2;
+    /* Alhaalta ylös eikä ylhäältä alas, ja se on korjaus eikä maku: areenalla
+     * on **katto** (`boss_arena` rivit 0–1), joten ylhäältä etsivä silmukka
+     * löysi rivin 0 ja johti nollaan paikkaan jokaisessa linnakkeessa —
+     * mitattu `1-F:0 2-F:0 … 8-F:0`. Lattia on alimman kiinteän pinon
+     * ylin laatta, ja juuri sen päällä seistään. */
+    let floor = -1;
+    for (let ty = this.h - 1; ty >= 0; ty--) {
+      if (isSolid(this.tileAt(probe, ty))) floor = ty;
+      else if (floor >= 0) break;
+    }
+    if (floor < PILLAR_H + 1) return;
+    let door = -1;
+    for (let tx = this.arenaCol; tx < this.w; tx++) {
+      for (let ty = 0; ty < this.h; ty++) {
+        if (this.tileAt(tx, ty) === T.DOOR) { door = tx; break; }
+      }
+      if (door >= 0) break;
+    }
+    const last = (door < 0 ? this.w : door) - PILLAR_EDGE;
+    for (let tx = this.arenaCol + PILLAR_EDGE; tx <= last; tx += PILLAR_GAP) {
+      if (!isSolid(this.tileAt(tx, floor))) continue;
+      let clear = true;
+      for (let d = 1; d <= PILLAR_H + 1; d++) {
+        if (this.tileAt(tx, floor - d) !== T.EMPTY) { clear = false; break; }
+      }
+      if (!clear) continue;
+      this.pillars.push({ tx, floor, state: 'down', timer: 0 });
+    }
+  }
+
+  /**
+   * Pomo pyytää yhtä pilaria nousemaan, ja tämä valitsee minkä.
+   *
+   * Lähin pelaajaan, koska kaukainen pilari ei ole tapahtuma. Sen sarakkeen
+   * päällä seisova pelaaja on ainoa poikkeus: pilari joka nousee jalkojen alta
+   * ei ole ennakoitu vaan yllätys, ja se on tasan se mitä kriteeri 1 kieltää.
+   */
+  wakePillar() {
+    if (!this.pillars || !this.pillars.length) return false;
+    const p = this.player;
+    const px = Math.floor(p.cx / TILE);
+    let best = null;
+    for (const s of this.pillars) {
+      if (s.state !== 'down') continue;
+      if (Math.abs(s.tx - px) <= 1) continue;
+      if (!best || Math.abs(s.tx - px) < Math.abs(best.tx - px)) best = s;
+    }
+    if (!best) return false;
+    best.state = 'warn';
+    best.timer = PILLAR_WARN;
+    return true;
+  }
+
+  /**
+   * Varoitus, nousu, ja se yksi tapaus jossa nousu odottaa.
+   *
+   * Jos pelaaja on varoituksen lopussa juuri sen sarakkeen päällä, nousu ei
+   * peruunnu vaan **jää odottamaan**. Peruuntuminen opettaisi seisomaan
+   * pilarin päällä; odottaminen sanoo saman asian toisin päin — se tulee
+   * silti, mene pois.
+   */
+  updatePillars() {
+    if (!this.pillars) return;
+    const p = this.player;
+    for (const s of this.pillars) {
+      if (s.state !== 'warn') continue;
+      if (s.timer > 0) {
+        s.timer--;
+        if (s.timer % PILLAR_PUFF === 0) {
+          this.spawnPuff(s.tx * TILE + 4 + (s.timer % 3) * 3, s.floor * TILE - 2);
+        }
+        continue;
+      }
+      const left = s.tx * TILE;
+      if (p.x + p.w > left && p.x < left + TILE) continue;   // ks. yllä: odottaa
+      for (let d = 1; d <= PILLAR_H; d++) this.setTile(s.tx, s.floor - d, T.HARD);
+      s.state = 'up';
+      this.shake(3, 'y');
+      Sfx.play('jysahdys');
+      for (let i = 0; i < 4; i++) {
+        this.spawnPuff(left + 2 + i * 4, (s.floor - PILLAR_H) * TILE + 4, i % 2 === 0);
+      }
+    }
+  }
+
+  /**
+   * Kriteeri 2: pomon kaatuminen palauttaa huoneen.
+   *
+   * Kutsutaan `onBossDefeated`ista, eli samasta tapahtumasta joka avaa oven.
+   * Sen jälkeen kentän lopputila on sen lähtötila, eikä hiekan lopputilaportti
+   * (v26.08.16.92) näe tässä mitään muuttunutta.
+   */
+  dropPillars() {
+    if (!this.pillars) return;
+    for (const s of this.pillars) {
+      if (s.state === 'up') {
+        for (let d = 1; d <= PILLAR_H; d++) this.setTile(s.tx, s.floor - d, T.EMPTY);
+      }
+      s.state = 'down';
+      s.timer = 0;
+    }
   }
 
   enter() {
@@ -2363,6 +2544,10 @@ export class LevelScene {
   onBossDefeated() {
     // The tick, not `true`. Still truthy for every existing reader.
     this.bossDefeated = this.tick + 1;
+    /* Kriteeri 2, ja se on tässä eikä oven avaamisen jälkeen: huone palautuu
+     * samalla tapahtumalla joka päättää taistelun, jotta pelaajan viimeinen
+     * kävely ovelle kulkee sitä lattiaa jonka hän muistaa. */
+    this.dropPillars();
     Music.play(this.def.music || 'fortress');
     Sfx.play('door');
     this.shake(4);
@@ -3035,6 +3220,7 @@ export class LevelScene {
       this.updateTimer();
       this.player.update(input);
       this.playerTiles();
+      this.updatePillars();
       this.tryWarp(input);
       this.updateTransit();
       this.updateProgress();

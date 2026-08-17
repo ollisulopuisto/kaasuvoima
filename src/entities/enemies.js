@@ -1809,6 +1809,10 @@ export class Boss extends Enemy {
      */
     this.hp = this.king ? KING_FORMS.length
       : variant === 3 ? 5 : variant === 4 ? 4 : 3 + Math.min(1, variant);
+    /* Lähtöpisteet talteen: areenapomon toinen vaihe alkaa ensimmäisestä
+     * osumasta, ja "onko häneen osuttu" on juuri tämä vertailu. Ks.
+     * `wakePillar`. */
+    this.hp0 = this.hp;
     this.score = 5000 + variant * 1000;
     this.invuln = 0;
     this.jumpTimer = 90;
@@ -2091,6 +2095,23 @@ export class Boss extends Enemy {
     // fall, and never more than a couple of pairs at a time.
     const live = this.level.entities.filter((e) => e instanceof Shockwave && !e.remove).length;
     if (this.onGround && fallSpeed > 3.5 && live < 4 && (this.form >= 1 || this.scale > 1.5)) {
+      /*
+       * AREENAPOMO: sama laskeutuminen joka lähettää aallon nostaa myös
+       * pilarin — mutta vasta ensimmäisen osuman jälkeen.
+       *
+       * Kaksi päätöstä, ja molemmat ovat rajauksia.
+       *
+       * **Kuka.** Tämä on iskuaallon pomon liikettä (`form >= 1`) eikä uusi
+       * laji, koska hänen sanansa on jo lattia: aalto juoksee sitä pitkin.
+       * Pilarin nostaminen on sama lause voimakkaampana, ja se tarkoittaa myös
+       * että **kuningas perii sen** kuudentena muotonaan — maailma 8:n lause on
+       * että linna lähettää sen mitä se on jo lähettänyt.
+       *
+       * **Milloin.** `hp < hp0` eli vasta kun pelaaja on osunut kerran. Huone
+       * joka järjestyy uusiksi ennen kuin pelaaja on nähnyt sen entisenä ei
+       * ole muutos vaan pohjapiirros; toinen vaihe on vasta muutos.
+       */
+      if (this.hp < this.hp0 && this.level.wakePillar) this.level.wakePillar();
       this.level.add(new Shockwave(this.level, this.x - 6, this.y + this.h - 12, -1));
       this.level.add(new Shockwave(this.level, this.x + this.w - 6, this.y + this.h - 12, 1));
       // Pystyyn, ja massan verran: putoava paino osuu lattiaan alaspäin, ja se
