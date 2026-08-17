@@ -73,6 +73,21 @@ const GOAL_HEIGHT = 6 * TILE;
  * ovat neliöitä samasta syystä kuin kaikki muutkin.
  */
 /** Seconds left when the music starts pushing. */
+/*
+ * POLTTOAINE: kolikot ovat aika, ks. `updateTimer`.
+ *
+ * `FUEL_DRAIN` frameja kolikkoa kohti, `FUEL_HURRY` se pinta jolta kiire
+ * alkaa, ja `FUEL_FLOOR` se määrä johon kenttään saapuva täydennetään.
+ *
+ * Täydennys on **reiluussääntö eikä armo**: kenttään ei saa lähettää ketään
+ * niin tyhjänä ettei sitä voi läpäistä, ja 25 kolikkoa on kolmekymmentä
+ * sekuntia — enemmän kuin yhdenkään kentän juostu läpimeno. Jos pelaaja tulee
+ * täydempänä, mitään ei oteta pois: täydennys on lattia eikä nollaus, ja juuri
+ * siksi säästämisellä on merkitystä.
+ */
+const FUEL_DRAIN = 72;
+const FUEL_HURRY = 17;
+export const FUEL_FLOOR = 25;
 const HURRY_TIME = 100;
 
 /*
@@ -144,6 +159,14 @@ const TUBE_W = 10;
 const TUBE_PAD = 4;
 const COIN_PX = 2;
 const COIN_CAP = 100;
+/*
+ * Kuinka monta poimittua kolikkoa on elämä. Omistajan luku (*"maybe 500 coins
+ * = extra life"*), ja se on oikea suuruusluokka: kentässä on 25…45 kolikkoa,
+ * joten elämä on noin viidentoista kentän työ jos kaikki poimitaan — eli
+ * harvinaisempi kuin ennen (sata) ja siksi merkittävämpi. Luku on **uran**
+ * kokonaisluku eikä säiliön pinta: säiliö on aika ja se kuluu, ura ei kulu.
+ */
+const LIFE_COINS = 500;
 /** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
 const COIN_ARC = 26;
 const COIN_DROP_G = 0.6;
@@ -1388,7 +1411,24 @@ export class LevelScene {
     /** How many pages this climb has taken. Reported, never played on. */
     this.camPages = 0;
     this.tick = 0;
+    /* Kello on nyt putkilon pinta (`updateTimer`). `def.time` jää dataan, koska
+     * kenttien pituus on mitattu sitä vasten ja aika-ajon jako lukee sitä —
+     * mutta pelaajaa se ei enää tapa. */
     this.time = this.def.time;
+    /*
+     * TÄYDENNYS KENTÄN ALUSSA, ja se on reiluussääntö eikä armo: kenttään ei
+     * saa astua niin tyhjänä ettei sitä voi läpäistä. `FUEL_FLOOR` on
+     * **lattia eikä nollaus** — täydempänä saapuvalta ei oteta mitään pois, ja
+     * juuri siksi säästämisellä on merkitystä.
+     *
+     * Kohtauksessa eikä `startLevel`issä, koska kohtaus **on** kenttä: päivän
+     * pieru, esittelykenttä ja pikalatauksen rakentama kenttä syntyvät kaikki
+     * tästä samasta konstruktorista, eikä yhdenkään niistä kuulu aloittaa
+     * tyhjällä säiliöllä.
+     */
+    if (game && game.state && !(game.state.coins > FUEL_FLOOR)) {
+      game.state.coins = FUEL_FLOOR;
+    }
     this.timeSub = 0;
     this.state = 'play';
     this.stateTimer = 0;
@@ -1416,12 +1456,11 @@ export class LevelScene {
     /* HUD-nauhan hereilläolo ja se mitä siitä viimeksi luettiin, ks.
      * `updateHudWake`. Kenttä alkaa hereillä: ensimmäinen asia jonka pelaaja
      * tekee kentässä on katsoa mihin hän tuli. */
+    /* Kellon katkaisin, ks. `updateTimer`. Peli ei aseta tätä koskaan. */
+    this.clockStopped = false;
     this.hudWake = HUD_WAKE;
     this.hudSeen = null;
-    /* Kellon virstanpylväs: frameja jäljellä siitä kun AIKA ohitti tasasadan.
-     * Ks. `drawOverlay` — luolassa ei näy aurinkoa, ja silloin tämä on ainoa
-     * kello. */
-    this.timeMark = 0;
+
 
     /* Kolikkoputkilo, ks. `TUBE_X`. `tubeFill` on **näkyvä** pinta ja
      * `game.state.coins` on totuus: lennossa olevat kolikot ovat sen verran
@@ -2089,7 +2128,7 @@ export class LevelScene {
     this.bandHold = 0;
     this.starMusic = !!(this.player && this.player.star > 0);
     Music.play(this.trackFor(this.placeBand));
-    Music.setHurry(this.time <= HURRY_TIME);
+    Music.setHurry(this.game.state.coins <= FUEL_HURRY);
     // The room and the weather, from the theme — the audio half of what
     // PostFX.setAmbience does to the picture.
     Ambience.set(this.theme, this.def);
@@ -2803,15 +2842,36 @@ export class LevelScene {
     if (x !== undefined) this.addScorePop(x, y, '1UP');
   }
 
+  /**
+   * KOLIKKO ON KOLME ASIAA, ja sen jälkeen kun kolikot ovat aika (18.8.2026)
+   * ne ovat kaikki eri asioita:
+   *
+   *   1. **Polttoainetta** putkiloon, katto `COIN_CAP`. Täysi säiliö ei vuoda
+   *      yli — ylimääräinen kolikko ei katoa mihinkään, se vain ei mahdu
+   *      *aikaan*. Täyteen ajaminen on itsessään palkinto: kaksi minuuttia on
+   *      pisin mahdollinen kello.
+   *   2. **Uran kokonaislukema** (`coinsTotal`), joka ei koskaan kulu. Tästä
+   *      tulee elämä: `LIFE_COINS` kolikkoa poimittuna on 1UP, ja se on
+   *      omistajan oma ehdotus (*"maybe 500 coins = extra life"*). Sadan
+   *      kolikon elämä ei enää kelpaa, koska sata kolikkoa on nyt se säiliö
+   *      jota kulutetaan — palkinto ja mittari eivät voi olla sama luku.
+   *   3. **Pisteitä**, kuten ennenkin.
+   */
   addCoin(x, y, popped = false) {
-    this.game.state.coins++;
-    this.game.state.score += COIN;
+    const st = this.game.state;
+    st.coinsTotal = (st.coinsTotal || 0) + 1;
+    st.score += COIN;
     Sfx.play('coin');
-    this.coinToTube(x, y, popped);
-    if (this.game.state.coins >= COIN_CAP) {
-      this.game.state.coins -= COIN_CAP;
-      this.gainLife(x, y);
+    if (st.coins < COIN_CAP) {
+      st.coins++;
+      this.coinToTube(x, y, popped);
+    } else {
+      /* Täysi säiliö: kolikko lasketaan ja pisteytetään, mutta se ei lennä
+       * putkiloon — lento päättyisi pintaan joka ei nouse, ja se olisi kuva
+       * joka valehtelee. */
+      this.addScorePop(x, y - 8, COIN);
     }
+    if (st.coinsTotal % LIFE_COINS === 0) this.gainLife(x, y);
   }
 
   /* ---------------------------- kolikkoputkilo --------------------------- */
@@ -3601,7 +3661,7 @@ export class LevelScene {
     if (on === this.starMusic) return;
     this.starMusic = on;
     Music.play(this.trackFor(this.placeBand));
-    Music.setHurry(this.time <= HURRY_TIME);
+    Music.setHurry(this.game.state.coins <= FUEL_HURRY);
   }
 
   /**
@@ -3627,7 +3687,7 @@ export class LevelScene {
     this.bandHold = 0;
     this.placeBand = band;
     Music.play(this.trackFor(band));
-    Music.setHurry(this.time <= HURRY_TIME);
+    Music.setHurry(this.game.state.coins <= FUEL_HURRY);
   }
 
   /**
@@ -3903,7 +3963,6 @@ export class LevelScene {
       this.updateBandMusic();
       this.updateStarMusic();
     }
-    if (this.timeMark > 0) this.timeMark--;
     this.updateCoinFlights();
     /* Viimeisenä, jotta framen kaikki muutokset ovat jo tapahtuneet: nauha
      * herää siitä mitä tällä framella tuli, ei siitä mitä edellisellä. */
@@ -3945,25 +4004,70 @@ export class LevelScene {
     }
   }
 
+  /**
+   * KOLIKOT OVAT AIKA (18.8.2026).
+   *
+   * Omistaja: *"coins = time! Niin aloitetaan jollain määrällä kolikoita ja ne
+   * valuvat vasemman reunan säiliöstä, eli lisää aikaa saa poimimalla lisää
+   * kolikoita. Näin saadaan uusi mekaniikka ja päästään eroon erillisestä
+   * kellosta."*
+   *
+   * Tämä poistaa pelistä abstraktin luvun ja korvaa sen tavaralla joka on jo
+   * ruudulla. Kolme asiaa muuttuu kerralla, ja jokainen niistä on parannus:
+   *
+   *   - **Kello katosi.** `AIKA 300` oli luku joka ei ollut missään: sitä ei
+   *     voinut nähdä kentässä eikä siihen voinut vaikuttaa. Nyt sama tieto on
+   *     putkilon pinta, ja siihen vaikutetaan poimimalla.
+   *   - **Kolikko sai merkityksen.** Se oli piste ja sadasosa elämästä. Nyt se
+   *     on **se hetki jonka sillä ostaa**, ja kolikkorivi kuilun yli on
+   *     ensimmäistä kertaa tarjous eikä koriste.
+   *   - **Kenttäsuunnittelu ohjaa kelloa.** Kentän kolikot *ovat* sen
+   *     aikabudjetti, eli sama data joka piirtää palkinnon asettaa myös
+   *     kiireen. Kaksi lukua yhdeksi.
+   *
+   * `FUEL_DRAIN` on 72 framea eli 1,2 sekuntia kolikkoa kohti: täysi putkilo
+   * (100) on kaksi minuuttia, mikä on tasan se mitä vanha kello antoi (300
+   * yksikköä × 24 framea). Kentän kolikot (25…45) ostavat 30…54 sekuntia
+   * lisää, eli kenttä läpi juostuna jää reilusti plussalle ja kenttä tutkittuna
+   * kuluttaa juuri sen minkä se maksaa.
+   *
+   * Putken tyhjeneminen tappaa, ja se on sama kuolema kuin ennen (`die('time')`)
+   * — sama ääni, sama animaatio, sama merkitys. Vain syy on nyt näkyvä.
+   */
   updateTimer() {
+    /*
+     * KELLON KATKAISIN, ja sillä on kaksi oikeaa käyttäjää eikä yhtään
+     * kolmatta: **esittelykenttä** (`demo.js`, jonka on tarkoitus pyöriä
+     * loputtomiin eikä kuolla nälkään alkuruudun taustalla) ja **mittarit**
+     * (`tools/verify.mjs`, joiden koesilmukat ajavat tuhansia frameja
+     * mittaamassa jotain muuta kuin kelloa).
+     *
+     * Peli itse ei aseta tätä koskaan. Ennen kolikkokelloa sama asia tehtiin
+     * kirjoittamalla `scene.time = 9999`, mikä toimi vahingossa: se oli iso
+     * luku isossa laskurissa. Kun kello muuttui säiliöksi, se lakkasi
+     * toimimasta hiljaa — koesilmukat alkoivat kuolla nälkään kesken mittauksen
+     * ja mittasivat sen jälkeen ruumista. Nimetty katkaisin ei voi mennä rikki
+     * hiljaa samalla tavalla.
+     */
+    if (this.clockStopped) return;
     // Nothing counts down while you are between places. Thirty frames is not a
     // gift worth arguing about, and the alternative is a clock that can kill
     // the player inside a pipe, where nothing can be done about it.
     if (this.player.transit) return;
-    if (++this.timeSub >= 24) {
-      this.timeSub = 0;
-      this.time--;
-      /* Tasasata on virstanpylväs: kello käy näyttäytymässä, ks.
-       * `drawOverlay`. Luolassa aurinkoa ei näy, ja silloin tämä on ainoa
-       * kello — mutta se on yhä tapahtuma eikä pysyvä lukema. */
-      if (this.time > 0 && this.time % 100 === 0) this.timeMark = HUD_FADE * 3;
-      if (this.time <= 0) {
-        this.time = 0;
-        this.player.die('time');
-      } else if (this.time === HURRY_TIME) {
-        Sfx.play('timewarn');
-        Music.setHurry(true);
-      }
+    if (++this.timeSub < FUEL_DRAIN) return;
+    this.timeSub = 0;
+    const st = this.game.state;
+    if (st.coins <= 0) {
+      this.player.die('time');
+      return;
+    }
+    st.coins--;
+    /* Kiire alkaa siitä pinnasta jolta ei enää ehdi kauas: `FUEL_HURRY`
+     * kolikkoa on kaksikymmentä sekuntia, eli suunnilleen yksi ruutu
+     * juoksuvauhtia ja se hetki jona kannattaa lakata tutkimasta. */
+    if (st.coins === FUEL_HURRY) {
+      Sfx.play('timewarn');
+      Music.setHurry(true);
     }
   }
 
@@ -5080,7 +5184,11 @@ export class LevelScene {
     this.player.controllable = false;
     this.player.autoWalk = true;
     this.player.ducking = false;
-    this.awardScore(Math.max(0, this.time) * TIME_SECOND);
+    /* Jäljellä oleva polttoaine pisteinä. Kolikoita **ei kuluteta** — säiliö
+     * kannetaan seuraavaan kenttään — eli tämä on kuitti säästämisestä eikä
+     * lunastus: nopea läpimeno maksaa enemmän kuin hidas, ja silti kaikki
+     * poimittu on yhä tallella. */
+    this.awardScore(Math.max(0, this.game.state.coins) * TIME_SECOND);
     this.recordRace();
     Music.stop();
     Ambience.stop();
@@ -5116,8 +5224,23 @@ export class LevelScene {
     /* Aurinko on kentän kello, ks. `sky` backdropissa. Osuus lasketaan tässä
      * eikä siellä, koska `def.time` on kentän ominaisuus ja taustan piirtäjä
      * ei tiedä kentistä mitään — se saa yhden luvun väliltä 0…1. */
-    const total = this.def.time || 0;
-    const clock = total > 0 ? Math.max(0, Math.min(1, this.time / total)) : null;
+    /*
+     * AURINKO SEURAA MATKAA, EI KELLOA (18.8.2026).
+     *
+     * Aurinko oli kentän kello, ja kelloa ei enää ole — kolikot ovat aika ja
+     * ne näkyvät putkilossa. Kaksi vaihtoehtoa oli: palauttaa aurinko
+     * maisemaksi tai antaa sille uusi luettava tehtävä. Jälkimmäinen on
+     * parempi ja se on tässä: **aurinko nousee kentän alussa ja laskee sen
+     * lopussa**, eli taivas kertoo kuinka pitkällä ollaan.
+     *
+     * Se on sama kuva samalla logiikalla mutta eri lähteellä, ja siksi se ei
+     * opeta uutta: pelaaja luki siitä jo "kohta loppuu", ja nyt se pitää
+     * paikkansa matkan eikä sekuntien suhteen. Ja se ratkaisee saman
+     * ongelman jonka kello ratkaisi väärin — luolassa aurinkoa ei näy, mutta
+     * matkan näkee muutenkin.
+     */
+    const span = Math.max(1, this.widthPx - VIEW_W);
+    const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock);
     /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
@@ -5649,16 +5772,28 @@ export class LevelScene {
   updateHudWake() {
     const st = this.game.state;
     const p = this.player;
-    const seen = `${st.score} ${st.coins} ${st.lives} ${st.reserve} ${p.powerLevel}`
+    /*
+     * KOLIKKO HERÄTTÄÄ VAIN NOUSTESSAAN (18.8.2026, kolikot ovat aika).
+     *
+     * Lukemasta joka muuttuu **itsestään** ei ole uutiseksi: säiliö valuu
+     * 72 framen välein, ja jos se laskettaisiin muutokseksi, nauha olisi
+     * hereillä ikuisesti eikä koko himmennyksestä olisi jäljellä mitään.
+     * Nousu on eri asia — se on aina seurausta siitä että pelaaja poimi
+     * jotain, eli täsmälleen se tapaus jota varten herääminen on olemassa.
+     */
+    const gained = st.coins > (this.hudCoins === undefined ? st.coins : this.hudCoins);
+    this.hudCoins = st.coins;
+    const seen = `${st.score} ${st.lives} ${st.reserve} ${p.powerLevel}`
       + ` ${p.type} ${p.swallowed || ''}`;
-    if (seen !== this.hudSeen) {
+    if (seen !== this.hudSeen || gained) {
       this.hudSeen = seen;
       this.hudWake = HUD_WAKE;
     } else if (this.hudWake > 0) this.hudWake--;
     /* Kriisi pitää nauhan hereillä ilman että mikään muuttuu: loppuva kello ja
      * käynnissä oleva lähtölaskenta ovat lukemia joita katsotaan juuri siksi
      * ettei niissä tapahdu mitään ennen kuin on liian myöhäistä. */
-    const urgent = this.state !== 'play' || this.time <= 100 || this.player.star > 0
+    const urgent = this.state !== 'play' || this.game.state.coins <= FUEL_HURRY
+      || this.player.star > 0
       || this.switchTimer > 0 || this.player.corked > 0 || (this.race && this.race.flash > 0);
     if (urgent) this.hudWake = Math.max(this.hudWake, HUD_FADE);
   }
@@ -5716,18 +5851,38 @@ export class LevelScene {
      * näyttäytymässä `HUD_FADE`n ajan. Kaksi tapaa saada sama luku, ja
      * kumpikaan ei ole pysyvä.
      */
-    const urgent = this.time <= 100;
-    if (urgent || this.timeMark > 0) {
-      const a = urgent ? 1 : Math.min(1, this.timeMark / HUD_FADE);
-      ctx.save();
-      ctx.globalAlpha = a;
-      const color = urgent && Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff';
-      drawText(ctx, `AIKA ${padNum(this.time, 3)}`, OVERLAY.right, 6,
+    /*
+     * KELLO ON PUTKILO, ja tämä rivi on vain sen hätähuuto.
+     *
+     * `AIKA 300` katosi kokonaan kun kolikot muuttuivat ajaksi (18.8.2026):
+     * lukema on nyt putkilon pinta vasemmassa reunassa, ja se on ruudulla koko
+     * ajan. Numero ilmestyy vain kun polttoaine on vähissä (`FUEL_HURRY`),
+     * koska silloin — ja vain silloin — tarkka luku on eri tieto kuin pinta:
+     * "vielä vähän" ja "kaksitoista sekuntia" ovat eri lauseita.
+     */
+    const urgent = st.coins <= FUEL_HURRY;
+    if (urgent) {
+      const color = Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff';
+      drawText(ctx, `KOLIKOT ${padNum(st.coins, 2)}`, OVERLAY.right, 6,
         { color, align: 'right', shadow: S });
-      ctx.restore();
     }
 
-    if (this.race) this.drawSplit(ctx, 0);
+    /*
+     * AIKA-AJON KELLO ON RUUDULLA, ja se on seurausta siitä että AIKA-kello
+     * katosi (18.8.2026: kolikot ovat aika).
+     *
+     * Ennen tätä kulunutta aikaa **ei piirretty**, ja perustelu oli hyvä: se
+     * oli `AIKA`-lukeman toisinto framelleen (`def.time - floor(ajokello/24)`),
+     * ja kaksi lukemaa samasta luvusta on DESIGN.md kohdan 8 virhe. Nyt sitä
+     * lukemaa ei ole, joten toisintoa ei ole — ja kilpa jonka kelloa ei näe on
+     * kilpa jota ei voi ajaa. Jako (`drawSplit`) kertoo eron ennätykseen,
+     * tämä kertoo missä ollaan; ne ovat kaksi eri asiaa ja siksi molemmat.
+     */
+    if (this.race) {
+      drawText(ctx, formatTime(this.race.frames), VIEW_W / 2, 6,
+        { color: '#ffffff', align: 'center', shadow: S });
+      this.drawSplit(ctx, 0);
+    }
 
     /* Kellokulma: tähti, kytkin ja ummetus ovat kaikki lähtölaskentoja, ja ne
      * ovat samassa kolossa AIKAn alla. Vain yksi kerrallaan — kolo on yksi,

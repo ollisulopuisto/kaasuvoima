@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.24 — kolikot ovat aika
+
+Omistaja 18.8.2026: *"coins = time! Niin aloitetaan jollain määrällä kolikoita
+ja ne valuvat vasemman reunan säiliöstä, eli lisää aikaa saa poimimalla lisää
+kolikoita. Näin saadaan uusi mekaniikka ja päästään eroon erillisestä
+kellosta."*
+
+**AIKA-kello on poissa.** Se oli luku joka ei ollut missään: sitä ei voinut
+nähdä kentässä eikä siihen voinut vaikuttaa. Nyt sama tieto on **putkilon
+pinta**, se on ruudulla koko ajan, ja siihen vaikutetaan poimimalla.
+
+Kolme asiaa muuttui kerralla ja jokainen on parannus:
+
+- **Kolikko sai merkityksen.** Se oli piste ja sadasosa elämästä. Nyt se on
+  **se hetki jonka sillä ostaa**, ja kolikkorivi kuilun yli on ensimmäistä
+  kertaa tarjous eikä koriste.
+- **Kenttäsuunnittelu ohjaa kelloa.** Kentän kolikot *ovat* sen aikabudjetti:
+  sama data joka piirtää palkinnon asettaa myös kiireen. Kaksi lukua yhdeksi.
+- **Aurinko seuraa matkaa.** Se oli kentän kello; kelloa ei ole, joten se
+  kertoo nyt kuinka pitkällä ollaan. Sama kuva, sama logiikka, uusi lähde —
+  ja se pitää paikkansa myös luolassa, jossa kellon lukeminen oli mahdotonta.
+
+**Luvut.** Kolikko valuu 72 framen välein (1,2 s), säiliö vetää sata eli kaksi
+minuuttia — tasan sen minkä vanha kello antoi (300 × 24 framea). Kenttien
+kolikot (25…45) ostavat 30…54 sekuntia lisää. Kiire alkaa 17 kolikosta, ja
+silloin — ja vain silloin — tarkka luku ilmestyy nurkkaan: "vielä vähän" ja
+"kaksitoista sekuntia" ovat eri lauseita.
+
+**Kenttään ei lähetetä ketään tyhjänä.** `FUEL_FLOOR` 25 on **lattia eikä
+nollaus**: täydempänä saapuvalta ei oteta mitään pois, ja juuri siksi
+säästämisellä on merkitystä.
+
+**Elämä tulee nyt urasta.** Sata kolikkoa ei enää kelpaa elämäksi, koska sata
+kolikkoa on se säiliö jota kulutetaan — palkinto ja mittari eivät voi olla sama
+luku. Elämä on **500 poimittua kolikkoa** (omistajan luku), ja se lasketaan
+kulumattomasta kokonaisluvusta.
+
+**Aika-ajon kello ilmestyi ruudulle.** Kulunutta aikaa ei ennen piirretty, ja
+perustelu oli hyvä: se oli AIKA-lukeman toisinto framelleen. Toisinnon toinen
+puoli katosi, ja kilpa jonka kelloa ei näe on kilpa jota ei voi ajaa.
+
+**Ja yksi hiljainen ansa nimettiin.** Koesilmukat sammuttivat kellon
+kirjoittamalla `scene.time = 9999`, mikä toimi vahingossa — iso luku isossa
+laskurissa. Kun kello muuttui säiliöksi, ne alkoivat kuolla nälkään kesken
+mittauksen ja mittasivat sen jälkeen ruumista (4-F:n jättiläisen kannet olivat
+"saavuttamattomissa" siksi että mittaaja kuoli framella 2088). Nyt katkaisin on
+nimetty (`clockStopped`), ja sillä on kaksi oikeaa käyttäjää: esittelykenttä
+alkuruudun taustalla ja mittarit.
+
+---
+
 ## v26.08.18.23 — hössötin, ladattu laukaus ja päivän kentät korpuksella
 
 Kolme tekemätöntä kohtaa ROADMAPista kerralla, ja yksi niistä oli odottanut

@@ -1742,6 +1742,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       return s;
     };
 
@@ -2205,6 +2206,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, '2-1');
         game.setScene(s);
         s.time = 9999;
+        s.clockStopped = true;
         const shell = s.entities.find((e) => e.constructor.name === 'ShellGuy');
         const sand = [];
         for (let tx = 0; tx < s.w; tx++) {
@@ -3930,6 +3932,7 @@ const report = await page.evaluate(async () => {
       // The boss is not what this is about.
       s3.entities = s3.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s3.time = 9999;
+      s3.clockStopped = true;
       game.setScene(s3);
       let done = null;
       game.finishLevel = (r) => { done = r; };
@@ -4763,6 +4766,7 @@ const report = await page.evaluate(async () => {
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       if (s.def.boss) s.bossDefeated = true;      // ovi on maali; tappelu on eri testi
       s.time = 9999;
+      s.clockStopped = true;
       /*
        * `runGround` eikä oma botti, ja tämä on korjaus eikä siistiminen.
        *
@@ -4852,6 +4856,7 @@ const report = await page.evaluate(async () => {
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       if (s.def.boss) s.bossDefeated = true;
       s.time = 9999;
+      s.clockStopped = true;
       const startCol = Math.floor(s.player.cx / 16);
       /* Puolet kentästä on jäljellä, joten puolet kehysbudjetista: 4000 framea
        * on 67 s, ja mitattu koko kentän juoksu on ~36 s. */
@@ -4895,6 +4900,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       for (const [key, exitRow] of s.warpExits) {
         const [tx, ty] = key.split(',').map(Number);
         if (info(s.grid[ty][tx - 1]).warp) continue;   // sama suu vain kerran
@@ -5167,6 +5173,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       const i = mkInput();
       const step = (held = {}, pressed = {}) => {
         i.held = { ...blank(), ...held };
@@ -6559,6 +6566,7 @@ const report = await page.evaluate(async () => {
     reset();
     const bean = new LevelScene(game, '1-2');
     bean.time = 9999;
+    bean.clockStopped = true;
     game.scene = bean;
     const def = getLevel('1-2').rows;
 
@@ -6625,6 +6633,7 @@ const report = await page.evaluate(async () => {
      * out of — which is what lets a finished vine be climbed from the ground. */
     const order = new LevelScene(game, '1-2');
     order.time = 9999;
+    order.clockStopped = true;
     game.scene = order;
     order.bumpTile(blockAt[0], blockAt[1], order.player);
     for (let f = 0; f < 24; f++) order.update(mkInput());
@@ -6652,6 +6661,7 @@ const report = await page.evaluate(async () => {
       const half = new LevelScene(game, '1-2');
       half.entities = half.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       half.time = 9999;
+      half.clockStopped = true;
       game.setScene(half);
       half.bumpTile(blockAt[0], blockAt[1], half.player);
       for (let f = 0; f < 40; f++) half.update(mkInput());
@@ -6677,6 +6687,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, '1-2');
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       game.scene = s;
       return s;
     };
@@ -6814,6 +6825,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, id);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       game.scene = s;
       return s;
     };
@@ -7072,6 +7084,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, id);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       game.setScene(s);
       return s;
     };
@@ -7427,10 +7440,17 @@ const report = await page.evaluate(async () => {
    */
   {
     const { Music, audioTap } = await import('/src/core/audio.js');
+    /*
+     * `time` on nyt **polttoaine** eikä kello (18.8.2026: kolikot ovat aika).
+     * Kutsupaikat lukevat sitä yhä nimellä "aika", ja se on oikein — se on
+     * yhä se luku joka loppuu — mutta se asetetaan kolikkoina, koska kolikot
+     * ovat se mistä kiire syntyy (`FUEL_HURRY`).
+     */
     const mk = (id, power = { type: null, level: 0 }, time = 9999) => {
       reset(power);
       const s = new LevelScene(game, id);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      game.state.coins = Math.min(99, Math.max(1, Math.round(time / 6)));
       s.time = time;
       // setScene eikä sijoitus: `enter()` on se paikka jossa kohtaus valitsee
       // raitansa, ja puolet näistä tarkistuksista koskee juuri sitä.
@@ -7609,7 +7629,7 @@ const report = await page.evaluate(async () => {
       hold(s, i, [], 60);
       expect('entering the cave with the clock low keeps the hurry',
         Music.current === 'cave' && Music._hurry === true,
-        `raita ${Music.current}, kiire ${Music._hurry}, aikaa ${s.time}`);
+        `raita ${Music.current}, kiire ${Music._hurry}, kolikoita ${game.state.coins}`);
     }
 
     /* 8. Kiihtyvyys. Grieg valittiin rakenteensa takia — teos kiihtyy — joten
@@ -7785,6 +7805,7 @@ const report = await page.evaluate(async () => {
     game.setScene(s);
     s.entities = s.entities.filter((e) => e.kind !== 'enemy');
     s.time = 9999;
+    s.clockStopped = true;
     // Pelaaja pois siilon alta, jotta koe mittaa hiekkaa eikä uppoamista.
     s.player.x = 2 * 16;
     s.player.y = 13 * 16 - s.player.h;
@@ -7823,6 +7844,7 @@ const report = await page.evaluate(async () => {
     after.grid = endRows.map((row) => row.split(''));
     after.entities = after.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
     after.time = 9999;
+    after.clockStopped = true;
     const got = runGround(after, isSolid, 3000, () => finished);
     game.finishLevel = () => {};
     expect('valuneen hiekan läpi pääsee yhä maaliin voimatasolla 0',
@@ -7838,6 +7860,7 @@ const report = await page.evaluate(async () => {
     game.setScene(real);
     real.entities = real.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
     real.time = 9999;
+    real.clockStopped = true;
     const silo = [];
     for (let ty = 0; ty < real.h; ty++) {
       for (let tx = 0; tx < real.w; tx++) {
@@ -7858,6 +7881,7 @@ const report = await page.evaluate(async () => {
     realAfter.grid = realRows.map((row) => row.split(''));
     realAfter.entities = realAfter.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
     realAfter.time = 9999;
+    realAfter.clockStopped = true;
     const realGot = runGround(realAfter, isSolid, 7000, () => done);
     game.finishLevel = () => {};
     expect('2-4:n hiekkasiilon voi kaataa, ja kenttä kelpaa yhä sen jälkeen',
@@ -7919,6 +7943,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy');
       s.time = 9999;
+      s.clockStopped = true;
       const p = s.player;
       p.x = 20 * 16;
       p.y = 13 * 16 - p.h;
@@ -9367,6 +9392,7 @@ const report = await page.evaluate(async () => {
         game.setScene(s);
         s.entities = s.entities.filter((e) => e.kind !== 'enemy');
         s.time = 9999;
+        s.clockStopped = true;
         const p = s.player;
         const x0 = (s.grid[0].length - 48) * 16;
         const i = mkInput();
@@ -12080,6 +12106,7 @@ const report = await page.evaluate(async () => {
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       if (strip) s.entities = s.entities.filter((e) => e.kind !== 'item');
       s.time = 9999;
+      s.clockStopped = true;
       return runGround(s, solid2, 7000, () => finished);
     };
 
@@ -12262,6 +12289,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       return s;
     };
     const down = () => { const i = mkInput(); i.pressed.down = true; i.held.down = true; return i; };
@@ -12503,6 +12531,7 @@ const report = await page.evaluate(async () => {
         game.setScene(s);
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         const p = s.player;
         p.pMeter = meter;
         p.vx = 2.5;
@@ -12700,12 +12729,16 @@ const report = await page.evaluate(async () => {
     s2.add(thief);
     for (let f = 0; f < 200 && thief.loot === 0; f++) s2.update(idle);
     const coins1 = s2.grid.flat().filter((c) => c === TF.COIN).length;
-    const purse = game.state.coins;
+    /* Uran kokonaisluku eikä säiliön pinta: kolikot ovat aika (18.8.2026) ja
+     * säiliö valuu koko ajan, joten "saiko pelaaja saaliin" on kysymys jonka
+     * vain kulumaton luku voi vastata. */
+    const purse = game.state.coinsTotal || 0;
     thief.stomp();
     for (let f = 0; f < 60; f++) s2.update(idle);
     expect('kolikkovaras syö kolikon ja pudottaa saaliin tallattuna',
-      thief.loot > 0 && coins1 < coins0 && game.state.coins >= purse + thief.loot,
-      `söi ${thief.loot}, kolikoita ${coins0} -> ${coins1}, kukkaro ${purse} -> ${game.state.coins}`);
+      thief.loot > 0 && coins1 < coins0 && (game.state.coinsTotal || 0) >= purse + thief.loot,
+      `söi ${thief.loot}, kolikoita ${coins0} -> ${coins1},`
+      + ` ura ${purse} -> ${game.state.coinsTotal || 0}`);
 
     /*
      * 3. JA JOKAINEN LAJI SELVIÄÄ PIKATALLENNUKSESTA.
@@ -13166,6 +13199,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       const got = runGround(s, isSolid, 7000, () => finished);
       expect('esittelykenttä läpäisee samat säännöt ja saman botin kuin pelin kentät',
         problems.length === 0 && got.cleared,
@@ -13245,6 +13279,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       const slots = s.pillars || [];
       shapes.push(`${id}:${slots.length}`);
 
@@ -13310,6 +13345,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       return s;
     };
     /** Kävelijä annettuun ruutuun, heti hereillä. */
@@ -13618,7 +13654,13 @@ const report = await page.evaluate(async () => {
         sc.setTile(Math.floor(sc.player.cx / 16), Math.floor(sc.player.cy / 16), T.LAVA);
         sc.playerTiles();
       }],
-      ['aika', (sc) => { sc.time = 1; sc.timeSub = 23; sc.updateTimer(); }],
+      /* "Aika" on nyt tyhjä säiliö (18.8.2026: kolikot ovat aika). Sama
+       * väite, uusi lähde: tähti ei suojaa siltä että polttoaine loppuu. */
+      ['aika', (sc) => {
+        game.state.coins = 0;
+        sc.timeSub = 999;
+        sc.updateTimer();
+      }],
     ]) {
       reset({ type: 'shroom', level: 2 });
       const sc = new LevelScene(game, '1-1');
@@ -14427,6 +14469,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, id);
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         const input = mkInput();
         let air = 0;
         let seen = 0;
@@ -14537,6 +14580,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, id);
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         const input = mkInput();
         let rise = 0;
         let air = 0;
@@ -14717,6 +14761,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, id);
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         const spot = ledge(s, 4, 8);
         if (!spot) return null;
         const p = s.player;
@@ -14884,6 +14929,7 @@ const report = await page.evaluate(async () => {
           const s = new LevelScene(game, id);
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          s.clockStopped = true;
           const p = s.player;
           p.x = (spot.tx - runUp) * TILE;
           p.y = spot.fy * TILE - p.h;
@@ -15049,6 +15095,7 @@ const report = await page.evaluate(async () => {
         s.camPageFrames = pageFrames;
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         let finished = null;
         game.finishLevel = (r) => { finished = r; };
         const bot = makeClimber(s, climbRows(over), budget);
@@ -15220,6 +15267,7 @@ const report = await page.evaluate(async () => {
           const s = new LevelScene(game, id);
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          s.clockStopped = true;
           if (s.vertical) { climbs.push(id); continue; }
           const input = mkInput();
           for (let f = 0; f < 600; f++) {
@@ -15501,6 +15549,7 @@ const report = await page.evaluate(async () => {
           game.setScene(s);
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          s.clockStopped = true;
           const bot = makeClimber(s, rows, climbBudget);
           const input = mkInput();
           const startFeet = s.player.y + s.player.h;
@@ -15727,6 +15776,7 @@ const report = await page.evaluate(async () => {
           game.setScene(s);
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          s.clockStopped = true;
           const bot = makeClimber(s, rows, segBudget);
           const input = mkInput();
           let axis = s.vertical;
@@ -18192,6 +18242,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, id);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       const p = s.player;
       p.x = spot.tx * TILE + (TILE - p.w) / 2;
       p.y = spot.ty * TILE - p.h;
@@ -18364,6 +18415,7 @@ const report = await page.evaluate(async () => {
         reset({ type: 'shroom', level: 3 });
         const s = new LevelScene(game, id);
         s.time = 9999;
+        s.clockStopped = true;
         s.entities = s.entities.filter((e) => e.kind !== 'hazard');
         const boss = s.entities.find((e) => e.constructor.name === 'Boss');
         let door = null;
@@ -18424,6 +18476,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, '1-1');
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         let block = null;
         for (let tx = 3; tx < s.w && !block; tx++) {
           for (let ty = 2; ty < s.h - 1; ty++) {
@@ -19729,35 +19782,46 @@ const report = await page.evaluate(async () => {
           : `ajokelloa ei ole (${taError})`);
     }
 
-    /* 4. Ja toisin päin: kulunut aika **on** AIKA-kellon toisinto, joten sitä ei
-     * piirretä. Väite on se laskukaava, framelleen. */
+    /* 4. Ja toisin päin: kulunut aika **piirretään**, koska AIKA-kelloa ei enää
+     * ole (18.8.2026: kolikot ovat aika). Ennen tämä väite oli päinvastainen ja
+     * sen perustelu oli laskukaava — kulunut aika oli AIKA-lukeman toisinto
+     * framelleen — mutta toisinnon toinen puoli katosi, ja kilpa jonka kelloa
+     * ei näe on kilpa jota ei voi ajaa. Väite on nyt kaksiosainen: kello on
+     * ruudulla aika-ajossa **eikä** ole tavallisella kierroksella. */
     {
-      seed = 7;
-      Math.random = seeded;
-      reset();
-      game.timeAttack = true;
-      const scene = new LevelScene(game, '1-1');
-      const def = getLevel('1-1');
-      const input = mkInput();
-      let total = 0;
-      let agree = 0;
-      let transit = 0;
-      for (let f = 0; f < 900 && scene.state === 'play'; f++) {
-        input.held.right = true;
-        input.held.jump = (f % 41) < 11;
-        input.pressed.jump = (f % 41) === 0;
-        if (scene.player.transit) transit++;
-        scene.update(input);
-        if (scene.state !== 'play' || !scene.race) break;
-        total++;
-        if (def.time - Math.floor((scene.race.frames - transit) / 24) === scene.time) agree++;
-      }
-      Math.random = realRandom;
-      game.timeAttack = false;
-      expect('kulunut aika on johdettavissa AIKA-kellosta, siksi sitä ei piirretä toiseen kertaan',
-        total > 0 && agree === total,
-        `${agree}/${total} framea täsmää kaavaan AIKA = ${def.time} - floor((ajokello -`
-        + ` putkiframet)/24), putkessa ${transit} framea`);
+      const shot = (timed) => {
+        seed = 7;
+        Math.random = seeded;
+        reset();
+        game.timeAttack = timed;
+        const scene = new LevelScene(game, '1-1');
+        const input = mkInput();
+        for (let f = 0; f < 240; f++) {
+          input.held.right = true;
+          input.held.jump = (f % 41) < 11;
+          input.pressed.jump = (f % 41) === 0;
+          scene.update(input);
+        }
+        const c = document.createElement('canvas');
+        c.width = VIEW_W;
+        c.height = VIEW_H;
+        const g = c.getContext('2d');
+        g.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.drawOverlay(g);
+        Math.random = realRandom;
+        game.timeAttack = false;
+        /* Ylin rivi keskeltä: kello on siellä ja vain siellä. */
+        const d = g.getImageData(120, 4, 80, 12).data;
+        let ink = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) ink++;
+        return { ink, frames: scene.race ? scene.race.frames : null };
+      };
+      const timed = shot(true);
+      const plain = shot(false);
+      expect('aika-ajossa kulunut aika on ruudulla, tavallisella kierroksella ei',
+        timed.ink > 20 && plain.ink === 0 && timed.frames > 0,
+        `aika-ajossa ${timed.ink} px mustetta (ajokello ${timed.frames} framea),`
+        + ` tavallisessa ${plain.ink} px`);
     }
 
     /* 5. Tilan lataus. Tähtilogiikkaa ei kahdenneta: tila vain kieltäytyy, ja
@@ -20272,13 +20336,14 @@ const report = await page.evaluate(async () => {
       const woke = s.hudInk();
       /* Kello alle sadan on kriisi eikä tapahtuma: nauha ei saa nukahtaa
        * silloin vaikka mikään lukema ei muutu. */
-      s.time = 90;
+      /* Kriisi on nyt vähissä oleva polttoaine eikä kello (18.8.2026). */
+      game.state.coins = 8;
       for (let f = 0; f < 200; f++) s.update(idle());
       const urgent = s.hudInk();
       expect('HUD-nauha himmenee itsekseen ja herää lukeman muutoksesta',
         fresh === 1 && slept < 0.75 && woke === 1 && urgent === 1,
         `alussa ${fresh}, 200 framen jälkeen ${slept.toFixed(2)}, kolikosta ${woke},`
-        + ` kello 90 ${urgent.toFixed(2)}`);
+        + ` vähissä polttoaineessa ${urgent.toFixed(2)}`);
 
       /* Suihku: mitä täydempi mittari, sitä tiheämpi pilvi — ja kolme tilaa
        * joissa sitä ei tule lainkaan. */
@@ -20322,6 +20387,11 @@ const report = await page.evaluate(async () => {
           usedSaveState: false, continues: 0, bestTimes: {},
         };
         const s = new LevelScene(game, '1-1');
+        /* Konstruktori nostaa säiliön lattiaan (`FUEL_FLOOR`), koska kolikot
+         * ovat aika eikä kenttään lähetetä ketään tyhjänä. Tämä väite koskee
+         * pinnan piirtoa, joten pinta asetetaan vasta sen jälkeen. */
+        game.state.coins = coins;
+        s.tubeFill = coins;
         s.updateCoinFlights();
         g.clearRect(0, 0, VIEW_W, VIEW_H);
         s.drawCoinTube(g);
@@ -20355,6 +20425,8 @@ const report = await page.evaluate(async () => {
         usedSaveState: false, continues: 0, bestTimes: {},
       };
       const s = new LevelScene(game, '1-1');
+      game.state.coins = 0;
+      s.tubeFill = 0;
       s.addCoin(s.player.x + 40, s.player.y);
       const inAir = s.coinFlights.length;
       const fillAtPickup = s.tubeFill;
@@ -20372,12 +20444,17 @@ const report = await page.evaluate(async () => {
       const atFull = s.tubeFill;
       const draining = s.tubeFlush;
       for (let f = 0; f < 90 && s.tubeFlush > 0; f++) s.updateCoinFlights();
+      game.state.coins = 0;
       s.updateCoinFlights();
       const flushed = s.tubeFill;
-      expect('poimittu kolikko lentää putkiloon, ja sadas valuttaa sen tyhjäksi',
+      /* Sadas kolikko **täyttää säiliön** eikä enää anna elämää: kolikot ovat
+       * aika (18.8.2026), ja elämä tulee uran kokonaisluvusta (`LIFE_COINS`
+       * 500). Täysi säiliö on itsessään palkinto — kaksi minuuttia on pisin
+       * mahdollinen kello. */
+      expect('poimittu kolikko lentää putkiloon, ja sadas täyttää sen',
         inAir === 1 && fillAtPickup === 0 && landed === 1
         && atFull === 100 && draining > 1 && flushed === 0
-        && game.state.lives === livesBefore + 1,
+        && game.state.lives === livesBefore,
         `poiminnassa ilmassa ${inAir} pinta ${fillAtPickup}, perillä ${landed};`
         + ` sadas -> pinta ${atFull} ja huuhtelu ${draining} framea,`
         + ` valumisen jälkeen ${flushed}, elämät ${livesBefore} -> ${game.state.lives}`);
@@ -20596,6 +20673,7 @@ const report = await page.evaluate(async () => {
       const s = new LevelScene(game, '1-1');
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       const p = s.player;
 
       /* 1. Hössötin: kosketus vie ohjauksen muttei elämää eikä voimatasoa. */
@@ -20877,6 +20955,7 @@ const report = await page.evaluate(async () => {
         const s = new LevelScene(game, '1-1');
         s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         s.time = 9999;
+        s.clockStopped = true;
         for (let tx = 0; tx < 40; tx++) {
           for (let ty = 0; ty < 15; ty++) s.setTile(tx, ty, ' ');
           s.setTile(tx, 13, '#');
@@ -20997,6 +21076,7 @@ const report = await page.evaluate(async () => {
           const s = new LevelScene(game, '1-1');
           s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
           s.time = 9999;
+          s.clockStopped = true;
           const p = s.player;
           const col = s.grid[12].indexOf('/');
           p.x = (col - 6) * 16;
@@ -21140,6 +21220,7 @@ const report = await page.evaluate(async () => {
       game.scene = scene;
       scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       scene.time = 9999;
+      scene.clockStopped = true;
       const r = runGround(scene, isSolid, 7000, () => finished);
       expect('päivän kenttä on läpäistävissä voimatasolla 0',
         r.cleared, r.cleared ? `${scene.w} saraketta läpi` : `eteni ${r.reach} %`);
@@ -21379,6 +21460,7 @@ const report = await page.evaluate(async () => {
         scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         if (scene.def.boss) scene.bossDefeated = true;
         scene.time = 9999;
+        scene.clockStopped = true;
         /* Pystykentät kiipeävät eivätkä juokse; niillä on oma todisteensa
          * `climb-bot.js`:ssä ja `playable.mjs`:ssä. Peliin ei kuulu vielä
          * yhtään, joten tämä haara on varaus eikä poikkeus. */
@@ -21693,6 +21775,7 @@ const report = await page.evaluate(async () => {
         const scene = new LevelScene(game, '1-1');
         scene.entities = scene.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
         scene.time = 9999;
+        scene.clockStopped = true;
         game.setScene(scene);
         take();
         scene.player.collect('shroom');
@@ -21857,6 +21940,7 @@ const report = await page.evaluate(async () => {
       game.setScene(s);
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       return s;
     };
     const put = (s, e) => { e.active = true; e.alwaysActive = true; s.entities.push(e); return e; };
@@ -22415,6 +22499,7 @@ const report = await page.evaluate(async () => {
        * seisomaan viereisessä sarakkeessa. */
       s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
       s.time = 9999;
+      s.clockStopped = true;
       return s;
     };
     const findLump = (s) => {
