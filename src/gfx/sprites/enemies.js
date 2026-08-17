@@ -107,7 +107,7 @@ export function breath(tick, x, y) {
  * empties the band this sprite was redrawn to fill. So the sack breathes the
  * way the player does: the middle swells and the stubs stretch after it.
  */
-function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
+function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0, skin = null) {
   const px = Math.round(x);
   const py = Math.round(y);
   if (squashed) {
@@ -137,7 +137,14 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
     ctx.fillStyle = '#a83c4c';
     ctx.fillRect(bx + 1, py + 10 - b, 14, 2);
     ctx.fillStyle = '#701c30';
-    for (let i = 0; i < 4; i++) ctx.fillRect(bx + 3 + i * 3, py + 10 - b, 1, 2);
+    const stitches = skin ? skin.stitches : 4;
+    for (let i = 0; i < stitches; i++) ctx.fillRect(bx + 3 + i * 3, py + 10 - b, 1, 2);
+    /* Tahra: yksi tummempi läiskä pussin kyljessä. Ei koskaan silmien päällä
+     * eikä sauman päällä — ne kaksi ovat ne kohdat joista tämä otus luetaan. */
+    if (skin && skin.smudge) {
+      ctx.fillStyle = 'rgba(112,28,48,0.45)';
+      ctx.fillRect(bx + skin.smudge.x, py + skin.smudge.y - b, 2, 2);
+    }
     // The vent, on the back, and it is where the leak below comes from. A
     // creature that leaks from a hole nobody drew is a creature that leaks by
     // magic; this one has the hole.
@@ -163,7 +170,7 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
     ctx.fillRect(bx + 3, py + 2, 2, 1);
     ctx.fillRect(bx + 11, py + 2, 2, 1);
     ctx.fillStyle = '#f8a8a8';
-    ctx.fillRect(bx + 6, py + 1, 3, 1);
+    ctx.fillRect(bx + 5 + (skin ? skin.shine : 1), py + 1, 3, 1);
     // Two stubs. Not shoes, not feet — the bag has to stand on something and
     // this is the least it can get away with.
     ctx.fillStyle = '#701c30';
@@ -176,10 +183,30 @@ function walkerBody(ctx, x, y, frame, facing, squashed, lift = 0) {
   });
 }
 
-export function drawWalker(ctx, x, y, frame, facing, squashed) {
+/**
+ * Kävelijän yksilölliset piirteet, ja ne ovat kaikki **laatikon sisällä**.
+ *
+ * Kolme akselia: ompeleiden määrä (kolme vai neljä), tahran paikka pussin
+ * kyljessä, ja solmun kallistus yhden pikselin. Yhdessä kaksitoista erilaista
+ * kävelijää, eikä yksikään niistä ole eri kokoinen, eri värinen tai eri
+ * muotoinen — se on sama otus jolla on ollut oma elämänsä.
+ */
+function walkerSkin(skin) {
+  return {
+    stitches: skin > 0.5 ? 4 : 3,
+    smudge: skin > 0.28 ? { x: 2 + Math.floor(skin * 7), y: 4 + Math.floor(skin * 3) } : null,
+    /* Solmun **kiilto** siirtyy, ei solmu itse: solmu on siluetin ylin reuna,
+     * ja sen liikuttaminen muutti ääriviivaa kahdeksan pikselin verran
+     * (mitattu portissa). Siluetista luetaan tallattavuus, joten se on ainoa
+     * osa jota iho ei saa koskea. */
+    shine: skin > 0.66 ? 1 : 0,
+  };
+}
+
+export function drawWalker(ctx, x, y, frame, facing, squashed, skin = 0.5) {
   // `frame` is the walker's tick divided by eight; the breath wants frames.
   const lift = breath(frame * 8, x, y);
-  outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed, lift));
+  outlined(ctx, (g) => walkerBody(g, x, y, frame, facing, squashed, lift, walkerSkin(skin)));
 }
 
 /* -------------------------------- pönttö -------------------------------- */

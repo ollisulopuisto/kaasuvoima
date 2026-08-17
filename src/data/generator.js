@@ -41,7 +41,7 @@
  * kirjattu `src/core/daily.js`:hin sanalla eikä jätetty pääteltäväksi.
  */
 import { validateLevel } from './rules.js';
-import { hashNoise } from '../core/utils.js';
+import { hashNoise, hashPlace } from '../core/utils.js';
 import { PACING_STATS, JUMP_BUDGET } from './pacing.js';
 
 /* ------------------------------- the engine ----------------------------- */
@@ -966,8 +966,8 @@ function placeStar(c, notBefore) {
  */
 const SECRET_COIN_RATE = 0.07;
 const SECRET_POWER_RATE = 0.015;
-export const hidesSomething = (x, y) => hashNoise(x * 7 + 13, y * 11 + 5) < SECRET_POWER_RATE
-  || hashNoise(x * 3 + 1, y * 5 + 2) < SECRET_COIN_RATE;
+export const hidesSomething = (x, y) => hashPlace(x * 7 + 13, y * 11 + 5) < SECRET_POWER_RATE
+  || hashPlace(x * 3 + 1, y * 5 + 2) < SECRET_COIN_RATE;
 
 /**
  * Makes sure at least one ordinary brick in the level is hiding something.

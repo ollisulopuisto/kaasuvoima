@@ -1,6 +1,6 @@
 import { getLevel } from '../data/levels.js';
 import { T } from '../gfx/tiles.js';
-import { hashNoise } from './utils.js';
+import { hashNoise, hashPlace } from './utils.js';
 
 /**
  * What a level hides, and how much of it this save has found.
@@ -76,8 +76,8 @@ const SECRET_POWER_RATE = 0.015;
 
 /** True when an ordinary brick at this position is hiding something. */
 export function brickHides(tx, ty) {
-  if (hashNoise(tx * 7 + 13, ty * 11 + 5) < SECRET_POWER_RATE) return true;
-  return hashNoise(tx * 3 + 1, ty * 5 + 2) < SECRET_COIN_RATE;
+  if (hashPlace(tx * 7 + 13, ty * 11 + 5) < SECRET_POWER_RATE) return true;
+  return hashPlace(tx * 3 + 1, ty * 5 + 2) < SECRET_COIN_RATE;
 }
 
 /** Keys are stable strings, so a save survives everything but a level rewrite. */

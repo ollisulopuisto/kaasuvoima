@@ -627,6 +627,46 @@ const BOSS_LINE = {
  * @param {'arrive'|'hurt'|'die'} kind mikä tilanne
  * @param {number} [speaker] kenen äänellä, jos eri kuin `variant` (kuningas)
  */
+/**
+ * TYYDYTTÄVÄ TAPPO, ja tyydytys on tässä **kolme kerrosta ja yksi nouseva
+ * sävel**.
+ *
+ * Omistaja 18.8.2026: *"lisää TYYDYTTÄVÄ ääniefekti kun vihollinen tallataan,
+ * kupla puhkaistaan jne eli kun vihu kuolee."* Vanha `stomp` oli kaksi ääntä
+ * (kohinapurske + matala kolmio) ja se on **oikea isku muttei palkinto**: se
+ * kertoo että jotain osui, ei että jotain onnistui.
+ *
+ * Palkinto rakennetaan kolmesta osasta, ja jokainen niistä tekee eri työn:
+ *
+ *   - **napsahdus** (0…15 ms): terävä transientti, se osa joka tuntuu
+ *     sormissa. Ilman sitä isku on mössöä.
+ *   - **runko**: matala kolmio joka laskee — sama kuin ennenkin, koska se on
+ *     se ääni jonka pelaaja on jo oppinut tunnistamaan tallaukseksi.
+ *   - **kuittaus**: lyhyt nouseva sävel. Tämä on se osa joka tekee siitä
+ *     palkinnon, ja se on **ketjun mittainen**: puolisävelaskel per ketjun
+ *     lenkki, tasan sama laskuri joka maksaa pisteet (`CHAIN_LADDER`). Neljäs
+ *     tallaus samalla kaarella kuulostaa siis neljänneltä, ja viides
+ *     viidenneltä — se on sama tieto korvalle jonka pistepomppu antaa
+ *     silmälle, eikä uusi merkki (DESIGN.md kohta 8).
+ *
+ * Katto on kaksitoista puolisävelaskelta eli oktaavi: sen yli mentäessä
+ * kuittaus katoaa sinne minne pelin muut korkeat äänet (kolikko 988 Hz)
+ * asuvat, ja kaksi eri asiaa samalla korkeudella on yksi liikaa.
+ */
+export function killSound(step = 0) {
+  if (muted || !ensure()) return;
+  const n = Math.min(12, Math.max(0, step));
+  // Napsahdus: hyvin lyhyt ylätaajuinen purske.
+  noise({ dur: 0.035, from: 5200, to: 1800, q: 1.1, gain: 0.16, attack: 0.002 });
+  // Runko: sama kuin vanha tallausääni, koska se on jo opittu.
+  noise({ dur: 0.13, from: 700, to: 130, q: 2, gain: 0.26 });
+  tone({ type: 'triangle', from: 200, to: 60, dur: 0.12, gain: 0.22, hold: 0.2, curve: 'lin' });
+  // Kuittaus: nouseva sävel, ketjun mittainen.
+  const base = 523 * Math.pow(2, n / 12);
+  tone({ type: 'square', from: base, to: base * 1.5, dur: 0.09, gain: 0.13, hold: 0.35, delay: 0.02 });
+  tone({ type: 'triangle', from: base * 2, dur: 0.06, gain: 0.08, hold: 0.4, delay: 0.05 });
+}
+
 export function bossSay(variant, kind, speaker = variant) {
   const words = BOSS_WORDS[variant] || BOSS_WORDS[0];
   const voice = BOSS_VOICES[speaker] || BOSS_VOICES[0];

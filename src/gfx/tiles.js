@@ -551,8 +551,20 @@ function bevel(ctx, x, y, w, h, light, dark) {
 /* -------------------------------- ground -------------------------------- */
 
 /** The dressing on the top edge of a ground tile, one per theme. */
-function surfaceCap(ctx, x, y, th, tx, ty) {
+function surfaceCap(ctx, x, y, th, tx, ty, tick = 0) {
   const n = hashNoise(tx, ty);
+  /*
+   * HEINÄ HEILUU, ja se on pikkuanimaatio eikä tuuli.
+   *
+   * Omistaja: *"noihin skin-eroihin voisi lisätä pikkuanimaatioita."* Ruoho on
+   * niistä paras paikka aloittaa, koska se on jo **laatan ulkopuolella** —
+   * korret piirtyvät riville y-1 ja y-2 — eli niiden liike ei voi muuttaa
+   * siluettia jolla seistään. Yksi pikseli sivulle, jakso 180 framea eli kolme
+   * sekuntia, ja **vaihe laatan omasta hashista**: ruohikko aaltoilee sen
+   * sijaan että koko rivi nykisi kerralla. Yhtenäinen nyökkäys lukisi
+   * tapahtumana (DESIGN.md kohta 8); eritahtinen lukee kasvillisuutena.
+   */
+  const sway = Math.round(Math.sin((tick + n * 180) / 28.6)) ;
   switch (th.surface) {
     case 'grass':
       ctx.fillStyle = th.groundTop;
@@ -562,8 +574,8 @@ function surfaceCap(ctx, x, y, th, tx, ty) {
         const bn = hashNoise(tx * 5 + i, ty);
         if (bn < 0.45) continue;
         const bx = x + Math.floor(bn * 14);
-        ctx.fillRect(bx, y - 1, 1, 1);
-        if (bn > 0.85) ctx.fillRect(bx, y - 2, 1, 1);
+        ctx.fillRect(bx + sway, y - 1, 1, 1);
+        if (bn > 0.85) ctx.fillRect(bx + sway, y - 2, 1, 1);
       }
       ctx.fillStyle = th.groundTopDark;
       ctx.fillRect(x, y + 4, TILE, 2);
@@ -671,7 +683,7 @@ function surfaceCap(ctx, x, y, th, tx, ty) {
   }
 }
 
-function drawGround(ctx, x, y, th, openAbove, tx, ty) {
+function drawGround(ctx, x, y, th, openAbove, tx, ty, tick = 0) {
   ctx.fillStyle = th.ground;
   ctx.fillRect(x, y, TILE, TILE);
 
@@ -768,7 +780,7 @@ function drawGround(ctx, x, y, th, openAbove, tx, ty) {
     }
   }
 
-  if (openAbove) surfaceCap(ctx, x, y, th, tx, ty);
+  if (openAbove) surfaceCap(ctx, x, y, th, tx, ty, tick);
 
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
   ctx.fillRect(x, y + TILE - 1, TILE, 1);
@@ -951,10 +963,42 @@ function drawUsed(ctx, x, y, th) {
   ctx.fillRect(x + 1, y + 1, 14, 1);
 }
 
-function drawHard(ctx, x, y, th, tx, ty) {
+/**
+ * KIVILOHKON OMA IHO, ja sama tasapaino kuin putkella.
+ *
+ * Kivi on pelin yleisin yksittäinen palikka — areenat, holvit, korokkeet,
+ * kaikki linnakkeet — ja se oli **täsmälleen sama kuva joka kerta**. Putki sai
+ * yksilöllisyytensä ensin (v26.08.18.2); tämä on sama sääntö samalle laatalle:
+ * siluetti ei muutu, pohjaväri ei muutu, ja vaihtelu on paikan funktio eikä
+ * kellon.
+ *
+ * Kolme akselia, ja jokainen niistä on pintaa jota laatassa jo on:
+ * **halkeaman paikka**, **kulman lohkeama** ja **kiven suunta** (vaaka vai
+ * pysty). Kolme kertaa kaksi kertaa kaksi on kaksitoista erilaista kiveä, mikä
+ * on juuri se ero mitattujen rajojen sisällä: sen alle jäävä ei näy, sen yli
+ * menevä lakkaa olemasta sama palikka.
+ *
+ * Ja yksi pikkuanimaatio: **pölyhiukkanen** irtoaa halkeamasta kerran
+ * yhdeksässä sekunnissa, laatan omassa vaiheessa. Se on yhden pikselin
+ * kokoinen ja putoaa kolme riviä; sitä ei huomaa ellei katso, ja juuri se on
+ * ehto — merkki jonka huomaa olisi merkki.
+ */
+function hardSkin(tx, ty) {
+  const n = hashNoise(tx * 7, ty * 11);
+  const m = hashNoise(tx + 5, ty * 3);
+  return {
+    crack: 3 + Math.floor(n * 8),
+    chip: m > 0.6,
+    vertical: n > 0.5,
+    phase: Math.floor(m * 540),
+  };
+}
+
+function drawHard(ctx, x, y, th, tx, ty, tick = 0) {
   ctx.fillStyle = th.hard;
   ctx.fillRect(x, y, TILE, TILE);
   bevel(ctx, x, y, TILE, TILE, th.hardLight, th.hardDark);
+  const skin = hardSkin(tx, ty);
 
   if (th.surface === 'metal') {                    // riveted plate
     ctx.fillStyle = th.hardDark;
@@ -989,6 +1033,28 @@ function drawHard(ctx, x, y, th, tx, ty) {
     ctx.fillRect(x + 3, y + 3, 2, 2);
     ctx.fillRect(x + 11, y + 11, 2, 2);
     if (hashNoise(tx, ty) > 0.7) ctx.fillRect(x + 10, y + 4, 2, 1);
+  }
+
+  /* Halkeama: kolme pikseliä siihen suuntaan johon tämä kivi on lohjennut.
+   * Piirretään jokaiselle pinnalle, koska se on kiveä eikä pintamateriaalia —
+   * metallilaatta halkeaa hitsaussaumastaan aivan kuten kivi kerroksestaan. */
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  if (skin.vertical) ctx.fillRect(x + skin.crack, y + 5, 1, 6);
+  else ctx.fillRect(x + 4, y + skin.crack, 6, 1);
+  if (skin.chip) {
+    /* Lohkeama nurkassa: tummempi kolmio kahdesta suorakaiteesta. Se on
+     * **laatan sisällä** eikä syö reunaa — siluetti on kiinteä pinta ja
+     * pysyy sellaisena. */
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(x + TILE - 4, y + 1, 3, 1);
+    ctx.fillRect(x + TILE - 3, y + 2, 2, 1);
+  }
+  /* Ja pöly: yksi pikseli, kerran yhdeksässä sekunnissa, laatan omassa
+   * vaiheessa. Ks. `hardSkin`. */
+  const dust = (tick + skin.phase) % 540;
+  if (dust < 18) {
+    ctx.fillStyle = `rgba(255,255,255,${0.22 - dust * 0.01})`;
+    ctx.fillRect(x + (skin.vertical ? skin.crack : 7), y + 11 + Math.floor(dust / 6), 1, 1);
   }
 }
 
@@ -1282,15 +1348,28 @@ function drawWarpPipe(ctx, x, y, ch, th, tick, hanging, tx = 0) {
   ctx.fillRect(x, y + PIPE_THROAT, TILE, 3);
 }
 
-function drawPlatform(ctx, x, y, th) {
+/**
+ * Lauta saa syynsä paikasta, ja **animaatiota se ei saa**.
+ *
+ * Sama vaihtelu kuin kivellä — oksankohta ja lankkujen sauma siirtyvät laatan
+ * hashin mukaan — mutta liikettä ei: lauta on puolikiinteä, eli se on ainoa
+ * pinta jonka läpi voi pudota tahallaan. Liikkuva lauta lukisi lupauksena
+ * siitä että se on menossa jonnekin, ja tässä pelissä murenevalla laudalla on
+ * jo oma tärinänsä. Yksi merkki, yksi merkitys.
+ */
+function drawPlatform(ctx, x, y, th, tx = 0, ty = 0) {
   ctx.fillStyle = th.brickLight;
   ctx.fillRect(x, y, TILE, 2);
   ctx.fillStyle = th.brick;
   ctx.fillRect(x, y + 2, TILE, 3);
   ctx.fillStyle = th.brickDark;
   ctx.fillRect(x, y + 5, TILE, 1);
-  ctx.fillRect(x + 5, y + 2, 1, 3);
-  ctx.fillRect(x + 11, y + 2, 1, 3);
+  const seam = hashNoise(tx * 13, ty + 2) > 0.5 ? 1 : 0;
+  ctx.fillRect(x + 5 - seam, y + 2, 1, 3);
+  ctx.fillRect(x + 11 + seam, y + 2, 1, 3);
+  if (hashNoise(tx + 3, ty * 7) > 0.62) {            // oksankohta
+    ctx.fillRect(x + 2 + Math.floor(hashNoise(tx, ty) * 10), y + 3, 2, 1);
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.fillRect(x, y, TILE, 1);
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -2005,10 +2084,10 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
   const th = THEMES[themeName] || THEMES.grass;
   switch (ch) {
     case T.GROUND:
-      drawGround(ctx, x, y, th, !isSolid(above), tx, ty);
+      drawGround(ctx, x, y, th, !isSolid(above), tx, ty, tick);
       if (opts.warn) drawHazardEdge(ctx, x, y, opts.warn);
       break;
-    case T.HARD: drawHard(ctx, x, y, th, tx, ty); break;
+    case T.HARD: drawHard(ctx, x, y, th, tx, ty, tick); break;
     case T.BRICK: drawBrick(ctx, x, y, th, tx, ty); break;
     case T.QCOIN:
     case T.QPOWER:
@@ -2029,7 +2108,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.WARP_L:
     case T.WARP_R: drawWarpPipe(ctx, x, y, ch, th, tick, info(above).pipe, tx); break;
     case T.VINE: drawVine(ctx, x, y, tx, ty, tick); break;
-    case T.PLATFORM: drawPlatform(ctx, x, y, th); break;
+    case T.PLATFORM: drawPlatform(ctx, x, y, th, tx, ty); break;
     case T.CRUMBLE: drawCrumble(ctx, x, y, th, tx, ty, opts.crumble || 0); break;
     case T.LUMP: drawLump(ctx, x, y, th, tx, ty, opts.fall || 0); break;
     case T.ICE: drawIce(ctx, x, y, !isSolid(above), tx, ty); break;

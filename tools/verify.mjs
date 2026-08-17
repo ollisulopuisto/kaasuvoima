@@ -12044,6 +12044,93 @@ const report = await page.evaluate(async () => {
       rows.map((r) => `${r.id} ilman ilmoitusta ${r.declared ? 'kaatuu sääntöön' : 'menee läpi'}`).join(', '));
   }
 
+  /* ------------------- kupla, kuittaus ja vihollisen iho ---------------- */
+  /*
+   * Kolme omistajan pyyntöä samasta pelituntumasta, ja jokainen mitataan
+   * tapahtumana eikä koodirivinä.
+   */
+  {
+    const E4 = await import('/src/entities/enemies.js');
+    const gfx4 = await import('/src/gfx/sprites.js');
+
+    /*
+     * 1. MAAHANISKU VANGITSEE, EI TAPA. *"Ground stomp voisi vangita
+     *    viholliset kupliin, ei tappaa suorilta."* Väite on että kävelijä on
+     *    iskun jälkeen **elossa ja kuplassa** — ei poissa.
+     */
+    reset({ type: 'shroom', level: 2 });
+    const s5 = new LevelScene(game, '1-1');
+    game.setScene(s5);
+    s5.entities = s5.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+    const p5 = s5.player;
+    const floor5 = 12;
+    /* Yhden ja kahden laatan päähän, koska iskun ulottuvuus on mitattu 44 px
+     * plus viisi per voimataso — neljä laattaa oli kuusikymmentäneljä
+     * pikseliä eli **ulottuvuuden ulkopuolella**, ja portti mittasi silloin
+     * tyhjää eikä vangitsemista. */
+    const victims = [1, 2].map((d) => {
+      const e = new E4.Walker(s5, (Math.floor(p5.cx / 16) + d) * 16, floor5 * 16);
+      e.y = floor5 * 16 - e.h;
+      e.active = true;
+      e.alwaysActive = true;
+      e.spawnGrace = 0;
+      s5.add(e);
+      return e;
+    });
+    /* Jalat lattiassa ja pudotus muistissa: `poundImpact` mittaa ulottuvuuden
+     * **jalkojen tasolta** (`POUND_LIFT`), joten ilmassa leijuva koekappale
+     * mittasi iskun kahdeksankymmentä pikseliä väärästä korkeudesta. */
+    p5.x = victims[0].x - 20;
+    p5.y = floor5 * 16 - p5.h;
+    p5.onGround = true;
+    p5.poundFromY = p5.y - 174;
+    s5.poundImpact(p5, 1);
+    const bubbled = victims.filter((e) => e.bubbled).length;
+    const gone = victims.filter((e) => e.remove || e.dying).length;
+    expect('maahanisku vangitsee kuplaan eikä tapa suoralta',
+      bubbled === victims.length && gone === 0,
+      `${victims.length} kävelijää: kuplassa ${bubbled}, poissa ${gone}`);
+
+    /*
+     * 2. VIHOLLISELLA ON IHO, JA SE ON VAIN PINTAA. Sama kolmikko kuin
+     *    laatoilla — eroa on, eroa on vähän — **ja lisäksi yksi jota laatoilla
+     *    ei ollut**: siluetin on oltava identtinen, koska siitä luetaan
+     *    tallattavuus.
+     */
+    const shotE = () => {
+      const c = document.createElement('canvas');
+      c.width = 24; c.height = 24;
+      return c.getContext('2d', { willReadFrequently: true });
+    };
+    const paintE = (skin) => {
+      const g = shotE();
+      g.clearRect(0, 0, 24, 24);
+      gfx4.drawWalker(g, 4, 4, 0, 1, false, skin);
+      return g.getImageData(0, 0, 24, 24).data;
+    };
+    const base = paintE(0.1);
+    let diffPx = 0;
+    let maskPx = 0;
+    let changed = 0;
+    for (const skin of [0.3, 0.45, 0.6, 0.75, 0.9]) {
+      const other = paintE(skin);
+      let d = 0;
+      for (let i = 0; i < base.length; i += 4) {
+        const aOn = base[i + 3] > 8;
+        const bOn = other[i + 3] > 8;
+        if (aOn !== bOn) maskPx++;
+        if (aOn && bOn && (base[i] !== other[i] || base[i + 1] !== other[i + 1])) d++;
+      }
+      if (d > 0) changed++;
+      diffPx = Math.max(diffPx, d);
+    }
+    const area = 16 * 16;
+    expect('kävelijällä on yksilöllinen pinta, muttei yksilöllistä siluettia',
+      changed >= 3 && diffPx > 2 && diffPx < area * 0.12 && maskPx === 0,
+      `erilaisia ${changed}/5, suurin ero ${diffPx} pikseliä (${(100 * diffPx / area).toFixed(1)} %), `
+      + `siluettiero ${maskPx} pikseliä`);
+  }
+
   /* ------------------------ maailmaan vaikuttavat ----------------------- */
   /*
    * OLIO JOKA MUUTTAA KENTTÄÄ, ja kolme väitettä siitä.
@@ -12218,6 +12305,75 @@ const report = await page.evaluate(async () => {
     expect('putken kiilto on pinta eikä merkki: se liikkuu, muttei huuda',
       moved > 0 && biggest < 3,
       `muuttuvia frameja ${moved}/460, suurin muutos ${biggest.toFixed(1)} % laatasta`);
+
+    /*
+     * JA SAMA VAATIMUS JOKAISELLE LAATALLE JOLLA ON IHO.
+     *
+     * Putki oli ensimmäinen; kivi, lauta ja maa saivat saman kohtelun, koska
+     * ne ovat ne kolme joita kentässä on eniten. Väite on sama kolmikko —
+     * **eroa on, eroa on vähän, ja se on sama joka kerta** — mutta mitattuna
+     * jokaiselta erikseen, koska jokaisella on eri määrä pintaa jolla vaihdella.
+     */
+    const kinds = [
+      { name: 'kivi', ch: tiles.T.HARD, above: ' ' },
+      { name: 'lauta', ch: tiles.T.PLATFORM, above: ' ' },
+      { name: 'maa', ch: tiles.T.GROUND, above: ' ' },
+      { name: 'tiili', ch: tiles.T.BRICK, above: ' ' },
+    ];
+    const skinRows = [];
+    for (const k of kinds) {
+      const draw = (tx, tick) => {
+        const { c, g } = shot();
+        g.clearRect(0, 0, 16, 16);
+        tiles.drawTile(g, k.ch, 0, 0, 'grass', tx, 9, tick, k.above, {});
+        return g.getImageData(0, 0, 16, 16).data;
+      };
+      const b = draw(3, 0);
+      const ds = [5, 7, 9, 11, 13, 15, 17, 19].map((tx) => diff(b, draw(tx, 0)));
+      const changed = ds.filter((d) => d > 0.5).length;
+      const worst = Math.max(...ds);
+      const stable = diff(draw(3, 0), draw(3, 0)) === 0;
+      skinRows.push({ name: k.name, changed, worst, stable });
+    }
+    /* Maan katto on 24 % eikä 12 %, ja se on mitattu ero eikä löysennys: maa on
+     * ainoa näistä jonka **koko yläreuna on kasvillisuutta** — korret,
+     * tuppaat ja niiden varjot ovat laatan pinta-alasta viidennes, ja ne ovat
+     * juuri se osa joka saa vaihdella. Kivi, lauta ja tiili vaihtelevat
+     * yksityiskohdissa, ja niiden katto on se sama 12 % kuin putkella. */
+    const roof = (name) => (name === 'maa' ? 24 : 12);
+    expect('jokainen yleinen laatta on yksilö, muttei eri palikka',
+      skinRows.every((r) => r.changed >= 3 && r.worst > 1 && r.worst < roof(r.name) && r.stable),
+      skinRows.map((r) => `${r.name} ${r.changed}/8 erilaista, suurin ${r.worst.toFixed(1)} %`
+        + `${r.stable ? '' : ', EI VAKAA'}`).join(' · '));
+
+    /*
+     * Ja heinä heiluu — mutta vain heinä. Maalaatan **kiinteä osa** (rivit
+     * 0…15 laatan sisällä) ei saa liikkua lainkaan, koska se on se pinta jolla
+     * seistään; liike on sen yläpuolella olevissa korsissa, jotka piirtyvät
+     * laatan ulkopuolelle. Mitataan molemmat erikseen samasta kuvasta.
+     */
+    const grass = (tick) => {
+      const { c, g } = shot();
+      c.height = 20;
+      g.clearRect(0, 0, 16, 20);
+      tiles.drawTile(g, tiles.T.GROUND, 0, 4, 'grass', 6, 9, tick, ' ', {});
+      return g.getImageData(0, 0, 16, 20).data;
+    };
+    let bladesMoved = 0;
+    let bodyMoved = 0;
+    const g0 = grass(0);
+    for (let t = 6; t <= 180; t += 6) {
+      const gt = grass(t);
+      for (let i = 0; i < g0.length; i += 4) {
+        if (g0[i] === gt[i] && g0[i + 1] === gt[i + 1] && g0[i + 2] === gt[i + 2]) continue;
+        const row = Math.floor((i / 4) / 16);
+        if (row < 4) bladesMoved++;
+        else bodyMoved++;
+      }
+    }
+    expect('heinä heiluu laatan yläpuolella, eikä maa liiku lainkaan',
+      bladesMoved > 0 && bodyMoved === 0,
+      `korsia liikkui ${bladesMoved} pikseliä, maata ${bodyMoved}`);
   }
 
   /* ------------------------------ näppäimet ----------------------------- */
@@ -15948,6 +16104,52 @@ const report = await page.evaluate(async () => {
     expect('jokainen kahdeksasta pomosta puhuu, ja jättiläinen on matalampi kuin rynnäkkö',
       !measured || (mute.length === 0 && giant.hz < rush.hz),
       measured ? heard.map((r) => `${r.v}: ${r.peak} @ ${r.hz} Hz`).join(', ') : 'ei mitattu');
+  }
+
+  {
+    /*
+     * 2. TAPON KUITTAUS NOUSEE KETJUN MUKANA. Mitataan taajuudesta eikä
+     *    koodista: sama ääni ketjun ensimmäisenä ja neljäntenä, ja jälkimmäisen
+     *    vahvin taajuus on korkeampi. Ilman tätä "tyydyttävä" on mielipide.
+     */
+    const tapv = audioTap();
+    if (tapv && tapv.ctx.state === 'running') {
+      const { killSound } = await import('/src/core/audio.js');
+      const stopWake2 = keepRendering(tapv);
+      const an2 = tapv.ctx.createAnalyser();
+      an2.fftSize = 16384;
+      an2.smoothingTimeConstant = 0;
+      tapv.bus.connect(an2);
+      const meter2 = meterFor(tapv, an2);
+      const bins2 = new Float32Array(an2.frequencyBinCount);
+      const hz2 = tapv.ctx.sampleRate / an2.fftSize;
+      const peakHz = async (step) => {
+        await meter2.settle(2);
+        meter2.clear();
+        killSound(step);
+        let best = -Infinity;
+        let bin = 0;
+        const t0 = tapv.ctx.currentTime;
+        while (tapv.ctx.currentTime - t0 < 0.35) {
+          await meter2.peakFor(50);
+          an2.getFloatFrequencyData(bins2);
+          /* 400…3000 Hz: kuittaus asuu siellä, ja rungon matala kolmio (60…200)
+           * jää alle — muuten mitattaisiin iskua eikä palkintoa. */
+          for (let i = Math.floor(400 / hz2); i < Math.floor(3000 / hz2); i++) {
+            if (bins2[i] > best) { best = bins2[i]; bin = i; }
+          }
+        }
+        return Math.round(bin * hz2);
+      };
+      const first = await peakHz(0);
+      const fourth = await peakHz(4);
+      an2.disconnect();
+      stopWake2();
+      const real = metered(tapv, meter2.stalled());
+      expect('tapon kuittaus nousee ketjun mukana',
+        !real || fourth > first,
+        real ? `ensimmäinen ${first} Hz, neljäs ${fourth} Hz` : 'ei mitattu');
+    }
   }
 
   {

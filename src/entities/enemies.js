@@ -17,8 +17,8 @@ import {
   drawPaukkupoho, drawPyorre, drawKummitus, drawKuura,
   drawKolikkovaras } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
-import { Sfx, bossSay } from '../core/audio.js';
-import { approach } from '../core/utils.js';
+import { Sfx, bossSay, killSound } from '../core/audio.js';
+import { approach, hashNoise } from '../core/utils.js';
 import { Item } from './items.js';
 
 /**
@@ -79,6 +79,22 @@ export class Enemy extends Entity {
      * kentän, joten kuplan päällä otettu pikatallennus palautuu kuplan päälle
      * eikä vaadi riviäkään tallennuskoodia. */
     this.carried = 0;
+    /*
+     * YKSILÖN OMA IHO, ja sama sääntö kuin laatoilla.
+     *
+     * Omistaja 18.8.2026: *"skin-vaihtelua voisi olla myös vihollisissa,
+     * eikö?"* Kyllä — ja vihollisilla ehto on tiukempi kuin laatoilla, koska
+     * niiden siluetista luetaan **tallattavuus**. Vaihtelu saa siis koskea vain
+     * pintaa laatikon sisällä: tahra, ompeleen paikka, silmien väli. Ei kokoa,
+     * ei ääriviivaa, ei väriä joka veisi kontrastin maata vasten (`verify.mjs`
+     * mittaa molemmat).
+     *
+     * Siemen on **syntymäpaikka** eikä juokseva numero: sama otus samassa
+     * kentässä näyttää samalta joka kerta, myös pikalatauksen jälkeen — ja
+     * koska `savestate.js` tallentaa jokaisen oman kentän, tämä luku palautuu
+     * ilman riviäkään tallennuskoodia.
+     */
+    this.skin = hashNoise(Math.round(x), Math.round(y));
     /* Frames with the whole body under the surface of a quicksand pool — the
      * same counter, the same name and the same units as the player's `sunk`,
      * and a plain number for the same reason his is one: `savestate.js`
@@ -342,7 +358,11 @@ export class Enemy extends Entity {
     }
     this.tumble(dir);
     this.level.chainReward(this.score, this.cx, this.y);
+    /* Kaatuminen on kuolema kuten tallauskin, ja sen kuuluu tuntua siltä.
+     * `kick` jää alle potkun omana äänenä — se kertoo *mikä* osui — ja tapon
+     * kuittaus tulee päälle. */
     Sfx.play('kick');
+    killSound(this.level.player ? this.level.player.chain || 0 : 0);
   }
 
   /** Caught by a fart ball: floats, harmless, and worth double to whoever pops it. */
@@ -362,7 +382,11 @@ export class Enemy extends Entity {
     this.tumble(dir);
     this.level.spawnPuff(this.cx, this.cy);
     this.level.awardScore(this.score * POP_BONUS, this.cx, this.y);
+    /* Kuplan puhkeaminen **on tappo**, joten se saa tapon äänen — `pop` yksin
+     * oli kalvon ääni eikä palkinnon. Ketjun lenkki tulee pelaajalta, koska
+     * puhkaisija on hän myös silloin kun kupla puhkeaa jalkojen alla. */
     Sfx.play('pop');
+    killSound(this.level.player ? this.level.player.chain || 0 : 0);
   }
 
   /** Nobody came: it breaks out faster than it went in, and blinking. */
@@ -507,10 +531,10 @@ export class Walker extends Enemy {
   draw(ctx) {
     const frame = Math.floor(this.tick / 8);
     if (this.dying) {
-      this.drawFlipped(ctx, () => drawWalker(ctx, this.x, this.y, frame, this.facing, false));
+      this.drawFlipped(ctx, () => drawWalker(ctx, this.x, this.y, frame, this.facing, false, this.skin));
       return;
     }
-    this.drawSprite(ctx, (g) => drawWalker(g, this.x, this.y, frame, this.facing, this.squash > 0));
+    this.drawSprite(ctx, (g) => drawWalker(g, this.x, this.y, frame, this.facing, this.squash > 0, this.skin));
   }
 }
 
