@@ -1211,6 +1211,19 @@ const SFX = {
     tone({ type: 'sine', from: 1500, to: 420, dur: 0.06, gain: 0.28, hold: 0.2, curve: 'lin' });
     noise({ dur: 0.07, from: 3400, to: 900, q: 1.2, gain: 0.16, type: 'highpass', attack: 0.004 });
   },
+  /*
+   * NIELU — ja se on tarkoituksella **ainoa imevä ääni pelissä**.
+   *
+   * Kaikki muu tässä pelissä työntää ulos: pierut, suihkut, purskeet. Nieleminen
+   * on niiden vastakohta ja sen kuuluu kuulostaa siltä, joten taajuus **nousee**
+   * siinä missä pieru laskee, ja kohina suodattuu kapeammaksi eikä leveämmäksi.
+   * Sama tunniste kuin muillakin: muoto erottaa, ei sointiväri.
+   */
+  nielu: () => {
+    noise({ dur: 0.18, from: 300, to: 1800, q: 5, gain: 0.2, attack: 0.05 });
+    tone({ type: 'sine', from: 180, to: 620, dur: 0.16, gain: 0.16, hold: 0.4, curve: 'lin' });
+    tone({ type: 'triangle', from: 900, dur: 0.05, gain: 0.1, delay: 0.16 });
+  },
   upota: () => {
     /*
      * JUOKSUHIEKKA, the moment the sand takes hold — and the whole design of it

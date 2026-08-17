@@ -116,7 +116,7 @@ siirtyy [ROADMAP.md](ROADMAP.md):hen.
 | 3 | maailman vaihto lennossa | Giana Sisters | ei |
 | 4 | litteä maailma käännetään | Super Paper Mario | **päätetty 10.8.** → ROADMAP |
 | 5 | vahinko muuttaa muotoa | Wario Land | epävarma |
-| 6 | syö vihollinen, saat kyvyn | Kirby | **kyllä** |
+| 6 | syö vihollinen, saat kyvyn | Kirby | **kyllä** — tehty v26.08.18.8 |
 | 7 | syöksy jolla on lataus | Celeste | ehkä |
 | 8 | tartu ja heilahda | Bionic Commando | **harkittu, ei oteta** |
 | 9 | painovoiman kääntö | VVVVVV | ei |

@@ -254,6 +254,21 @@ const SHELF_TILES = 3;
  */
 const FROST_LIFE = 360;
 
+/**
+ * Kuinka kauan nielty kyky kestää, frameina. Ks. `swallowEnemy`.
+ *
+ * Kahdeksan sekuntia: juoksuvauhdilla noin seitsemänkymmentä laattaa eli kolme
+ * ja puoli ruutua. Suunnitelmaksi tarpeeksi, varusteeksi liian vähän.
+ */
+const SWALLOW_FRAMES = 480;
+/** Mitä pistepomppu sanoo kun jokin niellään. */
+const SWALLOW_NAMES = {
+  piikki: 'PIIKIT', siivet: 'SIIVET', kylmä: 'KYLMÄ',
+  magneetti: 'MAGNEETTI', kuori: 'KUORI', sylky: 'SYLKY',
+};
+/** Magneetin säde laattoina. Ks. `pullCoins`. */
+const MAGNET_R = 4;
+
 const PILLAR_H = 2;
 /**
  * Etäisyys areenan reunasta ja ovesta, laattoina.
@@ -2260,6 +2275,66 @@ export class LevelScene {
    * kesken (`escape`), joku ampuu sen, tai vihollinen kuolee muuten. Siksi
    * tila tarkistetaan ennen istuttamista eikä sen jälkeen.
    */
+  /**
+   * Kuka antaa minkä kyvyn — ja jokainen on **se mitä laji on**, ei uusi asia.
+   *
+   * Kuusi lajia kymmenestä kuplattavasta antaa oman kykynsä; loput antavat
+   * syljen, joka on niistä itsestään tehty ammus. Se ei ole laiskuutta vaan
+   * sama sääntö toisin päin: laji jolla ei ole erikoista antaa itsensä.
+   */
+  swallowGift(e) {
+    const name = e.constructor.name;
+    if (name === 'SpikeGuy') return 'piikki';
+    if (name === 'Flyer' || name === 'Paarma' || name === 'StinkCloud') return 'siivet';
+    if (name === 'Kuura') return 'kylmä';
+    if (name === 'Kolikkovaras') return 'magneetti';
+    if (name === 'ShellGuy') return 'kuori';
+    return 'sylky';
+  }
+
+  /**
+   * Nieleminen: kupla katoaa, kyky jää — `SWALLOW_FRAMES` framea.
+   *
+   * Kahdeksan sekuntia on mitattu kentän mitasta eikä tunnelmasta: pelaaja
+   * juoksee sekunnissa 150 px eli yhdeksän laattaa, joten kyky kantaa noin
+   * seitsemänkymmentä laattaa — kolme ja puoli ruutua. Se on tarpeeksi pitkä
+   * ollakseen suunnitelma ("nielen tämän ja menen tuonne") ja liian lyhyt
+   * ollakseen varuste.
+   */
+  swallowEnemy(p, e) {
+    if (!e.bubbled || e.dying) return false;
+    const kind = this.swallowGift(e);
+    e.remove = true;
+    p.swallowKind = kind;
+    p.swallowTimer = SWALLOW_FRAMES;
+    this.awardScore(e.score, e.cx, e.y);
+    this.spawnPuff(p.cx, p.cy);
+    Sfx.play('nielu');
+    this.addScorePop(p.cx, p.y - 12, SWALLOW_NAMES[kind] || kind);
+    return true;
+  }
+
+  /**
+   * Nielty kolikkovaras vetää kolikot puoleensa, ja se on **sen oma kyky
+   * käännettynä**: se juoksi kolikoille, tämä tuo kolikot sinulle.
+   *
+   * Säde on neljä laattaa eli sama etäisyys jolta varas itse haistaa kolikon
+   * (`THIEF_REACH` on kymmenen, mutta se juoksee — pelaajalle riittää
+   * ulottuvuus). Kolikko poistetaan ruudukosta ja maksetaan kukkaroon, eli
+   * täsmälleen sama tapahtuma kuin siihen koskeminen.
+   */
+  pullCoins(p) {
+    const cx = Math.floor(p.cx / TILE);
+    const cy = Math.floor(p.cy / TILE);
+    for (let ty = cy - MAGNET_R; ty <= cy + MAGNET_R; ty++) {
+      for (let tx = cx - MAGNET_R; tx <= cx + MAGNET_R; tx++) {
+        if (this.tileAt(tx, ty) !== T.COIN) continue;
+        this.setTile(tx, ty, T.EMPTY);
+        this.addCoin(tx * TILE + 8, ty * TILE);
+      }
+    }
+  }
+
   rideBubble(p, e) {
     if (!e.bubbled || e.dying || e.remove) {
       e.carried = 0;
@@ -3367,7 +3442,7 @@ export class LevelScene {
     }
     if (this.speedPulse > 0) this.speedPulse--;
     this.updateEntities();
-    if (this.state !== 'dead') this.collisions();
+    if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
     this.updateBumps();
     this.updateCrumbles();
@@ -4213,7 +4288,16 @@ export class LevelScene {
     }
   }
 
-  collisions() {
+  /**
+   * @param {object} input se syöte jolla tämä frame ajetaan
+   *
+   * Syöte annetaan parametrina eikä lueta `this.game.input`ista, ja se on
+   * korjaus: **kohtaus voi ajaa jonkun muun kuin näppäimistön syötteellä.**
+   * Esittelydemo ajaa oikeaa `LevelScene`ä botin ohjaimella, ja jokainen
+   * `this.game.input` täällä lukisi silloin sen ihmisen näppäimistöä joka ei
+   * pelaa. Sama vika olisi tullut nielemiseen heti sen synnyttyä.
+   */
+  collisions(input = this.game.input) {
     const p = this.player;
     if (p.dying || p.transit) return;
     const spin = p.spinBox;
@@ -4306,6 +4390,28 @@ export class LevelScene {
        *     odotetaan — pitempi kantaminen tekisi kuplaloukusta hissin.
        */
       if (e.bubbled) {
+        /*
+         * VERBI 6: NIELEMINEN, ja se tapahtuu **kuplasta** eikä suoraan
+         * vihollisesta.
+         *
+         * IDEAS kohta 6, tuomio "kyllä": jokaisesta lajista tulee työkalu. Se
+         * tarvitsi verbin jolla vihollinen otetaan käteen, ja tässä pelissä
+         * sellainen oli jo — kuplaloukku. Kuplassa oleva on määritelmän mukaan
+         * vaaraton ja paikallaan, eli se on ainoa hetki jolloin nieleminen voi
+         * olla **valinta** eikä osuma: pelaaja seisoo sen vieressä ja painaa
+         * ylös. Suoraan vihollisesta nieleminen olisi ollut kolmas tapa
+         * koskettaa vihollista, ja kaksi (tallaus, kosketus) on jo se määrä
+         * jonka pelaaja lukee kerralla.
+         *
+         * Ja se on **maahaniskun jatko**: isku vangitsee kuplaan
+         * (v26.08.18.7), kupla niellään, kyky on kädessä. Kolme verbiä yhdeksi
+         * lauseeksi ilman yhtäkään uutta nappia.
+         */
+        /* Syöte luetaan pelistä eikä parametrista: `collisions` ei saa syötettä,
+         * ja sama tapa on jo käytössä tallauksen `held.jump`illa muutama rivi
+         * alempana. Yksi lähde, yksi tapa. */
+        if (input && input.held.up && overlaps(p.box, e.box)
+          && this.swallowEnemy(p, e)) continue;
         if (e.carried > 0) {
           this.rideBubble(p, e);
           continue;
@@ -4403,9 +4509,18 @@ export class LevelScene {
          * ja ääni kertoo monesko tämä oli eikä montako niitä on nyt. */
         const step = p.chain || 0;
         if (this.chained(p, () => e.stomp())) {
-          p.bounce(this.game.input.held.jump);
+          p.bounce(input ? input.held.jump : false);
           killSound(step);
         }
+        continue;
+      }
+
+      /* Nielty piikkiukko tekee piikikkääksi: kosketus tappaa sen sijaan että
+       * satuttaisi. Se on tähden puolikas — tappaa kosketuksesta muttei suojaa
+       * piikeiltä eikä laavalta — ja juuri se ero pitää tähden omana asianaan
+       * (DESIGN.md kohta 8: kaksi merkkiä samasta asiasta on yksi liikaa). */
+      if (p.swallowed === 'piikki' && !e.spiky) {
+        e.hitByShell(e.cx >= p.cx ? 1 : -1);
         continue;
       }
 
@@ -4874,8 +4989,28 @@ export class LevelScene {
         ctx.fillRect(bx, y + 18, 5, 1);
       }
     }
+    /*
+     * NIELTY KYKY HUDISSA, ja se on **nimi ja palkki** eikä kuvake.
+     *
+     * Kyky kestää kahdeksan sekuntia, eli pelaajan on tiedettävä kaksi asiaa
+     * yhdellä silmäyksellä: *mikä* ja *kuinka kauan vielä*. Kuvake vastaisi
+     * ensimmäiseen ja vaatisi opettelua; nimi vastaa siihen suoraan, ja
+     * kutistuva palkki on sama kello jonka pelaaja on jo oppinut lukemaan
+     * vauhtimittarista. Sijainti on elämien vieressä, koska sekin on asia joka
+     * sinulla joko on tai ei ole.
+     */
+    const gift = this.player.swallowed;
+    if (gift) {
+      const left = this.player.swallowTimer / SWALLOW_FRAMES;
+      drawText(ctx, SWALLOW_NAMES[gift] || gift, 100, y + 17, { color: '#a8e04a' });
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(100, y + 25, 44, 3);
+      ctx.fillStyle = '#a8e04a';
+      ctx.fillRect(100, y + 25, Math.round(44 * left), 3);
+    } else {
+      drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
+    }
     drawText(ctx, `KV *${this.game.state.lives}`, 100, y + 6, { color: '#ffffff' });
-    drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 100, y + 17, { color: '#ffd048' });
 
     /* Päivän kenttä ei ole missään maailmassa, joten se kertoo nimensä. Mitattu
      * että se mahtuu: 12 merkkiä * 6 px = 72 px, 196 + 72 = 268, ja oikealle
