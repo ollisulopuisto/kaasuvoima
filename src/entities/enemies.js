@@ -14,7 +14,7 @@ import {
   drawBeanBaron, drawBeanBomb, drawBubble, bubbleRadius, recolored, TINTS,
   SUN_TRAIL_LIFE, drawKurnuttaja, drawCroak, BOSS_LIMBS,
   drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
-  drawPaukkupoho } from '../gfx/sprites.js';
+  drawPaukkupoho, drawPyorre, drawKummitus } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx, bossSay } from '../core/audio.js';
 import { approach } from '../core/utils.js';
@@ -3546,6 +3546,146 @@ export class Paukkupoho extends Enemy {
   }
 }
 
+/*
+ * PYÖRRE — kaasukehän ainoa vihollinen joka ei liiku minnekään.
+ *
+ * Maailma 7 on se jossa jokainen kuoppa on pohjaton ja jokainen lauta lyhyt,
+ * ja siitä seuraa yksi asia jota mikään muu maailma ei vaadi: **joskus on
+ * pakko seistä paikallaan.** Paarma tehtiin sitä vastaan — se ampuu alas
+ * siihen mihin joku pysähtyi — ja tämä on sama kysymys toisin päin: se ei
+ * rankaise odottamisesta vaan **ajoituksesta**. Kehä pyörii, ja siitä pääsee
+ * läpi vain oikealla hetkellä.
+ *
+ * Kolme päätöstä, ja jokainen on rajaus:
+ *
+ *   1. **Se ei jätä kehäänsä koskaan.** Ei painovoimaa, ei maastotörmäystä,
+ *      ei jahtaamista. Vihollinen joka pysyy ympyrällään on luettavissa
+ *      yhdellä silmäyksellä, ja se on ainoa tapa tehdä ajoituksesta reilu.
+ *   2. **Sitä ei voi tallata.** Piikikäs, koska pyörivän kappaleen päälle
+ *      laskeutuminen olisi arpapeli sen kulmasta — ja tässä pelissä
+ *      tallattavuuden näkee kruunusta tai piikeistä.
+ *   3. **Se ei tuki reittiä.** Säde on kaksi laattaa ja akseli on ilmassa,
+ *      joten lattiatasolla on aina se hetki jolloin pallo on ylhäällä.
+ *      `verify.mjs` mittaa sen botilla eikä usko tätä kappaletta.
+ */
+const WHIRL_RADIUS = 32;
+/** Kierros 150 framessa eli kahdessa ja puolessa sekunnissa. */
+const WHIRL_TURN = (Math.PI * 2) / 150;
+
+export class Pyorre extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 12, 12);
+    /* Akseli on se ruutu johon merkki pantiin. Keskipiste talteen erikseen,
+     * koska `x`/`y` ovat laatikon nurkka ja kehä lasketaan keskiöstä. */
+    this.ax = x + 8;
+    this.ay = y + 8;
+    this.angle = 0;
+    this.score = 200;
+    this.noclip = true;
+    this.alwaysActive = true;
+    this.active = true;
+    this.place();
+  }
+
+  get spiky() { return true; }
+
+  get bubbleable() { return false; }
+
+  /** Akselissa kiinni: ei uppoa hiekkaan eikä lennä tuulessa. */
+  get sinks() { return false; }
+
+  get windborne() { return false; }
+
+  place() {
+    this.x = this.ax + Math.cos(this.angle) * WHIRL_RADIUS - this.w / 2;
+    this.y = this.ay + Math.sin(this.angle) * WHIRL_RADIUS - this.h / 2;
+  }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    this.angle += WHIRL_TURN;
+    this.place();
+  }
+
+  draw(ctx) {
+    drawPyorre(ctx, this.x, this.y, this.ax, this.ay, this.angle);
+  }
+}
+
+/*
+ * KUMMITUS — se joka etenee vain kun et katso.
+ *
+ * Genren vanha temppu ja siksi vapaa (DESIGN.md kohta 2), mutta käännettynä
+ * tämän pelin sanastolle: kummitus on **kaasua**, se kulkee pilven läpi, ja se
+ * hyytyy paikalleen sillä hetkellä kun sitä katsotaan.
+ *
+ * Miksi juuri kaasukehään: maailman 7 lauta on lyhyt ja kuoppa pohjaton, joten
+ * pelaajan on pakko **kääntyä katsomaan** ennen jokaista hyppyä. Kummitus tekee
+ * siitä valinnan — katso taakse ja se pysähtyy, katso eteen ja se lähestyy — ja
+ * se on pelin ainoa vihollinen joka mittaa *mihin pelaaja katsoo* eikä sitä
+ * missä hän on.
+ *
+ * Kolme rajausta:
+ *
+ *   1. **Tallaus ei tepsi.** Se on kaasua; jalka menee läpi. Tähti ja häntä
+ *      tepsivät, koska ne tepsivät kaikkeen.
+ *   2. **Se ei voi tukkia reittiä**, koska se kulkee maaston läpi (`noclip`)
+ *      eikä siis voi jäädä seinäksi kapealle laudalle.
+ *   3. **Se on hitaampi kuin kävely.** 0,55 px/frame vastaan pelaajan 1,5:
+ *      siitä pääsee aina eroon eteenpäin menemällä. Kiirehtijä, ei ansa.
+ */
+const GHOST_SPEED = 0.55;
+
+export class Kummitus extends Enemy {
+  constructor(level, x, y) {
+    super(level, x, y, 16, 16);
+    this.score = 200;
+    this.noclip = true;
+    this.shy = 0;
+    this.bob = 0;
+  }
+
+  get bubbleable() { return false; }
+
+  get sinks() { return false; }
+
+  get windborne() { return false; }
+
+  /** Kaasu ei tallaudu, ja piikit ovat se merkki jolla se sanotaan. */
+  get spiky() { return true; }
+
+  update() {
+    this.tick++;
+    if (this.dying) return this.updateDying();
+    const p = this.level.player;
+    if (!p) return;
+    const dx = p.cx - this.cx;
+    const dy = p.cy - this.cy;
+    /* "Katsooko pelaaja tänne" on **suunta eikä näkökenttä**: `facing` on se
+     * mikä ruudulla näkyy, ja mikä tahansa kartiolasku olisi sääntö jota ei
+     * näe. Sama peruste kuin kruunulla — merkki on se mitä katsotaan. */
+    const looked = dx === 0 || Math.sign(dx) === -p.facing;
+    this.shy = looked ? Math.min(1, this.shy + 0.12) : Math.max(0, this.shy - 0.12);
+    this.facing = dx < 0 ? -1 : 1;
+    if (looked) {
+      this.vx = 0;
+      this.vy = 0;
+      return;
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    this.vx = (dx / len) * GHOST_SPEED;
+    this.vy = (dy / len) * GHOST_SPEED;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.bob += 0.06;
+  }
+
+  draw(ctx) {
+    drawKummitus(ctx, this.x, this.y + Math.sin(this.bob) * 1.5, this.facing, this.shy, this.tick);
+  }
+}
+
 export const ENEMY_CHARS = {
   g: (level, tx, ty) => new Walker(level, tx * TILE, ty * TILE),
   k: (level, tx, ty) => new ShellGuy(level, tx * TILE + 1, ty * TILE - 8),
@@ -3600,6 +3740,11 @@ export const ENEMY_CHARS = {
    * leijuva otus jonka piirros roikkuu ruudun ylälaidasta lukisi kentässä
    * rivin verran ylempänä kuin se on.
    */
+  /* Pyörre: merkki on **akseli**, eli se ruutu jonka ympäri pallo kiertää —
+   * ei se paikka jossa pallo on. Palikka lukee siis samalla tavalla kuin
+   * kurnuttajan kuoppa: merkki kertoo mistä ilmiö lähtee. */
+  e: (level, tx, ty) => new Pyorre(level, tx * TILE, ty * TILE),
+  q: (level, tx, ty) => new Kummitus(level, tx * TILE, ty * TILE),
   T: (level, tx, ty) => new Torvi(level, tx * TILE, ty * TILE),
   Z: (level, tx, ty) => new Paarma(level, tx * TILE, ty * TILE + 2),
   Y: (level, tx, ty) => new Yokki(level, tx * TILE, ty * TILE),

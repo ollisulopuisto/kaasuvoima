@@ -1451,3 +1451,97 @@ export function drawPaukkupoho(ctx, x, y, frame, facing, fuse = 0) {
   const lift = breath(frame * 8, x, y);
   outlined(ctx, (g) => paukkupohoBody(g, x, y, frame, facing, fuse, lift));
 }
+
+/* --------------------------------- pyörre --------------------------------- */
+
+/**
+ * PYÖRRE — kaasupallo joka kiertää näkyvää akselia.
+ *
+ * Kolme osaa, ja jokainen niistä on tietoa eikä koristetta:
+ *
+ *   - **akseli** piirretään, koska kehä on luettava ennen kuin siihen menee.
+ *     Pyörivä pallo ilman keskiötä on satunnainen este; keskiön kanssa se on
+ *     kello jonka jokainen näkee.
+ *   - **vana** kolmena haalenevana pisteenä taaksepäin kertoo kiertosuunnan.
+ *     Ilman sitä kahden framen välinen ero on kaksi pikseliä, eikä suuntaa näe
+ *     kuin katsomalla pitkään.
+ *   - **piikit** sanovat saman kuin kaikki muutkin piikit tässä pelissä: älä
+ *     laskeudu tämän päälle. Sama kuvakieli kuin piikkiukolla ja karvapallolla,
+ *     ei uutta merkkiä opeteltavaksi.
+ */
+function pyorreBody(ctx, x, y, ax, ay, angle) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const r = (rx, ry, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(rx, ry, w, h); };
+  // Akseli: pieni tumma napa ja sen ympärillä vaalea rengas.
+  r(Math.round(ax) - 3, Math.round(ay) - 3, 6, 6, C.ink);
+  r(Math.round(ax) - 2, Math.round(ay) - 2, 4, 4, C.gasDark);
+  // Vana taaksepäin, kolme pistettä.
+  for (let i = 1; i <= 3; i++) {
+    const a = angle - i * 0.22;
+    const tx = Math.round(ax + Math.cos(a) * 32) - 1;
+    const ty = Math.round(ay + Math.sin(a) * 32) - 1;
+    ctx.globalAlpha = 0.34 - i * 0.08;
+    r(tx, ty, 3, 3, C.gas);
+    ctx.globalAlpha = 1;
+  }
+  // Pallo ja neljä piikkiä.
+  r(px + 2, py + 2, 8, 8, C.gas);
+  r(px + 3, py + 3, 6, 6, C.gasDark);
+  r(px + 4, py + 4, 3, 3, C.gas);
+  r(px + 5, py, 2, 3, C.white);
+  r(px + 5, py + 9, 2, 3, C.white);
+  r(px, py + 5, 3, 2, C.white);
+  r(px + 9, py + 5, 3, 2, C.white);
+}
+
+export function drawPyorre(ctx, x, y, ax, ay, angle) {
+  outlined(ctx, (g) => pyorreBody(g, x, y, ax, ay, angle));
+}
+
+/* -------------------------------- kummitus -------------------------------- */
+
+/**
+ * KUMMITUS — kaasupilvi jolla on kasvot, ja se peittää ne kun sitä katsotaan.
+ *
+ * `shy` 0…1 on koko animaatio: nolla on avoimet kasvot ja liikkeessä oleva
+ * häntä, yksi on käsien taakse painetut kasvot ja pysähtynyt keho. Se on
+ * tarkoituksella **sama kello kuin sen logiikka** (`Kummitus.shy`), koska
+ * pelaajan on voitava lukea ruudulta *miksi* se pysähtyi — ei vain että se
+ * pysähtyi. Kruunun kanssa sama sääntö: merkki on se mitä katsotaan.
+ *
+ * Väri on pelin kaasunvihreä eikä haamunvalkoinen, ja se on sanastopäätös:
+ * kaikki mikä tässä pelissä leijuu ja läpäisee seinät on kaasua, ja valkoinen
+ * on jo varattu piikeille ja lumelle.
+ */
+function kummitusBody(ctx, x, y, facing, shy, frame) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const r = (rx, ry, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(rx, ry, w, h); };
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    // Runko: pyöreä yläosa ja repaleinen helma, jonka repaleet liikkuvat.
+    r(bx + 3, py + 1, 10, 12, C.gas);
+    r(bx + 2, py + 3, 12, 9, C.gas);
+    r(bx + 4, py + 2, 8, 3, C.greenLight);
+    const wag = Math.floor(frame / 6) % 2;
+    for (let i = 0; i < 4; i++) {
+      const h = (i + wag) % 2 ? 3 : 2;
+      r(bx + 2 + i * 3, py + 12, 3, h, C.gasDark);
+    }
+    if (shy > 0.5) {
+      // Kädet kasvojen edessä: kaksi vaaleaa laattaa ja niiden välissä rako.
+      r(bx + 4, py + 5, 3, 4, C.white);
+      r(bx + 9, py + 5, 3, 4, C.white);
+      r(bx + 7, py + 6, 2, 2, C.ink);
+    } else {
+      r(bx + 5, py + 5, 2, 3, C.ink);
+      r(bx + 9, py + 5, 2, 3, C.ink);
+      // Suu auki sitä enemmän mitä kauempana katse on.
+      r(bx + 6, py + 9, 4, 2 - Math.round(shy), C.ink);
+    }
+  });
+}
+
+export function drawKummitus(ctx, x, y, facing, shy = 0, frame = 0) {
+  outlined(ctx, (g) => kummitusBody(g, x, y, facing, shy, frame));
+}
