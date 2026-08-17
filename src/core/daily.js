@@ -153,23 +153,6 @@ export function dailySpec(day) {
     minIntro: theme === 'ice' ? 48 : 32,
     intensity: 1.2,
     enemiesPer100: 8,
-    /*
-     * MÄKI EI TULE PÄIVÄN KENTTÄÄN, ja se on todistuksen ehto eikä makuasia.
-     *
-     * Päivän kenttä kantaa mukanaan todistuksen (`daily-origin.js`): 1096
-     * päivän jokainen kenttä on rakennettu, tarkistettu säännöillä ja
-     * verrattu korpukseen, ja sormenjälki on committoituna. `verify.mjs`
-     * rakentaa saman ikkunan joka ajolla ja vertaa — eli **mikä tahansa
-     * muutos generaattorin palasarjaan muuttaa jokaista päivän kenttää ja
-     * mitätöi todistuksen.**
-     *
-     * Uuden todistuksen voi tehdä vain se jolla on korpus (`VGLC_DIR`), ja
-     * tämä agentti ei sitä ole. Vaihtoehdot olivat siis rikkoa portti tai
-     * jättää mäki päivän kentästä pois; jälkimmäinen on ainoa joka pitää
-     * lupauksen. Kun todistus joskus uusitaan korpuksen kanssa, tämä rivi
-     * poistetaan ja päivän kentät saavat mäkensä.
-     */
-    drop: ['hill'],
   };
 }
 

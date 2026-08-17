@@ -20,7 +20,7 @@ export {
   drawWalker, drawShell, drawFlyer, drawPlant, drawStinkCloud, drawCorkGuy,
   drawAngrySun, drawSunTrail, SUN_TRAIL_LIFE, breath, BREATH_PERIOD,
   drawHeartburn, bubbleRadius, drawBubble, drawSpines, drawSpikeGuy,
-  drawBeanBaron, drawBeanBomb, drawKurnuttaja, drawCroak,
+  drawBeanBaron, drawBeanBomb, drawKurnuttaja, drawHossotin, drawCroak,
   drawTorvi, drawTorahdys, drawPaarma, drawPisara, drawYokki, drawKarvapallo,
   drawPaukkupoho, drawPyorre, drawKummitus, drawKuura, drawKolikkovaras,
 } from './sprites/enemies.js';

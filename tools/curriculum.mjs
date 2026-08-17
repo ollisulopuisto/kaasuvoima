@@ -209,6 +209,8 @@ const ENEMY_NAMES = {
   s: 'kolikkovaras',
   e: 'pyörre',
   q: 'kummitus',
+  /* Hössötin, se laji joka ei satuta vaan vie ohjauksen (17.8.2026). */
+  h: 'hössötin',
 };
 
 /**

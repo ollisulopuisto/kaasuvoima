@@ -651,6 +651,60 @@ function kurnuttajaBody(ctx, x, y, frame, facing, lift = 0) {
   });
 }
 
+/**
+ * HÖSSÖTIN — se laji joka ei satuta vaan **hätäännyttää**.
+ *
+ * Kuva on väite lajista, ja tässä väite on kolmiosainen: valtavat silmät, pienet
+ * hosuvat kädet ja keho joka värisee paikallaan. Se ei ole vaarallisen näköinen
+ * eikä sen kuulukaan olla — se mitä siihen törmäämisestä seuraa ei ole osuma
+ * vaan sekunti jona pelaaja ei ohjaa jalkojaan (`Player.panic`).
+ *
+ * Väri on **keltainen** ja se on valittu erottumaan: punainen on tässä pelissä
+ * vahinko (osumavälähdys), vihreä on kaasu ja oranssi on ummetus. Keltainen ei
+ * ole varattu, ja se lukee säikähdykseksi kaikilla kolmella teemalla joissa
+ * laji esiintyy.
+ *
+ * Kädet liikkuvat **framea kohti** eivätkä kävelyn tahtiin: hössötys on
+ * nopeampaa kuin kulku, ja juuri se ero tekee siitä hössötystä.
+ */
+function hossotinBody(ctx, x, y, frame, facing) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const shake = (frame % 2) ? 1 : 0;
+  flip(ctx, px, 16, facing < 0, (bx) => {
+    // keho: pyöreä pussi joka on leveimmillään keskeltä
+    ctx.fillStyle = '#f0c840';
+    ctx.fillRect(bx + 2 + shake, py + 4, 12, 9);
+    ctx.fillRect(bx + 1 + shake, py + 6, 14, 5);
+    ctx.fillStyle = '#c89818';
+    ctx.fillRect(bx + 2 + shake, py + 11, 12, 2);
+    // silmät: valtavat, ja pupillit ylös — se katsoo kaikkea kerralla
+    ctx.fillStyle = C.white;
+    ctx.fillRect(bx + 3 + shake, py + 5, 5, 5);
+    ctx.fillRect(bx + 9 + shake, py + 5, 5, 5);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 4 + shake + (frame % 4 === 0 ? 1 : 0), py + 5, 2, 2);
+    ctx.fillRect(bx + 10 + shake + (frame % 4 === 0 ? 1 : 0), py + 5, 2, 2);
+    // suu: pieni ja auki
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(bx + 7 + shake, py + 11, 3, 1);
+    // kädet: hosuvat, eri vaiheessa keskenään
+    ctx.fillStyle = '#c89818';
+    const a1 = (frame % 4) < 2 ? -2 : 1;
+    const a2 = (frame % 4) < 2 ? 1 : -2;
+    ctx.fillRect(bx + shake, py + 6 + a1, 2, 3);
+    ctx.fillRect(bx + 14 + shake, py + 6 + a2, 2, 3);
+    // jalat
+    ctx.fillStyle = '#a87810';
+    ctx.fillRect(bx + 4 + shake, py + 13, 3, 3);
+    ctx.fillRect(bx + 9 + shake, py + 13, 3, 3);
+  });
+}
+
+export function drawHossotin(ctx, x, y, frame, facing) {
+  outlined(ctx, (g) => hossotinBody(g, x, y, frame, facing));
+}
+
 export function drawKurnuttaja(ctx, x, y, frame, facing) {
   outlined(ctx, (g) => kurnuttajaBody(g, x, y, frame, facing, breath(frame, x, y)));
 }

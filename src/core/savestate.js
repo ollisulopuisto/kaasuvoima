@@ -3,6 +3,7 @@ import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
   Moon, SpikeGuy, BeanBaron, BeanBomb, Kurnuttaja,
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Pyorre, Kummitus,
+  Hossotin,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
@@ -41,7 +42,7 @@ const REGISTRY = {
    * seuraava laji jää samalla tavalla pois.
    */
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho,
-  Pyorre, Kummitus,
+  Pyorre, Kummitus, Hossotin,
   /* `CoinPop` poistui 17.8.2026: lohkosta lyöty kolikko **on** nyt se kolikko
    * joka lentää putkiloon (`coinToTube`), eikä lentorata ole olio vaan
    * kohtauksen oma kenttä — ja kohtauksen kentät `savestate` kantaa jo. */
