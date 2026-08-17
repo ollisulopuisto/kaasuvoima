@@ -114,6 +114,42 @@ export const SLOPE_CHUNKS = {
     14: '########################',
   }),
 
+  /**
+   * KAKSI REITTIÄ LIMITTÄIN, ja tämä on Sonicin idea tämän pelin säännöillä.
+   *
+   * Omistaja 17.8.2026: *"kentissä on edelleen liian vähän varianssia … ehkä
+   * Sonicin 2D-kentistä voisi ottaa inspiraatiota? Ja kiva olisi jos niissä
+   * vois mennä limittäin."*
+   *
+   * Limittäin tarkoittaa tässä sitä mitä se Sonicissa tarkoittaa: **kaksi
+   * reittiä jotka kulkevat saman matkan päällekkäin ja yhtyvät takaisin.**
+   * Alempi on aina auki ja se on se jonka jokainen kävelee; ylempi ostetaan
+   * vauhdilla, ja sen palkinto on kolikkorivi jonka näkee alhaaltakin — eli
+   * syy yrittää on näkyvissä ennen kuin yrittää.
+   *
+   * Kolme sääntöä joita tämä ei riko, ja ne ovat syy siihen että palikka on
+   * tämän muotoinen eikä hienompi:
+   *
+   *   - **Alempi reitti on lattia koko matkalta.** Ylempi saa olla vaikea;
+   *     pohja ei. Se on sama ehto jolla `rinnehyppy` sai ojansa.
+   *   - **Ylempi on puulavaa** (`-`) eikä maata: sen läpi pääsee alhaalta
+   *     hyppäämällä, joten reitit *vaihtuvat* keskellä matkaa eivätkä vain
+   *     kulje rinnakkain. Juuri se tekee limityksestä limityksen.
+   *   - **Ramppi on se ovi.** Rinne nostaa neljä laattaa ja huipulta lähtee
+   *     vauhdilla (`SLOPE_LAUNCH`); kävellen sieltä tippuu takaisin alas, ja
+   *     se on hinta eikä rangaistus.
+   */
+  kaksitie: ck(24, {
+    6: '            o o o o',
+    7: '           ---------',
+    9: '       /#',
+    10: '      /##',
+    11: '     /###',
+    12: '    /####    g',
+    13: '########################',
+    14: '########################',
+  }),
+
   ylareitti: ck(20, {
     4: '             o o o',
     5: '            -----',

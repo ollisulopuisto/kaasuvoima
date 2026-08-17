@@ -77,7 +77,10 @@ export const WORLD3_LEVELS = {
     theme: 'ice', bg: 'peaks', music: 'jaatie',
     chunks: [
       'start', 'spike_walk', 'power', 'ice_first', 'walkers', 'ice_pit', 'qrow',
-      'flyer', 'plat_hi', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
+      /* `plat_hi` → `kaksitie`: sama nousu ylemmälle tasolle, mutta nyt ylempi
+       * ja alempi reitti kulkevat saman matkan limittäin ja yhtyvät takaisin.
+       * Vaihto eikä lisäys, kuten aina maailmojen käyrän takia. */
+      'flyer', 'kaksitie', 'shell', 'pit_l', 'heartburn_pair', 'ice_twin',
       'spikes', 'ice_star', 'cork_gap', 'sky_run', 'spring_jet', 'pit_plat', 'power_hi',
       /* `plat_steps` → `pitkarinne`: sama nousu portaina, mutta alas tullaan
        * kahdeksan laatan rinnettä. Vaihto eikä lisäys, koska maailman käyrä on
