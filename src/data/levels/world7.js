@@ -80,8 +80,12 @@ export const WORLD7_LEVELS = {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
     chunks: [
       'start', 'cloud_bank', 'power', 'cloud_hole', 'cloud_squall', 'cloud_updraft',
-      'cloud_hole_wisp', 'cloud_blocks', 'cloud_hail', 'cloud_hole', 'cloud_bank',
-      'cloud_hole_deck', 'cloud_gate', 'cloud_lattice', 'cloud_hole_wisp',
+      /* Pyörre esitellään tasaisella maalla ja kohdataan reiän vauhdinotolla
+       * vasta kuusi palikkaa myöhemmin — sama opetusjärjestys kuin paarmalla
+       * 7-3:ssa, ja samasta syystä: uusi laji maksaa ensimmäisellä kerralla
+       * korkeintaan voimatason, ei kierrosta. */
+      'cloud_whirl', 'cloud_blocks', 'cloud_hail', 'cloud_hole', 'cloud_bank',
+      'cloud_hole_deck', 'cloud_gate', 'cloud_lattice', 'cloud_whirl_hole',
       'cloud_squall', 'cloud_hole', 'cloud_flock', 'run_up', 'goal', 'goal_end',
     ],
   },
@@ -276,8 +280,8 @@ export const WORLD7_LEVELS = {
   '7-3': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
     chunks: [
-      'start', 'cloud_bank', 'power', 'cloud_hole', 'cloud_hole_deck', 'cloud_paarma', 'flat8',
-      'cloud_hole_wisp', 'cloud_hail', 'cloud_anvil', 'cloud_hole', 'cloud_hole_deck',
+      'start', 'cloud_ghost', 'power', 'cloud_hole', 'cloud_hole_deck', 'cloud_paarma', 'flat8',
+      'cloud_hole_wisp', 'cloud_hail', 'cloud_anvil', 'cloud_hole', 'cloud_ghost_deck',
       'flat8', 'cloud_hole_wisp', 'cloud_lattice', 'cloud_paarma_deck', 'cloud_flock', 'cloud_hole',
       'cloud_squall', 'cloud_blocks', 'cloud_hole_deck', 'cloud_hole', 'cloud_gate',
       'cloud_updraft', 'run_up', 'goal', 'goal_end',

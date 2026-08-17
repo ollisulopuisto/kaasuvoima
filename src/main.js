@@ -828,7 +828,29 @@ class Game {
       this.toShare();
     }
 
+    /*
+     * ENTER KÄÄNNETÄÄN TÄSSÄ, ja tämä on se yksi paikka jossa se tehdään.
+     *
+     * `confirm` on se mitä näppäin sanoo; mitä se *tarkoittaa* riippuu siitä
+     * mitä ruudulla on, ja kolme tapausta ovat kaikki sitä mitä pelaaja
+     * odottaa:
+     *
+     *   - **taukovalikossa** se on valinta, koska valikko on valikko;
+     *   - **kentässä** se on tauko, koska "valitse" ei tarkoita siellä mitään
+     *     ja Enter on ollut tauko niin kauan kuin peli on ollut olemassa;
+     *   - **muualla** se on valinta, eli sama kuin hyppynappi valikoissa.
+     *
+     * Käännös on `Input.pressed`issa eikä jokaisessa kohtauksessa, koska
+     * kohtauksia on yhdeksän ja käännöksiä olisi silloin yhdeksän. Yksi paikka
+     * on myös se ainoa jossa "mitä ruudulla on" tiedetään.
+     */
     const pausable = this.scene instanceof LevelScene;
+    if (Input.pressed.confirm) {
+      Input.consume('confirm');
+      if (pausable && !this.paused) Input.pressed.start = true;
+      else Input.pressed.jump = true;
+    }
+
     if (pausable && Input.pressed.start) {
       Input.consume('start');
       this.paused = !this.paused;

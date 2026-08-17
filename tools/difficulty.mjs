@@ -95,6 +95,16 @@ export const ENEMY_COST = {
              * skill on this list — the plant next door is the same deal and
              * costs 1.1; the jet costs more only because it erupts out of open
              * floor instead of a pipe you can see from a screen away. */
+  e: 1.8,   /* pyörre: unkillable by stomp and it is *in the way* — but it is a
+             * clock, not a chase. Priced above the heartburn jet (1.5), which
+             * is the other bolted-down unkillable thing, because a metronome
+             * you jump over is easier than a circle you have to be inside at
+             * the right moment; priced below the paarma (2.2), which aims. */
+  q: 1.9,   /* kummitus: cannot be killed at all and it never stops coming, which
+             * is the angry sun's price (3.0) — except it is slower than a walk,
+             * so the answer is always "go on". That is the same deal a stink
+             * cloud offers at 1.5 with one difference: this one follows you
+             * across the whole level. Between the two, nearer the cloud. */
   A: 3.0,   // angry sun: unkillable by stomp and follows you for the rest of the level
   P: 3.0,   /* bean baron: survives being hit, so clearing it is two actions under
              * pressure — above the flyer's 1.6 — and it throws something that

@@ -7,6 +7,44 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.1 — kaksi uutta lajia: PYÖRRE ja KUMMITUS
+
+Ensimmäinen erä uusia vihollisia. Omistajan mitta: SMB3:ssa ja SMW:ssä nimettyjä
+vihollisia on kummassakin noin 60–80, ja meillä oli **19** (+ 8 pomovarianttia).
+Erot ovat pienemmät kuin luvut: alkuperäiset laskevat värivariantit ja siivekkäät
+versiot erikseen, joten eri *käyttäytymisiä* niissä on 35–45. Tästä erästä
+alkaen tavoite on sama suuruusluokka.
+
+Molemmat menivät maailmaan 7, koska `tools/variety.mjs` sanoo mihin uusi laji
+kannattaa laittaa: sanasto per maailma on `w1 14 · w2 24 · w3 26 · w4 21 ·
+w5 17 · w6 16 · w7 14 · w8 13`.
+
+**PYÖRRE** (`e`) kiertää näkyvää akselia kahden laatan säteellä, 150 framea
+kierrokselta. Se ei jätä kehäänsä koskaan, sitä ei voi tallata, eikä se tuki
+reittiä. Maailma 7 on se jossa jokainen kuoppa on pohjaton ja **joskus on pakko
+seistä paikallaan**; paarma tehtiin sitä vastaan rankaisemalla odottamista, ja
+tämä on sama kysymys toisin päin — se rankaisee väärästä hetkestä.
+
+**KUMMITUS** (`q`) etenee vain kun siihen ei katsota, ja hyytyy paikalleen kun
+katsoo. Se on pelin ainoa vihollinen joka mittaa **mihin pelaaja katsoo** eikä
+sitä missä hän on, ja se on tässä maailmassa siksi että lyhyt lauta ja pohjaton
+kuoppa pakottavat kääntymään ennen jokaista hyppyä. Tallaus ei tepsi (se on
+kaasua), se kulkee maaston läpi eikä voi jäädä seinäksi, ja se on hitaampi kuin
+kävely (0,55 vastaan 1,5) — kiirehtijä, ei ansa.
+
+Neljä uutta palikkaa sijoittaa ne opetusjärjestyksessä: kumpikin esitellään
+tasaisella maalla ja kohdataan reiän vauhdinotolla vasta myöhemmin, sama
+järjestys kuin paarmalla.
+
+Kolme porttia kaatui matkalla, ja jokainen niistä on nyt kommenttina siinä
+kohdassa jota se koskee: ohut pilvi ei saa leijua tyhjän päällä (kansi oli
+reiän yllä), lauta jolle ei ole syytä nousta ei johda mihinkään (kansi oli
+tyhjä), ja uusi laji ilman hintaa vaikeusmittarissa mittautuu nollaksi.
+Hinnat ovat `pyörre 1,8` ja `kummitus 1,9`, molemmat perusteltuina naapureitaan
+vasten.
+
+---
+
 ## v26.08.17.99 — Enter on aina valinta
 
 Omistaja pelistä: *"näppäimet ovat menuissa välillä outoja, mielestäni enter

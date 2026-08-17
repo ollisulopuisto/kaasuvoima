@@ -393,4 +393,83 @@ export const CLOUD_CHUNKS = {
     13: G,
     14: G,
   }),
+
+  /* ------------------------ uudet kaasukehän lajit ---------------------- */
+
+  /**
+   * PYÖRTEEN ENSIESITTELY, ja se on tasaisella maalla.
+   *
+   * Uusi laji opetetaan siellä missä sen väärin lukeminen maksaa vähiten: kehä
+   * on lattian yllä eikä reiän, joten ensimmäinen kerta maksaa korkeintaan
+   * voimatason. Akseli (`e`) on rivillä 9 eli kolme laattaa maasta, ja säde on
+   * kaksi laattaa — pallon alin kohta on siis laatan verran maan yläpuolella,
+   * ja sen ali pääsee kyykyssä tai ajoittamalla. Kolikot ovat kehän
+   * ulkopuolella, koska tämän pelin kolikkorivi tarkoittaa "tänne".
+   */
+  cloud_whirl: ck(16, {
+    9: '       e',
+    11: '  oo',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * PYÖRRE TOISEN KERRAN, ja nyt kannen ja reiän välissä.
+   *
+   * Tämä on se ruutu jota varten laji on: reikä on sama viiden ruudun reikä
+   * kuin `cloud_hole`ssa merkilleen, mutta sen vauhdinoton yllä kiertää kehä.
+   * Hyppy ei siis ole muuttunut, vaan se **hetki** jolloin sen saa aloittaa —
+   * ja juuri se on maailman 7 oma kysymys, sama jonka paarma kysyy toisin päin.
+   *
+   * Akseli on reiän lipan yllä eikä kuilun keskellä: kehän alin kohta jää
+   * lipan päälle, joten pelaaja joka odottaa väärässä paikassa saa osuman eikä
+   * pudotusta. Pohjaton kuoppa on tässä maailmassa jo tarpeeksi ankara.
+   */
+  cloud_whirl_hole: ck(16, {
+    7: '        e',
+    9: '   oo',
+    13: '#########     ##',
+    14: '#########     ##',
+  }),
+
+  /**
+   * KUMMITUS PILVEN PÄÄLLÄ, ja sillä on nimenomaan tilaa tulla.
+   *
+   * Kummitus etenee vain kun siihen ei katsota, joten ensiesittely tarvitsee
+   * kaksi asiaa: **matkaa** (muuten se on jo kimpussa ennen kuin sääntö on
+   * luettavissa) ja **syyn katsoa taaksepäin**. Kolikkorivi on siksi menosuunnassa
+   * ja kummitus takana: pelaaja juoksee kolikoille, kääntyy, ja näkee sen
+   * pysähtyvän. Sääntö opitaan kerralla eikä kuolemalla.
+   */
+  cloud_ghost: ck(16, {
+    8: '  q',
+    9: '        o o o',
+    13: G,
+    14: G,
+  }),
+
+  /**
+   * KUMMITUS JA LYHYT LAUTA, eli se mitä laji tekee tässä maailmassa.
+   *
+   * Kansi on **vauhdinoton yllä eikä kuilun**, ja se on maailman oma sääntö
+   * eikä tämän ruudun valinta: ohut pilvi ei saa leijua tyhjän päällä, ja
+   * portti mittaa sen laatta laatalta. Ensimmäinen versio pani kannen reiän
+   * ylle ja kaatoi sen neljällä laatalla.
+   *
+   * Kansi vauhdinoton yllä ja kummitus sen takana. Reikä pakottaa
+   * katsomaan eteenpäin ja kummitus rankaisee siitä — mutta hitaammin kuin
+   * pelaaja kävelee (0,55 vastaan 1,5), joten vastaus on aina olemassa: mene.
+   * Se on kiirehtijä eikä ansa, ja tämä ruutu on se lause.
+   */
+  cloud_ghost_deck: ck(16, {
+    /* Kolikot kannen päällä, koska **lauta jolle ei ole syytä nousta on lauta
+     * joka ei johda mihinkään** — ja se on sääntö eikä maku: portti kaatoi
+     * tämän kannen tyhjänä (`platform at 170,7 leads to nothing`). Sama
+     * ratkaisu ja samat kolikot kuin `cloud_hole_deck`illa. */
+    5: '   ooo',
+    7: '  ----',
+    9: '   q     oo',
+    13: '######     #####',
+    14: '######     #####',
+  }),
 };

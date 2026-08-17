@@ -12010,6 +12010,28 @@ const report = await page.evaluate(async () => {
     tap('Escape');
     const backed = game.scene.constructor.name;
 
+    /*
+     * JA KENTÄSSÄ ENTER ON TAUKO. Omistaja löysi tämän samana iltana kun
+     * edellinen versio antoi Enterin hypylle: *"nyt enter on hyppy myös pelin
+     * sisällä eli ei toimi pausena."* Kolme tapausta, kolme mittausta —
+     * kentässä tauko, taukovalikossa valinta, muualla valinta.
+     */
+    reset();
+    const lvl = new LevelScene(game, '1-1');
+    game.setScene(lvl);
+    settleUI();
+    const beforePause = game.paused;
+    tap('Enter');
+    const paused = game.paused;
+    /* Ja taukovalikossa sama näppäin valitsee: kursori on JATKAssa, joten
+     * valinta purkaa tauon. Se on myös se tapaus joka rikkoutuisi hiljaa jos
+     * käännös tehtäisiin väärässä järjestyksessä. */
+    tap('Enter');
+    const resumed = !game.paused;
+    expect('Enter on tauko kentässä ja valinta taukovalikossa',
+      beforePause === false && paused === true && resumed === true,
+      `ennen ${beforePause}, painalluksen jälkeen ${paused}, toisen jälkeen ${!resumed}`);
+
     expect('Enter valitsee jokaisella ruudulla, ja Escape perääntyy',
       fromTitle === 'TitleScene' && afterTitle !== 'TitleScene'
       && afterMap !== 'WorldMapScene'
