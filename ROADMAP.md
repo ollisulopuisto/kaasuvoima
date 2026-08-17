@@ -1225,6 +1225,17 @@ peruuttaminen ei ole.
 siitä *mitä* rakennetaan jos rakennetaan, eivät lupauksia siitä että
 rakennetaan.
 
+**Tehty 17.8.2026 (v26.08.18.9), kaikki kolme päätöstä sellaisenaan.** Täydellä
+mittarilla alas näyttää alemman kaistan 96 framea läpikuultavana, mittari
+tyhjenee, eikä kentässä muutu mitään muuta — `tools/verify.mjs` lukee ruudukon
+ennen ja jälkeen juuri siksi. Ks. `LevelScene.tryPeek` ja `drawPeek`.
+
+**Yhä auki ja tiedossa: vilkaisua ei opeteta missään.** Se ei ole
+näppäinlistassa (alkuruudun ohjerivi on jo 56 merkkiä), eikä yksikään kenttä
+johdata siihen. Kyky jota kukaan ei löydä ei ole olemassa, joten seuraava askel
+tälle on opetuspaikka — luontevin on maailman 1 ensimmäinen kolmikaistainen
+kenttä, jossa mittarin täyttäminen on jo pakko opetella.
+
 ### Päätetty: haarautuva kartta, eriarvoiset haarat
 
 Omistajan päätös 9.8.2026: **haarat ovat eriarvoisia ja vaikeudesta palkitaan.**

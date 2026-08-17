@@ -154,7 +154,7 @@ jäi epäselvä tuomio, ja sitä yhtä verbiä joka oli hyväksytty ilman kotia.
 | A | pieruhylly: ammuksesta tulee lava | ✔ tehty v26.08.16.91 |
 | B | kaasukupla joka kantaa: kuplan päälle voi astua | ✔ tehty v26.08.16.86 |
 | C | ummetus muodoksi: tukossa oleva on raskas | ei |
-| D | kaistan vilkaisu | **tee rajattuna** |
+| D | kaistan vilkaisu | **tee rajattuna** — tehty v26.08.18.9 |
 | E | hiekka tottelee painovoimaa | ✔ tehty v26.08.16.92 |
 | F | kurnuttajan kyyti | ei |
 | G | loppukentän voi syödä (maailma 8) | ei näin |

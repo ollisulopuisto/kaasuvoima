@@ -269,6 +269,44 @@ const SWALLOW_NAMES = {
 /** Magneetin säde laattoina. Ks. `pullCoins`. */
 const MAGNET_R = 4;
 
+/**
+ * KAISTAN VILKAISU. Alempi kaista näkyy hetken läpikuultavana, ja se maksaa
+ * koko vauhtimittarin. Ks. `tryPeek` ja ROADMAP.md 10.8.2026.
+ *
+ * Kolme päätöstä, ja kaikki kolme näkyvät näissä luvuissa:
+ *
+ * **Vain katsominen.** Vilkaisu piirtää, se ei siirrä ketään: kenttägraafi
+ * pysyy täsmälleen samana, joten `rules.js` todistaa yhä yhden kaistan eikä
+ * kaistojen välistä graafia. Alas pääsee edelleen vain putkesta tai varresta.
+ *
+ * **Hinta on koko mittari.** Mittari täyttyy 56 framessa täyttä juoksua ja
+ * tyhjenee itsekseen 168 framessa, eli vilkaisu maksaa sekunnin juoksua *ja*
+ * sen mitä täydellä mittarilla saisi: nopeuskaton 3,5 ja kaasulehden lennon.
+ * Ilmainen tämä olisi tutka, ja silloin koko salaisuusrakenne — kartta kertoo
+ * *että* niitä on muttei *missä* — kuolisi kertakäytöllä.
+ *
+ * 96 framea eli 1,6 sekuntia: pidempi kuin mittarin täyttö, koska maksettu
+ * asia pitää ehtiä lukea, mutta lyhyempi kuin sen luonnollinen tyhjeneminen,
+ * jottei kukaan voi pitää alakerrosta näkyvissä juoksemalla edestakaisin.
+ *
+ * **Vain muoto, ei sisältö.** Piirretään laatat eikä olioita: pelaaja näkee
+ * *missä* kammio on, ei mitä siellä on. Se on juuri se ero jonka takia tämä on
+ * vihje eikä vastaus.
+ */
+export const PEEK_FRAMES = 96;
+/** Nousu ja lasku, frameina. Nopea sisään, hitaampi ulos — ks. `PoundWave`. */
+export const PEEK_IN = 8;
+const PEEK_OUT = 24;
+/**
+ * Haamukaistan läpikuultavuus huipussaan.
+ *
+ * Mitattu silmällä yhtä asiaa vasten: **haamu ei saa koskaan lukea lattiaksi.**
+ * Puolikas on se raja jolla laatan reunat vielä erottuvat muodoksi mutta jonka
+ * läpi oikea maailma näkyy koko ajan. Tämän yli mennessä pelaaja alkaa yrittää
+ * kävellä sellaisen päällä jota ei ole.
+ */
+const PEEK_ALPHA = 0.5;
+
 const PILLAR_H = 2;
 /**
  * Etäisyys areenan reunasta ja ovesta, laattoina.
@@ -1187,6 +1225,12 @@ export class LevelScene {
      * half-state, and what makes the save state need one field instead of a
      * second copy of the map. */
     this.switchTimer = 0;
+    /* Kaistan vilkaisu: montako framea haamua on jäljellä, ja minkä kaistan
+     * pelaaja seisoi kun osti sen. Ei tallenneta — vilkaisu on 1,6 sekuntia
+     * kuvaa eikä kentän tila, ja tallennuksesta palaava katsoo mieluummin
+     * peliään kuin sekunnin vanhaa haamua. Ks. PEEK_FRAMES. */
+    this.peek = 0;
+    this.peekBand = 1;
     /* Which band the music is currently the sound of, and how long the feet
      * have disagreed with it. Derived, never saved: `enter` re-reads both from
      * the player's feet, so a restored snapshot cannot come back believing it
@@ -3089,6 +3133,54 @@ export class LevelScene {
   }
 
   /**
+   * Kaistan vilkaisu: alaspäin, alas painamalla, koko mittarin hinnalla.
+   *
+   * **Alas ja vain alas, yksi nappi ja yksi merkitys.** Perustelu on kallis ja
+   * mitattu toisaalla: kartan nuolissa oli vika jossa yksi syöte ei osunut
+   * mihinkään suuntaan ja pelaaja jäi jumiin. Luolakaista on lisäksi se jossa
+   * salaisuudet ovat, eli se jonka katsominen on täyden mittarin arvoista.
+   * Ylöspäin laajentaminen on myöhemmin halpaa; kahden napin peruuttaminen ei.
+   *
+   * Järjestys on tahallinen: tämä ajetaan `tryWarp`in **jälkeen**, joten
+   * putken suun päällä alas tarkoittaa putkea eikä vilkaisua. Sama painallus
+   * ei saa maksaa mittaria silloin kun se tekee jo jotain muuta — ja `transit`
+   * on juuri se merkki jonka `tryWarp` jättää jälkeensä.
+   */
+  tryPeek(input) {
+    const bands = this.def.bands;
+    const p = this.player;
+    if (!bands || !input || !input.pressed.down) return false;
+    /* `pFullEntry` eikä `pFull`: sama painallus aloittaa kyykyn joka jarruttaa,
+     * ja mittari luettaisiin vasta jarrutuksen jälkeen. Ks. `Player.update`. */
+    if (p.dying || p.transit || !p.onGround || !p.pFullEntry) return false;
+    /* Alimmassa kaistassa ei ole mitään alempaa katsottavaa, eikä siitä saa
+     * veloittaa: maksu jota vastaan ei tule kuvaa luetaan rikkinäisyydeksi. */
+    const band = this.bandAt(p.y + p.h);
+    const last = Math.floor((this.h - 1) / bands.rows);
+    if (band + 1 > last) return false;
+    p.pMeter = 0;
+    this.peek = PEEK_FRAMES;
+    this.peekBand = band;
+    Sfx.play('kurkistus');
+    return true;
+  }
+
+  /**
+   * Vilkaisu kuluu loppuun, ja se katkeaa jos jalat vaihtavat kaistaa.
+   *
+   * Katkaisu ei ole varmuuden vuoksi: putkella alas mennyt pelaaja katsoisi
+   * muuten *luolan alta* jotain jota ei ole, ja varren huipulle noussut näkisi
+   * reittikaistan haamuna sen päällä jolla itse seisoo. Vilkaisu kuuluu siihen
+   * paikkaan jossa se ostettiin.
+   */
+  updatePeek() {
+    if (this.peek <= 0) return;
+    this.peek--;
+    const p = this.player;
+    if (p.transit || this.bandAt(p.y + p.h) !== this.peekBand) this.peek = 0;
+  }
+
+  /**
    * Which band a pair of feet is in: 0 sky, 1 the route, 2 the cave.
    *
    * One measurement, used by everything that cares. The find (`noteBand`) and
@@ -3397,6 +3489,8 @@ export class LevelScene {
       this.updatePillars();
       this.updateFrost();
       this.tryWarp(input);
+      this.tryPeek(input);
+      this.updatePeek();
       this.updateTransit();
       this.updateProgress();
       if (this.race) this.updateRace();
@@ -4652,6 +4746,7 @@ export class LevelScene {
 
     if (this.def.bands) this.drawUnderground(ctx, camX, camY);
     this.drawTiles(ctx, camX, camY);
+    if (this.peek > 0) this.drawPeek(ctx, camX, camY);
     if (this.game.debug) this.drawHeatmap(ctx, camX, camY);
     if (this.goal) {
       drawGoal(ctx, this.goal.x, this.goal.y, GOAL_HEIGHT, this.cardIndex, this.state !== 'play');
@@ -4797,6 +4892,46 @@ export class LevelScene {
     if (camY + this.viewH <= top) return;
     ctx.fillStyle = '#150e1c';
     ctx.fillRect(camX, top, VIEW_W, this.heightPx - top);
+  }
+
+  /**
+   * Alempi kaista haamuna nykyisen päälle. Ks. PEEK_FRAMES ja `tryPeek`.
+   *
+   * Piirretään laattojen **jälkeen** ja olioiden **edelle**: haamu on maailman
+   * päällä jotta sen näkee lattian läpi, mutta pelaaja ja viholliset ovat sen
+   * päällä jotta se mitä oikeasti tapahtuu pysyy luettavana. Vilkaisu ei ole
+   * hetki jolloin peli menee tauolle — viholliset kävelevät koko ajan.
+   *
+   * Laatan koristekoordinaatit ovat sen **oman** kaistan koordinaatit
+   * (`ty + span`), eivät ne joihin se piirretään. Iho-vaihtelu on paikan
+   * tiiviste, joten näin haamu näyttää täsmälleen siltä mitä sinne mennessä
+   * löytyy — muuten sama putki olisi eri putki kahdesti.
+   */
+  drawPeek(ctx, camX, camY) {
+    const span = this.def.bands.rows;
+    // Nopea sisään, hitaampi ulos: kuva ilmestyy tapahtumana ja häviää verhona.
+    const fade = Math.min(1, (PEEK_FRAMES - this.peek) / PEEK_IN, this.peek / PEEK_OUT);
+    const tx0 = Math.max(0, Math.floor(camX / TILE));
+    const tx1 = Math.min(this.w - 1, Math.floor((camX + VIEW_W) / TILE));
+    const ty0 = Math.max(0, Math.floor(camY / TILE));
+    const ty1 = Math.min(this.h - 1 - span, Math.floor((camY + this.viewH) / TILE));
+    ctx.save();
+    ctx.globalAlpha = PEEK_ALPHA * fade;
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const ch = this.tileAt(tx, ty + span);
+        if (ch === ' ') continue;
+        drawTile(ctx, ch, tx * TILE, ty * TILE, this.theme, tx, ty + span, this.tick,
+          this.tileAt(tx, ty + span - 1), {});
+      }
+    }
+    /* Yksi juova joka pyyhkäisee ruudun ylhäältä alas vilkaisun mitassa. Se on
+     * kello: pelaaja näkee ilman numeroa kuinka paljon katseluaikaa on jäljellä,
+     * ja se erottaa haamun maailmasta ilman että haamua tarvitsee värjätä. */
+    ctx.globalAlpha = 0.4 * fade;
+    ctx.fillStyle = '#9fe8ff';
+    ctx.fillRect(camX, camY + this.viewH * (1 - this.peek / PEEK_FRAMES), VIEW_W, 2);
+    ctx.restore();
   }
 
   drawTiles(ctx, camX, camY) {
