@@ -97,6 +97,10 @@ export class DemoScene {
     stand.finishLevel = () => { this.done = true; };
 
     this.level = new LevelScene(stand, DEMO_LEVEL, demoLevel());
+    /* Esittely ei kuole nälkään: kolikot ovat kello (18.8.2026), ja
+     * alkuruudun taustalla pyörivän kentän on määrä pyöriä niin kauan kuin
+     * kukaan katsoo. Ks. `LevelScene.updateTimer`. */
+    this.level.clockStopped = true;
     // Telemetry answers "where do people die". A robot is not people, and its
     // deaths would sit on top of the heatmap the levels are tuned from.
     this.level.recordDeath = () => {};

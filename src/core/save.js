@@ -35,6 +35,14 @@ export const DEFAULT_SAVE = () => ({
    */
   bet: 0,
   /*
+   * Uran aikana poimitut kolikot yhteensä — ei kulu koskaan. Kolikot ovat
+   * aika (18.8.2026), eli `coins` on säiliön pinta ja kuluu; elämä tulee
+   * tästä luvusta (`LIFE_COINS`). Sisään ilman versionostoa samalla
+   * perusteella kuin `secrets` ja `bet`: vanhassa tallennuksessa ei ole
+   * kenttää, levitys antaa nollan, eikä nolla ole arvaus vaan totuus.
+   */
+  coinsTotal: 0,
+  /*
    * levelId -> { frames, marks } eli AIKA-AJON paras aika ja sen välipisteet
    * (ks. core/timeattack.js). Sisään samalla perusteella kuin `secrets` ja
    * `continues`, eli **ilman versionostoa**: vanhassa tallennuksessa ei ole
@@ -153,6 +161,7 @@ export const Save = {
         secrets: state.secrets || {},
         bestTimes: state.bestTimes || {},
         bet: state.bet || 0,
+        coinsTotal: state.coinsTotal || 0,
         doors: state.doors || {},
         taught: state.taught || {},
         checks: state.checks || {},
