@@ -7,6 +7,48 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.22 — neljä taloa, kolme uhkapeliä
+
+Omistaja 17.8.2026: *"hernetalo on kiva, mut lisätään siihen
+satunnaisuutta/panoksia ja generoi 2–5 muunlaista bonusasiaa, esim. laita panos
+ja lyö vetoa jne; enempi tuuria kuin taitoa."*
+
+Rajaus on siinä viimeisessä lauseessa ja se on hyvä: **bonushuone jossa taito
+ratkaisee on vain lyhyt kenttä**, ja niitä on jo 65. Se mitä kartalla voi tehdä
+ja kentässä ei, on **panos** — kolikot ovat pelin ainoa kertyvä valuutta jolla
+on jo merkitys (sata on elämä), joten niiden asettaminen alttiiksi on panos
+jonka pelaaja lukee ilman että mitään selitetään.
+
+Talot olivat kartalla jo, yksi per maailma, eikä yhtään uutta solmua lisätty:
+kartan muoto on mitattu (jokainen kenttä on tiellä linnakkeeseen), ja uusi
+solmu olisi ollut uusi tie. **Talo sai luonteen, ei osoitetta.**
+
+- **HERNETALO** (1, 5) — kolme tuttua esinettä ja **arpa**. Neljäs luukku on nyt
+  tuntematon: kolmasosa tähti, kolmasosa hernekeitto, kolmasosa tyhjä. Varma
+  valinta säilyi, joten arpa on tarjous eikä pakko.
+- **KRUUNA VAI PIERU** (2, 6) — panosta 5, 15 tai 30 kolikkoa. Kolikko lentää
+  ilmaan neljäkymmentä framea, ja se odotus on se mitä uhkapelistä ostetaan.
+  Voitto tuplaa, häviö vie.
+- **KOLME KUPPIA** (3, 7) — yhden alla elämä, kupit sekoitetaan näkyvästi.
+  Katse auttaa vähän ja onni loput. Ei panosta: hinta on käynti, ja jokainen
+  talo on kerran.
+- **VETOTALO** (4, 8) — lyö vetoa **omasta pelaamisestasi**: selvitä seuraava
+  kenttä kuolematta ja panos maksetaan tuplana. Ainoa jossa taito on mukana ja
+  ainoa jonka palkinto tulee myöhemmin — vedon jälkeen tavallinen kenttä on eri
+  kenttä.
+
+Veto elää `game.state`issa eikä kartalla, koska kohtaus katoaa kun kenttä alkaa,
+ja `finishLevel` maksaa sen — se on se yksi funktio jonka läpi jokainen kentän
+loppu kulkee. Tallennus kantaa vedon (`bet`, ilman versionostoa samalla
+perusteella kuin `secrets` ja `bestTimes`).
+
+Neljä porttia, ja kaksi niistä löysi vian ennen kuin sitä ehti pelata: veto
+maksettiin **tyngälle** (aiemmat väitteet korvaavat `game.finishLevel`in, ja
+tyngälle maksettu veto on veto jota kukaan ei maksanut), ja kuppipelin
+sekoitusmittaus oli yhden näytteen kolikonheitto.
+
+---
+
 ## v26.08.18.21 — maa liikkuu myös generoiduissa kentissä
 
 Omistaja pyysi ajamaan korpuksen ja katsomaan mitä siitä saa. Korpus (VGLC, 481

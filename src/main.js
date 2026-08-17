@@ -459,6 +459,30 @@ class Game {
       return;
     }
 
+    /*
+     * VETO RATKEAA TÄSSÄ, ja se on ainoa paikka jossa se voi ratketa:
+     * `finishLevel` on se yksi funktio jonka läpi jokainen kentän loppu kulkee
+     * — kuolema, maali ja päivän yritys omalla haarallaan. Ks. `updateBet`
+     * kartalla.
+     *
+     * Häviö on hiljainen ja voitto kuuluu: panos on jo maksettu talossa, joten
+     * kuolema ei vie mitään enempää kuin sen minkä se muutenkin vei, ja
+     * läpäisy tuo tuplat. Veto nollataan kummassakin tapauksessa — se koski
+     * *seuraavaa* kenttää, ja seuraava kenttä on nyt takana.
+     */
+    if (this.state.bet) {
+      const stake = this.state.bet;
+      this.state.bet = 0;
+      if (result.cleared) {
+        this.state.coins += stake * 2;
+        Sfx.play('payout');
+        this.toast(`VETO VOITTI: ${stake * 2} KOLIKKOA`);
+      } else {
+        this.toast('VETO MENI');
+      }
+      this.persist();
+    }
+
     if (result.died) {
       this.state.power = makePower();
       this.state.lives--;

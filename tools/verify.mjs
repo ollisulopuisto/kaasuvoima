@@ -20573,6 +20573,135 @@ const report = await page.evaluate(async () => {
         + ` kello ${p2.swallowTimer}`);
     }
 
+    /* --- 8 b. neljä taloa, kolme uhkapeliä --- */
+    /*
+     * Talojen väite on **panos**, ja panos on ainoa asia jonka väärin
+     * laskeminen huomataan vasta pelaajan kolikoissa. Neljä mittausta:
+     * kolikko ei voi kadota eikä syntyä väärin, kuppipeli antaa elämän vain
+     * oikeasta kupista, veto säilyy kentän yli, ja arpa on arpa.
+     */
+    {
+      const { WorldMapScene } = await import('/src/scenes/worldmap.js');
+      const { WORLDS } = await import('/src/data/worlds.js');
+      const fresh = (coins = 42) => {
+        game.state = {
+          lives: 3, coins, score: 0, power: { type: null, level: 0 }, reserve: null,
+          world: 0, node: 'w1-1', cleared: {}, worldsOpen: 8, cards: [], secrets: {},
+          usedSaveState: false, continues: 0, bestTimes: {}, bet: 0,
+        };
+        const m = new WorldMapScene(game);
+        m.tick = 10;
+        return m;
+      };
+      const tap = () => ({ pressed: { jump: true }, consume() {} });
+      const idle = () => ({ pressed: {}, consume() {} });
+
+      /* 1. Jokaisella talolla on laji, ja laji on tunnettu. */
+      const houses = WORLDS.flatMap((w) => w.nodes.filter((n) => n.type === 'house'));
+      const games = new Set(houses.map((h) => h.game));
+      const unknown = houses.filter((h) => !['items', 'coinflip', 'cups', 'bet'].includes(h.game));
+      expect('jokaisella talolla on tunnettu laji, ja lajeja on useampi kuin yksi',
+        houses.length === 8 && unknown.length === 0 && games.size >= 3,
+        `${houses.length} taloa, lajit ${[...games].sort().join(' ')}`);
+
+      /* 2. Kolikonheitto: voitto tuplaa panoksen, häviö vie sen, eikä
+       *    kummassakaan tapauksessa synny tai katoa muuta. */
+      let won = null;
+      let lost = null;
+      for (let i = 0; i < 40 && (won === null || lost === null); i++) {
+        const m = fresh(42);
+        m.houseGame = 'coinflip';
+        m.mode = 'house';
+        m.housePhase = 'pick';
+        m.houseCursor = 1;                       // panos 15
+        m.node = houses.find((h) => h.game === 'coinflip') || m.node;
+        m.updateCoinflip(tap());
+        const after = game.state.coins;
+        for (let f = 0; f < 60 && m.mode === 'house'; f++) m.updateCoinflip(idle());
+        const end = game.state.coins;
+        if (m.houseResult && won === null) won = { after, end };
+        if (!m.houseResult && lost === null) lost = { after, end };
+      }
+      expect('kolikonheitto tuplaa voiton ja vie häviön, eikä muuta',
+        !!won && !!lost && won.after === 27 && won.end === 57
+        && lost.after === 27 && lost.end === 27,
+        `voitto ${won ? `${won.after} -> ${won.end}` : 'ei osunut'},`
+        + ` häviö ${lost ? `${lost.after} -> ${lost.end}` : 'ei osunut'} (panos 15, alku 42)`);
+
+      /* 3. Kuppipeli: elämä vain oikeasta kupista, ja sekoitus liikuttaa
+       *    palkintoa — muuten se olisi kolme kuppia joista aina keskimmäinen. */
+      let right = null;
+      let wrong = null;
+      /* Sekoitus mitataan omalla kierroksellaan eikä palkintokierroksen
+       * kyljessä: yksi sekoitus voi päätyä lähtöruutuun (parillinen määrä
+       * osuvia vaihtoja), joten yhden näytteen mittaus olisi kolikonheitto
+       * siitä läpäiseekö portti. Kymmenen kierrosta, ja vaaditaan että
+       * palkinto liikkui useimmissa. */
+      let moved = 0;
+      for (let i = 0; i < 10; i++) {
+        const mm = fresh();
+        mm.houseGame = 'cups';
+        mm.mode = 'house';
+        mm.updateCups(idle());
+        const start = mm.cupPrize;
+        for (let f = 0; f < 200 && mm.housePhase === 'shuffle'; f++) mm.updateCups(idle());
+        if (mm.cupPrize !== start) moved++;
+      }
+      for (let i = 0; i < 30 && (right === null || wrong === null); i++) {
+        const m = fresh();
+        m.houseGame = 'cups';
+        m.mode = 'house';
+        m.updateCups(idle());
+        for (let f = 0; f < 200 && m.housePhase === 'shuffle'; f++) m.updateCups(idle());
+        const lives = game.state.lives;
+        m.houseCursor = m.cupPrize;              // oikea kuppi
+        m.updateCups(tap());
+        for (let f = 0; f < 80 && m.mode === 'house'; f++) m.updateCups(idle());
+        if (right === null) right = game.state.lives - lives;
+
+        const m2 = fresh();
+        m2.houseGame = 'cups';
+        m2.mode = 'house';
+        m2.updateCups(idle());
+        for (let f = 0; f < 200 && m2.housePhase === 'shuffle'; f++) m2.updateCups(idle());
+        const lives2 = game.state.lives;
+        m2.houseCursor = (m2.cupPrize + 1) % 3;  // väärä kuppi
+        m2.updateCups(tap());
+        for (let f = 0; f < 80 && m2.mode === 'house'; f++) m2.updateCups(idle());
+        if (wrong === null) wrong = game.state.lives - lives2;
+      }
+      expect('kuppipeli antaa elämän vain oikeasta kupista, ja sekoitus liikuttaa palkintoa',
+        right === 1 && wrong === 0 && moved >= 3,
+        `oikea kuppi ${right} elämää, väärä ${wrong}, sekoitus liikutti palkintoa`
+        + ` ${moved}/10 kierroksella`);
+
+      /* 4. Veto elää `state`issa kentän yli: talo ottaa panoksen, `finishLevel`
+       *    maksaa tuplat läpäisystä eikä mitään kuolemasta. */
+      const m = fresh(42);
+      m.houseGame = 'bet';
+      m.mode = 'house';
+      m.houseCursor = 2;                          // panos 30
+      m.node = houses.find((h) => h.game === 'bet') || m.node;
+      m.updateBet(tap());
+      const afterBet = { coins: game.state.coins, bet: game.state.bet };
+      /* Prototyypin oma `finishLevel`, ei olion päälle asetettu: aiemmat
+       * väitteet korvaavat sen tynkällä (`game.finishLevel = () => {}`), ja
+       * tyngälle maksettu veto on veto jota kukaan ei maksanut. */
+      const real = Object.getPrototypeOf(game).finishLevel;
+      const keepNode = game.pendingNode;
+      /* Oikea solmu, koska oikea `finishLevel` merkitsee sen selvitetyksi ja
+       * siirtää pelaajan seuraavaan: tynkäsolmu kaatuisi `node.id`:hen. */
+      game.pendingNode = WORLDS[0].nodes.find((n) => n.level && n.type === 'level');
+      real.call(game, { cleared: true, card: null });
+      const afterWin = { coins: game.state.coins, bet: game.state.bet };
+      game.pendingNode = keepNode;
+      expect('veto otetaan talossa ja maksetaan kentän lopussa',
+        afterBet.coins === 12 && afterBet.bet === 30
+        && afterWin.coins === 72 && afterWin.bet === 0,
+        `talossa ${afterBet.coins} kolikkoa ja veto ${afterBet.bet};`
+        + ` läpäisyn jälkeen ${afterWin.coins} ja veto ${afterWin.bet}`);
+    }
+
     /* --- 9 c. pyörivät jalat --- */
     /*
      * Kolme väitettä, ja ne ovat samat kolme jotka mikä tahansa uusi
