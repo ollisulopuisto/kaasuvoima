@@ -546,6 +546,10 @@ way around the game's own measurements:
 Where the log and a note land on the same piece, **the note wins** — they answer
 different questions, and somebody writing a note has already seen the deaths.
 
+The shapes are the generator's own piece names, and `shape:rest` is worth
+knowing about: `rest` is the calm ground between challenges, so asking for it is
+how you say **take this obstacle out** without saying what should replace it.
+
 The 26 generated levels can act on a note directly. The hand-made ones cannot,
 and the reader says so per level instead of dropping them quietly.
 
