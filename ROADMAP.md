@@ -505,6 +505,55 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### Render audio offline instead of listening to it live
+
+*(Owner, 18.8.2026: "should we do audio testing in some other way, if headless
+chrome is so slow and unreliable?" — queued, not started.)*
+
+**The measured problem.** Headless Chromium renders audio in bursts, not
+smoothly: measured at `äänikello 3.39 s / seinäkello 1.56 s`. An `AnalyserNode`
+remembers 743 ms, so a single burst can be longer than the window and whole
+sounds are genuinely missed. That is why `every consonant makes a sound of its
+own` and `a fricative is audible…` report *"ei mitattu"* in roughly two runs of
+three. They are not lying — the samples really were lost — but a gate that
+measures nothing two times in three is a gate that is one bad day from being
+deleted.
+
+Live listening also costs the two things that make the suite slow: waiting for
+the bus to fall silent, and waiting in real time for a 420 ms sample.
+
+**The fix is already half-built.** `tone` was split into `buildTone(ac, dest,
+…)` on 18.8.2026 so the graph can be constructed in *any* context, and
+`renderTone` renders it into an `OfflineAudioContext`. That is faster than real
+time, deterministic, and returns every sample — no analyser, no missed burst,
+no waiting for silence. Six of the SID gates already work this way.
+
+**So the rule should be inverted: offline is the default, live is the
+exception that has to justify itself.** Most audio claims are about the signal
+and not about time — ring-modulation sidebands, hard-sync harmonics, portamento
+arriving mid-note, vibrato depth, whether a spoken line is louder than the
+floor. None of those needs a live context.
+
+What genuinely stays live, and why, has to be listed rather than assumed:
+anything scheduled against the wall clock (the `live` PWM path), the sequencer
+if its clock is real, and the ambience beds, which ramp with `setTargetAtTime`
+over seconds. For that residue the fix is an `AudioWorkletNode` meter instead
+of an `AnalyserNode` — a worklet sees every block and cannot miss a burst. It
+was prototyped in a scratch harness and worked (a 100-sound burst decayed to
+zero with no missed window); it replaces `meterFor` at six call sites.
+
+**What not to do.** Do not move audio testing to a Node-side WebAudio
+implementation. It would be fast and deterministic and it would be testing a
+different synthesiser than the one the player hears, which is the one thing
+this suite exists to avoid. And do not hash rendered output as a golden file:
+it catches regressions but says nothing about *why*, and every deliberate
+tuning change would look like a failure. Assert measured properties, as
+everything else here does.
+
+**Pairs well with the split above.** Offline gates run in milliseconds, so
+`--only audio` would turn an eight-minute loop into a couple of seconds — which
+is what makes the remaining live gates worth fixing at all.
+
 ### Split `tools/verify.mjs` into modules
 
 *(Owner, 18.8.2026: "if verify is twenty six thousand lines, shouldn't we make
