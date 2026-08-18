@@ -23117,6 +23117,139 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
+/* ---- pumping: rhythm fills the P-meter ---- */
+/*
+ * TAPPING RUN ON THE BEAT FILLS THE GAUGE FASTER THAN HOLDING IT.
+ *
+ * Owner's idea, 18.8.2026: the active reload from Gears of War, applied to the
+ * P-meter. The design argument is in IDEAS.md and the numbers are in
+ * `player.js` next to `PUMP_PERIOD`; this block is what keeps them true.
+ *
+ * Five claims, and the last two are the ones that would rot quietly:
+ *
+ *   1  faster    on the beat fills the gauge faster than holding
+ *   2  forgiving one frame early still counts — the window straddles the beat
+ *   3  costly    off the beat vents, and is far worse than simply holding
+ *   4  ceiling   rhythm reaches P-speed sooner and never exceeds it
+ *   5  optional  holding alone still fills the gauge exactly as it always did
+ *
+ * Claim 5 is the promise DESIGN.md §5 rests on. The power-0 bot in
+ * `playable.mjs` holds the button and cannot play this mechanic, so if a level
+ * ever came to require rhythm that gate would fail — but only if holding still
+ * works, which is what this measures.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const P = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { P_METER_MAX, MAX_P, MAX_RUN } = await import('/src/entities/player.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const scene = () => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      return s;
+    };
+    /*
+     * `style` is how the run button is played. `offset` is where in the beat
+     * the press lands, so 0 is on it and 6 is as wrong as it gets.
+     */
+    const play = (style, offset = 0, cap = 900) => {
+      const s = scene();
+      const p = s.player;
+      const i = {
+        held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+      };
+      let frames = cap;
+      let vents = 0;
+      let topSpeed = 0;
+      for (let f = 0; f < cap; f++) {
+        i.held = blank();
+        i.pressed = blank();
+        i.held.right = true;
+        i.held.run = true;
+        if (style === 'rhythm' && p.pumping && p.pumpPhase === offset % 12) {
+          i.held.run = false;
+          i.pressed.run = true;
+        }
+        const before = p.pMeter;
+        s.update(i);
+        topSpeed = Math.max(topSpeed, Math.abs(p.vx));
+        if (p.pMeter < before - 5) vents++;
+        if (p.pMeter >= P_METER_MAX) { frames = f + 1; break; }
+      }
+      return { frames, vents, meter: Math.round(p.pMeter), top: Math.round(topSpeed * 100) / 100 };
+    };
+    const out = { max: { P: MAX_P, run: MAX_RUN } };
+    out.hold = play('hold');
+    out.beat = play('rhythm', 0);
+    out.early = play('rhythm', 11);
+    out.off = play('rhythm', 6);
+
+    /* And the ceiling, measured after the gauge is full: run on for a while
+     * and see how fast the body actually goes. */
+    const s = scene();
+    const p = s.player;
+    const i = {
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    };
+    let fastest = 0;
+    for (let f = 0; f < 400; f++) {
+      i.held = blank();
+      i.pressed = blank();
+      i.held.right = true;
+      i.held.run = true;
+      if (p.pumping && p.pumpPhase === 0) { i.held.run = false; i.pressed.run = true; }
+      s.update(i);
+      fastest = Math.max(fastest, Math.abs(p.vx));
+    }
+    out.ceiling = Math.round(fastest * 1000) / 1000;
+    return out;
+  });
+
+  expect('rytmissä painettu juoksunäppäin täyttää mittarin nopeammin kuin pohjassa pidetty',
+    P.beat.frames < P.hold.frames * 0.9 && P.beat.vents === 0,
+    `pohjassa ${P.hold.frames} framea, rytmissä ${P.beat.frames}`
+    + ` (${Math.round((1 - P.beat.frames / P.hold.frames) * 100)} % nopeammin)`);
+
+  expect('yksi frame etuajassa kelpaa: ikkuna on lyönnin molemmin puolin',
+    P.early.frames < P.hold.frames && P.early.vents === 0,
+    `frame etuajassa ${P.early.frames} framea, ${P.early.vents} tyhjennystä`);
+
+  expect('väärässä tahdissa painaminen tyhjentää, ja on pohjassa pitämistä huonompi',
+    P.off.vents > 5 && P.off.frames > P.hold.frames * 1.5,
+    `väärässä tahdissa ${P.off.frames} framea ja ${P.off.vents} tyhjennystä`
+    + ` — pohjassa ${P.hold.frames} ja 0`);
+
+  expect('rytmi vie P-nopeuteen nopeammin muttei sen yli',
+    P.ceiling <= P.max.P + 0.001 && P.ceiling > P.max.run,
+    `nopein ${P.ceiling} px/frame, P-katto ${P.max.P}, juoksukatto ${P.max.run}`);
+
+  expect('pohjassa pitäminen täyttää mittarin yhä kuten ennenkin',
+    P.hold.meter >= 112 && P.hold.vents === 0 && P.hold.frames < 200,
+    `${P.hold.frames} framea, mittari ${P.hold.meter}, tyhjennyksiä ${P.hold.vents}`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- pumping: loppu ---- */
 /* ---- rinne koskee muutakin kuin pelaajaa ---- */
 /*
  * SE MIKÄ LIUKUU TAI VIERII TOTTELEE RINNETTÄ, SE MIKÄ KÄVELEE EI.

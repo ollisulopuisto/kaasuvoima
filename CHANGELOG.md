@@ -63,6 +63,64 @@ kuljettiin.
 
 ---
 
+## v26.08.18.33 — pumping: the P-meter has a rhythm
+
+Owner, 18.8.2026: *"could a mechanic work where tapping run repeatedly gives you
+more speed? Not continuous mashing — a meter where hitting the right moment in
+the cooldown gives a boost, like the active reload in Gears of War."*
+
+**One meter, two ways to fill it.** Holding run fills the P-meter at `P_FILL`
+exactly as it always has, and nothing about that changed. What is new is a
+technique: let go and press again on the beat, and the gauge jumps. A second
+gauge beside the first would have been two answers to one question, which
+DESIGN.md §8 forbids — so this is not a gauge, it is a way of filling the one
+that already means *"you have run long enough to go faster"*.
+
+**It fills faster, it does not go higher**, and that is not taste. `cap` reads
+`pFull ? MAX_P : …`, so the ceiling is untouched: rhythm reaches P-speed sooner
+and never passes it. A mechanic that raised the ceiling would invalidate
+`gapTiles` 6 and `wallTiles` 4 — both measured at P-speed — and with them every
+level's proof that it can be finished.
+
+Measured, empty gauge to full, 1-1 at power 1:
+
+| how it is played | frames | |
+| --- | --- | --- |
+| hold the button | **100** | unchanged from before this existed |
+| on the beat | **78** | 22 % faster |
+| one frame early | **77** | the window straddles the beat on purpose |
+| off the beat | **491** | 36 vents — far worse than simply holding |
+| mashing | never fills | you cannot mash the run button and run at once |
+
+**A miss vents**, which is the thematically exact cost for a body that runs on
+gas, and it is what keeps the technique a choice rather than free money. The
+window is four frames of twelve and straddles the beat — one early, three late
+— because you aim at something you can see, and a hair early is the same
+mistake as a hair late.
+
+**The metronome is a puff and not a sound.** The beat is drawn as a fat, slow
+puff behind the heels. That is a limitation rather than a decision: an audible
+metronome needs a sound of its own, and a new sound is a separate argument.
+Venting *is* audible, because that is the half you must not miss.
+
+**Two things were measured and then had to be rebuilt.** The beat first rode
+the existing plume, so it would need no new drawing — but the plume's own
+rhythm accelerates from `PLUME_SLOW` to `PLUME_FAST` as the gauge fills, so the
+cue drifted against a fixed beat and landed on it only by accident. And
+`pumping` was first gated on the run cap, which goes false underneath the press:
+with the button up the cap drops to `MAX_WALK` and `vx` bleeds 2.50 → 2.44 in
+one frame, so the beat clock reset every time the player used it. Rhythm came
+out *slower* than holding, 111 frames against 100, and nothing vented at all.
+The threshold is now "faster than a walk", which one released frame cannot fall
+through.
+
+**It stays optional, and the existing gate proves it.** The power-0 bot in
+`playable.mjs` holds the button and cannot play this mechanic, so any level that
+came to require rhythm would fail the day it was written. Nothing new had to be
+built to protect DESIGN.md §5.
+
+---
+
 ## v26.08.18.31 — alkuperäisyystarkistus ei ollut koskaan verrannut mitään
 
 Tämä ei ollut listalla. Se löytyi kun kenttädatan rivimäärä piti käydä läpi

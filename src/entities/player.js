@@ -351,6 +351,66 @@ const PLUME_SLOW = 10;
 const PLUME_FAST = 2;
 
 /*
+ * PUMPING: the P-meter gains a second way to fill, and it is a rhythm.
+ *
+ * Owner, 18.8.2026: *"could a mechanic work where tapping run repeatedly gives
+ * you more speed? Not continuous mashing — a meter where hitting the right
+ * moment in the cooldown gives a boost, like the active reload in Gears of
+ * War."* The proposal and its reasoning are in IDEAS.md; this is the build.
+ *
+ * **One meter, two ways to fill it.** Holding run fills at `P_FILL` exactly as
+ * it always has and nothing about that changed — DESIGN.md §8 forbids two ways
+ * of saying the same thing, and the P-meter already means "you have run long
+ * enough to go faster". A second gauge beside it would be a second answer to
+ * one question. So this is a technique for filling the gauge, not a gauge.
+ *
+ * **It fills faster, it does not go higher.** `cap` reads `pFull ? MAX_P : …`,
+ * so the ceiling is untouched: rhythm reaches P-speed sooner and never exceeds
+ * it. That matters beyond taste — `gapTiles` 6 and `wallTiles` 4 are measured
+ * at P-speed and every level in the game is validated against them, so a
+ * mechanic that raised the ceiling would invalidate the jump budget and with it
+ * every level's proof of passability.
+ *
+ * **A miss has to cost, or it is mashing.** Gears jams the rifle, and that
+ * punishment is the entire reason the choice is interesting. Here the cost is
+ * the thematically exact one: a mistimed pump **vents**, and the gauge drops a
+ * whole segment.
+ *
+ * Measured, empty gauge to full, in 1-1 at power 1:
+ *
+ * | how it is played | frames | note |
+ * | --- | --- | --- |
+ * | hold the button | **100** | unchanged from before this existed |
+ * | on the beat | **78** | 22 % faster |
+ * | one frame early | **77** | the window straddles the beat on purpose |
+ * | off the beat | **491** | 36 vents — far worse than simply holding |
+ * | mashing | never fills | see below |
+ *
+ * **Mashing turns out to punish itself, and not the way this comment first
+ * claimed.** The estimate here was that mashing would land a third of its
+ * presses and run at a loss. What actually happens is simpler and better: with
+ * the button up half the time the body never reaches running speed at all, so
+ * `pumping` is false, no press counts, and the gauge drains to zero. You
+ * cannot mash the run button and run at the same time. The vent is what
+ * punishes a *rhythm* that is wrong, which is the interesting case.
+ *
+ * **No cue, no punishment.** Below `PLUME_START` the body does not smoke,
+ * there is no beat to hear or see, and a press does nothing at all — neither
+ * gain nor vent. You get up to speed by holding, the plume starts, and only
+ * then is there a rhythm to play. The mechanic teaches itself in that order.
+ *
+ * The beat is shown and not heard, and that is a limitation rather than a
+ * decision: the cue is a fat puff on the beat, because a metronome would need
+ * a sound of its own and a new sound is a separate argument (see the "every
+ * sound the code asks for exists" gate and DESIGN.md §8). Venting is audible
+ * because that is the half you must not miss.
+ */
+const PUMP_PERIOD = 12;
+const PUMP_WINDOW = 4;
+const PUMP_GAIN = 20;
+const PUMP_VENT = P_METER_MAX / P_SEGMENTS;
+
+/*
  * Supertähti. Long enough to be worth having — about twelve seconds, three or
  * four chunks at a run — and short enough that the level is not handed over.
  *
@@ -430,6 +490,11 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
+    /* Pumping (see PUMP_PERIOD): the beat clock, and how long the last
+     * successful pump still shows on the body. Both are plain numbers, so
+     * `savestate.js` carries them without knowing they exist. */
+    this.pumpTick = 0;
+    this.pumpFlash = 0;
     /* Minkä suuntaisessa rinteessä keho on juuri nyt (1 nousee oikealle, -1
      * vasemmalle, 0 ei rinnettä). `moveY` kirjoittaa, `slopePull` lukee. */
     this.onSlope = 0;
@@ -890,6 +955,7 @@ export class Player extends Entity {
       this.pMeter = Math.max(0, this.pMeter - P_DRAIN);   // flight burns the gauge
     }
     // Otherwise the gauge is frozen: SMB3 leaves it alone while you are airborne.
+    this.updatePump(input);
     this.ventPlume();
 
     /* -------------------------------- jump ---------------------------- */
@@ -1547,6 +1613,97 @@ export class Player extends Entity {
    * *tiheys ja koko* kertovat saman asian kahdella kanavalla samaan tapaan
    * kuin aika-ajon jako (nuoli ja etumerkki).
    */
+  /**
+   * True while there is a beat to play to: feet down, gas flowing, and running
+   * fast enough that the gauge is filling.
+   *
+   * **Running, not holding run — and not at the run cap either.** Pumping
+   * means letting go for a frame, so a condition that asked for the button
+   * would switch itself off on the frame it is meant to read. Asking for the
+   * run cap has the same fault one step removed, and it was measured: with the
+   * button up the cap drops to `MAX_WALK` and `vx` bleeds toward it at 0.06 a
+   * frame, so a single released frame takes 2.50 to 2.44 and a threshold at
+   * the cap goes false underneath the press. Rhythm came out *slower* than
+   * holding (111 frames against 100) and nothing vented at all, because the
+   * beat clock reset every time the player used it.
+   *
+   * The threshold is therefore "faster than a walk", which a one-frame release
+   * cannot fall through — from the run cap it is sixteen frames of bleed away.
+   *
+   * This was first gated on the plume (`PLUME_START`) so that the beat could
+   * ride a picture the game already draws. Measured, that was too late to
+   * matter: the gauge fills from empty in about a hundred frames and the plume
+   * does not start until two thirds of the way up, so the technique got two
+   * beats and saved ten frames. The metronome is its own puff anyway, so it
+   * can start when the filling starts — which is the moment the mechanic is
+   * about.
+   */
+  get pumping() {
+    return this.onGround && this.corked <= 0 && !this.dying
+      && Math.abs(this.vx) > MAX_WALK + 0.1;
+  }
+
+  /** Where in the beat we are, 0 at the puff. See PUMP_PERIOD. */
+  get pumpPhase() { return this.pumpTick % PUMP_PERIOD; }
+
+  /**
+   * Is a press right now on the beat?
+   *
+   * The window **straddles** the puff — one frame early, three late — because
+   * you aim at a thing you can see and being a hair early is the same mistake
+   * as being a hair late. It is still four frames of twelve in total, and that
+   * total is what keeps mashing unprofitable: a press every other frame lands
+   * a third of them here, which is `PUMP_GAIN` twice against `PUMP_VENT` four
+   * times. Widening it to half the cycle would flip that sign.
+   */
+  get pumpOnBeat() {
+    const p = this.pumpPhase;
+    return p < PUMP_WINDOW - 1 || p === PUMP_PERIOD - 1;
+  }
+
+  /**
+   * One frame of the pump.
+   *
+   * The clock only runs while there is a beat (`pumping`), and it resets when
+   * there is not — so the rhythm always starts from the puff the player just
+   * saw rather than from an invisible counter that kept running while he was
+   * in the air.
+   */
+  updatePump(input) {
+    if (!this.pumping) {
+      this.pumpTick = 0;
+      this.pumpFlash = 0;
+      return;
+    }
+    this.pumpTick++;
+    if (this.pumpFlash > 0) this.pumpFlash--;
+    /*
+     * The metronome is its own puff and not a louder frame of the plume, and
+     * that is the difference between a beat and a coincidence: the plume's own
+     * rhythm runs from `PLUME_SLOW` to `PLUME_FAST` as the gauge fills, so a
+     * cue that rode it would drift against the pump's fixed period and land on
+     * the beat only by accident. This one is fat, slow and exactly on time.
+     */
+    if (this.pumpPhase === 0) {
+      const back = this.cx - this.facing * (this.w / 2 + 1);
+      this.level.add(new Puff(this.level, back, this.y + this.h - 4, {
+        spread: 0.5, size: 5, life: PUMP_WINDOW * 3,
+      }));
+    }
+    if (!input || !input.pressed || !input.pressed.run) return;
+    if (this.pumpOnBeat) {
+      this.pMeter = Math.min(P_METER_MAX, this.pMeter + PUMP_GAIN);
+      this.pumpFlash = PUMP_WINDOW * 2;
+    } else {
+      /* Vent. A whole segment, so the loss is one the segmented gauge can
+       * actually show — half a segment would have been a number that only the
+       * code knew about. */
+      this.pMeter = Math.max(0, this.pMeter - PUMP_VENT);
+      this.level.spawnPuff(this.cx - this.facing * (this.w / 2 + 2), this.cy, true);
+      Sfx.play('sylkaisy');
+    }
+  }
+
   ventPlume() {
     if (!this.onGround || this.corked > 0 || this.dying) return;
     const t = this.pMeter / P_METER_MAX;

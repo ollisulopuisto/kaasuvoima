@@ -643,7 +643,33 @@ areenaa muokkaavan pomon tiellä. Halpa harjoitus kalliista ongelmasta.
 
 **C (ummetus on muoto)** on se joka tekee pelistä eniten itsensä näköisen.
 
-## Proposal 18.8.2026: fill the P-meter by rhythm, not by holding
+## ✔ Built 18.8.2026: fill the P-meter by rhythm, not by holding
+
+*(Built the same day it was proposed — v26.08.18.33. The proposal below stands
+as written; three things came out differently once measured, and they are
+marked inline. The build's own reasoning lives next to `PUMP_PERIOD` in
+`entities/player.js`.)*
+
+**What changed against the proposal:**
+
+- **The window is not the plume.** Riding the existing plume would have needed
+  no new drawing, but the plume's rhythm accelerates as the gauge fills, so a
+  fixed beat drifted against it. The metronome is its own puff.
+- **Pumping is not gated on the plume either.** Gated at `PLUME_START` the
+  technique got two beats and saved ten frames, because the gauge fills in
+  about a hundred frames and the plume starts two thirds of the way up. It is
+  gated on running instead.
+- **Mashing punishes itself, and not by venting.** The proposal expected
+  mashing to land a third of its presses and run at a loss. What happens is
+  simpler: with the button up half the time the body never reaches running
+  speed, so there is nothing to pump and the gauge drains. The vent punishes a
+  *wrong rhythm*, which is the interesting case.
+
+Measured: 100 frames holding, 78 on the beat, 491 off it.
+
+---
+
+## The proposal as written
 
 *(Owner: "could a mechanic work where tapping run repeatedly gives you more
 speed? Not continuous mashing — a meter where hitting the right moment in the
