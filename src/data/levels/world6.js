@@ -63,6 +63,17 @@ export const WORLD6_LEVELS = {
    */
   '6-1': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /*
+     * MAANJÄRISTYS (ks. sääosio `scenes/level.js`:n alussa), ja luulaakso on
+     * sille pelin ainoa oikea osoite: tämä on se maailma jossa maa itse on
+     * jäänteitä, ja järistys on siellä sen puhetta eikä sään oikkua.
+     *
+     * Miksi juuri 6-1 eikä 6-2: järistys on **ajoitus** — se nytkäyttää sitä
+     * mikä on maassa, ei sitä mikä on ilmassa — ja ajoitus opitaan siellä
+     * missä siihen ei kuole. 6-1 on maailman avaus ja sen maa on leveää;
+     * 6-2 on käytävä, jossa sama nytkäys olisi ollut kuoppa eikä kysymys.
+     */
+    quake: true,
     chunks: [
       'start', 'bone_stones', 'power', 'bone_grave', 'bone_wisp', 'bone_dance',
       'bone_spine', 'bone_marrow', 'bone_wisp', 'bone_grave', 'bone_ribs',
@@ -87,6 +98,14 @@ export const WORLD6_LEVELS = {
    */
   '6-2': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /*
+     * METSÄPALO (ks. `scenes/level.js`, `updateWildfire`). Palo syttyy pelaajan
+     * takaa ja leviää puusta puuhun 1,23 px/frame; juoksuvauhti on 2,5, joten
+     * pako on mahdollinen muttei ilmainen. Puu kasvaa takaisin, eli kentän
+     * lopputila on sen lähtötila — se on emergenssin raja (ROADMAP 10.8.2026)
+     * eikä siisteyttä.
+     */
+    wildfire: true,
     chunks: [
       'start', 'bone_stones', 'power', 'bone_jaws', 'bone_yokki', 'bone_dance', 'bone_marrow',
       /* `bone_grave` → `bone_kummitus`: kummituksen ensiesittely siirtyi
@@ -94,7 +113,25 @@ export const WORLD6_LEVELS = {
        * lisäys, ja etäisyys yökin esittelyyn on kokonainen palikkajono —
        * `verify.mjs` mittaa sen 20 laatan säännöllä. */
       'bone_kummitus', 'bone_dance', 'bone_coffins', 'bone_yokki_ledge', 'bone_marrow', 'bone_jaws',
-      'bone_dance', 'bone_grave', 'bone_stones', 'bone_ridge', 'run_up',
+      /*
+       * METSÄ JA SEN PALO, ja kolme palikkaa on tässä yksi lause: tiheikkö,
+       * aukio, harveneva reuna. Palo leviää `WILDFIRE_REACH`in päähän puusta
+       * puuhun, joten **aukio on se paikka jossa se pysähtyy** — metsän muoto
+       * on tämän kentän vaikeus, ja siksi tiheydet ovat tässä järjestyksessä
+       * eivätkä sekaisin.
+       *
+       * Vaihto eikä lisäys, ja jokainen kolmesta on toistoa: `bone_marrow`,
+       * `bone_jaws` ja `bone_dance` esiintyvät kaikki aiemmin tässä samassa
+       * kentässä, joten yksikään ensiesittely ei liikkunut
+       * (`tools/curriculum.mjs` mittaa sen).
+       *
+       * Luumaailma sai palon eikä ruoho, ja se on kaksi päätöstä kerralla.
+       * Teema: luussa puu on kuiva runko (`drawTree`in `bare`), eli se näyttää
+       * siltä että se palaa jo ennen kuin se palaa. Ja opetusjärjestys: palo
+       * on takaa-ajaja, ja takaa-ajajan paikka on siellä missä pelaaja osaa jo
+       * juosta.
+       */
+      'metsikko', 'aukio', 'metsanreuna', 'bone_ridge', 'run_up',
       'goal', 'goal_end',
     ],
   },

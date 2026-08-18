@@ -10,6 +10,22 @@ export function overlaps(a, b) {
 }
 
 /**
+ * A stable 32-bit seed for a string, so the same level rolls the same dice.
+ *
+ * FNV-1a. Kaksi eri asiaa tarvitsee tämän — `scale.js`in väkijoukko ja
+ * `terrain.js`in maastoprofiili — ja kolmas kopio olisi ollut se hetki jolloin
+ * kaksi kenttää alkaa arpoa eri lailla samasta tunnuksesta.
+ */
+export function seedOf(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
  * Deterministic small PRNG so decoration never flickers between frames.
  *
  * **PUOLET ARVOALUEESTA PUUTTUI, JA SE MITATTIIN 18.8.2026.**

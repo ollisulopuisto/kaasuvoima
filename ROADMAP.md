@@ -38,19 +38,38 @@ Omistajan päätös 17.8.2026: **hyväksytään tämä nyt.** Se on tietoinen va
 ilmestyvät lukemat ja koko ruudun kuva vastaan pystyvieritys tavallisessa
 kentässä — eikä vahinko.
 
-**Isompi refactor on jonossa, ei unohdettu.** Kolme asiaa jotka se sisältäisi:
+**✔ Isompi refactor tehty 18.8.2026** (v26.08.18.30). Kolme asiaa, ja kaksi
+niistä meni toisin kuin tässä arvattiin:
 
-1. **Kenttädata 15 → 16 riviin.** Yksi rivi lisää palauttaa pystyvierityksen
-   ilman että mitään muuta tarvitsee muuttaa. Koskee jokaista käsintehtyä
-   kenttää, generaattoria (`tools/gen-levels.mjs`), sääntöjä (`data/rules.js`)
-   ja päivän kentän sormenjälkeä.
-2. **Vaikeusmittarin ruutukorkeus.** `tools/difficulty.mjs` laskee ruudun
-   13 laatan korkuiseksi (208/16). Todellinen luku on nyt 15, ja sen
-   korjaaminen ajaa koko vaikeustaulun uusiksi — eli myös kartan pipit ja
-   maailmojen käyrät.
-3. **Ylimmät rivit kenttäsuunnittelussa.** Rivit 0–1 olivat käytännössä
-   piilossa; nyt ne näkyvät. Salaisuudet jotka on piilotettu ruudun yläpuolelle
-   kannattaa käydä läpi (`secrets.js`, `SKY`-kaista).
+1. ✔ **Kenttädata 15 → 16 riviin.** Pystyvieritys palasi ja se on mitattu:
+   kamera liikkuu 1-1:ssä 16 px, letterboxatussa 2-1:ssä 48 px (varaa 64) ja
+   kaistoitetun 1-2:n reittikaistan sisällä 14 px. **Rivi tuli päälle eikä alle**, ja se ei ollut
+   makuasia: alle lisätty olisi antanut vierityksen muttei yhtään lisää tilaa
+   hypylle. Päälle lisätty siirtää lattian alemmas ja kannen kauemmas, joten
+   maastopassin `MAX_LIFT` nousi yhdestä kahteen — 30,38 px varaa + 16 px = 46,4,
+   ja kahden laatan nosto vie siitä 32.
+
+   Ja se tuli **kokoajaan eikä kenttädataan**, toisin kuin tässä oletettiin:
+   palikkatiedostot ovat yhä 15 riviä lattioineen riveillä 13-14 (370
+   rivimerkintää kahdessatoista tiedostossa), ja `data/chunks.js` lisää yhden
+   rivin. `CHUNK_ROWS` ja `BAND_ROWS` ovat kaksi eri lukua, ja niiden ero on
+   koko muutoksen sisältö. Taivasrivi on **kopio ylimmästä** eikä tyhjä, koska
+   katot ja pavunvarsi jatkuvat ylöspäin.
+2. ✔ **Vaikeusmittarin ruutukorkeus.** `SCREEN_ROWS` 13 → 15, ja portti vertaa
+   sen `VIEW_H`iin — leveydellä sellainen oli, korkeudella ei. **Mitattu
+   vaikutus vaikeuslukuihin oli nolla**, eli tässä arvattu "ajaa koko taulun
+   uusiksi" ei pitänyt paikkaansa: luku vaikuttaa vain kiipeilykenttien
+   putoamisiin eikä yksikään putoaminen ollut kahden laatan päässä rajasta.
+3. **Ylimmät rivit kenttäsuunnittelussa — jäi tekemättä.** Rivi 0 on nyt
+   kokoajan lisäämä taivasrivi eikä kenttäsuunnittelijan käytettävissä, joten
+   kysymys siirtyi: se ei ole enää "mitä riveillä 0-1 on" vaan "mitä 16 rivin
+   kentän ylimmillä riveillä *kannattaisi* olla". Salaisuuksia ei käyty läpi.
+
+   **Ja yksi asia joka ei ollut tässä listassa lainkaan:** jokainen piilotiili
+   koko pelissä arvottiin uudestaan, koska ne ovat sijainnin hajautus ja jokainen
+   ruutu siirtyi rivin alaspäin. Mitattuna 98 → 79. Pikatallennuksen versio
+   nousi kakkoseen samasta syystä — tilannekuva kantaa koko ruudukon, ja vanha
+   15-rivinen palautuisi kenttään jonka alin rivi puuttuu.
 
 ---
 
@@ -441,16 +460,151 @@ kuusi varianttia yhtä vastaan, portissa lukuna). Kahdeksas variantti toiselle
 maailman 8 esiintymälle tekee väitteestä merkilleen toden sen sijaan että se
 on totta vain jos pöhöä ei lasketa kahdesti.
 
-### Pomoäänet odottavat testien korjausta, eivät päätöstä
+### Pomoäänet: este on poistunut (18.8.2026)
 
 Päätös 9.8.2026 on voimassa sellaisenaan: **oma ääni, jaetut toimintaäänet.**
-Este on muualla — puhesynteesin testit (`a spoken line is loud enough to hear`,
-`every consonant makes a sound of its own`, `a fricative is audible…`) kaatuvat
-satunnaisesti, kolmesti 16.8.2026 aikana ja aina eri lukemin. Kuuden uuden
-äänen rakentaminen sen päälle tarkoittaisi kuutta ääntä joiden portti ei kerro
-mitään. **Korjataan mittaus ensin.**
+Este oli mittauksessa, ja se on nyt korjattu — kuusi uutta ääntä voi rakentaa.
+
+Este oli puhesynteesin testeissä (`a spoken line is loud enough to hear`, `every
+consonant makes a sound of its own`, `a fricative is audible…`), jotka kaatuivat
+satunnaisesti ja aina eri lukemin. **Vika ei ollut kynnyksissä eikä
+odotusajoissa** — molempia oli jo kerran säädetty eikä kumpikaan auttanut —
+vaan siinä että mittaus mittasi ympäristöä. Kaksi mitattua syytä:
+
+* **Väylällä oli 24,25 ennen kuin lohko soitti mitään**, ja `Ambience.current`
+  oli `wind`. Tuulipeti on jatkuvaa kohinaa, ja juuri sen muotoinen oli kaatunut
+  ajo: *ikkunat … 5.62 5.62 5.62*, kolme peräkkäistä täsmälleen yhtä suurta
+  lukemaa. Vaimeneva häntä ei tee sitä. Peti herää joka kerta kun elossa oleva
+  näyttämö kutsuu `hold()`ia, eli portti riippui siitä mikä näyttämö sattui
+  olemaan pystyssä edellisen lohkon jäljiltä.
+* **Nimikkösivulle palaaminen yksin ei riitä.** Parkkeerattuna väylä oli puhdas
+  (*ennen 0.00*) ja sitten houkutusdemo lähti kesken odotuksen — *pitäjät
+  TitleScene/… DemoScene/m:level/…*, ikkunat 282,65 viisi kertaa peräkkäin,
+  19,4 sekuntia. `game.toTitle()` *ostaa* kaksikymmentä sekuntia; se ei takaa
+  mitään, ja hitaalla renderöijällä lohko kestää kauemmin.
+
+Korjaus on `tools/verify.mjs`:n `park()`: näyttämö nimikkösivulle, `Music.stop()`,
+`Ambience.stop()` ja **`startDemo` irrotettuna** mittauksen ajaksi, kaikki
+takaisin sen jälkeen. Kynnyksiin ja odotusaikoihin ei koskettu. Todistettu
+kolmella peräkkäisellä ajolla: *ääni 0,614 / 0,609 / 0,612, tausta 0,000 joka
+kerta*, eikä yhdessäkään ollut muuta pitäjää kuin nimikkösivu.
+
+**Mitä jäi jäljelle, ja se on eri vika.** Konsonanttilohkon kaksi porttia
+(`every consonant makes a sound of its own`, `a fricative is audible…`)
+raportoivat yhä noin kahdessa ajossa kolmesta *"ei mitattu (äänikello seisoi)"*,
+eli ne menevät läpi tyhjinä. Syy on mitattu ja se on toinen kuin yllä: **päätön
+Chromium renderöi ääntä ryöppyinä** — mitattu *äänikello 3,39 s / seinäkello
+1,56 s*, eli äänikello ehti yli kaksinkertaista vauhtia — ja yhden ryöpyn väliin
+mahtuu enemmän ääntä kuin analysaattorin 743 ms:n muistiin. Silloin ääntä
+oikeasti menee ohi, joten `meterFor`in `stalled` kertoo totuuden eikä ole liian
+tiukka. Korjaus ei siis ole kynnyksen säätö vaan mittaustapa joka ei voi
+menettää näytteitä: `AudioWorkletNode`, joka näkee jokaisen näytteen
+äänisäikeessä. Kokeiltu erillisellä koeajolla ja se toimii — sadan äänen ryöppy
+vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se on
+`meterFor`in vaihto kuudessa kutsupaikassa eikä mahtunut tähän erään.
 
 ## Jonossa
+
+### Render audio offline instead of listening to it live
+
+*(Owner, 18.8.2026: "should we do audio testing in some other way, if headless
+chrome is so slow and unreliable?" — queued, not started.)*
+
+**The measured problem.** Headless Chromium renders audio in bursts, not
+smoothly: measured at `äänikello 3.39 s / seinäkello 1.56 s`. An `AnalyserNode`
+remembers 743 ms, so a single burst can be longer than the window and whole
+sounds are genuinely missed. That is why `every consonant makes a sound of its
+own` and `a fricative is audible…` report *"ei mitattu"* in roughly two runs of
+three. They are not lying — the samples really were lost — but a gate that
+measures nothing two times in three is a gate that is one bad day from being
+deleted.
+
+Live listening also costs the two things that make the suite slow: waiting for
+the bus to fall silent, and waiting in real time for a 420 ms sample.
+
+**The fix is already half-built.** `tone` was split into `buildTone(ac, dest,
+…)` on 18.8.2026 so the graph can be constructed in *any* context, and
+`renderTone` renders it into an `OfflineAudioContext`. That is faster than real
+time, deterministic, and returns every sample — no analyser, no missed burst,
+no waiting for silence. Six of the SID gates already work this way.
+
+**So the rule should be inverted: offline is the default, live is the
+exception that has to justify itself.** Most audio claims are about the signal
+and not about time — ring-modulation sidebands, hard-sync harmonics, portamento
+arriving mid-note, vibrato depth, whether a spoken line is louder than the
+floor. None of those needs a live context.
+
+What genuinely stays live, and why, has to be listed rather than assumed:
+anything scheduled against the wall clock (the `live` PWM path), the sequencer
+if its clock is real, and the ambience beds, which ramp with `setTargetAtTime`
+over seconds. For that residue the fix is an `AudioWorkletNode` meter instead
+of an `AnalyserNode` — a worklet sees every block and cannot miss a burst. It
+was prototyped in a scratch harness and worked (a 100-sound burst decayed to
+zero with no missed window); it replaces `meterFor` at six call sites.
+
+**What not to do.** Do not move audio testing to a Node-side WebAudio
+implementation. It would be fast and deterministic and it would be testing a
+different synthesiser than the one the player hears, which is the one thing
+this suite exists to avoid. And do not hash rendered output as a golden file:
+it catches regressions but says nothing about *why*, and every deliberate
+tuning change would look like a failure. Assert measured properties, as
+everything else here does.
+
+**Pairs well with the split above.** Offline gates run in milliseconds, so
+`--only audio` would turn an eight-minute loop into a couple of seconds — which
+is what makes the remaining live gates worth fixing at all.
+
+### Split `tools/verify.mjs` into modules
+
+*(Owner, 18.8.2026: "if verify is twenty six thousand lines, shouldn't we make
+that part itself modular?" — queued, not started. Written in English because
+that is the language for new prose from here on; the older Finnish stays as it
+is.)*
+
+**The file's own shape already says where the seams are.** Measured:
+
+| | |
+| --- | --- |
+| lines | 26,400 |
+| `page.evaluate` blocks | **32** |
+| locally redefined `expect` helpers | **20** |
+| checks produced per run | **802** |
+| wall time for one run | ~8 min |
+
+Thirty-two is the number that decides this. The file is not one enormous
+browser function — it is already thirty-two independently evaluated units with
+Node-side glue between them. Splitting recognises a structure that exists; it
+does not invent one. Twenty copies of `expect` is the same duplication this
+repo has removed elsewhere (`seedOf`, `routeBand`, the five copies of `SOLID`).
+
+**Why it is worth doing, in costs actually paid rather than tidiness.**
+
+1. **Every question costs eight minutes.** Chasing the row numbers after the
+   15 → 16 change took about a dozen full runs. `--only audio` would have made
+   most of them seconds.
+2. **Two people cannot work in it at once.** That change had to be serialised
+   behind a subagent purely because both halves of the work would otherwise
+   have been edits to this one file. That is a throughput limit, not a
+   hypothesis.
+
+**The condition, and it is this repo's own recurring lesson.** A split must
+prove it did not silently drop a gate. The failure mode to fear is not a crash,
+it is 780 checks quietly passing where there were 802. So: snapshot the check
+*names* to a file first, split, then require the name set to be identical
+before and after. Same trick as the difficulty table and the daily fingerprint
+— the proof is a comparison, not a promise.
+
+**Shape.**
+
+- `tools/verify.mjs` stays the runner: serves the repo, launches Chromium,
+  collects `report.checks` / `report.failures`, prints, exits non-zero.
+- `tools/gates/*.js` for the browser-side blocks, imported by URL exactly the
+  way the gates already import game modules.
+- `tools/gates/harness.js` for the shared `expect`, the input builders, the
+  scene builders and the audio tap.
+- `--only <name>` and `--list` on the runner.
+
+Do it as its own change, on a green suite, with the name snapshot as its proof.
 
 ### Kenttien varianssi: mitattu tila ja se mitä se vaatii
 
@@ -488,38 +642,139 @@ Kolme askelta, halvimmasta kalleimpaan:
 2. **Rinteet generaattorin sanastoon.** Generaattori ei tunne `/`- ja
    `\`-merkkejä lainkaan, joten 26 generoitua kenttää ovat rakenteellisesti
    tasamaata. Tämä on se muutos jolla varianssi kasvaa eniten työtä kohti.
-3. **Maastopassi: maan korkeus vaihtelee palikoiden välillä.** Kokoaja
-   päättäisi kullekin palikalle lattiatason ja kirjoittaisi siirtymät
-   rinteinä. Tämä on se joka tekee kentistä maisemaa eikä käytävää — ja se on
-   myös kallein: `rules.js`, hyppybudjetti, vaikeusmittari, botti ja jokainen
-   käsintehty kenttä lukevat tällä hetkellä lattiaa rivinä 13.
+3. ✔ **Maastopassi: maan korkeus vaihtelee palikoiden välillä — tehty
+   18.8.2026** (v26.08.18.25, `src/data/terrain.js`). Kokoaja päättää kullekin
+   palikalle lattiatason ja kirjoittaa siirtymät rinteinä; kuusi kenttää sai
+   maaston, neljä jäi ilman ja jokaisen syy on sen omassa kommentissa.
 
-### Ääni: mitä SID-sanastosta jäi tekemättä
+   **Kalleusarvio oli oikea toisesta toteutuksesta.** Yksikään lueteltu
+   tiedosto ei muuttunut, koska passi ei siirrä maata vaan **nostaa pintaa ja
+   jättää kiven alle**: rivit 13-14 pysyvät kiinteinä, ja `floorProfile` on
+   osannut vaihtelevan korkeuden koko ajan — vain sen siemen oli rivissä 13, ja
+   siemen osuu edelleen.
 
-`tone` osaa nyt pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja
-suodinpyyhkäisyn (v26.08.18.14), ja JÄÄTIE käyttää niistä kolmea. Loput
-Galway/Hubbard-tekniikat ovat kirjattuina eivätkä tehtyinä:
+   **Nosto oli aluksi yksi laatta ja on nyt kaksi** (18.8.2026): kenttädata
+   kasvoi kuuteentoista riviin ja kansi nousi laatan verran. Kolme ei mahdu —
+   30,38 px varaa + 16 px lisärivi = 46,4, ja kolmen laatan nosto on 48.
+   Jokainen seuraava rivi kenttädataan ostaa tasan yhden laatan lisää.
 
-1. **Kanavan varastaminen rummulle.** Klassinen kikka: basso vaikenee kahdeksi
-   framea ja sama kanava soittaa rummun. Vaatii sekvensseriin käsitteen
-   "tämä ääni on varattu" — nyt jokainen ääni on oma polkunsa.
-2. **Rengasmodulaatio käyttöön.** Parametri on olemassa muttei yhdessäkään
-   raidassa: se on kellojen ja metallisten lyömäsoitinten ääni, ja luulaakso
-   (maailma 6) on sille luonteva koti.
-3. **Hard sync.** SIDin kolmas allekirjoitus, ja ainoa jota WebAudiolla ei saa
-   suoraan — vaatisi joko `AudioWorklet`in tai jaksotetun uudelleenkäynnistyksen.
-4. **Vibrato- ja portamento-taulukot** nuottikohtaisesti (nyt vibrato on koko
-   äänen ominaisuus, ei nuotin).
+   ✔ **Generoidut kentät saivat maaston 18.8.2026.** Passi on toinen toteutus
+   eikä toisinto: kokoaja voi työntää rinteen palikoiden väliin, generaattori ei
+   (leveys on siellä mitoitettu luku), joten se kirjoittaa rinteen tasamaan
+   päälle ja vaatii vauhdinottoa `MAX_LIFT` saraketta enemmän. Portit ja rinteen
+   muoto ovat yhteisiä. 26 kenttää generoitiin uusiksi korpus käsillä.
+
+   **Laskeva maasto on nyt mahdollinen muttei tehty.** Lisärivi tuli päälle,
+   joten ruudukon pohja on yhä lattia — mutta lisääntynyt korkeus sallisi
+   valita perustason ylempää ja notkot siitä alas. Se on suunnittelukysymys eikä
+   este.
+
+### Ääni: SID-sanasto — ✔ LOPPUUN TEHTY 18.8.2026 (v26.08.18.29)
+
+`tone` osasi pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja
+suodinpyyhkäisyn (v26.08.18.14), ja JÄÄTIE käytti niistä kolmea. Neljä
+Galway/Hubbard-tekniikkaa oli kirjattuina eikä tehtyinä; kaikki neljä ovat nyt
+tehtyjä, ja kolme niistä päätyi eri paikkaan tai eri muotoon kuin tässä luki.
+Se mikä muuttui on kirjattuna, koska se on ainoa osa joka ei ollut arvattavissa.
+
+1. ✔ **Kanavan varastaminen rummulle** (`level`, maailmojen yleisraita).
+   Sekvensserissä on nyt käsite "tämä ääni on varattu": `steal` varaa kanavan
+   PAL-ruuduissa mitatuksi ajaksi, varattu ääni vaikenee, ja pitkä nuotti
+   **katkaistaan** varauksen alkuun (`_spanOf`) — muuten varaus olisi ollut
+   pelkkä kirjanpitomerkintä. Varastetun kanavan rumpu on äänen oma aalto ja
+   oma sävel pudotettuna alas, eli sama tapa jolla se tehtiin sirulla.
+
+   **Kaksi framea oli väärä luku, ja se on mitattu.** 50 Hz:n ruutu on 20 ms,
+   ja `level`in kuudestoistaosa on 96 ms: kahden ruudun reikä katoaisi nuotin
+   oman vaimenemisen sisään. Kuusi ruutua (120 ms) nielee varastetun nuotin ja
+   seuraavan, eli reikä on kaksi kuudestoistaosaa. Portti lukee `audioDiag`ista
+   neljä osumaa ja neljä vaiennettua nuottia 32 askelta kohti — molemmat, koska
+   osumat ilman vaikenemista olisi pelkkä lisätty rumpuraita.
+
+   Koti on `level` eikä mikään muu siksi että sen basso soittaa kuudestoistaosia
+   keskeytyksettä: se on pelin ainoa basso jonka vaikeneminen on tapahtuma.
+
+2. ✔ **Rengasmodulaatio käyttöön** — **tehtaassa (maailma 4), ei luulaaksossa.**
+   Tämä kohta ehdotti luulaaksoa, ja se oli väärä ehdotus kahdesta syystä
+   joista kumpikin riittää yksin.
+
+   **`bone` on lainattu raita** (Saint-Saëns, *Danse macabre*, DESIGN.md kohta
+   1 b), eikä lainattua sävelmää järjestellä uusiksi tekniikan takia. Sääntö on
+   kirjoitettu täsmälleen tätä painetta vastaan: tekniikkalista on se voima
+   joka saa lainatun aineiston liukumaan huomaamatta joksikin muuksi.
+
+   **Ja vaikka ei olisi, se olisi sama asia kahdesti sanottuna.** `bone`in
+   ksylofoni on jo kirjoitettu ulos — kolmioaalto, `staccato` 0,34, `hold` 0,08
+   — ja rengasmoduloitu kello sen viereen olisi toinen tapa sanoa "luut
+   kalisevat". DESIGN.md kohta 8 on tehty sen estämiseksi.
+
+   Tehdas on se paikka jossa ääni on uutta tietoa: raidan rummuissa luki jo
+   "metallic sixteenths", mutta hi-hat on suodatettua kohinaa eli metallin pinta
+   eikä metalli. Alasin (`comp`, suhde 2,41) mitattiin renderöimällä: kantoaalto
+   vaimenee 7597-kertaisesti ja tilalle tulee kaksi sivunauhaa kohtiin 1,41× ja
+   3,41× perustaajuutta — kumpikaan ei ole lähelläkään kokonaislukumonikertaa,
+   ja juuri se on ero kellon ja äänen välillä.
+
+3. ✔ **Hard sync — jaksotettuna uudelleenkäynnistyksenä, ja se toimii.**
+   Tässä luki että se vaatisi joko `AudioWorklet`in tai jaksotetun
+   uudelleenkäynnistyksen. Jälkimmäinen riitti, eikä se ole approksimaatio:
+   koska `OscillatorNode` alkaa aina vaiheesta nolla, isäntäjakson mittainen
+   oskillaattori joka käynnistetään joka jakson alussa **on** vaiheen nollaus.
+
+   Ja koska "melkein hard sync" kuulostaisi vain kirkkaammalta nuotilta, väite
+   on kolme lukua signaalista eikä yksi parametri taulusta:
+
+   | väite | mitattu |
+   | --- | --- |
+   | sointiväri seuraa orjaa | spektrin huippu isännän 1. osaäänestä 4:nteen kun suhde 1 → 4 |
+   | sävelkorkeus ei liiku | perustaajuus 0,0114 synkronoituna, **0,0000** nelinkertaisella nuotilla |
+   | jakso on isännän | energiaa isännän monikerroilla 19× välien verran |
+
+   **Hinta on se joka ratkaisi paikan.** Yksi oskillaattori isäntäjaksoa kohti
+   tarkoittaa että hinta kaksinkertaistuu oktaavia kohti: pomoraidan lyijyn
+   iskut olisivat 147 solmua nuottia kohti ja `lead octave up` -osiossa 294.
+   Basson oktaavihyppy on 37 (pahimmillaan 56), joten sync meni bassoon — mikä
+   on lisäksi se ääni jonka Hubbard tästä oikeasti teki. Neljä merkittyä
+   nuottia koko pelissä, ja portti laskee sekä niiden määrän että kalleimman.
+
+4. ✔ **Vibrato- ja portamento-taulukot nuottikohtaisesti** (`marks`, kaasukehä).
+   Nuotin kolmas kenttä on avain äänen `marks`-tauluun: soitin antaa
+   oletuksen, nuotti poikkeuksen, kuten SID-ajurissa. Taulu kantaa syvyyden,
+   nopeuden, **viiveen** ja portamenton — ja samaa taulua käyttää kohta 3, eli
+   kaksi tekniikkaa jakavat yhden mekanismin eivätkä kaksi.
+
+   Kaasukehä siksi että raidan koko ajatus on ettei mikään putoa (D-lyydinen),
+   ja portamento on sama väite melodian puolella. Mitattu: liuku on perillä
+   nuotin puolivälissä (227 → 330 Hz) ja pysyy siellä; viivästetty vibrato on
+   alussa 8,4 Hz leveä ja lopussa 28,0 Hz, kun viiveetön on 28,0 Hz alusta asti.
+   Fraasi 2 (viima) on kokonaan merkitsemätön, ja se on se todiste ettei tämä
+   ole äänen ominaisuus.
+
+**Mitä tästä jäi.** `renderTone` (offline-renderöinti porttia varten) näkee
+kaiken paitsi pulssin leveysmodulaation, koska se aikataulutetaan
+`setTimeout`illa seinäkellon mukaan eikä äänikellon. Se ei ole kiireellistä —
+leveysmodulaatio on jo mitattu suoraan osaäänistä (`pulseHarmonics`) — mutta se
+on ainoa kohta `tone`ssa jonka lopputulosta portti ei kuule. `AudioWorklet`
+korjaisi sekä sen että hard syncin hinnan yhdellä kertaa, ja se on ainoa syy
+jonka takia sen vielä joskus voisi tehdä.
 
 ### Omistajan pyynnöt 17.8.2026 — vielä tekemättä
 
 1. ✔ **Vinot kentät — tehty 17.8.2026** (v26.08.18.13). 45° rinteet, oma
    pystyratkaisu, vauhti korkeudeksi. Perustelut ja luvut: PHYSICS.md ja
    CHANGELOG. **Mitä rinteistä jäi tekemättä:** loivempi 30° rinne (kaksi
-   laattaa yhtä korkeuseroa kohti), rinteet generaattorin sanastoon (nyt vain
-   käsintehdyissä kentissä), ja vihollisten oma suhde rinteeseen — kuori
-   kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä *suunnitellut*
-   sitä, ks. `slopePull` joka on tällä hetkellä vain pelaajan.
+   laattaa yhtä korkeuseroa kohti). Se vaatisi neljä uutta laattamerkkiä ja
+   puolikkaan askeleen `slopeTop`iin, eikä sitä ole aloitettu.
+
+   ✔ **Rinteet generaattorin sanastoon — tehty 17.8.2026** (`hill`, v26.08.18.24)
+   ja maastopassina 18.8.2026 (`liftTerrain`).
+
+   ✔ **Vihollisten oma suhde rinteeseen — tehty 18.8.2026.** Sääntö on yksi
+   lause ja se on nyt `physics.js`:n `slopePull`in kommentissa: **se mikä liukuu
+   tai vierii tottelee rinnettä, se mikä kävelee ei.** Kävelijä kävelee omaa
+   vauhtiaan ja se on sen koko sopimus pelaajan kanssa; potkaistu kuori ja
+   karvapallo ovat kappaleita joita on työnnetty. Sama funktio pelaajalle ja
+   kuorelle, rajat kutsujalta.
 2. ✔ **Hirviö joka vie ohjauksen — tehty 17.8.2026** (HÖSSÖTIN, v26.08.18.23).
 3. ✔ **Latautuva iso tulipallo — tehty 17.8.2026.** Nappiongelma ratkesi
    kiertämällä se: lataus on aika ilman laukausta eikä pohjassa pidetty nappi.
@@ -1142,6 +1397,20 @@ kertoo että emergentit lopputulokset ovat sen mittauksen ulkopuolella.
 | murenevat lavat murenevat vihollisen alta | luumaailman lankku ei enää kanna ketä tahansa |
 | tuuli kantaa kuoria ja vihollisia | pilvimaailman tuuli koskee kaikkea |
 | potkaistu kuori tappaa sen mihin osuu | puhdas olio ↔ olio, ei maastoa |
+| ↑ **täydennetty 18.8.2026** | ks. alla: *maa heittää, ja pallo kerää* |
+
+**Toinen erä 18.8.2026, ja molemmat ovat lakeja jotka mahtuvat kohtaan 1.**
+
+| laki | mitä muuttuu |
+| --- | --- |
+| maanjäristys nytkäyttää sitä mikä on maassa | `quakeborne`, oletus **kyllä** — tuuli kantaa valikoiden, maa päästää irti kaikesta |
+| pyörremyrsky vetää ja nostaa | kulkee tuulen `push`-tietä, eli laki 3 pätee sellaisenaan |
+| karvapallo kerää sen minkä yli se vierii | ensimmäinen laki jossa **olio tarttuu olioon**: kyyti on lainaa, kyytiläisellä ei ole laatikkoa, ja pallo päästää irti puhjetessaan |
+
+Karvapallon kolmas kohta on se joka piti kirjoittaa ennen koodia: kyytiläinen
+on ketju jonka *pallo* aloitti, joten laki 2 kieltää sitä koskemasta pelaajaan.
+Tyhjä laatikko sanoo sen rakenteellisesti — kieltoa ei tarvitse muistaa
+yhdessäkään törmäyssilmukassa.
 
 **Omistajan lisäehto murenevaan lavaan: lankun on kasvettava takaisin.**
 Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa
@@ -1207,6 +1476,37 @@ Läksy on se joka toistuu tässä tiedostossa: koe joka asettaa kappaleen itse o
 koe joka voi asettaa sen paikkaan jota pelissä ei ole olemassa. Kaksi kertaa
 tässä erässä — ensin talloportin pelaaja piikkipenkkiin, nyt tämä — ja
 molemmilla kerroilla tulos näytti uskottavalta vialta.
+
+### Löydetty 18.8.2026: alkuperäisyystarkistus ei ollut koskaan verrannut mitään
+
+Tämä on tämän repon oma pahin virhelaji — **vihreä portti joka ei mittaa
+mitään** — ja se eli DESIGN.md:n kohdan 3 ytimessä.
+
+`tools/originality.mjs` trimmasi korpuksen neljääntoista riviin muttei meidän
+ruudukkoa. Vertailuavain on ikkunan sarakkeet merkkijonoina, ja sarakkeen
+pituus on ruudukon korkeus: meillä 15 merkkiä, korpuksella 14. Kaksi eri
+pituista merkkijonoa ei voi olla sama merkkijono, joten osumia oli aina nolla.
+Jokainen `origin: 'checked'` ja päivän kenttien sormenjälki oli tyhjä väite —
+ja koodin oma kommentti väitti nimenomaan sitä mitä koodi ei tehnyt: *"Both
+grids are trimmed to the same 14 bottom rows before comparing."*
+
+**Se mikä korjattuna paljastui, on hyvä uutinen kahdesti.** Osumia tulee, mutta
+kahdeksan sarakkeen ikkunassa ne ovat tasamaata, portaita ja yksi kävelijä
+tasaisella lattialla — lajityypin aakkosia, jotka kohta 2 vapauttaa. Mitattuna
+26 kenttää 481 korpustiedostoa vasten: 640 osumaa kahdeksalla sarakkeella, 95
+kahdellatoista, 8 kuudellatoista, **0 kahdellakymmenellä**. Ja sama nolla
+saadaan toista tietä: jättämällä pelkkää maata ja ilmaa sisältävät ikkunat
+vertaamatta, koska lattia ei ole sommitelma. Kaksi eri sääntöä, sama tulos.
+
+Omistajan päätös 18.8.2026 (kolmesta vaihtoehdosta): **korjaa vertailu ja nosta
+ikkuna mitatulle rajalle**, 8 → 20. Kentät eivät muuttuneet; väite muuttui
+mitatuksi.
+
+**Mitä tästä kannattaa ottaa opiksi muualle.** Vika ei ollut logiikassa vaan
+siinä että kaksi puolta valmisteltiin eri paikoissa — korpus trimmattiin
+lukusilmukassa, meidän ruudukko ei trimmattu missään. Trimmaus on nyt yhdessä
+funktiossa jota molemmat kutsuvat. Sama kysymys kannattaa esittää jokaiselle
+vertailulle tässä repossa: **kumpi puoli valmistellaan ja missä.**
 
 ### Löydetty 17.8.2026: puhetestit mittasivat seinäkellolla ääntä (v26.08.17.93)
 

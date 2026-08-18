@@ -7,6 +7,552 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.32 — puhetesti mittasi näyttämöä, ei puhetta
+
+`a spoken line is loud enough to hear` kaatui satunnaisesti, kolmesti 16.8.2026
+aikana ja aina eri lukemin, ja se esti pomoäänet (ROADMAP). Kynnystä ja
+odotusaikaa oli jo säädetty kahdesti, kumpikin oikeasta syystä ja kumpikaan ei
+auttanut. **Tällä kertaa mitattiin ensin.**
+
+Kaatuneen ajon rivi luettiin loppuun asti — *näyttämö WorldMapScene … ikkunat
+65.11 65.11 65.11 13.42 8.96 5.62 5.62 5.62* — ja siinä oli kaksi asiaa jotka
+vaimeneva ääni ei voi tehdä: kolme peräkkäistä **täsmälleen** yhtä suurta
+lukemaa, ja lopuksi tasainen taso eikä nollaa. Uusi diagnostiikkarivi kertoi
+kumman: väylän taso mitattiin **ennen** kuin lohko soitti mitään, ja se oli
+*24,25 @ WorldMapScene/m:-/a:wind*. Lohkon oma tahallinen "punainen" (neljä
+ääntä) oli murto-osa siitä mitä odotus todella kuunteli, ja `Ambience`in
+tuulipeti — jatkuvaa kohinaa, ei häntä — oli päällä. Peti herää joka kerta kun
+elossa oleva näyttämö kutsuu `hold()`ia, eli portin lukema riippui siitä mikä
+näyttämö sattui jäämään pystyyn edellisestä lohkosta.
+
+Ensimmäinen korjausyritys — peli nimikkösivulle, `Music.stop()`,
+`Ambience.stop()` — puhdisti väylän (*ennen 0.00*) ja paljasti toisen puoliskon:
+**houkutusdemo lähti kesken odotuksen** ja alkoi soittaa samalle väylälle
+(*pitäjät TitleScene/… DemoScene/m:level/…*, ikkunat 282,65 viisi kertaa,
+19,4 sekuntia). `game.toTitle()` *ostaa* kaksikymmentä sekuntia; se ei takaa
+mitään. Siksi demo ei ole enää ajastettu vaan **irrotettu**: `startDemo` on
+mittauksen ajan tyhjä ja palautetaan lopuksi.
+
+Kynnyksiin ja odotusaikoihin ei koskettu, ja tahallinen punainen on yhä
+tallella. Todiste on kolme peräkkäistä ajoa, koska yksi vihreä ei kerro mitään
+satunnaisesta viasta: **ääni 0,614 / 0,609 / 0,612, tausta 0,000 joka kerta**,
+eikä yhdessäkään ollut muuta pitäjää kuin nimikkösivu.
+
+Sama parkki annettiin myös konsonantti- ja pomoäänilohkoille, jotka olivat
+tehneet saman käsin ja vajaammin. Niistä kaksi (`every consonant makes a sound
+of its own`, `a fricative is audible…`) menee yhä noin kahdessa ajossa kolmesta
+läpi tyhjänä — *"ei mitattu (äänikello seisoi)"* — ja se on **eri vika**, ei
+sama: päätön Chromium renderöi ääntä ryöppyinä (mitattu *äänikello 3,39 s /
+seinäkello 1,56 s*), ja yhden ryöpyn väliin mahtuu enemmän ääntä kuin
+analysaattorin 743 ms:n muistiin. Ääntä menee siis oikeasti ohi, joten
+"ei mitattu" on totuus eikä liian tiukka raja. Korjaus on mittaustapa joka ei
+voi menettää näytteitä (`AudioWorkletNode`); se on kokeiltu toimivaksi ja
+kirjattu ROADMAPiin.
+
+Samassa erässä `tools/verify.mjs`:n kenttäkiinnikkeet siirrettiin kuudentoista
+rivin ruudukolle: lattia riville 14, kaistat 16/32, pystykoekenttä 48 riville,
+ja `4-F`:n möykkyrivin punainen vaihtui `4-2`:een koska salaisuuksien hajautus
+arpoi uudelleen. Yksi portti (`potkaistu kuori kiihtyy alamäkeen`) ei ollut
+mitannut mitään: kuori syntyi kahdeksan pikseliä lattian sisään, luki lattian
+seinäksi ja pomppi paikallaan koko kokeen ajan — nyt jalat pannaan pinnalle
+`toShell`in jälkeen, ja alamäki nostaa vauhdin 3,4:stä 4,76:een. Sen pari
+(`kävelijä kävelee samaa vauhtia myös rinteessä`) ei ollut sekään: kävelijä ei
+ehtinyt rinteeseen asti yhdeksässäkymmenessä framessa, joten koe vertasi kahta
+tasamaata. Molemmat lukevat nyt myös sen, montako framea rinteessä oikeasti
+kuljettiin.
+
+---
+
+## v26.08.18.33 — pumping: the P-meter has a rhythm
+
+Owner, 18.8.2026: *"could a mechanic work where tapping run repeatedly gives you
+more speed? Not continuous mashing — a meter where hitting the right moment in
+the cooldown gives a boost, like the active reload in Gears of War."*
+
+**One meter, two ways to fill it.** Holding run fills the P-meter at `P_FILL`
+exactly as it always has, and nothing about that changed. What is new is a
+technique: let go and press again on the beat, and the gauge jumps. A second
+gauge beside the first would have been two answers to one question, which
+DESIGN.md §8 forbids — so this is not a gauge, it is a way of filling the one
+that already means *"you have run long enough to go faster"*.
+
+**It fills faster, it does not go higher**, and that is not taste. `cap` reads
+`pFull ? MAX_P : …`, so the ceiling is untouched: rhythm reaches P-speed sooner
+and never passes it. A mechanic that raised the ceiling would invalidate
+`gapTiles` 6 and `wallTiles` 4 — both measured at P-speed — and with them every
+level's proof that it can be finished.
+
+Measured, empty gauge to full, 1-1 at power 1:
+
+| how it is played | frames | |
+| --- | --- | --- |
+| hold the button | **100** | unchanged from before this existed |
+| on the beat | **78** | 22 % faster |
+| one frame early | **77** | the window straddles the beat on purpose |
+| off the beat | **491** | 36 vents — far worse than simply holding |
+| mashing | never fills | you cannot mash the run button and run at once |
+
+**A miss vents**, which is the thematically exact cost for a body that runs on
+gas, and it is what keeps the technique a choice rather than free money. The
+window is four frames of twelve and straddles the beat — one early, three late
+— because you aim at something you can see, and a hair early is the same
+mistake as a hair late.
+
+**The metronome is a puff and not a sound.** The beat is drawn as a fat, slow
+puff behind the heels. That is a limitation rather than a decision: an audible
+metronome needs a sound of its own, and a new sound is a separate argument.
+Venting *is* audible, because that is the half you must not miss.
+
+**Two things were measured and then had to be rebuilt.** The beat first rode
+the existing plume, so it would need no new drawing — but the plume's own
+rhythm accelerates from `PLUME_SLOW` to `PLUME_FAST` as the gauge fills, so the
+cue drifted against a fixed beat and landed on it only by accident. And
+`pumping` was first gated on the run cap, which goes false underneath the press:
+with the button up the cap drops to `MAX_WALK` and `vx` bleeds 2.50 → 2.44 in
+one frame, so the beat clock reset every time the player used it. Rhythm came
+out *slower* than holding, 111 frames against 100, and nothing vented at all.
+The threshold is now "faster than a walk", which one released frame cannot fall
+through.
+
+**It stays optional, and the existing gate proves it.** The power-0 bot in
+`playable.mjs` holds the button and cannot play this mechanic, so any level that
+came to require rhythm would fail the day it was written. Nothing new had to be
+built to protect DESIGN.md §5.
+
+---
+
+## v26.08.18.31 — alkuperäisyystarkistus ei ollut koskaan verrannut mitään
+
+Tämä ei ollut listalla. Se löytyi kun kenttädatan rivimäärä piti käydä läpi
+tiedosto tiedostolta.
+
+`tools/originality.mjs` trimmasi **korpuksen** neljääntoista riviin muttei
+meidän ruudukkoa. Avain on ikkunan sarakkeet merkkijonoina, ja sarakkeen pituus
+on ruudukon korkeus — eli meidän avaimet olivat 15 merkin sarakkeita ja
+korpuksen 14 merkin. **Ne eivät voineet olla samoja merkkijonoja.** Tarkistus
+palautti aina nollan, ja se nolla luettiin todisteeksi: jokainen
+`origin: 'checked'` ja päivän kenttien sormenjälki oli tyhjä väite. Koodin oma
+kommentti väitti nimenomaan sitä mitä koodi ei tehnyt (*"Both grids are trimmed
+to the same 14 bottom rows"*).
+
+Korjattuna osumia tulee — ja se mitä ne ovat, ratkaisi säännön. Kahdeksan
+sarakkeen ikkunassa osumat ovat tasamaata, portaita ja **yksi kävelijä
+tasaisella lattialla**: lajityypin aakkosia, jotka DESIGN.md kohdan 2 mukaan
+ovat vapaita. Mitattuna, 26 kenttää 481 korpustiedostoa vasten: 640 osumaa
+kahdeksalla sarakkeella, 95 kahdellatoista, 8 kuudellatoista, **0
+kahdellakymmenellä**. Sama nolla saadaan toista tietä — jättämällä pelkkää
+maata ja ilmaa sisältävät ikkunat vertaamatta, koska lattia ei ole sommitelma —
+ja kaksi eri sääntöä samaan tulokseen on ristiintarkistus eikä sattuma.
+
+Omistajan päätös: korjaa vertailu ja nosta ikkuna mitatulle rajalle. Väite on
+nyt vahvempi kuin se jonka tiedosto luuli tekevänsä: **yksikään ruudullinen
+mitään sijoitettua sisältävä pätkä ei toistu korpuksesta** — ja tällä kertaa se
+on mitattu. 26 generoitua kenttää ja 1096 päivän kenttää tarkistettiin korpusta
+vasten uudestaan, osumia 0.
+
+Hinta sanotaan ääneen: leveämpi ikkuna päästää läpi lyhyemmän lainauksen.
+Kahdeksan saraketta ei kuitenkaan **voinut** löytää sellaista, koska se ei
+erottanut lainausta lattiasta — mittaamaton tiukkuus ei ole tiukkuutta.
+
+---
+
+## v26.08.18.30 — kuudestoista rivi, ja se mitä sen alta paljastui
+
+Kenttädata kasvoi viidestätoista rivistä kuuteentoista. ROADMAP lupasi siitä
+yhden asian ja se toteutui; matkalla löytyi kaksi asiaa joita se ei luvannut,
+ja jälkimmäinen on tämän erän tärkein rivi.
+
+**PYSTYVIERITYS PALASI.** Ikkuna on 240 px ja kenttä oli täsmälleen sen
+korkuinen, joten kamera ei voinut liikkua pystysuunnassa lainkaan siitä asti
+kun HUD-nauha purettiin (17.8.2026). Nyt kenttä on 256 px ja liikkumavaraa on
+**16 px** — letterbox-kentissä 64 px, koska niiden ikkuna on 192.
+
+Mitattu eikä oletettu: botti juoksee ja hyppää kentän läpi, ja kamera liikkuu
+1-1:ssä 0…16, 2-1:ssä (letterbox) 16…64 ja 1-2:n reittikaistan sisällä 14 px.
+
+**Rivi tuli päälle eikä alle**, ja se on koko ero: alle lisätty rivi olisi
+antanut vierityksen muttei yhtään lisää tilaa hypylle. Päälle lisätty siirtää
+lattian alemmas ja **kannen kauemmas**, joten maastopassin `MAX_LIFT` nousi
+yhdestä kahteen. Mitattu eikä arvattu: korkein pieruhyppy jätti 1-1:ssä 30,38
+px kanteen, lisärivi antaa 16 px lisää, ja kahden laatan nosto (32 px) jättää
+siitä 14. Kolme ei mahtuisi. **Jokainen seuraava rivi kenttädataan ostaa tasan
+yhden laatan lisää.**
+
+Ja se tulee **kokoajassa eikä kenttädatassa**: palikkatiedostot ovat yhä
+viisitoista riviä lattioineen riveillä 13-14 — siellä on 370 rivimerkintää
+kahdessatoista tiedostossa — ja kokoaja lisää yhden rivin. Kaksi nimeä,
+`CHUNK_ROWS` ja `BAND_ROWS`, ja niiden ero on muutoksen koko sisältö.
+
+**Taivasrivi on kopio ylimmästä eikä tyhjä rivi**, ja se on mitattu: palikoiden
+rivillä 0 on tasan kaksi merkkiä koko sanastossa, `#` 82 palikassa (katot) ja
+`v` yhdessä (pavunvarsi). Kumpikin jatkuu ylöspäin. Tyhjä rivi olisi jättänyt
+katon päälle ryömintätilan ja pysäyttänyt varren riviä ennen kaistan rajaa —
+portti sanoi jälkimmäisen heti: *"nothing leads into the sky band"*, 1-2, 2-2
+ja 3-2.
+
+**GENEROIDUT KENTÄT SAIVAT MAASTON.** Passi on toinen toteutus eikä toisinto,
+ja ero on siinä mitä kutsujalla on käsissään: kokoaja pitelee palikkalistaa ja
+voi **työntää rinteen väliin**, generaattori kirjoittaa ruudukkoon jonka leveys
+on mitoitettu luku — joten se **kirjoittaa rinteen tasamaan päälle** ja vaatii
+siksi vauhdinottoa `MAX_LIFT` saraketta enemmän. Portit, rinteen muoto ja se
+peruslause että maa nousee ja jättää kiven alle ovat yhteisiä. Ulkoilmateemat
+vain, samasta paikasta luettuna kuin mäki lukee omansa.
+
+26 kenttää generoitiin uusiksi korpus käsillä, 16-rivisinä ja maastolla.
+
+**Ja se mitä varianssimittari sanoo koko työstä.** Omistajan alkuperäinen
+valitus 17.8.2026 oli *"kentissä on edelleen liian vähän varianssia! Ne
+tuntuvat tasaisilta ja toisteisilta"*, ja `tools/variety.mjs` mittasi silloin:
+uutuus 38 % (w8) … 82 % (w5), neljä maailmaa kahdeksasta toistaa itseään
+mediaania enemmän, ja **kuudessa kahdeksasta loppupuoli on alkupuolta
+toistavampi**. Nyt: uutuus **68 % … 99 %**, itseään toistavia yhä neljä, ja
+loppupuoli on toistavampi enää **neljässä kahdeksasta**. Maastopassi
+käsintehdyissä ja generoiduissa kentissä on se mikä muutti nämä luvut.
+
+**RUUDUN KORKEUS LASKETAAN OIKEIN.** `tools/difficulty.mjs`in `SCREEN_ROWS` oli
+13 (= vanha `VIEW_H` 208 / 16) vielä sen jälkeen kun ikkuna kasvoi 240:een. Luku
+ei kaada mitään eikä näy missään — se vain lukee kiipeilykentän putoamiset kaksi
+laattaa liian aikaisin kuvan ulkopuolelle vieviksi. Nyt 15, ja **portti vertaa
+sen `VIEW_H`iin**; leveydellä sellainen on ollut pitkään, korkeudella ei ollut.
+Mitattu vaikutus vaikeuslukuihin: nolla. Se on silti korjaus — luku joka on
+väärin ja jonka vaikutus sattuu olemaan nolla on luku joka on väärin.
+
+**RINNE KOSKEE MUUTAKIN KUIN PELAAJAA.** ROADMAP kirjasi puuttuvan puoliskon:
+*"kuori kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä
+suunnitellut sitä."* Suunnitelma on yksi lause: **se mikä liukuu tai vierii
+tottelee rinnettä, se mikä kävelee ei.** Kävelijä kävelee omaa vauhtiaan ja se
+on sen koko sopimus pelaajan kanssa; potkaistu kuori ja karvapallo ovat
+kappaleita joita on työnnetty, ja kappale rinteessä on painovoimaa. Sääntö
+siirtyi `player.js`:stä `physics.js`:ään yhtenä funktiona — sama mäki, sama
+veto, rajat kutsujalta.
+
+---
+
+## v26.08.18.29 — SID-sanasto loppuun
+
+ROADMAPin lista "mitä SID-sanastosta jäi tekemättä" oli neljä kohtaa, ja ne
+olivat siellä siksi että jokaisen voi *melkein* tehdä: rumpu basson päällä on
+melkein varastettu kanava, korkeampi nuotti on melkein hard sync, ja äänen
+vibrato on melkein nuotin vibrato. Nyt ne ovat tehtyjä, ja **kolme neljästä
+päätyi eri paikkaan tai eri lukuun kuin ROADMAPissa luki** — ne kohdat ovat
+tässä, koska ne ovat se osa jota diff ei kerro.
+
+**Ensin työkalu, jota ilman mikään tästä ei ole tarkistettavissa.** `tone`
+rakentaa graafinsa nyt annettuun kontekstiin (`buildTone`), joten sama koodi
+joka soittaa pelin soittaa myös `renderTone`n offline-kontekstiin — ääni on
+taulukko eikä korvahavainto. Kaikki alla olevat luvut on renderöity samasta
+koodista jonka pelaaja kuulee, eikä mallista siitä.
+
+**1. Kanavan varastaminen (`level`).** Sekvensserissä on käsite "tämä ääni on
+varattu": `steal` varaa kanavan PAL-ruuduissa, varattu ääni vaikenee, ja pitkä
+nuotti katkaistaan varauksen alkuun (`_spanOf`). Ilman katkaisua varaus olisi
+ollut kirjanpitomerkintä, jonka läpi basso olisi soinut.
+
+*Reikä on se ääni.* Rumpu basson **päällä** on paksumpi; rumpu basson
+**tilalle** on isku, koska pohja katoaa ja tulee takaisin. Sitä ei saa millään
+miksausratkaisulla, ja siksi tekniikka on tässä pelissä muutakin kuin nostalgiaa
+— kanavia meillä on niin monta kuin jaksaa rakentaa.
+
+ROADMAP sanoi "kahdeksi framea". **Se on väärä luku tässä tempossa**, ja se
+mitattiin: ruutu on 20 ms, `level`in kuudestoistaosa 96 ms, joten kahden ruudun
+reikä katoaisi nuotin oman vaimenemisen sisään. Kuusi ruutua on 120 ms ja
+nielee varastetun nuotin sekä seuraavan. Portti lukee `audioDiag`ista **4
+osumaa ja 4 vaiennettua nuottia** 32 askelta kohti — molemmat, koska osumat
+ilman vaikenemista olisi lisätty rumpuraita uudella nimellä.
+
+Koti on yleisraita eikä erikoisraita: sen basso soittaa kuudestoistaosia
+keskeytyksettä, eli se on pelin ainoa basso jonka vaikeneminen on tapahtuma.
+Ja se on eniten kuultu raita, joten tekniikka joutuu ansaitsemaan paikkansa.
+Askeleet 6 ja 13 ovat tahdin kaksi kuudestoistaosaa joilla rumpusetti ei lyö —
+setti ei voi soittaa siellä, ja basso voi.
+
+**2. Rengasmodulaatio — tehtaassa (maailma 4), ei luulaaksossa.** ROADMAP
+ehdotti luulaaksoa. Se oli väärä ehdotus kahdesta syystä, ja kumpikin riittäisi
+yksin: `bone` on **lainattu raita** (Saint-Saëns, *Danse macabre*, DESIGN.md
+kohta 1 b), eikä lainattua sävelmää järjestellä uusiksi tekniikan takia — ja
+vaikka olisi oma, `bone`in ksylofoni on jo kirjoitettu ulos aaltomuotona ja
+verhokäyränä, joten rengasmoduloitu kello olisi toinen tapa sanoa "luut
+kalisevat" (DESIGN.md kohta 8).
+
+Tehtaan rummuissa luki jo "metallic sixteenths", mutta hi-hat on suodatettua
+kohinaa — metallin pinta eikä metalli. Alasin on `comp`, suhde 2,41, ja
+mitattuna se on **tulo eikä sekoitus**: kantoaalto vaimenee 7597-kertaisesti ja
+tilalle jää kaksi sivunauhaa kohdissa 1,41× ja 3,41× perustaajuutta. Kumpikaan
+ei ole lähelläkään kokonaislukumonikertaa, ja juuri se on ero kellon ja äänen
+välillä.
+
+**3. Hard sync — jaksotettuna uudelleenkäynnistyksenä, ja se toimii.** ROADMAP
+piti tätä ainoana jota WebAudiolla ei saa suoraan. Reitti oli oikea: koska
+`OscillatorNode` alkaa aina vaiheesta nolla, isäntäjakson mittainen
+oskillaattori joka käynnistetään joka jakson alussa **on** vaiheen nollaus,
+eikä approksimaatio siitä. Kolme lukua, koska "kirkkaampi ääni" olisi mennyt
+läpi yhdellä:
+
+| väite | mitattu |
+| --- | --- |
+| sointiväri seuraa orjaa | huippu isännän 1. osaäänestä 4:nteen kun suhde 1 → 4 |
+| sävelkorkeus ei liiku | perustaajuus 0,0114 synkronoituna, **0,0000** nelinkertaisella nuotilla |
+| jakso on isännän | energiaa isännän monikerroilla 19× välien verran |
+
+**Hinta ratkaisi paikan, ja se on mitattu.** Yksi oskillaattori isäntäjaksoa
+kohti tarkoittaa että hinta kaksinkertaistuu oktaavia kohti: pomoraidan lyijyn
+iskut maksaisivat 147 solmua nuottia kohti ja `lead octave up` -osiossa 294.
+Basson oktaavihyppy maksaa 37, pahimmillaan 56. Sync meni siis bassoon — mikä
+on lisäksi se ääni jonka Hubbard tästä oikeasti teki. Neljä merkittyä nuottia
+koko pelissä, ja portti laskee sekä määrän että kalleimman.
+
+**4. Vibrato- ja portamento-taulukot (`marks`, kaasukehä).** Nuotin kolmas
+kenttä on avain äänen `marks`-tauluun: soitin antaa oletuksen, nuotti
+poikkeuksen — SID-ajurin taulukko sellaisenaan. Taulu kantaa syvyyden,
+nopeuden, **viiveen** ja portamenton, ja kohta 3 käyttää samaa taulua. Kaksi
+tekniikkaa, yksi mekanismi.
+
+Kaasukehä siksi että raidan koko ajatus on ettei mikään putoa (D-lyydinen), ja
+portamento on sama väite melodian puolella. Mitattu: liuku on perillä nuotin
+puolivälissä (227 → 330 Hz) ja **pysyy** siellä — liuku joka ei ehdi perille on
+glissando eikä portamento. Viivästetty vibrato on alussa 8,4 Hz leveä ja
+lopussa 28,0 Hz, kun viiveetön on 28,0 Hz alusta asti. Fraasi 2 (viima) on
+kokonaan merkitsemätön, ja se on todiste ettei tämä ole äänen ominaisuus.
+
+Kuusi uutta porttia, ja kaikki kuusi lukevat signaalia eivätkä taulua.
+
+---
+
+## v26.08.18.28 — karvapallo kerää: katamari kaasukehässä
+
+Omistaja 18.8.2026: *"muokkaa jotain vihollista niin, että se voi tarttua
+yhteen toisen vihollisen kanssa ja liikkua yhdessä; niiden koko kasvaa
+spiraalin muodossa eli vähän kuin katamari damacyssä mutta siten, että
+vihollinen itse kasvattaa itsestään isomman."*
+
+**Karvapallo, eikä uusi laji.** Pyyntö luettiin kirjaimellisesti ("muokkaa
+jotain vihollista"), ja karvapallo on se ainoa jolle tämä sopii ilman uutta
+lakia: se on pallo, se vierii jo, se kasvattaa vauhtiaan jo — ja se **kuolee
+itsestään** (`KARVA_LIFE`, seinään puhkeaminen). Kasvava pallo on siis
+tilapäinen tapahtuma eikä kentän uusi pysyvä muoto. Nimikin sanoo sen:
+karva*pallo*, ja katamari on juuri se mitä karvapallo oikeassa maailmassa tekee.
+
+Pallo nappaa yli vierimänsä kävelijät, kuoret, piikkiukot, korkkiukot ja yökit
+(`rollable`, oletus ei — kyky eikä lajilista), kasvaa neljä pikseliä kutakin
+kohti neljään asti, ja kyytiläiset asettuvat **arkhimedeen spiraalille**:
+mitattuna säteet 19 · 24 · 29 · 34 px, ja ne kiertävät pallon oman pyörinnän
+mukana. Kasvun resepti on pomon (`applyScale`) pienempänä — jalat ja keskiviive
+pysyvät — ja skaalaus on naapurikuvapiste omaan puskuriin, sama vastaus kuin
+pelaajan voimatasoilla 2…5.
+
+**Kolme rajaa, ja jokainen oli jo kirjoitettu jonnekin muualle.**
+
+1. **Kyyti on lainaa, ei tappo.** Puhjetessaan pallo päästää irti ja
+   kyytiläiset putoavat maahan elävinä — sama sääntö kuin murenevalla laudalla
+   ja kuuran jäljellä. Siitä seuraa myös se mikä tekee tästä pelattavan: pallon
+   annettu vieriä **siivoaa reitin hetkeksi** mutta kasvaa samalla isommaksi
+   esteeksi. Kauppa on pelaajan, ja hän näkee molemmat puolet koko ajan.
+2. **Ei uutta vahingon lähdettä.** Kyytiläisen laatikko on nolla × nolla, eli
+   mikään törmäyssilmukka ei löydä sitä. Laki 2 (*vain oma ketju satuttaa*)
+   pitää siis rakenteellisesti eikä muistamalla: pelaajaa satuttaa yhä
+   täsmälleen se sama pallo jonka hän näkee tulevan.
+3. **Ei viittauksia olioiden välillä.** Kyytiläinen kantaa pallon **tunnusta**
+   eikä pallon oliota, koska `savestate.js` kopioi jokaisen oman kentän —
+   oliokenttä palautuisi prototyypittömänä kaksoiskappaleena eikä yksikään
+   portti huomaisi sitä. Samalla korjattiin se mikä teki tunnuksista
+   turvallisia: `claimIds` nostaa laskurin palautettujen tunnusten yli, koska
+   laskuri ei ole tallenteessa mutta tunnukset ovat.
+
+Yksi vika löytyi portista eikä pelistä: puhjennut pallo ehti vielä yhden
+`update`in ennen kuin se poistettiin listalta, ja keräsi juuri päästämänsä
+takaisin — jolloin jäljelle jäi kyytiläisiä joiden kyyti oli poissa, eli
+näkymättömiä olioita ilman laatikkoa. *"Vapaana 1"* kolmesta.
+
+Viisi uutta porttia.
+
+---
+
+## v26.08.18.27 — potenssit, arpova lohko ja kuolema joka on tämän hahmon oma
+
+Kolme omistajan pyyntöä, ja kaksi niistä korjaa aiemman päätöksen sen omilla
+ehdoilla.
+
+**PISTEET OVAT KAKKOSEN POTENSSEJA.** Omistaja: *"varmista että kaikki pisteet
+ovat 2:n potensseja, nyt vihollisten tappamisesta tulee välillä 100, 200 jne."*
+Taulukko oli neliöitä (v26.08.18.11), ja se ratkaisi saman ongelman
+puolittain — **100 on neliö**, ja niin ovat 400 ja 900, eli neliöllisyys salli
+täsmälleen ne genren pyöreät luvut joita vastaan koko sääntö kirjoitettiin.
+Nyt 32 · 128 · 256 · 512 · 1024 · 2048 · 4096 · 8192, ketju 1 · 2 · 4 … 128, ja
+pomot 2¹³…2²⁰. Potenssi kertaa potenssi on potenssi, joten *jokainen* ruudulle
+pomppaava luku on potenssi riippumatta siitä minkä monen kertoimen läpi se tuli.
+
+Hinta sanotaan ääneen `points.js`:ssä: **asteikko on karkea.** Kahden
+vihollisluokan ero on aina tasan kaksinkertainen, eikä väliarvoja ole — 16 ja
+20 olivat neliöinä naapureita, 256 ja 512 eivät ole. Räikeimmin se näkyy
+pomoissa: kahdeksas pomo on miljoona, koska kahdeksan pomoa mahtuu
+potenssiasteikolle vain kahdeksan potenssin päähän toisistaan.
+
+**KYSYMYSLOHKO ANTAA 1…5 KOLIKKOA.** Omistajan luku. Määrä on **hajautettu
+sijainnista** eikä arvottu ajossa, ja se on pakko eikä makuasia: kolikot ovat
+aikaa (v26.08.18.24), joten `Math.random()` tekisi kentän aikabudjetista
+arpapelin ja `tools/playable.mjs` mittaisi joka ajolla eri kenttää. Nyt yllätys
+on kentässä eikä kellossa — lohko antaa saman verran tänään, huomenna ja
+jokaiselle pelaajalle.
+
+Arpa on `hashNoise` eikä `hashPlace`, ja ero on mitattu: `hashPlace` on se
+tahallaan jäädytetty rikkinäinen versio jonka jakauma on vino, ja sillä pelin
+97 kysymyslohkosta **yksikään** ei olisi antanut neljää tai viittä (42 · 38 ·
+17 · 0 · 0). `hashNoise`illa jakauma on 19 · 17 · 22 · 26 · 13. Viisi kolikkoa
+on yksi kilahdus ja viisi porrastettua lentoa, ei viittä päällekkäistä ääntä.
+
+**KUOLEMA EI OLE ENÄÄ HYPPY.** Omistaja: *"tee pelaajahahmon kuolinanimaatioista
+personallisempia … ehkä kaasu paisuu ja poksahtaa? tai hahmo kaatuu suorilta
+jaloilta selälleen silmät ristissä?"* `Player.state()` palautti kuolevalle
+`'jump'`, eli kuolema oli **hyppy jonka fysiikka oli riisuttu** — genren kuolema
+kirjaimellisesti.
+
+Molemmat omistajan ideoista ovat saman animaation kaksi puoliskoa, koska tämä
+hahmo kulkee kaasulla: jäykistyminen on se hetki jolloin kaasu lakkaa
+liikkumasta, ja poksahdus on se mihin se johtaa. Kolme kuvaa 141 framen
+ikkunassa — **jäykkä** (jalat suorina yhdessä, kädet sivuille ojossa, silmät
+ristissä), **paisuu** (vyötärölle kasvaa kaasupullistuma, eli ajastin jonka
+näkee), **tyhjä kuori** (poksahtanut, litteä, kädet retkottavat). Poksahdus on
+kahdeksan kaasupilveä ja `pop` — sama ääni kuin kuplan puhkeamisella, koska se
+on sama tapahtuma isompana.
+
+Fysiikka on tavuakaan muuttamatta ennallaan (`vy = -6,6`, painovoima 0,32), eli
+jokainen kuolemasta mitattu asia mittaa yhä samaa asiaa. Uusi on vain kuva —
+ja `verify.mjs` mittaa sen neljällä väitteellä, joista ensimmäinen on se joka
+olisi muuten rapistunut hiljaa: kuoleva ei näytä hyppäävältä, mitattuna
+pikseleistä.
+
+---
+
+## v26.08.18.26 — neljä säätä ja metsä joka palaa
+
+Peli on tuntenut yhden sään: tuulen, joka on aavikon yön puuska ja pilvimaailman
+laki 3 (*tuuli kantaa kaikkea*). Nyt niitä on neljä, ja jokainen niistä on
+rakennettu tuulen mallista — **kenttäkohtainen lippu, johdettu kellosta,**
+mikä on myös syy siihen ettei `savestate.js` tarvitse niistä riviä: palautettu
+kello palauttaa sään.
+
+Yksi kenttä kutakin, ja se on ROADMAPin oma sääntö juoksuhiekasta luettuna
+uudelleen: *uhka joka on joka kentässä on maastoa, ja maasto ei ole uhka.*
+
+**MAANJÄRISTYS (6-1).** Maa tärisee pystyyn ja **nytkäyttää kerran** sen minkä
+se kannattelee. Ilmassa oleva ei tunne sitä lainkaan, ja siitä tulee koko
+mekaniikka: järistys on kysymys ("olenko juuri nyt maassa?") eikä hidaste.
+`quakeborne` on oletuksena **kyllä**, toisin kuin `windborne` — ja se on väite
+eikä epäjohdonmukaisuus: tuuli kantaa, ja kantaminen riippuu keveydestä; maa ei
+kanna vaan päästää irti, eikä painavuus ole siihen vastaus. Poikkeuksia ovat
+vain ne jotka eivät seiso maassa (nielu putkessa, torvi seinässä) ja ne jotka
+*ovat* huone (pomo, aurinko, kuu, papuparooni).
+
+**PYÖRREMYRSKY (7-3).** Suppiloita jotka vaeltavat kenttää vasemmalle kahden
+ruudun välein. **Ulkokehä vetää, ydin nostaa** — ja se mitä näet on se mikä
+koskee: piirretyn suppilon leveys ylhäällä on `TWISTER_REACH` ja alhaalla
+`TWISTER_CORE`, eli tasan ne kaksi lukua joilla veto lasketaan. Kulkee tuulen
+`push`-tietä, joten laki 3 pätee: se kantaa kuoria ja vihollisia. Ääni on
+tuulen peti, koska suppilo on tuulta (DESIGN.md kohta 8).
+
+**TULIMYRSKY (4-3), ja se kohta jossa portti oli oikeassa ja perustelu
+väärässä.** Kekäle oli aluksi kohtauksen piirtämä sade — puhdas funktio
+kellosta ja paikasta, ei olioita, ei riviä tallennukseen — ja se kaatoi portin
+*"jokainen kenttä on läpäistävissä voimatasolla 0"*: 4-3 jäi sarakkeeseen 107.
+Se portti **riisuu kentästä viholliset ja vaarat**, koska sen väite koskee
+maastoa, ja maastoksi kirjoitettu sade jäi riisumatta. Nyt kekäle on `Entity`,
+`kind: 'hazard'`, sama esine kuin happopisara — ja **katto sammuttaa sen**,
+mikä on yhtä aikaa se mitä oikea kekäle tekisi ja se sääntö joka tekee
+myrskystä väistettävän. Varoitus on puolitoista sekuntia taivaalla: juoksemalla
+ehtii yhdeksän laattaa, eli katon alle.
+
+**PUU ON NYT LAATTA (`t`).** Puita on ollut koko ajan, mutta taustanauhassa:
+kolme puuta kolmen mäen päällä, 232 px:n kaistaleena jota toistetaan. Se on
+maisemaa jota ei voi osoittaa. `t` on sama puu kentässä — sarake, rivi, paikka
+jonka kenttäsuunnittelija valitsee. **Ei kiinteä eikä puolikiinteä**, ja se on
+päätös: puu jonka läpi ei kuljeta olisi seinä, ja seinä menisi
+lattiaprofiiliin, kuilulaskuun ja hyppybudjettiin. Sen ainoa sääntö on että se
+seisoo jossakin (`rules.js`, `checkTrees`) — sama lause kuin vihollisella,
+koska kysymys on sama. Laji tulee teemasta kuten maanpinnankin: havu, kaktus,
+kuiva runko.
+
+**METSÄPALO (6-2).** Syttyy **pelaajan takaa**, leviää puusta puuhun 1,23
+px/frame ja sammuu aukiolle. Juoksuvauhti on 2,5, joten pako on mahdollinen
+muttei ilmainen — ja koska metsäpalikoita on kolme tiheyttä (`metsikko`,
+`aukio`, `metsanreuna`), metsän muoto *on* kentän vaikeus.
+
+Tämäkin oli ensin väärin päin: jos takana ei ollut puuta, palo syttyi lähimpään
+edessä olevaan. Portti kaatui 6-2:een sarakkeessa 208, eli tasan siihen kohtaan
+jossa metsä alkaa. Takaa-ajaja jonka eteen syttyy tuli ei ole takaa-ajaja vaan
+seinä. Nyt ilman puuta takana ei synny paloa lainkaan.
+
+Ja se mikä pitää tämän emergenssin rajan sisällä (ROADMAP 10.8.2026): **puu ei
+ole reitti**, joten palava metsä voi olla se mikä muu maasto ei saa olla, ja
+**lopputila on lähtötila** — puu palaa, jää hiileksi ja kasvaa takaisin, kuten
+kuuran jälki sulaa. Kumpikin on mitattu eikä muistettu.
+
+Yksitoista uutta porttia (`verify.mjs`: *sää*, *puu ja metsäpalo*). 6-2:n
+mitattu vaikeus laski 120,9 → 84,1: kolme luupalikkaa vaihtui kolmeen
+metsäpalikkaan, ja metsä on maisemaa jonka vaikeus on siinä mikä siellä palaa.
+
+---
+
+## v26.08.18.25 — maastopassi: maa liikkuu palikoiden välillä
+
+ROADMAPin varianssityön kolmas askel, ja se arvioitiin siellä kalleimmaksi:
+*"`rules.js`, hyppybudjetti, vaikeusmittari, botti ja jokainen käsintehty
+kenttä lukevat tällä hetkellä lattiaa rivinä 13."* Arvio oli oikea toisesta
+toteutuksesta kuin tästä.
+
+**Maasto ei siirry, pinta nousee.** `src/data/terrain.js` kelaa palikan rivit
+ylös ja jättää alle sitä samaa maata joka palikan alimmalla rivillä oli. Rivit
+13-14 pysyvät siis kiinteinä jokaisessa sarakkeessa jossa ne olivat kiinteät
+ennenkin, ja `floorProfile`in siemen, `checkGaps`in pohjattomuustesti ja
+`difficulty.mjs`:n `lethalCol` lukevat yhä sitä mitä ne ovat aina lukeneet.
+`floorProfile` on osannut vaihtelevan korkeuden koko ajan — se kävelee pinon
+ylös — ja vain sen siemen oli rivissä 13. Siemen osuu edelleen. Yksikään
+lueteltu tiedosto ei muuttunut.
+
+Siirtymät kirjoitetaan **rinteinä**, samalla muodolla kuin `kumpare` ja
+generaattorin `hill`: rinne on maan pinta ja sen alla on kiveä lattiaan asti.
+Kenttä on maastonsa kanssa yhä yksi kenttä, sama joka kerta — profiili tulee
+kentän tunnuksesta siemenenä, joten jokainen portti mittaa sitä ruudukkoa jota
+pelataan.
+
+**Kuusi kenttää sai maaston:** 1-3, 2-N, 2-M, 2-4, 2-5, 3-1. Neljä jäi ilman,
+ja jokaisen syy on sen omassa kommentissa — ne ovat tämän erän arvokkain osa,
+koska jokainen niistä on asia jonka automaattinen maasto rikkoisi hiljaa:
+
+| kenttä | miksi ei |
+| --- | --- |
+| 1-1 | piilottaa tarkoituksella *ei mitään*, ja piilotiili on sijainnin hajautus: siirretyt sarakkeet arpoivat sinne yhden. Sillä on myös pelin ahtain kansi. |
+| 2-1 | sen ainoa kuori päätyy vasemmalle potkaistuna hiekkaan. Nostettuna lammikko oli kolme laattaa kuoren yläpuolella, eikä kuori nouse mäkeä. |
+| 2-3 | maailman 2 haaran koko idea on että tiet mittautuvat eri lukemiin. 154,3 → 145,8 pudotti sen samaan pistemäärään toisen tien kanssa. |
+| 3-3 | sen `sky_run` on tasan kuuden laatan kuilu eli tarkalleen hyppybudjetti, ja rinteet sen edellä muuttavat sitä mistä kohtaa juoksija sen kohtaa. Botti kuoli siihen jokaisella siemenellä. |
+
+**Kaksi lukua jotka löytyivät punaisesta.**
+
+1. **Sauma vaatii vauhdinoton, kuusi saraketta kumpaankin suuntaan.** Aluksi
+   ehtona oli yksi tasainen reunasarake, ja `tools/playable.mjs` kuoli 1-1:ssä
+   sarakkeeseen 290: rinne oli kutistanut `pit_plat`in kymmenen sarakkeen
+   kuilun edestä kuudentoista sarakkeen vauhdinoton kolmeen. `validateLevel` oli
+   tyytyväinen koko ajan, koska se mittaa kuilun leveyden eikä sitä paljonko
+   vauhtia sen eteen mahtuu. Sama sokea piste kuin vaikeustason venytyksellä oli
+   — ja siksi sama luku: `RUNWAY` on nyt kahden säännön alla, `terrain.js`:ssä,
+   ja `scale.js` tuo sen sieltä.
+2. **Nosto on yksi laatta, ja sen määrää kentän kansi.** Maailmalla on kansi ja
+   tavallinen kenttä on tasan yhden ruudun korkuinen, joten nostettu maa syö
+   hyppykorkeutta suoraan. Mitattuna: korkein pieruhyppy jättää 1-1:ssä 30,38
+   px kanteen ja 2-1:ssä 27–38 px — alle kaksi laattaa. Kolmen laatan nostolla
+   portti luki 1-1:stä `pää 0.00 px`, eli pelaaja kolautti kantta. Yksi laatta
+   on se mitä tässä ruudussa on varaa nostaa, ja **ROADMAPin ensimmäinen kohta
+   (kenttädata 15 → 16 riviin) on se muutos joka nostaa tuota lukua.**
+
+**Vaikeus laimenee hieman ja se on odotettu:** maasto on sarakkeita ilman
+lisähaastetta, sama ilmiö jonka generaattorin mäki mittasi (#98). Kuudessa
+kentässä −0,7…−2,3 pistettä, eikä yhdenkään maailman muoto muuttunut.
+
+Portit: neljä uutta väitettä (`verify.mjs`, *maastopassi*) — pohja säilyy,
+jokaisen rinteen kummallakin puolella on vauhdinotto, aloitus ja lippu eivät
+liiku, ja kenttä joka ei voi saada maastoa heittää sen sijaan että jäisi
+hiljaa tasamaaksi. `seedOf` on nyt yhdessä paikassa (`core/utils.js`) kahden
+sijaan.
+
 ## v26.08.18.24 — kolikot ovat aika
 
 Omistaja 18.8.2026: *"coins = time! Niin aloitetaan jollain määrällä kolikoita

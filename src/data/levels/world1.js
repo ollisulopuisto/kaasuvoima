@@ -69,6 +69,19 @@ export const WORLD1_LEVELS = {
    * nowhere. `tools/verify.mjs` now holds the whole game to at most one warp in
    * three.
    */
+  /*
+   * EI MAASTOPASSIA, ja kaksi mitattua syytä. Ks. `data/terrain.js`.
+   *
+   *   1. **Piilotiilet ovat sijainnin hajautus** (`core/secrets.js`), ja
+   *      maastopassi työntää sarakkeita rinteiden verran eteenpäin. 1-1 piilottaa
+   *      tarkoituksella *ei mitään* — se on koko yllä olevan putkiperustelun
+   *      toinen puolisko — ja maaston kanssa portti löysi sieltä yhden
+   *      piilotiilen. Sama muutos jokaisessa muussakin kentässä, mutta vain
+   *      tässä yhdessä nolla on väite.
+   *   2. **Kansi.** Korkein pieruhyppy jättää täällä 30,38 px kentän kanteen,
+   *      ja se on koko pelin ahtain mitattu lukema. Yhden laatan nosto veisi
+   *      siitä puolet.
+   */
   '1-1': {
     theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
@@ -173,6 +186,11 @@ export const WORLD1_LEVELS = {
    */
   '1-3': {
     theme: 'grass', bg: 'peaks', music: 'level',
+    /* Maastopassi (`data/terrain.js`): kokoaja päättää palikoiden lattiatasot
+     * ja kirjoittaa siirtymät rinteinä. Maailman 1 kolmesta käsintehdystä
+     * kentästä tämä on se joka sen saa — 1-1 opettaa eikä piilota mitään, ja
+     * maasto siirtää sarakkeita, mikä arpoisi sen piilotiilet uusiksi. */
+    terrain: true,
     chunks: [
       'start_high', 'plat_hi', 'power', 'sky_run', 'pipe_short', 'plat_float',
       /*
@@ -236,6 +254,25 @@ export const WORLD1_LEVELS = {
    */
   '1-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
+    /*
+     * The chunk order is the one this level was written with. The flyer's
+     * first appearance in the whole game is in `root_drop`, and after world 1's
+     * generated levels were rebuilt for the 16-row grid the ground pound's
+     * first appearance landed here too, nineteen tiles away — one short of the
+     * twenty `tools/curriculum.mjs` requires between two first appearances.
+     *
+     * Two orderings were tried before the right fix was found, and both are
+     * worth recording because each broke something else quietly. Swapping
+     * `root_drop` with `root_pantry` moved this level's power-up out of the
+     * opening quarter, which DESIGN.md §5 requires and `validateLevel` caught.
+     * Swapping it with `root_moat` moved the lava's first appearance to column
+     * 57 and put *that* inside the pound's screen instead. The three
+     * appearances simply do not fit into 160 columns at twenty tiles apart
+     * while the pantry is pinned to the opening quarter.
+     *
+     * So the level did not move at all: the flyer moved three columns inside
+     * its own chunk. See `root_drop` in `chunks/fortresses.js`.
+     */
     chunks: [
       'start', 'root_gate', 'root_pantry', 'root_drop', 'root_scale',
       'root_vault', 'root_moat', 'root_drop', 'root_moat', 'boss_arena',

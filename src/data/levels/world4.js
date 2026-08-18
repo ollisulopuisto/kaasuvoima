@@ -143,6 +143,18 @@ export const WORLD4_LEVELS = {
    */
   '4-3': {
     theme: 'factory', bg: 'factory', music: 'factory',
+    /*
+     * TULIMYRSKY (ks. sääosio `scenes/level.js`:n alussa), ja se on tehtaassa
+     * eikä taivaalla siksi että täällä sillä on lähde: uuni käryää, ja kekälesade
+     * on koneen oire eikä sään oikku. Sama peruste kuin kuumuuden väreilyllä,
+     * joka on jo tämän teeman oma (`postfx.js`).
+     *
+     * Varoitus on puolitoista sekuntia ja se on **taivaassa** eikä nurkassa:
+     * juoksuvauhdilla ehtii yhdeksän laattaa, eli katon alle jos sellainen on
+     * kuvassa. Tehdas on ainoa teema jossa kattoa on takuulla — `THEME_RULES`
+     * vaatii sen — joten myrsky ja suoja saapuivat samaan kenttään.
+     */
+    firestorm: true,
     chunks: [
       'start', 'spike_walk', 'fort_power', 'fac_vents', 'fac_belt', 'fac_torvi', 'fac_shaft',
       'heartburn_pair', 'cloud_run', 'gate_leap', 'fac_press', 'corks', 'fac_belt',

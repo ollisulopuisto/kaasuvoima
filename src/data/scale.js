@@ -1,6 +1,8 @@
 import { T } from '../gfx/tiles.js';
 import { mulberry32 } from './generator.js';
-import { CHUNK_ROWS } from './chunks.js';
+import { BAND_ROWS } from './chunks.js';
+import { seedOf } from '../core/utils.js';
+import { LOOSE, RUN_ROWS, RUNWAY } from './terrain.js';
 
 /**
  * VAIKEUSTASOT, ELI SAMA PELI KOLMESSA MITASSA.
@@ -147,49 +149,6 @@ export const difficultyLabel = (id) => (isBaseMode(id) ? '' : modeOf(id).title);
 const OPENING = 0.25;
 /** The shortest span that may be duplicated, in columns. */
 const MIN_SEG = 24;
-/**
- * VAUHDINOTTO: montako yhtenäistä maasaraketta sauman kummallakin puolella on
- * oltava.
- *
- * Ja tämä on se luku joka löytyi punaisesta. Sääntö oli aluksi "kaksi
- * peräkkäistä samanlaista maasaraketta", mikä riittää **laattojen jatkuvuuteen**
- * — liitos asettaa vierekkäin sarakeparin joka on kentässä jo vierekkäin, joten
- * saumaan ei voi syntyä seinää eikä kuilua — mutta ei riittänyt vauhtiin.
- * `node tools/playable.mjs --mode hard` mittasi hinnan: viisi kenttää joissa
- * botti ei enää päässyt läpi, ja 7-3 oli niistä selvin. Sen rytmi on 43
- * saraketta lattiaa ja viiden sarakkeen kuilu, ja liitos pani kuilun eteen
- * viisi saraketta lattiaa 43:n sijaan. Kuilu oli yhä hyppybudjetin sisällä ja
- * `validateLevel` sanoi kentän olevan kunnossa — se mittaa kuilun leveyden,
- * ei sitä paljonko vauhtia sen eteen mahtuu.
- *
- * Kuusi kumpaankin suuntaan tarkoittaa että jokaisen liitoksen ympärillä on
- * **kaksitoista saraketta tasaista**, ja mitattuna seisonnasta täyteen juoksuun
- * (`ACC` 0,0547 px/frame²) menee 46 framea ja noin neljä laattaa — eli
- * vauhdinottoa on kolminkertaisesti siihen nähden mitä paikaltaan lähtevä
- * tarvitsee. Luku on haettu mittaamalla: `--mode hard` on vihreä kuudella ja
- * kentät venyvät 2,03x ja 2,99x, kun kymmenellä ne venyvät enää 2,80x ja
- * yksitoista kenttää ei veny lainkaan.
- *
- * **Vauhdinotto mitataan alariveistä eikä koko sarakkeesta**, ja se ero on
- * sekin mitattu: kun ehto oli "koko sarake tyhjä ja maata" kahdenkymmenenneljän
- * sarakkeen matkalta, yksikään kentän 64:stä ei venynyt lainkaan. Syy on
- * ilmeinen jälkeenpäin — taivaassa on kolikoita, lauttoja ja tiiliä, eikä
- * kahdenkymmenenneljän sarakkeen mittaista tyhjää taivasta ole missään. Yllä
- * oleva kolikkorivi ei kuitenkaan hidasta juoksijaa, joten kysymys on väärä:
- * vauhtia rajoittaa se mitä jaloissa on. `RUN_ROWS` on se osa sarakkeesta jossa
- * juoksija on.
- */
-const RUNWAY = 6;
-/**
- * Mitkä rivit ovat "jalat": lattia ja se tila jossa vartalo kulkee.
- *
- * Kaistan alin viisi riviä, eli 10…14 kun lattia on rivillä 13. Pisin hahmo on
- * 43 px eli 2,7 laattaa, joten rivit 10–12 ovat se mitä sen läpi juokseminen
- * vaatii tyhjäksi ja rivit 13–14 se mitä se vaatii kiinteäksi. Kaikki sen
- * yläpuolella — kolikot, lautat, tiilirivit, salaiset huoneet — saa vaihdella
- * vauhdinoton matkalla, koska mikään niistä ei ole juoksijan tiellä.
- */
-const RUN_ROWS = 5;
 /** Tiles of clear ground an added enemy keeps from any other enemy. */
 const SPACING = 6;
 /** Columns after the start marker and before the flag that stay empty. */
@@ -260,12 +219,6 @@ const UNIQUE = new Set([
  */
 const GROUNDLINGS = ['g', 'k', 'c', 'x', 'Y', 'm'];
 
-/**
- * Merkit jotka eivät ole maastoa: ne seisovat maaston päällä tai leijuvat sen
- * yllä. Vauhdinoton mittaus (`seamColumns`) lukee ne tyhjänä, koska juoksijaa
- * hidastaa se mitä maastossa on eikä se kuka siinä sattuu seisomaan.
- */
-const LOOSE = new Set([...'gkfprcxAOPHbTZYm1', T.COIN, T.GOAL]);
 
 /* ------------------------------- the seams ------------------------------- */
 
@@ -424,16 +377,6 @@ function stretchRows(rows, mode, limit) {
 
 /* ------------------------------ the crowd -------------------------------- */
 
-/** A stable 32-bit seed for a string, so the same level rolls the same dice. */
-function seedOf(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 /**
  * Which rows are the route.
  *
@@ -442,8 +385,8 @@ function seedOf(text) {
  * meets, and one added to the cave is a punishment for finding a secret.
  */
 function routeBand(rows) {
-  if (rows.length <= CHUNK_ROWS) return [0, rows.length];
-  return [CHUNK_ROWS, 2 * CHUNK_ROWS];
+  if (rows.length <= BAND_ROWS) return [0, rows.length];
+  return [BAND_ROWS, 2 * BAND_ROWS];
 }
 
 /** Every tile an enemy could be added to, in column order. */

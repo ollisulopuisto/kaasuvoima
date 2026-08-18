@@ -44,14 +44,29 @@ const IS_MAIN = !!process.argv[1] && pathToFileURL(process.argv[1]).href === imp
 
 const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
 
-const ROWS = 15;
-const FLOOR = 13;
+/*
+ * Kaistan korkeus ja lattian rivi, kootussa kentässä. Kasvoivat yhdellä
+ * 18.8.2026 (`src/data/chunks.js`, `SKY_PAD`). Erillään `SCREEN_ROWS`ista alla,
+ * ja juuri se ero on koko muutoksen tarkoitus: kaista on 16, ruutu on 15.
+ */
+const ROWS = 16;
+const FLOOR = 14;
 /**
- * How tall a screen is, in tiles: `VIEW_H` 208 / `TILE` 16. Only the climb
+ * How tall a screen is, in tiles: `VIEW_H` 240 / `TILE` 16. Only the climb
  * measurement uses it, and it uses it as the line between "a fall you can see
  * the bottom of" and "a fall that takes the level off the picture".
+ *
+ * **Se oli 13, ja se oli väärin 17.8.2026 alkaen.** HUD-nauha purettiin sinä
+ * päivänä ja `VIEW_H` kasvoi 208:sta 240:een, mutta tämä luku ei liikkunut
+ * mukana — eli jokainen sen jälkeen mitattu kiipeilykenttä (6-K, 7-T, 7-P) on
+ * mitattu ruudulla joka on kaksi laattaa liian matala: putoaminen luettiin
+ * "kuvan ulkopuolelle vieväksi" kaksi laattaa aikaisemmin kuin se oikeasti
+ * vie. Luku on tässä kirjoitettuna eikä johdettuna, koska `VIEW_H` asuu
+ * selaimen puolella (`src/scenes/level.js`) eikä tämä tiedosto voi tuoda sitä
+ * — ja juuri siksi `tools/verify.mjs` vertaa nämä kaksi keskenään portissa.
+ * Sama järjestely kuin leveydellä, joka on ollut portissa jo pitkään.
  */
-const SCREEN_ROWS = 13;
+const SCREEN_ROWS = 15;
 /**
  * The rise one jump carries **from a standstill**, in tiles, derived from the
  * same measured case and the same 0.8 safety factor `wallTiles` is derived
@@ -337,7 +352,11 @@ const SOLID = new Set(['#', 'X', 'B', '?', '!', '*', 'u', 'N', '[', ']', '{', '}
 function routeBand(rows) {
   if (rows.length <= ROWS) return rows;
   const start = rows.findIndex((row) => row.includes('1'));
-  const top = Math.floor(Math.max(start, 0) / ROWS) * ROWS;
+  /* Kiinni ruudukon pohjaan: kaista on `ROWS` riviä, mutta jokainen korkea
+   * ruudukko ei ole kaistojen monikerta — 45 rivin kiipeily luettuna vaakana
+   * antaisi muuten alle `ROWS` riviä, ja `runs` lukisi olematonta riviä.
+   * Ennen 18.8.2026 tätä ei voinut nähdä, koska 45 on tasan kolme kaistaa. */
+  const top = Math.min(Math.floor(Math.max(start, 0) / ROWS) * ROWS, rows.length - ROWS);
   return rows.slice(top, top + ROWS);
 }
 
@@ -575,7 +594,13 @@ function measure(rows, opts = {}) {
   if (opts.vertical) return measureClimb(rows);
   const route = routeBand(rows);
   const w = route[0].length;
-  const at = (x, y) => (y < 0 || y >= ROWS || x < 0 || x >= w ? ' ' : route[y][x]);
+  /* Raja luetaan **kaistasta itsestään** eikä `ROWS`ista, ja se on korjaus eikä
+   * varovaisuutta: kun kenttädata kasvoi 15 rivistä 16:een (18.8.2026), vakio
+   * ja committoitu data olivat hetken eri mieltä — ja `route[y]` oli
+   * `undefined` juuri sillä rivillä jota vakio lupasi. Mittari joka lukee
+   * ruudukkoa lukekoon sen omat mitat. */
+  const h = route.length;
+  const at = (x, y) => (y < 0 || y >= h || x < 0 || x >= w ? ' ' : route[y][x]);
 
   let enemyCost = 0;
   const enemies = {};

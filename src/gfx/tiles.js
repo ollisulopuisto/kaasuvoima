@@ -53,6 +53,29 @@ export const T = {
    */
   SLOPE_R: '/',
   SLOPE_L: '\\',
+  /*
+   * PUU, ja se on pelin ensimmäinen laatta joka on **pelkkää maisemaa**.
+   *
+   * Puita on ollut koko ajan (`gfx/backdrop.js`in `pine`, `cactus`,
+   * `deadTree`), mutta ne ovat olleet taustanauhassa: kolme puuta kolmen mäen
+   * päällä, tallennettuna 232 px:n levyiseen kaistaleeseen jota toistetaan.
+   * Se on maisemaa jota ei voi osoittaa — kenttä ei tiedä puistaan mitään,
+   * eikä mikään voi tapahtua niille.
+   *
+   * `t` on sama puu **kentässä**: sarake, rivi, ja siten paikka jonka
+   * kenttäsuunnittelija valitsee ja johon jokin voi koskea. Ensimmäinen joka
+   * koskee on metsäpalo (`LevelScene.updateWildfire`), ja juuri siksi tämä
+   * merkki oli tehtävä ensin — palava tausta olisi ollut palava tapetti.
+   *
+   * **Ei kiinteä eikä puolikiinteä, ja se on päätös.** Puu jonka läpi ei
+   * kuljeta olisi seinä, ja seinä on maastoa: se menisi lattiaprofiiliin,
+   * kuilulaskuun ja hyppybudjettiin, ja metsä olisi silloin este eikä metsä.
+   * Puun läpi kävellään kuten kolikon läpi, ja se piirtyy laattakerroksessa
+   * eli pelaajan takana. Sen ainoa sääntö on että se **seisoo jossakin**
+   * (`rules.js`, `checkTrees`) — leijuva puu on virhe siinä missä leijuva
+   * vihollinen.
+   */
+  TREE: 't',
 };
 
 /**
@@ -80,6 +103,10 @@ const SLOPE_UP_L = { slope: -1, standable: true };
 export const TILE_INFO = {
   [T.SLOPE_R]: { ...SLOPE_UP_R },
   [T.SLOPE_L]: { ...SLOPE_UP_L },
+  /* Maisemaa: ei kiinteä, ei satuttava, ei mitään minkä päällä seistään.
+   * Ks. `T.TREE`. Palava puu on kohtauksen kirjanpitoa (`LevelScene.burning`)
+   * eikä toinen merkki, samoin kuin murenevan lavan eteneminen. */
+  [T.TREE]: { tree: true },
   [T.GROUND]: { ...S },
   [T.HARD]: { ...S },
   [T.BRICK]: { ...S, breakable: true, bumpable: true },
@@ -1412,6 +1439,85 @@ function drawPlatform(ctx, x, y, th, tx = 0, ty = 0) {
 }
 
 /**
+ * PUU, ja sen muoto tulee teemasta samalla säännöllä kuin maanpinnan.
+ *
+ * Taustan puut (`gfx/backdrop.js`) ovat jo neljää lajia — havu, kaktus, kuiva
+ * runko, kylkiluu — ja ne on valittu teemasta. Sama valinta tässä, samoista
+ * syistä ja samoilla väreillä (`th.hill`), jotta kentän puu ja horisontin puu
+ * ovat saman metsän puita. Se on myös se syy miksi tässä on yksi merkki eikä
+ * neljä: laji on tieto **paikasta**, ei laatasta, aivan kuten maanpinnan
+ * korret ja aallot.
+ *
+ * Yksi laatta, ei kaksi. Puu on kuudentoista pikselin korkuinen pensas eikä
+ * metsänjättiläinen, ja se on tarkoituksella: laattaa korkeampi kuva vuotaisi
+ * naapuriruutuun, ja naapuriruutu on jonkun toisen laatan. Metsä tehdään
+ * rivistä puita, kuten oikeakin.
+ *
+ * `burn` 0…1 on palamisen eteneminen (`LevelScene.burning`), samassa hengessä
+ * kuin `drawCrumble`in oma eteneminen: laatta on yhä `t`, ja se miltä se
+ * näyttää on kohtauksen kirjanpitoa.
+ */
+function drawTree(ctx, x, y, th, tx, ty, tick, burn = 0) {
+  const sway = Math.sin(tick * 0.04 + tx * 0.9) * (burn > 0 ? 1.6 : 0.8);
+  const n = hashNoise(tx, ty + 41);
+  const trunk = burn > 0.55 ? '#3a2a24' : '#6b4a2a';
+  const trunkDark = burn > 0.55 ? '#241a16' : '#452c18';
+  /* Runko, ja se on aina sama: laji näkyy latvassa. */
+  ctx.fillStyle = trunkDark;
+  ctx.fillRect(x + 7, y + 10, 3, 6);
+  ctx.fillStyle = trunk;
+  ctx.fillRect(x + 7, y + 10, 1, 6);
+  if (burn >= 1) return;
+
+  const shape = th.surface === 'sand' ? 'cactus'
+    : th.surface === 'bone' ? 'bare'
+      : 'pine';
+  /* Palava latva kulkee vihreästä oranssin kautta hiileen: yksi luku, kolme
+   * väriä, eikä erillistä liekkiolioita — tuli on sen puun ominaisuus joka
+   * palaa, ei asia joka seisoo sen päällä. */
+  const green = shape === 'cactus' ? th.hill : th.groundTop || th.hill;
+  const dark = shape === 'cactus' ? th.hillDark : th.groundTopDark || th.hillDark;
+  const body = burn > 0 ? (burn > 0.5 ? '#7a3a18' : '#e07028') : green;
+  const bodyDark = burn > 0 ? (burn > 0.5 ? '#4a2410' : '#a84a14') : dark;
+
+  if (shape === 'cactus') {
+    ctx.fillStyle = bodyDark;
+    ctx.fillRect(x + 6, y + 2, 5, 12);
+    ctx.fillRect(x + 3, y + 6, 3, 5);
+    ctx.fillRect(x + 11, y + 5, 3, 6);
+    ctx.fillStyle = body;
+    ctx.fillRect(x + 7, y + 3, 2, 10);
+    ctx.fillRect(x + 4, y + 7, 1, 3);
+  } else if (shape === 'bare') {
+    ctx.fillStyle = bodyDark;
+    ctx.fillRect(x + 8 + Math.round(sway), y + 2, 2, 9);
+    ctx.fillRect(x + 4 + Math.round(sway), y + 5, 4, 1);
+    ctx.fillRect(x + 10 + Math.round(sway), y + 7, 4, 1);
+  } else {
+    /* Havu: kolme kapenevaa kerrosta, ja lumi jäätiellä. */
+    for (let k = 0; k < 3; k++) {
+      const w = 11 - k * 3;
+      const top = y + 2 + k * 3;
+      const cx = x + 8 + Math.round(sway * (1 - k * 0.25));
+      ctx.fillStyle = bodyDark;
+      ctx.fillRect(cx - Math.floor(w / 2), top, w, 4);
+      ctx.fillStyle = body;
+      ctx.fillRect(cx - Math.floor(w / 2), top, w, 1);
+      if (burn === 0 && th.surface === 'snow') {
+        ctx.fillStyle = 'rgba(244,248,255,0.85)';
+        ctx.fillRect(cx - Math.floor(w / 2) + (n > 0.5 ? 1 : 0), top, Math.max(2, w - 3), 1);
+      }
+    }
+  }
+  if (burn > 0 && burn < 1) {
+    /* Kipinät, ja ne ovat kuvaa eivätkä vahinkoa: vahinko on laatassa. */
+    ctx.fillStyle = 'rgba(255,190,80,0.8)';
+    const k = Math.floor(tick / 4) % 3;
+    ctx.fillRect(x + 4 + k * 4, y + 1 - (Math.floor(tick / 4) % 3), 1, 1);
+  }
+}
+
+/**
  * The spikes only occupy the bottom of their tile; the rest is air.
  *
  * Exported because the damage box in scenes/level.js is built from it. Drawing
@@ -2192,6 +2298,7 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.SHELF: drawShelf(ctx, x, y, tick, opts.shelf === undefined ? 1 : opts.shelf); break;
     case T.SLOPE_R:
     case T.SLOPE_L: drawSlope(ctx, ch, x, y, th, tx, ty, tick); break;
+    case T.TREE: drawTree(ctx, x, y, th, tx, ty, tick, opts.burn || 0); break;
     case T.COIN: drawCoinSprite(ctx, x, y, tick); break;
     case T.SPIKE: drawSpike(ctx, x, y, tick); break;
     case T.LAVA:

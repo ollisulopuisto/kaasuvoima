@@ -1,5 +1,7 @@
 import { Entity } from './entity.js';
-import { moveX, moveY, applyGravity, footingAhead, GRAVITY } from '../level/physics.js';
+import {
+  moveX, moveY, applyGravity, footingAhead, GRAVITY, slopePull as slopeSlide,
+} from '../level/physics.js';
 /* The sand's own numbers. They are imported from the player rather than copied
  * because they are the *sand's* and not his: `QUICKSAND_SINK` is how fast this
  * tile pulls, full stop, and a walker that sank at its own private rate would
@@ -19,7 +21,7 @@ import {
   drawKolikkovaras } from '../gfx/sprites.js';
 import { TILE, T, surfaceOf, surfaceUnder } from '../gfx/tiles.js';
 import { Sfx, bossSay, killSound } from '../core/audio.js';
-import { approach, hashNoise } from '../core/utils.js';
+import { approach, hashNoise, overlaps } from '../core/utils.js';
 import { Item } from './items.js';
 /* Arvoluokat, ei lukuja: mitä yksi vihollinen maksaa on pistetaulukon asia,
  * ei tämän tiedoston. Ks. `points.js`. */
@@ -189,6 +191,23 @@ export class Enemy extends Entity {
    * rivin mittainen levennettäväksi jos joku joskus haluaa toisin.
    */
   get windborne() { return false; }
+
+  /**
+   * Kestääkö tämä maan järinän: **oletus on ei**, eli järistys heittää.
+   *
+   * Toisin päin kuin `windborne`, ja se on väite eikä epäjohdonmukaisuus.
+   * Tuuli **kantaa**, ja kantaminen riippuu siitä miten kevyt jokin on —
+   * siksi siihen liitytään. Järistys ei kanna vaan **päästää irti**: maa joka
+   * lakkaa hetkeksi olemasta paikallaan lakkaa olemasta paikallaan kaikelle
+   * mikä sen päällä seisoo, eikä painavuus ole siihen vastaus. Siksi
+   * poikkeuksia ovat vain ne jotka *eivät seiso maassa* — putkeen pultattu
+   * nielu, lattiasta nouseva närästys, torvi seinässä — ja ne jotka **ovat
+   * huone**: pomo, aurinko, kuu ja papuparooni.
+   *
+   * Ilmassa oleva ei kuulu kummallekaan listalle: `updateQuake` kysyy
+   * `onGround`ia ennen tätä, joten lentäjä on turvassa koska se lentää.
+   */
+  get quakeborne() { return true; }
 
   /** Tuulen (tai minkä tahansa ulkopuolisen) työntö tälle framelle. */
   push(dv) {
@@ -434,10 +453,35 @@ export class Enemy extends Entity {
   held() {
     if (this.bubbled) { this.updateBubbled(); return true; }
     if (this.flipped) { this.updateFlipped(); return true; }
+    /* Karvapallon kyydissä: paikan kirjoittaa pallo, ei tämä. Sama muoto kuin
+     * kuplalla ja kumossa olemisella — yksi portti jonka jokainen laji jo
+     * kysyy, joten uusi tila ei vaadi riviäkään yhdestäkään `update`ista. */
+    if (this.rolledBy) return true;
     return false;
   }
 
+  /**
+   * Kelpaako tämä karvapallon kyytiin. Oletus on **ei**, samasta syystä kuin
+   * `windborne`illa: kyyti on lajikohtainen ominaisuus eikä kaikkien oikeus.
+   * Pomo, aurinko ja putkeen pultattu nielu eivät ole kerättäviä, eikä ole
+   * toinen karvapallokaan — kaksi palloa jotka keräisivät toisensa olisi
+   * kysymys jota kukaan ei ole suunnitellut.
+   */
+  get rollable() { return false; }
+
   get box() {
+    /*
+     * KYYDISSÄ OLEVALLA EI OLE LAATIKKOA, ja se on reiluussääntö eikä temppu.
+     *
+     * Laki 2 (ROADMAP 10.8.2026): pelaajaa saa satuttaa vain ketju jonka hän
+     * itse aloitti. Karvapallon kyytiin joutunut kävelijä on ketju jonka
+     * **pallo** aloitti, joten se ei saa koskettaa pelaajaa lainkaan — eikä
+     * pelaaja sitä. Pallo satuttaa kuten ennenkin, ja se on se ainoa asia
+     * jonka pelaaja näkee tulevan. Tyhjä laatikko sanoo sen rakenteellisesti:
+     * mikään törmäyssilmukka ei löydä kyytiläistä, joten kieltoa ei tarvitse
+     * muistaa yhdessäkään niistä.
+     */
+    if (this.rolledBy) return { x: this.cx, y: this.cy, w: 0, h: 0 };
     if (!this.bubbled) return { x: this.x, y: this.y, w: this.w, h: this.h };
     const r = bubbleRadius(this.w, this.h);
     return { x: this.cx - r, y: this.cy - r, w: r * 2, h: r * 2 };
@@ -597,6 +641,9 @@ export class Enemy extends Entity {
 }
 
 export class Walker extends Enemy {
+  /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
+  get rollable() { return true; }
+
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.speed = 0.55;
@@ -667,8 +714,21 @@ export class Walker extends Enemy {
 
 /** How fast a kicked shell travels, and keeps travelling after a bounce. */
 const SHELL_SPEED = 3.4;
+/**
+ * Mihin asti rinne saa kiihdyttää liukuvaa kuorta, ja mitä se maksaa
+ * takaisin ylämäessä. `SLOPE_DOWN` ja `SLOPE_UP` ovat pelaajan omat luvut
+ * (`entities/player.js`) tuotuna tänne, koska rinne on maastoa eikä kehon
+ * ominaisuus: sama mäki, sama veto. Katto on 1,4 × `SHELL_SPEED`, sama suhde
+ * kuin pelaajan P-katolla juoksukattoon.
+ */
+const SLOPE_DOWN = 0.14;
+const SLOPE_UP = 0.045;
+const SHELL_SLOPE_MAX = SHELL_SPEED * 1.4;
 
 export class ShellGuy extends Enemy {
+  /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
+  get rollable() { return true; }
+
   constructor(level, x, y) {
     super(level, x, y, 14, 24);
     this.mode = 'walk';
@@ -858,6 +918,24 @@ export class ShellGuy extends Enemy {
       // A shell that hits something goes through it or comes back off it, and
       // which one depends on what it hit. Bricks are the soft thing in this
       // game; everything else is masonry.
+      /*
+       * RINNE KOSKEE KUORTA, ja tämä on se rivi jota ROADMAP odotti: *"kuori
+       * kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä
+       * suunnitellut sitä."* Suunnitelma on `physics.js`:n `slopePull`in
+       * kommentissa yhtenä lauseena — se mikä liukuu tai vierii tottelee
+       * rinnettä, se mikä kävelee ei — ja **potkaistu kuori liukuu**.
+       *
+       * Vain liukuva, ei kävelevä: `toWalking`in jälkeen kuori on taas
+       * kävelijä, ja kävelijä kävelee omaa vauhtiaan. Sama laji, kaksi tilaa,
+       * ja rinne erottaa ne.
+       *
+       * Katto on `SHELL_SLOPE_MAX` eikä `SHELL_SPEED`, koska muuten sääntö ei
+       * tekisi mitään: kuori kulkee jo lähtövauhtiaan, ja alamäki joka ei voi
+       * nostaa sitä on alamäki jota ei ole. Kerroin on sama kuin pelaajalla —
+       * juoksukatto 2,5 vastaan P-katto 3,5 on 1,4 — eli rinne antaa kuorelle
+       * saman suhteellisen lainan kuin pelaajalle.
+       */
+      slopeSlide(this, SLOPE_DOWN, SLOPE_UP, SHELL_SLOPE_MAX);
       if (this.moveSideways()) {
         if (!this.smashAhead()) {
           /* Bounce off it, at speed.
@@ -986,6 +1064,9 @@ export class Flyer extends Enemy {
  * the platform it was guarding does not guard anything.
  */
 export class SpikeGuy extends Enemy {
+  /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
+  get rollable() { return true; }
+
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     // Slower than a walker. It is already the harder one to deal with; making
@@ -1037,6 +1118,9 @@ export class SpikeGuy extends Enemy {
  * for the rest of the level.
  */
 export class Plant extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: putkeen pultattu. */
+  get quakeborne() { return false; }
+
   /** Offsets at or beyond this are "down the pipe": not drawn, cannot hurt. */
   static HIDDEN_OFFSET = 24;
 
@@ -1446,6 +1530,9 @@ const SCREEN_W = 320;
  * out of its own band, and past the flag. See `quitReason`.
  */
 export class AngrySun extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: ei seiso maassa. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
@@ -1658,6 +1745,9 @@ export class AngrySun extends Enemy {
 
 /** Ummetuskorkki — plugs you up instead of hurting you. */
 export class CorkGuy extends Enemy {
+  /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
+  get rollable() { return true; }
+
   constructor(level, x, y) {
     super(level, x, y, 14, 16);
     this.score = PTS.common;
@@ -2001,6 +2091,9 @@ const KING_FORMS = [0, 1, 2, 3, 3, 4, 5];
  * (väri, arvomerkki, pisteet) ja `form` kiertää `KING_FORMS`in läpi.
  */
 export class Boss extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y, variant = 0) {
     super(level, x, y, bossSize(variant).w, bossSize(variant).h);
     this.variant = variant;
@@ -2747,6 +2840,9 @@ export class BeanBomb extends Entity {
 }
 
 export class BeanBaron extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 18, 26);
     this.speed = 0.45;
@@ -2905,6 +3001,9 @@ export class BeanBaron extends Enemy {
  * (Lead designer's request.)
  */
 export class Moon extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
@@ -3155,6 +3254,9 @@ export class Torahdys extends Enemy {
  * enää vartioi mitään.
  */
 export class Torvi extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: seinässä kiinni. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.score = PTS.rare;
@@ -3283,6 +3385,65 @@ export class Happopisara extends Entity {
 }
 
 /**
+ * KEKÄLE — se mitä tulimyrskystä sataa (`LevelScene.updateFirestorm`).
+ *
+ * Sama esine kuin happopisara ja tarkoituksella: putoava, satuttava, maahan
+ * osuessaan katoava. Ero on suunta ja lähde — pisara tulee paarmasta pystyyn,
+ * kekäle taivaalta vinoon — ja se riittää tekemään niistä kaksi eri asiaa
+ * ilman että kumpikaan on uusi laji. `kind: 'hazard'` on sama valinta samoin
+ * perustein: tähti suojaa siltä, kuori ei pyyhi sitä pois, ja jokainen portti
+ * joka riisuu kentästä vaarat riisuu myös tämän.
+ *
+ * **Katto sammuttaa.** Kekäle katoaa ensimmäiseen kiinteään laattaan, mikä on
+ * yhtä aikaa se mitä oikea kekäle tekisi ja se sääntö joka tekee myrskystä
+ * pelattavan: sade on uhka siellä missä taivas on auki, ja katon alla ollaan
+ * turvassa. Ilman sitä sadetta ei voisi väistää, ja uhka jota ei voi väistää
+ * on vero eikä uhka.
+ *
+ * Vaakaliike on `x`:ään suoraan eikä `moveSideways`illa: kekäle ei kävele eikä
+ * ole tuulen kannettavana, se lentää sitä rataa jolla se lähti. Seinä ei
+ * pysäytä sitä sivusuunnassa, koska pystysuora osuma tulee joka tapauksessa
+ * ensin — ja jos ei tule, kekäle lentää kuvasta ulos ja katoaa siihen.
+ */
+const EMBER_GRAVITY = 0.16;
+const EMBER_MAX = 2.6;
+const EMBER_DRIFT = -0.9;
+
+export class Ember extends Entity {
+  constructor(level, x, y) {
+    super(level, x, y, 4, 4);
+    this.kind = 'hazard';
+    this.active = true;
+    this.vy = 1.2;
+  }
+
+  update() {
+    this.tick++;
+    this.x += EMBER_DRIFT;
+    this.vy = Math.min(this.vy + EMBER_GRAVITY, EMBER_MAX);
+    const hit = moveY(this, this.level);
+    if (hit.ground || this.y > this.level.heightPx + 16
+      || this.x + this.w < this.level.cam.x - 48) {
+      this.snuff();
+    }
+  }
+
+  snuff() {
+    this.remove = true;
+  }
+
+  draw(ctx) {
+    /* Ydin ja häntä, ja häntä osoittaa sitä suuntaa josta kekäle tuli: kuva
+     * kertoo mihin väistetään ennen kuin osuma kertoo missä ei. */
+    const heat = 0.65 + 0.35 * Math.sin(this.tick * 0.4);
+    ctx.fillStyle = 'rgba(255,168,64,0.45)';
+    ctx.fillRect(Math.round(this.x - EMBER_DRIFT), Math.round(this.y - 4), 1, 5);
+    ctx.fillStyle = `rgb(255,${Math.round(110 + heat * 90)},48)`;
+    ctx.fillRect(Math.round(this.x), Math.round(this.y), 3, 3);
+  }
+}
+
+/**
  * PAARMA — turvonnut paarma joka partioi ilmassa ja pudottaa happopisaran sen
  * päälle joka kävelee sen ali.
  *
@@ -3399,6 +3560,63 @@ const KARVA_MAX = 2.6;
 const KARVA_LIFE = 360;
 
 /**
+ * KATAMARI: PALLO KERÄÄ SEN MINKÄ YLI SE VIERII.
+ *
+ * Omistaja 18.8.2026: *"muokkaa jotain vihollista niin, että se voi tarttua
+ * yhteen toisen vihollisen kanssa ja liikkua yhdessä; niiden koko kasvaa
+ * spiraalin muodossa eli vähän kuin katamari damacyssä mutta siten, että
+ * vihollinen itse kasvattaa itsestään isomman."*
+ *
+ * **Karvapallo eikä uusi laji, ja se on pyyntö luettuna kirjaimellisesti**
+ * ("muokkaa jotain vihollista"). Se on myös se ainoa laji jolle tämä sopii
+ * ilman uutta lakia: se on pallo, se vierii jo, se kasvattaa vauhtiaan jo, ja
+ * se **kuolee itsestään** — `KARVA_LIFE` ja seinään puhkeaminen ovat molemmat
+ * jo olemassa, joten kasvava pallo on tilapäinen tapahtuma eikä kentän uusi
+ * pysyvä muoto. Pallon nimikin on karva*pallo*: katamari on juuri se mitä
+ * karvapallo tekee oikeassa maailmassa.
+ *
+ * ## Kolme rajaa, ja jokainen niistä on jo kirjoitettu jonnekin muualle
+ *
+ * 1. **Kyyti on lainaa, ei tappo.** Puhjetessaan pallo **päästää irti**, ja
+ *    kyydissä olleet putoavat maahan elävinä. Se on sama sääntö kuin
+ *    murenevalla laudalla ja kuuran jäljellä (ROADMAP 10.8.2026): muutos joka
+ *    palautuu itsestään on tilapäinen tapahtuma, ja palautumaton olisi olio
+ *    joka poistaa kentästä sisältöä jonka `difficulty.mjs` on jo laskenut.
+ *    Siitä seuraa myös se mikä tekee tästä pelattavan: pallon annettu vieriä
+ *    **siivoaa reitin hetkeksi** mutta kasvaa samalla isommaksi esteeksi.
+ *    Kauppa on pelaajan, ja hän näkee molemmat puolet koko ajan.
+ * 2. **Ei uutta vahingon lähdettä.** Pallo satutti kosketuksesta ennenkin ja
+ *    satuttaa nyt; kyydissä oleva ei satuta erikseen (se on `held()`, eli
+ *    samassa tilassa kuin kuplassa oleva). Reiluussääntö (laki 2) pitää siis
+ *    ilman uutta tarkistusta: pelaajaa satuttaa yhä täsmälleen se sama pallo
+ *    jonka hän näkee tulevan.
+ * 3. **Ei viittauksia olioiden välillä.** Kyytiläinen kantaa `rolledBy`ssään
+ *    pallon **tunnuksen** eikä pallon oliota, koska `savestate.js` kopioi
+ *    jokaisen oman kentän — oliokenttä palautuisi prototyypittömänä
+ *    kaksoiskappaleena, eikä yksikään portti huomaisi sitä. Sama syy miksi
+ *    kuura tallettaa ruutuavaimia eikä laattoja.
+ *
+ * ## Spiraali
+ *
+ * Kyytiläiset asettuvat **arkhimedeen spiraalille**: kulma kasvaa tasaisesti
+ * järjestysluvun mukana ja säde sen mukana, joten toinen kyytiläinen on
+ * kauempana kuin ensimmäinen. Se on sama muoto jonka `Pyorre` piirtää yhdellä
+ * kappaleella, ja siksi kierto tulee samasta paikasta kuin pallon oma pyörintä
+ * (`spin`, kuljettu matka eikä kello): kyyti näyttää siltä että se on kiinni
+ * pallossa eikä kelluu sen ympärillä.
+ *
+ * Kasvu on `Boss.applyScale`n resepti pienempänä: **jalat ja keskiviiva
+ * pysyvät**, leveys ja korkeus kasvavat. Katto on neljä kyytiläistä — pallo
+ * joka kasvaa laattaa leveämmäksi alkaisi kysyä kysymyksiä maastosta
+ * (ovista, käytävistä, katoista), eikä yksikään niistä ole tämän lajin
+ * kysymys.
+ */
+const KARVA_CATCH = 4;
+const KARVA_GROW = 4;
+const KARVA_SPIRAL = 1.15;
+const KARVA_SPIRAL_R = 5;
+
+/**
  * KARVAPALLO — tiivistynyt karvakerä, ja se on tämän pelin oma vastaus siihen
  * vanhaan ideaan jossa vihollinen ei tule itse vaan lähettää jotain edellään.
  *
@@ -3423,6 +3641,8 @@ export class Karvapallo extends Enemy {
     this.life = KARVA_LIFE;
     this.score = PTS.minor;
     this.spin = 0;
+    /** Montako kyytiläistä on kerätty. Ks. `collect`. */
+    this.rolled = 0;
     this.active = true;
   }
 
@@ -3446,6 +3666,13 @@ export class Karvapallo extends Enemy {
     }
     this.roll = Math.min(KARVA_MAX, this.roll + KARVA_ACC);
     this.vx = this.roll * this.facing;
+    /* Ja pallo vierii: sama sääntö kuin kuorella, ks. `physics.js`:n
+     * `slopePull`. Vauhti luetaan takaisin `roll`iin, koska se on se luku
+     * jonka pallo kantaa mukanaan — muuten alamäestä lainattu vauhti
+     * katoaisi seuraavalla framella kun `vx` kirjoitetaan uusiksi. */
+    slopeSlide(this, SLOPE_DOWN, SLOPE_UP, KARVA_MAX * 1.6);
+    this.roll = Math.abs(this.vx);
+    if (this.vx !== 0) this.facing = Math.sign(this.vx);
     // Pyörimiskulma kuljetusta matkasta eikä kellosta: hidastuva pallo pyörii
     // hitaammin, ja se on ainoa tapa jolla vieritys näyttää vieritykseltä.
     this.spin += this.roll;
@@ -3455,10 +3682,100 @@ export class Karvapallo extends Enemy {
     }
     applyGravity(this, 1);
     moveY(this, this.level);
-    if (this.y > this.level.heightPx + 32) this.remove = true;
+    this.collect();
+    this.carry();
+    if (this.y > this.level.heightPx + 32) {
+      this.release();
+      this.remove = true;
+    }
+  }
+
+  /** Montako kyytiläistä pallossa on. Luku on kentässä, ei laskettuna. */
+  get stuck() { return this.rolled || 0; }
+
+  /**
+   * Kerää sen minkä yli vieritään. Ks. `KARVA_CATCH`.
+   *
+   * Sama muoto kuin paukkupöhön räjähdyksellä (`blast`): laji itse kävelee
+   * `level.entities`in läpi eikä kohtaus tunne tätä lakia lainkaan. Ehto on
+   * kyky (`rollable`) eikä lajilista, joten seuraava kerättävä laji lisätään
+   * yhdellä getterillä eikä tämän tiedoston kahdessa kohdassa.
+   */
+  collect() {
+    /* Puhjennut pallo ei kerää, ja tämä rivi on mitattu eikä varmuuden vuoksi.
+     * `burst` päästää irti ja nollaa laskurin; jos pallo ehtii vielä yhden
+     * `update`in ennen kuin se poistetaan listalta, se keräisi juuri
+     * päästämänsä takaisin — ja jäljelle jäisi kyytiläisiä joiden kyyti on
+     * poissa, eli näkymättömiä olioita ilman laatikkoa. Portti löysi sen
+     * (*"vapaana 1"* kolmesta). */
+    if (this.remove || this.stuck >= KARVA_CATCH) return;
+    for (const e of this.level.entities) {
+      if (this.stuck >= KARVA_CATCH) break;
+      if (e === this || !e.active || e.remove || e.dying || e.rolledBy) continue;
+      if (!e.rollable || e.bubbled || e.flipped) continue;
+      if (!overlaps(this.box, e.box)) continue;
+      e.rolledBy = this.id;
+      e.rollAt = this.stuck;
+      e.vx = 0;
+      e.vy = 0;
+      e.onGround = false;
+      this.rolled = this.stuck + 1;
+      this.grow();
+      Sfx.play('nielu');
+    }
+  }
+
+  /**
+   * Kasvu: jalat ja keskiviiva pysyvät, koko kasvaa. `Boss.applyScale`n
+   * resepti pienempänä, ja samasta syystä — pallo joka kasvaisi nurkastaan
+   * upottaisi itsensä maahan tai hyppäisi ylös yhdellä framella.
+   */
+  grow() {
+    const bottom = this.y + this.h;
+    const cx = this.cx;
+    this.w = 12 + this.stuck * KARVA_GROW;
+    this.h = 12 + this.stuck * KARVA_GROW;
+    this.x = Math.round(cx - this.w / 2);
+    this.y = Math.round(bottom - this.h);
+  }
+
+  /**
+   * Kyytiläisten paikat spiraalilla. Kirjoitetaan joka framella pallon omasta
+   * pyörinnästä, kuten kuplan kantama pelaaja kirjoitetaan kuplan laatikosta
+   * (`LevelScene.rideBubble`) — ei vanhempaa, ei hierarkiaa, vain paikka.
+   */
+  carry() {
+    if (this.remove || !this.stuck) return;
+    for (const e of this.level.entities) {
+      if (e.rolledBy !== this.id) continue;
+      if (e.remove) continue;
+      const n = e.rollAt || 0;
+      const a = this.spin * 0.06 + n * KARVA_SPIRAL;
+      const r = this.w / 2 + KARVA_SPIRAL_R * (n + 1);
+      e.x = this.cx + Math.cos(a) * r - e.w / 2;
+      e.y = this.cy + Math.sin(a) * r - e.h / 2;
+      e.facing = Math.cos(a) >= 0 ? 1 : -1;
+    }
+  }
+
+  /**
+   * Päästää irti. Kyyti on lainaa eikä tappo: kyydissä olleet putoavat maahan
+   * elävinä, eli kentästä ei katoa sisältöä jota mikään mittari ei tiedä
+   * kadonneen.
+   */
+  release() {
+    for (const e of this.level.entities) {
+      if (e.rolledBy !== this.id) continue;
+      e.rolledBy = 0;
+      e.rollAt = 0;
+      e.vy = -1.5;
+      e.onGround = false;
+    }
+    this.rolled = 0;
   }
 
   burst() {
+    this.release();
     this.remove = true;
     this.level.spawnPuff(this.cx, this.cy, true);
     Sfx.play('pop');
@@ -3466,10 +3783,11 @@ export class Karvapallo extends Enemy {
 
   draw(ctx) {
     if (this.dying) {
-      this.drawFlipped(ctx, () => drawKarvapallo(ctx, this.x, this.y, this.spin, this.facing));
+      this.drawFlipped(ctx,
+        () => drawKarvapallo(ctx, this.x, this.y, this.spin, this.facing, this.w));
       return;
     }
-    this.drawSprite(ctx, (g) => drawKarvapallo(g, this.x, this.y, this.spin, this.facing));
+    this.drawSprite(ctx, (g) => drawKarvapallo(g, this.x, this.y, this.spin, this.facing, this.w));
   }
 }
 
@@ -3489,6 +3807,9 @@ export class Karvapallo extends Enemy {
  * ansa eikä este.
  */
 export class Yokki extends Enemy {
+  /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
+  get rollable() { return true; }
+
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.speed = 0.3;

@@ -1,4 +1,4 @@
-import { assembleTall, CHUNK_ROWS } from './chunks.js';
+import { assembleTall, BAND_ROWS } from './chunks.js';
 import { defaultTime, registerLevel } from './levels.js';
 
 /**
@@ -100,9 +100,9 @@ export function demoLevel() {
     rows,
     time: defaultTime(rows[0].length),
     /* Sama kolmikaistainen muoto kuin `getLevel` antaa korkealle kentälle.
-     * Luvut luetaan `CHUNK_ROWS`:sta eikä kirjoiteta tähän, jotta kaista ei voi
+     * Luvut luetaan `BAND_ROWS`:sta eikä kirjoiteta tähän, jotta kaista ei voi
      * jäädä eri mittaiseksi kuin se ruudukko jonka `assembleTall` teki. */
-    bands: { rows: CHUNK_ROWS, main: CHUNK_ROWS, cave: 2 * CHUNK_ROWS },
+    bands: { rows: BAND_ROWS, main: BAND_ROWS, cave: 2 * BAND_ROWS },
     boss: false,
     bossVariant: 0,
   });

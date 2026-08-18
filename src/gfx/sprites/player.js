@@ -776,6 +776,128 @@ function icicle(ctx, x, y) {
 }
 
 /** Draws the player at template scale. `s.type` picks the row of POWER_LOOKS. */
+/**
+ * KUOLEMA, ja miksi se ei ole hyppy.
+ *
+ * Omistaja 18.8.2026: *"tee pelaajahahmon kuolinanimaatioista personallisempia:
+ * niiden ei tarvitse ehkä kestää pidempään, mutta ne voisivat olla jotain muuta
+ * kuin mariosta kopioituja. ehkä kaasu paisuu ja poksahtaa? tai hahmo kaatuu
+ * suorilta jaloilta selälleen silmät ristissä?"*
+ *
+ * Tähän asti `Player.state()` palautti kuolevalle `'jump'`, eli kuolema oli
+ * **hyppy jonka fysiikka oli riisuttu**: sama kuva, sama asento, vain kaari
+ * toinen. Se on genren kuolema kirjaimellisesti — se ei ole tämän hahmon
+ * kuolema, koska tässä hahmossa ei ole mitään mikä kuolisi noin.
+ *
+ * Tämä hahmo kulkee kaasulla. Siis se **paisuu ja poksahtaa**, ja molemmat
+ * omistajan ideoista mahtuvat samaan animaatioon, koska ne ovat sen kaksi
+ * puoliskoa: jäykistyminen on se hetki jolloin kaasu lakkaa liikkumasta, ja
+ * poksahdus on se mihin jäykistyminen johtaa. Kolme kuvaa, ja kukin niistä
+ * kestää sen mitä sen lukeminen vaatii:
+ *
+ *   `stiff`  0…`DEATH_SWELL`   **jäykkä**: jalat suorina yhdessä, kädet
+ *                              sivuille ojossa, silmät ristissä. Keho ei enää
+ *                              tee mitään omasta tahdostaan, ja juuri se on
+ *                              se mikä lukijalle kerrotaan ensin.
+ *   `swell`  …`DEATH_POP`      **paisuu**: vyötärölle kasvaa kaasupullistuma.
+ *                              Se kasvaa tasaisesti, eli se on ajastin jonka
+ *                              näkee — kuva kertoo että jotain on tulossa.
+ *   `husk`   `DEATH_POP`…      **tyhjä kuori**: poksahtanut, litteä, kädet
+ *                              retkottavat. Poksahdus itse on `Player.update`in
+ *                              kaasupilvi ja `pop`-ääni; tämä on se mitä siitä
+ *                              jää jäljelle putoamaan.
+ *
+ * **Laatikko.** Pullistuma on ainoa kohta jossa piirros menee laatikkonsa
+ * ulkopuolelle, ja se on ilmoitettu: `verify.mjs`in asentokatselmus antaa
+ * `dead swell`ille oman väljyytensä sivusuunnassa. Alaspäin se ei mene
+ * lainkaan (`below: 0` on ehdoton) — pullistuma kasvaa vyötäröltä ylöspäin ja
+ * sivuille, koska jalat ovat se osa joka on jäykkänä maata kohti.
+ */
+/* Viedään ulos, koska hinnan lukee se joka sen maksaa: `Player.update`
+ * poksauttaa kaasupilven `DEATH_POP`illa, eikä kopioitu luku pysy samana. */
+export const DEATH_SWELL = 18;
+export const DEATH_POP = 42;
+/** Suurin pullistuma pikseleinä sivulle, isolla keholla; pienellä puolet. */
+const DEATH_BULGE = 3;
+
+/** Ristisilmä: kaksi lävistäjää, ja ne piirretään pään sisään. */
+function crossEye(ctx, ex, ey, big) {
+  ctx.fillStyle = C.ink;
+  const n = big ? 3 : 2;
+  for (let i = 0; i < n; i++) {
+    ctx.fillRect(ex + i, ey + i, 1, 1);
+    ctx.fillRect(ex + i, ey + n - 1 - i, 1, 1);
+  }
+}
+
+/** Mikä vaihe on menossa, ja kuinka pitkällä se on (0…1). */
+function deathPhase(t) {
+  if (t < DEATH_SWELL) return { phase: 'stiff', k: t / DEATH_SWELL };
+  if (t < DEATH_POP) return { phase: 'swell', k: (t - DEATH_SWELL) / (DEATH_POP - DEATH_SWELL) };
+  return { phase: 'husk', k: Math.min(1, (t - DEATH_POP) / 20) };
+}
+
+function deathPose(ctx, px, py, pal, s, small) {
+  const { phase, k } = deathPhase(s.deadT || 0);
+  const bulge = phase === 'swell' ? Math.round((small ? DEATH_BULGE - 1 : DEATH_BULGE) * k) : 0;
+  const w = small ? 12 : 14;
+  const hw = small ? 7 : 8;
+  const hair = 3;
+  const skin = small ? 6 : 7;
+  const headH = hair + skin;
+
+  /*
+   * Kaikki mitat ovat **yhtenäisiä**, ja se on portti eikä siisteys: `verify`
+   * vaatii että hahmo on yksi kappale (nelinaapuruus), joten pään alareunan ja
+   * vartalon yläreunan välissä ei saa olla yhtään tyhjää riviä. Ensimmäinen
+   * versio jätti isolle keholle neljä — pää oli riveillä 1…10 ja vartalo alkoi
+   * rivistä 15 — ja portti laski 150 rikkinäistä asentoa.
+   */
+  const hy = py + (phase === 'husk' ? (small ? 3 : 8) : (small ? 0 : 1));
+  const ty = hy + headH;
+  const legY = py + (small ? 12 : 21);
+  const th = legY - ty;
+
+  head(ctx, px + 3, hy, pal, hw, hair, skin, false);
+  crossEye(ctx, px + (small ? 6 : 7), hy + hair + 1, !small);
+
+  if (phase === 'husk') {
+    /* Tyhjä kuori: pää on painunut hartioihin ja se mikä jää väliin on ohut.
+     * Kädet retkottavat alaspäin — jäykkyys on mennyt sen mukana mikä sitä
+     * piti yllä. */
+    ctx.fillStyle = pal.suit;
+    ctx.fillRect(px + 1, ty, w - 2, th);
+    ctx.fillStyle = pal.shade;
+    ctx.fillRect(px + 1, ty, w - 2, 1);
+    ctx.fillStyle = C.skin;
+    ctx.fillRect(px, ty, 2, th);
+    ctx.fillRect(px + w - 2, ty, 2, th);
+    ctx.fillStyle = pal.legs;
+    ctx.fillRect(px + 2, legY, w - 4, py + (small ? 16 : 26) - legY);
+    return;
+  }
+
+  /* Jäykkä ja paisuva ovat sama piirros, ja vain pullistuma erottaa ne. */
+  ctx.fillStyle = pal.suit;
+  ctx.fillRect(px + 2 - bulge, ty, w - 4 + bulge * 2, th);
+  if (pal.mark) gasMarks(ctx, pal.mark, px + 2, ty, w - 4, th);
+  ctx.fillStyle = pal.shade;
+  ctx.fillRect(px + 2 - bulge, ty, w - 4 + bulge * 2, 1);
+
+  /* Kädet suorina sivuille: se on jäykistymisen merkki, ja pullistuma työntää
+   * niitä ulospäin sitä mukaa kuin se kasvaa. */
+  ctx.fillStyle = C.skin;
+  const ay = ty + Math.max(0, Math.floor(th / 2) - 1);
+  ctx.fillRect(px - bulge, ay, 2, 2);
+  ctx.fillRect(px + w - 2 + bulge, ay, 2, 2);
+
+  /* Jalat yhdessä ja suorina — ei kävelysykliä, ei hyppyasentoa. */
+  ctx.fillStyle = pal.legs;
+  ctx.fillRect(px + 4, legY, w - 8, py + (small ? 16 : 26) - legY);
+  ctx.fillStyle = pal.shade;
+  ctx.fillRect(px + 4, legY, w - 8, 1);
+}
+
 function drawPlayerBase(ctx, x, y, s, small) {
   const pal = POWER_LOOKS[s.type || 'none'] || POWER_LOOKS.none;
   const ducking = s.ducking && !small;
@@ -796,6 +918,13 @@ function drawPlayerBase(ctx, x, y, s, small) {
      * nothing else about the body is happening. */
     if (s.pound) {
       poundPose(ctx, px, py, pal, s, small);
+      return;
+    }
+
+    /* Ja kuolema ennen kaikkea muuta, samasta syystä kuin isku: sen ajan
+     * kehossa ei tapahdu mitään muuta. Ks. `deathPose`. */
+    if (s.dead) {
+      deathPose(ctx, px, py, pal, s, small);
       return;
     }
 

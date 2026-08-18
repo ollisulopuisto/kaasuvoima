@@ -2,10 +2,11 @@ import { Player } from '../entities/player.js';
 import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
   Moon, SpikeGuy, BeanBaron, BeanBomb, Kurnuttaja,
-  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Pyorre, Kummitus,
+  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Ember, Pyorre, Kummitus,
   Hossotin,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
+import { claimIds } from '../entities/entity.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 
 /**
@@ -43,6 +44,11 @@ const REGISTRY = {
    */
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho,
   Pyorre, Kummitus, Hossotin,
+  /* Kekäle on lyhytikäinen mutta se on **vaara**, ja pikatallennus keskellä
+   * kekälesadetta palauttaisi ilman tätä kentän jossa sade on juuri lakannut.
+   * Sää itse (`quake`, `twister`, sateen kello) on johdettu kellosta eikä
+   * tarvitse riviä; se mikä sateesta on jo ilmassa, tarvitsee. */
+  Ember,
   /* `CoinPop` poistui 17.8.2026: lohkosta lyöty kolikko **on** nyt se kolikko
    * joka lentää putkiloon (`coinToTube`), eikä lentorata ole olio vaan
    * kohtauksen oma kenttä — ja kohtauksen kentät `savestate` kantaa jo. */
@@ -96,7 +102,7 @@ export function captureState(game) {
   const scene = game.scene;
   if (!scene) return null;
   const base = {
-    v: 1,
+    v: 2,
     stamp: new Date().toISOString(),
     gameState: JSON.parse(JSON.stringify(game.state)),
   };
@@ -146,6 +152,10 @@ export function captureState(game) {
          * tätä pikalataus jättäisi jään ikuiseksi ja kentän lopputila olisi eri
          * kuin sen lähtötila. */
         frost: [...(scene.frost || new Map()).entries()].map(([k, v]) => [k, { ...v }]),
+        /* Metsäpalo, samasta syystä kuin kuura: ruudukko palauttaa puun, muttei
+         * sitä kuinka pitkällä sen palo oli — ja palon vaihe on ero sen välillä
+         * satuttaako puu vai onko se jo hiiltä. */
+        burning: [...(scene.burning || new Map()).entries()].map(([k, v]) => [k, { ...v }]),
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -169,7 +179,13 @@ export function captureState(game) {
 }
 
 export function restoreState(game, snap) {
-  if (!snap || snap.v !== 1) return false;
+  /* Versio 2 (18.8.2026): kenttädata kasvoi 15 rivistä 16:een. Tilannekuva
+   * kantaa **koko ruudukon**, ja vanha 15-rivinen ruudukko palautettaisiin
+   * kenttään jonka `h` on 16 — jolloin alin rivi eli lattia olisi
+   * `undefined`. Tämä on se harvinainen tapaus jossa version nosto on oikein:
+   * `save.js` migratoi *edistymisen* nostamatta versiota, mutta tilannekuva on
+   * kuva ruudukosta jota ei enää ole. Hinta on kolme pikatallennuspaikkaa. */
+  if (!snap || snap.v !== 2) return false;
   game.state = { cards: [], ...snap.gameState };
 
   if (snap.kind === 'map') {
@@ -214,6 +230,11 @@ export function restoreState(game, snap) {
   // Vanhempi tilannekuva on otettu ennen areenapomoa; johdetut paikat jäävät.
   if (data.pillars) scene.pillars = data.pillars.map((s) => ({ ...s }));
   scene.frost = new Map((data.frost || []).map(([k, v]) => [k, { ...v }]));
+  scene.burning = new Map((data.burning || []).map(([k, v]) => [k, { ...v }]));
+  /* Tunnuslaskuri palautettujen tunnusten yli, ks. `claimIds`. Tämä on se rivi
+   * joka pitää olioiden väliset viittaukset (karvapallon kyyti) ehjinä sivun
+   * latauksen jälkeen tehdyssä pikalatauksessa. */
+  claimIds(Math.max(0, ...scene.entities.map((e) => e.id || 0)));
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

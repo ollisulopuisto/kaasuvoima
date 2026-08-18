@@ -497,7 +497,8 @@ lukuihin (49/48/40/47/49 · 33/33/28/33/36/49 · 18/17/15/9/17/33 px):
 ### Kohta 4 tarkemmin: mitä "litteä maailma käännetään" olisi täällä
 
 **Se ei ole 3D eikä sen pitäisi olla.** Tämä peli on kolmessa kaistassa —
-taivas, reitti, luola — jotka ovat 15 riviä kukin, päällekkäin, ja `bandAt`
+taivas, reitti, luola — jotka ovat 16 riviä kukin (15 riviä kenttädataa ja
+yksi kokoajan lisäämä taivasrivi, ks. `data/chunks.js`), päällekkäin, ja `bandAt`
 kertoo jo kumpaan jalat osuvat. Käännös on siis **naapurikaista**, ei kolmas
 ulottuvuus, ja se on ainoa versio jonka tämä moottori voi tehdä rehellisesti.
 
@@ -641,3 +642,111 @@ validoimaan lopputilan eikä lähtötilaa — ja se on juuri se este joka seisoo
 areenaa muokkaavan pomon tiellä. Halpa harjoitus kalliista ongelmasta.
 
 **C (ummetus on muoto)** on se joka tekee pelistä eniten itsensä näköisen.
+
+## ✔ Built 18.8.2026: fill the P-meter by rhythm, not by holding
+
+*(Built the same day it was proposed — v26.08.18.33. The proposal below stands
+as written; three things came out differently once measured, and they are
+marked inline. The build's own reasoning lives next to `PUMP_PERIOD` in
+`entities/player.js`.)*
+
+**What changed against the proposal:**
+
+- **The window is not the plume.** Riding the existing plume would have needed
+  no new drawing, but the plume's rhythm accelerates as the gauge fills, so a
+  fixed beat drifted against it. The metronome is its own puff.
+- **Pumping is not gated on the plume either.** Gated at `PLUME_START` the
+  technique got two beats and saved ten frames, because the gauge fills in
+  about a hundred frames and the plume starts two thirds of the way up. It is
+  gated on running instead.
+- **Mashing punishes itself, and not by venting.** The proposal expected
+  mashing to land a third of its presses and run at a loss. What happens is
+  simpler: with the button up half the time the body never reaches running
+  speed, so there is nothing to pump and the gauge drains. The vent punishes a
+  *wrong rhythm*, which is the interesting case.
+
+Measured: 100 frames holding, 78 on the beat, 491 off it.
+
+---
+
+## The proposal as written
+
+*(Owner: "could a mechanic work where tapping run repeatedly gives you more
+speed? Not continuous mashing — a meter where hitting the right moment in the
+cooldown gives a boost, like the active reload in Gears of War." Written down
+as a proposal; the numbers below are the ones that have to be measured before
+any of it is built.)*
+
+**Short answer: yes, and it fits this character better than it fits the game it
+came from — but only as a new way to fill the meter that already exists.**
+
+### The one thing that would sink it
+
+A second meter. `DESIGN.md` §8 forbids two ways of saying the same thing, and
+the P-meter already means exactly *"you have been running long enough to go
+faster"*. A rhythm gauge next to it would be a second speed-earning system with
+its own bar, its own sound and its own rules, and the player would have to read
+both to answer one question.
+
+So the shape is not "a new meter". It is: **the P-meter keeps its meaning and
+gains a second way to fill.** Holding run fills it at `P_FILL` as it does now
+and nothing that exists changes; releasing and re-pressing inside a window
+fills it faster. One meter, one meaning, two techniques — the same relationship
+the slope already has with speed.
+
+### Why it suits this character
+
+The active reload works in Gears because a rifle *has* a reload — the fiction
+supplies the cooldown. Here the fiction supplies something better: the
+character runs on gas. Pumping pressure rhythmically is what you would
+literally do to a bellows, and the game already draws the pressure as a plume
+(`PLUME_START`) rather than as a number. The mechanic would be reading the
+thing the game already draws.
+
+### Three design rules it would have to obey
+
+1. **A miss has to cost something.** Gears jams the rifle; that punishment is
+   the entire reason the choice is interesting. Without a cost, pressing early
+   is free and the mechanic degenerates into mashing, which the owner already
+   ruled out. The thematic cost here is exact: a mistimed pump **vents**, and
+   the meter drops. Note the existing asymmetry to build on — `P_DRAIN` is a
+   third of `P_FILL`, so the meter is already forgiving, and a vent would be
+   the one thing that is not.
+2. **The window is shown on the body, not in a bar.** The HUD strip was taken
+   apart on purpose (17.8.2026) and every reading now lives in the world: coins
+   in the tube, time in the sun, pressure in the plume. The window belongs in
+   the plume — a flash on the beat — and nowhere else.
+3. **It must degrade to holding.** Touch controls exist (`core/touch.js`), and
+   rhythmic timing on glass is far harder than on a keyboard. Holding run must
+   remain a complete way to play, not a worse one.
+
+### The constraint that matters, and the good news about it
+
+`DESIGN.md` §5: the ground route must be clearable at the smallest size with no
+power-up. If speed becomes skill-gated, the temptation is to design levels
+around the higher speed — and that would quietly break the promise for everyone
+who does not have the rhythm.
+
+**The existing gate already prevents this for free.** `tools/playable.mjs` and
+the `verify.mjs` power-0 gate both drive a bot that only runs right and jumps —
+it holds the button. So any level that came to *require* rhythm would fail the
+gate the day it was written. Nothing new has to be built to protect the
+promise; it is already protected by a bot that cannot play the mechanic.
+
+### What to measure before building it
+
+- **The ceiling.** `MAX_WALK` 1.5, `MAX_RUN` 2.5, `MAX_P` 3.5. Does perfect
+  rhythm reach `MAX_P` faster, or go past it? Past it is a different game:
+  `tools/measure-jump.mjs` would have to be re-run, because `gapTiles` 6 and
+  `wallTiles` 4 are measured at P-speed and every level is validated against
+  them. Reaching it *faster* changes nothing measured and is the safer
+  proposal.
+- **The window.** How wide, in frames, before it stops being a skill and starts
+  being a coin flip — and how that reads at 60 Hz on a phone.
+- **Whether the plume can carry it.** If the flash is not legible while
+  running, the mechanic has no feedback and the rest does not matter.
+
+My recommendation if it is built: **faster to `MAX_P`, not past it.** It gives
+the technique a real payoff, keeps every measured number in the game valid, and
+leaves the ground route exactly where it is.
+
