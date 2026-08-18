@@ -28,6 +28,19 @@ export function withVine(spec, col, top, bottom) {
   return spec;
 }
 
+/**
+ * Mitä palikan **ylimmällä rivillä** saa olla, ja miksi se on portti.
+ *
+ * Kokoaja monistaa rivin 0 taivasriviksi (`data/chunks.js`, `SKY_PAD`), koska
+ * siellä olevat asiat ovat jatkuvia: katto on paksumpi katto ja pavunvarsi
+ * yltää kaistan rajalle. Monistus on oikea vastaus tasan niin kauan kuin
+ * rivillä 0 on vain sellaista mitä *saa* monistaa — kolikko rivillä 0 olisi
+ * kaksi kolikkoa, vihollinen kaksi vihollista, ja kumpikaan ei kaataisi
+ * mitään. Siksi tämä on heitto palikan määrittelyhetkellä eikä sääntö jonka
+ * joku muistaa.
+ */
+const SKY_SAFE = new Set([' ', '#', 'X', 'v']);
+
 export function ck(w, spec) {
   const rows = [];
   for (let y = 0; y < CHUNK_ROWS; y++) {
@@ -36,6 +49,11 @@ export function ck(w, spec) {
       throw new Error(`chunk row ${y} is ${raw.length} wide, expected max ${w}: "${raw}"`);
     }
     rows.push(raw.padEnd(w, ' '));
+  }
+  for (const ch of rows[0]) {
+    if (SKY_SAFE.has(ch)) continue;
+    throw new Error(`chunk row 0 has "${ch}": only continuing tiles (${[...SKY_SAFE].join('')}) `
+      + 'may sit on the top row, because the assembler copies it into the sky row');
   }
   return { w, rows };
 }
