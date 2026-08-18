@@ -1,5 +1,5 @@
 import { Input } from './core/input.js';
-import { Save } from './core/save.js';
+import { Save, CONTINUE_LIVES } from './core/save.js';
 import { Music, Sfx, toggleMute, isMuted, audioDiag } from './core/audio.js';
 import { drawText } from './gfx/font.js';
 import { WORLDS, startNode, findNode } from './data/worlds.js';
@@ -428,7 +428,13 @@ class Game {
 
   continueGame() {
     this.adoptState(Save.load());
-    if (this.state.lives < 1) this.state.lives = 4;
+    /* Resuming a save whose stock is gone *is* a continue — the run reached
+     * PELI POIKKI and the tab was closed instead of the choice being made — so
+     * it hands out exactly what the choice hands out, from the same constant.
+     * It stays uncounted, as it was before: `continues` is taken on the screen
+     * that offers the option, and the title cannot tell an emptied save from
+     * one that was merely written at zero lives mid-run. */
+    if (this.state.lives < 1) this.state.lives = CONTINUE_LIVES;
     this.toWorldMap();
   }
 
@@ -488,7 +494,20 @@ class Game {
       this.state.lives--;
       this.persist();
       if (this.state.lives < 0) {
-        this.state.lives = 4;
+        /*
+         * TYHJÄ PINO, EI TÄYTETTYÄ. This line used to read `lives = 4`, which
+         * meant the continue had already happened before the screen that offers
+         * it was drawn: the player was handed a fresh stock for dying, and
+         * ALOITA ALUSTA got the same silent gift. Now the death only empties
+         * the pile, and the grant belongs to the choice — `GameOverScene` sets
+         * `CONTINUE_LIVES` in the JATKA branch and nowhere else, which is also
+         * the only way the red coins it draws can be a promise it keeps.
+         *
+         * Zero rather than the -1 we just counted down to, because this is
+         * persisted: a save is read by `continueGame`, and a negative stock is
+         * a number no other part of the game is prepared to see.
+         */
+        this.state.lives = 0;
         this.persist();
         this.setScene(new GameOverScene(this));
       } else {

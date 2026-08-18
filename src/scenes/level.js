@@ -25,7 +25,7 @@ import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
 } from '../core/timeattack.js';
-import { clamp, hashNoise, hashPlace, overlaps, padNum } from '../core/utils.js';
+import { clamp, hashNoise, hashPlace, overlaps } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
 import { DAILY_TITLE } from '../core/daily.js';
 
@@ -2115,6 +2115,34 @@ export class LevelScene {
       st.checks[this.id] = tx;
       if (this.game.persist) this.game.persist();
     }
+    /*
+     * A LIT LAMP TOPS THE TUBE UP TO `FUEL_FLOOR`, and the amount is not a
+     * choice — it is the same line the level entrance runs.
+     *
+     * The constructor guarantees that nobody starts a level under `FUEL_FLOOR`
+     * coins, because a level you cannot finish is not a level. Lighting a lamp
+     * *moves* where the level starts: `spawn` becomes this column and death
+     * brings you back here rather than to the gate. So the same guarantee has
+     * to move with it, or a checkpoint would be a promise that gets thinner the
+     * further into a level it sits — you would be returned to a spot with
+     * whatever fuel happened to be left when you died, which is exactly the
+     * situation the entrance floor exists to prevent.
+     *
+     * It tops up and never trims. A player arriving rich keeps everything: this
+     * is a floor, and a floor that could take coins away would make lighting a
+     * lamp a thing to think twice about.
+     *
+     * Coins fly in rather than appearing, and they are **not** collected coins:
+     * no score, no `coinsTotal`. The lamp is not a payout, it is the level
+     * starting again — see `addCoin` for what a real coin does.
+     */
+    const short = FUEL_FLOOR - st.coins;
+    if (short > 0) {
+      st.coins = FUEL_FLOOR;
+      for (let i = 0; i < short; i++) {
+        this.coinToTube(tx * TILE + 8, ty * TILE, true, i * QCOIN_STAGGER);
+      }
+    }
     /* Ääni ja kuva samasta tapahtumasta, ja molemmat kertovat "päällä": liekki
      * jää palamaan ruudulle, sytytys kuuluu kerran. Tärinää ei ole — tärinä on
      * tässä pelissä iskun sana (ks. `shake`), eikä lyhty osu mihinkään. */
@@ -3283,6 +3311,40 @@ export class LevelScene {
         this.chained(shell, () => e.hitByShell(Math.sign(shell.vx) || 1));
       }
     }
+    this.shellThrowsSwitch(shell);
+  }
+
+  /**
+   * A SLIDING SHELL THROWS A SWITCH, and this is the cheapest bundling in the
+   * game: no new object, no new verb, one condition.
+   *
+   * The switch block is bumped from below by a head (`bumpBlock`), which means
+   * a switch is reachable exactly where a jump is. That made the switch a
+   * *height* puzzle in a game whose switch is a *time* puzzle — ten seconds to
+   * cross a room and come back — and the two have nothing to do with each
+   * other. A shell already is a thing the player aims down a corridor, and it
+   * already smashes bricks along the way (`ShellGuy.smashAhead`), so letting it
+   * hit the switch adds a way to solve a room without adding a thing to learn.
+   *
+   * It reads the tile the shell is about to enter rather than the one it is in,
+   * for the same reason `smashAhead` does: a shell moving at speed is inside
+   * the next column before a frame boundary notices, and a switch that fires
+   * one tile late fires from the far side of the wall it was meant to open.
+   *
+   * `T.USED` and `startSwitch` are the same two lines the head bump runs, in
+   * the same order — the switch cannot tell which of them threw it, which is
+   * the whole point of it being one switch rather than two.
+   */
+  shellThrowsSwitch(shell) {
+    const dir = Math.sign(shell.vx);
+    if (!dir) return;
+    const box = shell.box;
+    const ahead = Math.floor((dir > 0 ? box.x + box.w + 1 : box.x - 1) / TILE);
+    const ty = Math.floor((box.y + box.h / 2) / TILE);
+    const ch = this.rawTileAt(ahead, ty);
+    if (!info(ch).switch) return;
+    this.setTile(ahead, ty, T.USED);
+    this.startSwitch();
   }
 
   /**
@@ -6442,21 +6504,21 @@ export class LevelScene {
      * kumpikaan ei ole pysyvä.
      */
     /*
-     * KELLO ON PUTKILO, ja tämä rivi on vain sen hätähuuto.
+     * KELLO ON PUTKILO, EIKÄ SILLÄ OLE ENÄÄ NUMEROA — ei edes hätätilassa.
      *
-     * `AIKA 300` katosi kokonaan kun kolikot muuttuivat ajaksi (18.8.2026):
-     * lukema on nyt putkilon pinta vasemmassa reunassa, ja se on ruudulla koko
-     * ajan. Numero ilmestyy vain kun polttoaine on vähissä (`FUEL_HURRY`),
-     * koska silloin — ja vain silloin — tarkka luku on eri tieto kuin pinta:
-     * "vielä vähän" ja "kaksitoista sekuntia" ovat eri lauseita.
+     * `AIKA 300` katosi kun kolikot muuttuivat ajaksi (18.8.2026), ja tähän jäi
+     * hätähuuto: `KOLIKOT 12` vilkkumassa oikeassa yläkulmassa alle
+     * `FUEL_HURRY`n. Sen perustelu oli että tarkka luku on silloin eri tieto
+     * kuin pinta — mutta se ei ollut ainoa eikä edes ensimmäinen tapa jolla
+     * peli sen kertoo. Ne kaksi olivat jo olemassa ja ne ovat molemmat
+     * diegeettisiä: `timewarn` soi täsmälleen sillä kolikolla (`updateTimer`),
+     * ja musiikki vaihtaa kiirevaihteelle (`Music.setHurry`) ja pysyy siellä.
+     * Kolme tapaa sanoa "aika loppuu", ja se kolmas oli ainoa joka vaati
+     * lukemaan numeron kesken hypyn.
+     *
+     * Omistaja 18.8.2026: *"let's get rid of the coin counter on the right
+     * side, it's not needed."* Putkilo on koko ajan ruudulla ja se on matala.
      */
-    const urgent = st.coins <= FUEL_HURRY;
-    if (urgent) {
-      const color = Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff';
-      drawText(ctx, `KOLIKOT ${padNum(st.coins, 2)}`, OVERLAY.right, 6,
-        { color, align: 'right', shadow: S });
-    }
-
     /*
      * AIKA-AJON KELLO ON RUUDULLA, ja se on seurausta siitä että AIKA-kello
      * katosi (18.8.2026: kolikot ovat aika).
@@ -6505,6 +6567,29 @@ export class LevelScene {
         align: 'right',
         shadow: S,
       });
+    } else if (this.player.swallowed) {
+      /*
+       * NIELTY KYKY ON LÄHTÖLASKENTA SIINÄ MISSÄ MUUTKIN (18.8.2026).
+       *
+       * Sillä oli oma nimi ja oma palkki varalokeron vieressä, ja perustelu
+       * kuului: pelaajan on tiedettävä *mikä* ja *kuinka kauan vielä*. Se on
+       * yhä totta — ja se on täsmälleen se pari jonka tämä kolo on jo viisi
+       * kertaa kertonut. `TÄHTI 6` sanoo mikä ja kuinka kauan yhdellä rivillä;
+       * `SIIVET 6` sanoo saman saman levyisenä samassa paikassa.
+       *
+       * Kolo on yhä yksi, eli tähti voittaa kyvyn. Se on sama valinta joka
+       * tehtiin viidelle edelliselle: kaksi lähtölaskentaa yhtä aikaa on tila
+       * jossa kumpaakaan ei ehdi lukea, ja jos molemmat ovat käynnissä, tähti
+       * on se joka päättyy ikävämmin.
+       */
+      const secs = Math.ceil(this.player.swallowTimer / 60);
+      const name = SWALLOW_NAMES[this.player.swallowed] || this.player.swallowed;
+      drawText(ctx, `${name} ${secs}`, OVERLAY.right, 17, {
+        color: this.player.swallowTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2
+          ? '#ff8040' : '#a8e04a',
+        align: 'right',
+        shadow: S,
+      });
     } else if (this.bossDefeated) {
       drawText(ctx, 'OVI AUKI', OVERLAY.right, 17, { color: '#ffd048', align: 'right', shadow: S });
     }
@@ -6526,27 +6611,9 @@ export class LevelScene {
     ctx.restore();
     if (st.reserve) drawItem(ctx, st.reserve, OVERLAY.box + 2, by + 2, this.tick);
 
-    /*
-     * NIELTY KYKY, ja se on **nimi ja palkki** eikä kuvake.
-     *
-     * Kyky kestää kahdeksan sekuntia, eli pelaajan on tiedettävä kaksi asiaa
-     * yhdellä silmäyksellä: *mikä* ja *kuinka kauan vielä*. Kuvake vastaisi
-     * ensimmäiseen ja vaatisi opettelua; nimi vastaa siihen suoraan, ja
-     * kutistuva palkki on sama kello jonka pelaaja on jo oppinut lukemaan.
-     * Paikka on varalokeron vieressä, koska molemmat vastaavat kysymykseen
-     * "mitä minulla on mukana".
-     */
-    const gift = this.player.swallowed;
-    if (gift) {
-      const left = this.player.swallowTimer / SWALLOW_FRAMES;
-      drawText(ctx, SWALLOW_NAMES[gift] || gift, OVERLAY.box - 6, by + 2,
-        { color: '#a8e04a', align: 'right', shadow: S });
-      const bw = 44;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, bw, 3);
-      ctx.fillStyle = '#a8e04a';
-      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, Math.round(bw * left), 3);
-    }
+    /* Nielty kyky oli tässä, nimenä ja palkkina. Se on nyt yläkulman
+     * lähtölaskentakolossa muiden kanssa — ks. `SIIVET 6` siellä ylempänä —
+     * eli alanurkkaan jäi vain varalokero, ja alanurkka on sitä hiljaisempi. */
 
   }
 

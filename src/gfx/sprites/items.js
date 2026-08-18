@@ -754,6 +754,14 @@ export function drawLifeCoins(ctx, x, y, lives, shadow) {
   const shown = Math.max(0, Math.min(LIFE_PIPS, lives));
   for (let i = 0; i < shown; i++) {
     const cx = x + i * (LIFE_PIP + 2);
+    /* The drop shadow the text beside these uses, and for the same reason: the
+     * level HUD is drawn over whatever the level happens to be, and a dark
+     * coin on a dark cave wall is a coin nobody can count. Callers that draw
+     * on a known ground (the map panel, the game-over screen) pass null. */
+    if (shadow) {
+      ctx.fillStyle = shadow;
+      ctx.fillRect(cx + 1, y + 1, LIFE_PIP, LIFE_PIP);
+    }
     ctx.fillStyle = '#8c1414';
     ctx.fillRect(cx, y, LIFE_PIP, LIFE_PIP);
     ctx.fillStyle = '#d83030';

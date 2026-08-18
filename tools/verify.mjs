@@ -8522,6 +8522,60 @@ const report = await page.evaluate(async () => {
       ['NameEntryScene', 'HighScoreScene'].includes(game.scene.constructor.name),
       game.scene.constructor.name);
     scores.clearScores();
+
+    /*
+     * JATKO ON KOURALLINEN PUNAISIA KOLIKOITA, ei sana.
+     *
+     * Elämä on punainen kolikko (18.8.2026), ja jatko on täsmälleen "tässä on
+     * lisää elämiä" — joten ruudun on annettava ne näkyvästi. Kaksi väitettä
+     * yhdestä valinnasta, ja molemmat tarvitaan: kuolema tyhjentää pinon
+     * (`Game.finishLevel`), joten pelkkä "elämiä on jäljellä" menisi läpi myös
+     * silloin kun kukaan ei antanut mitään, ja piirretty kolikkomäärä ilman
+     * tilatarkistusta olisi lupaus jota kukaan ei pidä.
+     *
+     * Luku luetaan `CONTINUE_LIVES`ista eikä kirjoiteta tähän uudestaan: koko
+     * muutoksen pointti on, ettei aloituspinoa ja jatkon pinoa ole kahtena eri
+     * lukuna kahdessa eri tiedostossa.
+     */
+    {
+      const { Save, CONTINUE_LIVES, START_LIVES } = await import('/src/core/save.js');
+      reset();
+      game.state.lives = 0;          // kuten kuolema jättää pinon
+      game.state.score = 50000;
+      game.setScene(new GameOverScene(game));
+      for (let f = 0; f < 32; f++) game.scene.update(mkInput());
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 240;
+      const g = canvas.getContext('2d');
+      game.scene.draw(g);
+      /* JATKA-rivin kaista. Punainen tunnistetaan erotuksella eikä tarkalla
+       * sävyllä, jotta kolikon kolme sävyä kelpaavat kaikki eikä ruudun
+       * keltainen kehys (255,208,72) tai sininen tausta kelpaa yksikään. */
+      const px = g.getImageData(0, 100, 320, 24).data;
+      const cols = new Set();
+      for (let y = 0; y < 24; y++) {
+        for (let x = 0; x < 320; x++) {
+          const o = ((y * 320) + x) * 4;
+          const r = px[o];
+          if (r > 120 && r - px[o + 1] > 60 && r - px[o + 2] > 60) cols.add(x);
+        }
+      }
+      let coins = 0;
+      for (const x of cols) if (!cols.has(x - 1)) coins++;
+      expect('peli poikki tarjoaa jatkon elämät punaisina kolikkoina',
+        coins === CONTINUE_LIVES && CONTINUE_LIVES > 0 && CONTINUE_LIVES <= START_LIVES,
+        `${coins} kolikkoa rivillä, jatko antaa ${CONTINUE_LIVES}/${START_LIVES}`);
+
+      const k = mkInput();
+      k.pressed.jump = true;
+      game.scene.update(k);
+      expect('jatko antaa täsmälleen ne elämät jotka se näytti, ja ne säilyvät',
+        game.state.lives === CONTINUE_LIVES && Save.load().lives === CONTINUE_LIVES,
+        `elämät ${game.state.lives}, tallennuksessa ${Save.load().lives},`
+        + ` luvattu ${CONTINUE_LIVES}`);
+    }
   }
 
   /* ------------------------------ näppäimet ------------------------------ */
@@ -12983,12 +13037,162 @@ const report = await page.evaluate(async () => {
      * säiliö valuu koko ajan, joten "saiko pelaaja saaliin" on kysymys jonka
      * vain kulumaton luku voi vastata. */
     const purse = game.state.coinsTotal || 0;
+    /* The haul is read before the stomp, because death empties the belly:
+     * `spill` zeroes `loot` precisely so that one hoard cannot pay twice. */
+    const ate = thief.loot;
     thief.stomp();
     for (let f = 0; f < 60; f++) s2.update(idle);
     expect('kolikkovaras syö kolikon ja pudottaa saaliin tallattuna',
-      thief.loot > 0 && coins1 < coins0 && (game.state.coinsTotal || 0) >= purse + thief.loot,
-      `söi ${thief.loot}, kolikoita ${coins0} -> ${coins1},`
+      ate > 0 && coins1 < coins0 && (game.state.coinsTotal || 0) >= purse + ate - Math.floor(ate / 4),
+      `söi ${ate}, kolikoita ${coins0} -> ${coins1},`
       + ` ura ${purse} -> ${game.state.coinsTotal || 0}`);
+
+    /*
+     * 2 b. SE PAISUU SILLÄ MITÄ SE ON SYÖNYT — and the three claims here are
+     * the three that can break each other.
+     *
+     * The body grows with the loot and stops at one tile, which is the cap
+     * that keeps this species out of the terrain question its own class
+     * comment promises to stay out of (`THIEF_CAP`): every corridor a 16x16
+     * walker fits through, a full-grown thief fits through too, and its head
+     * reaches a one-tile ceiling without ever being inside it. The feet stay
+     * on the floor while it grows, because a body that grew from its corner
+     * would grow into the ground. And the box is square at every step, because
+     * the drawing below is measured against it.
+     */
+    const grower = new E3.Kolikkovaras(s2, 8 * 16 + 1, 8 * 16 + 2);
+    const feet0 = grower.y + grower.h;
+    const swell = [];
+    let feetMoved = 0;
+    let broken = 0;
+    for (let n = 0; n <= 10; n++) {
+      grower.loot = n;
+      grower.fatten();
+      swell.push(grower.w);
+      if (grower.y + grower.h !== feet0) feetMoved++;
+      if (grower.w > 16 || grower.h !== grower.w) broken++;
+    }
+    expect('kolikkovaras paisuu saaliistaan laatikkoaan myöten, laattaa isommaksi ei',
+      swell[0] === 14 && swell[10] === 16 && broken === 0 && feetMoved === 0
+      && swell.every((v, i) => i === 0 || v >= swell[i - 1]),
+      `koot ${swell.join(',')}, jalat liikkuivat ${feetMoved} kertaa, laatikko rikki ${broken}`);
+
+    /*
+     * And the picture keeps the box it was given. Measured rather than
+     * asserted, and measured as a *difference*: the art's bounding box against
+     * the entity's box has to come out the same at 14 and at 16. A drawing
+     * that grew at its own rate would show up here as a margin that moved,
+     * which is the one failure that matters — the top edge is where the player
+     * reads whether he may jump on this thing.
+     *
+     * The numbers themselves are the sprite's own habits and not this test's
+     * business: the sack hangs a pixel past the box on the carrying side, and
+     * `outlined` and `breath` each add one below.
+     */
+    const gfxT = await import('/src/gfx/sprites.js');
+    const CW = 48;
+    const cT = document.createElement('canvas');
+    cT.width = CW;
+    cT.height = CW;
+    const gT = cT.getContext('2d', { willReadFrequently: true });
+    const OT = 12;
+    const margins = (loot, size, facing) => {
+      const out = { left: -99, right: -99, top: -99, bottom: -99, h: 0 };
+      for (let t = 0; t < 40; t++) {
+        gT.clearRect(0, 0, CW, CW);
+        gfxT.drawKolikkovaras(gT, OT, OT, t, facing, loot, size);
+        const d = gT.getImageData(0, 0, CW, CW).data;
+        let x0 = 1e9; let y0 = 1e9; let x1 = -1; let y1 = -1;
+        for (let y = 0; y < CW; y++) {
+          for (let x = 0; x < CW; x++) {
+            if (d[((y * CW) + x) * 4 + 3] < 8) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        out.left = Math.max(out.left, OT - x0);
+        out.right = Math.max(out.right, x1 - (OT + size - 1));
+        out.top = Math.max(out.top, OT - y0);
+        out.bottom = Math.max(out.bottom, y1 - (OT + size - 1));
+        out.h = Math.max(out.h, y1 - y0 + 1);
+      }
+      return out;
+    };
+    /* The size pairs are asked of the entity rather than written down here,
+     * so the drawing is measured with the numbers it is actually drawn with;
+     * an invented pair (a full sack in a thin box) would measure a thief that
+     * cannot exist. One coin is the smallest haul on the list because the
+     * empty-handed thief is the only one carrying no sack at all, and a sack
+     * appearing is a different event from a body growing. */
+    const pairs = [1, 2, 4, 10].map((n) => {
+      grower.loot = n;
+      grower.fatten();
+      return [n, grower.w];
+    });
+    const edges = ['left', 'right', 'top', 'bottom'];
+    const drift = [];
+    const seenM = [];
+    for (const facing of [1, -1]) {
+      let ref = null;
+      for (const [n, size] of pairs) {
+        const m = margins(n, size, facing);
+        if (m.h !== size) drift.push(`saalis ${n}: piirros ${m.h} px ${size} px:n laatikossa`);
+        if (!ref) ref = m;
+        else {
+          for (const k of edges) {
+            if (m[k] !== ref[k]) drift.push(`saalis ${n} suunta ${facing}: ${k} ${m[k]}, ohuena ${ref[k]}`);
+          }
+        }
+        seenM.push(`${n}/${size}${facing < 0 ? '<' : '>'} ${edges.map((k) => m[k]).join(' ')}`);
+      }
+    }
+    expect('paisuneen varkaan piirros pitää laatikkonsa',
+      drift.length === 0,
+      drift.length ? drift.join('; ') : `vasen/oikea/ylä/ala: ${seenM.join(', ')}`);
+
+    /*
+     * 2 c. KUOLLESSAAN SE PAMAHTAA AUKI ja pitää neljäsosan.
+     *
+     * The burst is `addCoin` with the `?` block's own stagger, so this reads
+     * the flights the scene actually queued: one per coin, five frames apart,
+     * each from its own point across the body. One coin from one point five
+     * times over would be a pile, and the owner asked for a burst.
+     *
+     * The quarter is rounded down, and the second thief here is that decision
+     * measured: three coins in, three coins out. What you lose is what you let
+     * it get fat on, never a race you lost by half a second — which is the
+     * sentence in the class comment that had to stay true.
+     */
+    const rich = new E3.Kolikkovaras(s2, 8 * 16 + 1, 8 * 16 + 2);
+    s2.add(rich);
+    rich.loot = 8;
+    rich.fatten();
+    s2.coinFlights.length = 0;
+    const purseR = game.state.coinsTotal || 0;
+    rich.stomp();
+    const burst = s2.coinFlights.slice();
+    const paid = (game.state.coinsTotal || 0) - purseR;
+    const fan = new Set(burst.map((f) => f.x0)).size;
+    expect('kuollut varas pamahtaa auki, pitää neljäsosan ja sirottelee loput',
+      paid === 6 && rich.loot === 0 && rich.w === 14 && burst.length === 6 && fan === 6
+      && burst.every((f, i) => f.wait === i * 5 && f.phase === 'pop'),
+      `maksoi ${paid}/8, lentoja ${burst.length}, lähtöpaikkoja ${fan}, `
+      + `odotukset ${burst.map((f) => f.wait).join(',')}`);
+
+    const poor = new E3.Kolikkovaras(s2, 9 * 16 + 1, 8 * 16 + 2);
+    s2.add(poor);
+    poor.loot = 3;
+    poor.fatten();
+    const purseP = game.state.coinsTotal || 0;
+    /* A shell and not a stomp: the same death through the other door, and it
+     * pays the same. Before this batch it paid nothing at all. */
+    poor.flipDie(1);
+    const paidPoor = (game.state.coinsTotal || 0) - purseP;
+    expect('kolmen kolikon varas antaa kuoresta takaisin kaikki kolme',
+      paidPoor === 3 && poor.loot === 0,
+      `maksoi ${paidPoor}/3`);
 
     /*
      * 3. JA JOKAINEN LAJI SELVIÄÄ PIKATALLENNUKSESTA.
@@ -14009,7 +14213,8 @@ const report = await page.evaluate(async () => {
 
   /* ----------------------------- kytkinruudut --------------------------- */
   {
-    const { T } = await import('/src/gfx/tiles.js');
+    const { T, TILE } = await import('/src/gfx/tiles.js');
+    const E = await import('/src/entities/enemies.js');
     reset({ type: 'shroom', level: 1 });
     const s = new LevelScene(game, '3-2');
     game.setScene(s);
@@ -14046,6 +14251,34 @@ const report = await page.evaluate(async () => {
       for (let f = 0; f < 12; f++) s.update(i);
       expect('a switch runs out and the bricks come back',
         s.switchTimer === 0 && s.solidAt(brick.tx, brick.ty), `ajastin ${s.switchTimer}`);
+
+      /*
+       * A SLIDING SHELL THROWS THE SWITCH TOO (18.8.2026).
+       *
+       * The switch was reachable exactly where a jump was, which made a *time*
+       * puzzle into a *height* puzzle. A shell is already something the player
+       * aims down a corridor, so this adds a second way in without adding a
+       * thing to learn — and the two ways must be the same switch, which is
+       * what the second half of this check is for: the tile is consumed to
+       * `T.USED` exactly as a head bump consumes it.
+       *
+       * The shell is placed to the LEFT of the button and pushed right, and
+       * the tile read is the one ahead of the body — a shell at speed is inside
+       * the next column before a frame boundary notices it.
+       */
+      s.switchTimer = 0;
+      s.grid[button.ty][button.tx] = T.SWITCH;
+      const shell = new E.ShellGuy(s, button.tx * TILE, button.ty * TILE);
+      /* Adjacent, not near: `shellThrowsSwitch` reads the tile the body is
+       * about to enter, so the gap has to be under one pixel or the read lands
+       * on the column before the button. */
+      shell.x = button.tx * TILE - shell.w;
+      shell.y = button.ty * TILE;
+      shell.vx = 4;
+      s.shellSweep(shell);
+      expect('liukuva kuori heittää kytkimen, ja se on sama kytkin',
+        s.switchTimer > 0 && s.grid[button.ty][button.tx] === T.USED,
+        `ajastin ${s.switchTimer}, ruutu ${s.grid[button.ty][button.tx]}`);
 
       /* The one way this design could hurt someone is being inside a brick when
        * it comes back. It turns out that cannot happen, and not for the reason
@@ -20761,6 +20994,7 @@ const report = await page.evaluate(async () => {
         usedSaveState: false, continues: 0, bestTimes: {},
       };
       const { COIN_CAP, RED_COST, RED_KEEP } = await import('/src/scenes/level.js');
+      const { T } = await import('/src/gfx/tiles.js');
       const s = new LevelScene(game, '1-1');
       game.state.coins = 0;
       s.tubeFill = 0;
@@ -20810,6 +21044,48 @@ const report = await page.evaluate(async () => {
         + ` täyttyessä pinta ${afterMint} (odotus ${RED_KEEP}), coins ${coinsAfter}`
         + ` (odotus ${COIN_CAP - RED_COST}), huuhtelu ${draining} framea,`
         + ` lopulta ${settled}, elämät ${livesBefore} -> ${game.state.lives}`);
+
+      /*
+       * SYTYTETTY LYHTY TÄYTTÄÄ SÄILIÖN `FUEL_FLOOR`iin (18.8.2026).
+       *
+       * Konstruktori takaa ettei kukaan aloita kenttää sen alle, koska kenttä
+       * jota ei voi läpäistä ei ole kenttä. Lyhty **siirtää sen mistä kenttä
+       * alkaa** — `spawn` on sen sarake ja kuolema palauttaa siihen — joten
+       * saman takuun on siirryttävä mukana. Muuten tarkistuspiste olisi lupaus
+       * joka ohenee mitä syvemmällä se on: pelaaja palaisi paikkaan sillä
+       * polttoaineella joka sattui olemaan jäljellä kun hän kuoli.
+       *
+       * Kaksi puolta, ja jälkimmäinen on se joka voisi rikkoutua hiljaa:
+       * **täyttää muttei koskaan leikkaa**. Rikkaana saapuva pitää kaikkensa,
+       * koska lattia joka voisi viedä kolikoita tekisi lyhdyn sytyttämisestä
+       * asian jota kannattaa harkita.
+       */
+      const { FUEL_FLOOR } = await import('/src/scenes/level.js');
+      const lampScene = new LevelScene(game, '1-1');
+      const lamp = (() => {
+        for (let ty = 0; ty < lampScene.h; ty++) {
+          for (let tx = 0; tx < lampScene.w; tx++) {
+            const ch = lampScene.grid[ty][tx];
+            if (ch === T.LAMP || ch === T.LAMP_LIT) return { tx, ty };
+          }
+        }
+        return null;
+      })();
+      let poorAfter = null;
+      let richAfter = null;
+      if (lamp) {
+        game.state.coins = 4;
+        lampScene.lightLamp(lamp.tx, lamp.ty);
+        poorAfter = game.state.coins;
+        const rich = new LevelScene(game, '1-1');
+        game.state.coins = COIN_CAP - 1;
+        rich.lightLamp(lamp.tx, lamp.ty);
+        richAfter = game.state.coins;
+      }
+      expect('sytytetty lyhty täyttää säiliön kenttään saapumisen lattiaan, muttei leikkaa',
+        !!lamp && poorAfter === FUEL_FLOOR && richAfter === COIN_CAP - 1,
+        lamp ? `köyhänä 4 -> ${poorAfter} (odotus ${FUEL_FLOOR}),`
+          + ` rikkaana ${COIN_CAP - 1} -> ${richAfter}` : '1-1:stä ei löytynyt lyhtyä');
     }
 
     /* --- 5. aurinko on kello, ei maisemaa --- */

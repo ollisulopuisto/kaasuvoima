@@ -7,6 +7,90 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.37 — five bundlings, and one readout that had to go
+
+Owner, after the red coin: *"I like the double feature they now serve, that
+feels elegant! We should try to come up with more bundlings like that, in
+powerups, enemies, GUI."*
+
+The test a bundling has to pass, written down because it predicts which pairs
+work: **the two meanings must move in the same direction.** Coins rise when you
+collect and fall when you spend, and so do time and lives — that is why one tube
+can be both. A pair where one half rises as the other falls is not a bundle, it
+is a confusing dial.
+
+**The coin number is gone from the corner.** It only ever appeared below
+`FUEL_HURRY`, and two diegetic warnings already fire on exactly that coin: the
+`timewarn` sting, and the music changing to its hurry gear and staying there.
+Three ways to say *time is running out*, and the third was the only one that had
+to be read mid-jump.
+
+**A swallowed ability is a countdown like the others.** It had a name and a
+draining bar of its own next to the reserve box, argued on the grounds that the
+player needs *what* and *how long* at a glance. Both true — and both are what
+the top-right slot has been saying five different ways already (`TÄHTI 6`,
+`KYTKIN 4`, `HÄTÄ 3`, `UMMETUS 8`, `OVI AUKI`). `SIIVET 6` is the same sentence
+in the widget that exists, so the bottom-corner widget is deleted and the star
+still wins the slot, because two countdowns at once is a state where neither
+gets read.
+
+The bundling that was proposed and **did not survive the code** is worth
+recording too: a swallowed ability cannot live in the reserve slot, because it
+is not an item you use — it is a mode you are in, and a mode has no icon you
+press.
+
+**A sliding shell throws a switch.** The switch was bumped from below by a head,
+which made a *time* puzzle — ten seconds to cross a room and come back — into a
+*height* puzzle, which is a different question entirely. A shell is already
+something the player aims down a corridor and it already smashes bricks on the
+way, so this is one condition and no new noun. It reads the tile it is about to
+enter, like `smashAhead`, because a shell at speed is inside the next column
+before a frame boundary notices; a switch that fires one tile late fires from
+the far side of the wall it was supposed to open. The consequence is the exact
+complement of the head bump: a shell throws the switches at its own height, and
+a head throws the ones above it.
+
+**A lit lamp fills the tube to `FUEL_FLOOR`.** The level constructor guarantees
+nobody starts under that number, because a level you cannot finish is not a
+level. Lighting a lamp *moves where the level starts* — `spawn` becomes that
+column and death returns you there — so the guarantee has to move with it, or a
+checkpoint is a promise that thins the deeper it sits. It fills and never trims:
+a floor that could take coins away would make lighting a lamp a thing to think
+about twice.
+
+**The continue speaks in red coins**, and looking at it found a bug: lives were
+already being restored in `Game.finishLevel`, *before* the game-over screen was
+built, so ALOITA ALUSTA was silently getting the same four lives as JATKA. Now
+the death path empties the pile and only the chosen branch refills it, with
+`CONTINUE_LIVES = ceil(START_LIVES / 2)` — half a fresh run's stock, derived
+from the same constant so the two cannot drift. A continue keeps the score, the
+cleared nodes, the open worlds and the reserve item, so it must not also pay a
+new run's price; and one life would only return the player to this screen after
+a single mistake, which turns a decision into a door. The row draws the two
+coins it is offering.
+
+**The coin thief swells and bursts.** Owner: *"make kolikkovaras a monster that
+swells up and releases (most) of the coins upon dying."* It grows 14 → 15 → 16
+px with its hoard, capped at one tile because the pöhö and the piikkiukko are
+already 16×16 on the same floors — so a full-grown thief asks no new traversal
+question — and it grows upward from its feet, so under a one-tile ceiling its
+head ends level with the ceiling rather than inside it. The swell is **drawn,
+not scaled**: a scaled copy put every edge between destination pixels, dropped
+the picture 1 px below its box, and read as *nearer* rather than fatter.
+
+It keeps a quarter, rounded down, so 3 in pays 3 out and 8 in pays 6. Rounding
+down is what keeps the old Finnish paragraph true — a thief caught quickly costs
+literally nothing, and the loss is a function of how fat you let it get, which
+is the one thing visible across a room. Dying by shell, tail or burst bubble now
+pays out too; before, only a stomp did, which contradicted the promise the class
+comment had been making since it was written.
+
+Two leftovers found and fixed on the way: `drawLifeCoins` took a `shadow`
+parameter it never used, and the interlude card was still drawing `*  4` — the
+last place in the game that named a life as a number.
+
+---
+
 ## v26.08.18.36 — a life is a red coin, and the score left the screen
 
 Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why do we even

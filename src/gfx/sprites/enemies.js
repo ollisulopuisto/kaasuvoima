@@ -1785,27 +1785,55 @@ export function drawKuura(ctx, x, y, frame, facing) {
  * jonka suusta pilkottaa yksi kolikko: varas ei ole kultainen, sillä on vain
  * kultaa mukanaan. Sama päätös kuin sääherran tummassa värissä.
  */
-function varasBody(ctx, x, y, frame, facing, loot, lift) {
+/*
+ * AND IT SWELLS, which is `fat`: the pixels the body has been inflated by,
+ * handed down from `Kolikkovaras.fatten` as the box it has to fill.
+ *
+ * Drawn rather than scaled, and that is the whole decision. The grown
+ * karvapallo above scales a finished sprite through a buffer because its
+ * factors are thirds and halves of a round body; this one grows by one and two
+ * pixels, and at that size a scaled copy is worse in both ways that matter. It
+ * cannot land on the box (14 to 16 is 8/7, so every edge falls between two
+ * destination pixels and the whole picture drifts a pixel low, which for a
+ * stompable enemy is the picture lying about where its head is), and it reads
+ * as *nearer* rather than as fatter, because everything grows including the
+ * feet and the eyes.
+ *
+ * So the torso and the belt widen, the legs move down with the belly, the sack
+ * rides down with them and the eyes move apart across the widening face, while
+ * the feet stay two pixels tall, the eyes stay two pixels each and the hood
+ * stays two rows deep. The margins inside the frame — three pixels left of the
+ * body, two right, two above the hood — are the same at every size, so the
+ * drawing keeps exactly the relationship to its box that it had when it was
+ * thin.
+ */
+function varasBody(ctx, x, y, frame, facing, loot, lift, fat) {
   const px = Math.round(x);
   const py = Math.round(y) + lift;
   const r = (rx, ry, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(rx, ry, w, h); };
   const step = Math.floor(frame / 6) % 2;
   const bag = Math.min(6, loot);
-  flip(ctx, px, 14, facing < 0, (bx) => {
+  flip(ctx, px, 14 + fat, facing < 0, (bx) => {
     if (bag > 0) {
-      r(bx - 1, py + 4 - Math.floor(bag / 2), 5, 5 + bag, '#8c6a3c');   // säkki
-      r(bx, py + 5 - Math.floor(bag / 2), 3, 2, C.gold);                // kolikko suussa
+      r(bx - 1, py + 4 + fat - Math.floor(bag / 2), 5, 5 + bag, '#8c6a3c');   // säkki
+      r(bx, py + 5 + fat - Math.floor(bag / 2), 3, 2, C.gold);                // kolikko suussa
     }
-    r(bx + 3, py + 3, 9, 9, '#c85a20');             // runko
-    r(bx + 4, py + 2, 7, 2, '#8c3a0c');             // huppu
+    r(bx + 3, py + 3, 9 + fat, 9 + fat, '#c85a20');   // runko
+    r(bx + 4, py + 2, 7 + fat, 2, '#8c3a0c');         // huppu
     r(bx + 5, py + 5, 2, 2, C.ink);
-    r(bx + 9, py + 5, 2, 2, C.ink);
-    r(bx + 4, py + 8, 6, 1, '#8c3a0c');             // vyö
-    r(bx + 4 + step, py + 12, 3, 2, '#5a2c0c');
-    r(bx + 8 - step, py + 12, 3, 2, '#5a2c0c');
+    r(bx + 9 + fat, py + 5, 2, 2, C.ink);
+    r(bx + 4, py + 8 + fat, 6 + fat, 1, '#8c3a0c');   // vyö
+    r(bx + 4 + step, py + 12 + fat, 3, 2, '#5a2c0c');
+    r(bx + 8 + fat - step, py + 12 + fat, 3, 2, '#5a2c0c');
   });
 }
 
-export function drawKolikkovaras(ctx, x, y, frame, facing, loot = 0) {
-  outlined(ctx, (g) => varasBody(g, x, y, frame, facing, loot, breath(frame, x, y)));
+/**
+ * `size` is the hitbox the entity is carrying right now, and the drawing is
+ * built to it: one argument, one number, and no second place where the size of
+ * a thief is decided.
+ */
+export function drawKolikkovaras(ctx, x, y, frame, facing, loot = 0, size = 14) {
+  const fat = Math.max(0, Math.round(size) - 14);
+  outlined(ctx, (g) => varasBody(g, x, y, frame, facing, loot, breath(frame, x, y), fat));
 }
