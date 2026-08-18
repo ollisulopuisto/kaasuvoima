@@ -25,7 +25,7 @@
  * sisään poikkeuksen. Tiedosto perustelee itsensä omassa alussaan.
  */
 
-import { CHUNK_ROWS, COMMON_CHUNKS, SLOPE_CHUNKS } from './chunks/common.js';
+import { CHUNK_ROWS, COMMON_CHUNKS, SLOPE_CHUNKS, TREE_CHUNKS } from './chunks/common.js';
 import { GRASS_CHUNKS } from './chunks/grass.js';
 import { DESERT_CHUNKS } from './chunks/desert.js';
 import { ICE_CHUNKS } from './chunks/ice.js';
@@ -47,6 +47,7 @@ export { CHUNK_ROWS };
 export const CHUNKS = {
   ...COMMON_CHUNKS,
   ...SLOPE_CHUNKS,
+  ...TREE_CHUNKS,
   ...GRASS_CHUNKS,
   ...DESERT_CHUNKS,
   ...ICE_CHUNKS,

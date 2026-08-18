@@ -151,6 +151,10 @@ export function captureState(game) {
          * tätä pikalataus jättäisi jään ikuiseksi ja kentän lopputila olisi eri
          * kuin sen lähtötila. */
         frost: [...(scene.frost || new Map()).entries()].map(([k, v]) => [k, { ...v }]),
+        /* Metsäpalo, samasta syystä kuin kuura: ruudukko palauttaa puun, muttei
+         * sitä kuinka pitkällä sen palo oli — ja palon vaihe on ero sen välillä
+         * satuttaako puu vai onko se jo hiiltä. */
+        burning: [...(scene.burning || new Map()).entries()].map(([k, v]) => [k, { ...v }]),
         /* Liikkeellä olevat möykyt. Sama muoto kuin `crumbles` ja samasta
          * syystä: maasto joka on kesken jotain on kentän tilaa, ja
          * pikatallennus joka palauttaisi kentän lähtömuotoonsa mutta pelaajan
@@ -219,6 +223,7 @@ export function restoreState(game, snap) {
   // Vanhempi tilannekuva on otettu ennen areenapomoa; johdetut paikat jäävät.
   if (data.pillars) scene.pillars = data.pillars.map((s) => ({ ...s }));
   scene.frost = new Map((data.frost || []).map(([k, v]) => [k, { ...v }]));
+  scene.burning = new Map((data.burning || []).map(([k, v]) => [k, { ...v }]));
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

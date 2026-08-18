@@ -7,6 +7,75 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.26 — neljä säätä ja metsä joka palaa
+
+Peli on tuntenut yhden sään: tuulen, joka on aavikon yön puuska ja pilvimaailman
+laki 3 (*tuuli kantaa kaikkea*). Nyt niitä on neljä, ja jokainen niistä on
+rakennettu tuulen mallista — **kenttäkohtainen lippu, johdettu kellosta,**
+mikä on myös syy siihen ettei `savestate.js` tarvitse niistä riviä: palautettu
+kello palauttaa sään.
+
+Yksi kenttä kutakin, ja se on ROADMAPin oma sääntö juoksuhiekasta luettuna
+uudelleen: *uhka joka on joka kentässä on maastoa, ja maasto ei ole uhka.*
+
+**MAANJÄRISTYS (6-1).** Maa tärisee pystyyn ja **nytkäyttää kerran** sen minkä
+se kannattelee. Ilmassa oleva ei tunne sitä lainkaan, ja siitä tulee koko
+mekaniikka: järistys on kysymys ("olenko juuri nyt maassa?") eikä hidaste.
+`quakeborne` on oletuksena **kyllä**, toisin kuin `windborne` — ja se on väite
+eikä epäjohdonmukaisuus: tuuli kantaa, ja kantaminen riippuu keveydestä; maa ei
+kanna vaan päästää irti, eikä painavuus ole siihen vastaus. Poikkeuksia ovat
+vain ne jotka eivät seiso maassa (nielu putkessa, torvi seinässä) ja ne jotka
+*ovat* huone (pomo, aurinko, kuu, papuparooni).
+
+**PYÖRREMYRSKY (7-3).** Suppiloita jotka vaeltavat kenttää vasemmalle kahden
+ruudun välein. **Ulkokehä vetää, ydin nostaa** — ja se mitä näet on se mikä
+koskee: piirretyn suppilon leveys ylhäällä on `TWISTER_REACH` ja alhaalla
+`TWISTER_CORE`, eli tasan ne kaksi lukua joilla veto lasketaan. Kulkee tuulen
+`push`-tietä, joten laki 3 pätee: se kantaa kuoria ja vihollisia. Ääni on
+tuulen peti, koska suppilo on tuulta (DESIGN.md kohta 8).
+
+**TULIMYRSKY (4-3), ja se kohta jossa portti oli oikeassa ja perustelu
+väärässä.** Kekäle oli aluksi kohtauksen piirtämä sade — puhdas funktio
+kellosta ja paikasta, ei olioita, ei riviä tallennukseen — ja se kaatoi portin
+*"jokainen kenttä on läpäistävissä voimatasolla 0"*: 4-3 jäi sarakkeeseen 107.
+Se portti **riisuu kentästä viholliset ja vaarat**, koska sen väite koskee
+maastoa, ja maastoksi kirjoitettu sade jäi riisumatta. Nyt kekäle on `Entity`,
+`kind: 'hazard'`, sama esine kuin happopisara — ja **katto sammuttaa sen**,
+mikä on yhtä aikaa se mitä oikea kekäle tekisi ja se sääntö joka tekee
+myrskystä väistettävän. Varoitus on puolitoista sekuntia taivaalla: juoksemalla
+ehtii yhdeksän laattaa, eli katon alle.
+
+**PUU ON NYT LAATTA (`t`).** Puita on ollut koko ajan, mutta taustanauhassa:
+kolme puuta kolmen mäen päällä, 232 px:n kaistaleena jota toistetaan. Se on
+maisemaa jota ei voi osoittaa. `t` on sama puu kentässä — sarake, rivi, paikka
+jonka kenttäsuunnittelija valitsee. **Ei kiinteä eikä puolikiinteä**, ja se on
+päätös: puu jonka läpi ei kuljeta olisi seinä, ja seinä menisi
+lattiaprofiiliin, kuilulaskuun ja hyppybudjettiin. Sen ainoa sääntö on että se
+seisoo jossakin (`rules.js`, `checkTrees`) — sama lause kuin vihollisella,
+koska kysymys on sama. Laji tulee teemasta kuten maanpinnankin: havu, kaktus,
+kuiva runko.
+
+**METSÄPALO (6-2).** Syttyy **pelaajan takaa**, leviää puusta puuhun 1,23
+px/frame ja sammuu aukiolle. Juoksuvauhti on 2,5, joten pako on mahdollinen
+muttei ilmainen — ja koska metsäpalikoita on kolme tiheyttä (`metsikko`,
+`aukio`, `metsanreuna`), metsän muoto *on* kentän vaikeus.
+
+Tämäkin oli ensin väärin päin: jos takana ei ollut puuta, palo syttyi lähimpään
+edessä olevaan. Portti kaatui 6-2:een sarakkeessa 208, eli tasan siihen kohtaan
+jossa metsä alkaa. Takaa-ajaja jonka eteen syttyy tuli ei ole takaa-ajaja vaan
+seinä. Nyt ilman puuta takana ei synny paloa lainkaan.
+
+Ja se mikä pitää tämän emergenssin rajan sisällä (ROADMAP 10.8.2026): **puu ei
+ole reitti**, joten palava metsä voi olla se mikä muu maasto ei saa olla, ja
+**lopputila on lähtötila** — puu palaa, jää hiileksi ja kasvaa takaisin, kuten
+kuuran jälki sulaa. Kumpikin on mitattu eikä muistettu.
+
+Yksitoista uutta porttia (`verify.mjs`: *sää*, *puu ja metsäpalo*). 6-2:n
+mitattu vaikeus laski 120,9 → 84,1: kolme luupalikkaa vaihtui kolmeen
+metsäpalikkaan, ja metsä on maisemaa jonka vaikeus on siinä mikä siellä palaa.
+
+---
+
 ## v26.08.18.25 — maastopassi: maa liikkuu palikoiden välillä
 
 ROADMAPin varianssityön kolmas askel, ja se arvioitiin siellä kalleimmaksi:

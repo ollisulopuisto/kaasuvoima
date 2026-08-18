@@ -60,6 +60,51 @@ export function ck(w, spec) {
  *                jonka päällä on palkinto. Tämä on se lupaus jonka kohta 1
  *                antaa: nopeampi reitti on ylempi reitti.
  */
+/**
+ * METSÄ, ja se on ensimmäistä kertaa **kentässä** eikä taustanauhassa.
+ *
+ * Puu (`T.TREE`) ei ole kiinteä: sen läpi kävellään, se piirtyy pelaajan
+ * takana, eikä se näy yhdessäkään reittisäännössä. Nämä palikat ovat siis
+ * maisemaa siinä missä taustan mäetkin — sillä yhdellä erolla joka oli koko
+ * syy tehdä ne: **metsällä on paikka**, ja paikkaan voi koskea. Ensimmäinen
+ * joka koskee on metsäpalo (`LevelScene.updateWildfire`).
+ *
+ * Kolme palikkaa, ja ne ovat metsä kolmessa tiheydessä. Se on tarkoituksellista
+ * eikä koristelua: palo leviää puusta puuhun `WILDFIRE_REACH`in päähän, joten
+ * **aukio on turvapaikka** ja tiheikkö se josta on päästävä pois. Metsän muoto
+ * on siis sen kentän kysymys jossa se palaa, ja maisemaa siinä jossa ei.
+ *
+ *   `metsikko`   tiheikkö: kymmenen puuta peräkkäin, palo kulkee sen läpi
+ *   `metsanreuna` harveneva reuna, ja kolikot palkintona sen alla
+ *   `aukio`      aukio: puut vain päissä, keskellä ei ole mitään mikä palaa
+ */
+export const TREE_CHUNKS = {
+  metsikko: ck(16, {
+    9: '   o o o o',
+    /* Kävelijä tiheikössä, ja se on tässä samasta syystä kuin generaattorin
+     * mäellä seisova vihollinen: pelkkää maisemaa oleva palikka **laimentaa
+     * kentän vaikeutta**, koska vaikeus luetaan saraketta kohti. Metsä ilman
+     * ketään olisi kolme palikkaa kävelyä keskellä luumaailmaa. */
+    12: ' tttt gtt ttt',
+    13: G,
+    14: G,
+  }),
+  metsanreuna: ck(16, {
+    9: '     o o o',
+    12: ' tt t  t   g t',
+    13: G,
+    14: G,
+  }),
+  /* Aukio on tyhjä ja se on sen ainoa tehtävä: palo ei yllä sen yli, joten se
+   * on ainoa turvallinen paikka palavassa metsässä. Vihollinen siinä olisi
+   * ollut turvapaikka joka ei ole turvallinen. */
+  aukio: ck(16, {
+    12: 'tt          tt',
+    13: G,
+    14: G,
+  }),
+};
+
 export const SLOPE_CHUNKS = {
   kumpare: ck(16, {
     9: '       /###\\',

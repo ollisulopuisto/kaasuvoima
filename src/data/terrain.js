@@ -162,9 +162,10 @@ export const RUN_ROWS = 5;
  * Merkit jotka eivät ole maastoa: ne seisovat maaston päällä tai leijuvat sen
  * yllä. Vauhdinoton mittaus lukee ne tyhjänä — `seamColumns` (`scale.js`) ja
  * `seamReady` täällä — koska juoksijaa hidastaa se mitä maastossa on eikä se
- * kuka siinä sattuu seisomaan.
+ * kuka siinä sattuu seisomaan. Puu on listalla samasta syystä eikä
+ * poikkeuksena: sen läpi kävellään, joten se ei ole juoksijan tiellä.
  */
-export const LOOSE = new Set([...'gkfprcxAOPHbTZYm1', T.COIN, T.GOAL]);
+export const LOOSE = new Set([...'gkfprcxAOPHbTZYm1', T.COIN, T.GOAL, T.TREE]);
 
 const BLANK = /^ *$/;
 /** Portti 2: alin rivi kopioituu täytteeksi, joten siinä saa olla vain nämä. */

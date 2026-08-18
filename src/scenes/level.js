@@ -466,6 +466,33 @@ const EMBER_RAIN = 240;
 const EMBER_EVERY = 10;
 
 /**
+ * METSÄPALO, ja se yksi lause joka pitää sen emergenssin rajan sisällä.
+ *
+ * ROADMAP 10.8.2026 sallii maaston liikkua vain silloin kun liike ei voi
+ * poistaa reittiä, ja tämä on se ehto luettuna helpoimmalla mahdollisella
+ * tavalla: **puu ei ole reitti.** Se ei ole kiinteä, sen läpi kävellään,
+ * eikä `floorProfile`, `checkGaps` tai hyppybudjetti näe siitä mitään (ks.
+ * `T.TREE`). Palava metsä voi siis olla se mikä muu maasto ei saa olla — asia
+ * joka muuttuu kesken kentän — koska se mitä siitä muuttuu ei ole kenttä vaan
+ * maisema johon on lisätty vaara.
+ *
+ * Ja silti **lopputila on lähtötila**, kuten kuurallakin: puu palaa, jää
+ * hiileksi ja kasvaa takaisin. Se ei ole varmuuden vuoksi vaan siksi että
+ * pikatallennus, kentän uusinta ja kaikki mittarit lukevat samaa kenttää.
+ *
+ * Luvut ovat pakoa varten. Palo leviää kaksi laattaa 26 framen välein eli
+ * 1,23 px/frame, ja juoksuvauhti on 2,5 — **paosta tulee siis mahdollinen
+ * muttei ilmainen**, ja aukio (`chunks/common.js`) on turvapaikka koska palo
+ * ei yllä sen yli. Metsän muoto on tässä kentän vaikeus, ja se on samalla
+ * syy siihen että metsäpalikoita on kolme tiheyttä eikä yksi.
+ */
+const WILDFIRE_CYCLE = 1200;
+const WILDFIRE_BURN = 150;
+const WILDFIRE_ASH = 240;
+const WILDFIRE_STEP = 26;
+const WILDFIRE_REACH = 2;
+
+/**
  * Kuinka kauan nielty kyky kestää, frameina. Ks. `swallowEnemy`.
  *
  * Kahdeksan sekuntia: juoksuvauhdilla noin seitsemänkymmentä laattaa eli kolme
@@ -1538,6 +1565,10 @@ export class LevelScene {
     this.quake = 0;
     this.twister = 0;
     this.emberWarn = 0;
+    /* Palavat puut, `"tx,ty"` → `{ age }`. Kohtauksen kirjanpitoa kuten kuura
+     * ja mureneva lauta, ja samasta syystä `savestate.js`:ssä: ruudukko
+     * palauttaa puun, muttei sitä kuinka pitkällä sen palo oli. */
+    this.burning = new Map();
     this.goal = null;
     this.cardIndex = 0;
     this.wonCard = null;
@@ -4020,6 +4051,7 @@ export class LevelScene {
     if (this.def.quake) this.updateQuake();
     if (this.def.twister) this.updateTwister();
     if (this.def.firestorm) this.updateFirestorm();
+    if (this.def.wildfire) this.updateWildfire();
     /* The bed sounds while the level is being played, and only then. This one
      * line is also how it stops: pausing, dying, clearing and every scene
      * change all stop calling it. See Ambience.hold.
@@ -4238,6 +4270,111 @@ export class LevelScene {
    *
    * Sään puolelle jää se mikä on oikeasti säätä: **kello ja taivas.**
    */
+  /**
+   * Kentän puut kerran laskettuna. Ruudukko on staattinen tämän merkin osalta
+   * — palo ei poista puuta vaan merkitsee sen — joten lista kelpaa kentän
+   * loppuun asti.
+   */
+  treeList() {
+    if (this.trees) return this.trees;
+    this.trees = [];
+    for (let ty = 0; ty < this.h; ty++) {
+      for (let tx = 0; tx < this.w; tx++) {
+        if (this.grid[ty][tx] === T.TREE) this.trees.push({ tx, ty });
+      }
+    }
+    return this.trees;
+  }
+
+  /** Palamisen eteneminen 0…1 piirtoa varten; 1 on hiili. Ks. `drawTree`. */
+  burnProgress(tx, ty) {
+    const st = this.burning.get(`${tx},${ty}`);
+    if (!st) return 0;
+    return Math.min(1, st.age / WILDFIRE_BURN);
+  }
+
+  /** Palaako tämä puu juuri nyt: hiili ei polta enää. */
+  isAblaze(tx, ty) {
+    const st = this.burning.get(`${tx},${ty}`);
+    return !!st && st.age < WILDFIRE_BURN;
+  }
+
+  /**
+   * METSÄPALO: syttyy takaa, leviää puusta puuhun, sammuu aukiolle.
+   *
+   * Syttymiskohta on **pelaajan takana** eikä arvottu paikka, ja se on koko
+   * mekaniikka: palo on takaa-ajaja jonka nopeus on tiedossa (`WILDFIRE_STEP`,
+   * `WILDFIRE_REACH`) ja jonka pysäyttää metsän muoto. Siksi tämä ei ole
+   * johdettu kellosta kuten muu sää — se riippuu siitä missä pelaaja on — ja
+   * siksi `savestate.js` kantaa `burning`in.
+   */
+  updateWildfire() {
+    if (this.state !== 'play') return;
+    for (const [key, st] of this.burning) {
+      st.age++;
+      if (st.age >= WILDFIRE_BURN + WILDFIRE_ASH) this.burning.delete(key);
+    }
+    if (this.tick % WILDFIRE_STEP === 0) this.spreadFire();
+    if (this.tick % WILDFIRE_CYCLE === 0) this.lightFire();
+    this.burnPlayer();
+  }
+
+  /** Sytyttää lähimmän puun pelaajan takaa, jos mikään ei vielä pala. */
+  lightFire() {
+    if (this.burning.size) return;
+    const px = Math.floor(this.player.cx / TILE);
+    let best = null;
+    for (const t of this.treeList()) {
+      if (t.tx >= px) continue;
+      if (!best || t.tx > best.tx) best = t;
+    }
+    /*
+     * TAKAA VAIN, ja tämä oli ensin toisin päin. Ensimmäinen versio sytytti
+     * lähimmän *edessä* olevan puun jos takana ei ollut yhtään, "jotta kenttä
+     * jossa metsä alkaa myöhemmin ei jää ilman paloaan". Portti kaatui heti:
+     * *"jokainen kenttä on läpäistävissä voimatasolla 0"*, 6-2 sarakkeessa 208
+     * — eli tasan siinä kohdassa jossa metsä alkaa. Palo syttyi juuri siihen
+     * mihin oltiin menossa, ja takaa-ajaja jonka eteen syttyy tuli ei ole
+     * takaa-ajaja vaan seinä.
+     *
+     * Ilman puuta takana ei siis synny paloa lainkaan. Se on sama lupaus kuin
+     * kaikella muulla tässä pelissä: se mikä satuttaa, tulee näkyvistä ja
+     * sieltä mistä on jo tultu.
+     */
+    if (best) this.burning.set(`${best.tx},${best.ty}`, { age: 0 });
+  }
+
+  /** Puusta puuhun, `WILDFIRE_REACH` laatan päähän. Hiili ei sytytä. */
+  spreadFire() {
+    if (!this.burning.size) return;
+    const lit = [];
+    for (const [key, st] of this.burning) {
+      if (st.age >= WILDFIRE_BURN) continue;
+      const [tx, ty] = key.split(',').map(Number);
+      for (const t of this.treeList()) {
+        if (Math.abs(t.tx - tx) > WILDFIRE_REACH || Math.abs(t.ty - ty) > WILDFIRE_REACH) continue;
+        const k = `${t.tx},${t.ty}`;
+        if (!this.burning.has(k)) lit.push(k);
+      }
+    }
+    for (const k of lit) this.burning.set(k, { age: 0 });
+  }
+
+  /** Palava puu satuttaa kuten laava: se on huoneessa, ei huone. */
+  burnPlayer() {
+    const p = this.player;
+    if (!p || p.dying || p.star > 0 || p.invuln > 0) return;
+    const x0 = Math.floor(p.x / TILE);
+    const x1 = Math.floor((p.x + p.w - 1) / TILE);
+    const y0 = Math.floor(p.y / TILE);
+    const y1 = Math.floor((p.y + p.h - 1) / TILE);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (this.isAblaze(tx, ty)) { p.hurt('hazard'); return; }
+      }
+    }
+  }
+
   /** Minkä kaistan ylälaidasta sää tulee: sen jossa pelaaja on. */
   bandTop() {
     if (!this.def.bands || !this.player) return 0;
@@ -5970,6 +6107,10 @@ export class LevelScene {
             /* Möykyn varoitustärinä. Sama kanava kuin murenevalla laudalla,
              * koska se on sama lupaus: se mikä on lähdössä, näyttää siltä. */
             fall: this.fallWobble(tx, ty),
+            /* Palamisen eteneminen, sama kanava kuin murenevalla laudalla ja
+             * samasta syystä: laatta on yhä `t`, ja se miltä se näyttää on
+             * kohtauksen kirjanpitoa. Ks. `burnProgress`. */
+            burn: ch === T.TREE ? this.burnProgress(tx, ty) : 0,
             switchOn: this.switchTimer > 0,
             // A door is several tiles; each slice needs to know which of its
             // sides are the outside of the whole door.

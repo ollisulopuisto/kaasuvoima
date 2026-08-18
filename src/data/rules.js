@@ -197,6 +197,8 @@ const REWARD = new Set(['o', '!', '?', 'N', 'B']);
 /* The two halves of a warp pipe's mouth. `{}` below them is ordinary pipe. */
 const WARP = new Set(['(', ')']);
 const VINE = 'v';
+/** Maisemalaatta, ks. `T.TREE` ja `checkTrees`. */
+const TREE = 't';
 /**
  * How far above its floor the engine hangs a beanstalk's bean block, in tiles.
  *
@@ -652,6 +654,32 @@ function climbCarry(reach) {
  *      vihollista. Palkinto laatan päällä on syy seistä sillä, ja reitti joka
  *      voi kadota on täsmälleen se asia jota tämä koko raja on vastaan.
  */
+/**
+ * Universal. **Puu seisoo jossakin.**
+ *
+ * Puu ei ole kiinteä eikä satuttava (ks. `T.TREE`), joten se ei ole
+ * yhdenkään muun säännön kysymys: se ei voi tukkia käytävää eikä pudottaa
+ * ketään, ja `floorProfile` ei näe sitä lainkaan. Juuri siksi se tarvitsee
+ * tämän yhden — laatta jota mikään ei mittaa on laatta jonka voi sijoittaa
+ * mihin tahansa, ja ilmassa roikkuva puu on virhe siinä missä ilmassa
+ * roikkuva vihollinen. Sanamuoto on tarkoituksella sama kuin
+ * `checkEnemyFooting`illa, koska kysymys on sama.
+ *
+ * Puu kelpaa toisen puun alustaksi, jotta pensaikosta voi kasvattaa korkeamman
+ * puun pinoamalla. Rinne kelpaa myös: metsä kasvaa mäenrinteessä.
+ */
+function checkTrees(rows, w, problems) {
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < w; x++) {
+      if (rows[y][x] !== TREE) continue;
+      const below = y + 1 >= rows.length ? ' ' : rows[y + 1][x];
+      if (!stands(below) && below !== TREE) {
+        problems.push(`tree at ${x},${y} is standing on nothing`);
+      }
+    }
+  }
+}
+
 function checkFalling(rows, w, problems) {
   for (let y = 0; y < rows.length; y++) {
     for (let x = 0; x < w; x++) {
@@ -1774,6 +1802,7 @@ export function validateLevel(rows, budget, opts = {}) {
     checkEnemyFooting(rows, w, problems);
     checkVines(rows, w, problems);
     checkFalling(rows, w, problems);
+    checkTrees(rows, w, problems);
     checkIce(rows, w, problems);
     checkClimbWidth(rows, w, problems);
     checkClimbTraverse(rows, w, budget, problems);
@@ -1801,9 +1830,11 @@ export function validateLevel(rows, budget, opts = {}) {
   const where = (b) => (b === routeIndex ? '' : ` in the ${bandName(b)}`);
 
   /* Universal, whole grid: a beanstalk is a beanstalk in any band, a tile that
-   * can fall is one wherever it is put, and so is a tile you cannot stop on. */
+   * can fall is one wherever it is put, a tree stands on something wherever it
+   * grows, and so is a tile you cannot stop on. */
   checkVines(rows, w, problems);
   checkFalling(rows, w, problems);
+  checkTrees(rows, w, problems);
   checkIce(rows, w, problems);
 
   /* Universal, per band: headroom over the ground of whatever band it is, and

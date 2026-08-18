@@ -22718,6 +22718,172 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
+/* ---- puu ja metsäpalo ---- */
+/*
+ * PUU ON MAISEMAA, JA METSÄPALO ON SE JOKA TEKEE MAISEMASTA PAIKAN.
+ *
+ * Puu (`T.TREE`) on pelin ensimmäinen laatta jonka koko olemus on ettei se ole
+ * mitään: ei kiinteä, ei satuttava, ei jalansija. Juuri siksi sillä on tässä
+ * portti — laatta jota mikään sääntö ei mittaa on laatta jonka voi sijoittaa
+ * mihin tahansa, ja hiljainen virhe siitä olisi leijuva metsä.
+ *
+ * Ja metsäpalo on se yksi asia joka **muuttaa kenttää kesken kentän**, mikä on
+ * ROADMAPin 10.8.2026 rajan reunalla. Se mahtuu rajan sisään kahdesta syystä
+ * ja molemmat mitataan tässä: puu ei ole reitti (se ei ole kiinteä), ja palo
+ * palautuu itsestään (puu kasvaa takaisin). Jos jompikumpi lakkaa olemasta
+ * totta, kenttä voi muuttua läpäisemättömäksi ilman että mikään sanoo mitään.
+ *
+ *   1  maisema    puu ei ole kiinteä eikä satuttava, ja se seisoo jossakin
+ *   2  leviäminen palo kulkee puusta puuhun ja **pysähtyy aukiolle**
+ *   3  vahinko    palava puu satuttaa, hiili ei
+ *   4  palautus   lopputila on lähtötila: ruudukko ennallaan, kirjanpito tyhjä
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const F = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { T, isSolid, isSemi, TILE_INFO } = await import('/src/gfx/tiles.js');
+    const { levelIds, getLevel } = await import('/src/data/levels.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const scene = (id) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      return s;
+    };
+    const out = {};
+
+    out.where = levelIds().filter((id) => getLevel(id).wildfire);
+    out.planted = levelIds().filter((id) => getLevel(id).rows.some((r) => r.includes(T.TREE)));
+    out.info = {
+      solid: isSolid(T.TREE), semi: isSemi(T.TREE),
+      flags: Object.keys(TILE_INFO[T.TREE] || {}),
+    };
+
+    const id = out.where[0] || '6-2';
+    const s = scene(id);
+    out.trees = s.treeList().length;
+    /* Metsän muoto lukuina: tiheikkö, aukio ja reuna ovat kolme eri tiheyttä,
+     * ja juuri se on se mitä palon on määrä lukea. */
+    const cols = [...new Set(s.treeList().map((t) => t.tx))].sort((a, b) => a - b);
+    out.spread = { cols: cols.length };
+
+    /* --- 2. leviäminen ja aukio ----------------------------------------- */
+    {
+      const t = scene(id);
+      const i = mkInput();
+      const list = t.treeList();
+      const first = list.reduce((m, x) => (x.tx < m.tx ? x : m), list[0]);
+      t.burning.set(`${first.tx},${first.ty}`, { age: 0 });
+      /* Pelaaja pois tieltä, jotta mitataan leviämistä eikä kuolemaa. */
+      t.player.x = (first.tx + 60) * 16;
+      let reach = first.tx;
+      for (let f = 0; f < 900; f++) {
+        t.update(i);
+        for (const key of t.burning.keys()) {
+          const tx = Number(key.split(',')[0]);
+          if (tx > reach) reach = tx;
+        }
+      }
+      /* Mihin sarakkeeseen palo pysähtyi, ja mikä on lähin puu sen takana:
+       * jos väli on suurempi kuin ulottuvuus, aukio pysäytti sen. */
+      const beyond = list.filter((x) => x.tx > reach).map((x) => x.tx);
+      out.spread.from = first.tx;
+      out.spread.reach = reach;
+      out.spread.gap = beyond.length ? Math.min(...beyond) - reach : null;
+      out.spread.left = beyond.length;
+    }
+
+    /* --- 3. vahinko: palava satuttaa, hiili ei -------------------------- */
+    {
+      const hurtAt = (age) => {
+        const t = scene(id);
+        const i = mkInput();
+        const tree = t.treeList()[0];
+        t.burning.set(`${tree.tx},${tree.ty}`, { age });
+        t.player.x = tree.tx * 16;
+        t.player.y = tree.ty * 16;
+        t.player.invuln = 0;
+        const before = t.player.powerLevel;
+        t.burnPlayer();
+        return { before, after: t.player.powerLevel, hurt: t.player.invuln > 0 };
+      };
+      out.hurt = { ablaze: hurtAt(10).hurt, ash: hurtAt(200).hurt };
+    }
+
+    /* --- 4. lopputila on lähtötila -------------------------------------- */
+    {
+      const t = scene(id);
+      const i = mkInput();
+      const before = t.grid.map((r) => r.join(''));
+      const tree = t.treeList()[0];
+      t.burning.set(`${tree.tx},${tree.ty}`, { age: 0 });
+      t.player.x = (tree.tx + 90) * 16;
+      let peak = 0;
+      for (let f = 0; f < 2000; f++) {
+        t.update(i);
+        peak = Math.max(peak, t.burning.size);
+        if (t.tick % 1200 === 1199) break;   // ennen seuraavaa syttymistä
+      }
+      for (let f = 0; f < 900; f++) {
+        if (!t.burning.size) break;
+        t.update(i);
+      }
+      const after = t.grid.map((r) => r.join(''));
+      out.restore = {
+        peak, left: t.burning.size,
+        same: before.length === after.length && before.every((r, k) => r === after[k]),
+      };
+    }
+    return out;
+  });
+
+  expect('puu on maisemaa: ei kiinteä, ei puolikiinteä, eikä satuttava lippu',
+    !F.info.solid && !F.info.semi && F.info.flags.join(',') === 'tree',
+    `kiinteä ${F.info.solid}, puolikiinteä ${F.info.semi}, liput [${F.info.flags.join(' ')}]`);
+
+  expect('puita on istutettu kenttään, ja metsäpalo on tasan yhdessä',
+    F.planted.length >= 1 && F.where.length === 1 && F.trees > 8,
+    `puita kentissä ${F.planted.join(',') || '-'} (${F.trees} kpl), palo ${F.where.join(',') || '-'}`);
+
+  expect('palo leviää puusta puuhun ja pysähtyy aukiolle',
+    F.spread.reach > F.spread.from && F.spread.left > 0 && F.spread.gap > 2,
+    `syttyi sarakkeesta ${F.spread.from}, eteni sarakkeeseen ${F.spread.reach},`
+    + ` aukio ${F.spread.gap} saraketta, ${F.spread.left} puuta jäi palamatta`);
+
+  expect('palava puu satuttaa, hiili ei',
+    F.hurt.ablaze && !F.hurt.ash,
+    `palava ${F.hurt.ablaze}, hiili ${F.hurt.ash}`);
+
+  expect('metsäpalon lopputila on sen lähtötila',
+    F.restore.peak > 1 && F.restore.left === 0 && F.restore.same,
+    `korkeimmillaan ${F.restore.peak} puuta palamassa, jäljellä ${F.restore.left},`
+    + ` ruudukko ennallaan: ${F.restore.same}`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- puu ja metsäpalo: loppu ---- */
 /* ---- möykky kentissä ---- */
 /*
  * MÖYKKY ON KENTISSÄ, JA SE ON TÄMÄN LOHKON KOKO AIHE.
@@ -24324,7 +24490,13 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     /* Pieruhylly. Vaaraton, ja se on rakenteellista eikä toiveajattelua: hylly
      * on puolikiinteä, eli sen läpi mennään alhaalta ja sen päälle
      * laskeudutaan. Se ei voi sulkea käytävää eikä puristaa ketään. */
-    'shelf'];
+    'shelf',
+    /* Puu. Vaaraton, ja se on koko sen olemassaolon ehto: puu ei ole kiinteä
+     * eikä satuttava, sen läpi kävellään ja se piirtyy pelaajan takana (ks.
+     * `T.TREE`). Palava puu satuttaa, mutta palaminen on kohtauksen
+     * kirjanpitoa (`LevelScene.burning`) eikä tämän laatan lippu — jos siitä
+     * joskus tehdään merkki, se merkki kuuluu `HURTS`iin. */
+    'tree'];
 
   /* Kattavuus ensin: mikään lippu ei saa jäädä luokittelematta. */
   const unknownIn = (table) => [...new Set(Object.values(table).flatMap((i) => Object.keys(i)))]
