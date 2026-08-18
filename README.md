@@ -396,7 +396,7 @@ VGLC_DIR="/tmp/vglc/Super Mario Bros/Processed" node tools/mine-pacing.mjs
 
 ## Salaisuudet
 
-Maailman 1 kenttä 1-2 on **45 riviä korkea**: pilvien yllä on taivaskaista ja
+Maailman 1 kenttä 1-2 on **48 riviä korkea**: pilvien yllä on taivaskaista ja
 maan alla suljettu luolahuone. Kumpaankaan ei tarvita kohtausvaihtoja — sama
 ruudukko, korkeampi kenttä, ja kamera pysyy siinä kaistassa jossa pelaajan jalat
 ovat.
@@ -550,7 +550,12 @@ Mitatut luvut kulkevat selaimeen `src/data/pacing.js`:n kautta — kannettu kopi
 ### Kenttien tekeminen
 
 Kentät kootaan 15 rivin **palikoista** (`src/data/chunks.js`), jolloin sarakkeet
-osuvat aina kohdalleen. Palikka kirjoitetaan harvana rivikarttana:
+osuvat aina kohdalleen. Palikan lattia on riveillä 13-14, ja **koottu kenttä on
+kuusitoista riviä**: kokoaja lisää päälle yhden taivasrivin (`SKY_PAD`), joka on
+kopio palikan ylimmästä rivistä — niin katot ja pavunvarsi jatkuvat ylöspäin.
+Kootussa kentässä lattia on siis riveillä 14-15, ja se yksi rivi on se mikä
+antaa kameralle pystysuuntaista liikkumavaraa. Palikka kirjoitetaan harvana
+rivikarttana:
 
 ```js
 pipe_short: ck(16, {
@@ -571,9 +576,11 @@ ilman sitä kello lasketaan kentän pituudesta:
 },
 ```
 
-Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko, `!`
-tehostelaatikko, `o` kolikko, `-` puulava, `[] {}` putki, `^` piikit, `W` laava,
-`N` nuottilaatikko, `F` maali, `D` linnakkeen ovi. Viholliset ja vaarat: `g`
+Merkit: `#` maa, `X` kova palikka, `B` tiili, `?` kolikkolaatikko (antaa 1–5
+kolikkoa, määrä hajautettu sijainnista), `!` tehostelaatikko, `o` kolikko, `-`
+puulava, `[] {}` putki, `^` piikit, `W` laava, `N` nuottilaatikko, `F` maali,
+`D` linnakkeen ovi, `/` `\` 45° rinne, `t` puu (maisemaa: ei kiinteä, ei
+satuttava, mutta metsäpalo tarttuu siihen). Viholliset ja vaarat: `g`
 mönkijä, `k` kilpikonna, `f` lentäjä, `p` putkikasvi, `r` ruskea pilvi, `c`
 ummetuskorkki, `x` piikkiukko, `A` vihainen aurinko, `H` närästys, `U`
 kurnuttaja (kuilun ensimmäiselle lattiariville, tyhjään sarakkeeseen), `O` kuu,
@@ -581,6 +588,13 @@ kurnuttaja (kuilun ensimmäiselle lattiariville, tyhjään sarakkeeseen), `O` ku
 `Y` yökki, `m` paukkupöhö. Aloituspaikka on `1`.
 
 Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
+
+Kentän muut liput: `terrain: true` antaa **maastopassin** (`src/data/terrain.js`)
+— kokoaja päättää kullekin palikalle lattiatason ja kirjoittaa siirtymät
+rinteinä. `wind`, `quake`, `twister`, `firestorm` ja `wildfire` ovat sää:
+puuska, maanjäristys, pyörremyrsky, tulimyrsky ja metsäpalo. Kukin on
+kenttäkohtainen tarkoituksella — uhka joka on joka kentässä on maastoa, ja
+maasto ei ole uhka.
 
 ### Maailmankartan muokkaus
 
