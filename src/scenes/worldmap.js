@@ -3,7 +3,7 @@ import {
   PIPS, REWARDS, TILE, BEND_MAX,
 } from '../data/worlds.js';
 import { drawText } from '../gfx/font.js';
-import { drawItem, drawPlayer } from '../gfx/sprites.js';
+import { drawItem, drawLifeCoins, drawPlayer } from '../gfx/sprites.js';
 /* Kolikko lentää uhkapelitalossa, ks. `drawCoinflip`. */
 import { drawCoinSprite } from '../gfx/tiles.js';
 import { Music, Sfx } from '../core/audio.js';
@@ -1545,8 +1545,13 @@ export class WorldMapScene {
     ctx.fillRect(309, PANEL_Y + 6, 1, 24);
     if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 290, PANEL_Y + 10, this.tick);
 
-    drawText(ctx, padNum(this.game.state.score, 7), 8, PANEL_Y + 10, { color: '#ffffff' });
-    drawText(ctx, `KV *${this.game.state.lives}`, 8, PANEL_Y + 20, { color: '#ffffff' });
+    /* Sama sääntö kuin kentässä (18.8.2026): pisteet luetaan lopussa
+     * (`scenes/scores.js`) eikä matkan varrella, ja elämä on punainen kolikko
+     * eikä lukema. Kartta ja kenttä eivät voi kertoa eri tarinaa siitä mitä
+     * pelaajalla on — se olisi kaksi tapaa sanoa sama asia, ja toinen niistä
+     * olisi se jonka juuri poistimme. */
+    const row = drawLifeCoins(ctx, 8, PANEL_Y + 10, this.game.state.lives, null);
+    if (row.over) drawText(ctx, '+', row.end, PANEL_Y + 9, { color: '#ff8a8a' });
     drawText(ctx, `KOLIKOT ${padNum(this.game.state.coins, 2)}`, 60, PANEL_Y + 20, { color: '#ffd048' });
     this.drawSecretCount(ctx);
 

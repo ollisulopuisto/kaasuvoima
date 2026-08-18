@@ -20760,6 +20760,7 @@ const report = await page.evaluate(async () => {
         world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
         usedSaveState: false, continues: 0, bestTimes: {},
       };
+      const { COIN_CAP, RED_COST, RED_KEEP } = await import('/src/scenes/level.js');
       const s = new LevelScene(game, '1-1');
       game.state.coins = 0;
       s.tubeFill = 0;
@@ -20769,31 +20770,46 @@ const report = await page.evaluate(async () => {
       for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
       const landed = s.tubeFill;
       const livesBefore = game.state.lives;
-      game.state.coins = 99;
-      s.tubeFill = 99;
+      game.state.coins = COIN_CAP - 1;
+      s.tubeFill = COIN_CAP - 1;
       s.addCoin(s.player.x + 40, s.player.y);
       for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
       /* Sadas kolikko **ei** nollaa pintaa kertaheitolla vaan aloittaa
        * valumisen (`COIN_FLUSH`): täysi putkilo on se yksi hetki jonka koko
        * mittari on rakennettu lupaamaan, ja se saa kestää. Väite on siis
        * kaksiosainen — heti täysi, ja huuhtelun jälkeen tyhjä. */
-      const atFull = s.tubeFill;
+      const afterMint = s.tubeFill;
+      const coinsAfter = game.state.coins;
       const draining = s.tubeFlush;
       for (let f = 0; f < 90 && s.tubeFlush > 0; f++) s.updateCoinFlights();
-      game.state.coins = 0;
       s.updateCoinFlights();
-      const flushed = s.tubeFill;
-      /* Sadas kolikko **täyttää säiliön** eikä enää anna elämää: kolikot ovat
-       * aika (18.8.2026), ja elämä tulee uran kokonaisluvusta (`LIFE_COINS`
-       * 500). Täysi säiliö on itsessään palkinto — kaksi minuuttia on pisin
-       * mahdollinen kello. */
-      expect('poimittu kolikko lentää putkiloon, ja sadas täyttää sen',
+      const settled = s.tubeFill;
+      /*
+       * TÄYSI SÄILIÖ LYÖ PUNAISEN KOLIKON (18.8.2026).
+       *
+       * Owner: *"X yellow coins turns into one red coin, and each death takes
+       * away one red coin."* `RED_COST` keltaista lähtee, `RED_KEEP` jää, ja
+       * elämä nousee yhdellä — kolme väitettä yhdestä tapahtumasta, ja jokainen
+       * niistä on ollut väärin jossain välissä:
+       *
+       *   - **Elämä.** Ennen tätä täysi säiliö ei antanut mitään; elämä tuli
+       *     uran 500 kolikosta, ja huuhteluanimaatio heitti kipinän "sinne
+       *     mistä 1UP tuli" ilman että 1UP:tä tapahtui.
+       *   - **Hinta.** `coins` on aika, joten 64 kolikkoa on 80 sekuntia. Jos
+       *     tämä ei vähentäisi säiliötä, elämä olisi ilmainen ja mittari
+       *     valehtelisi toiseen suuntaan.
+       *   - **Jäännös.** 32 jää, eli lasi ei koskaan tyhjene maksusta. Nolla
+       *     tarkoittaisi että palkinto voi tappaa.
+       */
+      expect('täysi putkilo vaihtuu punaiseksi kolikoksi ja jättää reilun kolmanneksen',
         inAir === 1 && fillAtPickup === 0 && landed === 1
-        && atFull === 100 && draining > 1 && flushed === 0
-        && game.state.lives === livesBefore,
+        && afterMint === RED_KEEP && coinsAfter === COIN_CAP - RED_COST
+        && draining > 1 && settled === RED_KEEP
+        && game.state.lives === livesBefore + 1,
         `poiminnassa ilmassa ${inAir} pinta ${fillAtPickup}, perillä ${landed};`
-        + ` sadas -> pinta ${atFull} ja huuhtelu ${draining} framea,`
-        + ` valumisen jälkeen ${flushed}, elämät ${livesBefore} -> ${game.state.lives}`);
+        + ` täyttyessä pinta ${afterMint} (odotus ${RED_KEEP}), coins ${coinsAfter}`
+        + ` (odotus ${COIN_CAP - RED_COST}), huuhtelu ${draining} framea,`
+        + ` lopulta ${settled}, elämät ${livesBefore} -> ${game.state.lives}`);
     }
 
     /* --- 5. aurinko on kello, ei maisemaa --- */

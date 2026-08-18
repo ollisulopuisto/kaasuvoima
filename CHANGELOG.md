@@ -7,6 +7,65 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.36 — a life is a red coin, and the score left the screen
+
+Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why do we even
+need to show the score before the game over hiscores table? Let's say X yellow
+coins turns into one red coin, and each death takes away one red coin — maybe
+2/3 of the yellow gauge turns into a red coin, all coins fall down and you now
+have +1 red coin and a 1/3 full yellow gauge."*
+
+**The full tube already had an animation, and it was lying.** It was written on
+17.8 when a full tube *was* the 1UP: the glass drains over `COIN_FLUSH` frames,
+the mouth throws a spark "up, where the 1UP came from". A day later coins became
+time, the payout moved to a career counter of 500, and nobody moved the
+animation — so reaching a hundred coins drained the glass, threw the spark, and
+then snapped straight back to full with no life given. The drain was a draw-time
+multiplier on `tubeFill` and `state.coins` was never touched.
+
+Now it is true. At `COIN_CAP` the tube pays `RED_COST` **64** coins out and
+keeps **36**, and `gainLife` fires on the same frame.
+
+**64 and not 66.7.** Two thirds of a hundred is not a number of coins. 64 is 2⁶,
+the scale `core/points.js` is already on, and it leaves 36 — 64 % out against
+the 67 % asked for, a coin and a half of difference, 1,8 seconds of clock.
+
+The cap *was* moved to 96 first, because 96 = 64 + 32 is the prettier
+arithmetic, and the gate priced it within one run: the tube's interior is
+exactly 200 px at **two pixels per coin** and `verify.mjs` measures it. A
+96-coin cap in a 100-coin glass is either a fractional pixel scale or a
+re-measured tube. The hundred stays.
+
+**The trade is deliberately good and deliberately automatic.** 64 coins are 80
+seconds; a level's coins buy 30…54. So a life costs about two levels of income
+and is worth much more than that — which matters, because nobody is asked. A
+price the player would rather not pay, taken without asking, would make a full
+tube something to *avoid*, and the full tube is the one moment this meter exists
+to promise. It also cannot kill: 36 coins are 45 seconds, so the glass is never
+left empty by its own reward.
+
+**`LIFE_COINS = 500` is gone.** Two ways to buy the same thing is DESIGN.md §8,
+and the tube's way is the one you can see. `coinsTotal` stays because the run
+card counts it, not because anything is bought with it.
+
+**The score is off the screen.** A running total is a number nobody acts on: it
+cannot be spent, it changes nothing about the next jump, and every payment it
+records has already said so where it happened, as a figure popping off the thing
+that paid. It is read out at the end in `scenes/scores.js`, where somebody is
+actually deciding whether the run was any good. The world map lost it too — the
+map and the level cannot tell different stories about what the player has.
+
+Lives take the freed row as red coins, drawn the same size as the yellow ones in
+the tube on the other side of the screen, so the exchange rate is a picture
+rather than a rule. Over five lives the row would leave its corner — `verify.mjs`
+measures that the readouts stay in the top corners, and it caught exactly that
+with twelve — so the sixth life onward is a plus.
+
+Gate: *täysi putkilo vaihtuu punaiseksi kolikoksi ja jättää reilun kolmanneksen*
+— pinta 36, coins 36, elämät 3 → 4.
+
+---
+
 ## v26.08.18.35 — the ground moves in 43 levels instead of 19
 
 Owner, having looked at the playtest desk: *"the levels are still super flat."*

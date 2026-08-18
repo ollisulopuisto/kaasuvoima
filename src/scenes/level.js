@@ -7,7 +7,8 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
-import { drawGoal, drawItem } from '../gfx/sprites.js';
+import { drawGoal, drawItem, drawLifeCoins,
+} from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
@@ -158,15 +159,46 @@ const TUBE_X = 3;
 const TUBE_W = 10;
 const TUBE_PAD = 4;
 const COIN_PX = 2;
-const COIN_CAP = 100;
+export const COIN_CAP = 100;
 /*
- * Kuinka monta poimittua kolikkoa on elämä. Omistajan luku (*"maybe 500 coins
- * = extra life"*), ja se on oikea suuruusluokka: kentässä on 25…45 kolikkoa,
- * joten elämä on noin viidentoista kentän työ jos kaikki poimitaan — eli
- * harvinaisempi kuin ennen (sata) ja siksi merkittävämpi. Luku on **uran**
- * kokonaisluku eikä säiliön pinta: säiliö on aika ja se kuluu, ura ei kulu.
+ * PUNAINEN KOLIKKO: mitä täysi säiliö maksaa ja mitä siitä jää.
+ *
+ * `RED_COST` yellow coins leave as one red coin and `RED_KEEP` stay in the
+ * glass. The trade is 80 seconds for a life, and it is a good one at every
+ * point in the game — a level's coins buy 30…54 seconds, so a life costs about
+ * two levels' worth of income and is worth far more than that. It matters that
+ * it is good, because the conversion is **automatic**: a price the player would
+ * rather not pay, paid without asking, would turn a full tube into something to
+ * avoid, and the full tube is the one moment this whole meter was built to
+ * promise.
+ *
+ * It also cannot kill: 32 coins are 40 seconds, so the glass is never left
+ * empty and the conversion is never the reason somebody starves.
  */
-const LIFE_COINS = 500;
+/*
+ * PUNAISEN KOLIKON HINTA, ja miksi se ei ole tasan kaksi kolmasosaa.
+ *
+ * Owner, 18.8.2026: *"maybe 2/3s of the yellow coin gauge turn into a red coin,
+ * all coins fall down and you now have +1 red coin and 1/3 full yellow coin
+ * gauge."*
+ *
+ * Two thirds of a hundred is 66,7, which is not a number of coins. 64 is, and
+ * it is 2⁶ — the same scale everything in `core/points.js` is on. It leaves 36,
+ * so the split is 64 % out and 36 % left where the owner asked for 67 % and
+ * 33 %: a coin and a half of difference, which is 1,8 seconds of clock and
+ * nothing anybody can feel.
+ *
+ * **The cap was moved to 96 first and moved back**, because 96 = 64 + 32 is the
+ * prettier arithmetic and the gate priced it: the tube's interior is exactly
+ * 200 px at **two pixels per coin**, and `verify.mjs` measures that. Ninety-six
+ * coins in a hundred-coin glass is either a fractional pixel scale or a
+ * re-measured tube, and neither is worth buying a rounder number with. The
+ * hundred stays, `FUEL_DRAIN` stays at 72 frames, and a full tube is still the
+ * two minutes the old `AIKA 300` clock gave.
+ */
+export const RED_COST = 64;
+export const RED_KEEP = COIN_CAP - RED_COST;
+
 /** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
 const COIN_ARC = 26;
 const COIN_DROP_G = 0.6;
@@ -2985,11 +3017,12 @@ export class LevelScene {
    *      yli — ylimääräinen kolikko ei katoa mihinkään, se vain ei mahdu
    *      *aikaan*. Täyteen ajaminen on itsessään palkinto: kaksi minuuttia on
    *      pisin mahdollinen kello.
-   *   2. **Uran kokonaislukema** (`coinsTotal`), joka ei koskaan kulu. Tästä
-   *      tulee elämä: `LIFE_COINS` kolikkoa poimittuna on 1UP, ja se on
-   *      omistajan oma ehdotus (*"maybe 500 coins = extra life"*). Sadan
-   *      kolikon elämä ei enää kelpaa, koska sata kolikkoa on nyt se säiliö
-   *      jota kulutetaan — palkinto ja mittari eivät voi olla sama luku.
+   *   2. **Uran kokonaislukema** (`coinsTotal`), joka ei koskaan kulu. Sitä
+   *      lukee enää ajokortti; elämä ei tule siitä (18.8.2026). Elämä on se
+   *      punainen kolikko jonka täysi säiliö lyö — `RED_COST` keltaista ulos,
+   *      `RED_KEEP` jää — ja kahta tapaa ostaa sama asia ei ole (DESIGN.md
+   *      kohta 8). Se myös palauttaa mittarille sen lupauksen jonka *kolikot
+   *      ovat aika* otti pois: täydellä säiliöllä on taas seuraus.
    *   3. **Pisteitä**, kuten ennenkin.
    */
   addCoin(x, y, popped = false, { silent = false, delay = 0 } = {}) {
@@ -3006,7 +3039,10 @@ export class LevelScene {
        * joka valehtelee. */
       this.addScorePop(x, y - 8, COIN);
     }
-    if (st.coinsTotal % LIFE_COINS === 0) this.gainLife(x, y);
+    /* No career payout any more: a life is the red coin the tube mints, and
+     * `LIFE_COINS` was the second way of saying the same thing (DESIGN.md §8).
+     * `coinsTotal` stays because the run card counts it, not because anything
+     * is bought with it. */
   }
 
   /* ---------------------------- kolikkoputkilo --------------------------- */
@@ -3120,11 +3156,19 @@ export class LevelScene {
              * lupaamaan meni ohi nopeammin kuin sen ehti nähdä.
              *
              * Nyt pinta **valuu** alas `COIN_FLUSH` framen ajan ja suusta
-             * nousee kipinä: sata kolikkoa lähtee sinne minne ne oli menossa.
-             * Ääni ja 1UP-teksti ovat jo olemassa (`gainLife`), joten tämä on
-             * sama tapahtuma mittarin puolella eikä toinen tapahtuma. */
-            this.tubeFill = COIN_CAP;
+             * nousee kipinä: `RED_COST` kolikkoa lähtee sinne minne ne olivat
+             * menossa. Ääni ja 1UP-teksti ovat jo olemassa (`gainLife`), joten
+             * tämä on sama tapahtuma mittarin puolella eikä toinen tapahtuma. */
+            /* 18.8.2026: the flush finally does what it always said it did.
+             * It was written when a full tube *was* the 1UP, and when coins
+             * became time the payout moved to a career counter and this stayed
+             * behind — a glass that drained over 34 frames, threw a spark
+             * "up, where the 1UP came from", and then snapped back to full
+             * with nothing having happened. Now 64 coins really do leave. */
+            this.game.state.coins -= RED_COST;
+            this.tubeFill = RED_KEEP;
             this.tubeFlush = COIN_FLUSH;
+            this.gainLife(this.player.cx, this.player.cy - 12);
           }
         }
       }
@@ -3166,11 +3210,12 @@ export class LevelScene {
     // pino
     const inner = box.x + 1;
     const innerW = box.w - 2;
-    /* Huuhtelun aikana pinta on `tubeFill` kerrottuna sillä osuudella joka on
-     * vielä valumatta: sata kolikkoa katoaa alaspäin kolmessakymmenessä
-     * framessa. Muulloin kerroin on yksi eikä mitään muutu. */
-    const drain = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 1;
-    const shown = Math.round(this.tubeFill * drain);
+    /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
+     * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
+    const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
+    const shown = this.tubeFlush > 0
+      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
+      : this.tubeFill;
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -6307,7 +6352,9 @@ export class LevelScene {
      */
     const gained = st.coins > (this.hudCoins === undefined ? st.coins : this.hudCoins);
     this.hudCoins = st.coins;
-    const seen = `${st.score} ${st.lives} ${st.reserve} ${p.powerLevel}`
+    /* Pisteet eivät ole avaimessa koska ne eivät ole enää nauhalla: lukema
+     * joka ei näy ei voi olla syy herättää se. */
+    const seen = `${st.lives} ${st.reserve} ${p.powerLevel}`
       + ` ${p.type} ${p.swallowed || ''}`;
     if (seen !== this.hudSeen || gained) {
       this.hudSeen = seen;
@@ -6363,8 +6410,27 @@ export class LevelScene {
     if (ink > 0.01) {
       ctx.save();
       ctx.globalAlpha = ink;
-      drawText(ctx, padNum(st.score, 7), OVERLAY.left, 6, { color: '#ffffff', shadow: S });
-      drawText(ctx, `KV *${st.lives}`, OVERLAY.left, 17, { color: '#ffffff', shadow: S });
+      /*
+       * PISTEET EIVÄT OLE ENÄÄ RUUDULLA, ja elämät eivät ole enää luku.
+       *
+       * Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why
+       * do we even need to show the score before the game over hiscores
+       * table?"* — and the honest answer is that we do not. A running total is
+       * a number nobody acts on: it cannot be spent, it changes nothing about
+       * the next jump, and every payment it records has **already** said so
+       * where it happened, as a figure popping off the thing that paid
+       * (`addScorePop`). The total still exists and still matters; it is read
+       * out at the end in `scenes/scores.js`, which is where somebody is
+       * actually deciding whether the run was any good.
+       *
+       * Lives take the freed row as red coins, because a life *is* a red coin
+       * now (`RED_COST`). `KV *4` was a label, a star and a digit standing in
+       * for a thing the player owns; four red coins are the thing itself, drawn
+       * the same size as the yellow ones in the tube on the other side of the
+       * screen, so the exchange rate is a picture rather than a rule.
+       */
+      const row = drawLifeCoins(ctx, OVERLAY.left, 6, st.lives, S);
+      if (row.over) drawText(ctx, '+', row.end, 5, { color: '#ff8a8a', shadow: S });
       ctx.restore();
     }
 
