@@ -191,6 +191,27 @@ const coinArc = (c, x, w) => {
   }
 };
 
+/**
+ * A CAP THE EASE KNOB CANNOT BUY ITS WAY PAST.
+ *
+ * `ctx.ease` is tiles taken off an obstacle, and a positive value has only ever
+ * made a piece smaller — so every site could subtract and stop there. A note
+ * from the playtest desk can now ask for the opposite (`tools/read-notes.mjs`),
+ * and a negative ease *adds* tiles, which turns three of these expressions into
+ * a way to widen a hole past the measured jump budget: `gap` clamps to
+ * `softGap` before subtracting, `corkGate` starts at `maxGap`, and
+ * `crumbleWalk` clamps before subtracting too. The other four already carry an
+ * outer `Math.min` and need nothing.
+ *
+ * So the cap is re-applied after the ease rather than before it. For any ease
+ * of zero or more this is arithmetic that changes nothing — which is the point,
+ * and `src/data/generated.js` comes out byte-identical to prove it. What it
+ * buys is that **no feedback anyone types can produce a jump the game has not
+ * measured**: the budget stays the ceiling, and a request to make a spot harder
+ * spends itself against it.
+ */
+const withinBudget = (cap, tiles) => Math.min(cap, tiles);
+
 export const PIECES = {
   /** Plain ground with nothing on it — the rest between challenges. */
   rest(c, x, ctx) {
@@ -203,7 +224,8 @@ export const PIECES = {
   /** A gap. Wide ones get a stepping stone, because ours is a 6-tile budget. */
   gap(c, x, ctx) {
     const raw = sampleHist(stats.gapWidth, { min: 1, max: 9 });
-    const w = Math.max(2, Math.min(ctx.softGap, Math.round(raw * GAP_SCALE)) - ctx.ease);
+    const w = withinBudget(ctx.softGap,
+      Math.max(2, Math.min(ctx.softGap, Math.round(raw * GAP_SCALE)) - ctx.ease));
     const lead = 2;
     c.ground(x, lead);
     if (w > ctx.maxGap) {
@@ -234,7 +256,7 @@ export const PIECES = {
    * cures the cork sits on the far side.
    */
   corkGate(c, x, ctx) {
-    const w = Math.max(3, ctx.maxGap - ctx.ease);
+    const w = withinBudget(ctx.maxGap, Math.max(3, ctx.maxGap - ctx.ease));
     c.ground(x, 5);
     c.set(x + 2, FLOOR - 1, 'c');
     /* The plank in the middle is a stepping stone, and a world that bridges no
@@ -316,9 +338,9 @@ export const PIECES = {
    * betraying you, which is DESIGN.md §5 applied to a tile that disappears.
    */
   crumbleWalk(c, x, ctx) {
-    const w = Math.max(3, Math.min(ctx.maxGap, Math.round(
+    const w = withinBudget(ctx.maxGap, Math.max(3, Math.min(ctx.maxGap, Math.round(
       sampleHist(stats.gapWidth, { min: 2, max: 8 }) * GAP_SCALE,
-    )) - ctx.ease);
+    )) - ctx.ease));
     c.ground(x, 3);
     for (let i = 0; i < w; i++) c.set(x + 3 + i, FLOOR, '%');
     // Coins over the deck and not over the piers, so the greedy line and the
@@ -1318,11 +1340,29 @@ export function buildLevel({
     const from = x;
     x += PIECES.rest(c, x, ctx);
 
+    /*
+     * A NOTE MAY NAME THE PIECE, AND THE WORLD MAY STILL SAY NO.
+     *
+     * `tuned.force` is the third thing feedback can ask for, after "easier" and
+     * "harder": *put a hill here*, *put a gap here*. It is looked up in
+     * `weights` rather than in `PIECES`, so a world that subtracted a piece
+     * (the `drop` list — no hills in the factory, no lava in the ice world)
+     * keeps its subtraction, and the refusal is recorded in the trace instead
+     * of being silently granted. A note is a request, not an override.
+     *
+     * The two draws above happen either way, forced or not. Overriding *after*
+     * the draw rather than instead of it keeps the random stream identical to
+     * the untuned build, which is what makes the rest of the level line up:
+     * every other note was resolved against that build's columns, and a forced
+     * piece that swallowed a draw would move them all.
+     */
     let name = weightedPiece(weights);
     if (name === lastPiece) name = weightedPiece(weights);   // avoid doubles
+    const asked = tuned ? tuned.force : null;
+    if (asked && Object.hasOwn(weights, asked)) name = asked;
     lastPiece = name;
     x += PIECES[name](c, x, ctx);
-    trace.push({ name, from, to: x });
+    trace.push({ name, from, to: x, ...(asked ? { asked, honoured: name === asked } : {}) });
   }
 
   /*
