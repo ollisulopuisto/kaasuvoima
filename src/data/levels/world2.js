@@ -214,16 +214,30 @@ export const WORLD2_LEVELS = {
    * has no warp for them to point at.
    */
   /*
-   * EI MAASTOPASSIA (`data/terrain.js`), ja syy on tämän kentän oma kauppa.
-   * Sen ainoa kuori seisoo hiekkalammikon oikealla puolella, joten vasemmalle
-   * potkaistu kuori päätyy hiekkaan — väline vaihtuu roskikseen, ja
-   * `tools/verify.mjs` mittaa sen. Nostettu maasto pani lammikon kolme
-   * laattaa kuoren yläpuolelle, eikä kuori nouse mäkeä: kauppa katosi
-   * hiljaa. Käsintehty korkeussuhde kahden palikan välillä on kentän
-   * päätös, ei kokoajan.
+   * TERRAIN (`data/terrain.js`), and the trade it once cost is the reason to
+   * read the shell test in `tools/verify.mjs` before touching either chunk.
+   * This level's only shell stands to the right of the quicksand pool, so a
+   * shell kicked left ends in the sand — the tool turns into rubbish, which is
+   * the whole bargain the mechanic offers. Raised ground puts the pool three
+   * tiles above the shell, and the gate that guards the bargain used to read
+   * row 13; it reads the *column* now, which is the thing the bargain is
+   * actually about. Move either chunk and that test says so.
+   *
+   * **AND A NAMED SEED, `2-1i`, FOR THE CAMERA.** This is a letterboxed level,
+   * which means its view has room to travel — and three gates in
+   * `tools/verify.mjs` measure exactly that travel here, because a cropped
+   * window is a *short* one (192 px against 240) and a short window is the one
+   * with room to move. Raise the wrong chunk and all three go red at
+   * once: the landing that moves the view furthest lurches 15,10 px on its
+   * first frame instead of 8,90 (the ceiling is 13), the tightest shelf in the
+   * level rises until every jump off it spends the camera's whole headroom, and
+   * the sun's retreat is measured from a walk that now starts inside a hillside
+   * and dies in ten frames. Twelve seeds measured; `2-1i` is the one that
+   * leaves the camera reading exactly what flat ground read.
    */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
+    terrain: '2-1i',
     chunks: [
       'start', 'pipe_short', 'power', 'walkers', 'sun', 'corks',
       'pipe_plant', 'pit_l', 'coins', 'dune_sink', 'shell', 'plat_steps',
@@ -444,15 +458,28 @@ export const WORLD2_LEVELS = {
    * both branches); this is the second place it turns up.
    */
   /*
-   * EI MAASTOPASSIA (`data/terrain.js`), ja syy on kartalla. Maailma 2 haarautuu,
-   * ja haaran koko idea on että tiet mittautuvat eri lukemiin: `pipsFor`
-   * antaa kolme pistettä vasta 150:stä, ja tämä kenttä on 154,3. Maasto on
-   * sarakkeita ilman lisähaastetta, eli se laimentaa mitattua vaikeutta —
-   * mitattuna 154,3 → 145,8, jolloin LAAVATIE ja HIEKKATIE näyttäisivät
-   * kartalla samalta ja haara lakkaisi olemasta valinta.
+   * TERRAIN, AND A NAMED SEED, AND THE REASON IS ON THE MAP RATHER THAN IN THE
+   * GROUND. See `data/terrain.js`.
+   *
+   * World 2 forks, and the point of a fork is that the two roads measure to
+   * different readings: `pipsFor` pays the third pip at 150, and
+   * `tools/verify.mjs` fails the build if LAAVATIE and HIEKKATIE light the same
+   * number of them ("world 2 forks, and the two roads measure differently").
+   * LAAVATIE's number *is* this level's number, and terrain adds columns
+   * without adding challenge — it dilutes the score. Measured over twenty-six
+   * seeds: flat 154,3, and terrain lands anywhere between 148,1 and 151,9. Half
+   * of those seeds cost the world its fork.
+   *
+   * `2-3v` is the one that measured highest, 151,9. **The margin is 1,9 points
+   * and that is the whole point of writing it down**: this level cannot afford
+   * to get any longer or any gentler, and the gate that says so is a pixel test
+   * of the map's tier colours rather than anything in this file. Re-run
+   * `tools/difficulty.mjs --write` after anything that touches this level, and
+   * read the LAAVATIE row it prints.
    */
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
+    terrain: '2-3v',
     chunks: [
       /* Hössötin maailmaan 2: laji joka ei satuta kuuluu sinne missä pelaaja
        * on jo oppinut ne jotka satuttavat — ja 2-3 on maailman hengähdys

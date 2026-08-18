@@ -204,6 +204,14 @@ export const WORLD3_LEVELS = {
    * kohtaa* juoksija sen kohtaa, ja `tools/playable.mjs` kuoli siihen kuiluun
    * jokaisella kokeillulla siemenellä. Kuilu joka on tasan budjetin mittainen
    * on kenttäsuunnittelua eikä kokoajan päätettävissä.
+   *
+   * MEASURED AGAIN 18.8.2026, after the two changes that answered every other
+   * refusal in the game — the grid grew to sixteen rows and `MAX_LIFT` rose to
+   * two — and the answer did not move. Seven seeds (`true` and `3-3a`…`3-3f`);
+   * `tools/playable.mjs` died in the same gap every time, at column 237-241 of
+   * roughly 433. Ten other hand-made levels took the pass in that same pass of
+   * work and this one is the only refusal, which is what makes it the level's
+   * own geometry rather than a bad roll.
    */
   '3-3': {
     theme: 'ice', bg: 'peaks', music: 'jaatie',

@@ -70,20 +70,28 @@ export const WORLD1_LEVELS = {
    * three.
    */
   /*
-   * EI MAASTOPASSIA, ja kaksi mitattua syytä. Ks. `data/terrain.js`.
+   * TERRAIN, AND A NAMED SEED RATHER THAN `true`. See `data/terrain.js`.
    *
-   *   1. **Piilotiilet ovat sijainnin hajautus** (`core/secrets.js`), ja
-   *      maastopassi työntää sarakkeita rinteiden verran eteenpäin. 1-1 piilottaa
-   *      tarkoituksella *ei mitään* — se on koko yllä olevan putkiperustelun
-   *      toinen puolisko — ja maaston kanssa portti löysi sieltä yhden
-   *      piilotiilen. Sama muutos jokaisessa muussakin kentässä, mutta vain
-   *      tässä yhdessä nolla on väite.
-   *   2. **Kansi.** Korkein pieruhyppy jättää täällä 30,38 px kentän kanteen,
-   *      ja se on koko pelin ahtain mitattu lukema. Yhden laatan nosto veisi
-   *      siitä puolet.
+   * This level refused the pass twice, and both refusals have since been
+   * answered — but only one of them by the terrain code:
+   *
+   *   1. **The lid.** The highest fart jump used to leave 30,38 px between the
+   *      player and the top of the world here, the tightest measured reading in
+   *      the game, so one tile of lift would have eaten half of it. The grid is
+   *      sixteen rows now, which is 16 px more, and `MAX_LIFT` is priced
+   *      against that number (46,4 px against two tiles). Answered.
+   *   2. **The hidden bricks are a hash of position** (`core/secrets.js`), and
+   *      a ramp pushes every column after it forward, so terrain re-rolls every
+   *      brick in the level. 1-1 deliberately hides *nothing* — that is the
+   *      other half of the pipe argument above, and `tools/verify.mjs` asserts
+   *      `secretTotal('1-1') === 0`. The seed `1-1` itself rolls one hidden
+   *      brick into the level; `1-1a` rolls none. **That is what the seed is
+   *      for**: the shape of the ground is the assembler's business, but which
+   *      of its shapes this level takes is still the level's decision.
    */
   '1-1': {
     theme: 'grass', bg: 'hills', music: 'level',
+    terrain: '1-1a',
     chunks: [
       'start', 'flat', 'power', 'walker', 'qrow', 'coins',
       /* Ensimmäinen rinne on 1-1:ssä ja se on `kumpare`: maa jota pitkin

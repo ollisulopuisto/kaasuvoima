@@ -909,6 +909,8 @@ export const THEME_RULES = {
       coins: 2, notes: 1, stinkGap: 2, corkGate: 1, highReward: 2,
       crumbleWalk: 2, switchWall: 2,
     },
+    /* Terrain pass: open sky, nothing above to protect. */
+    lift: { keep: 0 },
     rules: [ruleOpenSky],
     fixtures: [THEME_FIXTURES.openSky],
   },
@@ -920,6 +922,8 @@ export const THEME_RULES = {
       heartburn: 3, sun: 1, coins: 2, stinkGap: 2, corkGate: 2, lava: 1,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
+    /* Terrain pass: open sky, nothing above to protect. */
+    lift: { keep: 0 },
     rules: [ruleOpenSky],
     fixtures: [THEME_FIXTURES.openSky],
   },
@@ -937,6 +941,8 @@ export const THEME_RULES = {
       heartburn: 2, coins: 2, stinkGap: 3, corkGate: 2, lava: 1,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
+    /* Terrain pass: open sky, nothing above to protect. */
+    lift: { keep: 0 },
     rules: [ruleOpenSky],
     fixtures: [THEME_FIXTURES.openSky],
   },
@@ -955,6 +961,8 @@ export const THEME_RULES = {
       coins: 2, notes: 1, stinkGap: 3, corkGate: 2, lava: 2, heartburn: 2,
       highReward: 2, crumbleWalk: 3, switchWall: 2,
     },
+    /* Terrain pass: open sky, nothing above to protect. */
+    lift: { keep: 0 },
     rules: [ruleOpenSky],
     fixtures: [THEME_FIXTURES.openSky],
   },
@@ -991,6 +999,8 @@ export const THEME_RULES = {
      */
     shape: (c) => ceilingPass(c, 3, 2),
     maxBlockHeight: 7,
+    /* Terrain pass: rows 0-3 are the sky and the lid (`ceilingPass(c, 3, 2)`). */
+    lift: { keep: 4 },
     rules: [ruleFactoryCeiling],
     fixtures: [THEME_FIXTURES.factory],
   },
@@ -1012,6 +1022,8 @@ export const THEME_RULES = {
      * plank carries: at seven the coin lands on row 4, i.e. through the moon.
      * Measured: with the plank uncapped only 10 of 80 seeds built a legal 6-4. */
     maxPlatform: 5,
+    /* Terrain pass: rows 0-5 stay empty for the moon (`ruleBoneSky`). */
+    lift: { keep: 6 },
     rules: [ruleBoneSky, ruleBoneStands],
     fixtures: [THEME_FIXTURES.bone, THEME_FIXTURES.boneStands],
   },
@@ -1456,11 +1468,26 @@ export function buildLevel({
    * Se ei ole makuasia kummallakaan puolella — luussa maa on luuta ja tehtaassa
    * lattia — ja kummankin vaikeuskäyrä on mitattu ilman liikkuvaa maata.
    *
+   * **That paragraph is superseded, 18.8.2026, and a measurement is why.** The
+   * owner said the levels read as flat and the ground profile agreed: where
+   * this pass runs, 25-40 % of columns sit on the floor row; where it does not,
+   * 98-100 % do. Thirteen generated levels were in the second group purely
+   * because their theme has a ceiling — which is a fact about the top of the
+   * grid and never was a fact about the ground. `pal.lift.keep` names how many
+   * rows at the top the pass must leave alone (see `liftTerrain`), so the
+   * factory keeps its lid and the bone world keeps its moon while the floor
+   * underneath them moves.
+   *
+   * The cloud world still refuses, and it is the theme refusing rather than
+   * this condition: `ruleCloudNoLegs` forbids anything solid above the floor,
+   * so there is no such thing as cloud terrain. The fortress refuses too, for
+   * the reason `terrainSeedOf` already gives about boss arenas.
+   *
    * Ennen tähtiä ja salaisuutta, jotta ne asettuvat lopulliselle maalle.
    * Siemenessä on teema mukana, jotta kahden maailman sama siemen ei anna
    * samaa maastoa.
    */
-  if (pal.weights.hill) c.setRows(liftTerrain(c.rows(), `${theme}-${seed}`));
+  if (pal.lift) c.setRows(liftTerrain(c.rows(), `${theme}-${seed}`, pal.lift.keep));
 
   /* The two characters that are claims about blocks rather than places. Both
    * run last, on the finished level, and both report failure to the validator
