@@ -63,6 +63,8 @@ export const WORLD6_LEVELS = {
    */
   '6-1': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     /*
      * MAANJÄRISTYS (ks. sääosio `scenes/level.js`:n alussa), ja luulaakso on
      * sille pelin ainoa oikea osoite: tämä on se maailma jossa maa itse on
@@ -98,6 +100,8 @@ export const WORLD6_LEVELS = {
    */
   '6-2': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     /*
      * METSÄPALO (ks. `scenes/level.js`, `updateWildfire`). Palo syttyy pelaajan
      * takaa ja leviää puusta puuhun 1,23 px/frame; juoksuvauhti on 2,5, joten
@@ -236,6 +240,8 @@ export const WORLD6_LEVELS = {
    */
   '6-M': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'power', 'bone_jaws', 'bone_grave', 'bone_dance', 'bone_wisp',
       'bone_jaws', 'bone_grave', 'bone_wisp', 'bone_arena', 'bone_vault',

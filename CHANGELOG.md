@@ -7,6 +7,83 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.35 — the ground moves in 43 levels instead of 19
+
+Owner, having looked at the playtest desk: *"the levels are still super flat."*
+
+**Measured before arguing.** For every column, scan up from the bottom row while
+the tile is solid; the topmost solid row is the ground height. Then count how
+many columns sit on the level's lowest ground row. The answer split cleanly in
+two, and the split was not about tuning:
+
+    13 levels   40 % on the floor   generated, outdoor theme — the pass runs
+     6 levels   25 % on the floor   hand-made with the terrain flag
+    13 levels  100 % on the floor   generated, ceiling theme — pass switched off
+    33 levels   98 % on the floor   hand-made, no flag
+
+Where the terrain pass runs, the ground already moves. **It was switched off for
+46 of 65 levels**, so nothing about `MAX_LIFT` or the seam spacing was the
+problem — coverage was. (`MIN_SPAN` was tried at 24 instead of 40 and moved the
+medians by nothing at all, which is how that was established rather than
+assumed.)
+
+**Ceiling themes: the roof rode up with the floor.** The pass lifts whole
+columns, which is what makes an enemy rise with the ground it stands on. Under
+an open sky there is nothing above to damage; the factory has a lid and the bone
+world has a sky that must stay empty, and both are absolute claims about the top
+rows. Lifting broke them twice over — the lid moved up with everything else, and
+the ramps at each span edge, written as complete columns of sky over ground,
+erased the lid outright. Measured: **all 240 seeds** failed for 4-4, 4-5, 4-6,
+5-5 and 5-7 with *tehtaassa ei ole kattoa*.
+
+`liftTerrain` now takes `keep`: how many rows at the top it may not touch. The
+ground below rises, the roof stays, and the headroom between them shrinks by
+exactly the lift — the honest cost, and now what `columnCap` measures. Factory
+keeps rows 0-3, the bone world rows 0-5.
+
+The cloud world refuses, and it is the *theme* refusing rather than the pass
+failing: `ruleCloudNoLegs` forbids anything solid above the floor, and lifted
+ground is solid ground above the floor by definition. 7-4, 7-5 and 7-6 stay
+flat and that is the world being what it is.
+
+**Hand-made levels: ten of eleven took the flag.** 1-1, 2-1, 2-3, 4-1, 4-3, 6-1,
+6-2, 6-M, 7-1 and 7-3, from 87.3 % of columns on the floor to **57.2 %** on
+average. Four needed a named terrain seed rather than `true`, and each name is a
+gate the default seed failed:
+
+- `1-1a` — `true` rolled one brick into hiding something, and verify asserts the
+  first level hides nothing.
+- `2-1i` — `true` cost the camera 15.10 px of lurch against a 13 px ceiling, and
+  started the sun walk inside a hillside. 12 seeds measured; `2-1i` reads what
+  flat ground read.
+- `2-3v` — terrain dilutes the score, and half the seeds cost world 2 its fork by
+  dropping LAAVATIE under the 150-point pip threshold. 26 seeds measured;
+  `2-3v` is 151.9.
+- `7-3m` — `true` made a floor jump under the anvil deck lethal.
+
+3-3 refused again, for the reason it refused the first time: its `sky_run` gap is
+exactly the measured six-tile budget, so any ramp that eats the run-up makes it
+unclearable. Seven seeds, the bot died in the same gap every time, and the flag
+is not there.
+
+**Two generated levels needed `seedOffset`** — 4-5 lost the ground route to its
+new terrain, 4-7 came out perfectly flat — which is the knob from v26.08.18.34
+being paid for on the same day it was built.
+
+Result, and the boss arenas are excluded because `terrainSeedOf` has always
+excluded them (a boss respawns on a fixed row):
+
+    all 65 levels    95 % -> 79 % on the floor,  6 -> 10 height changes
+    the 50 non-boss              67 % on the floor,   15 height changes
+    perfectly flat   20 -> 15, of which 5 are playable levels: the three cloud
+                     levels, 7-P (multi-band), and nothing else
+
+Difficulty moved by a few points either way and no level moved away from its
+aim; both branch forks still read differently on the map, which is the gate that
+made `2-3v` a measurement instead of a preference.
+
+---
+
 ## v26.08.18.34 — feedback moves the generator, and the file can be rebuilt again
 
 Two halves, and the second one was found by shipping the first.

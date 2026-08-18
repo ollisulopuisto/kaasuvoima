@@ -78,6 +78,8 @@ export const WORLD7_LEVELS = {
    */
   '7-1': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'cloud_bank', 'power', 'cloud_hole', 'cloud_squall', 'cloud_updraft',
       /* Pyörre esitellään tasaisella maalla ja kohdataan reiän vauhdinotolla
@@ -279,6 +281,11 @@ export const WORLD7_LEVELS = {
    */
   '7-3': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
+    /* Terrain pass, see `data/terrain.js`. A named seed and not `true`: the
+     * level's own id lifts a plank into the run-up of the anvil deck, and both
+     * `tools/playable.mjs` and the ground-pound gate in `tools/verify.mjs` say
+     * so. `7-3m` clears each of them. */
+    terrain: '7-3m',
     /*
      * PYÖRREMYRSKY (ks. sääosio `scenes/level.js`:n alussa). Pilvimaailma on
      * se paikka jossa tuuli jo kantaa kaikkea (ROADMAPin laki 3), joten

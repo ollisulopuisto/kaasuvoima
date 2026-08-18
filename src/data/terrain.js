@@ -384,22 +384,24 @@ function plainColumn(rows, x) {
  * maata tai tyhjää. Ero on että sarake voi olla kuilu — ja kuilu **saa nousta
  * mukana**, koska sen pohja on tyhjä ja kopioituu tyhjänä.
  */
-function columnCap(rows, x) {
+function columnCap(rows, x, keep) {
   const h = rows.length;
   const fill = rows[h - 1][x];
   if (fill !== '#' && fill !== ' ') return 0;
   if (rows[h - 2][x] !== ' ' && fill !== '#') return 0;
   let blank = 0;
-  while (blank < MAX_LIFT && rows[blank][x] === ' ') blank++;
+  while (blank < MAX_LIFT && rows[keep + blank][x] === ' ') blank++;
   return blank;
 }
 
 /** Yksi sarake nostettuna, kuilut ja kaikki. Ks. `liftRows`. */
-function liftColumn(rows, x, lift) {
+function liftColumn(rows, x, lift, keep) {
   const h = rows.length;
   const out = [];
   const fill = rows[h - 1][x];
-  for (let y = 0; y < h; y++) out.push(y + lift < h ? rows[y + lift][x] : fill);
+  for (let y = 0; y < h; y++) {
+    out.push(y < keep ? rows[y][x] : (y + lift < h ? rows[y + lift][x] : fill));
+  }
   return out;
 }
 
@@ -412,7 +414,34 @@ function liftColumn(rows, x, lift) {
  */
 const MIN_SPAN = 40;
 
-export function liftTerrain(rows, seed) {
+/*
+ * A ROOF IS NOT GROUND, AND `keep` IS THE ROW WHERE THAT STOPS BEING OBVIOUS.
+ *
+ * The pass lifts whole columns: everything in a column moves up with the ground
+ * it stands on, which is what makes this terrain and not a tile edit. Under an
+ * open sky there is nothing above to damage, and that is why the pass ran on the
+ * four outdoor themes only.
+ *
+ * The factory has a lid and the bone world has a sky that must stay empty
+ * (`ruleFactoryCeiling`, `ruleBoneSky`), and both are *absolute* claims about
+ * the top rows rather than claims about the ground. Lifting whole columns broke
+ * them from two directions at once: the ceiling rode up with the floor, and the
+ * ramps at a span's edges — written as complete columns of sky over ground —
+ * erased the lid outright. Measured before this: **all 240 seeds** failed for
+ * 4-4, 4-5, 4-6, 5-5 and 5-7, every one of them with *tehtaassa ei ole kattoa*.
+ *
+ * `keep` is how many rows at the top the pass may not touch. The ground below
+ * them rises, the roof stays where the theme put it, and the headroom between
+ * the two shrinks by exactly the lift — which is the real cost, and is what
+ * `columnCap` now measures by counting its blank rows from `keep` rather than
+ * from row 0.
+ *
+ * The cloud world is not on this list and cannot be: `ruleCloudNoLegs` says
+ * nothing solid may stand above the floor at all, and lifted ground is solid
+ * ground above the floor by definition. That is a theme refusing terrain, not
+ * the pass failing to offer it.
+ */
+export function liftTerrain(rows, seed, keep = 0) {
   const h = rows.length;
   const w = rows[0].length;
   const need = RUNWAY + MAX_LIFT;
@@ -420,7 +449,7 @@ export function liftTerrain(rows, seed) {
   const caps = new Array(w);
   for (let x = 0; x < w; x++) {
     tops[x] = plainColumn(rows, x);
-    caps[x] = columnCap(rows, x);
+    caps[x] = columnCap(rows, x, keep);
   }
 
   /* Saumakelpoinen sarake: sen molemmin puolin on `need` saraketta samaa
@@ -453,14 +482,14 @@ export function liftTerrain(rows, seed) {
     const lift = cap > 0 ? Math.floor(roll() * (cap + 1)) : 0;
     if (!lift) continue;
     for (let x = from; x < to; x++) {
-      const col = liftColumn(rows, x, lift);
+      const col = liftColumn(rows, x, lift, keep);
       for (let y = 0; y < h; y++) grid[y][x] = col[y];
     }
     /* Rinne ylös jakson alkuun ja alas sen loppuun, kirjoitettuna tasamaan
      * päälle sen ulkopuolelle — eli siihen vauhdinottoon josta `need` varasi
      * tilaa juuri tätä varten. */
-    writeRamp(grid, from, tops[from], lift, -1);
-    writeRamp(grid, to - 1, tops[to - 1], lift, +1);
+    writeRamp(grid, from, tops[from], lift, -1, keep);
+    writeRamp(grid, to - 1, tops[to - 1], lift, +1, keep);
   }
   return grid.map((r) => r.join(''));
 }
@@ -469,7 +498,7 @@ export function liftTerrain(rows, seed) {
  * Rinne jakson reunaan: `dir === -1` kirjoittaa nousun jakson vasemmalle
  * puolelle, `+1` laskun sen oikealle puolelle.
  */
-function writeRamp(grid, edge, baseTop, lift, dir) {
+function writeRamp(grid, edge, baseTop, lift, dir, keep = 0) {
   const h = grid.length;
   const ramp = rampRows(baseTop, baseTop - lift, h);
   for (let j = 0; j < lift; j++) {
@@ -478,7 +507,9 @@ function writeRamp(grid, edge, baseTop, lift, dir) {
     const src = dir < 0 ? j : lift - 1 - j;
     const x = dir < 0 ? edge - lift + j : edge + 1 + j;
     if (x < 0 || x >= grid[0].length) continue;
-    for (let y = 0; y < h; y++) {
+    /* From `keep` down only: a ramp is a full column of sky over ground, and
+     * writing its sky across a factory lid is how the lid disappeared. */
+    for (let y = keep; y < h; y++) {
       const ch = ramp[y][src];
       grid[y][x] = dir < 0 ? ch : (ch === RISE ? FALL : ch);
     }

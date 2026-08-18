@@ -42,6 +42,8 @@ export const WORLD4_LEVELS = {
    */
   '4-1': {
     theme: 'factory', bg: 'factory', music: 'factory',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'fac_floor', 'fort_power', 'fac_press', 'fac_vents', 'corks',
       'fac_belt', 'cork_gap', 'fac_shaft', 'fac_gap', 'fac_star', 'heartburn',
@@ -143,6 +145,8 @@ export const WORLD4_LEVELS = {
    */
   '4-3': {
     theme: 'factory', bg: 'factory', music: 'factory',
+    /* Terrain pass, see `data/terrain.js`. */
+    terrain: true,
     /*
      * TULIMYRSKY (ks. sääosio `scenes/level.js`:n alussa), ja se on tehtaassa
      * eikä taivaalla siksi että täällä sillä on lähde: uuni käryää, ja kekälesade

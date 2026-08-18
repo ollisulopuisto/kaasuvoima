@@ -566,16 +566,18 @@ const WORLD4 = [
     id: '4-4', world: 'w4', theme: 'factory', music: 'factory', width: 320,
     enemiesPer100: 7.0, maxGap: 5, aim: 168, minIntro: 32, intensity: 1.05, attempts: SEARCH,
   },
+  /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
   {
-    id: '4-5', world: 'w4', theme: 'factory', music: 'factory', width: 340,
+    id: '4-5', seedOffset: 1, world: 'w4', theme: 'factory', music: 'factory', width: 340,
     enemiesPer100: 7.6, maxGap: 5, aim: 181, minIntro: 32, intensity: 1.30, attempts: SEARCH,
   },
   {
     id: '4-6', world: 'w4', theme: 'factory', music: 'factory', width: 300,
     enemiesPer100: 8.0, maxGap: 5, aim: 197, minIntro: 32, intensity: 1.35, attempts: SEARCH,
   },
+  /* seedOffset: the default seed left this level's ground perfectly flat. */
   {
-    id: '4-7', world: 'w4', theme: 'factory', music: 'factory', width: 350,
+    id: '4-7', seedOffset: 2, world: 'w4', theme: 'factory', music: 'factory', width: 350,
     enemiesPer100: 8.4, maxGap: 5, aim: 212, minIntro: 32, intensity: 1.55, attempts: SEARCH,
   },
 ];

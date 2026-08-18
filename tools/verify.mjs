@@ -4416,7 +4416,7 @@ const report = await page.evaluate(async () => {
    * vaikeustason venytyksellä oli, ja siksi sama luku (`RUNWAY`).
    */
   {
-    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const { getLevel, levelIds, terrainSeedOf } = await import('/src/data/levels.js');
     const { CHUNKS, assemble } = await import('/src/data/chunks.js');
     const { LOOSE, MAX_LIFT, RUNWAY, RUN_ROWS, applyTerrain, liftCap, seamReady, terrainProfile }
       = await import('/src/data/terrain.js');
@@ -4433,7 +4433,19 @@ const report = await page.evaluate(async () => {
     const built = withTerrain.map((id) => {
       const def = getLevel(id);
       const chunks = def.chunks.map((n) => CHUNKS[n]);
-      const { shift } = applyTerrain(chunks, terrainProfile(chunks, id));
+      /* The seed comes from `terrainSeedOf` and not from the id, because
+       * `terrain:` may name a seed instead of saying `true` — a level that
+       * could not clear its own id's ramps picks a different string. Rebuilding
+       * with the id would then produce a different `shift` than the level
+       * actually has, and every claim below compares that shift against the
+       * real grid: the whole gate would report holes that are not there.
+       *
+       * The definition is handed over without its `rows`, because `getLevel`
+       * has already built them and `terrainSeedOf` refuses a level that writes
+       * its own — the seed rule is read from the one function that owns it
+       * rather than copied here. */
+      const { shift } = applyTerrain(chunks,
+        terrainProfile(chunks, terrainSeedOf(id, { terrain: def.terrain, chunks: def.chunks })));
       const starts = [];
       let flatCol = 0;
       chunks.forEach((chunk, i) => { starts.push({ flat: flatCol, at: flatCol + shift[i] }); flatCol += chunk.w; });
@@ -4539,7 +4551,6 @@ const report = await page.evaluate(async () => {
     /* 4. POIKKEUS, punaisena ensin. Kenttä joka laskee sarakkeita numeroina ei
      *    voi saada maastoa, ja hiljaa jätetty tasamaa olisi juuri se vika jota
      *    etsittäisiin väärästä tiedostosta. Kolme muotoa, kolme heittoa. */
-    const { terrainSeedOf } = await import('/src/data/levels.js');
     const refused = [];
     const shapes = [
       ['korkea kenttä', { sky: [[0, 'flat']] }],

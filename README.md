@@ -635,7 +635,12 @@ Linnakkeen pomon liikesarja tulee kentän `bossVariant`-kentästä (0–3).
 
 Kentän muut liput: `terrain: true` antaa **maastopassin** (`src/data/terrain.js`)
 — kokoaja päättää kullekin palikalle lattiatason ja kirjoittaa siirtymät
-rinteinä. `wind`, `quake`, `twister`, `firestorm` ja `wildfire` ovat sää:
+rinteinä. A string instead of `true` is the seed: `terrain: '2-3v'` builds a
+different set of heights from the same chunks, which is how four levels take the
+pass without breaking a gate the default seed broke (see CHANGELOG v26.08.18.35
+— a camera lurch, a hidden brick, a pip threshold and a lethal floor jump). A
+level that writes its own `rows`, carries a hidden band, or is a boss arena
+cannot take it at all, and `terrainSeedOf` throws rather than ignoring the flag. `wind`, `quake`, `twister`, `firestorm` ja `wildfire` ovat sää:
 puuska, maanjäristys, pyörremyrsky, tulimyrsky ja metsäpalo. Kukin on
 kenttäkohtainen tarkoituksella — uhka joka on joka kentässä on maastoa, ja
 maasto ei ole uhka.
