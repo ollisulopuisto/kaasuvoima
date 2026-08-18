@@ -7,6 +7,62 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.27 — potenssit, arpova lohko ja kuolema joka on tämän hahmon oma
+
+Kolme omistajan pyyntöä, ja kaksi niistä korjaa aiemman päätöksen sen omilla
+ehdoilla.
+
+**PISTEET OVAT KAKKOSEN POTENSSEJA.** Omistaja: *"varmista että kaikki pisteet
+ovat 2:n potensseja, nyt vihollisten tappamisesta tulee välillä 100, 200 jne."*
+Taulukko oli neliöitä (v26.08.18.11), ja se ratkaisi saman ongelman
+puolittain — **100 on neliö**, ja niin ovat 400 ja 900, eli neliöllisyys salli
+täsmälleen ne genren pyöreät luvut joita vastaan koko sääntö kirjoitettiin.
+Nyt 32 · 128 · 256 · 512 · 1024 · 2048 · 4096 · 8192, ketju 1 · 2 · 4 … 128, ja
+pomot 2¹³…2²⁰. Potenssi kertaa potenssi on potenssi, joten *jokainen* ruudulle
+pomppaava luku on potenssi riippumatta siitä minkä monen kertoimen läpi se tuli.
+
+Hinta sanotaan ääneen `points.js`:ssä: **asteikko on karkea.** Kahden
+vihollisluokan ero on aina tasan kaksinkertainen, eikä väliarvoja ole — 16 ja
+20 olivat neliöinä naapureita, 256 ja 512 eivät ole. Räikeimmin se näkyy
+pomoissa: kahdeksas pomo on miljoona, koska kahdeksan pomoa mahtuu
+potenssiasteikolle vain kahdeksan potenssin päähän toisistaan.
+
+**KYSYMYSLOHKO ANTAA 1…5 KOLIKKOA.** Omistajan luku. Määrä on **hajautettu
+sijainnista** eikä arvottu ajossa, ja se on pakko eikä makuasia: kolikot ovat
+aikaa (v26.08.18.24), joten `Math.random()` tekisi kentän aikabudjetista
+arpapelin ja `tools/playable.mjs` mittaisi joka ajolla eri kenttää. Nyt yllätys
+on kentässä eikä kellossa — lohko antaa saman verran tänään, huomenna ja
+jokaiselle pelaajalle.
+
+Arpa on `hashNoise` eikä `hashPlace`, ja ero on mitattu: `hashPlace` on se
+tahallaan jäädytetty rikkinäinen versio jonka jakauma on vino, ja sillä pelin
+97 kysymyslohkosta **yksikään** ei olisi antanut neljää tai viittä (42 · 38 ·
+17 · 0 · 0). `hashNoise`illa jakauma on 19 · 17 · 22 · 26 · 13. Viisi kolikkoa
+on yksi kilahdus ja viisi porrastettua lentoa, ei viittä päällekkäistä ääntä.
+
+**KUOLEMA EI OLE ENÄÄ HYPPY.** Omistaja: *"tee pelaajahahmon kuolinanimaatioista
+personallisempia … ehkä kaasu paisuu ja poksahtaa? tai hahmo kaatuu suorilta
+jaloilta selälleen silmät ristissä?"* `Player.state()` palautti kuolevalle
+`'jump'`, eli kuolema oli **hyppy jonka fysiikka oli riisuttu** — genren kuolema
+kirjaimellisesti.
+
+Molemmat omistajan ideoista ovat saman animaation kaksi puoliskoa, koska tämä
+hahmo kulkee kaasulla: jäykistyminen on se hetki jolloin kaasu lakkaa
+liikkumasta, ja poksahdus on se mihin se johtaa. Kolme kuvaa 141 framen
+ikkunassa — **jäykkä** (jalat suorina yhdessä, kädet sivuille ojossa, silmät
+ristissä), **paisuu** (vyötärölle kasvaa kaasupullistuma, eli ajastin jonka
+näkee), **tyhjä kuori** (poksahtanut, litteä, kädet retkottavat). Poksahdus on
+kahdeksan kaasupilveä ja `pop` — sama ääni kuin kuplan puhkeamisella, koska se
+on sama tapahtuma isompana.
+
+Fysiikka on tavuakaan muuttamatta ennallaan (`vy = -6,6`, painovoima 0,32), eli
+jokainen kuolemasta mitattu asia mittaa yhä samaa asiaa. Uusi on vain kuva —
+ja `verify.mjs` mittaa sen neljällä väitteellä, joista ensimmäinen on se joka
+olisi muuten rapistunut hiljaa: kuoleva ei näytä hyppäävältä, mitattuna
+pikseleistä.
+
+---
+
 ## v26.08.18.26 — neljä säätä ja metsä joka palaa
 
 Peli on tuntenut yhden sään: tuulen, joka on aavikon yön puuska ja pilvimaailman

@@ -10,7 +10,7 @@ import {
  * count decides how long a stride is and the dead time decides when the second
  * tier of idle starts — both are the drawing's business, and a copy kept here
  * would go stale the first time either is tuned. */
-import { WALK_FRAMES, DEEP_IDLE } from '../gfx/sprites/player.js';
+import { WALK_FRAMES, DEEP_IDLE, DEATH_POP } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 /* Vauhtimittarin suihku, ks. `ventPlume`. Sama pilvi kuin muuallakin. */
 import { Puff } from './effects.js';
@@ -470,6 +470,8 @@ export class Player extends Entity {
      * `sunk` ja `drift` viholliselle: `savestate.js` sarjallistaa sen itse. */
     this.airJumpCd = 0;
     this.dying = false;
+    /** Kuoleman oma kello, ks. `die` ja `deathPose`. */
+    this.deathT = 0;
     this.animTimer = 0;
     this.animFrame = 0;
     this.wag = 0;
@@ -668,6 +670,11 @@ export class Player extends Entity {
     if (this.wag !== 0 || this.type === 'leaf') this.wag += this.flying > 0 ? 0.5 : 0.12;
 
     if (this.dying) {
+      /* Kuoleman oma kello, ja se on erillinen `tick`istä samasta syystä kuin
+       * `poundTimer`: piirros lukee vaihetta eikä ikää, ja kuolema alkaa
+       * nollasta silloinkin kun keho on ollut kentässä kaksi minuuttia. */
+      this.deathT++;
+      if (this.deathT === DEATH_POP) this.popGas();
       this.vy = Math.min(this.vy + 0.32, 9);
       this.y += this.vy;
       return;
@@ -1668,6 +1675,23 @@ export class Player extends Entity {
   }
 
   /** `cause` is only carried through to telemetry; it changes nothing in play. */
+  /**
+   * POKSAHDUS: kaasu ulos, kerralla ja joka suuntaan.
+   *
+   * Kuoleva keho on `noclip`, eli tämä on ainoa hetki jolloin kaasupilvi ei
+   * ole minkään merkki vaan tapahtuma itse. Ääni on `pop` eikä oma uusi ääni,
+   * ja se on DESIGN.md kohta 8 luettuna oikein päin: `pop` on tässä pelissä jo
+   * *kalvo joka pettää* (kuplan puhkaisu), ja tämä on täsmälleen sama asia
+   * isompana. Kaksi ääntä samalle tapahtumalle olisi se mitä kohta 8 kieltää.
+   */
+  popGas() {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      this.level.spawnPuff(this.cx + Math.cos(a) * 6, this.cy + Math.sin(a) * 6);
+    }
+    Sfx.play('pop');
+  }
+
   die(cause = 'enemy') {
     if (this.dying) return;
     /* Nothing in the level can kill a travelling player — the clock stops, the
@@ -1678,6 +1702,7 @@ export class Player extends Entity {
     this.transit = null;
     this.cancelPound();
     this.dying = true;
+    this.deathT = 0;
     this.noclip = true;
     this.controllable = false;
     this.vy = -6.6;
@@ -1730,6 +1755,13 @@ export class Player extends Entity {
        * climbing", and a dive is none of those. */
       pound: this.poundPhase || null,
       poundT: this.poundTimer,
+      /* KUOLEMA. Kaksi kenttää kuten iskullakin, ja samasta syystä: tämä puoli
+       * tietää vain että keho on kuollut ja kuinka kauan, ja piirros päättää
+       * miltä jäykistyminen, paisuminen ja poksahdus näyttävät. `state()` jää
+       * rauhaan — se vastaa kysymykseen "seisooko, kävelee, hyppää vai
+       * kiipeää", eikä kuolema ole mikään niistä. */
+      dead: this.dying,
+      deadT: this.deathT,
       running: Math.abs(this.vx) > MAX_WALK,
       /* Pyörivät jalat: keho menee kovempaa kuin sen jalat osaavat kävellä.
        * Ks. `spinLegs` sprite-puolella — ehto on tässä yhtenä lauseena, jotta

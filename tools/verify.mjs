@@ -10958,6 +10958,22 @@ const report = await page.evaluate(async () => {
        * the shiver is already allowed on the ice, for the same reason. */
       { n: 'panic', s: { state: 'idle', tick: 5, idle: 1260, theme: 'desert' }, a: { px: { above: 4, back: 1 } } },
       { n: 'smoke', s: { state: 'idle', tick: 5, idle: 1355, theme: 'desert' }, a: { px: { above: 4 } } },
+      /*
+       * KUOLEMA, kolme näytettä — jäykkä, paisunut, tyhjä kuori. Ne ovat
+       * tässä listassa samasta syystä kuin maahanisku: kuolema on ainoa muu
+       * asento joka piirretään kokonaan omalla piirrolla, ja sen keskimmäinen
+       * vaihe on ainoa koko pelissä joka **kasvaa laatikkonsa ulkopuolelle**.
+       *
+       * Väljyys on ilmoitettu eikä sallittu: pullistuma on `DEATH_BULGE` (3)
+       * pikseliä kumpaankin sivuun isolla keholla, ja kädet työntyvät sen
+       * mukana — eli neljä. Ylöspäin se ei mene ja **alaspäin ei lainkaan**,
+       * koska pullistuma kasvaa vyötäröltä ylös ja jalat ovat se osa joka on
+       * jäykkänä maata kohti. `below` pysyy siis nollassa kaikissa kolmessa,
+       * ja juuri se on tässä se rivi jota kannattaa katsoa.
+       */
+      { n: 'dead stiff', s: { state: 'jump', dead: true, deadT: 6 } },
+      { n: 'dead swell', s: { state: 'jump', dead: true, deadT: 40 }, a: { px: { front: 4, back: 4 } } },
+      { n: 'dead husk', s: { state: 'jump', dead: true, deadT: 60 } },
     ];
 
     const leaks = [];
@@ -13597,10 +13613,12 @@ const report = await page.evaluate(async () => {
       const before = game.state.score;
       land(c);
       const third = game.state.score - before;
-      /* Suhde on ketjun järjestysluvun neliö (`CHAIN` = [1, 4, 9, …],
-       * ks. `src/core/points.js`), eli toinen tappo maksaa nelinkertaisesti. */
+      /* Suhde on kakkosen potenssi (`CHAIN` = [1, 2, 4, …], ks.
+       * `src/core/points.js`), eli toinen tappo maksaa kaksinkertaisesti.
+       * Luku oli neljä 18.8.2026 asti, jolloin taulukko vaihtui neliöistä
+       * kakkosen potensseihin — sama väite, uusi asteikko. */
       expect('ilmassa ketjutettu tallaus maksaa enemmän, ja maakosketus katkaisee ketjun',
-        first > 0 && second === first * 4 && third === first,
+        first > 0 && second === first * 2 && third === first,
         `1. ${first}, 2. ${second}, maahan käynnin jälkeen ${third}`
         + `, maassa ${landed}`);
     }
@@ -13629,9 +13647,9 @@ const report = await page.evaluate(async () => {
         s.shellSweep(shell);
         paid.push(game.state.score - before);
       }
-      /* Kertoimet ovat järjestysluvun neliöitä (`CHAIN`), eli 1 · 4 · 9. */
+      /* Kertoimet ovat kakkosen potensseja (`CHAIN`), eli 1 · 2 · 4. */
       expect('potkaistun kuoren jono maksaa nousevasti, ja ketju alkaa potkusta',
-        paid[0] > 0 && paid[1] === paid[0] * 4 && paid[2] === paid[0] * 9,
+        paid[0] > 0 && paid[1] === paid[0] * 2 && paid[2] === paid[0] * 4,
         paid.join(' -> '));
     }
 
@@ -22718,6 +22736,237 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
+/* ---- kuolema on oma kuvansa ---- */
+/*
+ * KUOLEMA EI OLE HYPPY.
+ *
+ * Omistaja 18.8.2026: *"tee pelaajahahmon kuolinanimaatioista
+ * personallisempia … ehkä kaasu paisuu ja poksahtaa?"* Tähän asti
+ * `Player.state()` palautti kuolevalle `'jump'`, eli kuolema oli hyppy jonka
+ * fysiikka oli riisuttu — genren kuolema kirjaimellisesti.
+ *
+ * Neljä väitettä, ja ensimmäinen on se joka olisi muuten rapistunut hiljaa:
+ *
+ *   1  kuva       kuoleva ei näytä hyppäävältä, mitattuna pikseleistä
+ *   2  vaiheet    jäykkä → paisuu → tyhjä kuori, kaikki kolme eri kuvaa
+ *   3  poksahdus  tasan kerran, tasan `DEATH_POP`illa, ja siitä jää kaasua
+ *   4  ikkuna     koko animaatio ehtii kulua ennen kuin kohtaus loppuu
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const D = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { drawPlayer, DEATH_SWELL, DEATH_POP } = await import('/src/gfx/sprites/player.js');
+    const { Sfx } = await import('/src/core/audio.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const out = { swellAt: DEATH_SWELL, popAt: DEATH_POP };
+
+    /* 1 + 2. Kuvat. Sama keho, samat värit, vain `dead`/`deadT` vaihtuu. */
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 64;
+    const g = cv.getContext('2d');
+    const shot = (extra) => {
+      g.clearRect(0, 0, 64, 64);
+      drawPlayer(g, 20, 20, {
+        type: 'shroom', level: 1, facing: 1, frame: 0, state: 'jump', tick: 5, ...extra,
+      });
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let h = 2166136261;
+      let ink = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 0) ink++;
+        h ^= d[i] + d[i + 1] * 3 + d[i + 2] * 7 + d[i + 3] * 11;
+        h = Math.imul(h, 16777619);
+      }
+      return { h: h >>> 0, ink };
+    };
+    const jump = shot({});
+    const stiff = shot({ dead: true, deadT: 6 });
+    const swell = shot({ dead: true, deadT: DEATH_POP - 2 });
+    const husk = shot({ dead: true, deadT: DEATH_POP + 18 });
+    out.pics = {
+      jump: jump.h, stiff: stiff.h, swell: swell.h, husk: husk.h,
+      /* Paisunut on leveämpi kuin jäykkä: se on koko keskimmäisen vaiheen
+       * väite yhtenä lukuna. */
+      wider: swell.ink > stiff.ink,
+      /* Tyhjä kuori on litteämpi kuin jäykkä. */
+      flatter: husk.ink < stiff.ink,
+    };
+
+    /* 3 + 4. Poksahdus oikeassa kentässä. */
+    game.state = {
+      lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+      world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+    };
+    let done = null;
+    game.finishLevel = (r) => { done = r; };
+    const s = new LevelScene(game, '1-1');
+    game.setScene(s);
+    s.time = 9999;
+    s.clockStopped = true;
+    const heard = [];
+    const real = Sfx.play;
+    Sfx.play = (n) => { heard.push(n); };
+    const i = mkInput();
+    const puffs = () => s.entities.filter((e) => e.constructor.name === 'Puff').length;
+    s.player.die('debug');
+    const before = puffs();
+    let popFrame = -1;
+    let popPuffs = 0;
+    let frames = 0;
+    for (let f = 0; f < 200 && !done; f++) {
+      const was = puffs();
+      s.update(i);
+      frames++;
+      if (popFrame < 0 && puffs() > was) { popFrame = s.player.deathT; popPuffs = puffs() - was; }
+    }
+    Sfx.play = real;
+    out.pop = {
+      at: popFrame, puffs: popPuffs, before,
+      sounds: heard.filter((n) => n === 'pop').length,
+      /* Kuinka pitkälle kello ehti ennen kuin kohtaus antoi periksi. */
+      reached: s.player.deathT, frames, ended: !!done,
+    };
+    return out;
+  });
+
+  const uniq = new Set([D.pics.jump, D.pics.stiff, D.pics.swell, D.pics.husk]);
+  expect('kuoleva hahmo ei näytä hyppäävältä, eikä kolme vaihetta näytä toisiltaan',
+    uniq.size === 4,
+    `${uniq.size} eri kuvaa neljästä (hyppy, jäykkä, paisunut, kuori)`);
+
+  expect('paisunut on leveämpi kuin jäykkä, ja tyhjä kuori litteämpi',
+    D.pics.wider && D.pics.flatter,
+    `paisunut leveämpi: ${D.pics.wider}, kuori litteämpi: ${D.pics.flatter}`);
+
+  expect('kaasu poksahtaa tasan kerran ja tasan silloin kun sen pitää',
+    D.pop.at === D.popAt && D.pop.puffs >= 6 && D.pop.sounds === 1,
+    `poksahti kellolla ${D.pop.at} (odotettu ${D.popAt}), ${D.pop.puffs} kaasupilveä,`
+    + ` ${D.pop.sounds} ääntä`);
+
+  expect('koko animaatio ehtii kulua ennen kuin kohtaus loppuu',
+    D.pop.ended && D.pop.reached > D.popAt + 20,
+    `kello ehti ${D.pop.reached}, poksahdus ${D.popAt}, kohtaus kesti ${D.pop.frames} framea`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- kuolema: loppu ---- */
+/* ---- kysymyslohkon kolikot ---- */
+/*
+ * LOHKO ANTAA 1…5 KOLIKKOA, JA SE ON SAMA LUKU IKUISESTI.
+ *
+ * Omistaja 18.8.2026: *"question mark block voisi antaa satunnaisen määrän
+ * kolikoita, 1-5 ehkä?"* Satunnaisuus on tässä **kentän ominaisuus eikä ajon**,
+ * ja se on pakko eikä makuasia: kolikot ovat aikaa (`updateTimer`), joten
+ * `Math.random()` tekisi kentän aikabudjetista arpapelin ja `playable.mjs`
+ * mittaisi joka ajolla eri kenttää.
+ *
+ * Kolme väitettä:
+ *
+ *   1  vaihtelu   pelin lohkot antavat eri määriä, ja kaikki 1…5 esiintyy
+ *   2  pysyvyys   sama lohko antaa saman verran joka kerta
+ *   3  yksi ääni  viisi kolikkoa on yksi kilahdus, ei viittä päällekkäin
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const Q = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const { levelIds, getLevel } = await import('/src/data/levels.js');
+    const { Sfx } = await import('/src/core/audio.js');
+    const game = window.sfb3;
+    const scene = (id) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.time = 9999;
+      s.clockStopped = true;
+      return s;
+    };
+    const out = { hist: [0, 0, 0, 0, 0, 0], blocks: 0 };
+
+    /* 1. Koko pelin jakauma, luettuna samasta funktiosta jota peli käyttää. */
+    const probe = scene('1-1');
+    for (const id of levelIds()) {
+      const rows = getLevel(id).rows;
+      rows.forEach((row, ty) => {
+        for (let tx = 0; tx < row.length; tx++) {
+          if (row[tx] !== T.QCOIN) continue;
+          out.blocks++;
+          out.hist[probe.qcoinPayout(tx, ty)]++;
+        }
+      });
+    }
+
+    /* 2. Sama lohko, kaksi kertaa, kaksi eri kohtausta. */
+    const find = (s) => {
+      for (let ty = 0; ty < s.h; ty++) {
+        for (let tx = 0; tx < s.w; tx++) if (s.rawTileAt(tx, ty) === T.QCOIN) return { tx, ty };
+      }
+      return null;
+    };
+    const punch = (s, spot) => {
+      const before = s.game.state.coins;
+      const heard = [];
+      const real = Sfx.play;
+      Sfx.play = (n) => { heard.push(n); };
+      s.bumpTile(spot.tx, spot.ty, s.player);
+      Sfx.play = real;
+      return { got: s.game.state.coins - before, heard: heard.filter((n) => n === 'coin').length };
+    };
+    const a = scene('1-1');
+    const spot = find(a);
+    const first = punch(a, spot);
+    const b = scene('1-1');
+    const second = punch(b, spot);
+    out.same = { at: `${spot.tx},${spot.ty}`, first: first.got, second: second.got };
+    out.sound = first.heard;
+    out.predicted = a.qcoinPayout(spot.tx, spot.ty);
+    return out;
+  });
+
+  const seen = Q.hist.slice(1);
+  expect('kysymyslohkot antavat 1…5 kolikkoa, ja jokainen määrä esiintyy pelissä',
+    Q.blocks > 20 && seen.every((n) => n > 0),
+    `${Q.blocks} lohkoa, jakauma ${seen.join(' · ')}`);
+
+  expect('sama lohko antaa saman verran joka kerta',
+    Q.same.first === Q.same.second && Q.same.first === Q.predicted
+    && Q.same.first >= 1 && Q.same.first <= 5,
+    `lohko ${Q.same.at}: ${Q.same.first} ja ${Q.same.second}, ennustettu ${Q.predicted}`);
+
+  expect('monta kolikkoa on yksi kilahdus eikä monta päällekkäin',
+    Q.sound === 1, `${Q.same.first} kolikkoa, ${Q.sound} ääntä`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- kysymyslohkon kolikot: loppu ---- */
 /* ---- puu ja metsäpalo ---- */
 /*
  * PUU ON MAISEMAA, JA METSÄPALO ON SE JOKA TEKEE MAISEMASTA PAIKAN.
@@ -24328,22 +24577,30 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 }
 
 /*
- * PISTEET OVAT NELIÖITÄ, JA NE OVAT YHDESSÄ PAIKASSA.
+ * PISTEET OVAT KAKKOSEN POTENSSEJA, JA NE OVAT YHDESSÄ PAIKASSA.
  *
  * Kaksi väitettä, ja kumpikin vartioi eri puolta samasta päätöksestä
  * (`src/core/points.js`):
  *
- *   1. **Jokainen luku on kokonaisluvun neliö.** Myös kertoimet, koska tulo on
- *      neliö vain jos molemmat tekijät ovat — ketjun kahdeksas tappo kulkee
+ *   1. **Jokainen luku on kakkosen potenssi.** Myös kertoimet, koska tulo on
+ *      potenssi vain jos molemmat tekijät ovat — ketjun kahdeksas tappo kulkee
  *      kahden kertoimen läpi ennen kuin se pomppaa ruudulle.
  *   2. **Lähdekoodissa ei ole yhtään pistelukua.** Tämä on se puoli joka
  *      rapistuu itsestään: uusi vihollinen kirjoitetaan vanhan vieressä, ja
  *      `this.score = 200` on juuri se rivi joka kopioituu. Portti lukee
  *      `src/`:n tekstinä eikä moduuleina, koska väite koskee kirjoitusasua.
+ *
+ * Väite 1 oli 17.8.2026 alkaen "kokonaisluvun neliö", ja omistaja osoitti
+ * 18.8.2026 miksi se ei riittänyt: **100 on neliö**, ja niin ovat 400 ja 900 —
+ * eli neliöllisyys salli täsmälleen ne genren pyöreät luvut joita vastaan koko
+ * sääntö kirjoitettiin. Potenssi ei salli.
  */
 {
   const pts = await import(join(ROOT, 'src/core/points.js'));
-  const square = (n) => Number.isInteger(n) && n > 0 && Number.isInteger(Math.sqrt(n));
+  /* Bittitesti eikä logaritmi: `Math.log2` on liukuluku, ja liukuluku joka on
+   * "melkein kokonaisluku" on juuri se tapa jolla tämä portti siunaisi
+   * hiljaa väärän arvon. `n & (n - 1)` on nolla tasan potensseille. */
+  const power = (n) => Number.isInteger(n) && n > 0 && (n & (n - 1)) === 0;
   const table = [
     ...Object.entries(pts.PTS).map(([k, v]) => [`PTS.${k}`, v]),
     ['COIN', pts.COIN],
@@ -24353,22 +24610,22 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     ...pts.CHAIN.map((v, i) => [`CHAIN[${i}]`, v]),
     ...Array.from({ length: 8 }, (_, v) => [`bossPoints(${v})`, pts.bossPoints(v)]),
   ];
-  const crooked = table.filter(([, v]) => !square(v));
+  const crooked = table.filter(([, v]) => !power(v));
   /* Nousevuus on osa väitettä: portaikko joka ei nouse ei ole portaikko, ja
-   * neliöllisyys yksin sallisi sellaisen. */
+   * potenssillisuus yksin sallisi sellaisen. */
   const climbs = (list) => list.every((v, i) => i === 0 || v > list[i - 1]);
   const rising = climbs(pts.GOAL_STEPS) && climbs(pts.CHAIN)
     && climbs(Array.from({ length: 8 }, (_, v) => pts.bossPoints(v)));
   report.checks.push({
-    name: 'jokainen pistearvo on kokonaisluvun neliö ja portaikot nousevat',
+    name: 'jokainen pistearvo on kakkosen potenssi ja portaikot nousevat',
     ok: crooked.length === 0 && rising,
     detail: crooked.length
-      ? `ei neliö: ${crooked.map(([k, v]) => `${k} = ${v}`).join(', ')}`
-      : `${table.length} arvoa, juuret ${table.map(([, v]) => Math.sqrt(v)).join(' ')}`
+      ? `ei potenssi: ${crooked.map(([k, v]) => `${k} = ${v}`).join(', ')}`
+      : `${table.length} arvoa, eksponentit ${table.map(([, v]) => Math.round(Math.log2(v))).join(' ')}`
         + `${rising ? '' : ' — MUTTA portaikko ei nouse'}`,
   });
   if (crooked.length) {
-    report.failures.push(...crooked.map(([k, v]) => `${k} = ${v} ei ole neliö`));
+    report.failures.push(...crooked.map(([k, v]) => `${k} = ${v} ei ole kakkosen potenssi`));
   }
   if (!rising) report.failures.push('pisteportaikko ei nouse');
 

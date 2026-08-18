@@ -179,6 +179,16 @@ const COIN_DROP_G = 0.6;
 const COIN_POP_VY = -4.4;
 const COIN_POP_G = 0.32;
 const COIN_POP_FRAMES = 14;
+/**
+ * Kysymyslohkon kolikkomäärän katto ja lähtöjen porrastus.
+ *
+ * Viisi on omistajan luku. Porrastus on viisi framea, eli täysi viiden
+ * kolikon lohko purkautuu 20 framessa (0,33 s) — lyhyempi kuin
+ * `COIN_POP_FRAMES` kertaa viisi, joten kolikot ovat ilmassa yhtä aikaa ja
+ * muodostavat viuhkan eivätkä jonon.
+ */
+const QCOIN_MAX = 5;
+const QCOIN_STAGGER = 5;
 /** Kuinka kauan täysi putkilo valuu tyhjäksi. Ks. `updateCoinFlights`. */
 const COIN_FLUSH = 34;
 
@@ -2978,14 +2988,14 @@ export class LevelScene {
    *      jota kulutetaan — palkinto ja mittari eivät voi olla sama luku.
    *   3. **Pisteitä**, kuten ennenkin.
    */
-  addCoin(x, y, popped = false) {
+  addCoin(x, y, popped = false, { silent = false, delay = 0 } = {}) {
     const st = this.game.state;
     st.coinsTotal = (st.coinsTotal || 0) + 1;
     st.score += COIN;
-    Sfx.play('coin');
+    if (!silent) Sfx.play('coin');
     if (st.coins < COIN_CAP) {
       st.coins++;
-      this.coinToTube(x, y, popped);
+      this.coinToTube(x, y, popped, delay);
     } else {
       /* Täysi säiliö: kolikko lasketaan ja pisteytetään, mutta se ei lennä
        * putkiloon — lento päättyisi pintaan joka ei nouse, ja se olisi kuva
@@ -3023,12 +3033,16 @@ export class LevelScene {
    * on aina tehnyt. Vasta sen jälkeen imu tarttuu. Näin ponnahdus ja lento
    * ovat **sama kolikko** eivätkä kaksi — ks. `bumpTile`.
    */
-  coinToTube(x, y, popped = false) {
+  coinToTube(x, y, popped = false, delay = 0) {
     const sx = x - Math.round(this.cam.x);
     const sy = y - Math.round(this.cam.y) + this.bar;
     this.coinFlights.push({
       phase: popped ? 'pop' : 'arc',
       t: 0,
+      /* Odotus ennen lähtöä, frameina. Sitä tarvitsee vain monikolikkoinen
+       * lohko (`qcoinPayout`): viisi kolikkoa samalta framelta olisi yksi
+       * paksu kolikko, eikä viisi. Ks. `updateCoinFlights`. */
+      wait: delay,
       x0: sx,
       y0: sy,
       x: sx,
@@ -3060,6 +3074,7 @@ export class LevelScene {
     const mouthX = box.x + box.w / 2;
     const mouthY = box.top - 2;
     for (const f of this.coinFlights) {
+      if (f.wait > 0) { f.wait--; continue; }
       if (f.phase === 'pop') {
         /* Sama kaari kuin lohkokolikolla aina: ylös ja takaisin. Kun se on
          * käyty, kolikko on siinä mistä imu ottaa kiinni — ja pistepomppu
@@ -3852,7 +3867,14 @@ export class LevelScene {
          * lennähtäisivät putkeen."* Ennen tässä oli kaksi oliota — `CoinPop`
          * joka pomppasi ja katosi, ja lento joka lähti samasta paikasta — eli
          * kaksi kolikkoa yhdestä. Nyt lento alkaa pompulla. */
-        this.addCoin(tx * TILE + 8, ty * TILE, true);
+        const n = this.qcoinPayout(tx, ty);
+        for (let i = 0; i < n; i++) {
+          /* Yksi ääni, monta kolikkoa, ja lähdöt porrastettuina: viisi
+           * kolikkoa samalta framelta samasta pisteestä olisi yksi paksu
+           * kolikko ja viisi päällekkäistä kilahdusta. Ks. `coinToTube`. */
+          this.addCoin(tx * TILE + 8, ty * TILE, true,
+            { silent: i > 0, delay: i * QCOIN_STAGGER });
+        }
       } else {
         // A star block promises a star; everything else rolls.
         const kind = meta.question === 'star' ? 'star' : this.rollPowerup(player);
@@ -3910,6 +3932,34 @@ export class LevelScene {
     }
 
     Sfx.play('bump');
+  }
+
+  /**
+   * MONTAKO KOLIKKOA TÄMÄ LOHKO ANTAA, 1…`QCOIN_MAX`.
+   *
+   * Omistaja 18.8.2026: *"question mark block voisi antaa satunnaisen määrän
+   * kolikoita, 1-5 ehkä?"*
+   *
+   * **Satunnainen kerran, ei joka kerta.** Luku on hajautettu sijainnista, eli
+   * sama lohko antaa saman verran tänään, huomenna ja jokaiselle pelaajalle.
+   * Se ei ole varmuuden vuoksi vaan pakko, ja syy on että **kolikot ovat
+   * aikaa** (`updateTimer`): `Math.random()` tekisi kentän aikabudjetista
+   * arpapelin, jolloin sama kenttä olisi eri kenttä joka yritys ja
+   * `tools/playable.mjs` mittaisi joka ajolla eri asiaa. Nyt yllätys on
+   * kentässä eikä kellossa — pelaaja ei tiedä mitä lohko antaa ennen kuin lyö,
+   * ja opittuaan hän tietää sen pysyvästi.
+   *
+   * **`hashNoise` eikä `hashPlace`, ja se on mitattu valinta.** `hashPlace` on
+   * se tahallaan jäädytetty rikkinäinen versio jonka jakauma on vino
+   * (`core/utils.js`), ja piilotiilet lukevat sitä koska niiden paikat on
+   * todistettu sillä. Uudella arvalla ei ole sellaista velkaa, ja vinous olisi
+   * näkynyt heti: `hashPlace`illa pelin 97 kysymyslohkosta **yksikään** ei
+   * olisi antanut neljää tai viittä kolikkoa (42 · 38 · 17 · 0 · 0).
+   * `hashNoise`in oma kommentti sanoo saman toisin päin — *"viidennekset ovat
+   * tasan"* — ja mitattuna se pitää: 19 · 17 · 22 · 26 · 13, keskiarvo 2,97.
+   */
+  qcoinPayout(tx, ty) {
+    return 1 + Math.floor(hashNoise(tx * 17 + 29, ty * 23 + 11) * QCOIN_MAX);
   }
 
   /** @returns 'coin' | 'power' | null — see SECRET_COIN_RATE for the reasoning. */
