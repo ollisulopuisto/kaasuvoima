@@ -69,6 +69,19 @@ export const WORLD1_LEVELS = {
    * nowhere. `tools/verify.mjs` now holds the whole game to at most one warp in
    * three.
    */
+  /*
+   * EI MAASTOPASSIA, ja kaksi mitattua syytä. Ks. `data/terrain.js`.
+   *
+   *   1. **Piilotiilet ovat sijainnin hajautus** (`core/secrets.js`), ja
+   *      maastopassi työntää sarakkeita rinteiden verran eteenpäin. 1-1 piilottaa
+   *      tarkoituksella *ei mitään* — se on koko yllä olevan putkiperustelun
+   *      toinen puolisko — ja maaston kanssa portti löysi sieltä yhden
+   *      piilotiilen. Sama muutos jokaisessa muussakin kentässä, mutta vain
+   *      tässä yhdessä nolla on väite.
+   *   2. **Kansi.** Korkein pieruhyppy jättää täällä 30,38 px kentän kanteen,
+   *      ja se on koko pelin ahtain mitattu lukema. Yhden laatan nosto veisi
+   *      siitä puolet.
+   */
   '1-1': {
     theme: 'grass', bg: 'hills', music: 'level',
     chunks: [
@@ -173,6 +186,11 @@ export const WORLD1_LEVELS = {
    */
   '1-3': {
     theme: 'grass', bg: 'peaks', music: 'level',
+    /* Maastopassi (`data/terrain.js`): kokoaja päättää palikoiden lattiatasot
+     * ja kirjoittaa siirtymät rinteinä. Maailman 1 kolmesta käsintehdystä
+     * kentästä tämä on se joka sen saa — 1-1 opettaa eikä piilota mitään, ja
+     * maasto siirtää sarakkeita, mikä arpoisi sen piilotiilet uusiksi. */
+    terrain: true,
     chunks: [
       'start_high', 'plat_hi', 'power', 'sky_run', 'pipe_short', 'plat_float',
       /*

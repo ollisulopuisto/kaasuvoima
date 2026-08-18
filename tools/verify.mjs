@@ -2208,9 +2208,14 @@ const report = await page.evaluate(async () => {
         s.time = 9999;
         s.clockStopped = true;
         const shell = s.entities.find((e) => e.constructor.name === 'ShellGuy');
+        /* Sarakkeesta eikä riviltä 13: 2-1 sai maastoa (`data/terrain.js`), ja
+         * sen lammikko on nyt kolme laattaa ylempänä. Se on yhä sama lammikko
+         * samassa sarakkeessa, ja juuri saraketta tämä testi kysyy. */
         const sand = [];
         for (let tx = 0; tx < s.w; tx++) {
-          if (s.rawTileAt(tx, 13) === T.QUICKSAND) sand.push(tx);
+          for (let ty = 0; ty < s.h; ty++) {
+            if (s.rawTileAt(tx, ty) === T.QUICKSAND) { sand.push(tx); break; }
+          }
         }
         let gone = null;
         let col = null;
@@ -4375,6 +4380,194 @@ const report = await page.evaluate(async () => {
       stumpy.slice(0, 3).join(' / ') || 'ei yhtään');
     expect('the same beanstalk fixture with none of the faults passes',
       grown.length === 0, grown.slice(0, 3).join(' / '));
+  }
+
+  /* ------------------------------ maastopassi ----------------------------- */
+  /*
+   * MAASTOPASSI, ja se yksi väite jonka varassa koko toteutus lepää.
+   *
+   * `src/data/terrain.js` nostaa palikoiden lattiatasoa ja kirjoittaa
+   * siirtymät rinteinä. Se on halpa vain siksi että se **ei siirrä maata vaan
+   * nostaa pintaa ja jättää kiven alle**: rivit 13-14 pysyvät kiinteinä, joten
+   * `floorProfile`in siemen, `checkGaps`in pohjattomuustesti ja
+   * `difficulty.mjs`:n `lethalCol` lukevat yhä sitä mitä ne ovat aina lukeneet.
+   * Jos joku joskus toteuttaa noston toisin — siirtämällä — jokainen niistä
+   * alkaa lukea nostettua saraketta kuiluna, eikä yksikään sano sitä ääneen.
+   * Siksi tämä on portti eikä kommentti.
+   *
+   * Neljä väitettä:
+   *
+   *   1  pohja      maasto ei muuta yhtäkään saraketta kuiluksi
+   *   2  vauhti     rinteen kummallakin puolella on `RUNWAY` saraketta lattiaa
+   *   3  ankkurit   aloitus ja lippu ovat maan tasalla
+   *   4  poikkeus   kenttä joka ei voi saada maastoa sanoo sen ääneen
+   *
+   * Väite 2 on se joka on jo kerran ollut punaisena, eikä arvaamalla: yhden
+   * sarakkeen reunaehdolla 1-1 sai rinteen kolme saraketta ennen `pit_plat`in
+   * kymmenen sarakkeen kuilua, ja `tools/playable.mjs` kuoli sarakkeeseen 290.
+   * `validateLevel` oli tyytyväinen koko ajan, koska se mittaa kuilun leveyden
+   * eikä sitä paljonko vauhtia sen eteen mahtuu — sama sokea piste kuin
+   * vaikeustason venytyksellä oli, ja siksi sama luku (`RUNWAY`).
+   */
+  {
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const { CHUNKS, assemble } = await import('/src/data/chunks.js');
+    const { LOOSE, MAX_LIFT, RUNWAY, RUN_ROWS, applyTerrain, liftCap, seamReady, terrainProfile }
+      = await import('/src/data/terrain.js');
+    const FLOOR = 13;
+    const SLOPE = '/\\';
+
+    const withTerrain = levelIds().filter((id) => getLevel(id).terrain);
+    expect('maastopassi on käytössä useammassa kuin yhdessä kentässä',
+      withTerrain.length >= 2, `${withTerrain.length} kenttää: ${withTerrain.join(' ')}`);
+
+    /* Kummankin väitteen pohja: sama palikkalista kahdesti, ja tieto siitä
+     * mihin rinteet syntyivät. `shift[i]` on montako saraketta palikan i eteen
+     * on työnnetty, joten sen kasvu kahden palikan välillä **on** se rinne. */
+    const built = withTerrain.map((id) => {
+      const def = getLevel(id);
+      const chunks = def.chunks.map((n) => CHUNKS[n]);
+      const { shift } = applyTerrain(chunks, terrainProfile(chunks, id));
+      const starts = [];
+      let flatCol = 0;
+      chunks.forEach((chunk, i) => { starts.push({ flat: flatCol, at: flatCol + shift[i] }); flatCol += chunk.w; });
+      return { id, def, chunks, shift, starts, flat: assemble(def.chunks), rows: def.rows };
+    });
+
+    /* 1. POHJA. Jokainen sarake joka oli maata on yhä maata. Sarakkeet
+     *    verrataan *sisällöltään* eikä numeroltaan, koska rinne työntää
+     *    numeroita eteenpäin. */
+    const holes = [];
+    for (const b of built) {
+      b.chunks.forEach((chunk, i) => {
+        for (let x = 0; x < chunk.w; x++) {
+          const from = b.starts[i].flat + x;
+          const to = b.starts[i].at + x;
+          for (const y of [FLOOR, FLOOR + 1]) {
+            if (b.flat[y][from] === '#' && b.rows[y][to] !== '#') {
+              holes.push(`${b.id} sarake ${to} rivi ${y}: "${b.rows[y][to]}"`);
+            }
+          }
+        }
+      });
+    }
+    expect('nostettu maasto ei jätä yhtäkään saraketta ilman pohjaa',
+      holes.length === 0, holes.length ? holes.slice(0, 3).join(' / ')
+        : `${withTerrain.length} kenttää, rivit 13-14 ennallaan`);
+
+    /* 2. VAUHTI. Mitataan **passin omista rinteistä** eikä ruudukon jokaisesta
+     *    vinosta merkistä: `kumpare` ja `pitkarinne` ovat käsintehtyä sanastoa
+     *    ja niiden tasanne on kentän tekijän päätös. Se mitä tämä portti
+     *    vahtii on kokoajan kirjoittama siirtymä — ja sen kummallakin puolella
+     *    on oltava `RUNWAY` saraketta tasaista maata *samalla korkeudella*,
+     *    koska porras portaan perään on jalansijaa muttei vauhdinottoa. */
+    const surfaceOf = (rows, x) => {
+      if (rows[FLOOR + 1][x] !== '#') return -1;
+      let y = FLOOR + 1;
+      while (y > 0 && rows[y - 1][x] === '#') y--;
+      return y;
+    };
+    /* Jalansija luetaan pinnasta eikä rivistä 13, ja juuri se on koko passin
+     * idea: nostetussa sarakkeessa rivi 13 on kiveä maan alla, ja se mitä
+     * juoksija tarvitsee on vapaat rivit sen pinnan yllä jolla hän seisoo. */
+    const plainFeet = (rows, x) => {
+      const top = surfaceOf(rows, x);
+      if (top < 0) return false;
+      for (let y = top - (RUN_ROWS - 2); y < top; y++) {
+        const ch = y < 0 ? ' ' : rows[y][x];
+        if (ch !== ' ' && !LOOSE.has(ch)) return false;
+      }
+      return true;
+    };
+    const runway = (rows, from, step) => {
+      const top = surfaceOf(rows, from);
+      if (top < 0 || !plainFeet(rows, from)) return 0;
+      let n = 0;
+      for (let x = from; x >= 0 && x < rows[0].length; x += step) {
+        if (surfaceOf(rows, x) !== top || !plainFeet(rows, x)) break;
+        n++;
+      }
+      return n;
+    };
+    const tight = [];
+    let ramps = 0;
+    for (const b of built) {
+      b.chunks.forEach((chunk, i) => {
+        if (!i) return;
+        const width = b.shift[i] - b.shift[i - 1];
+        if (!width) return;
+        ramps++;
+        const end = b.starts[i].at - 1;
+        const start = end - width + 1;
+        const before = runway(b.rows, start - 1, -1);
+        const after = runway(b.rows, end + 1, +1);
+        if (before < RUNWAY || after < RUNWAY) {
+          tight.push(`${b.id} rinne ${start}-${end}: ${before} ennen, ${after} jälkeen`);
+        }
+        if (width > MAX_LIFT) tight.push(`${b.id} rinne ${start}-${end} on ${width} saraketta`);
+      });
+    }
+    expect('jokaisen maastorinteen kummallakin puolella on täysi vauhdinotto',
+      ramps > 0 && tight.length === 0,
+      tight.length ? tight.slice(0, 3).join(' / ')
+        : `${ramps} rinnettä, kaikilla vähintään ${RUNWAY} saraketta samaa korkeutta kumpaankin suuntaan`);
+
+    /* 3. ANKKURIT. Aloitusruutu ja lippu ovat samalla rivillä kuin tasamaalla —
+     *    ne ovat ne kaksi kohtaa joista kaikki muu on mitattu. Vertailu on
+     *    tasamaahan eikä riviin 12, koska 1-3 alkaa hyllyltä (`start_high`)
+     *    rivillä 9 ja on tehnyt niin ennen maastoa: väite on "maasto ei
+     *    siirtänyt", ei "kaikki alkavat samalta korkeudelta". */
+    const rowOf = (rows, mark) => rows.findIndex((row) => row.includes(mark));
+    const drifted = [];
+    for (const b of built) {
+      for (const mark of '1F') {
+        const was = rowOf(b.flat, mark);
+        const now = rowOf(b.rows, mark);
+        if (was !== now) drifted.push(`${b.id} "${mark}" rivi ${was} → ${now}`);
+      }
+    }
+    expect('maasto ei siirrä aloitusruutua eikä lippua',
+      drifted.length === 0, drifted.length ? drifted.join(' / ')
+        : `${withTerrain.length} kenttää, "1" ja "F" ennallaan`);
+
+    /* 4. POIKKEUS, punaisena ensin. Kenttä joka laskee sarakkeita numeroina ei
+     *    voi saada maastoa, ja hiljaa jätetty tasamaa olisi juuri se vika jota
+     *    etsittäisiin väärästä tiedostosta. Kolme muotoa, kolme heittoa. */
+    const { terrainSeedOf } = await import('/src/data/levels.js');
+    const refused = [];
+    const shapes = [
+      ['korkea kenttä', { sky: [[0, 'flat']] }],
+      ['luolakaista', { cave: [[0, 'flat']] }],
+      ['osioitu kenttä', { segments: [{ toCol: 32 }] }],
+      ['pomoareena', { boss: true }],
+      ['omat rivit', { rows: ['#'] }],
+    ];
+    for (const [what, extra] of shapes) {
+      try {
+        terrainSeedOf('koe', { terrain: true, chunks: ['start', 'flat'], ...extra });
+        refused.push(`${what}: ei heittänyt`);
+      } catch {
+        // odotettu
+      }
+    }
+    /* Ja vihreä sen vieressä: tavallinen kenttä saa siemenekseen tunnuksensa,
+     * eikä maastoa pyytämätön saa mitään. */
+    const seeded = terrainSeedOf('2-9', { terrain: true, chunks: ['start'] });
+    const unseeded = terrainSeedOf('2-9', { chunks: ['start'] });
+    expect('maastoa pyytävä kenttä saa siemenekseen tunnuksensa, muut eivät mitään',
+      seeded === '2-9' && unseeded === null, `${seeded} / ${unseeded}`);
+    expect('kenttä joka ei voi saada maastoa sanoo sen heittona eikä tasamaana',
+      refused.length === 0, refused.length ? refused.join(' / ')
+        : `${shapes.length} muotoa, jokainen heittää`);
+
+    /* Ja sanasto itse: nostoa on rajallisesti, eikä sauma ole ilmainen. */
+    const names = Object.keys(CHUNKS);
+    const liftable = names.filter((n) => liftCap(CHUNKS[n]) > 0).length;
+    const seamable = names.filter((n) => seamReady(CHUNKS[n], 'left')
+      && seamReady(CHUNKS[n], 'right')).length;
+    expect('sanastosta osa nousee ja osa ei — portti erottaa ne',
+      liftable > 20 && liftable < names.length && seamable > 10 && seamable < names.length,
+      `${names.length} palikkaa: ${liftable} nousee (kattona ${MAX_LIFT}), ${seamable} kelpaa saumaksi`);
   }
 
   /* ------------------------------ luumaailma ------------------------------ */

@@ -58,10 +58,40 @@ export const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((
  */
 const BANDS = { rows: CHUNK_ROWS, main: CHUNK_ROWS, cave: 2 * CHUNK_ROWS };
 
-function buildRows(def) {
+/**
+ * MAASTOPASSI ON KENTÄN OMA VALINTA, ja nämä ovat ne kentät jotka eivät voi
+ * tehdä sitä.
+ *
+ * Vaihteleva maasto kirjoittaa palikoiden väliin rinteitä, eli **sarakkeita
+ * joita palikkalistassa ei ole**. Kolme kentän muotoa lukee saraketta
+ * numerona eikä sisältönä, ja jokaiselle niistä lisätty sarake tarkoittaa eri
+ * paikkaa kuin ennen:
+ *
+ *   - `sky` ja `cave` ovat harvoja `[sarake, palikka]` -sijoituksia, ja ne
+ *     osoittaisivat vartensa viereen;
+ *   - `segments` rajaa osionsa sarakenumeroilla;
+ *   - pomoareenan sisäänkäynti (`arenaColumn`) on palikkaleveyksien summa —
+ *     ja senkin voisi korjata (`terrainShift` tekee juuri sen), mutta areenan
+ *     oma uudelleensyntymä on `level.js`:ssä yhä rivi 12, joten nostettu
+ *     areena pudottaisi voitetun pomon jälkeen pelaajan kiveen.
+ *
+ * Poikkeus ei ole varoitus vaan poikkeus: kenttä joka pyytää maastoa jota se
+ * ei voi saada on kirjoitusvirhe, ja hiljaa jätetty tasamaa olisi se vika
+ * jota etsittäisiin väärästä tiedostosta.
+ */
+export function terrainSeedOf(id, def) {
+  if (!def.terrain) return null;
+  if (def.rows) throw new Error(`${id}: terrain needs chunks, and this level writes its own rows`);
+  if (def.sky || def.cave) throw new Error(`${id}: terrain and hidden bands both count columns`);
+  if (def.segments) throw new Error(`${id}: terrain and segments both count columns`);
+  if (def.boss) throw new Error(`${id}: a boss arena respawns on a fixed row, so it stays flat`);
+  return def.terrain === true ? id : String(def.terrain);
+}
+
+function buildRows(id, def) {
   if (def.rows) return normalizeRows(def.rows);
   if (def.sky || def.cave) return assembleTall(def.chunks, def.sky, def.cave);
-  return assemble(def.chunks);
+  return assemble(def.chunks, terrainSeedOf(id, def));
 }
 
 /**
@@ -87,7 +117,7 @@ export function getLevel(id, mode = DEFAULT_MODE) {
   if (cache.has(key)) return cache.get(key);
   const def = LEVEL_DEFS[id];
   if (!def) throw new Error(`unknown level: ${id}`);
-  const rows = buildRows(def);
+  const rows = buildRows(id, def);
   const scaled = scaleLevel(id, def, rows, mode, arenaColumn(def));
   const level = {
     id,

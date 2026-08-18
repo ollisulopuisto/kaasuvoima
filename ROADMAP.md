@@ -488,11 +488,28 @@ Kolme askelta, halvimmasta kalleimpaan:
 2. **Rinteet generaattorin sanastoon.** Generaattori ei tunne `/`- ja
    `\`-merkkejä lainkaan, joten 26 generoitua kenttää ovat rakenteellisesti
    tasamaata. Tämä on se muutos jolla varianssi kasvaa eniten työtä kohti.
-3. **Maastopassi: maan korkeus vaihtelee palikoiden välillä.** Kokoaja
-   päättäisi kullekin palikalle lattiatason ja kirjoittaisi siirtymät
-   rinteinä. Tämä on se joka tekee kentistä maisemaa eikä käytävää — ja se on
-   myös kallein: `rules.js`, hyppybudjetti, vaikeusmittari, botti ja jokainen
-   käsintehty kenttä lukevat tällä hetkellä lattiaa rivinä 13.
+3. ✔ **Maastopassi: maan korkeus vaihtelee palikoiden välillä — tehty
+   18.8.2026** (v26.08.18.25, `src/data/terrain.js`). Kokoaja päättää kullekin
+   palikalle lattiatason ja kirjoittaa siirtymät rinteinä; kuusi kenttää sai
+   maaston, neljä jäi ilman ja jokaisen syy on sen omassa kommentissa.
+
+   **Kalleusarvio oli oikea toisesta toteutuksesta.** Yksikään lueteltu
+   tiedosto ei muuttunut, koska passi ei siirrä maata vaan **nostaa pintaa ja
+   jättää kiven alle**: rivit 13-14 pysyvät kiinteinä, ja `floorProfile` on
+   osannut vaihtelevan korkeuden koko ajan — vain sen siemen oli rivissä 13, ja
+   siemen osuu edelleen.
+
+   **Mitä jäi tekemättä, ja se on yksi luku.** Nosto on **yksi laatta**, koska
+   maailmalla on kansi ja kenttä on tasan yhden ruudun korkuinen: korkein
+   pieruhyppy jättää 1-1:ssä 30,38 px kanteen, eli alle kaksi laattaa, ja
+   kolmen laatan nostolla pelaaja kolautti sitä mitatusti. Kohta 1 tämän
+   tiedoston alussa (kenttädata 15 → 16 riviin) on se muutos joka nostaa
+   `MAX_LIFT`iä — maastopassi on nyt se toinen syy tehdä se. Laskeva maasto
+   odottaa samaa muutosta: rivi 14 on ruudukon pohja.
+
+   Generoidut kentät eivät saa maastoa tässä erässä. Ne rakennetaan
+   ruudukkoon eikä palikoista (`generator.js`), ja niiden uudelleengenerointi
+   vaatii korpuksen (`VGLC_DIR`) tai pudottaa 26 kentän `checked`-merkinnän.
 
 ### Ääni: mitä SID-sanastosta jäi tekemättä
 

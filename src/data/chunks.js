@@ -40,6 +40,7 @@ import { SECRET_CHUNKS } from './chunks/secrets.js';
  * tiedä eroa — mutta niiden vaikeus on mitattu eikä arvioitu: ks. tiedoston oma
  * alku ja `tools/gen-jumps.mjs`. */
 import { JUMP_CHUNKS } from './chunks/jumps.js';
+import { applyTerrain, terrainProfile } from './terrain.js';
 
 export { CHUNK_ROWS };
 
@@ -59,15 +60,45 @@ export const CHUNKS = {
   ...JUMP_CHUNKS,
 };
 
-/** Expands a chunk name list into one padded grid of characters. */
-export function assemble(names) {
-  const rows = Array.from({ length: CHUNK_ROWS }, () => '');
-  for (const name of names) {
+/** Looks a playlist up, and says which name was wrong rather than that one was. */
+function chunksOf(names) {
+  return names.map((name) => {
     const chunk = CHUNKS[name];
     if (!chunk) throw new Error(`unknown chunk: ${name}`);
+    return chunk;
+  });
+}
+
+/**
+ * Expands a chunk name list into one padded grid of characters.
+ *
+ * `seed` on maastopassi (`./terrain.js`): sen kanssa kokoaja päättää kullekin
+ * palikalle lattiatason ja kirjoittaa siirtymät rinteinä, ilman sitä maa on
+ * tasan rivillä 13 kuten ennenkin. Se on **valinnainen ja oletuksena pois**,
+ * koska kentän maasto on kentän oma asia: 64 käsintehtyä kenttää on mitattu
+ * tasamaalla, ja kokoaja joka alkaisi arpoa mäkiä niiden alle muuttaisi
+ * jokaisen niistä mittaamatta.
+ */
+export function assemble(names, seed = null) {
+  const chunks = chunksOf(names);
+  if (seed) return applyTerrain(chunks, terrainProfile(chunks, seed)).rows;
+  const rows = Array.from({ length: CHUNK_ROWS }, () => '');
+  for (const chunk of chunks) {
     for (let y = 0; y < CHUNK_ROWS; y++) rows[y] += chunk.rows[y];
   }
   return rows;
+}
+
+/**
+ * Montako saraketta maastopassi työntää kunkin palikan eteen.
+ *
+ * Rinne on sarakkeita joita palikkalistassa ei ole, joten palikkaleveyksien
+ * summa lakkaa olemasta sarakenumero sillä hetkellä kun kenttä saa maaston.
+ * `arenaColumn` on se joka laskee niitä summia, ja tämä on sen vastaus.
+ */
+export function terrainShift(names, seed) {
+  const chunks = chunksOf(names);
+  return applyTerrain(chunks, terrainProfile(chunks, seed)).shift;
 }
 
 /** Stamps sparse `[column, chunk]` placements into one otherwise empty band. */

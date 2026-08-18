@@ -213,6 +213,15 @@ export const WORLD2_LEVELS = {
    * the lid are the same three coins every such pipe carries, and this level
    * has no warp for them to point at.
    */
+  /*
+   * EI MAASTOPASSIA (`data/terrain.js`), ja syy on tämän kentän oma kauppa.
+   * Sen ainoa kuori seisoo hiekkalammikon oikealla puolella, joten vasemmalle
+   * potkaistu kuori päätyy hiekkaan — väline vaihtuu roskikseen, ja
+   * `tools/verify.mjs` mittaa sen. Nostettu maasto pani lammikon kolme
+   * laattaa kuoren yläpuolelle, eikä kuori nouse mäkeä: kauppa katosi
+   * hiljaa. Käsintehty korkeussuhde kahden palikan välillä on kentän
+   * päätös, ei kokoajan.
+   */
   '2-1': {
     theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
     chunks: [
@@ -361,6 +370,9 @@ export const WORLD2_LEVELS = {
    */
   '2-N': {
     theme: 'night', bg: 'dunes', music: 'level', wind: true, spotlight: true,
+    /* Maastopassi, ks. `data/terrain.js`. Yön dyynit ovat sille luontevin
+     * paikka koko maailmassa: tuuli liikkuu jo, ja nyt maakin. */
+    terrain: true,
     chunks: [
       'start', 'pipe_short', 'power', 'dune_night', 'walkers', 'pit_s',
       'moon_night', 'corks', 'shell', 'plat_steps', 'pit_l', 'dune_crumble',
@@ -431,6 +443,14 @@ export const WORLD2_LEVELS = {
    * for a mechanic. 2-2 stays the level that introduces it (it comes first on
    * both branches); this is the second place it turns up.
    */
+  /*
+   * EI MAASTOPASSIA (`data/terrain.js`), ja syy on kartalla. Maailma 2 haarautuu,
+   * ja haaran koko idea on että tiet mittautuvat eri lukemiin: `pipsFor`
+   * antaa kolme pistettä vasta 150:stä, ja tämä kenttä on 154,3. Maasto on
+   * sarakkeita ilman lisähaastetta, eli se laimentaa mitattua vaikeutta —
+   * mitattuna 154,3 → 145,8, jolloin LAAVATIE ja HIEKKATIE näyttäisivät
+   * kartalla samalta ja haara lakkaisi olemasta valinta.
+   */
   '2-3': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
     chunks: [
@@ -478,6 +498,8 @@ export const WORLD2_LEVELS = {
    */
   '2-M': {
     theme: 'desert', bg: 'peaks', music: 'level',
+    /* Maastopassi, ks. `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'power', 'walkers', 'pit_s',
       'baron_arena', 'baron_vault', 'run_up', 'goal', 'goal_end',
@@ -524,6 +546,8 @@ export const WORLD2_LEVELS = {
    */
   '2-4': {
     theme: 'desert', bg: 'dunes', music: 'level',
+    /* Maastopassi, ks. `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'power', 'clay_cut', 'walkers', 'pit_twin', 'clay_vault',
       'shell', 'spikes', 'flyer', 'pit_plat', 'clay_rim', 'plat_steps',
@@ -567,6 +591,8 @@ export const WORLD2_LEVELS = {
    */
   '2-5': {
     theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
+    /* Maastopassi, ks. `data/terrain.js`. */
+    terrain: true,
     chunks: [
       'start', 'power', 'heat_row', 'walkers', 'pit_s', 'heat_step',
       'shell', 'heat_ledge', 'coins', 'pit_l', 'corks', 'heat_ramp',

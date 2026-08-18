@@ -7,6 +7,67 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.25 — maastopassi: maa liikkuu palikoiden välillä
+
+ROADMAPin varianssityön kolmas askel, ja se arvioitiin siellä kalleimmaksi:
+*"`rules.js`, hyppybudjetti, vaikeusmittari, botti ja jokainen käsintehty
+kenttä lukevat tällä hetkellä lattiaa rivinä 13."* Arvio oli oikea toisesta
+toteutuksesta kuin tästä.
+
+**Maasto ei siirry, pinta nousee.** `src/data/terrain.js` kelaa palikan rivit
+ylös ja jättää alle sitä samaa maata joka palikan alimmalla rivillä oli. Rivit
+13-14 pysyvät siis kiinteinä jokaisessa sarakkeessa jossa ne olivat kiinteät
+ennenkin, ja `floorProfile`in siemen, `checkGaps`in pohjattomuustesti ja
+`difficulty.mjs`:n `lethalCol` lukevat yhä sitä mitä ne ovat aina lukeneet.
+`floorProfile` on osannut vaihtelevan korkeuden koko ajan — se kävelee pinon
+ylös — ja vain sen siemen oli rivissä 13. Siemen osuu edelleen. Yksikään
+lueteltu tiedosto ei muuttunut.
+
+Siirtymät kirjoitetaan **rinteinä**, samalla muodolla kuin `kumpare` ja
+generaattorin `hill`: rinne on maan pinta ja sen alla on kiveä lattiaan asti.
+Kenttä on maastonsa kanssa yhä yksi kenttä, sama joka kerta — profiili tulee
+kentän tunnuksesta siemenenä, joten jokainen portti mittaa sitä ruudukkoa jota
+pelataan.
+
+**Kuusi kenttää sai maaston:** 1-3, 2-N, 2-M, 2-4, 2-5, 3-1. Neljä jäi ilman,
+ja jokaisen syy on sen omassa kommentissa — ne ovat tämän erän arvokkain osa,
+koska jokainen niistä on asia jonka automaattinen maasto rikkoisi hiljaa:
+
+| kenttä | miksi ei |
+| --- | --- |
+| 1-1 | piilottaa tarkoituksella *ei mitään*, ja piilotiili on sijainnin hajautus: siirretyt sarakkeet arpoivat sinne yhden. Sillä on myös pelin ahtain kansi. |
+| 2-1 | sen ainoa kuori päätyy vasemmalle potkaistuna hiekkaan. Nostettuna lammikko oli kolme laattaa kuoren yläpuolella, eikä kuori nouse mäkeä. |
+| 2-3 | maailman 2 haaran koko idea on että tiet mittautuvat eri lukemiin. 154,3 → 145,8 pudotti sen samaan pistemäärään toisen tien kanssa. |
+| 3-3 | sen `sky_run` on tasan kuuden laatan kuilu eli tarkalleen hyppybudjetti, ja rinteet sen edellä muuttavat sitä mistä kohtaa juoksija sen kohtaa. Botti kuoli siihen jokaisella siemenellä. |
+
+**Kaksi lukua jotka löytyivät punaisesta.**
+
+1. **Sauma vaatii vauhdinoton, kuusi saraketta kumpaankin suuntaan.** Aluksi
+   ehtona oli yksi tasainen reunasarake, ja `tools/playable.mjs` kuoli 1-1:ssä
+   sarakkeeseen 290: rinne oli kutistanut `pit_plat`in kymmenen sarakkeen
+   kuilun edestä kuudentoista sarakkeen vauhdinoton kolmeen. `validateLevel` oli
+   tyytyväinen koko ajan, koska se mittaa kuilun leveyden eikä sitä paljonko
+   vauhtia sen eteen mahtuu. Sama sokea piste kuin vaikeustason venytyksellä oli
+   — ja siksi sama luku: `RUNWAY` on nyt kahden säännön alla, `terrain.js`:ssä,
+   ja `scale.js` tuo sen sieltä.
+2. **Nosto on yksi laatta, ja sen määrää kentän kansi.** Maailmalla on kansi ja
+   tavallinen kenttä on tasan yhden ruudun korkuinen, joten nostettu maa syö
+   hyppykorkeutta suoraan. Mitattuna: korkein pieruhyppy jättää 1-1:ssä 30,38
+   px kanteen ja 2-1:ssä 27–38 px — alle kaksi laattaa. Kolmen laatan nostolla
+   portti luki 1-1:stä `pää 0.00 px`, eli pelaaja kolautti kantta. Yksi laatta
+   on se mitä tässä ruudussa on varaa nostaa, ja **ROADMAPin ensimmäinen kohta
+   (kenttädata 15 → 16 riviin) on se muutos joka nostaa tuota lukua.**
+
+**Vaikeus laimenee hieman ja se on odotettu:** maasto on sarakkeita ilman
+lisähaastetta, sama ilmiö jonka generaattorin mäki mittasi (#98). Kuudessa
+kentässä −0,7…−2,3 pistettä, eikä yhdenkään maailman muoto muuttunut.
+
+Portit: neljä uutta väitettä (`verify.mjs`, *maastopassi*) — pohja säilyy,
+jokaisen rinteen kummallakin puolella on vauhdinotto, aloitus ja lippu eivät
+liiku, ja kenttä joka ei voi saada maastoa heittää sen sijaan että jäisi
+hiljaa tasamaaksi. `seedOf` on nyt yhdessä paikassa (`core/utils.js`) kahden
+sijaan.
+
 ## v26.08.18.24 — kolikot ovat aika
 
 Omistaja 18.8.2026: *"coins = time! Niin aloitetaan jollain määrällä kolikoita

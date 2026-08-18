@@ -75,6 +75,9 @@ export const WORLD3_LEVELS = {
    */
   '3-1': {
     theme: 'ice', bg: 'peaks', music: 'jaatie',
+    /* Maastopassi, ks. `data/terrain.js`. Maailman 3 kahdesta käsintehdystä
+     * ulkoilmakentästä tämä; 3-3 jäi ilman, syy sen omassa kommentissa. */
+    terrain: true,
     chunks: [
       'start', 'spike_walk', 'power', 'ice_first', 'walkers', 'ice_pit', 'qrow',
       /* `plat_hi` → `kaksitie`: sama nousu ylemmälle tasolle, mutta nyt ylempi
@@ -191,6 +194,16 @@ export const WORLD3_LEVELS = {
    * levels/world1.js for the whole argument. The score does not move (186.5
    * before and after): the meter prices enemies, gaps and hazards, and a pipe
    * on flat ground is none of the three.
+   */
+  /*
+   * EI MAASTOPASSIA, ja syy on mitattu botilla eikä arvattu. Ks.
+   * `data/terrain.js`. Tämän kentän `sky_run` on **tasan kuuden laatan kuilu**
+   * eli tarkalleen hyppybudjetin mitta (`gapTiles` 6), ja sellaisen yli
+   * päästään vain lähtemällä sen viimeiseltä laatalta. Maasto ei muuta kuilua
+   * eikä sen vauhdinottoa — mutta rinteet sen edellä muuttavat sitä *mistä
+   * kohtaa* juoksija sen kohtaa, ja `tools/playable.mjs` kuoli siihen kuiluun
+   * jokaisella kokeillulla siemenellä. Kuilu joka on tasan budjetin mittainen
+   * on kenttäsuunnittelua eikä kokoajan päätettävissä.
    */
   '3-3': {
     theme: 'ice', bg: 'peaks', music: 'jaatie',
