@@ -471,6 +471,58 @@ mitään. **Korjataan mittaus ensin.**
 
 ## Jonossa
 
+### Split `tools/verify.mjs` into modules
+
+*(Owner, 18.8.2026: "if verify is twenty six thousand lines, shouldn't we make
+that part itself modular?" — queued, not started. Written in English because
+that is the language for new prose from here on; the older Finnish stays as it
+is.)*
+
+**The file's own shape already says where the seams are.** Measured:
+
+| | |
+| --- | --- |
+| lines | 26,400 |
+| `page.evaluate` blocks | **32** |
+| locally redefined `expect` helpers | **20** |
+| checks produced per run | **802** |
+| wall time for one run | ~8 min |
+
+Thirty-two is the number that decides this. The file is not one enormous
+browser function — it is already thirty-two independently evaluated units with
+Node-side glue between them. Splitting recognises a structure that exists; it
+does not invent one. Twenty copies of `expect` is the same duplication this
+repo has removed elsewhere (`seedOf`, `routeBand`, the five copies of `SOLID`).
+
+**Why it is worth doing, in costs actually paid rather than tidiness.**
+
+1. **Every question costs eight minutes.** Chasing the row numbers after the
+   15 → 16 change took about a dozen full runs. `--only audio` would have made
+   most of them seconds.
+2. **Two people cannot work in it at once.** That change had to be serialised
+   behind a subagent purely because both halves of the work would otherwise
+   have been edits to this one file. That is a throughput limit, not a
+   hypothesis.
+
+**The condition, and it is this repo's own recurring lesson.** A split must
+prove it did not silently drop a gate. The failure mode to fear is not a crash,
+it is 780 checks quietly passing where there were 802. So: snapshot the check
+*names* to a file first, split, then require the name set to be identical
+before and after. Same trick as the difficulty table and the daily fingerprint
+— the proof is a comparison, not a promise.
+
+**Shape.**
+
+- `tools/verify.mjs` stays the runner: serves the repo, launches Chromium,
+  collects `report.checks` / `report.failures`, prints, exits non-zero.
+- `tools/gates/*.js` for the browser-side blocks, imported by URL exactly the
+  way the gates already import game modules.
+- `tools/gates/harness.js` for the shared `expect`, the input builders, the
+  scene builders and the audio tap.
+- `--only <name>` and `--list` on the runner.
+
+Do it as its own change, on a green suite, with the name snapshot as its proof.
+
 ### Kenttien varianssi: mitattu tila ja se mitä se vaatii
 
 Omistaja 17.8.2026: *"kentissä on edelleen liian vähän varianssia! Ne tuntuvat
