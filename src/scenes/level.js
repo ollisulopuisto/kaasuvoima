@@ -10,7 +10,7 @@ import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
-import { ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
+import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 import { Music, Sfx, Ambience, killSound } from '../core/audio.js';
@@ -380,6 +380,90 @@ const SHELF_TILES = 3;
  * kenttä muutu jääkentäksi jos kuuran jättää eloon.
  */
 const FROST_LIFE = 360;
+
+/* ------------------------------- sää ------------------------------------ */
+/**
+ * KOLME UUTTA SÄÄTÄ, ja se yksi asia joka tekee niistä samaa lajia kuin tuuli.
+ *
+ * Tuuli (`updateWind`) on ollut pelin ainoa sää, ja sen muoto kannattaa lukea
+ * ennen näitä kolmea: se ei ole olio, se ei ole laatta, ja **se on johdettu
+ * kellosta** (`tick % 600`). Juuri se viimeinen on syy siihen ettei
+ * `savestate.js` tiedä siitä mitään — pikalataus palauttaa kellon, ja kello
+ * palauttaa puuskan. Nämä kolme on rakennettu samasta syystä samalla tavalla:
+ * jokainen niistä on **puhdas funktio kellosta ja paikasta**, ei tilaa jota
+ * kannetaan mukana.
+ *
+ * Ja ne ovat kenttäkohtaisia lippuja eivätkä teeman ominaisuuksia, mikä on
+ * ROADMAPin oma sääntö juoksuhiekasta: *uhka joka on joka kentässä on
+ * maastoa, ja maasto ei ole uhka.* Yksi kenttä kutakin, ja kunkin perustelu
+ * on sen kentän omassa kommentissa.
+ *
+ *   `quake`      MAANJÄRISTYS. Maa tärisee pystyyn ja **nytkäyttää kerran**
+ *                sen minkä se kannattelee. Ilmassa oleva ei tunne sitä, mikä
+ *                tekee järistyksestä ajoituksen eikä veron.
+ *   `twister`    PYÖRREMYRSKY. Suppiloita jotka vaeltavat kenttää vasemmalle
+ *                kahden ruudun välein; lähellä ne vetävät keskustaansa,
+ *                ytimessä ne nostavat. Käyttää tuulen `push`-tietä, eli
+ *                kantaa kuoria ja vihollisia laki 3:n mukaisesti.
+ *   `firestorm`  TULIMYRSKY. Kekäleitä sataa vinosti, ja niitä edeltää
+ *                varoitus jonka näkee ja kuulee. Kekäle itse on `Ember`,
+ *                `kind: 'hazard'` — ks. `updateFirestorm`, jonka kommentti on
+ *                se paikka jossa tuo valinta oli ensin väärin päin.
+ */
+
+/** Järistysten väli ja yhden järistyksen pituus, frameina. */
+const QUAKE_CYCLE = 900;
+const QUAKE_LEN = 150;
+/**
+ * Järistyksen tärinä ja nytkäys.
+ *
+ * Tärinä on `SHAKE_MAX`in alapuolella yhdellä yksiköllä ja se on tahallista:
+ * pomon laskeutuminen on tämän pelin kovin tärähdys, ja maan järinä on pitkä
+ * eikä kova. Nytkäys 2,6 px/frame nostaa pienimmän kehon noin puoli laattaa —
+ * tarpeeksi katkaisemaan juoksun ja tarkan hypyn, ei tarpeeksi heittämään
+ * ketään kuiluun.
+ */
+const QUAKE_SHAKE = 5;
+const QUAKE_KICK = 2.6;
+
+/** Suppiloiden väli maailmassa (kaksi ruutua) ja niiden vaellusnopeus. */
+const TWISTER_SPACING = 640;
+const TWISTER_SPEED = 0.8;
+/**
+ * Suppilon ulottuvuus, ydin ja voimat.
+ *
+ * Ulottuvuus on kuusi laattaa eli reilusti alle ruudun puolikkaan: suppilon on
+ * mahduttava kuvaan kokonaan ennen kuin se koskee, tai se on isku eikä sää.
+ * Veto on tuulen puuskaa (`0,055`) vahvempi, koska se on suunnattu — puuska
+ * työntää sivuun, suppilo pitää kiinni — ja nosto pienempi kuin painovoima,
+ * jotta ytimessä noustaan hitaasti eikä sinkouduta.
+ */
+const TWISTER_REACH = 96;
+const TWISTER_CORE = 28;
+const TWISTER_PULL = 0.075;
+const TWISTER_LIFT = 0.22;
+
+/**
+ * Tulimyrskyn kello: rauha, varoitus, sade.
+ *
+ * Varoitus on puolitoista sekuntia. Se on mitattu samasta paikasta kuin
+ * auringon sukellus: juoksuvauhdilla (2,5 px/frame) ehtii yhdeksän laattaa,
+ * eli suojan alle jos sellainen on kuvassa — ja jos ei ole, ehtii pysähtyä ja
+ * katsoa. Sade on neljä sekuntia, eli sitä ei odoteta ohi vaan sen läpi
+ * kuljetaan.
+ */
+const EMBER_CYCLE = 720;
+const EMBER_WARN = 90;
+const EMBER_RAIN = 240;
+/**
+ * Kuinka usein kekäle syntyy sateen aikana, frameina.
+ *
+ * Kymmenen framea ja putoamismatka noin yhdeksänkymmentä: ruudulla on siis
+ * yhdeksän kekälettä kerrallaan. Se on tiheys jolla ruudun poikki juoksevan on
+ * valittava reittinsä muttei pysähdyttävä — ja koska katto sammuttaa kekäleen
+ * (`Ember`), tiheys on suurimmillaan siellä missä taivas on auki.
+ */
+const EMBER_EVERY = 10;
 
 /**
  * Kuinka kauan nielty kyky kestää, frameina. Ks. `swallowEnemy`.
@@ -1448,6 +1532,12 @@ export class LevelScene {
      * impact in flight, and the next one writes this again. */
     this.lastPound = null;
     this.gust = 0;
+    /* Sään kolme lukemaa. Ne ovat johdettuja kellosta (ks. sääosio tämän
+     * tiedoston alussa), joten ne ovat `savestate.js`:n ulkopuolella samasta
+     * syystä kuin `gust`: palautettu kello palauttaa myös sään. */
+    this.quake = 0;
+    this.twister = 0;
+    this.emberWarn = 0;
     this.goal = null;
     this.cardIndex = 0;
     this.wonCard = null;
@@ -3927,10 +4017,18 @@ export class LevelScene {
     }
 
     if (this.def.wind) this.updateWind();
+    if (this.def.quake) this.updateQuake();
+    if (this.def.twister) this.updateTwister();
+    if (this.def.firestorm) this.updateFirestorm();
     /* The bed sounds while the level is being played, and only then. This one
      * line is also how it stops: pausing, dying, clearing and every scene
-     * change all stop calling it. See Ambience.hold. */
-    if (this.state === 'play') Ambience.hold(this.gust);
+     * change all stop calling it. See Ambience.hold.
+     *
+     * Suppilo puhaltaa samaan lukemaan kuin puuska: kumpikin on tuulta, ja
+     * DESIGN.md kohta 8 kieltää kaksi tapaa sanoa sama asia. Voimakkuus on
+     * läheisyys, joten ääni kasvaa kun suppilo lähestyy ja vaimenee kun se
+     * menee ohi — sama tieto kuin kuvassa, samasta luvusta. */
+    if (this.state === 'play') Ambience.hold(Math.max(this.gust, this.twisterNear()));
     if (this.shakeAmp > 0) {
       this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
       // Vaimennut tärinä ei jätä suuntaansa perinnöksi: seuraava isku saa
@@ -4002,6 +4100,169 @@ export class LevelScene {
       if (!e.active || e.remove || e.dying || !e.windborne) continue;
       e.push(-push * (e.onGround ? 0.5 : 1));
     }
+  }
+
+  /**
+   * MAANJÄRISTYS, ja se yksi päätös joka tekee siitä ajoituksen eikä veroa.
+   *
+   * Tärinä kestää koko järistyksen, mutta **nytkäys on yksi frame**: maa
+   * heittää kerran, järistyksen huipulla, ja se osuu vain siihen mikä on
+   * silloin maassa. Ilmassa oleva ei tunne sitä lainkaan. Siitä seuraa se
+   * mitä tältä haluttiin — järistys on kysymys ("olenko juuri nyt maassa?")
+   * eikä hidaste, ja vastaus on pelaajan käsissä ilman että hänelle annetaan
+   * uutta nappia.
+   *
+   * Pystytärinä eikä leveä: `shake`in suuntasääntö on jo olemassa, ja maan
+   * järinä on täsmälleen se tapaus jota varten se kirjoitettiin. Kovempi isku
+   * voittaa suunnan, joten pomon laskeutuminen kesken järistyksen näyttää yhä
+   * omalta itseltään.
+   */
+  updateQuake() {
+    const cycle = this.tick % QUAKE_CYCLE;
+    this.quake = cycle < QUAKE_LEN ? Math.sin((cycle / QUAKE_LEN) * Math.PI) : 0;
+    if (this.quake <= 0.05 || this.state !== 'play') return;
+    this.shake(QUAKE_SHAKE * this.quake, 'y');
+    if (cycle !== Math.floor(QUAKE_LEN / 2)) return;
+    Sfx.play('jysahdys');
+    /*
+     * LAKI: maa heittää kaiken minkä se kannattelee.
+     *
+     * Tuuli on **valinnainen lajeittain** (`windborne`, oletus ei), koska
+     * kantaminen riippuu siitä miten kevyt jokin on. Järistys on toisin päin
+     * (`quakeborne`, oletus kyllä), koska se ei kanna vaan päästää irti: maa
+     * joka lakkaa hetkeksi olemasta paikallaan lakkaa olemasta paikallaan
+     * kaikelle mikä sen päällä seisoo. Poikkeukset ovat siis niitä jotka eivät
+     * seiso maassa vaan *ovat* huone — pomot ja kalusteet.
+     */
+    if (this.player.onGround) {
+      this.player.vy = -QUAKE_KICK;
+      this.player.onGround = false;
+    }
+    for (const e of this.entities) {
+      if (!e.active || e.remove || e.dying || !e.onGround || !e.quakeborne) continue;
+      e.vy = -QUAKE_KICK;
+      e.onGround = false;
+    }
+  }
+
+  /**
+   * PYÖRREMYRSKY: suppiloita jotka vaeltavat maailmaa vasemmalle.
+   *
+   * Ne eivät synny kameran mukaan vaan asuvat maailmassa `TWISTER_SPACING`in
+   * välein ja liikkuvat kellon mukana — eli sama kenttä samalla framella on
+   * sama kenttä, ja pikalataus palauttaa myrskyn palauttamalla kellon. Sama
+   * peruste kuin puuskalla, ja se on syy siihen ettei tässä ole tilaa.
+   *
+   * Voima on kaksiosainen ja se on koko idea: **ulkokehä vetää, ydin nostaa.**
+   * Reunalta sinut imaistaan kohti keskustaa, mikä on haitta jos olet menossa
+   * ohi ja apu jos olet menossa yli; keskellä noustaan. Nousu on hitaampi kuin
+   * hyppy, joten suppilo ei koskaan vie sinne minne et voisi muutenkin päästä
+   * — se vie sinne hitaasti ja väärään aikaan, mikä on eri asia.
+   */
+  twisterAt(x) {
+    const drift = (this.tick * TWISTER_SPEED) % TWISTER_SPACING;
+    const i = Math.round((x + drift) / TWISTER_SPACING);
+    return i * TWISTER_SPACING - drift;
+  }
+
+  updateTwister() {
+    this.twister = this.twisterAt(this.player ? this.player.cx : 0);
+    if (this.state !== 'play') return;
+    this.pullToTwister(this.player, 1);
+    for (const e of this.entities) {
+      if (!e.active || e.remove || e.dying || !e.windborne) continue;
+      this.pullToTwister(e, 0);
+    }
+  }
+
+  /**
+   * Yhden kehon veto lähimpään suppiloon.
+   *
+   * `direct` erottaa pelaajan muista samasta syystä kuin tuulessa: pelaaja
+   * kirjoittaa oman `vx`:nsä ohjaimesta, kävelijä kirjoittaa sen joka framella
+   * uusiksi. Siksi pelaajaa siirretään `vx`:llä ja muita `push`illa
+   * (`drift`), eikä kumpikaan luku ole toisen kopio — sama jako, sama syy.
+   */
+  pullToTwister(body, direct) {
+    if (!body) return;
+    const eye = this.twisterAt(body.cx);
+    const d = body.cx - eye;
+    const away = Math.abs(d);
+    if (away > TWISTER_REACH) return;
+    const grip = 1 - away / TWISTER_REACH;
+    const pull = -Math.sign(d) * TWISTER_PULL * grip;
+    if (direct) body.vx += pull;
+    else body.push(pull);
+    if (away <= TWISTER_CORE) body.vy -= TWISTER_LIFT * (1 - away / TWISTER_CORE);
+  }
+
+  /**
+   * TULIMYRSKY: kekäleitä, ja ne ovat kenttää eivätkä olioita.
+   *
+   * Kekäle ei ole `Entity`, eikä se ole sitä kolmesta syystä joista kaksi on
+   * samoja kuin puuskalla: se on **johdettu kellosta ja paikasta**, joten
+   * tallennus ei tarvitse siitä riviä, ja se on huoneen osa eikä asukas, joten
+   * se satuttaa `hazard`ina kuten laava. Kolmas on määrä: sadetta on noin
+   * kahdeksan kekälettä ruudulla, ja kahdeksan oliota framessa olisi
+   * kahdeksan oliota myös `savestate.js`:ssä ja jokaisessa mittarissa.
+   *
+   * `emberField` on siis funktio eikä lista: se palauttaa ne kekäleet jotka
+   * juuri nyt osuvat annetulle sarakevälille. Sama funktio piirtää ja sama
+   * funktio satuttaa, joten kuvaa ja vahinkoa ei voi saada eri paikkoihin.
+   */
+  emberPhase() {
+    const cycle = this.tick % EMBER_CYCLE;
+    if (cycle < EMBER_CYCLE - EMBER_RAIN - EMBER_WARN) return { warn: 0, rain: -1 };
+    const into = cycle - (EMBER_CYCLE - EMBER_RAIN - EMBER_WARN);
+    if (into < EMBER_WARN) return { warn: into / EMBER_WARN, rain: -1 };
+    return { warn: 1, rain: into - EMBER_WARN };
+  }
+
+  /**
+   * TULIMYRSKY, ja se yksi valinta joka oli ensin väärin päin.
+   *
+   * Kekäle oli aluksi **kohtauksen piirtämä sade**: puhdas funktio kellosta ja
+   * paikasta, ei olioita, ei riviä tallennukseen. Perustelu kuulosti hyvältä ja
+   * portti kaatoi sen heti: *"jokainen kenttä on läpäistävissä voimatasolla
+   * 0"* punastui, 4-3 jäi sarakkeeseen 107. Se portti riisuu kentästä
+   * **viholliset ja vaarat** ennen mittausta, koska sen väite koskee maastoa —
+   * ja kekälesade oli kirjoitettu maastoksi, joten se jäi riisumatta.
+   *
+   * Portti oli oikeassa ja perustelu väärässä. Kekäle ei ole huone vaan asia
+   * huoneessa: se liikkuu, se osuu, se katoaa. Pelin oma taksonomia sanoo sen
+   * yhdellä sanalla — `Happopisara` on täsmälleen sama esine (putoava,
+   * satuttava, maahan osuessaan katoava) ja se on `Entity`, `kind: 'hazard'`.
+   * Nyt kekäle on sitä myös, mikä antaa ilmaiseksi kolme asiaa: portit
+   * riisuvat sen kuten muutkin vaarat, `savestate.js` kantaa sen `REGISTRY`n
+   * kautta, ja tähti suojaa siltä samalla säännöllä kuin laavalta.
+   *
+   * Sään puolelle jää se mikä on oikeasti säätä: **kello ja taivas.**
+   */
+  /** Minkä kaistan ylälaidasta sää tulee: sen jossa pelaaja on. */
+  bandTop() {
+    if (!this.def.bands || !this.player) return 0;
+    const rows = this.def.bands.rows * TILE;
+    return Math.floor(this.player.cy / rows) * rows;
+  }
+
+  updateFirestorm() {
+    const { warn, rain } = this.emberPhase();
+    this.emberWarn = warn;
+    if (rain === 0) Sfx.play('dive');
+    if (rain < 0 || this.state !== 'play') return;
+    if (rain % EMBER_EVERY) return;
+    /* Syntypaikka on kuvan yläpuolella ja kuvan levyinen: sade on sitä mitä
+     * näkyy, eikä ruudun ulkopuolelle kannata pudottaa mitään. Arpa on kellon
+     * hajautus, joten sama frame samassa kentässä on sama kekäle. */
+    const x = this.cam.x + hashNoise(this.tick, this.emberWarn * 97 + 1) * VIEW_W;
+    this.entities.push(new Ember(this, x, this.cam.y - 12));
+  }
+
+  /** Kuinka lähellä lähin suppilo on, 0…1. Sama luku kuvalle ja äänelle. */
+  twisterNear() {
+    if (!this.def.twister || !this.player) return 0;
+    const away = Math.abs(this.player.cx - this.twisterAt(this.player.cx));
+    return Math.max(0, 1 - away / TWISTER_REACH);
   }
 
   /**
@@ -5255,6 +5516,13 @@ export class LevelScene {
 
     if (this.def.bands) this.drawUnderground(ctx, camX, camY);
     this.drawTiles(ctx, camX, camY);
+    /* Suppilo on maastoa eikä olio, joten se on laattojen päällä ja pelaajan
+     * takana: sen läpi kuljetaan, eikä se saa peittää sitä keneen se koskee. */
+    if (this.def.twister) this.drawTwisters(ctx, camX);
+    /* Varoitus on taivasta, joten se on laattojen päällä ja kaiken elävän
+     * takana: se kertoo mistä jotain tulee, eikä se saa värjätä sitä kehen se
+     * kohta osuu. */
+    if (this.def.firestorm) this.drawEmberWarning(ctx, camX);
     if (this.peek > 0) this.drawPeek(ctx, camX, camY);
     if (this.game.debug) this.drawHeatmap(ctx, camX, camY);
     if (this.goal) {
@@ -5332,6 +5600,67 @@ export class LevelScene {
    * harmaita välipikseleitä, ja harmaa välipikseli on tässä pelissä väärä väri
    * riippumatta siitä miltä se näyttää.
    */
+  /**
+   * Suppilo: kolme kaarta jotka kapenevat alas ja pyörivät eri vauhtia.
+   *
+   * Muoto tulee samasta säännöstä kuin muukin tämän pelin liike — **se mitä
+   * näet on se mikä koskee**: kaaren leveys on `TWISTER_REACH` ylhäällä ja
+   * `TWISTER_CORE` alhaalla, eli ulkokehä ja ydin ovat piirrettyinä täsmälleen
+   * ne kaksi lukua joilla `pullToTwister` laskee. Suppilo joka näyttäisi
+   * leveämmältä kuin se vetää olisi valhe jota ei voi väistää.
+   */
+  drawTwisters(ctx, camX) {
+    const top = this.bandTop();
+    const base = top + this.viewH;
+    for (let x = this.twisterAt(camX - TWISTER_SPACING); x < camX + VIEW_W + TWISTER_REACH;
+      x += TWISTER_SPACING) {
+      ctx.save();
+      for (let ring = 0; ring < 3; ring++) {
+        const t = (this.tick * (0.06 + ring * 0.02)) % (Math.PI * 2);
+        ctx.strokeStyle = `rgba(228,232,244,${0.18 + ring * 0.07})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = top + 8; y < base; y += 6) {
+          const down = (y - top) / (base - top);
+          const w = TWISTER_REACH - (TWISTER_REACH - TWISTER_CORE) * down;
+          const sway = Math.sin(t + down * 5.2 + ring) * w * 0.5;
+          const px = x + sway;
+          if (y === top + 8) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+      }
+      /* Roska jota se kantaa: sama pyörre, harvempi ja tummempi. */
+      ctx.fillStyle = 'rgba(180,168,140,0.5)';
+      for (let k = 0; k < 14; k++) {
+        const down = ((this.tick * 0.02 + k * 0.11) % 1);
+        const w = TWISTER_REACH - (TWISTER_REACH - TWISTER_CORE) * down;
+        const a = this.tick * 0.09 + k * 1.7;
+        ctx.fillRect(Math.round(x + Math.cos(a) * w * 0.5),
+          Math.round(top + 8 + down * (base - top - 8)), 2, 2);
+      }
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Kekäleet ja niitä edeltävä varoitus.
+   *
+   * Varoitus on **taivas** eikä nurkkaan ilmestyvä merkki: se hehkuu ruudun
+   * ylälaidasta alaspäin, koska sieltä se tulee, ja se on siksi diegeettinen
+   * (DESIGN.md kohta 8) — huone värittää sen mikä on huoneessa. Kirkkaus
+   * kasvaa varoituksen mitassa, joten "kohta" ja "nyt" ovat eri kuvia.
+   */
+  drawEmberWarning(ctx, camX) {
+    const { warn, rain } = this.emberPhase();
+    if (rain >= 0 || warn <= 0) return;
+    const top = this.bandTop();
+    const g = ctx.createLinearGradient(0, top, 0, top + this.viewH * 0.6);
+    g.addColorStop(0, `rgba(255,96,32,${0.34 * warn})`);
+    g.addColorStop(1, 'rgba(255,96,32,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(camX, top, VIEW_W, this.viewH * 0.6);
+  }
+
   drawSpeedPulse(ctx, camX = 0, camY = 0) {
     if (this.speedPulse <= 0 || !this.player) return;
     const span = this.speedPulseUp ? SPEED_PULSE_FULL : SPEED_PULSE_SPENT;

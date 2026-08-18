@@ -190,6 +190,23 @@ export class Enemy extends Entity {
    */
   get windborne() { return false; }
 
+  /**
+   * Kestääkö tämä maan järinän: **oletus on ei**, eli järistys heittää.
+   *
+   * Toisin päin kuin `windborne`, ja se on väite eikä epäjohdonmukaisuus.
+   * Tuuli **kantaa**, ja kantaminen riippuu siitä miten kevyt jokin on —
+   * siksi siihen liitytään. Järistys ei kanna vaan **päästää irti**: maa joka
+   * lakkaa hetkeksi olemasta paikallaan lakkaa olemasta paikallaan kaikelle
+   * mikä sen päällä seisoo, eikä painavuus ole siihen vastaus. Siksi
+   * poikkeuksia ovat vain ne jotka *eivät seiso maassa* — putkeen pultattu
+   * nielu, lattiasta nouseva närästys, torvi seinässä — ja ne jotka **ovat
+   * huone**: pomo, aurinko, kuu ja papuparooni.
+   *
+   * Ilmassa oleva ei kuulu kummallekaan listalle: `updateQuake` kysyy
+   * `onGround`ia ennen tätä, joten lentäjä on turvassa koska se lentää.
+   */
+  get quakeborne() { return true; }
+
   /** Tuulen (tai minkä tahansa ulkopuolisen) työntö tälle framelle. */
   push(dv) {
     this.drift = Math.max(-DRIFT_MAX, Math.min(DRIFT_MAX, this.drift + dv));
@@ -1037,6 +1054,9 @@ export class SpikeGuy extends Enemy {
  * for the rest of the level.
  */
 export class Plant extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: putkeen pultattu. */
+  get quakeborne() { return false; }
+
   /** Offsets at or beyond this are "down the pipe": not drawn, cannot hurt. */
   static HIDDEN_OFFSET = 24;
 
@@ -1446,6 +1466,9 @@ const SCREEN_W = 320;
  * out of its own band, and past the flag. See `quitReason`.
  */
 export class AngrySun extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: ei seiso maassa. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
@@ -2001,6 +2024,9 @@ const KING_FORMS = [0, 1, 2, 3, 3, 4, 5];
  * (väri, arvomerkki, pisteet) ja `form` kiertää `KING_FORMS`in läpi.
  */
 export class Boss extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y, variant = 0) {
     super(level, x, y, bossSize(variant).w, bossSize(variant).h);
     this.variant = variant;
@@ -2747,6 +2773,9 @@ export class BeanBomb extends Entity {
 }
 
 export class BeanBaron extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 18, 26);
     this.speed = 0.45;
@@ -2905,6 +2934,9 @@ export class BeanBaron extends Enemy {
  * (Lead designer's request.)
  */
 export class Moon extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: on huone. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 20, 20);
     this.skyY = y;
@@ -3155,6 +3187,9 @@ export class Torahdys extends Enemy {
  * enää vartioi mitään.
  */
 export class Torvi extends Enemy {
+  /* Ei järistyksessä, ks. `Enemy.quakeborne`: seinässä kiinni. */
+  get quakeborne() { return false; }
+
   constructor(level, x, y) {
     super(level, x, y, 16, 16);
     this.score = PTS.rare;
@@ -3279,6 +3314,65 @@ export class Happopisara extends Entity {
 
   draw(ctx) {
     drawPisara(ctx, this.x, this.y, this.tick);
+  }
+}
+
+/**
+ * KEKÄLE — se mitä tulimyrskystä sataa (`LevelScene.updateFirestorm`).
+ *
+ * Sama esine kuin happopisara ja tarkoituksella: putoava, satuttava, maahan
+ * osuessaan katoava. Ero on suunta ja lähde — pisara tulee paarmasta pystyyn,
+ * kekäle taivaalta vinoon — ja se riittää tekemään niistä kaksi eri asiaa
+ * ilman että kumpikaan on uusi laji. `kind: 'hazard'` on sama valinta samoin
+ * perustein: tähti suojaa siltä, kuori ei pyyhi sitä pois, ja jokainen portti
+ * joka riisuu kentästä vaarat riisuu myös tämän.
+ *
+ * **Katto sammuttaa.** Kekäle katoaa ensimmäiseen kiinteään laattaan, mikä on
+ * yhtä aikaa se mitä oikea kekäle tekisi ja se sääntö joka tekee myrskystä
+ * pelattavan: sade on uhka siellä missä taivas on auki, ja katon alla ollaan
+ * turvassa. Ilman sitä sadetta ei voisi väistää, ja uhka jota ei voi väistää
+ * on vero eikä uhka.
+ *
+ * Vaakaliike on `x`:ään suoraan eikä `moveSideways`illa: kekäle ei kävele eikä
+ * ole tuulen kannettavana, se lentää sitä rataa jolla se lähti. Seinä ei
+ * pysäytä sitä sivusuunnassa, koska pystysuora osuma tulee joka tapauksessa
+ * ensin — ja jos ei tule, kekäle lentää kuvasta ulos ja katoaa siihen.
+ */
+const EMBER_GRAVITY = 0.16;
+const EMBER_MAX = 2.6;
+const EMBER_DRIFT = -0.9;
+
+export class Ember extends Entity {
+  constructor(level, x, y) {
+    super(level, x, y, 4, 4);
+    this.kind = 'hazard';
+    this.active = true;
+    this.vy = 1.2;
+  }
+
+  update() {
+    this.tick++;
+    this.x += EMBER_DRIFT;
+    this.vy = Math.min(this.vy + EMBER_GRAVITY, EMBER_MAX);
+    const hit = moveY(this, this.level);
+    if (hit.ground || this.y > this.level.heightPx + 16
+      || this.x + this.w < this.level.cam.x - 48) {
+      this.snuff();
+    }
+  }
+
+  snuff() {
+    this.remove = true;
+  }
+
+  draw(ctx) {
+    /* Ydin ja häntä, ja häntä osoittaa sitä suuntaa josta kekäle tuli: kuva
+     * kertoo mihin väistetään ennen kuin osuma kertoo missä ei. */
+    const heat = 0.65 + 0.35 * Math.sin(this.tick * 0.4);
+    ctx.fillStyle = 'rgba(255,168,64,0.45)';
+    ctx.fillRect(Math.round(this.x - EMBER_DRIFT), Math.round(this.y - 4), 1, 5);
+    ctx.fillStyle = `rgb(255,${Math.round(110 + heat * 90)},48)`;
+    ctx.fillRect(Math.round(this.x), Math.round(this.y), 3, 3);
   }
 }
 

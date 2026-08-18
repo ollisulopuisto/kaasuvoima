@@ -2,7 +2,7 @@ import { Player } from '../entities/player.js';
 import {
   Walker, ShellGuy, Flyer, Plant, StinkCloud, CorkGuy, Heartburn, Shockwave, Boss, AngrySun,
   Moon, SpikeGuy, BeanBaron, BeanBomb, Kurnuttaja,
-  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Pyorre, Kummitus,
+  Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho, Ember, Pyorre, Kummitus,
   Hossotin,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
@@ -43,6 +43,11 @@ const REGISTRY = {
    */
   Torvi, Torahdys, Paarma, Happopisara, Yokki, Karvapallo, Paukkupoho,
   Pyorre, Kummitus, Hossotin,
+  /* Kekäle on lyhytikäinen mutta se on **vaara**, ja pikatallennus keskellä
+   * kekälesadetta palauttaisi ilman tätä kentän jossa sade on juuri lakannut.
+   * Sää itse (`quake`, `twister`, sateen kello) on johdettu kellosta eikä
+   * tarvitse riviä; se mikä sateesta on jo ilmassa, tarvitsee. */
+  Ember,
   /* `CoinPop` poistui 17.8.2026: lohkosta lyöty kolikko **on** nyt se kolikko
    * joka lentää putkiloon (`coinToTube`), eikä lentorata ole olio vaan
    * kohtauksen oma kenttä — ja kohtauksen kentät `savestate` kantaa jo. */

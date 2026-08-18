@@ -2023,7 +2023,11 @@ export const Ambience = {
    * windy, not because everything sharing its palette is.
    */
   set(theme, def = null) {
-    const kind = (def && def.wind ? 'wind' : null) || THEME_AMBIENCE[theme] || null;
+    /* Suppilo on tuulta, ja siksi se saa tuulen pedin eikä omaansa: DESIGN.md
+     * kohta 8 kieltää kaksi tapaa sanoa sama asia, ja pilvimaailma lainaa jo
+     * aavikon tuulen samasta syystä. Voimakkuuden hoitaa `hold`. */
+    const windy = def && (def.wind || def.twister);
+    const kind = (windy ? 'wind' : null) || THEME_AMBIENCE[theme] || null;
     if (kind !== this.current) {
       this.stop();
       this.current = kind;

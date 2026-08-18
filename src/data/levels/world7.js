@@ -279,6 +279,16 @@ export const WORLD7_LEVELS = {
    */
   '7-3': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
+    /*
+     * PYÖRREMYRSKY (ks. sääosio `scenes/level.js`:n alussa). Pilvimaailma on
+     * se paikka jossa tuuli jo kantaa kaikkea (ROADMAPin laki 3), joten
+     * suppilo ei tuo tänne uutta lakia vaan uuden muodon vanhalle: puuska
+     * työntää sivuun, suppilo pitää kiinni ja nostaa.
+     *
+     * 7-3 eikä 7-1, koska 7-1 on maailman avaus ja opettaa pilven oman
+     * maaston. Uusi voima kuuluu sinne missä maasto on jo tuttua.
+     */
+    twister: true,
     chunks: [
       'start', 'cloud_ghost', 'power', 'cloud_hole', 'cloud_hole_deck', 'cloud_paarma', 'flat8',
       'cloud_hole_wisp', 'cloud_hail', 'cloud_anvil', 'cloud_hole', 'cloud_ghost_deck',

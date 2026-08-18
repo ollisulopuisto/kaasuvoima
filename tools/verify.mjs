@@ -22463,6 +22463,261 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- emergenssi: loppu ---- */
+/* ---- sää: kolme uutta ---- */
+/*
+ * KOLME UUTTA SÄÄTÄ, ja ne mitataan samalla ankaruudella kuin neljä lakia
+ * yllä — samasta syystä. Sää on **maasto → olio**: se on huoneen ominaisuus
+ * joka koskee kaikkea huoneessa olevaa, eikä yksikään näistä kolmesta muokkaa
+ * kenttää. Se on myös se raja jonka rikkoutuminen olisi hiljainen: myrsky joka
+ * unohtaisi vihollisen tai järistys joka heittäisi ilmassa olevaa näyttäisivät
+ * aivan oikeilta ruudulla.
+ *
+ * Neljä väitettä, ja jokainen kantaa lukunsa:
+ *
+ *   1  järistys   nytkäyttää maassa olevaa, ei ilmassa olevaa — ja se koskee
+ *                 vihollista siinä missä pelaajaa, paitsi kalusteita
+ *   2  suppilo    vetää keskustaansa ja nostaa ytimessä, ja kantaa kuorta
+ *   3  myrsky     varoittaa ennen kuin sataa, ja **katto sammuttaa kekäleen**
+ *   4  kello      sama kello on sama sää: pikalataus ei arvo säätä uusiksi
+ *
+ * Väite 3 on se joka on ollut punaisena: ensimmäinen kekälesade oli
+ * kohtauksen piirtämä eikä olio, ja se satoi katon läpi. Portti *"jokainen
+ * kenttä on läpäistävissä voimatasolla 0"* kaatui 4-3:een sarakkeeseen 107,
+ * koska se riisuu kentästä vaarat eikä maastoa — ja sade oli kirjoitettu
+ * maastoksi. Nyt kekäle on `Entity`, `kind: 'hazard'`, ja katto sammuttaa sen.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const W = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { Walker, Ember, Boss } = await import('/src/entities/enemies.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const { levelIds, getLevel } = await import('/src/data/levels.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const scene = (id) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, id);
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      return s;
+    };
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const out = {};
+
+    /* Missä sää on käytössä. Yksi kenttä kutakin on suunnittelupäätös
+     * (ROADMAP: uhka joka on joka kentässä on maastoa), ja "yksi" on siksi
+     * mitattava luku eikä muistiinpano. */
+    const flagged = (flag) => levelIds().filter((id) => getLevel(id)[flag]);
+    out.where = {
+      quake: flagged('quake'), twister: flagged('twister'), firestorm: flagged('firestorm'),
+    };
+
+    /* --- 1. järistys nytkäyttää sitä mikä on maassa ---------------------- */
+    {
+      const s = scene(out.where.quake[0] || '6-1');
+      const i = mkInput();
+      const p = s.player;
+      /* Kävelijä pelaajan viereen tasaiselle maalle, ja pomo verrokiksi:
+       * `quakeborne` on oletuksena kyllä ja kalusteilla ei. */
+      const w = new Walker(s, p.x + 40, p.y);
+      w.active = true;
+      w.alwaysActive = true;
+      w.speed = 0;
+      w.vx = 0;
+      s.entities.push(w);
+      /* Aja järistyksen huipulle asti ja katso mitä sillä framella tapahtui. */
+      const peak = 75;
+      let kickP = 0;
+      let kickW = 0;
+      let air = 0;
+      s.tick = 0;
+      for (let f = 0; f < peak + 4; f++) {
+        const wasP = p.vy;
+        const wasW = w.vy;
+        s.update(i);
+        if (p.vy - wasP < kickP) kickP = p.vy - wasP;
+        if (w.vy - wasW < kickW) kickW = w.vy - wasW;
+      }
+      /* Sama järistys ilmassa: hyppy juuri ennen huippua, eikä nytkäystä tule. */
+      const s2 = scene(out.where.quake[0] || '6-1');
+      const i2 = mkInput();
+      s2.tick = 0;
+      for (let f = 0; f < peak + 4; f++) {
+        i2.held = blank();
+        i2.pressed = blank();
+        s2.player.onGround = false;
+        s2.player.y -= 40;
+        const was = s2.player.vy;
+        s2.update(i2);
+        if (f === peak && s2.player.vy - was < -1) air = s2.player.vy - was;
+      }
+      out.quake = {
+        player: r2(kickP), walker: r2(kickW), air: r2(air), shake: r2(s.shakeAmp),
+        furniture: !(Boss.prototype.quakeborne),
+      };
+    }
+
+    /* --- 2. suppilo vetää ja nostaa -------------------------------------- */
+    {
+      const s = scene(out.where.twister[0] || '7-3');
+      const i = mkInput();
+      const p = s.player;
+      const eye = s.twisterAt(p.cx);
+      /* Kehälle: puolimatkaan ulottuvuudesta, jotta veto on olemassa muttei
+       * ydintä. Mitataan `vx`:n muutos yhdellä framella. */
+      p.x = eye + 60;
+      p.vx = 0;
+      p.vy = 0;
+      s.update(i);
+      const rim = r2(p.vx);
+      /* Ytimeen: nosto näkyy `vy`:n muutoksena painovoimaa vastaan. */
+      const s2 = scene(out.where.twister[0] || '7-3');
+      const p2 = s2.player;
+      p2.x = s2.twisterAt(p2.cx);
+      p2.vy = 0;
+      const beforeVy = p2.vy;
+      s2.update(mkInput());
+      const core = r2(p2.vy - beforeVy);
+      /* Ja laki 3: se kantaa kuorta siinä missä pelaajaa. */
+      const s3 = scene(out.where.twister[0] || '7-3');
+      const w = new Walker(s3, s3.twisterAt(s3.player.cx) + 60, s3.player.y);
+      w.active = true;
+      w.alwaysActive = true;
+      s3.entities.push(w);
+      const drift0 = w.drift;
+      s3.update(mkInput());
+      out.twister = {
+        rim, core, carries: r2(w.drift - drift0), windborne: w.windborne,
+        /* Ulompana kuin ulottuvuus: ei mitään. */
+        far: (() => {
+          const s4 = scene(out.where.twister[0] || '7-3');
+          const q = s4.player;
+          q.x = s4.twisterAt(q.cx) + 200;
+          q.vx = 0;
+          s4.update(mkInput());
+          return r2(q.vx);
+        })(),
+      };
+    }
+
+    /* --- 3. myrsky varoittaa, ja katto sammuttaa ------------------------- */
+    {
+      const s = scene(out.where.firestorm[0] || '4-3');
+      /* Vaiheet kellosta: rauha → varoitus → sade, tässä järjestyksessä. */
+      const seen = [];
+      for (let t = 0; t < 720; t++) {
+        s.tick = t;
+        const ph = s.emberPhase();
+        seen.push(ph.rain >= 0 ? 'sade' : (ph.warn > 0 ? 'varoitus' : 'rauha'));
+      }
+      const order = seen.filter((v, k) => v !== seen[k - 1]);
+      out.storm = {
+        order,
+        warn: seen.filter((v) => v === 'varoitus').length,
+        rain: seen.filter((v) => v === 'sade').length,
+      };
+
+      /* Katto sammuttaa, punainen vieressä: sama kekäle kahdessa sarakkeessa,
+       * toisessa kiveä yllä ja toisessa avoin taivas. */
+      const drop = (roofed) => {
+        const t = scene(out.where.firestorm[0] || '4-3');
+        const i = mkInput();
+        const tx = 6;
+        /* Lattia alle ja katto tai ei kattoa yllä, jotta mitattava asia on
+         * katto eikä se mihin kohtaan kenttää osuttiin. */
+        for (let dx = -6; dx <= 2; dx++) {
+          for (let ty = 0; ty < 13; ty++) t.setTile(tx + dx, ty, T.EMPTY);
+          t.setTile(tx + dx, 13, T.GROUND);
+          /* Katto on kaistale eikä yksi laatta, koska kekäle **ajautuu**
+           * sivuun pudotessaan: yhden laatan katto olisi mitannut sitä
+           * osuuko se, eikä sitä sammuttaako katto. */
+          if (roofed) t.setTile(tx + dx, 6, T.GROUND);
+        }
+        const e = new Ember(t, tx * 16 + 4, 16);
+        e.alwaysActive = true;
+        t.entities.push(e);
+        let ended = -1;
+        for (let f = 0; f < 240 && ended < 0; f++) {
+          t.update(i);
+          if (e.remove) ended = Math.round(e.y / 16);
+        }
+        return ended;
+      };
+      out.storm.roofed = drop(true);
+      out.storm.open = drop(false);
+    }
+
+    /* --- 4. sama kello on sama sää --------------------------------------- */
+    {
+      const read = (id, flag, at) => {
+        const s = scene(id);
+        const i = mkInput();
+        for (let f = 0; f < at; f++) s.update(i);
+        return flag === 'quake' ? r2(s.quake) : r2(s.twisterAt(0));
+      };
+      const qa = read(out.where.quake[0] || '6-1', 'quake', 40);
+      const qb = read(out.where.quake[0] || '6-1', 'quake', 40);
+      const ta = read(out.where.twister[0] || '7-3', 'twister', 40);
+      const tb = read(out.where.twister[0] || '7-3', 'twister', 40);
+      out.clock = { qa, qb, ta, tb };
+    }
+    return out;
+  });
+
+  const one = (list) => list.length === 1;
+  expect('jokaisella uudella säällä on tasan yksi kenttä',
+    one(W.where.quake) && one(W.where.twister) && one(W.where.firestorm),
+    `järistys ${W.where.quake.join(',') || '-'}, suppilo ${W.where.twister.join(',') || '-'},`
+    + ` myrsky ${W.where.firestorm.join(',') || '-'}`);
+
+  expect('järistys nytkäyttää maassa olevaa — pelaajaa ja vihollista — muttei ilmassa olevaa',
+    W.quake.player < -2 && W.quake.walker < -2 && W.quake.air === 0
+    && W.quake.shake > 0 && W.quake.furniture,
+    `pelaaja ${W.quake.player}, kävelijä ${W.quake.walker}, ilmassa ${W.quake.air},`
+    + ` tärinä ${W.quake.shake}, kaluste järistyksen ulkopuolella: ${W.quake.furniture}`);
+
+  expect('suppilo vetää kehältä keskustaan, nostaa ytimessä eikä ulotu kauas',
+    W.twister.rim < 0 && W.twister.core < 0 && W.twister.far === 0
+    && W.twister.carries < 0 && W.twister.windborne,
+    `kehä ${W.twister.rim} px/frame, ydin ${W.twister.core} px/frame,`
+    + ` kaukana ${W.twister.far}, kuoren kanto ${W.twister.carries}`);
+
+  expect('tulimyrsky varoittaa ennen kuin se sataa, ja varoitus on lyhyempi kuin sade',
+    W.storm.order.join('→') === 'rauha→varoitus→sade'
+    && W.storm.warn > 0 && W.storm.rain > W.storm.warn,
+    `${W.storm.order.join('→')}, varoitus ${W.storm.warn} framea, sade ${W.storm.rain}`);
+
+  expect('katto sammuttaa kekäleen, avoin taivas ei',
+    W.storm.roofed > 0 && W.storm.open > 0 && W.storm.roofed < W.storm.open,
+    `katon alla sammui rivillä ${W.storm.roofed}, avoimessa rivillä ${W.storm.open}`);
+
+  expect('sama kello on sama sää: sitä ei arvota kahdesti',
+    W.clock.qa === W.clock.qb && W.clock.ta === W.clock.tb,
+    `järistys ${W.clock.qa}/${W.clock.qb}, suppilo ${W.clock.ta}/${W.clock.tb}`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- sää: loppu ---- */
 /* ---- möykky kentissä ---- */
 /*
  * MÖYKKY ON KENTISSÄ, JA SE ON TÄMÄN LOHKON KOKO AIHE.

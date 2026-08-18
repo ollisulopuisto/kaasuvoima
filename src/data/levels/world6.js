@@ -63,6 +63,17 @@ export const WORLD6_LEVELS = {
    */
   '6-1': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /*
+     * MAANJÄRISTYS (ks. sääosio `scenes/level.js`:n alussa), ja luulaakso on
+     * sille pelin ainoa oikea osoite: tämä on se maailma jossa maa itse on
+     * jäänteitä, ja järistys on siellä sen puhetta eikä sään oikkua.
+     *
+     * Miksi juuri 6-1 eikä 6-2: järistys on **ajoitus** — se nytkäyttää sitä
+     * mikä on maassa, ei sitä mikä on ilmassa — ja ajoitus opitaan siellä
+     * missä siihen ei kuole. 6-1 on maailman avaus ja sen maa on leveää;
+     * 6-2 on käytävä, jossa sama nytkäys olisi ollut kuoppa eikä kysymys.
+     */
+    quake: true,
     chunks: [
       'start', 'bone_stones', 'power', 'bone_grave', 'bone_wisp', 'bone_dance',
       'bone_spine', 'bone_marrow', 'bone_wisp', 'bone_grave', 'bone_ribs',
