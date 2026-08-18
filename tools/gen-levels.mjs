@@ -502,7 +502,8 @@ const WORLD1 = [
  *             is. Measured after: 134 / 166 / 178 / 198.
  */
 const WORLD3 = [
-  { id: '3-4', world: 'w3', theme: 'ice', width: 320, enemiesPer100: 3.0, maxGap: 5, aim: 135, minIntro: 48 },
+  /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
+  { id: '3-4', seedOffset: 1, world: 'w3', theme: 'ice', width: 320, enemiesPer100: 3.0, maxGap: 5, aim: 135, minIntro: 48 },
   { id: '3-5', world: 'w3', theme: 'ice', width: 330, enemiesPer100: 3.6, maxGap: 5, aim: 165, minIntro: 48 },
   /* Tavoite 180 → 166: maailman huippu kuuluu viimeiselle kentälle, ja 3-7
    * yltää maastoineen 178:aan. Käyrä muotoillaan siis siitä mihin kentät
@@ -623,11 +624,13 @@ const WORLD5 = [
    * ilman että mikään huomautti. Luvut ovat ne jotka näillä kentillä oli ennen
    * mäkiä, eli tavoite on "sama kenttä kuin ennen, nyt maastoa mukana".
    */
-  { id: '5-1', world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3, aim: 190, attempts: SEARCH },
+  /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
+  { id: '5-1', seedOffset: 1, world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3, aim: 190, attempts: SEARCH },
   { id: '5-2', world: 'w5', theme: 'desert', width: 230, intensity: 1.0, aim: 160, attempts: SEARCH },
   { id: '5-3', world: 'w5', theme: 'ice', width: 240, intensity: 1.35, aim: 165, attempts: SEARCH },
+  /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
   {
-    id: '5-4', world: 'w5', theme: 'night', width: 260,
+    id: '5-4', seedOffset: 1, world: 'w5', theme: 'night', width: 260,
     enemiesPer100: 9.0, maxGap: 6, aim: 200, minIntro: 32, intensity: 1.15, attempts: SEARCH,
   },
   {
@@ -866,7 +869,37 @@ if (IS_MAIN) {
    * The world's own digit joins the sum for everything with an `aim`, which is
    * everything that was not already built.
    */
+  /*
+   * `seedOffset` MOVES ONE LEVEL'S SEARCH AND NOTHING ELSE, and it is here
+   * because of the one promise this search cannot check for itself.
+   *
+   * Every candidate is validated already — jump budget, headroom, spawn space,
+   * theme rule, corpus — and all of that is geometry `validateGenerated` reads
+   * off the grid. The ground-route promise (DESIGN.md §5, *clearable at the
+   * smallest size*) is not readable off a grid: it takes the power-0 bot, a
+   * browser and about five seconds per level to find out whether a hole is one
+   * a small body can cross. `tools/verify.mjs` gates on it and
+   * `tools/playable.mjs` says where it broke — neither of which this tool can
+   * call without pulling Playwright into a pure-Node generator that runs on
+   * every rebuild.
+   *
+   * So the bot's answer is carried here instead, as one number per level that
+   * needed one. **18.8.2026 is the day that stopped being invisible.** The
+   * committed `src/data/generated.js` had drifted away from the code that
+   * writes it: rebuilding changed 15 of the 26 levels, and three of them —
+   * 3-4, 5-1 and 5-4 — came out with a hole the smallest body cannot cross.
+   * The file had been right because somebody once looked, not because the tool
+   * guaranteed it, and a file that cannot be rebuilt is a file nobody dares
+   * rebuild. That is also why it had gone stale in the first place.
+   *
+   * Each of the three cleared at offset 1, which is the honest shape of this
+   * knob: it is not a difficulty dial and it buys nothing but a different draw.
+   * The number is whatever the bot first cleared, the gate re-checks it on
+   * every run, and a level that starts failing cannot be quietly nudged
+   * without somebody reading this paragraph again.
+   */
   const seedFor = (spec, attempt) => SEED + attempt * 7919 + spec.id.charCodeAt(2) * 104729
+    + (spec.seedOffset || 0) * 2654435761
     + (spec.aim === undefined ? 0 : spec.id.charCodeAt(0) * 15485863);
 
   for (const spec of plan) {
