@@ -127,8 +127,17 @@ const rnd = (a, b) => a + Math.random() * (b - a);
  * mitä Hubbardin basso on.
  */
 
-/** Pulssiaallot muistissa: leveys pyöristetään kahdeksasosaan ja jaetaan. */
-const pulseWaves = new Map();
+/**
+ * Pulssiaallot muistissa: leveys pyöristetään kahdeksasosaan ja jaetaan.
+ *
+ * Välimuisti on **kontekstikohtainen**, koska `PeriodicWave` kuuluu sille
+ * kontekstille joka sen loi. Ennen tässä oli yksi `Map`, mikä riitti niin
+ * kauan kuin konteksteja oli yksi — `renderTone` rakentaa oman offline-
+ * kontekstin, ja jaettu välimuisti olisi antanut sille toisen kontekstin
+ * aallon. Se ei kaadu vaan käyttäytyy määrittelemättömästi, eli se on juuri
+ * sitä lajia vikaa jota portti ei näkisi.
+ */
+const pulseWaves = new WeakMap();
 const PULSE_HARMONICS = 32;
 
 /**
@@ -153,47 +162,114 @@ export function pulseHarmonics(duty) {
   return imag;
 }
 
-function pulseWave(duty) {
+function pulseWave(ac, duty) {
+  let cache = pulseWaves.get(ac);
+  if (!cache) {
+    cache = new Map();
+    pulseWaves.set(ac, cache);
+  }
   const key = Math.max(1, Math.min(15, Math.round(duty * 16)));
-  const hit = pulseWaves.get(key);
+  const hit = cache.get(key);
   if (hit) return hit;
   const imag = pulseHarmonics(duty);
   const real = new Float32Array(imag.length);
-  const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
-  pulseWaves.set(key, wave);
+  const wave = ac.createPeriodicWave(real, imag, { disableNormalization: false });
+  cache.set(key, wave);
   return wave;
+}
+
+/**
+ * KOVA SYNKRONOINTI (`hard sync`), eli SIDin kolmas allekirjoitus.
+ *
+ * Sirussa se on yksi bitti: oskillaattori B **nollaa oskillaattori A:n
+ * vaiheen** joka kerta kun B aloittaa uuden jakson. Lopputulos on aalto jonka
+ * *jakso* on B:n ja jonka *muoto* on A:n — eli sävelkorkeus ei liiku vaikka
+ * A:n taajuus pyyhkäistään koko rekisterin läpi. Juuri se on ääni: kirkuva,
+ * metallinen lyijy joka soittaa yhtä nuottia ja muuttaa väriään.
+ *
+ * WebAudiossa ei ole vaiheen nollausta. ROADMAP nimesi kaksi reittiä,
+ * `AudioWorklet`in ja **jaksotetun uudelleenkäynnistyksen**, ja tämä on
+ * jälkimmäinen: koska `OscillatorNode` alkaa aina vaiheesta nolla, isäntä-
+ * jakson mittainen oskillaattori joka käynnistetään uudestaan jokaisen jakson
+ * alussa **on** vaiheen nollaus. Ei approksimaatio vaan sama tapahtuma,
+ * kirjoitettuna solmuina eikä rekisterinä.
+ *
+ * Hinta on se joka piti mitata ennen kuin tämän saattoi luvata: **yksi
+ * oskillaattori isäntäjaksoa kohti**. 220 Hz:n nuotti kestoltaan 0,17 s maksaa
+ * 37 solmua, ja siksi tämä ei ole ääniominaisuus vaan **nuottiominaisuus** —
+ * se merkitään yksittäisiin nuotteihin `marks`-taulusta, ei koko raitaan.
+ * `SYNC_MAX_SEGMENTS` on hätäjarru: sen jälkeen viimeinen pätkä soittaa
+ * nuotin loppuun synkronoimatta, mikä on ruma mutta ei kaada mitään.
+ */
+const SYNC_MAX_SEGMENTS = 128;
+
+export function syncVoice(ac, {
+  type = 'sawtooth', master, ratio = 2, ratioTo = null, dur = 0.2, t0 = 0, dest,
+}) {
+  const period = 1 / Math.max(1, master);
+  const wanted = Math.max(1, Math.ceil(dur / period));
+  const n = Math.min(wanted, SYNC_MAX_SEGMENTS);
+  const end = ratioTo === null || ratioTo === undefined ? ratio : ratioTo;
+  const segs = [];
+  for (let i = 0; i < n; i++) {
+    const at = t0 + i * period;
+    const k = n > 1 ? i / (n - 1) : 0;
+    const osc = ac.createOscillator();
+    osc.type = type;
+    /* Orjan taajuus on isännän monikerta, ja **se** pyyhkäistään. Isäntä eli
+     * kuultu sävelkorkeus ei liiku missään vaiheessa: se on koko temppu. */
+    osc.frequency.setValueAtTime(master * (ratio + (end - ratio) * k), at);
+    osc.connect(dest);
+    osc.start(at);
+    osc.stop(i === n - 1 ? t0 + dur : Math.min(t0 + dur, at + period));
+    segs.push(osc);
+  }
+  return segs;
 }
 
 /**
  * One oscillator with an ADSR-ish envelope. `bend` sweeps the pitch, `vibrato`
  * adds an LFO, `detune` layers a second slightly-off oscillator for thickness.
  *
- * SID-lisät (`duty`, `pwm`, `ring`, `arp`, `cutoff`) ovat yllä olevassa
- * kommentissa.
+ * SID-lisät (`duty`, `pwm`, `ring`, `arp`, `cutoff`, `sync`) ovat yllä
+ * olevissa kommenteissa.
+ *
+ * **Miksi tämä ottaa kontekstin parametrina.** Ennen `tone` luki moduulin oman
+ * `ctx`:n, eikä sitä voinut renderöidä muualle kuin kaiuttimiin — eli
+ * ainoakaan äänen *sisällöstä* kertova väite ei ollut mitattavissa muuten kuin
+ * kuuntelemalla. Nyt graafi rakennetaan `buildTone`ssa mihin tahansa
+ * kontekstiin, `tone` antaa sille elävän kontekstin ja `renderTone` antaa
+ * offline-kontekstin. Portti mittaa siis **saman koodin** joka soi pelissä,
+ * eikä mallia siitä. Kaksi tapaa sanoa sama asia olisi tässä ollut se toinen
+ * ja huonompi ratkaisu.
+ *
+ * `live` on ainoa ero: leveysmodulaatio aikataulutetaan `setTimeout`illa
+ * seinäkellon mukaan (ks. alempaa), eikä seinäkello tarkoita mitään
+ * offline-renderöinnissä. Se on myös ainoa ominaisuus jota `renderTone` ei
+ * näe — ja juuri se on jo mitattu suoraan luvuista (`pulseHarmonics`).
  */
-function tone({
-  type = 'square', from, to = from, dur = 0.1, gain = 0.3, delay = 0,
+function buildTone(ac, dest, {
+  type = 'square', from, to = from, dur = 0.1, gain = 0.3, t0 = 0,
   attack = 0.006, hold = 0.55, detune = 0, vibrato = 0, vibratoRate = 6,
-  bus = null, curve = 'exp',
+  vibDelay = 0, curve = 'exp', glide = 1,
   duty = 0, pwm = 0, pwmRate = 3, ring = 0, arp = null, arpRate = 50,
   cutoff = 0, resonance = 0, sweep = 1,
+  sync = 0, syncTo = null,
+  live = false,
 }) {
-  if (muted || !ensure()) return;
-  const out = bus || sfxBus;
-  const t0 = ctx.currentTime + delay;
-  const env = ctx.createGain();
+  const env = ac.createGain();
   env.gain.setValueAtTime(0.0001, t0);
   env.gain.exponentialRampToValueAtTime(gain, t0 + attack);
   env.gain.setValueAtTime(gain, t0 + Math.max(attack, dur * hold));
   env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  env.connect(out);
+  env.connect(dest);
 
   /* Suodin ennen envelopea, jotta pyyhkäisy kuuluu myös sammuvassa nuotissa.
    * Ilman `cutoff`ia ei suodinta rakenneta lainkaan: yksi solmu vähemmän per
    * nuotti on kuultavissa vasta tuhannessa, mutta se on ilmainen. */
   let sink = env;
   if (cutoff > 0) {
-    const lp = ctx.createBiquadFilter();
+    const lp = ac.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.setValueAtTime(Math.max(60, cutoff), t0);
     lp.Q.value = resonance;
@@ -209,9 +285,9 @@ function tone({
    * oskillaattorilla, jonka lepoarvo on nolla — eli tulo eikä sekoitus. Se on
    * täsmälleen se rakenne joka SIDissä on, ja siksi se kuulostaa siltä. */
   if (ring > 0) {
-    const ringGain = ctx.createGain();
+    const ringGain = ac.createGain();
     ringGain.gain.setValueAtTime(0, t0);
-    const mod = ctx.createOscillator();
+    const mod = ac.createOscillator();
     mod.type = 'sine';
     mod.frequency.setValueAtTime(from * ring, t0);
     mod.connect(ringGain.gain);
@@ -222,66 +298,130 @@ function tone({
   }
 
   const oscs = [];
-  const voices = detune ? [0, detune] : [0];
-  for (const cents of voices) {
-    const osc = ctx.createOscillator();
-    if (type === 'pulse') osc.setPeriodicWave(pulseWave(duty || 0.5));
-    else osc.type = type;
-    osc.detune.value = cents;
-    osc.frequency.setValueAtTime(from, t0);
-    if (to !== from) {
-      if (curve === 'lin') osc.frequency.linearRampToValueAtTime(Math.max(1, to), t0 + dur);
-      else osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + dur);
-    }
+  if (sync > 0) {
     /*
-     * ARPEGGIO: sama ääni käy soinnun läpi ruutuvauhtia. Askel on
-     * `setValueAtTime` eikä ramp — portaaton liuku olisi glissando, ja juuri
-     * portaikko on se mikä tekee siitä soinnun eikä liukuman.
+     * Kova synkronointi korvaa oskillaattorin kokonaan, eikä se sovi yhteen
+     * `detune`n, `arp`in eikä leveysmodulaation kanssa: kaikki kolme ovat
+     * asioita joita tehdään *sille yhdelle* oskillaattorille, ja tässä niitä
+     * on kymmeniä peräkkäin. Se ei ole rajoitus jota kierretään vaan se mitä
+     * sirussakin tapahtui — synkronoitu kanava oli varattu synkronointiin.
      */
-    if (arp && arp.length > 1) {
-      const stepDur = 1 / arpRate;
-      for (let i = 0; i * stepDur < dur; i++) {
-        const semi = arp[i % arp.length];
-        osc.frequency.setValueAtTime(from * Math.pow(2, semi / 12), t0 + i * stepDur);
+    for (const osc of syncVoice(ac, {
+      type: type === 'pulse' ? 'sawtooth' : type,
+      master: from, ratio: sync, ratioTo: syncTo, dur, t0, dest: sink,
+    })) oscs.push(osc);
+  } else {
+    const voices = detune ? [0, detune] : [0];
+    for (const cents of voices) {
+      const osc = ac.createOscillator();
+      if (type === 'pulse') osc.setPeriodicWave(pulseWave(ac, duty || 0.5));
+      else osc.type = type;
+      osc.detune.value = cents;
+      osc.frequency.setValueAtTime(from, t0);
+      if (to !== from) {
+        /*
+         * PORTAMENTO. `glide` on se osuus nuotin kestosta jonka aikana
+         * korkeus liukuu; oletus 1 on se mitä `bend` on aina tehnyt, eli
+         * liuku koko nuotin yli. Alle yhden arvo on nuottikohtainen
+         * portamento: liu'utaan edellisestä sävelestä tähän ja *pysytään*
+         * täällä loppunuotin ajan. Ero on koko asia — liuku joka ei ehdi
+         * perille ennen nuotin loppua on glissando eikä portamento, ja
+         * sellainen ei koskaan kuulosta siltä että nuotti olisi soitettu.
+         */
+        const rampEnd = t0 + dur * Math.max(0.02, Math.min(1, glide));
+        if (curve === 'lin') osc.frequency.linearRampToValueAtTime(Math.max(1, to), rampEnd);
+        else osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), rampEnd);
       }
-    }
-    /*
-     * PULSSIN LEVEYSMODULAATIO. Aalto vaihdetaan portaittain, koska
-     * `setPeriodicWave` ei ole automatisoitava parametri — ja koska SIDissäkin
-     * leveys on rekisteri jota ajuri kirjoittaa ruutu kerrallaan, portaikko on
-     * oikea muoto eikä kompromissi. Kahdeksan porrasta jaksoa kohti riittää:
-     * korva kuulee liikkeen eikä portaita.
-     */
-    if (type === 'pulse' && pwm > 0) {
-      const steps = Math.max(2, Math.round(dur * pwmRate * 8));
-      for (let i = 1; i <= steps; i++) {
-        const at = t0 + (dur * i) / steps;
-        const phase = Math.sin(2 * Math.PI * pwmRate * (at - t0));
-        const d = Math.max(0.06, Math.min(0.94, (duty || 0.5) + pwm * phase));
-        const wave = pulseWave(d);
-        /* `setValueAtTime` ei ole olemassa aalloille, joten aikataulutus
-         * tehdään ajastimella: se on epätarkempi kuin äänikello, mutta
-         * leveysmodulaatio on tekstuuria eikä rytmiä. */
-        const when = Math.max(0, (at - ctx.currentTime) * 1000);
-        setTimeout(() => { try { osc.setPeriodicWave(wave); } catch { /* stopped */ } }, when);
+      /*
+       * ARPEGGIO: sama ääni käy soinnun läpi ruutuvauhtia. Askel on
+       * `setValueAtTime` eikä ramp — portaaton liuku olisi glissando, ja juuri
+       * portaikko on se mikä tekee siitä soinnun eikä liukuman.
+       */
+      if (arp && arp.length > 1) {
+        const stepDur = 1 / arpRate;
+        for (let i = 0; i * stepDur < dur; i++) {
+          const semi = arp[i % arp.length];
+          osc.frequency.setValueAtTime(from * Math.pow(2, semi / 12), t0 + i * stepDur);
+        }
       }
+      /*
+       * PULSSIN LEVEYSMODULAATIO. Aalto vaihdetaan portaittain, koska
+       * `setPeriodicWave` ei ole automatisoitava parametri — ja koska SIDissäkin
+       * leveys on rekisteri jota ajuri kirjoittaa ruutu kerrallaan, portaikko on
+       * oikea muoto eikä kompromissi. Kahdeksan porrasta jaksoa kohti riittää:
+       * korva kuulee liikkeen eikä portaita.
+       */
+      if (live && type === 'pulse' && pwm > 0) {
+        const steps = Math.max(2, Math.round(dur * pwmRate * 8));
+        for (let i = 1; i <= steps; i++) {
+          const at = t0 + (dur * i) / steps;
+          const phase = Math.sin(2 * Math.PI * pwmRate * (at - t0));
+          const d = Math.max(0.06, Math.min(0.94, (duty || 0.5) + pwm * phase));
+          const wave = pulseWave(ac, d);
+          /* `setValueAtTime` ei ole olemassa aalloille, joten aikataulutus
+           * tehdään ajastimella: se on epätarkempi kuin äänikello, mutta
+           * leveysmodulaatio on tekstuuria eikä rytmiä. */
+          const when = Math.max(0, (at - ac.currentTime) * 1000);
+          setTimeout(() => { try { osc.setPeriodicWave(wave); } catch { /* stopped */ } }, when);
+        }
+      }
+      osc.connect(sink);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.03);
+      oscs.push(osc);
     }
-    osc.connect(sink);
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.03);
-    oscs.push(osc);
   }
 
   if (vibrato > 0) {
-    const lfo = ctx.createOscillator();
+    const lfo = ac.createOscillator();
     lfo.frequency.value = vibratoRate;
-    const amt = ctx.createGain();
-    amt.gain.value = vibrato;
+    const amt = ac.createGain();
+    if (vibDelay > 0) {
+      /*
+       * VIBRATON VIIVE, ja se on nuottikohtainen siinä missä syvyyskin.
+       * Laulaja ei aloita vibratoa nuotin alusta vaan vasta kun nuotti on
+       * kestänyt hetken, ja SID-ajureissa tämä oli taulukon ensimmäinen
+       * sarake. Ilman viivettä pitkä ja lyhyt nuotti värisevät yhtä paljon,
+       * ja silloin vibrato on äänen ominaisuus eikä fraseerausta.
+       */
+      amt.gain.setValueAtTime(0, t0);
+      amt.gain.linearRampToValueAtTime(vibrato, t0 + vibDelay);
+    } else {
+      amt.gain.value = vibrato;
+    }
     lfo.connect(amt);
     for (const osc of oscs) amt.connect(osc.frequency);
     lfo.start(t0);
     lfo.stop(t0 + dur + 0.03);
   }
+  return oscs.length;
+}
+
+/** Elävä ääni: sama graafi, pelin oma konteksti ja väylä. */
+function tone(opts) {
+  if (muted || !ensure()) return;
+  buildTone(ctx, opts.bus || sfxBus, {
+    ...opts, t0: ctx.currentTime + (opts.delay || 0), live: true,
+  });
+}
+
+/**
+ * Sama ääni renderöitynä numeroiksi, porttia varten.
+ *
+ * Tämä on se työkalu jota `pulseHarmonics` oli vain yhdelle ominaisuudelle:
+ * rengasmodulaation sivunauhat, kovan synkronoinnin sävelkorkeus ja
+ * portamenton liuku ovat kaikki *mitattavia lukuja*, mutta vain jos ääni
+ * saadaan taulukoksi ilman äänikorttia. `OfflineAudioContext` renderöi
+ * nopeammin kuin reaaliajassa eikä tarvitse laitetta, joten mittaus on
+ * toistettava eikä räpsyvä — mikä on koko ero portin ja arvauksen välillä.
+ */
+export async function renderTone(opts, seconds = 0.4, rate = 44100) {
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!OAC) return null;
+  const ac = new OAC(1, Math.max(64, Math.ceil(seconds * rate)), rate);
+  buildTone(ac, ac.destination, { ...opts, t0: 0, live: false });
+  const buf = await ac.startRendering();
+  return buf.getChannelData(0);
 }
 
 /** Filtered noise burst — the backbone of every flatulence in this game. */
@@ -2163,6 +2303,14 @@ export function audioDiag() {
     // was chosen, so the overlay shows where it has got to rather than trusting
     // that it moved at all.
     pace: Number(Music.pace().toFixed(2)),
+    /*
+     * Kanavan varastaminen kahtena lukuna: montako kertaa varastettu kanava on
+     * soittanut rummun, ja montako nuottia se on sen takia jättänyt soittamatta.
+     * Toinen ilman toista ei todista mitään — rumpuja ilman vaikenemista saa
+     * lisäämällä rumpuraidan, ja juuri se on se ratkaisu jota tämä ei ole.
+     */
+    stolen: Music._stolenHits,
+    silenced: Music._silencedNotes,
   };
 }
 
@@ -2188,18 +2336,35 @@ export const Sfx = {
 
 /* --------------------------------------------------------------------- */
 /* Step sequencer for the background tracks.                              */
-/* Notes are [semitoneOffsetFromA4 | null for rest, lengthInSixteenths].  */
+/* Notes are [semitoneOffsetFromA4 | null for rest, lengthInSixteenths]    */
+/* with an optional third field: a key into the voice's `marks` table.     */
 /* Drum patterns are one character per sixteenth: x = hit, . = rest.      */
 /* --------------------------------------------------------------------- */
 
 const freq = (semi) => 440 * Math.pow(2, semi / 12);
 
-/** Expands a note list into a step -> note map plus its total length. */
+/**
+ * PAL-ruutuvauhti, ja se on tässä tiedostossa aikayksikkö eikä trivia.
+ *
+ * C64:n soitinajuri ajettiin ruutukeskeytyksestä, joten kaikki mitä se teki
+ * mitattiin ruuduissa: arpeggion askel, vibraton viive, ja se montako ruutua
+ * basso vaikenee kun kanava varastetaan rummulle. `arpRate` oletus 50 on jo
+ * tämä luku; nyt se on nimetty.
+ */
+const PAL_HZ = 50;
+
+/**
+ * Expands a note list into a step -> note map plus its total length.
+ *
+ * Kolmas kenttä on **nuottimerkki** eli avain äänen `marks`-tauluun, ja se on
+ * se muutos joka teki vibratosta ja portamentosta nuotin ominaisuuksia. Ilman
+ * merkkiä nuotti on täsmälleen sitä mitä ennenkin: kaksi lukua.
+ */
 function compile(notes) {
   const map = new Map();
   let step = 0;
-  for (const [semi, len] of notes) {
-    if (semi !== null) map.set(step, [semi, len]);
+  for (const [semi, len, mark] of notes) {
+    if (semi !== null) map.set(step, [semi, len, mark || null]);
     step += len;
   }
   return { map, len: step };
@@ -2393,10 +2558,42 @@ const TRACKS = {
   /*
    * Same harmonic frame, driven harder: the bass walks in straight eighths so
    * the groove never lets up, and the phrases are shorter and more insistent.
+   *
+   * JA JUURI SIKSI VARASTETTU KANAVA ON TÄSSÄ RAIDASSA (18.8.2026).
+   *
+   * Reikä kuuluu vain jos on jotain mihin sen voi tehdä. Tämän raidan basso
+   * soittaa **kuudestoistaosia keskeytyksettä** — 32 nuottia kierrossa, ei
+   * yhtään taukoa — eli se on pelin ainoa basso jonka vaikeneminen on
+   * tapahtuma. Linnakkeen urkupiste vaikenisi huomaamatta, luulaakson
+   * um-pa-pa vaikenee jo itse, ja tähtiraidan kuusitoista sekuntia ei kestä
+   * yhtään reikää. Tämä on lisäksi se raita jota kuullaan eniten, joten
+   * tekniikka joutuu ansaitsemaan paikkansa oikeasti eikä yhdessä kentässä.
+   *
+   * Kuvio osuu askeleille 6 ja 13, ja ne on valittu siitä mitä rumpusetissä
+   * *ei* ole: bassorumpu lyö askeleilla 0 4 7 10 12 ja virveli 2 4 7 10 12 14
+   * 15, joten kuusi ja kolmetoista ovat tahdin kaksi tyhjää kuudestoistaosaa.
+   * Se on koko pointti — setti ei voi soittaa siellä mitään, koska siellä ei
+   * ole mitään, ja basso voi.
+   *
+   * Kuusi ruutua eikä kahta. ROADMAP sanoi "kahdeksi framea", ja se on se luku
+   * jolla temppu tehtiin 50 Hz:n ruutukeskeytyksessä — mutta kaksi ruutua on 40
+   * ms ja askel on tässä tempossa 96 ms, joten reikä katoaisi kokonaan nuotin
+   * oman vaimenemisen sisään. Kuusi ruutua on 120 ms: se nielee varastetun
+   * nuotin ja seuraavan, eli **reikä on kaksi kuudestoistaosaa**. Mitattuna
+   * neljä osumaa ja neljä vaiennettua nuottia yhtä kierrosta (32 askelta)
+   * kohti, ja molemmat luvut ovat portissa — osumat ilman vaikenemista olisi
+   * pelkkä lisätty rumpuraita, joka on juuri se ratkaisu jota tämä ei ole.
    */
   level: {
     tempo: 156,
     swing: 0.2,
+    steal: {
+      voice: 'bass',
+      pattern: '......x......x..',
+      frames: 6,
+      gain: 1.7,
+      lift: 7,
+    },
     lead: {
       wave: 'square', gain: 0.12, detune: 8, staccato: 0.7,
       octave: -12,
@@ -2448,6 +2645,38 @@ const TRACKS = {
     },
   },
 
+  /*
+   * PIERUTEHDAS — maailma 4, ja **rengasmodulaation koti** (18.8.2026).
+   *
+   * ROADMAP ehdotti luulaaksoa: rengasmodulaatio on kellojen ja metallisten
+   * lyömäsoitinten ääni, ja luuranko-osastolla on ksylofoni. Kaksi syytä
+   * miksi se meni tänne sen sijaan, ja kumpikin riittäisi yksin.
+   *
+   * **Luulaakso on lainattu raita.** `bone` on Saint-Saëns'n *Danse macabre*
+   * (DESIGN.md kohta 1 b), ja lainattua sävelmää ei järjestellä uusiksi tekniikan
+   * takia. Sääntö on kirjoitettu sitä varten ettei lainattu aineisto liu'u
+   * huomaamatta joksikin muuksi, ja tekniikkalista on täsmälleen se paine jota
+   * vastaan se on kirjoitettu.
+   *
+   * **Ja vaikka ei olisi, se olisi sama asia kahdesti sanottuna.** `bone`in
+   * ksylofoni on jo kirjoitettu ulos: kolmioaalto, `staccato` 0,34, `hold`
+   * 0,08 — isku ja vaimeneminen. Rengasmoduloitu kello sen päälle tai tilalle
+   * olisi toinen tapa sanoa "luut kalisevat", ja DESIGN.md kohta 8 on tehty
+   * juuri sen estämiseksi.
+   *
+   * Tehdas on se paikka jossa tämä ääni on uusi tieto eikä koriste. Raidan
+   * rummuissa luki jo "metallic sixteenths", mutta hi-hat on suodatettua
+   * kohinaa — se on metallin *pinta* eikä metalli. Rengasmodulaatio on
+   * kirjaimellisesti **epäharmoninen** spektri: kantoaalto katoaa ja jäljelle
+   * jää kaksi sivunauhaa, `f(r−1)` ja `f(r+1)`. Suhde 2,41 vie ne kohtiin
+   * 1,41 ja 3,41 kertaa perustaajuus, eikä kumpikaan ole lähelläkään
+   * kokonaislukumonikertaa — ja juuri se on ero kellon ja äänen välillä.
+   * Alasin on tehtaassa, ja sen ääni ei kuulu asteikkoon.
+   *
+   * Kahdeksan lyöntiä kierrossa, yksi kutakin sointua kohti ja aina
+   * jälkipotkulle. Harvaan siksi että epäharmoninen ääni on väsyttävä: se ei
+   * sulaudu harmoniaan, joten se pitää kuulla erikseen tai ei ollenkaan.
+   */
   factory: {
     tempo: 168,
     lead: {
@@ -2464,6 +2693,22 @@ const TRACKS = {
       notes: [
         [0, 8], [3, 8], [5, 8], [7, 8],
         [3, 8], [0, 8], [-2, 8], [0, 8],
+      ],
+    },
+    comp: {
+      /* Alasin. `staccato` yli yhden on tässä tahallista: isku saa soida
+       * nuottiruutunsa yli, koska metalli soi eikä lopeta tahdissa. */
+      wave: 'triangle', gain: 0.07, ring: 2.41,
+      staccato: 2.2, attack: 0.002, hold: 0.1,
+      notes: [
+        [null, 4], [12, 1], [null, 3],
+        [null, 4], [15, 1], [null, 3],
+        [null, 4], [17, 1], [null, 3],
+        [null, 4], [19, 1], [null, 3],
+        [null, 4], [15, 1], [null, 3],
+        [null, 4], [12, 1], [null, 3],
+        [null, 4], [10, 1], [null, 3],
+        [null, 4], [12, 1], [null, 3],
       ],
     },
     bass: {
@@ -2788,24 +3033,52 @@ const TRACKS = {
       // Kolmioaalto ja pitkä pito: puhallinmainen ääni, ei kanttiaallon terä.
       // Vibrato on hidas ja kapea, koska se on kannattelua eikä väristystä.
       wave: 'triangle', gain: 0.13, vibrato: 3, vibratoRate: 4.5, staccato: 0.92,
+      /*
+       * NUOTTITAULUKKO, eli se että vibrato ja portamento ovat nuotin
+       * ominaisuuksia eivätkä äänen (18.8.2026).
+       *
+       * Tähän asti `vibrato: 3` koski jokaista nuottia yhtä paljon: kahdeksan
+       * askeleen kannattelu ja yhden askeleen kuudestoistaosa värisivät
+       * samalla syvyydellä, mikä on soittotapa jota kukaan ei käytä. SID-
+       * ajureissa tämä oli taulukko — soitin antaa oletuksen, nuotti valitsee
+       * rivin — ja tässä on sama taulukko: `marks`.
+       *
+       * **Miksi juuri kaasukehä.** Raidan koko ajatus on ettei mikään putoa
+       * (D-lyydinen, ks. yllä), ja portamento on se sama väite melodian
+       * puolella: sävel joka *liukuu* paikalleen ei koskaan astu maahan.
+       * Viivästetty vibrato on toinen puoli samasta asiasta — pitkä nuotti
+       * alkaa suorana ja alkaa väristä vasta kun se on jäänyt roikkumaan, eli
+       * kannattelu kuuluu vasta kun on jotain kannateltavaa. Kummallakaan ei
+       * ole mitään tekemistä nopeiden juoksujen kanssa, ja siksi fraasi 2
+       * (viima) on kokonaan merkitsemätön: se on se todiste ettei tämä ole
+       * äänen ominaisuus.
+       */
+      marks: {
+        /* Kannateltu: vibrato tulee vasta 0,35 s kuluttua ja on syvempi. */
+        v: { vibrato: 6, vibratoRate: 5, vibDelay: 0.35 },
+        /* Liuku edellisestä sävelestä; puolet nuotista, sitten paikallaan. */
+        g: { glide: 0.5 },
+        /* Hidas liuku: nousee paikalleen melkein koko nuotin ajan. */
+        s: { glide: 0.85 },
+      },
       phrases: [
         // 0 — nousuvirtaus
-        [[-7, 2], [-5, 2], [-3, 2], [-1, 2], [0, 4], [2, 2], [4, 2],
-          [5, 2], [4, 2], [2, 2], [-1, 2], [0, 8]],
+        [[-7, 2], [-5, 2], [-3, 2], [-1, 2], [0, 4, 'g'], [2, 2], [4, 2],
+          [5, 2], [4, 2], [2, 2], [-1, 2], [0, 8, 'v']],
         // 1 — leijunta
-        [[0, 6], [-1, 2], [0, 8],
-          [2, 4], [4, 4], [5, 8]],
+        [[0, 6, 'v'], [-1, 2], [0, 8, 'v'],
+          [2, 4], [4, 4], [5, 8, 'v']],
         // 2 — viima
         [[9, 1], [7, 1], [5, 1], [4, 1], [2, 1], [0, 1], [-1, 1], [-3, 1],
           [-5, 1], [-3, 1], [-1, 1], [0, 1], [2, 1], [4, 1], [5, 1], [7, 1],
           [9, 1], [11, 1], [12, 1], [11, 1], [9, 1], [7, 1], [5, 1], [4, 1],
           [2, 2], [-1, 2], [0, 4]],
         // 3 — teema
-        [[5, 4], [4, 2], [2, 2], [0, 4], [-1, 4],
-          [0, 2], [2, 2], [4, 4], [5, 2], [9, 2], [7, 4]],
+        [[5, 4], [4, 2], [2, 2], [0, 4, 's'], [-1, 4],
+          [0, 2], [2, 2], [4, 4], [5, 2], [9, 2, 'g'], [7, 4, 'v']],
       ],
-      notes: [[5, 4], [4, 2], [2, 2], [0, 4], [-1, 4],
-        [0, 2], [2, 2], [4, 4], [5, 2], [9, 2], [7, 4]],
+      notes: [[5, 4], [4, 2], [2, 2], [0, 4, 's'], [-1, 4],
+        [0, 2], [2, 2], [4, 4], [5, 2], [9, 2, 'g'], [7, 4, 'v']],
     },
     harm: {
       /* D — E — D — Bm, kahdeksan askelta kukin. E on toinen aste duurina, eli
@@ -3054,6 +3327,29 @@ const TRACKS = {
     },
   },
 
+  /*
+   * POMO — ja **kovan synkronoinnin koti** (18.8.2026).
+   *
+   * Sync-ääni on kirkuva ja se ei sovi mihinkään: se ei sulaudu harmoniaan, se
+   * ei jää taustalle, ja kuultuna kolmatta kertaa peräkkäin se on melua. Se on
+   * siis täsmälleen sen paikan ääni jossa ollaan kerrallaan enintään minuutti.
+   *
+   * **Miksi bassossa eikä lyijyssä, ja se on mitattu eikä valittu.** Jaksotettu
+   * uudelleenkäynnistys maksaa yhden oskillaattorin isäntäjaksoa kohti (ks.
+   * `syncVoice`), eli hinta on suoraan verrannollinen sävelkorkeuteen. Tämän
+   * raidan lyijyn iskut ovat 880 Hz:ssä ja 0,17 s pitkiä — 147 solmua per
+   * nuotti, ja `lead octave up` -osiossa 294. Basson oktaavihyppy on 220
+   * Hz:ssä: **37 solmua**, neljä merkittyä nuottia kierrossa, eli noin 55
+   * solmua sekunnissa koko efektin hinnaksi. Sama tekniikka, neljäsosa
+   * hinnasta, ja lisäksi se on se ääni jonka Hubbard tästä oikeasti teki:
+   * synkronoitu bassomörinä eikä kirkuva soolo.
+   *
+   * Merkittynä ovat tasan ne neljä nuottia jotka riffi jo korostaa —
+   * oktaavihyppy jokaisen tahdin puolivälissä. Suhde pyyhkäistään 1:stä
+   * neljään nuotin aikana (`sync` → `syncTo`): isäntä ei liiku, eli
+   * sävelkorkeus ei liiku, ja siitä huolimatta ääni nousee. Se on koko temppu
+   * yhtenä nuottina, ja se on portissa kahtena lukuna.
+   */
   boss: {
     tempo: 176,
     lead: {
@@ -3074,11 +3370,16 @@ const TRACKS = {
     },
     bass: {
       wave: 'sawtooth', gain: 0.15,
+      marks: {
+        /* Kova synkronointi: orja pyyhkäisee perustaajuudesta neljänteen
+         * osaääneen nuotin aikana, isäntä pysyy paikallaan. */
+        y: { sync: 1, syncTo: 4 },
+      },
       notes: [
-        [-24, 2], [-24, 2], [-24, 2], [-12, 2], [-24, 2], [-24, 2], [-22, 2], [-20, 2],
-        [-26, 2], [-26, 2], [-26, 2], [-14, 2], [-26, 2], [-26, 2], [-24, 2], [-22, 2],
-        [-28, 2], [-28, 2], [-28, 2], [-16, 2], [-28, 2], [-28, 2], [-26, 2], [-24, 2],
-        [-29, 4], [-29, 4], [-27, 4], [-26, 4],
+        [-24, 2], [-24, 2], [-24, 2], [-12, 2, 'y'], [-24, 2], [-24, 2], [-22, 2], [-20, 2],
+        [-26, 2], [-26, 2], [-26, 2], [-14, 2, 'y'], [-26, 2], [-26, 2], [-24, 2], [-22, 2],
+        [-28, 2], [-28, 2], [-28, 2], [-16, 2, 'y'], [-28, 2], [-28, 2], [-26, 2], [-24, 2],
+        [-29, 4], [-29, 4], [-27, 4], [-26, 4, 'y'],
       ],
     },
     drums: {
@@ -3222,6 +3523,19 @@ export const Music = {
   _cycle: 0,
   _variation: VARIATIONS[0],
   _hurry: false,
+  /*
+   * KANAVAN VARASTAMINEN, ja se on käsite eikä erikoistapaus.
+   *
+   * `_reserved` on äänen nimi -> äänikellon hetki johon asti kanava on
+   * varattu. Sen jälkeen ääni vaikenee, ja ennen sitä se katkaisee nuottinsa.
+   * Kaksi laskuria ovat siksi että väite "basso todella vaikenee" on luku eikä
+   * korvahavainto: ks. `audioDiag`.
+   */
+  _reserved: new Map(),
+  _stolenHits: 0,
+  _silencedNotes: 0,
+  /** Mistä sävelestä portamento lähtee: äänen viimeksi soittama korkeus. */
+  _lastPitch: new Map(),
 
   has: (name) => Object.prototype.hasOwnProperty.call(TRACKS, name),
   names: () => Object.keys(TRACKS),
@@ -3258,6 +3572,10 @@ export const Music = {
     this._loopLen = Math.ceil(longest / 16) * 16;
     this._step = 0;
     this._cycle = 0;
+    this._reserved.clear();
+    this._lastPitch.clear();
+    this._stolenHits = 0;
+    this._silencedNotes = 0;
     this._applyVariation();
     this._nextTime = ctx.currentTime + 0.08;
     this._tick();
@@ -3360,6 +3678,68 @@ export const Music = {
     this._timer = setTimeout(() => this._tick(), TICK_MS);
   },
 
+  /**
+   * Onko `step` askel jolla kanava varastetaan.
+   *
+   * Kuvio luetaan oman pituutensa modulona kuten rumpukuviotkin, joten
+   * kuudentoista merkin varkauskuvio toistuu tahdeittain riippumatta siitä
+   * kuinka pitkä kierros on.
+   */
+  _stealsAt(step) {
+    const s = this._track && this._track.steal;
+    if (!s) return false;
+    return s.pattern[((step % s.pattern.length) + s.pattern.length) % s.pattern.length] === 'x';
+  },
+
+  /**
+   * Montako askelta nuotti saa soida ennen kuin sen kanava varataan.
+   *
+   * Ilman tätä "kanava on varattu" olisi pelkkä kirjanpitomerkintä: pitkä
+   * bassonuotti soisi reiän läpi ja rumpu tulisi sen päälle, eli täsmälleen se
+   * ratkaisu jota tämä ei ole. Ulos omaksi funktiokseen siksi että se on
+   * ainoa osa varkaudesta jota ei näe emittoiduista nuoteista — nykyisessä
+   * `level`-bassossa jokainen nuotti on yhden askeleen mittainen, joten
+   * katkaisu ei laukea kertaakaan, ja mittaamaton haara on rikkinäinen haara
+   * heti kun joku kirjoittaa pidemmän nuotin.
+   */
+  _spanOf(voiceName, step, len) {
+    const s = this._track && this._track.steal;
+    if (!s || s.voice !== voiceName) return len;
+    for (let k = 1; k < len; k++) if (this._stealsAt(step + k)) return k;
+    return len;
+  },
+
+  /**
+   * Se rumpu jonka varastettu kanava soittaa.
+   *
+   * Se on **sama ääni** jonka kanava muutenkin soittaa — sama aaltomuoto, sama
+   * voimakkuus, äänen oma sävel — pudotettuna alas kahdessakymmenessä
+   * millisekunnissa. Juuri niin C64:llä tehtiin bassorumpu: ei uutta soitinta
+   * vaan taajuusrekisteri joka kirjoitetaan alas muutaman ruudun aikana. Siksi
+   * tämä ei ole uusi ääniefekti eikä uusi soitin, ja siksi se kuulostaa siltä
+   * että se tulee bassosta — koska se on basso.
+   */
+  _stealHit(voice, step, delay, steal) {
+    const note = voice.map.get(step % voice.len);
+    const semi = note && !Array.isArray(note[0]) ? note[0] : null;
+    let root = this._lastPitch.get(voice.name);
+    if (semi !== null) root = semi + (voice.octave || 0) + this._transpose;
+    if (root === undefined) root = -24 + this._transpose;
+    const dur = steal.frames / PAL_HZ;
+    this._stolenHits++;
+    tone({
+      type: voice.wave,
+      from: freq(root + (steal.lift || 7)),
+      to: freq(root) * 0.3,
+      dur,
+      gain: voice.gain * (steal.gain || 1.6),
+      attack: 0.002,
+      hold: 0.1,
+      bus: musicBus,
+      delay,
+    });
+  },
+
   _emit(step, rawAt, inLead = false, stepDur = this._stepDur) {
     // Never hand the audio clock a time that has already gone by: some browsers
     // throw on it, and the rest fire everything at once.
@@ -3369,28 +3749,78 @@ export const Music = {
     const local = step % this._loopLen;
     const delay = Math.max(0, at - ctx.currentTime);
 
+    /*
+     * KANAVAN VARASTAMINEN, ja miksi se on tässä pelissä muutakin kuin nostalgiaa.
+     *
+     * SIDillä kanavia oli kolme ja rumpu piti ottaa jostakin, joten basso
+     * vaikeni muutaman ruudun ajaksi ja soitti sen itse. Meillä kanavia on niin
+     * monta kuin jaksaa rakentaa, joten temppu pitäisi olla tarpeeton — ja
+     * juuri se on syy miksi se on tässä. **Reikä on se ääni.** Rumpu joka
+     * soitetaan basson *päälle* on paksumpi; rumpu joka soitetaan basson
+     * *tilalle* on isku, koska pohja katoaa sen ajaksi ja tulee takaisin. Se ei
+     * ole sama asia kovempaa vaan eri asia, eikä sitä saa millään
+     * miksausratkaisulla.
+     *
+     * Varaus on aikaa eikä askelia (`frames` PAL-ruutuina), koska se on se
+     * yksikkö jolla asia alun perin mitattiin ja koska tempo liikkuu: kuuden
+     * ruudun reikä on yhtä pitkä myös tuplatempossa, jolloin se nielee kaksi
+     * nuottia yhden sijaan. Sekin on oikein — nopeampi kappale on tiheämpi,
+     * eikä reikä kutistu sen mukana.
+     */
+    const steal = this._track.steal;
+    const stealing = !!steal && !drop.includes('drums') && this._stealsAt(step);
+    if (stealing) this._reserved.set(steal.voice, at + steal.frames / PAL_HZ);
+
     for (const voice of this._voices) {
       // The bass is never dropped and never transposed out of its riff: the
       // groove is the one thing every variation is allowed to lean on.
       if (voice.name !== 'bass' && drop.includes(voice.name)) continue;
+      const until = this._reserved.get(voice.name) || 0;
+      if (at < until - 1e-4) {
+        // Varattu kanava: ensimmäisellä askeleella se soittaa rummun, muilla
+        // se on vaiti. Vaikeneminen on laskettava, ks. `audioDiag`.
+        if (stealing && voice.name === steal.voice) this._stealHit(voice, step, delay, steal);
+        else if (voice.map.has(step % voice.len)) this._silencedNotes++;
+        continue;
+      }
       const note = voice.map.get(step % voice.len);
       if (!note) continue;
-      const [semi, len] = note;
-      const dur = len * stepDur;
+      const [semi, len, mark] = note;
+      const m = (mark && voice.marks && voice.marks[mark]) || null;
+      // Nuotti joka jatkuisi varauksen yli katkaistaan sen alkuun, ks. `_spanOf`.
+      const dur = this._spanOf(voice.name, step, len) * stepDur;
       const octave = (voice.octave || 0) + (voice.name === 'lead' ? (v.leadOctave || 0) : 0);
       const accent = voice.accent && voice.accent[(step % voice.len) % voice.accent.length] === 'x';
       const chord = Array.isArray(semi) ? semi : [semi];
-      for (const note of chord) {
+      /*
+       * PORTAMENTO on nuottikohtainen ja se lähtee siitä mistä ääni oikeasti
+       * tuli, ei siitä mikä nuottilistassa sattuu olemaan edellisenä: askelten
+       * yli hypitään variaatioissa, fraasi vaihtuu osioittain ja sävellaji
+       * siirtyy. Liuku väärästä sävelestä on pahempi kuin ei liukua lainkaan.
+       * Sointu ei liu'u — nelisointu jonka jokainen sävel lähtee samasta
+       * paikasta on efekti eikä fraseeraus.
+       */
+      const prev = this._lastPitch.get(voice.name);
+      const gliding = !!(m && m.glide > 0) && chord.length === 1 && prev !== undefined;
+      for (const one of chord) {
+        const target = one + octave + this._transpose;
         tone({
           type: voice.wave,
-          from: freq(note + octave + this._transpose),
+          from: freq(gliding ? prev : target),
+          to: freq(target),
+          glide: gliding ? m.glide : 1,
           dur: dur * (voice.staccato || 0.98),
           gain: voice.gain * (accent ? 1.5 : 1) / Math.sqrt(chord.length),
           attack: voice.attack || 0.012,
           hold: voice.hold || 0.62,
           detune: voice.detune || 0,
-          vibrato: voice.vibrato || 0,
-          vibratoRate: voice.vibratoRate || 6,
+          /* Nuottimerkki voittaa äänen oman asetuksen, ja vain merkityllä
+           * nuotilla: `marks`-taulu on SID-ajurin taulukko, jossa ääni antaa
+           * oletuksen ja nuotti poikkeuksen. */
+          vibrato: m && m.vibrato !== undefined ? m.vibrato : (voice.vibrato || 0),
+          vibratoRate: m && m.vibratoRate !== undefined
+            ? m.vibratoRate : (voice.vibratoRate || 6),
+          vibDelay: m && m.vibDelay !== undefined ? m.vibDelay : (voice.vibDelay || 0),
           /* SID-sanasto kulkee ääneltä läpi sellaisenaan, ks. `tone`. Ei
            * oletuksia tässä: nolla tarkoittaa "ei tätä ominaisuutta", ja
            * jokainen vanha raita soi täsmälleen kuten ennenkin. */
@@ -3403,10 +3833,13 @@ export const Music = {
           cutoff: voice.cutoff || 0,
           resonance: voice.resonance || 0,
           sweep: voice.sweep || 1,
+          sync: m && m.sync ? m.sync : 0,
+          syncTo: m && m.syncTo !== undefined ? m.syncTo : null,
           bus: musicBus,
           delay,
         });
       }
+      this._lastPitch.set(voice.name, chord[chord.length - 1] + octave + this._transpose);
     }
 
     const d = this._drums;

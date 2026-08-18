@@ -403,6 +403,11 @@ export const WORLD7_LEVELS = {
       { toCol: 80, vertical: true },
     ],
     rows: [
+      /* Yksi tyhjä taivasrivi päälle (18.8.2026): koottu kaista on
+       * kuusitoista riviä (`data/chunks.js`, `SKY_PAD`), ja osioitu kenttä
+       * kirjoittaa omat rivinsä — joten se lisää sen itse. Ilman tätä
+       * `segmentSlices` palauttaisi ylimmästä osiosta 15 riviä. */
+      '                                                                                ',
       '                                                                                ',
       '                                                                                ',
       '                                                                                ',

@@ -85,24 +85,25 @@ export const FLOOR_ROW = 13;
  * KORKEIN NOSTO, LAATTOINA — ja tämä luku on **kentän katto**, ei maku.
  *
  * Maailmalla on kansi (`solidAt(x, -1)`, `verify.mjs`: *"the top of the world
- * is solid"*), ja tavallinen kenttä on viisitoista riviä eli tasan 240 px eli
- * yksi ruutu. Nostettu maa siis syö hyppykorkeutta suoraan: se mitä maa
+ * is solid"*), joten nostettu maa syö hyppykorkeutta suoraan: se mitä maa
  * nousee, sen katto laskee.
  *
- * Mitattu ennen kuin päätettiin. `verify.mjs`in portti *"anticipating the rise
- * costs neither the headroom nor the ground"* ajaa botin läpi kentän ja
- * pieruhyppää 60 framen välein; korkeimmillaan pelaajan pää on 1-1:ssä
- * **30,38 px** kannen alapuolella ja 2-1:ssä 27–38 px. Se on alle kaksi
- * laattaa. Kahden laatan nosto siis kolauttaisi pelaajan kanteen, ja kolmen
- * nosto teki sen mitatusti: sama portti luki 1-1:stä `pää 0.00 px`.
+ * Mitattu ennen kuin päätettiin, kahdesti. `verify.mjs`in portti *"anticipating
+ * the rise costs neither the headroom nor the ground"* ajaa botin läpi kentän
+ * ja pieruhyppää 60 framen välein; korkeimmillaan pelaajan pää oli 1-1:ssä
+ * **30,38 px** kannen alapuolella silloin kun kenttä oli viisitoista riviä.
+ * Alle kaksi laattaa, ja kolmen laatan nosto kolautti kanteen mitatusti
+ * (`pää 0.00 px`).
  *
- * Yksi laatta on siis se mitä tässä ruudussa on varaa nostaa. Se ei ole tämän
- * tiedoston vika eikä sen rajoitus vaan **ruudun korkeuden** — ROADMAPin
- * ensimmäinen kohta (kenttädata 15 → 16 riviin, pystyvieritys takaisin) on
- * juuri se muutos joka nostaa tämän luvun, ja siihen asti maasto liikkuu
- * laatan verran kerrallaan.
+ * Kenttädata kasvoi kuuteentoista riviin 18.8.2026 (`data/chunks.js`,
+ * `SKY_PAD`), ja **lisärivi tuli päälle eikä alle**: lattia laskeutui laatan,
+ * kansi ei. Vara on siis 30,38 + 16 = **46,4 px** eli 2,9 laattaa, ja kahden
+ * laatan nosto (32 px) jättää siitä 14 px. Kolme (48 px) ei mahdu.
+ *
+ * Kaksi on siis se mitä tässä ruudussa on varaa nostaa, ja jokainen seuraava
+ * rivi kenttädataan ostaa tasan yhden laatan lisää.
  */
-export const MAX_LIFT = 1;
+export const MAX_LIFT = 2;
 
 const ROWS = 15;
 
@@ -259,13 +260,13 @@ export function liftRows(chunk, lift) {
  * **pinta** ja sen alla on kiveä lattiaan asti, eli rinne on maan pinta eikä
  * kelluva viiva. Laskeva `\` on sama toisin päin.
  */
-export function rampRows(fromTop, toTop) {
+export function rampRows(fromTop, toTop, h = ROWS) {
   const rise = toTop < fromTop;
   const n = Math.abs(toTop - fromTop);
-  const rows = new Array(ROWS).fill('');
+  const rows = new Array(h).fill('');
   for (let j = 0; j < n; j++) {
     const surface = rise ? fromTop - 1 - j : fromTop + j;
-    for (let y = 0; y < ROWS; y++) {
+    for (let y = 0; y < h; y++) {
       rows[y] += y < surface ? ' ' : y === surface ? (rise ? RISE : FALL) : '#';
     }
   }
@@ -326,6 +327,162 @@ export function terrainProfile(chunks, seed) {
     for (let j = run.from; j <= run.to; j++) lift[j] = level;
   });
   return lift;
+}
+
+/* --------------------- sama passi valmiille ruudukolle --------------------- */
+/**
+ * MAASTO GENEROITUUN KENTTÄÄN, ja miksi tämä on toinen toteutus eikä toisinto.
+ *
+ * DESIGN.md kohta 8 kieltää kaksi tapaa sanoa sama asia, joten tämän on
+ * ansaittava paikkansa. Ero on siinä **mitä kutsujalla on käsissään**:
+ *
+ *   - Kokoaja (`applyTerrain`) pitelee palikkalistaa. Se tietää mistä palikka
+ *     alkaa ja mihin se loppuu, ja se voi **työntää sarakkeita väliin** —
+ *     rinne on sille uutta tilaa, eikä mikään palikan sisällä siirry.
+ *   - Generaattori (`data/generator.js`) ei kokoa palikoita vaan kirjoittaa
+ *     ruudukkoon. Sarakkeen lisääminen jälkikäteen siirtäisi kaiken sen
+ *     oikealla puolella, ja kentän leveys on siellä mitoitettu luku
+ *     (`c.width`, kello, tavoitevaikeus). Siksi tämä passi **ei lisää
+ *     saraketta vaan kirjoittaa rinteen tasamaan päälle**: se ottaa
+ *     vauhdinotosta sen mitä rinne tarvitsee, ja siksi se vaatii
+ *     vauhdinottoa `MAX_LIFT` saraketta enemmän kuin kokoaja.
+ *
+ * Se mikä on yhteistä, on yhteistä oikeasti: portit (`RUNWAY`, `RUN_ROWS`,
+ * `LOOSE`, `MAX_LIFT`), rinteen muoto (`rampRows`) ja se peruslause että maa
+ * **nousee ja jättää kiven alle**. Vain sauman löytäminen eroaa — palikkalista
+ * kertoo saumat, ruudukko on mitattava.
+ *
+ * Ruudukon korkeutta ei oleteta. Pinta haetaan pohjasta ylöspäin, joten sama
+ * funktio kelpaa 15-, 16- ja 45-riviselle ruudukolle.
+ */
+
+/** Sarakkeen pinnan rivi: kiinteän pinon ylin rivi, tai -1 jos pohjaa ei ole. */
+export function surfaceRow(rows, x) {
+  const h = rows.length;
+  if (rows[h - 1][x] !== '#') return -1;
+  let y = h - 1;
+  while (y > 0 && rows[y - 1][x] === '#') y--;
+  return y;
+}
+
+/** Maata jaloissa ja tilaa vartalolle: sama kysymys kuin `seamReady`illa. */
+function plainColumn(rows, x) {
+  const top = surfaceRow(rows, x);
+  if (top < 0) return -1;
+  for (let y = top - (RUN_ROWS - 2); y < top; y++) {
+    const ch = y < 0 ? ' ' : rows[y][x];
+    if (ch !== ' ' && !LOOSE.has(ch)) return -1;
+  }
+  return top;
+}
+
+/**
+ * Kuinka monta laattaa tämä sarake kestää nousta.
+ *
+ * Samat kaksi porttia kuin palikalla (`liftCap`), kysyttynä sarakkeelta:
+ * ylhäällä on oltava tilaa, ja alin rivi kelpaa täytteeksi vain jos siinä on
+ * maata tai tyhjää. Ero on että sarake voi olla kuilu — ja kuilu **saa nousta
+ * mukana**, koska sen pohja on tyhjä ja kopioituu tyhjänä.
+ */
+function columnCap(rows, x) {
+  const h = rows.length;
+  const fill = rows[h - 1][x];
+  if (fill !== '#' && fill !== ' ') return 0;
+  if (rows[h - 2][x] !== ' ' && fill !== '#') return 0;
+  let blank = 0;
+  while (blank < MAX_LIFT && rows[blank][x] === ' ') blank++;
+  return blank;
+}
+
+/** Yksi sarake nostettuna, kuilut ja kaikki. Ks. `liftRows`. */
+function liftColumn(rows, x, lift) {
+  const h = rows.length;
+  const out = [];
+  const fill = rows[h - 1][x];
+  for (let y = 0; y < h; y++) out.push(y + lift < h ? rows[y + lift][x] : fill);
+  return out;
+}
+
+/**
+ * Valmiin ruudukon maastopassi. Palauttaa uudet rivit.
+ *
+ * Sauma vaatii `RUNWAY + MAX_LIFT` saraketta samaa tasaista maata kummallekin
+ * puolelle: `RUNWAY` on vauhdinotto ja `MAX_LIFT` se osa jonka rinne syö.
+ * Jaksot erotellaan `MIN_SPAN`illa, jotta maasto on maisemaa eikä sahalaita.
+ */
+const MIN_SPAN = 40;
+
+export function liftTerrain(rows, seed) {
+  const h = rows.length;
+  const w = rows[0].length;
+  const need = RUNWAY + MAX_LIFT;
+  const tops = new Array(w);
+  const caps = new Array(w);
+  for (let x = 0; x < w; x++) {
+    tops[x] = plainColumn(rows, x);
+    caps[x] = columnCap(rows, x);
+  }
+
+  /* Saumakelpoinen sarake: sen molemmin puolin on `need` saraketta samaa
+   * tasaista maata samalla korkeudella. */
+  const seamAt = (x) => {
+    const top = tops[x];
+    if (top < 0) return false;
+    for (let i = x - need; i < x + need; i++) {
+      if (i < 0 || i >= w || tops[i] !== top) return false;
+    }
+    return true;
+  };
+  const seams = [];
+  for (let x = need; x + need < w; x++) {
+    if (!seamAt(x)) continue;
+    if (!seams.length || x - seams[seams.length - 1] >= MIN_SPAN) seams.push(x);
+  }
+  if (seams.length < 2) return rows.slice();
+
+  /* Jaksot saumojen väliin. Ensimmäinen ja viimeinen jäävät maan tasalle:
+   * aloitus ja lippu ovat ne kaksi kohtaa joista kaikki muu on mitattu. */
+  const spans = [];
+  for (let i = 0; i + 1 < seams.length; i++) spans.push([seams[i], seams[i + 1]]);
+  const roll = rollerFrom(seedOf(seed));
+  const grid = rows.map((r) => r.split(''));
+
+  for (const [from, to] of spans) {
+    let cap = MAX_LIFT;
+    for (let x = from; x < to && cap > 0; x++) cap = Math.min(cap, caps[x]);
+    const lift = cap > 0 ? Math.floor(roll() * (cap + 1)) : 0;
+    if (!lift) continue;
+    for (let x = from; x < to; x++) {
+      const col = liftColumn(rows, x, lift);
+      for (let y = 0; y < h; y++) grid[y][x] = col[y];
+    }
+    /* Rinne ylös jakson alkuun ja alas sen loppuun, kirjoitettuna tasamaan
+     * päälle sen ulkopuolelle — eli siihen vauhdinottoon josta `need` varasi
+     * tilaa juuri tätä varten. */
+    writeRamp(grid, from, tops[from], lift, -1);
+    writeRamp(grid, to - 1, tops[to - 1], lift, +1);
+  }
+  return grid.map((r) => r.join(''));
+}
+
+/**
+ * Rinne jakson reunaan: `dir === -1` kirjoittaa nousun jakson vasemmalle
+ * puolelle, `+1` laskun sen oikealle puolelle.
+ */
+function writeRamp(grid, edge, baseTop, lift, dir) {
+  const h = grid.length;
+  const ramp = rampRows(baseTop, baseTop - lift, h);
+  for (let j = 0; j < lift; j++) {
+    /* Nouseva rinne luetaan vasemmalta oikealle, ja laskeva on sen peilikuva:
+     * `rampRows` antaa nousun, ja alamäki on sama pylväikkö toisin päin. */
+    const src = dir < 0 ? j : lift - 1 - j;
+    const x = dir < 0 ? edge - lift + j : edge + 1 + j;
+    if (x < 0 || x >= grid[0].length) continue;
+    for (let y = 0; y < h; y++) {
+      const ch = ramp[y][src];
+      grid[y][x] = dir < 0 ? ch : (ch === RISE ? FALL : ch);
+    }
+  }
 }
 
 /**

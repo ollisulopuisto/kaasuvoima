@@ -102,7 +102,7 @@ export function captureState(game) {
   const scene = game.scene;
   if (!scene) return null;
   const base = {
-    v: 1,
+    v: 2,
     stamp: new Date().toISOString(),
     gameState: JSON.parse(JSON.stringify(game.state)),
   };
@@ -179,7 +179,13 @@ export function captureState(game) {
 }
 
 export function restoreState(game, snap) {
-  if (!snap || snap.v !== 1) return false;
+  /* Versio 2 (18.8.2026): kenttädata kasvoi 15 rivistä 16:een. Tilannekuva
+   * kantaa **koko ruudukon**, ja vanha 15-rivinen ruudukko palautettaisiin
+   * kenttään jonka `h` on 16 — jolloin alin rivi eli lattia olisi
+   * `undefined`. Tämä on se harvinainen tapaus jossa version nosto on oikein:
+   * `save.js` migratoi *edistymisen* nostamatta versiota, mutta tilannekuva on
+   * kuva ruudukosta jota ei enää ole. Hinta on kolme pikatallennuspaikkaa. */
+  if (!snap || snap.v !== 2) return false;
   game.state = { cards: [], ...snap.gameState };
 
   if (snap.kind === 'map') {

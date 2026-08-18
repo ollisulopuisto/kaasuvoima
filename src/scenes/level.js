@@ -1582,7 +1582,11 @@ export class LevelScene {
     this.goal = null;
     this.cardIndex = 0;
     this.wonCard = null;
-    this.spawn = { x: 2 * TILE, y: 12 * TILE };
+    /* Rivi 13 eikä 12: koottu kaista on kuusitoista riviä ja lattia on
+     * riveillä 14-15 (`data/chunks.js`, `SKY_PAD`), joten yksi rivi lattian
+     * yllä on 13. Tämä on vain oletus sille kentälle jossa ei ole `1`-merkkiä
+     * — `scanGrid` korvaa sen heti kun merkki löytyy. */
+    this.spawn = { x: 2 * TILE, y: 13 * TILE };
 
     /* HUD-nauhan hereilläolo ja se mitä siitä viimeksi luettiin, ks.
      * `updateHudWake`. Kenttä alkaa hereillä: ensimmäinen asia jonka pelaaja
@@ -1650,7 +1654,7 @@ export class LevelScene {
     /* Vasta `scanGrid`in jälkeen, ja se on koko vika ensimmäisessä yrityksessä:
      * `scanGrid` lukee aloitusmerkin ruudukosta ja kirjoittaa `spawn`in yli.
      * Ovi on siis viimeinen sana eikä ensimmäinen. */
-    if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 12 * TILE };
+    if (this.arenaReached) this.spawn = { x: (this.arenaCol + 2) * TILE, y: 13 * TILE };
     this.plantVines();
     this.plantWarpExits();
     this.plantLamp();

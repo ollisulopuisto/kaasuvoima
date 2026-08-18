@@ -38,19 +38,38 @@ Omistajan päätös 17.8.2026: **hyväksytään tämä nyt.** Se on tietoinen va
 ilmestyvät lukemat ja koko ruudun kuva vastaan pystyvieritys tavallisessa
 kentässä — eikä vahinko.
 
-**Isompi refactor on jonossa, ei unohdettu.** Kolme asiaa jotka se sisältäisi:
+**✔ Isompi refactor tehty 18.8.2026** (v26.08.18.30). Kolme asiaa, ja kaksi
+niistä meni toisin kuin tässä arvattiin:
 
-1. **Kenttädata 15 → 16 riviin.** Yksi rivi lisää palauttaa pystyvierityksen
-   ilman että mitään muuta tarvitsee muuttaa. Koskee jokaista käsintehtyä
-   kenttää, generaattoria (`tools/gen-levels.mjs`), sääntöjä (`data/rules.js`)
-   ja päivän kentän sormenjälkeä.
-2. **Vaikeusmittarin ruutukorkeus.** `tools/difficulty.mjs` laskee ruudun
-   13 laatan korkuiseksi (208/16). Todellinen luku on nyt 15, ja sen
-   korjaaminen ajaa koko vaikeustaulun uusiksi — eli myös kartan pipit ja
-   maailmojen käyrät.
-3. **Ylimmät rivit kenttäsuunnittelussa.** Rivit 0–1 olivat käytännössä
-   piilossa; nyt ne näkyvät. Salaisuudet jotka on piilotettu ruudun yläpuolelle
-   kannattaa käydä läpi (`secrets.js`, `SKY`-kaista).
+1. ✔ **Kenttädata 15 → 16 riviin.** Pystyvieritys palasi ja se on mitattu:
+   kamera liikkuu 1-1:ssä 16 px, letterboxatussa 2-1:ssä 48 px (varaa 64) ja
+   kaistoitetun 1-2:n reittikaistan sisällä 14 px. **Rivi tuli päälle eikä alle**, ja se ei ollut
+   makuasia: alle lisätty olisi antanut vierityksen muttei yhtään lisää tilaa
+   hypylle. Päälle lisätty siirtää lattian alemmas ja kannen kauemmas, joten
+   maastopassin `MAX_LIFT` nousi yhdestä kahteen — 30,38 px varaa + 16 px = 46,4,
+   ja kahden laatan nosto vie siitä 32.
+
+   Ja se tuli **kokoajaan eikä kenttädataan**, toisin kuin tässä oletettiin:
+   palikkatiedostot ovat yhä 15 riviä lattioineen riveillä 13-14 (370
+   rivimerkintää kahdessatoista tiedostossa), ja `data/chunks.js` lisää yhden
+   rivin. `CHUNK_ROWS` ja `BAND_ROWS` ovat kaksi eri lukua, ja niiden ero on
+   koko muutoksen sisältö. Taivasrivi on **kopio ylimmästä** eikä tyhjä, koska
+   katot ja pavunvarsi jatkuvat ylöspäin.
+2. ✔ **Vaikeusmittarin ruutukorkeus.** `SCREEN_ROWS` 13 → 15, ja portti vertaa
+   sen `VIEW_H`iin — leveydellä sellainen oli, korkeudella ei. **Mitattu
+   vaikutus vaikeuslukuihin oli nolla**, eli tässä arvattu "ajaa koko taulun
+   uusiksi" ei pitänyt paikkaansa: luku vaikuttaa vain kiipeilykenttien
+   putoamisiin eikä yksikään putoaminen ollut kahden laatan päässä rajasta.
+3. **Ylimmät rivit kenttäsuunnittelussa — jäi tekemättä.** Rivi 0 on nyt
+   kokoajan lisäämä taivasrivi eikä kenttäsuunnittelijan käytettävissä, joten
+   kysymys siirtyi: se ei ole enää "mitä riveillä 0-1 on" vaan "mitä 16 rivin
+   kentän ylimmillä riveillä *kannattaisi* olla". Salaisuuksia ei käyty läpi.
+
+   **Ja yksi asia joka ei ollut tässä listassa lainkaan:** jokainen piilotiili
+   koko pelissä arvottiin uudestaan, koska ne ovat sijainnin hajautus ja jokainen
+   ruutu siirtyi rivin alaspäin. Mitattuna 98 → 79. Pikatallennuksen versio
+   nousi kakkoseen samasta syystä — tilannekuva kantaa koko ruudukon, ja vanha
+   15-rivinen palautuisi kenttään jonka alin rivi puuttuu.
 
 ---
 
@@ -499,44 +518,128 @@ Kolme askelta, halvimmasta kalleimpaan:
    osannut vaihtelevan korkeuden koko ajan — vain sen siemen oli rivissä 13, ja
    siemen osuu edelleen.
 
-   **Mitä jäi tekemättä, ja se on yksi luku.** Nosto on **yksi laatta**, koska
-   maailmalla on kansi ja kenttä on tasan yhden ruudun korkuinen: korkein
-   pieruhyppy jättää 1-1:ssä 30,38 px kanteen, eli alle kaksi laattaa, ja
-   kolmen laatan nostolla pelaaja kolautti sitä mitatusti. Kohta 1 tämän
-   tiedoston alussa (kenttädata 15 → 16 riviin) on se muutos joka nostaa
-   `MAX_LIFT`iä — maastopassi on nyt se toinen syy tehdä se. Laskeva maasto
-   odottaa samaa muutosta: rivi 14 on ruudukon pohja.
+   **Nosto oli aluksi yksi laatta ja on nyt kaksi** (18.8.2026): kenttädata
+   kasvoi kuuteentoista riviin ja kansi nousi laatan verran. Kolme ei mahdu —
+   30,38 px varaa + 16 px lisärivi = 46,4, ja kolmen laatan nosto on 48.
+   Jokainen seuraava rivi kenttädataan ostaa tasan yhden laatan lisää.
 
-   Generoidut kentät eivät saa maastoa tässä erässä. Ne rakennetaan
-   ruudukkoon eikä palikoista (`generator.js`), ja niiden uudelleengenerointi
-   vaatii korpuksen (`VGLC_DIR`) tai pudottaa 26 kentän `checked`-merkinnän.
+   ✔ **Generoidut kentät saivat maaston 18.8.2026.** Passi on toinen toteutus
+   eikä toisinto: kokoaja voi työntää rinteen palikoiden väliin, generaattori ei
+   (leveys on siellä mitoitettu luku), joten se kirjoittaa rinteen tasamaan
+   päälle ja vaatii vauhdinottoa `MAX_LIFT` saraketta enemmän. Portit ja rinteen
+   muoto ovat yhteisiä. 26 kenttää generoitiin uusiksi korpus käsillä.
 
-### Ääni: mitä SID-sanastosta jäi tekemättä
+   **Laskeva maasto on nyt mahdollinen muttei tehty.** Lisärivi tuli päälle,
+   joten ruudukon pohja on yhä lattia — mutta lisääntynyt korkeus sallisi
+   valita perustason ylempää ja notkot siitä alas. Se on suunnittelukysymys eikä
+   este.
 
-`tone` osaa nyt pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja
-suodinpyyhkäisyn (v26.08.18.14), ja JÄÄTIE käyttää niistä kolmea. Loput
-Galway/Hubbard-tekniikat ovat kirjattuina eivätkä tehtyinä:
+### Ääni: SID-sanasto — ✔ LOPPUUN TEHTY 18.8.2026 (v26.08.18.29)
 
-1. **Kanavan varastaminen rummulle.** Klassinen kikka: basso vaikenee kahdeksi
-   framea ja sama kanava soittaa rummun. Vaatii sekvensseriin käsitteen
-   "tämä ääni on varattu" — nyt jokainen ääni on oma polkunsa.
-2. **Rengasmodulaatio käyttöön.** Parametri on olemassa muttei yhdessäkään
-   raidassa: se on kellojen ja metallisten lyömäsoitinten ääni, ja luulaakso
-   (maailma 6) on sille luonteva koti.
-3. **Hard sync.** SIDin kolmas allekirjoitus, ja ainoa jota WebAudiolla ei saa
-   suoraan — vaatisi joko `AudioWorklet`in tai jaksotetun uudelleenkäynnistyksen.
-4. **Vibrato- ja portamento-taulukot** nuottikohtaisesti (nyt vibrato on koko
-   äänen ominaisuus, ei nuotin).
+`tone` osasi pulssin, leveysmodulaation, arpeggion, rengasmodulaation ja
+suodinpyyhkäisyn (v26.08.18.14), ja JÄÄTIE käytti niistä kolmea. Neljä
+Galway/Hubbard-tekniikkaa oli kirjattuina eikä tehtyinä; kaikki neljä ovat nyt
+tehtyjä, ja kolme niistä päätyi eri paikkaan tai eri muotoon kuin tässä luki.
+Se mikä muuttui on kirjattuna, koska se on ainoa osa joka ei ollut arvattavissa.
+
+1. ✔ **Kanavan varastaminen rummulle** (`level`, maailmojen yleisraita).
+   Sekvensserissä on nyt käsite "tämä ääni on varattu": `steal` varaa kanavan
+   PAL-ruuduissa mitatuksi ajaksi, varattu ääni vaikenee, ja pitkä nuotti
+   **katkaistaan** varauksen alkuun (`_spanOf`) — muuten varaus olisi ollut
+   pelkkä kirjanpitomerkintä. Varastetun kanavan rumpu on äänen oma aalto ja
+   oma sävel pudotettuna alas, eli sama tapa jolla se tehtiin sirulla.
+
+   **Kaksi framea oli väärä luku, ja se on mitattu.** 50 Hz:n ruutu on 20 ms,
+   ja `level`in kuudestoistaosa on 96 ms: kahden ruudun reikä katoaisi nuotin
+   oman vaimenemisen sisään. Kuusi ruutua (120 ms) nielee varastetun nuotin ja
+   seuraavan, eli reikä on kaksi kuudestoistaosaa. Portti lukee `audioDiag`ista
+   neljä osumaa ja neljä vaiennettua nuottia 32 askelta kohti — molemmat, koska
+   osumat ilman vaikenemista olisi pelkkä lisätty rumpuraita.
+
+   Koti on `level` eikä mikään muu siksi että sen basso soittaa kuudestoistaosia
+   keskeytyksettä: se on pelin ainoa basso jonka vaikeneminen on tapahtuma.
+
+2. ✔ **Rengasmodulaatio käyttöön** — **tehtaassa (maailma 4), ei luulaaksossa.**
+   Tämä kohta ehdotti luulaaksoa, ja se oli väärä ehdotus kahdesta syystä
+   joista kumpikin riittää yksin.
+
+   **`bone` on lainattu raita** (Saint-Saëns, *Danse macabre*, DESIGN.md kohta
+   1 b), eikä lainattua sävelmää järjestellä uusiksi tekniikan takia. Sääntö on
+   kirjoitettu täsmälleen tätä painetta vastaan: tekniikkalista on se voima
+   joka saa lainatun aineiston liukumaan huomaamatta joksikin muuksi.
+
+   **Ja vaikka ei olisi, se olisi sama asia kahdesti sanottuna.** `bone`in
+   ksylofoni on jo kirjoitettu ulos — kolmioaalto, `staccato` 0,34, `hold` 0,08
+   — ja rengasmoduloitu kello sen viereen olisi toinen tapa sanoa "luut
+   kalisevat". DESIGN.md kohta 8 on tehty sen estämiseksi.
+
+   Tehdas on se paikka jossa ääni on uutta tietoa: raidan rummuissa luki jo
+   "metallic sixteenths", mutta hi-hat on suodatettua kohinaa eli metallin pinta
+   eikä metalli. Alasin (`comp`, suhde 2,41) mitattiin renderöimällä: kantoaalto
+   vaimenee 7597-kertaisesti ja tilalle tulee kaksi sivunauhaa kohtiin 1,41× ja
+   3,41× perustaajuutta — kumpikaan ei ole lähelläkään kokonaislukumonikertaa,
+   ja juuri se on ero kellon ja äänen välillä.
+
+3. ✔ **Hard sync — jaksotettuna uudelleenkäynnistyksenä, ja se toimii.**
+   Tässä luki että se vaatisi joko `AudioWorklet`in tai jaksotetun
+   uudelleenkäynnistyksen. Jälkimmäinen riitti, eikä se ole approksimaatio:
+   koska `OscillatorNode` alkaa aina vaiheesta nolla, isäntäjakson mittainen
+   oskillaattori joka käynnistetään joka jakson alussa **on** vaiheen nollaus.
+
+   Ja koska "melkein hard sync" kuulostaisi vain kirkkaammalta nuotilta, väite
+   on kolme lukua signaalista eikä yksi parametri taulusta:
+
+   | väite | mitattu |
+   | --- | --- |
+   | sointiväri seuraa orjaa | spektrin huippu isännän 1. osaäänestä 4:nteen kun suhde 1 → 4 |
+   | sävelkorkeus ei liiku | perustaajuus 0,0114 synkronoituna, **0,0000** nelinkertaisella nuotilla |
+   | jakso on isännän | energiaa isännän monikerroilla 19× välien verran |
+
+   **Hinta on se joka ratkaisi paikan.** Yksi oskillaattori isäntäjaksoa kohti
+   tarkoittaa että hinta kaksinkertaistuu oktaavia kohti: pomoraidan lyijyn
+   iskut olisivat 147 solmua nuottia kohti ja `lead octave up` -osiossa 294.
+   Basson oktaavihyppy on 37 (pahimmillaan 56), joten sync meni bassoon — mikä
+   on lisäksi se ääni jonka Hubbard tästä oikeasti teki. Neljä merkittyä
+   nuottia koko pelissä, ja portti laskee sekä niiden määrän että kalleimman.
+
+4. ✔ **Vibrato- ja portamento-taulukot nuottikohtaisesti** (`marks`, kaasukehä).
+   Nuotin kolmas kenttä on avain äänen `marks`-tauluun: soitin antaa
+   oletuksen, nuotti poikkeuksen, kuten SID-ajurissa. Taulu kantaa syvyyden,
+   nopeuden, **viiveen** ja portamenton — ja samaa taulua käyttää kohta 3, eli
+   kaksi tekniikkaa jakavat yhden mekanismin eivätkä kaksi.
+
+   Kaasukehä siksi että raidan koko ajatus on ettei mikään putoa (D-lyydinen),
+   ja portamento on sama väite melodian puolella. Mitattu: liuku on perillä
+   nuotin puolivälissä (227 → 330 Hz) ja pysyy siellä; viivästetty vibrato on
+   alussa 8,4 Hz leveä ja lopussa 28,0 Hz, kun viiveetön on 28,0 Hz alusta asti.
+   Fraasi 2 (viima) on kokonaan merkitsemätön, ja se on se todiste ettei tämä
+   ole äänen ominaisuus.
+
+**Mitä tästä jäi.** `renderTone` (offline-renderöinti porttia varten) näkee
+kaiken paitsi pulssin leveysmodulaation, koska se aikataulutetaan
+`setTimeout`illa seinäkellon mukaan eikä äänikellon. Se ei ole kiireellistä —
+leveysmodulaatio on jo mitattu suoraan osaäänistä (`pulseHarmonics`) — mutta se
+on ainoa kohta `tone`ssa jonka lopputulosta portti ei kuule. `AudioWorklet`
+korjaisi sekä sen että hard syncin hinnan yhdellä kertaa, ja se on ainoa syy
+jonka takia sen vielä joskus voisi tehdä.
 
 ### Omistajan pyynnöt 17.8.2026 — vielä tekemättä
 
 1. ✔ **Vinot kentät — tehty 17.8.2026** (v26.08.18.13). 45° rinteet, oma
    pystyratkaisu, vauhti korkeudeksi. Perustelut ja luvut: PHYSICS.md ja
    CHANGELOG. **Mitä rinteistä jäi tekemättä:** loivempi 30° rinne (kaksi
-   laattaa yhtä korkeuseroa kohti), rinteet generaattorin sanastoon (nyt vain
-   käsintehdyissä kentissä), ja vihollisten oma suhde rinteeseen — kuori
-   kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä *suunnitellut*
-   sitä, ks. `slopePull` joka on tällä hetkellä vain pelaajan.
+   laattaa yhtä korkeuseroa kohti). Se vaatisi neljä uutta laattamerkkiä ja
+   puolikkaan askeleen `slopeTop`iin, eikä sitä ole aloitettu.
+
+   ✔ **Rinteet generaattorin sanastoon — tehty 17.8.2026** (`hill`, v26.08.18.24)
+   ja maastopassina 18.8.2026 (`liftTerrain`).
+
+   ✔ **Vihollisten oma suhde rinteeseen — tehty 18.8.2026.** Sääntö on yksi
+   lause ja se on nyt `physics.js`:n `slopePull`in kommentissa: **se mikä liukuu
+   tai vierii tottelee rinnettä, se mikä kävelee ei.** Kävelijä kävelee omaa
+   vauhtiaan ja se on sen koko sopimus pelaajan kanssa; potkaistu kuori ja
+   karvapallo ovat kappaleita joita on työnnetty. Sama funktio pelaajalle ja
+   kuorelle, rajat kutsujalta.
 2. ✔ **Hirviö joka vie ohjauksen — tehty 17.8.2026** (HÖSSÖTIN, v26.08.18.23).
 3. ✔ **Latautuva iso tulipallo — tehty 17.8.2026.** Nappiongelma ratkesi
    kiertämällä se: lataus on aika ilman laukausta eikä pohjassa pidetty nappi.
@@ -1238,6 +1341,37 @@ Läksy on se joka toistuu tässä tiedostossa: koe joka asettaa kappaleen itse o
 koe joka voi asettaa sen paikkaan jota pelissä ei ole olemassa. Kaksi kertaa
 tässä erässä — ensin talloportin pelaaja piikkipenkkiin, nyt tämä — ja
 molemmilla kerroilla tulos näytti uskottavalta vialta.
+
+### Löydetty 18.8.2026: alkuperäisyystarkistus ei ollut koskaan verrannut mitään
+
+Tämä on tämän repon oma pahin virhelaji — **vihreä portti joka ei mittaa
+mitään** — ja se eli DESIGN.md:n kohdan 3 ytimessä.
+
+`tools/originality.mjs` trimmasi korpuksen neljääntoista riviin muttei meidän
+ruudukkoa. Vertailuavain on ikkunan sarakkeet merkkijonoina, ja sarakkeen
+pituus on ruudukon korkeus: meillä 15 merkkiä, korpuksella 14. Kaksi eri
+pituista merkkijonoa ei voi olla sama merkkijono, joten osumia oli aina nolla.
+Jokainen `origin: 'checked'` ja päivän kenttien sormenjälki oli tyhjä väite —
+ja koodin oma kommentti väitti nimenomaan sitä mitä koodi ei tehnyt: *"Both
+grids are trimmed to the same 14 bottom rows before comparing."*
+
+**Se mikä korjattuna paljastui, on hyvä uutinen kahdesti.** Osumia tulee, mutta
+kahdeksan sarakkeen ikkunassa ne ovat tasamaata, portaita ja yksi kävelijä
+tasaisella lattialla — lajityypin aakkosia, jotka kohta 2 vapauttaa. Mitattuna
+26 kenttää 481 korpustiedostoa vasten: 640 osumaa kahdeksalla sarakkeella, 95
+kahdellatoista, 8 kuudellatoista, **0 kahdellakymmenellä**. Ja sama nolla
+saadaan toista tietä: jättämällä pelkkää maata ja ilmaa sisältävät ikkunat
+vertaamatta, koska lattia ei ole sommitelma. Kaksi eri sääntöä, sama tulos.
+
+Omistajan päätös 18.8.2026 (kolmesta vaihtoehdosta): **korjaa vertailu ja nosta
+ikkuna mitatulle rajalle**, 8 → 20. Kentät eivät muuttuneet; väite muuttui
+mitatuksi.
+
+**Mitä tästä kannattaa ottaa opiksi muualle.** Vika ei ollut logiikassa vaan
+siinä että kaksi puolta valmisteltiin eri paikoissa — korpus trimmattiin
+lukusilmukassa, meidän ruudukko ei trimmattu missään. Trimmaus on nyt yhdessä
+funktiossa jota molemmat kutsuvat. Sama kysymys kannattaa esittää jokaiselle
+vertailulle tässä repossa: **kumpi puoli valmistellaan ja missä.**
 
 ### Löydetty 17.8.2026: puhetestit mittasivat seinäkellolla ääntä (v26.08.17.93)
 

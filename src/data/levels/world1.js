@@ -254,8 +254,24 @@ export const WORLD1_LEVELS = {
    */
   '1-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
+    /*
+     * `root_drop` ja `root_pantry` vaihtoivat paikkaa 18.8.2026, ja se on
+     * mitattu korjaus eikä makuasia.
+     *
+     * Lentäjän ensiesittely oli maailman 1 generoiduissa kentissä; kun ne
+     * generoitiin uusiksi (kenttädata 15 → 16 riviä), yksikään niistä ei enää
+     * saanut lentäjää, ja ensiesittely putosi tähän kenttään sarakkeeseen 55 —
+     * yhdeksäntoista laatan päähän maahaniskun ensiesittelystä sarakkeessa 74.
+     * `tools/curriculum.mjs` mittaa sen ja `verify.mjs` kaataa: kahta
+     * ensiesittelyä ei ole saman kahdenkymmenen laatan ruudun sisällä.
+     *
+     * Vaihto eikä lisäys, samasta syystä kuin kaikkialla muualla tässä
+     * tiedostossa: palikat ovat saman levyisiä, joten yksikään piilotiili ei
+     * liikkunut ja kentän pituus on ennallaan. Lentäjä on nyt sarakkeessa 39
+     * eli kolmenkymmenenviiden laatan päässä.
+     */
     chunks: [
-      'start', 'root_gate', 'root_pantry', 'root_drop', 'root_scale',
+      'start', 'root_gate', 'root_drop', 'root_pantry', 'root_scale',
       'root_vault', 'root_moat', 'root_drop', 'root_moat', 'boss_arena',
     ],
   },

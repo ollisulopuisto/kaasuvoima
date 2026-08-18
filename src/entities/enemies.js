@@ -1,5 +1,7 @@
 import { Entity } from './entity.js';
-import { moveX, moveY, applyGravity, footingAhead, GRAVITY } from '../level/physics.js';
+import {
+  moveX, moveY, applyGravity, footingAhead, GRAVITY, slopePull as slopeSlide,
+} from '../level/physics.js';
 /* The sand's own numbers. They are imported from the player rather than copied
  * because they are the *sand's* and not his: `QUICKSAND_SINK` is how fast this
  * tile pulls, full stop, and a walker that sank at its own private rate would
@@ -712,6 +714,16 @@ export class Walker extends Enemy {
 
 /** How fast a kicked shell travels, and keeps travelling after a bounce. */
 const SHELL_SPEED = 3.4;
+/**
+ * Mihin asti rinne saa kiihdyttää liukuvaa kuorta, ja mitä se maksaa
+ * takaisin ylämäessä. `SLOPE_DOWN` ja `SLOPE_UP` ovat pelaajan omat luvut
+ * (`entities/player.js`) tuotuna tänne, koska rinne on maastoa eikä kehon
+ * ominaisuus: sama mäki, sama veto. Katto on 1,4 × `SHELL_SPEED`, sama suhde
+ * kuin pelaajan P-katolla juoksukattoon.
+ */
+const SLOPE_DOWN = 0.14;
+const SLOPE_UP = 0.045;
+const SHELL_SLOPE_MAX = SHELL_SPEED * 1.4;
 
 export class ShellGuy extends Enemy {
   /** Karvapallon kyytiin, ks. `Enemy.rollable`. */
@@ -906,6 +918,24 @@ export class ShellGuy extends Enemy {
       // A shell that hits something goes through it or comes back off it, and
       // which one depends on what it hit. Bricks are the soft thing in this
       // game; everything else is masonry.
+      /*
+       * RINNE KOSKEE KUORTA, ja tämä on se rivi jota ROADMAP odotti: *"kuori
+       * kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä
+       * suunnitellut sitä."* Suunnitelma on `physics.js`:n `slopePull`in
+       * kommentissa yhtenä lauseena — se mikä liukuu tai vierii tottelee
+       * rinnettä, se mikä kävelee ei — ja **potkaistu kuori liukuu**.
+       *
+       * Vain liukuva, ei kävelevä: `toWalking`in jälkeen kuori on taas
+       * kävelijä, ja kävelijä kävelee omaa vauhtiaan. Sama laji, kaksi tilaa,
+       * ja rinne erottaa ne.
+       *
+       * Katto on `SHELL_SLOPE_MAX` eikä `SHELL_SPEED`, koska muuten sääntö ei
+       * tekisi mitään: kuori kulkee jo lähtövauhtiaan, ja alamäki joka ei voi
+       * nostaa sitä on alamäki jota ei ole. Kerroin on sama kuin pelaajalla —
+       * juoksukatto 2,5 vastaan P-katto 3,5 on 1,4 — eli rinne antaa kuorelle
+       * saman suhteellisen lainan kuin pelaajalle.
+       */
+      slopeSlide(this, SLOPE_DOWN, SLOPE_UP, SHELL_SLOPE_MAX);
       if (this.moveSideways()) {
         if (!this.smashAhead()) {
           /* Bounce off it, at speed.
@@ -3636,6 +3666,13 @@ export class Karvapallo extends Enemy {
     }
     this.roll = Math.min(KARVA_MAX, this.roll + KARVA_ACC);
     this.vx = this.roll * this.facing;
+    /* Ja pallo vierii: sama sääntö kuin kuorella, ks. `physics.js`:n
+     * `slopePull`. Vauhti luetaan takaisin `roll`iin, koska se on se luku
+     * jonka pallo kantaa mukanaan — muuten alamäestä lainattu vauhti
+     * katoaisi seuraavalla framella kun `vx` kirjoitetaan uusiksi. */
+    slopeSlide(this, SLOPE_DOWN, SLOPE_UP, KARVA_MAX * 1.6);
+    this.roll = Math.abs(this.vx);
+    if (this.vx !== 0) this.facing = Math.sign(this.vx);
     // Pyörimiskulma kuljetusta matkasta eikä kellosta: hidastuva pallo pyörii
     // hitaammin, ja se on ainoa tapa jolla vieritys näyttää vieritykseltä.
     this.spin += this.roll;

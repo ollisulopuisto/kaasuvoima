@@ -1,4 +1,4 @@
-import { assemble, assembleTall, CHUNK_ROWS, CHUNKS } from './chunks.js';
+import { assemble, assembleTall, BAND_ROWS, CHUNKS } from './chunks.js';
 import { normalizeRows } from '../core/utils.js';
 import { DEFAULT_MODE, isBaseMode, modeId, scaleLevel, scaleTime } from './scale.js';
 import { WORLD1_LEVELS } from './levels/world1.js';
@@ -56,7 +56,7 @@ export const defaultTime = (columns) => Math.min(600, Math.max(300, Math.round((
  * know — the camera, the warp pipes, the underground wash — reads it from here
  * rather than counting rows for itself.
  */
-const BANDS = { rows: CHUNK_ROWS, main: CHUNK_ROWS, cave: 2 * CHUNK_ROWS };
+const BANDS = { rows: BAND_ROWS, main: BAND_ROWS, cave: 2 * BAND_ROWS };
 
 /**
  * MAASTOPASSI ON KENTÄN OMA VALINTA, ja nämä ovat ne kentät jotka eivät voi
@@ -147,7 +147,11 @@ export function getLevel(id, mode = DEFAULT_MODE) {
      * meneminen **on** reitti, ja kaistarajaus pysäyttäisi kameran ensimmäiseen
      * saumaan. Kenttä joka ilmoittaa osionsa on siis yksi korkea huone kuten
      * kiipeilykin, ei kolme päällekkäistä. */
-    bands: !def.vertical && !def.segments && rows.length > CHUNK_ROWS ? BANDS : null,
+    /* `BAND_ROWS` eikä `CHUNK_ROWS`, ja tämä oli koko 16 rivin muutoksen
+     * hiljaisin ansa: palikkakorkuisella luvulla **jokainen tavallinen kenttä**
+     * täyttäisi ehdon `16 > 15`, saisi kaistat joita sillä ei ole, ja kamera
+     * alkaisi rajata kaistaan kenttää jossa ei ole yhtään. */
+    bands: !def.vertical && !def.segments && rows.length > BAND_ROWS ? BANDS : null,
     rows,
   };
   /*

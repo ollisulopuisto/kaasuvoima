@@ -268,8 +268,27 @@ Käytännön suojatoimet:
 4. **Samankaltaisuustarkistus, ja se on nyt merkintä datassa eikä ohje.**
    Kun `VGLC_DIR` on asetettu, `tools/originality.mjs` kanonisoi sekä oman
    tuotoksemme että korpuksen samaan aakkostoon ja hylkää kentän, jos yksikään
-   **8 sarakkeen ikkuna** osuu korpukseen. Ilman `VGLC_DIR`:iä tarkistusta ei voi
-   tehdä, eikä sitä teeskennellä.
+   **20 sarakkeen ikkuna** osuu korpukseen. Ilman `VGLC_DIR`:iä tarkistusta ei
+   voi tehdä, eikä sitä teeskennellä.
+
+   **Ikkuna oli kahdeksan 18.8.2026 asti, ja vertailu oli rikki koko sen ajan.**
+   Korpus trimmattiin neljääntoista riviin, meidän ruudukkoa ei trimmattu
+   lainkaan — eli avaimet olivat eri pituisia merkkijonoja eivätkä voineet
+   koskaan täsmätä. Tarkistus palautti aina nollan, ja se nolla luettiin
+   todisteeksi. Korjattuna kävi ilmi että kahdeksan saraketta vertaa **sanastoa
+   eikä sävellystä**: osumat ovat tasamaata, portaita ja yksi kävelijä
+   tasaisella lattialla, eli lajityypin aakkosia (kohta 2: *genre on vapaa,
+   ilmaisu ei*). Mitattuna 26 generoidusta kentästä 481 korpustiedostoa vasten:
+   640 osumaa kahdeksalla sarakkeella, 95 kahdellatoista, 8 kuudellatoista,
+   **0 kahdellakymmenellä** — ja sama nolla saadaan toista tietä, jättämällä
+   pelkkää maata ja ilmaa sisältävät ikkunat vertaamatta. Kaksi eri sääntöä,
+   sama tulos.
+
+   Väite on siis nyt vahvempi kuin se jonka tämä kohta luuli tekevänsä:
+   **yksikään ruudullinen mitään sijoitettua sisältävä pätkä ei toistu
+   korpuksesta.** Hinta sanotaan ääneen: leveämpi ikkuna päästää läpi
+   lyhyemmän lainauksen — mutta kahdeksan saraketta ei voinut löytää sellaista,
+   koska se ei erottanut lainausta lattiasta.
 
    Tässä luki pitkään *"nykyiset kentät on generoitu tarkistus päällä, osumia 0 —
    aja generaattori aina `VGLC_DIR` asetettuna"*, ja se lause on juuri se muoto
@@ -330,8 +349,8 @@ Käytännön suojatoimet:
    Reikä suljetaan sillä havainnolla että **siemenavaruus on äärellinen**:
    päivän kenttä on funktio päivämäärästä, joten koko tarkistusikkuna voidaan
    luetella etukäteen. `tools/daily-origin.mjs` generoi jokaisen päivän kentän
-   Nodessa, vertaa sen korpukseen samalla kahdeksan sarakkeen ikkunalla kuin
-   toimitetut kentät, ja repoon jää `src/data/daily-origin.js` — **pelkkä
+   Nodessa, vertaa sen korpukseen samalla kahdenkymmenen sarakkeen ikkunalla
+   kuin toimitetut kentät, ja repoon jää `src/data/daily-origin.js` — **pelkkä
    tuomio**: ikkunan rajat, päiväkohtainen siemenyritys yhtenä lukuna, ja
    sormenjälki. Korpuksesta ei kopioidu repoon mitään, eikä kentistäkään: yksi
    36-kantainen luku päivää kohti ei ole kenttäkartta.

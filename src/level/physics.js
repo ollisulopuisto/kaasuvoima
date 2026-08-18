@@ -75,6 +75,51 @@ function stepUp(entity, level, tx, ty) {
 }
 
 /**
+ * PAINOVOIMAN KOMPONENTTI RINTEEN PINTAA PITKIN, ja se on nyt fysiikkaa eikä
+ * pelaajan erikoisjärjestely.
+ *
+ * Alamäki lainaa vauhtia kattoonsa asti, ylämäki syö sitä nollaan asti muttei
+ * koskaan käännä kulkusuuntaa. Kumpikin lause oli `Player.slopePull`issa siitä
+ * asti kun rinteet tulivat (v26.08.18.13), ja ROADMAP kirjasi puuttuvan
+ * puoliskon samalla: *"kuori kiihtyy alamäkeen kuten pelaajakin, mutta kukaan
+ * ei ole vielä suunnitellut sitä."*
+ *
+ * Suunnitelma on yksi lause: **se mikä liukuu tai vierii tottelee rinnettä, se
+ * mikä kävelee ei.** Kävelijä kävelee omaa vauhtiaan ja se on sen koko
+ * sopimus pelaajan kanssa — kävelijä joka kiihtyisi alamäkeen olisi lajin
+ * lupauksen rikkomus, ja rinne olisi paikka jossa tuttu vihollinen käyttäytyy
+ * oudosti. Potkaistu kuori ja karvapallo eivät kävele: ne ovat kappaleita
+ * joita on työnnetty, ja kappale rinteessä on painovoimaa.
+ *
+ * Sama funktio kummallekin puolelle, koska sääntö on sama sääntö. Rajat tulevat
+ * kutsujalta (`down`, `up`, `max`), koska pelaajan katto on P-nopeus ja kuoren
+ * oma vauhti on toinen luku.
+ *
+ * Vain liikkeessä: paikallaan seisova ei valu. Se on päätös eikä
+ * yksinkertaistus — valuva keho tarkoittaisi ettei rinteessä voi seistä, ja
+ * silloin rinne olisi este eikä reitti. Raja on 0,05 px/frame eli alle yhden
+ * pikselin sekunnissa: se on "ei liiku" kaikilla mittareilla.
+ */
+export function slopePull(entity, down, up, max) {
+  const dir = entity.onSlope || 0;
+  if (!dir || !entity.onGround || Math.abs(entity.vx) < 0.05) return;
+  /* `dir` on nousun suunta, eli alamäki on sen vastakohta. */
+  const downhill = -dir;
+  const going = Math.sign(entity.vx);
+  if (going === downhill) {
+    if (Math.abs(entity.vx) < max) {
+      entity.vx = Math.max(-max, Math.min(max, entity.vx + down * downhill));
+    }
+  } else {
+    /* Ylämäki syö vauhtia muttei koskaan käännä kulkusuuntaa: nollaan asti ja
+     * siihen se jää. Käännetty vauhti olisi rinne joka työntää takaisin, eikä
+     * sitä kukaan halua nousta. */
+    const left = Math.abs(entity.vx) - up;
+    entity.vx = left > 0 ? left * going : 0;
+  }
+}
+
+/**
  * Moves an entity horizontally and pushes it out of solid tiles.
  * @returns true when a wall was hit.
  */

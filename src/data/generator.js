@@ -41,13 +41,25 @@
  * kirjattu `src/core/daily.js`:hin sanalla eikä jätetty pääteltäväksi.
  */
 import { validateLevel } from './rules.js';
+import { liftTerrain } from './terrain.js';
 import { hashNoise, hashPlace } from '../core/utils.js';
 import { PACING_STATS, JUMP_BUDGET } from './pacing.js';
 
 /* ------------------------------- the engine ----------------------------- */
 
-const ROWS = 15;
-const FLOOR = 13;          // rows 13-14 are the ground slab
+/*
+ * KAISTAN KORKEUS JA LATTIAN RIVI, ja ne ovat tässä omana parinaan eivätkä
+ * tuotuna `rules.js`:stä. Syy on tiedostossa eikä periaatteessa: tämä moduuli
+ * ajetaan **selaimessa** (päivän pieru rakentaa kenttänsä `daily.js`:ssä),
+ * eikä se saa tuoda kokoajaa mukanaan. `tools/verify.mjs` vertaa parin
+ * `RULE_CONSTANTS`iin portissa, samalla tavalla kuin `SOLID`in viisi kopiota.
+ *
+ * Kasvoivat yhdellä 18.8.2026 (`data/chunks.js`, `SKY_PAD`): koottu kenttä on
+ * kuusitoista riviä ja lattia on riveillä 14-15. Generaattori kirjoittaa
+ * valmiita kenttiä eikä palikoita, joten se kirjoittaa suoraan kaistan mitoin.
+ */
+const ROWS = 16;
+const FLOOR = 14;          // rows 14-15 are the ground slab
 const HEAD = 3;            // tiles of headroom the tallest player needs
 
 /**
@@ -143,6 +155,16 @@ class Canvas {
 
   rows() {
     return this.cells.map((row) => row.join(''));
+  }
+
+  /**
+   * Kirjoittaa koko ruudukon uusiksi. Yksi käyttäjä, ja se on maastopassi
+   * (`data/terrain.js`): passi lukee valmiin ruudukon ja palauttaa toisen,
+   * koska maasto on kysymys koko kentästä eikä yhdestäkään palasta.
+   */
+  setRows(rows) {
+    this.cells = rows.map((row) => row.split(''));
+    this.width = rows[0].length;
   }
 }
 
@@ -638,8 +660,13 @@ export const PIECES = {
  * quietly acquiring a lid because some piece grew tall enough.
  */
 
-/** Rows 0..1 — the two the world-8 roof claim is measured on. See verify.mjs. */
-const SKY_ROWS = 2;
+/**
+ * Rows 0..2 — the ones the world-8 roof claim is measured on, plus the sky row
+ * the assembler prepends (`data/chunks.js`, `SKY_PAD`). Kolme eikä kaksi
+ * 18.8.2026 alkaen: väite on "taivas on auki katon verran", ja kun katto
+ * siirtyi rivin alemmas, myös taivas siirtyi. Ks. verify.mjs.
+ */
+const SKY_ROWS = 3;
 const STANDS = '#X';
 
 const rowsOf = (rows) => rows.map((r) => r || '');
@@ -657,13 +684,15 @@ function ruleOpenSky(rows) {
 }
 
 /**
- * The bone world's sky is five rows deep, not two: the moon and the stars are
+ * The bone world's sky is six rows deep, not two: the moon and the stars are
  * the reason that world reads as midnight, and `chunks/bone.js` keeps rows 0..4
- * empty for them. A generated bone level has to buy the same silence.
+ * empty for them — plus the sky row the assembler prepends (`SKY_PAD`), which
+ * is why this is six and not five. A generated bone level has to buy the same
+ * silence.
  */
 function ruleBoneSky(rows) {
   const out = [];
-  for (let y = 0; y < 5; y++) {
+  for (let y = 0; y < 6; y++) {
     for (let x = 0; x < (rows[y] || '').length; x++) {
       if (rows[y][x] !== ' ') out.push(`kuu ei näy sarakkeessa ${x}, rivi ${y}`);
     }
@@ -737,18 +766,25 @@ function ruleFactoryCeiling(rows) {
   const w = (rows[0] || '').length;
   for (let x = 0; x < w; x++) {
     let roofed = false;
-    for (let y = 0; y < 6 && !roofed; y++) if (STANDS.includes(at(rows, x, y))) roofed = true;
+    for (let y = 0; y < 7 && !roofed; y++) if (STANDS.includes(at(rows, x, y))) roofed = true;
     if (!roofed) out.push(`tehtaassa ei ole kattoa sarakkeen ${x} yllä`);
   }
   return out.slice(0, 3);
 }
 
-/** The keep: stone over every column of rows 0..1, the finale's own claim. */
+/**
+ * The keep: stone over every column of rows 1..2, the finale's own claim.
+ *
+ * Rivit 1-2 eivätkä 0-1: kokoaja lisää yhden rivin päälle (`SKY_PAD`) ja
+ * kattopassi maalaa sen alta alkaen, joten linnakkeen kansi asuu nyt riviltä 1
+ * alaspäin. Rivi 0 on sen kopio, muttei sen paikka — sääntö kysyy siltä
+ * riviltä jolle kansi kirjoitetaan.
+ */
 function ruleKeepRoof(rows) {
   const out = [];
   const w = (rows[0] || '').length;
   for (let x = 0; x < w; x++) {
-    if (!STANDS.includes(at(rows, x, 0)) && !STANDS.includes(at(rows, x, 1))) {
+    if (!STANDS.includes(at(rows, x, 1)) && !STANDS.includes(at(rows, x, 2))) {
       out.push(`linnakkeessa on ulkopuolta sarakkeen ${x} yllä`);
     }
   }
@@ -783,18 +819,26 @@ const poke = (rows, x, y, ch) => rows.map((row, i) => (i === y
   ? row.slice(0, x) + ch + row.slice(x + 1) : row));
 const roof = (rows, y) => rows.map((row, i) => (i === y ? 'X'.repeat(row.length) : row));
 
+/*
+ * Rivinumerot siirtyivät yhdellä 18.8.2026, ja se on tämän taulukon koko
+ * muutos: koottu kenttä on kuusitoista riviä ja kaikki absoluuttinen liikkui
+ * alaspäin (`data/chunks.js`, `SKY_PAD`). Ne on kirjoitettu tähän lukuina
+ * eikä `FLOOR`iin nähden, koska ne testaavat **ylhäältä laskettuja sääntöjä**
+ * — taivasta, kuuta ja kattoa — ja niiden pitää siirtyä silloin kun katto
+ * siirtyy eikä silloin kun lattia siirtyy.
+ */
 const THEME_FIXTURES = {
-  openSky: () => ({ clean: flat(), broken: poke(flat(), 5, 1, 'X') }),
-  bone: () => ({ clean: flat(), broken: poke(flat(), 5, 4, 'X') }),
-  boneStands: () => ({ clean: flat(), broken: poke(flat(), 5, 9, 'X') }),
-  cloud: () => ({ clean: poke(flat(), 5, 9, '-'), broken: poke(flat(), 5, 9, 'X') }),
+  openSky: () => ({ clean: flat(), broken: poke(flat(), 5, 2, 'X') }),
+  bone: () => ({ clean: flat(), broken: poke(flat(), 5, 5, 'X') }),
+  boneStands: () => ({ clean: flat(), broken: poke(flat(), 5, 10, 'X') }),
+  cloud: () => ({ clean: poke(flat(), 5, 10, '-'), broken: poke(flat(), 5, 10, 'X') }),
   cloudHeld: () => ({
-    clean: poke(flat(), 5, 9, '-'),
-    broken: poke(poke(poke(flat(), 5, FLOOR, ' '), 5, FLOOR + 1, ' '), 5, 9, '-'),
+    clean: poke(flat(), 5, 10, '-'),
+    broken: poke(poke(poke(flat(), 5, FLOOR, ' '), 5, FLOOR + 1, ' '), 5, 10, '-'),
   }),
-  factory: () => ({ clean: roof(flat(), 3), broken: poke(roof(flat(), 3), 5, 3, ' ') }),
-  keep: () => ({ clean: roof(flat(), 0), broken: poke(roof(flat(), 0), 5, 0, ' ') }),
-  keepFlag: () => ({ clean: roof(flat(), 0), broken: poke(roof(flat(), 0), 5, 8, 'F') }),
+  factory: () => ({ clean: roof(flat(), 4), broken: poke(roof(flat(), 4), 5, 4, ' ') }),
+  keep: () => ({ clean: roof(flat(), 1), broken: poke(roof(flat(), 1), 5, 1, ' ') }),
+  keepFlag: () => ({ clean: roof(flat(), 1), broken: poke(roof(flat(), 1), 5, 9, 'F') }),
 };
 
 /**
@@ -822,7 +866,13 @@ const THEME_FIXTURES = {
  * over, which is what world 4 already looks like: its hand-made levels are
  * roofed over about half their columns and open over the rest.
  */
-function ceilingPass(c, y, top = 0) {
+/**
+ * Kansi riviltä `top` riville `y`. `top` on oletuksena 1 eikä 0, koska rivi 0
+ * on kokoajan lisäämä taivasrivi (`data/chunks.js`, `SKY_PAD`) — kansi joka
+ * maalattaisiin sen päälle veisi maailmalta sen yhden rivin jonka koko
+ * muutos osti.
+ */
+function ceilingPass(c, y, top = 1) {
   for (let x = 0; x < c.width; x++) {
     for (let row = top; row <= y; row++) c.set(x, row, 'X');
   }
@@ -899,7 +949,7 @@ export const THEME_RULES = {
      * that never lands on a block row or on the player's head. And why it does
      * not reach row 0: see `ceilingPass` — rows 0 and 1 are the two the finale's
      * roof claim is measured on, and this world is its nearest rival. */
-    shape: (c) => ceilingPass(c, 3, 2),
+    shape: (c) => ceilingPass(c, 4, 3),
     maxBlockHeight: 7,
     rules: [ruleFactoryCeiling],
     fixtures: [THEME_FIXTURES.factory],
@@ -976,7 +1026,7 @@ export const THEME_RULES = {
       gap: 3, enemies: 5, blockRow: 3, spikes: 3, heartburn: 3, lava: 3,
       crumbleWalk: 3, coins: 1, corkGate: 2,
     },
-    shape: (c) => ceilingPass(c, 1),
+    shape: (c) => ceilingPass(c, 2, 1),
     maxBlockHeight: 7,
     boss: true,
     rules: [ruleKeepRoof, ruleKeepNoFlag],
@@ -1333,6 +1383,26 @@ export function buildLevel({
    * cannot be grown by each piece separately without every piece knowing which
    * world it is in. */
   if (pal.shape) pal.shape(c);
+
+  /*
+   * MAASTOPASSI, ja se on tässä eikä palana.
+   *
+   * `hill` on pala: mäki nousee ja **palaa riville 13**, joten maan pinta on
+   * generoidussa kentässä vakio kaikkialla muualla. Passi (`data/terrain.js`,
+   * `liftTerrain`) nostaa kokonaisia jaksoja ja jättää ne sinne, eli se on
+   * sama ero kuin käsintehdyillä kentillä: mäki on maastonmuoto, maastopassi
+   * on maasto.
+   *
+   * **Ulkoilmateemat vain**, ja ehto luetaan siitä samasta paikasta josta mäki
+   * lukee omansa: teema joka ei painota `hill`iä ei myöskään liikuta maataan.
+   * Se ei ole makuasia kummallakaan puolella — luussa maa on luuta ja tehtaassa
+   * lattia — ja kummankin vaikeuskäyrä on mitattu ilman liikkuvaa maata.
+   *
+   * Ennen tähtiä ja salaisuutta, jotta ne asettuvat lopulliselle maalle.
+   * Siemenessä on teema mukana, jotta kahden maailman sama siemen ei anna
+   * samaa maastoa.
+   */
+  if (pal.weights.hill) c.setRows(liftTerrain(c.rows(), `${theme}-${seed}`));
 
   /* The two characters that are claims about blocks rather than places. Both
    * run last, on the finished level, and both report failure to the validator

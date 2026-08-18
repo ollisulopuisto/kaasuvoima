@@ -1,6 +1,6 @@
 import { T } from '../gfx/tiles.js';
 import { mulberry32 } from './generator.js';
-import { CHUNK_ROWS } from './chunks.js';
+import { BAND_ROWS } from './chunks.js';
 import { seedOf } from '../core/utils.js';
 import { LOOSE, RUN_ROWS, RUNWAY } from './terrain.js';
 
@@ -385,8 +385,8 @@ function stretchRows(rows, mode, limit) {
  * meets, and one added to the cave is a punishment for finding a secret.
  */
 function routeBand(rows) {
-  if (rows.length <= CHUNK_ROWS) return [0, rows.length];
-  return [CHUNK_ROWS, 2 * CHUNK_ROWS];
+  if (rows.length <= BAND_ROWS) return [0, rows.length];
+  return [BAND_ROWS, 2 * BAND_ROWS];
 }
 
 /** Every tile an enemy could be added to, in column order. */

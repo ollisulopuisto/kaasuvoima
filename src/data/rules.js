@@ -114,8 +114,21 @@
  * lone floating block.
  */
 
-const ROWS = 15;
-const FLOOR = 13;
+/*
+ * KAISTAN KORKEUS JA LATTIAN RIVI, ja kumpikin kasvoi yhdellä 18.8.2026.
+ *
+ * Palikkatiedostot ovat yhä viisitoista riviä lattioineen riveillä 13-14;
+ * **koottu** kenttä on kuusitoista, koska kokoaja lisää yhden taivasrivin
+ * päälle (`data/chunks.js`, `SKY_PAD`). Tämä tiedosto lukee koottuja kenttiä,
+ * joten se lukee kuuttatoista riviä ja lattiaa rivinä 14.
+ *
+ * Ja se mitä tästä *ei* seuraa: ruudun korkeus on yhä 15 laattaa. Kaista ja
+ * ruutu olivat sama luku ja lakkasivat olemasta, ja juuri se ero on koko
+ * muutoksen tarkoitus — kenttä joka on ruutua korkeampi on kenttä jossa kamera
+ * voi liikkua pystysuunnassa.
+ */
+const ROWS = 16;
+const FLOOR = 14;
 /**
  * How wide a vertical level is, and it is not a maximum: it is the width.
  *
@@ -1797,7 +1810,7 @@ export function validateLevel(rows, budget, opts = {}) {
       return problems;
     }
     if (rows.length <= ROWS) {
-      problems.push(`a climb is taller than one screen and this one is ${rows.length} rows`);
+      problems.push(`a climb is taller than one band and this one is ${rows.length} rows`);
     }
     checkEnemyFooting(rows, w, problems);
     checkVines(rows, w, problems);

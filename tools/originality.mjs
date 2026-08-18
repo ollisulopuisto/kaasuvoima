@@ -45,8 +45,51 @@ const IS_MAIN = !!process.argv[1] && pathToFileURL(process.argv[1]).href === imp
 /** Where the corpus is, or null. Read once so every caller sees the same answer. */
 export const CORPUS_DIR = process.env.VGLC_DIR || null;
 
-/** How many columns have to line up before it counts as a match. */
-export const WINDOW = 8;
+/**
+ * How many columns have to line up before it counts as a match.
+ *
+ * ## Kaksikymmentä, ja se on mitattu 18.8.2026 — kahdeksan oli arvattu
+ *
+ * Tässä luki `8`, ja sen perustelu luki tiedoston alussa: *"Eight columns is
+ * the window: shorter and any flat floor matches everything, longer and a copy
+ * could hide by moving one tile."* Perustelun ensimmäinen puolisko oli oikea ja
+ * **kahdeksan oli sen väärällä puolella** — mutta sitä ei voinut tietää, koska
+ * vertailu ei ollut koskaan verrannut mitään (ks. `trim`).
+ *
+ * Kun vertailu ensimmäistä kertaa toimi, luvut olivat nämä. 26 generoitua
+ * kenttää, 481 korpustiedostoa, `arrangement`-suodin päällä:
+ *
+ * | ikkuna | osumia |
+ * | --- | --- |
+ * |  8 | 640 |
+ * | 12 |  95 |
+ * | 16 |   8 |
+ * | 20 |   **0** |
+ * | 24 |   0 |
+ *
+ * Ja se mitä osumat *ovat*, ratkaisi asian: kapeassa ikkunassa ne ovat
+ * tasamaata, portaita ja **yksi kävelijä tasaisella lattialla**. Se ei ole
+ * sommitelma vaan lajityypin aakkoset, ja aakkoset ovat vapaat (DESIGN.md
+ * kohta 2: *"Genre on vapaa, ilmaisu ei"*). Kahdeksan saraketta vertaa siis
+ * sanastoa eikä sävellystä.
+ *
+ * **Kaksi tietä samaan nollaan, ja se on ristiintarkistus eikä sattuma.**
+ * Ilman `arrangement`-suodinta kahdenkymmenen ikkunassa on 55 osumaa ja
+ * jokainen niistä on pelkkää maata ja ilmaa; suodin poistaa ne, ja nolla
+ * jää. Sama nolla saadaan ilman suodinta nostamalla ikkuna 24:ään. Kaksi eri
+ * sääntöä, sama tulos — eli jäljelle jäänyt aineisto on maastoa eikä
+ * sommitelmaa, ja se on vahvempi väite kuin se jonka tämä tiedosto luuli
+ * tekevänsä: **yksikään ruudullinen mitään sijoitettua sisältävä pätkä ei
+ * toistu korpuksesta.**
+ *
+ * Hinta sanottuna ääneen: leveämpi ikkuna päästää läpi lyhyemmän lainauksen.
+ * Kahdeksan saraketta ei kuitenkaan **voinut** löytää sellaista, koska se ei
+ * erottanut lainausta lattiasta — mittaamaton tiukkuus ei ole tiukkuutta.
+ *
+ * Omistajan päätös 18.8.2026, kolmesta vaihtoehdosta: korjaa vertailu ja nosta
+ * ikkuna mitatulle rajalle.
+ */
+export const WINDOW = 20;
 
 /**
  * Kept identical to `src/data/rules.js`'s own SOLID, and it has to be: a solid
@@ -78,13 +121,60 @@ const canonOurs = (ch) => (SOLID.has(ch) ? 'X' : SINK.has(ch) ? '~'
   : ENEMY.has(ch) ? 'E' : ch === 'o' ? 'o' : '-');
 const canonCorpus = (ch) => ('XSQ?<>[]'.includes(ch) ? 'X' : ch === 'E' ? 'E' : ch === 'o' ? 'o' : '-');
 
+/**
+ * SAMA MÄÄRÄ RIVEJÄ MOLEMMILTA, ja tämä oli **rikki siitä asti kun se
+ * kirjoitettiin.**
+ *
+ * `windows` tekee jokaisesta sarakkeesta merkkijonon jonka pituus on ruudukon
+ * korkeus, ja avain on kahdeksan (nyt kahdenkymmenen) sellaisen ketju. Korpus
+ * trimmattiin neljääntoista riviin, **meidän ruudukkoa ei trimmattu lainkaan**
+ * — eli meidän avaimet olivat 15 merkin sarakkeita ja korpuksen 14 merkin,
+ * eikä yksikään niistä voinut olla sama merkkijono. Tarkistus palautti aina
+ * nollan, ja se nolla luettiin todisteeksi.
+ *
+ * Kommentti `corpusHits`issa väitti nimenomaan tätä — *"Both grids are trimmed
+ * to the same 14 bottom rows before comparing"* — ja koodi ei tehnyt sitä.
+ * Portti oli vihreä eikä mitannut mitään, mikä on tämän repon oma pahin
+ * virhelaji (`verify.mjs` sanoo sen monta kertaa: *"muistiinpano kestää
+ * täsmälleen niin kauan kuin sen kirjoittaja"*).
+ *
+ * Trimmaus on nyt yhdessä funktiossa jota molemmat puolet kutsuvat, koska
+ * kahdesta kutsupaikasta toinen unohtui kerran jo.
+ */
+const TRIM_ROWS = 14;
+const trim = (grid) => grid.slice(-TRIM_ROWS);
+
+/**
+ * LATTIA EI OLE SOMMITELMA, ja tämä on toinen puolisko samasta korjauksesta.
+ *
+ * Ikkuna joka sisältää vain maata ja ilmaa on **maaston muoto**: tasamaata,
+ * portaita, kuoppa. Ruudukolle piirretty tasohyppely tuottaa niitä
+ * väistämättä, eikä yksikään niistä ole kenenkään omaisuutta — DESIGN.md kohta
+ * 2 sanoo saman lajityypistä: *"Genre on vapaa, ilmaisu ei."*
+ *
+ * Mitattuna se on myös se mikä osumista jää jäljelle: kahdenkymmenen sarakkeen
+ * ikkunassa jokainen osuma on tätä lajia, eikä yksikään sisällä yhtäkään
+ * sijoitettua asiaa. Kun nämä jätetään pois, osumia on **nolla** — ja sama
+ * nolla saadaan ilman tätä sääntöä nostamalla ikkuna neljääntoista
+ * sarakkeeseen lisää (24). Kaksi eri tietä samaan lukuun on tässä
+ * ristiintarkistus eikä sattuma: se kertoo että jäljelle jäävä osuma-aineisto
+ * on maastoa eikä sommitelmaa.
+ *
+ * Sääntö koskee **molempia puolia**. Korpuksen tasamaa ei ole sommitelma sen
+ * paremmin kuin meidänkään.
+ */
+const arrangement = (key) => /[^\-X|]/.test(key);
+
 /** The set of canonicalised WINDOW-column slices of a grid. */
 function windows(grid, canon) {
   const w = grid.reduce((m, row) => Math.max(m, row.length), 0);
   const cols = [];
   for (let x = 0; x < w; x++) cols.push(grid.map((row) => canon(row[x] || ' ')).join(''));
   const out = new Set();
-  for (let x = 0; x + WINDOW <= w; x++) out.add(cols.slice(x, x + WINDOW).join('|'));
+  for (let x = 0; x + WINDOW <= w; x++) {
+    const key = cols.slice(x, x + WINDOW).join('|');
+    if (arrangement(key)) out.add(key);
+  }
   return out;
 }
 
@@ -145,21 +235,26 @@ export async function corpusIndex() {
   const keys = new Set();
   for (const file of list) {
     const grid = (await readFile(file, 'utf8')).split('\n').filter((r) => r.length);
-    for (const key of windows(grid.slice(-14), canonCorpus)) keys.add(key);
+    for (const key of windows(trim(grid), canonCorpus)) keys.add(key);
   }
   return { keys, files: list.length };
 }
 
-/** Montako kentän ikkunaa löytyy valmiiksi luetusta korpuksesta. */
+/**
+ * Montako kentän ikkunaa löytyy valmiiksi luetusta korpuksesta.
+ *
+ * `trim` on tässä eikä kutsujassa: se on osa vertailua eikä kutsujan
+ * kohteliaisuus. Ks. `corpusHits`.
+ */
 export function hitsAgainst(index, rows) {
   let hits = 0;
-  for (const key of windows(rows, canonOurs)) if (index.keys.has(key)) hits++;
+  for (const key of windows(trim(rows), canonOurs)) if (index.keys.has(key)) hits++;
   return hits;
 }
 
 export async function corpusHits(rows) {
   if (!CORPUS_DIR) return { checked: false, hits: 0, files: 0 };
-  const mine = windows(rows, canonOurs);
+  const mine = windows(trim(rows), canonOurs);
   const list = await corpusFiles(CORPUS_DIR);
   /* Hakemisto joka on olemassa muttei sisällä yhtään kenttää ei ole korpus.
    * Se on **eri asia kuin puuttuva korpus**, ja siksi se ei palaudu
@@ -173,8 +268,7 @@ export async function corpusHits(rows) {
   let hits = 0;
   for (const file of list) {
     const grid = (await readFile(file, 'utf8')).split('\n').filter((r) => r.length);
-    // Both grids are trimmed to the same 14 bottom rows before comparing.
-    for (const key of windows(grid.slice(-14), canonCorpus)) if (mine.has(key)) hits++;
+    for (const key of windows(trim(grid), canonCorpus)) if (mine.has(key)) hits++;
   }
   return { checked: true, hits, files: list.length };
 }

@@ -1,6 +1,7 @@
 import { Entity } from './entity.js';
 import {
   moveX, moveY, GRAVITY, GRAVITY_HELD, GRAVITY_HELD_CUTOFF, TERMINAL,
+  slopePull as slopeSlide,
 } from '../level/physics.js';
 import {
   drawPlayer, drawCork, PLAYER_SIZES, PLAYER_DUCK_SIZES, TINTS, STAR_TINTS, GLOWS,
@@ -1504,30 +1505,12 @@ export class Player extends Entity {
   }
 
   /**
-   * Painovoiman komponentti rinteen pintaa pitkin. Ks. `SLOPE_DOWN`.
-   *
-   * Vain liikkeessä: paikallaan seisova ei valu. Se on päätös eikä
-   * yksinkertaistus — valuva keho tarkoittaisi ettei rinteessä voi seistä, ja
-   * silloin rinne olisi este eikä reitti. Raja on 0,05 px/frame eli alle
-   * yhden pikselin sekunnissa: se on "ei liiku" kaikilla mittareilla.
+   * Painovoiman komponentti rinteen pintaa pitkin. Ks. `SLOPE_DOWN` ja
+   * `physics.js`:n `slopePull`, jossa itse sääntö asuu — pelaaja antaa sille
+   * omat rajansa (P-nopeus kattona) ja kuori omansa.
    */
   slopePull() {
-    const dir = this.onSlope || 0;
-    if (!dir || !this.onGround || Math.abs(this.vx) < 0.05) return;
-    /* `dir` on nousun suunta, eli alamäki on sen vastakohta. */
-    const downhill = -dir;
-    const going = Math.sign(this.vx);
-    if (going === downhill) {
-      if (Math.abs(this.vx) < MAX_P) {
-        this.vx = Math.max(-MAX_P, Math.min(MAX_P, this.vx + SLOPE_DOWN * downhill));
-      }
-    } else {
-      /* Ylämäki syö vauhtia muttei koskaan käännä kulkusuuntaa: nollaan asti
-       * ja siihen se jää. Käännetty vauhti olisi rinne joka työntää takaisin,
-       * eikä sitä kukaan halua nousta. */
-      const left = Math.abs(this.vx) - SLOPE_UP;
-      this.vx = left > 0 ? left * going : 0;
-    }
+    slopeSlide(this, SLOPE_DOWN, SLOPE_UP, MAX_P);
   }
 
   /**

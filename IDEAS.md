@@ -497,7 +497,8 @@ lukuihin (49/48/40/47/49 · 33/33/28/33/36/49 · 18/17/15/9/17/33 px):
 ### Kohta 4 tarkemmin: mitä "litteä maailma käännetään" olisi täällä
 
 **Se ei ole 3D eikä sen pitäisi olla.** Tämä peli on kolmessa kaistassa —
-taivas, reitti, luola — jotka ovat 15 riviä kukin, päällekkäin, ja `bandAt`
+taivas, reitti, luola — jotka ovat 16 riviä kukin (15 riviä kenttädataa ja
+yksi kokoajan lisäämä taivasrivi, ks. `data/chunks.js`), päällekkäin, ja `bandAt`
 kertoo jo kumpaan jalat osuvat. Käännös on siis **naapurikaista**, ei kolmas
 ulottuvuus, ja se on ainoa versio jonka tämä moottori voi tehdä rehellisesti.
 
