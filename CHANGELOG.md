@@ -7,6 +7,66 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.34 — feedback moves the generator, and the file can be rebuilt again
+
+Two halves, and the second one was found by shipping the first.
+
+**A note is now an input.** The playtest desk collected opinions and nothing
+read them. `tools/read-notes.mjs` parses a note — a level, a column range, and
+one of `easier`, `harder` or `shape:<piece>` — and `gen-levels.mjs --notes`
+applies it through the same two knobs the telemetry log already moves: the calm
+in front of a set piece, and the size of the piece itself. Where a note and a
+death cluster land on the same piece the note wins; they answer different
+questions, and somebody writing a note has already seen the deaths.
+
+The "harder" direction did not exist before, and adding it is where the care
+went. `ctx.ease` had only ever subtracted, so three of its seven sites clamped
+to the jump budget *before* the subtraction and would have widened a hole past
+a jump this game has measured. `withinBudget` re-applies the cap afterwards; at
+ease 0 it is arithmetic that changes nothing, proven by hashing 840 builds
+across eight themes before and after. A shape is looked up in the world's own
+palette, so a `drop` list still wins and the refusal is printed rather than
+granted. A note that changed nothing says which knob stayed still. Two notes
+pulling one stretch two ways are both refused and named — file order is not an
+opinion anybody holds.
+
+Shapes resolve before directions: a `shape:hill` under a `harder` note used to
+let the direction ask `EASEABLE` about the gap the hill replaced, and then
+print "gap widened by 1" about a hill.
+
+**And the file could not be rebuilt.** `src/data/generated.js` says at the top
+which command rebuilds it. Running that command changed 15 of the 26 levels —
+and two consecutive runs agreed with each other, so the tool was deterministic
+and the committed file was simply behind the code that writes it. It matters
+for the half above: a note names columns of the level as shipped, and the
+generator would have rebuilt a different layout underneath it.
+
+Rebuilding is what exposed the reason it had gone stale. Three of the rebuilt
+levels — 3-4, 5-1 and 5-4 — came out with a hole the smallest body cannot
+cross, i.e. failing the ground-route promise (DESIGN.md §5). The seed search
+validates jump budget, headroom, spawn space, theme rule and corpus, all of
+which are readable off the grid; *clearable at power 0* is not, and takes the
+bot, a browser and five seconds per level. So the file had been correct because
+somebody once looked, not because the tool guaranteed it — and a file nobody
+dares rebuild is a file that goes stale.
+
+`seedOffset` carries the bot's answer back into `PLAN`, one number per level
+that needed one, with the reason written above each. All three cleared at
+offset 1, which is the honest shape of the knob: it is not a difficulty dial
+and buys nothing but a different draw. Every level is clearable at the smallest
+size again, and `node tools/gen-levels.mjs` now reproduces the committed file
+byte-for-byte.
+
+Six levels moved on the difficulty meter and none of them moved away from its
+aim: 3-4 150.2 → 141.0 (aim 135), 5-1 186.0 → 190.3 (aim 190, now exact),
+5-6 245.2 → 240.1 (aim 245), 5-4 200.6 → 199.5 (aim 200), 5-2 163.8 → 162.3,
+1-5 62.3 → 60.3. The other twenty measure the same as before.
+
+Ten new checks in `tools/verify.mjs`, each shown red first by breaking the
+source it protects.
+
+---
+
 ## v26.08.18.32 — puhetesti mittasi näyttämöä, ei puhetta
 
 `a spoken line is loud enough to hear` kaatui satunnaisesti, kolmesti 16.8.2026
