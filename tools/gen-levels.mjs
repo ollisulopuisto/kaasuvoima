@@ -72,6 +72,7 @@ import {
   buildLevel, validateGenerated, hidesSomething, ENEMY, THEME_RULES, themeProblems,
 } from '../src/data/generator.js';
 import { readTelemetry, RULES } from './read-telemetry.mjs';
+import { readNotes } from './read-notes.mjs';
 import { corpusHits, originWord, CORPUS_DIR } from './originality.mjs';
 
 /*
@@ -110,6 +111,24 @@ const TELEMETRY = TELEMETRY_FILE
   })
   : null;
 
+const noteArg = process.argv.indexOf('--notes');
+const NOTES_FILE = noteArg > 0 ? process.argv[noteArg + 1] : null;
+if (noteArg > 0 && !NOTES_FILE) {
+  console.error('  --notes needs a file: node tools/gen-levels.mjs --notes notes.json');
+  process.exit(1);
+}
+const NOTES = NOTES_FILE
+  ? await readNotes(NOTES_FILE).catch((err) => {
+    console.error(`  ${err.message}`);
+    process.exit(1);
+  })
+  : null;
+if (NOTES) {
+  console.log(`  ${NOTES_FILE}: ${[...NOTES.levels.values()].flat().length} notes `
+    + `across ${NOTES.levels.size} levels`);
+  for (const line of NOTES.refused) console.log(`  refused  ${line}`);
+}
+
 /* ------------------------------ telemetry ------------------------------- */
 
 /**
@@ -119,6 +138,23 @@ const TELEMETRY = TELEMETRY_FILE
  * player could feel.
  */
 const REST_BOOST = 2;
+
+/**
+ * How much a "harder" note shortens the calm leading into a spot, i.e.
+ * `REST_BOOST` pointed the other way. Halving is the same size of change as
+ * doubling and it bottoms out on its own: `PIECES.rest` will not build fewer
+ * than three columns, so the tightest a note can pull a level is the tightest
+ * the generator was ever willing to be.
+ */
+const REST_SQUEEZE = 0.5;
+
+/**
+ * The tiles a direction is worth. One, in both directions, because the note
+ * says *which way* and not *how much* — the desk offers a direction and a
+ * range, and a person who wants two tiles says so twice, on two playthroughs,
+ * having seen what the first one did.
+ */
+const NOTE_STEP = 1;
 
 /** The pieces whose difficulty is a height or a distance, i.e. the ones `ease` can lower. */
 const EASEABLE = new Set(['gap', 'stinkGap', 'corkGate', 'stairs', 'platforms', 'crumbleWalk']);
@@ -137,7 +173,7 @@ const EASEABLE = new Set(['gap', 'stinkGap', 'corkGate', 'stairs', 'platforms', 
  * itself, and in both cases the obstacle to lower is the one in that same
  * iteration — the rest always comes first.
  */
-function planTuning(hot, trace) {
+export function planTuning(hot, trace, said = []) {
   const tuning = new Map();
   const notes = [];
   const where = (h) => (h.from === h.to ? `col ${h.from}` : `cols ${h.from}-${h.to}`);
@@ -147,7 +183,7 @@ function planTuning(hot, trace) {
   };
   const index = (col) => trace.findIndex((t) => col >= t.from && col < t.to);
 
-  for (const h of hot.deaths) {
+  for (const h of (hot ? hot.deaths : [])) {
     const i = index(h.at);
     if (i < 0) {
       notes.push(`deaths ${where(h)} (${h.count})  ->  outside any set piece, left alone`);
@@ -157,7 +193,7 @@ function planTuning(hot, trace) {
     notes.push(`deaths ${where(h)} (${h.count})  ->  rest before ${trace[i].name} x${REST_BOOST}`);
   }
 
-  for (const h of hot.stalls) {
+  for (const h of (hot ? hot.stalls : [])) {
     const i = index(h.at);
     if (i < 0) {
       notes.push(`stalls ${where(h)} (${h.count})  ->  outside any set piece, left alone`);
@@ -173,6 +209,98 @@ function planTuning(hot, trace) {
     const ease = h.count >= 2 * RULES.cluster ? 2 : 1;
     step(i).ease = ease;
     notes.push(`stalls ${where(h)} (${h.count})  ->  ${name} lowered by ${ease}`);
+  }
+
+  /*
+   * NOTES, AFTER THE LOG AND OVER THE TOP OF IT.
+   *
+   * The two sources can land on the same set piece, and when they do the note
+   * wins — not because a person is more reliable than a hundred deaths, but
+   * because they are answers to different questions. The log says *people keep
+   * dying here*, which the tuner reads as "too hard" because that is the only
+   * thing deaths can mean. A note says *I played this and it should be harder*,
+   * which is a thing no log can say, and somebody who writes it has already
+   * seen the deaths. Reading the log second would let the level talk over the
+   * person who played it.
+   *
+   * A range is applied to **every** set piece it covers, because a stretch of
+   * level is what the desk lets you drag and "this bit is flat" is a sentence
+   * about the bit and not about one obstacle in it. A shape is the exception:
+   * it lands on the first piece in the range only, since asking for a hill is
+   * asking for a hill and not for four of them.
+   */
+  /*
+   * SHAPES BEFORE DIRECTIONS, and the order is load-bearing rather than tidy.
+   *
+   * A stretch can carry both — *put a hill here* and *make this harder* is a
+   * coherent pair, and `read-notes.mjs` deliberately does not refuse it. But the
+   * direction has to be decided against the piece that will actually be built:
+   * reading them in file order let a `shape:hill` note sit under a "harder"
+   * note that had already asked `EASEABLE` about the `gap` the hill replaced,
+   * and then printed "gap widened by 1" about a hill. Resolving every shape
+   * first means the forced name is the truth by the time a direction reads it.
+   */
+  const covers = (note) => trace
+    .map((t, i) => [t, i])
+    .filter(([t]) => t.from < note.to && note.from < t.to);
+
+  for (const note of said.filter((n) => n.shape)) {
+    const span = { from: note.from, to: note.to };
+    const covered = covers(note);
+    if (!covered.length) {
+      notes.push(`note ${where(span)} "${note.want}"  ->  outside any set piece, left alone`);
+      continue;
+    }
+    const [t, i] = covered[0];
+    /* Two shape notes can miss each other's column ranges and still land on the
+     * same set piece, which `read-notes.mjs` cannot see from the file alone. The
+     * second is refused here rather than overwriting the first, because a line
+     * saying a piece became something it did not is the one thing this report
+     * must never print. */
+    const already = tuning.get(i) && tuning.get(i).force;
+    if (already) {
+      notes.push(`note ${where(span)} "${note.want}"  ->  ${t.name} is already `
+        + `becoming ${already}, left alone`);
+      continue;
+    }
+    step(i).force = note.shape;
+    notes.push(`note ${where(span)} "${note.want}"  ->  ${t.name} becomes ${note.shape}`);
+  }
+
+  for (const note of said.filter((n) => !n.shape)) {
+    const span = { from: note.from, to: note.to };
+    const covered = covers(note);
+    if (!covered.length) {
+      notes.push(`note ${where(span)} "${note.want}"  ->  outside any set piece, left alone`);
+      continue;
+    }
+    const harder = note.want === 'harder';
+    for (const [piece, i] of covered) {
+      const s = step(i);
+      /* The piece a shape note put here, if one did — see the block above. */
+      const t = { name: s.force || piece.name };
+      s.restScale = harder ? REST_SQUEEZE : REST_BOOST;
+      /*
+       * The calm always moves; the obstacle only moves if it has a size. The
+       * same `EASEABLE` set the log is held to decides that, because a note is
+       * not a licence to invent a knob — `enemies` has no height to give in
+       * either direction, and reporting "raised by 1" on it would be a line
+       * that reads like a change and is not one.
+       */
+      if (EASEABLE.has(t.name)) {
+        s.ease = harder ? -NOTE_STEP : NOTE_STEP;
+        notes.push(`note ${where(span)} "${note.want}"  ->  ${t.name} `
+          + `${harder ? 'widened' : 'lowered'} by ${NOTE_STEP}, calm x${s.restScale}`);
+      } else {
+        /* "The tuner does not resize it" and "it has no size" are different
+         * claims, and only the first one is ours to make: `hill` reads
+         * `ctx.ease` perfectly well and is left out of `EASEABLE` on purpose,
+         * because lowering scenery is not what a stall in front of it asks
+         * for. The line says which knob stayed still, not what the piece is. */
+        notes.push(`note ${where(span)} "${note.want}"  ->  the tuner does not resize `
+          + `${t.name}, only the calm before it moved, x${s.restScale}`);
+      }
+    }
   }
 
   return { tuning, notes };
@@ -649,7 +777,14 @@ const WORLD7 = [
   },
 ];
 
-const PLAN = [...WORLD1, ...WORLD3, ...WORLD4, ...WORLD5, ...WORLD6, ...WORLD7];
+/*
+ * Exported for the playtest desk, which needs to know which shapes each level
+ * can actually be asked for: the world's palette minus its `drop` list. A desk
+ * that offered `crumbleWalk` on a world 1 level would be collecting notes the
+ * generator is going to refuse, and the person writing them would find that out
+ * a regeneration later.
+ */
+export const PLAN = [...WORLD1, ...WORLD3, ...WORLD4, ...WORLD5, ...WORLD6, ...WORLD7];
 
 if (IS_MAIN) {
   /*
@@ -757,12 +892,22 @@ if (IS_MAIN) {
       let notes = [];
 
       const hot = TELEMETRY?.levels.get(spec.id);
-      if (hot) {
-        const tune = planTuning(hot, plain.trace);
+      const said = NOTES?.levels.get(spec.id);
+      if (hot || said) {
+        const tune = planTuning(hot, plain.trace, said || []);
         notes = tune.notes;
         if (tune.tuning.size) {
           made = buildLevel({ ...build, tuning: tune.tuning });
           rows = made.rows;
+          /* A shape the world subtracted is refused by `buildLevel`, and the
+           * refusal is worth as much as the grant: it is the difference between
+           * "your hill is in 6-2" and a note that quietly did nothing. */
+          for (const t of made.trace) {
+            if (t.asked && !t.honoured) {
+              notes.push(`note asked for ${t.asked} at col ${t.from}  ->  `
+                + `this world has no ${t.asked}, left as ${t.name}`);
+            }
+          }
         }
       }
       const problems = validateGenerated(spec.id, rows, made, spec.theme);
@@ -911,33 +1056,60 @@ ${body}
     }
   }
 
-  if (TELEMETRY) {
-    console.log(`\nTelemetry: ${TELEMETRY_FILE}, ${TELEMETRY.events} events`
-      + `  (cluster >= ${RULES.cluster}, attempts elsewhere >= ${RULES.elsewhere})\n`);
+  /*
+   * WHAT THE FEEDBACK DID, printed for both sources at once.
+   *
+   * `notes` on a built level holds the lines from `planTuning`, and those lines
+   * do not care which source produced them — a death cluster and a note from
+   * the desk both come out as "this piece, this much, this direction". So the
+   * report is one list, and the header above it names whichever sources were
+   * actually read. Splitting it would have meant printing a level twice on the
+   * run where somebody had both a log and an opinion.
+   */
+  if (NOTES) {
+    console.log(`\nNotes: ${NOTES_FILE}`);
+    for (const id of NOTES.levels.keys()) {
+      if (!PLAN.some((spec) => spec.id === id)) {
+        console.log(`  ignored  ${id}  notes written, but this level is not generated here`);
+      } else if (ONLY_WORLD && !plan.some((spec) => spec.id === id)) {
+        console.log(`  ignored  ${id}  notes written, but --world ${ONLY_WORLD} left it alone`);
+      }
+    }
+  }
+
+  if (TELEMETRY || NOTES) {
+    if (TELEMETRY) {
+      console.log(`\nTelemetry: ${TELEMETRY_FILE}, ${TELEMETRY.events} events`
+        + `  (cluster >= ${RULES.cluster}, attempts elsewhere >= ${RULES.elsewhere})\n`);
+    } else {
+      console.log('');
+    }
     let acted = 0;
     for (const { spec, notes } of built) {
       for (const note of notes) console.log(`  ${spec.id}  ${note}`);
       acted += notes.length;
     }
-    for (const id of TELEMETRY.levels.keys()) {
+    for (const id of (TELEMETRY ? TELEMETRY.levels.keys() : [])) {
       if (!PLAN.some((spec) => spec.id === id)) {
         console.log(`  ignored  ${id}  hotspots found, but this level is not generated here`);
       }
     }
     // A near-miss is worth a line each; the long tail of one-off deaths is not,
     // so it gets counted instead of listed.
-    for (const ig of TELEMETRY.ignored.filter((i) => i.code === 'grind')) {
+    for (const ig of (TELEMETRY ? TELEMETRY.ignored : []).filter((i) => i.code === 'grind')) {
       const where = ig.from === ig.to ? `col ${ig.from}` : `cols ${ig.from}-${ig.to}`;
       console.log(`  ignored  ${ig.level}  ${ig.kind} ${where} (${ig.count})  —  only `
         + `${ig.elsewhere} attempts ended elsewhere, want ${RULES.elsewhere}`);
     }
-    const thin = TELEMETRY.ignored.filter((i) => i.code === 'thin');
+    const thin = (TELEMETRY ? TELEMETRY.ignored : []).filter((i) => i.code === 'thin');
     for (const id of new Set(thin.map((i) => i.level))) {
       const mine = thin.filter((i) => i.level === id);
       console.log(`  ignored  ${id}  ${mine.length} more spot${mine.length === 1 ? '' : 's'} under the `
         + `${RULES.cluster}-event threshold (biggest ${Math.max(...mine.map((i) => i.count))})`);
     }
-    if (!acted && !TELEMETRY.ignored.length) console.log('  nothing in the log to act on');
+    if (!acted && !(TELEMETRY ? TELEMETRY.ignored.length : 0)) {
+      console.log('  nothing in the feedback to act on');
+    }
   }
 
   console.log(CORPUS_DIR

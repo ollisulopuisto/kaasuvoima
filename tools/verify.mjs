@@ -25309,6 +25309,337 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 }
 
 /*
+ * FEEDBACK MOVES THE GENERATOR, AND THE JUMP BUDGET STILL WINS.
+ *
+ * `tools/read-notes.mjs` lets a person drag a column range on the playtest desk
+ * and say one of three things — *easier*, *harder*, *put a hill here* —
+ * `planTuning` turns that into the two knobs the telemetry path already moved,
+ * and `buildLevel` reads them. That is a straight line from a sentence somebody
+ * typed to the geometry of a shipped level, and it is the first input this
+ * generator has ever had that can ask for **more** difficulty rather than less.
+ *
+ * Which is the whole reason this block exists. Everything the tuner could do
+ * before made pieces smaller, so every site could subtract and stop there. A
+ * negative `ease` adds, and three expressions in `src/data/generator.js` —
+ * `gap`, `corkGate`, `crumbleWalk` — clamped to the budget *before* subtracting.
+ * Two "harder" notes over the same stretch would therefore have produced a hole
+ * wider than the measured run-jump: a level nobody can finish, generated on
+ * request, with the person who asked for it having no way to know that is what
+ * they asked for. `withinBudget` re-applies the cap after the ease. This asks
+ * whether it holds, and five other things.
+ *
+ * Six, because the path has six places to go wrong: the cap under pressure, the
+ * cap when nobody asked for anything, what a note means, what a *broken* note
+ * means, what happens when a note asks for something the world subtracted, and
+ * whether the desk and the generator still agree on the list of shapes at all.
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const gen = await import('./gen-levels.mjs');
+  const { buildLevel, PIECES } = await import('../src/data/generator.js');
+  const { validateLevel } = await import('../src/data/rules.js');
+  const { readNotes, SHAPES } = await import('./read-notes.mjs');
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const budget = JSON.parse(await readFile(join(ROOT, 'tools/jump-budget.json'), 'utf8'));
+
+  /* A plan row, built on this block's own seeds. The tool's seed expression is
+   * the tool's business — `gen-levels.mjs` explains at length why it cannot
+   * move — so borrowing it here would tie this gate to a number that exists for
+   * an unrelated reason. The rows themselves are borrowed, because a world's
+   * gap cap and drop list are exactly the parts a made-up spec would get wrong. */
+  const build = (spec, seed, tuning = null) => buildLevel({
+    seed,
+    theme: spec.theme,
+    targetWidth: spec.width,
+    intensity: spec.intensity || 1,
+    enemiesPer100: spec.enemiesPer100 === undefined ? null : spec.enemiesPer100,
+    maxGap: spec.maxGap === undefined ? null : spec.maxGap,
+    drop: spec.drop || [],
+    species: spec.species || null,
+    minIntro: spec.minIntro || 0,
+    tuning,
+  });
+  /* One row per theme the plan reaches, times four seeds — a spread and not a
+   * level, because a cap that holds on one seed's pieces has not been asked
+   * anything about the pieces that seed never drew. */
+  const SPREAD = [...new Map(gen.PLAN.map((s) => [s.theme, s])).values()];
+  const SEEDS = [1, 7, 4242, 90210];
+  /* The same tuning on every set piece, however many the build ends up with.
+   * `buildLevel` looks each index up and a miss is simply untuned, so the range
+   * only has to outlast any level's piece count. */
+  const everyPiece = (tune) => {
+    const m = new Map();
+    for (let i = 0; i < 512; i++) m.set(i, { ...tune });
+    return m;
+  };
+
+  /*
+   * 1. THE ONE THAT WOULD HAVE CAUGHT IT.
+   *
+   * `ease: -3` on every piece is three "harder" notes deep on every stretch of
+   * every level, i.e. more than the desk will realistically produce and
+   * therefore the right amount to ask for. The gaps and walls are measured by
+   * the validator rather than counted here, so this asks the levels the exact
+   * question the shipped ones are held to.
+   *
+   * The rows are read twice, and the second reading is `crumbleWalk`'s. `%` is
+   * solid to the validator — deliberately: it is a floor until you stand on it
+   * — so a deck stretched past the budget is invisible in the level as built.
+   * Replacing the deck with air is the level a moment later, which is the state
+   * that piece's own cap exists to survive.
+   */
+  {
+    const wide = [];
+    const spans = (rows) => validateLevel(rows, budget).filter((p) => /^(gap|wall) of /.test(p));
+    for (const spec of SPREAD) {
+      for (const seed of SEEDS) {
+        const made = build(spec, seed, everyPiece({ restScale: 1, ease: -3 }));
+        wide.push(...spans(made.rows).map((p) => `${spec.theme}/${seed}: ${p}`));
+        wide.push(...spans(made.rows.map((r) => r.replaceAll('%', ' ')))
+          .map((p) => `${spec.theme}/${seed} with the deck fallen: ${p}`));
+      }
+    }
+    expect('a "harder" note cannot widen a hole past the measured jump budget',
+      wide.length === 0,
+      wide.length ? wide.slice(0, 3).join('; ')
+        : `${SPREAD.length} themes x ${SEEDS.length} seeds at ease -3, every gap within `
+          + `${budget.gapTiles} (${budget.softGapTiles} bridged) and every wall within `
+          + `${budget.wallTiles}`);
+  }
+
+  /*
+   * 2. AND THE ONE THAT SAYS THE CAP COST NOTHING.
+   *
+   * A cap re-applied after the ease is arithmetic that changes nothing whenever
+   * the ease is zero or above, which is every build this repository has ever
+   * made. That deserves a gate rather than a paragraph, because the feedback
+   * path leans on it twice. `gen-levels.mjs` builds each level plain first and
+   * resolves every note against *that* build's columns, so a neutral tuning
+   * that quietly moved one tile would leave every note pointing at the wrong
+   * piece; and `src/data/generated.js` is committed, so the same drift would
+   * rewrite shipped levels on the next run for a reason nobody typed.
+   *
+   * Byte-identical rows, not "close enough": the two builds share a seed, so
+   * there is no honest reason for a single character to differ.
+   */
+  {
+    const drift = [];
+    for (const spec of SPREAD) {
+      for (const seed of SEEDS) {
+        const plain = build(spec, seed).rows.join('\n');
+        const neutral = build(spec, seed, everyPiece({ restScale: 1, ease: 0 })).rows.join('\n');
+        if (plain !== neutral) {
+          const at = [...plain].findIndex((ch, i) => ch !== neutral[i]);
+          drift.push(`${spec.theme}/${seed} differs at character ${at}`);
+        }
+      }
+    }
+    expect('a neutral tuning builds the same level as no tuning at all',
+      drift.length === 0,
+      drift.length ? drift.slice(0, 3).join('; ')
+        : `${SPREAD.length * SEEDS.length} levels, rows identical byte for byte`);
+  }
+
+  /*
+   * 3. WHAT A NOTE MEANS, ON A TRACE SMALL ENOUGH TO READ.
+   *
+   * Three set pieces at known columns, because the thing under test is the
+   * mapping from a range to a knob — against a real level's trace every
+   * assertion below would instead be a claim about which piece that seed
+   * happened to draw. `enemies` is in the trace on purpose: it is the piece
+   * with no size to give, and the difference between "the calm moved" and "the
+   * obstacle moved" is the one distinction `planTuning` makes that a reader
+   * would not guess.
+   */
+  {
+    const TRACE = [
+      { name: 'gap', from: 30, to: 46 },
+      { name: 'stairs', from: 46, to: 70 },
+      { name: 'enemies', from: 70, to: 92 },
+    ];
+    /* Telemetry is optional and none is passed: a note is a judgement, and it
+     * does not wait for a log to agree with it. */
+    const plan = (from, to, want) => gen.planTuning(null, TRACE, [{
+      from, to, want, shape: want.startsWith('shape:') ? want.slice('shape:'.length) : null,
+    }]);
+    const show = (r) => JSON.stringify([...r.tuning]);
+
+    const easier = plan(32, 44, 'easier');
+    const e0 = easier.tuning.get(0);
+    expect('an "easier" note lowers the obstacle and lengthens the calm before it',
+      easier.tuning.size === 1 && !!e0 && e0.ease === 1 && e0.restScale > 1, show(easier));
+
+    const harder = plan(32, 44, 'harder');
+    const h0 = harder.tuning.get(0);
+    expect('a "harder" note widens the obstacle and shortens the calm before it',
+      harder.tuning.size === 1 && !!h0 && h0.ease === -1 && h0.restScale < 1, show(harder));
+
+    /* A dragged range is a sentence about the stretch, so it lands on every
+     * piece it touches — but only the two with a height or a span can spend an
+     * `ease`, and `enemies` has to come out with its calm moved and nothing
+     * else. Without that half, "applied to every covered piece" and "invented a
+     * knob on a piece that has none" look identical from outside. */
+    const across = plan(30, 92, 'easier');
+    const covered = [0, 1, 2].map((i) => across.tuning.get(i));
+    expect('a note across three pieces moves all three calms and only the two sizes',
+      across.tuning.size === 3 && covered.every((s) => s && s.restScale > 1)
+      && covered[0].ease === 1 && covered[1].ease === 1 && covered[2].ease === 0,
+      show(across));
+
+    /* Asking for a hill is asking for one hill. The same range as above, so the
+     * only thing between this and three hills is the rule itself. */
+    const shaped = plan(30, 92, 'shape:hill');
+    const s0 = shaped.tuning.get(0);
+    expect('a "shape:" note lands on the first piece in the range and no other',
+      shaped.tuning.size === 1 && !!s0 && s0.force === 'hill', show(shaped));
+
+    /* Silence here would be indistinguishable from a note that worked. */
+    const nowhere = plan(200, 240, 'easier');
+    expect('a note outside every set piece changes nothing and says so',
+      nowhere.tuning.size === 0 && nowhere.notes.length === 1
+      && nowhere.notes[0].includes('outside any set piece'),
+      `${nowhere.tuning.size} pieces tuned, ${nowhere.notes.join(' / ') || 'nothing reported'}`);
+  }
+
+  /*
+   * 4. A BROKEN NOTE IS REFUSED BY NAME, AND ITS NEIGHBOURS SURVIVE IT.
+   *
+   * Both halves matter and the second is the easier one to lose: a parser that
+   * throws the file away on the first typo turns one misspelt level id into an
+   * evening of feedback nobody acted on. Six ways to be wrong inside a file,
+   * plus the two that are wrong about the whole file and therefore throw.
+   */
+  {
+    const dir = await mkdtemp(join(tmpdir(), 'sfb3-notes-'));
+    const file = join(dir, 'notes.json');
+    const write = (body) => writeFile(file, JSON.stringify(body));
+    const problems = [];
+    try {
+      await write({
+        game: 'sfb3',
+        v: 1,
+        notes: [
+          { level: '1-4', from: 30, to: 46, want: 'easier' },        // sound
+          { level: 'seiska', from: 30, to: 46, want: 'easier' },     // not a level id
+          { level: '1-5', from: 46, to: 30, want: 'harder' },        // range runs backwards
+          { level: '1-5', from: 10, to: 20, want: 'shape:banaani' }, // no such piece
+          { level: '1-5', from: 10, to: 20, want: 'sivuttain' },     // no such direction
+          { level: '1-6', from: 10, to: 40, want: 'easier' },        // contradiction, one half
+          { level: '1-6', from: 30, to: 60, want: 'harder' },        // and the other
+          { level: '1-6', from: 90, to: 99, want: 'harder' },        // sound, overlaps neither
+        ],
+      });
+      const read = await readNotes(file);
+      const named = (needle) => read.refused.some((r) => r.includes(needle));
+      const byName = [
+        ['a level id that is not one', named('not a level id')],
+        ['a backwards column range', named('not a column range')],
+        ['a shape the generator has never heard of', named('no such shape "banaani"')],
+        ['a want that is neither direction nor shape', named('is neither easier, harder')],
+        ['both sides of a contradiction',
+          read.refused.filter((r) => r.includes('contradicts')).length === 2],
+      ];
+      for (const [what, ok] of byName) if (!ok) problems.push(`accepted ${what}`);
+      if (read.refused.length !== 6) {
+        problems.push(`${read.refused.length} refusals, expected 6`);
+      }
+      /* The two sound notes sit on different levels, and the second shares its
+       * level with the refused pair — so this also asks that a level does not
+       * lose its good notes along with its bad ones. */
+      const kept = [...read.levels].map(([id, list]) => `${id}x${list.length}`).join(' ');
+      if (kept !== '1-4x1 1-6x1') problems.push(`kept ${kept || 'nothing'}, expected 1-4x1 1-6x1`);
+
+      const throws = async (body) => {
+        await write(body);
+        try { await readNotes(file); return false; } catch { return true; }
+      };
+      if (!await throws({ game: 'smb1', v: 1, notes: [] })) problems.push('read another game\'s file');
+      if (!await throws({ game: 'sfb3', v: 2, notes: [] })) problems.push('read a version 2 file');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+    expect('readNotes refuses every malformed note by name and keeps the sound ones',
+      problems.length === 0,
+      problems.join('; ') || '6 notes refused, 2 kept, 2 whole files refused');
+  }
+
+  /*
+   * 5. A NOTE IS A REQUEST, AND THE WORLD MAY STILL SAY NO.
+   *
+   * `drop` is the mechanism by which world 1 stays as narrow as its first three
+   * levels taught, and `gen-levels.mjs` records what it cost the day generated
+   * levels handed those mechanics back. A `shape:` note is a way to hand one
+   * back on purpose, so the refusal is the behaviour — and the *recorded*
+   * refusal is the point, because a note that silently did nothing is the
+   * failure mode the whole notes path is written against. The granted half is
+   * here too: "never honoured" and "honoured only when allowed" produce the
+   * same `honoured: false` on the case above.
+   */
+  {
+    const spec = gen.PLAN.find((s) => (s.drop || [])
+      .some((n) => gen.THEME_RULES[s.theme].weights[n]));
+    const problems = [];
+    if (!spec) {
+      problems.push('no plan row drops a piece its own theme knows about');
+    } else {
+      const forbidden = spec.drop.find((n) => gen.THEME_RULES[spec.theme].weights[n]);
+      const allowed = Object.keys(gen.THEME_RULES[spec.theme].weights)
+        .find((n) => !spec.drop.includes(n));
+      const forced = (name) => build(spec, 31337,
+        new Map([[0, { restScale: 1, ease: 0, force: name }]])).trace;
+
+      const no = forced(forbidden);
+      if (!no.length) problems.push('the build produced no set pieces at all');
+      else {
+        if (no[0].asked !== forbidden) problems.push(`the request for ${forbidden} was not recorded`);
+        if (no[0].honoured !== false) problems.push(`${forbidden} was recorded as honoured`);
+        if (no.some((t) => t.name === forbidden)) problems.push(`${forbidden} was built anyway`);
+      }
+      const yes = forced(allowed);
+      if (!yes.length || yes[0].name !== allowed || yes[0].honoured !== true) {
+        problems.push(`${allowed} should have been honoured, got ${yes.length ? yes[0].name : 'nothing'}`);
+      }
+    }
+    expect('a shape the world dropped is refused in the trace, not granted',
+      problems.length === 0,
+      problems.join('; ') || `${spec.id} drops ${spec.drop.join(', ')}`);
+  }
+
+  /*
+   * 6. THE DESK'S PALETTE AND THE GENERATOR'S ARE ONE LIST, OR THEY ARE A BUG.
+   *
+   * `SHAPES` is what the playtest desk offers and what a refusal prints back at
+   * somebody who typed a name wrong. It is derived from `PIECES` today, so this
+   * costs nothing — and it is exactly the kind of derivation that gets replaced
+   * by a hand-written list the first time the desk wants to hide one entry. On
+   * that day the two drift apart in silence: a new set piece is a shape nobody
+   * can ask for, and a renamed one is a shape the desk offers and the generator
+   * refuses. Neither breaks anything, which is why nothing else would say so.
+   */
+  {
+    const mine = Object.keys(PIECES).sort();
+    const missing = mine.filter((n) => !SHAPES.includes(n));
+    const extra = SHAPES.filter((n) => !mine.includes(n));
+    expect('every shape the desk can ask for is a piece the generator can build',
+      missing.length === 0 && extra.length === 0,
+      missing.length || extra.length
+        ? `not offered: ${missing.join(', ') || '-'}; not a piece: ${extra.join(', ') || '-'}`
+        : `${SHAPES.length} pieces`);
+  }
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- palaute generaattorille: loppu ---- */
+
+/*
  * ALKUPERÄISYYSTARKISTUS: MITÄ ON MITATTU JA MITÄ EI, EIKÄ MITÄÄN SILTÄ VÄLILTÄ.
  *
  * DESIGN.md kohta 3 sanoo että generaattori hylkää kentän jos yksikään **8

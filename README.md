@@ -326,6 +326,7 @@ node tools/measure-jump.mjs  # mittaa hyppybudjetin ajamalla hypyt moottorissa
 node tools/gen-levels.mjs    # generoi kaikki generoidut kentät tilastoista
 node tools/gen-levels.mjs --world w3               # ...vain yhden maailman
 node tools/gen-levels.mjs --telemetry loki.json    # ...ja säätää niitä pelidatan mukaan
+node tools/gen-levels.mjs --notes notes.json       # ...ja säätää niitä pelaajan muistiinpanojen mukaan
 node tools/originality.mjs   # vertaa committoidut kentät korpukseen (vaatii VGLC_DIR)
 node tools/daily-origin.mjs  # tarkistaa päivän pierun koko ikkunan (vaatii VGLC_DIR)
 node tools/mirror-pacing.mjs # kantaa mitatut luvut selaimen luettaviksi (src/data/pacing.js)
@@ -508,6 +509,49 @@ Kaksi asiaa, joiden varaan koko kirjaus on rakennettu:
 Debug-ruudussa (**9**) kentän päälle piirtyy lämpökartta: punaiset pylväät ovat
 kuolemia, siniset viivat alalaidassa jumipaikkoja. **8** vie datan JSON-tiedostoon.
 Konsolista: `sfb3.telemetry.summary('1-1')` ja `sfb3.telemetry.clear()`.
+
+### The playtest desk: an opinion as a second input
+
+The log says *where* people die. It cannot say **that a stretch is boring**, and
+it never asks for anything — a level nobody dies in produces no events at all,
+which is indistinguishable in the data from a level nobody played. So there is a
+second input, and it is a person: the playtest desk draws every level as a
+silhouette built from its real grid, you drag across a stretch, and you say one
+of three things about it.
+
+    { "game": "sfb3", "v": 1,
+      "notes": [ { "level": "1-4", "from": 120, "to": 150, "want": "harder" },
+                 { "level": "5-2", "from": 40,  "to": 66,  "want": "easier" },
+                 { "level": "2-4", "from": 88,  "to": 100, "want": "shape:hill" } ] }
+
+`tools/read-notes.mjs` parses that and `tools/gen-levels.mjs --notes` acts on
+it, through the same two knobs the log already moves: the calm in front of a set
+piece, and the size of the piece itself. Four rules keep a note from becoming a
+way around the game's own measurements:
+
+- **A note cannot buy an unclearable jump.** "Harder" widens a hole by a tile,
+  and `withinBudget` in `src/data/generator.js` re-applies the measured jump
+  budget *after* the widening. The budget is the ceiling; a note spends itself
+  against it.
+- **A shape is a request, not an override.** `shape:hill` is looked up in the
+  world's own palette, so a world that subtracted a piece keeps its subtraction
+  and the refusal is printed by name.
+- **A note that changes nothing says so.** A piece with no size to give
+  (`enemies`) reports that only the calm before it moved, rather than a line
+  that reads like a change and is not one.
+- **Contradictions are refused, not resolved.** Two overlapping notes pulling
+  opposite ways are both dropped and named, because file order is not an opinion
+  anybody holds.
+
+Where the log and a note land on the same piece, **the note wins** — they answer
+different questions, and somebody writing a note has already seen the deaths.
+
+The shapes are the generator's own piece names, and `shape:rest` is worth
+knowing about: `rest` is the calm ground between challenges, so asking for it is
+how you say **take this obstacle out** without saying what should replace it.
+
+The 26 generated levels can act on a note directly. The hand-made ones cannot,
+and the reader says so per level instead of dropping them quietly.
 
 ## Julkaisu
 
