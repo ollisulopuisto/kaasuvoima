@@ -255,23 +255,26 @@ export const WORLD1_LEVELS = {
   '1-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
     /*
-     * `root_drop` ja `root_pantry` vaihtoivat paikkaa 18.8.2026, ja se on
-     * mitattu korjaus eikä makuasia.
+     * The chunk order is the one this level was written with. The flyer's
+     * first appearance in the whole game is in `root_drop`, and after world 1's
+     * generated levels were rebuilt for the 16-row grid the ground pound's
+     * first appearance landed here too, nineteen tiles away — one short of the
+     * twenty `tools/curriculum.mjs` requires between two first appearances.
      *
-     * Lentäjän ensiesittely oli maailman 1 generoiduissa kentissä; kun ne
-     * generoitiin uusiksi (kenttädata 15 → 16 riviä), yksikään niistä ei enää
-     * saanut lentäjää, ja ensiesittely putosi tähän kenttään sarakkeeseen 55 —
-     * yhdeksäntoista laatan päähän maahaniskun ensiesittelystä sarakkeessa 74.
-     * `tools/curriculum.mjs` mittaa sen ja `verify.mjs` kaataa: kahta
-     * ensiesittelyä ei ole saman kahdenkymmenen laatan ruudun sisällä.
+     * Two orderings were tried before the right fix was found, and both are
+     * worth recording because each broke something else quietly. Swapping
+     * `root_drop` with `root_pantry` moved this level's power-up out of the
+     * opening quarter, which DESIGN.md §5 requires and `validateLevel` caught.
+     * Swapping it with `root_moat` moved the lava's first appearance to column
+     * 57 and put *that* inside the pound's screen instead. The three
+     * appearances simply do not fit into 160 columns at twenty tiles apart
+     * while the pantry is pinned to the opening quarter.
      *
-     * Vaihto eikä lisäys, samasta syystä kuin kaikkialla muualla tässä
-     * tiedostossa: palikat ovat saman levyisiä, joten yksikään piilotiili ei
-     * liikkunut ja kentän pituus on ennallaan. Lentäjä on nyt sarakkeessa 39
-     * eli kolmenkymmenenviiden laatan päässä.
+     * So the level did not move at all: the flyer moved three columns inside
+     * its own chunk. See `root_drop` in `chunks/fortresses.js`.
      */
     chunks: [
-      'start', 'root_gate', 'root_drop', 'root_pantry', 'root_scale',
+      'start', 'root_gate', 'root_pantry', 'root_drop', 'root_scale',
       'root_vault', 'root_moat', 'root_drop', 'root_moat', 'boss_arena',
     ],
   },

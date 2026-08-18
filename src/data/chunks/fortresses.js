@@ -195,10 +195,21 @@ const ROOT_CHUNKS = {
    * kiertää sen. Piikkipeti on kolme ruutua ja alkaa vasta laudan loputtua, eli
    * se on se hinta jonka parvelta laskeutuminen väärässä paikassa maksaa.
    */
+  /*
+   * The flyer sits at local column 4, and that is a measured position rather
+   * than a drawn one. In 1-F this chunk carries the flyer's first appearance
+   * in the whole game, and `tools/curriculum.mjs` forbids two first
+   * appearances inside one twenty-tile screen. At local column 7 the flyer
+   * landed on column 55 with the ground pound's first appearance at 74 —
+   * nineteen tiles, one short. Three columns to the left is the cheapest fix
+   * that does not move a chunk, change the level's length or re-roll a single
+   * hidden brick, and the flyer patrols horizontally anyway, so its starting
+   * column is the one thing about it that is free to move.
+   */
   root_drop: ck(16, {
     0: G,
     1: G,
-    7: '       f',
+    7: '    f',
     8: '   o o o',
     9: '  -------',
     12: '       k    ^^^',

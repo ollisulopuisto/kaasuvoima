@@ -7,6 +7,62 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.32 — puhetesti mittasi näyttämöä, ei puhetta
+
+`a spoken line is loud enough to hear` kaatui satunnaisesti, kolmesti 16.8.2026
+aikana ja aina eri lukemin, ja se esti pomoäänet (ROADMAP). Kynnystä ja
+odotusaikaa oli jo säädetty kahdesti, kumpikin oikeasta syystä ja kumpikaan ei
+auttanut. **Tällä kertaa mitattiin ensin.**
+
+Kaatuneen ajon rivi luettiin loppuun asti — *näyttämö WorldMapScene … ikkunat
+65.11 65.11 65.11 13.42 8.96 5.62 5.62 5.62* — ja siinä oli kaksi asiaa jotka
+vaimeneva ääni ei voi tehdä: kolme peräkkäistä **täsmälleen** yhtä suurta
+lukemaa, ja lopuksi tasainen taso eikä nollaa. Uusi diagnostiikkarivi kertoi
+kumman: väylän taso mitattiin **ennen** kuin lohko soitti mitään, ja se oli
+*24,25 @ WorldMapScene/m:-/a:wind*. Lohkon oma tahallinen "punainen" (neljä
+ääntä) oli murto-osa siitä mitä odotus todella kuunteli, ja `Ambience`in
+tuulipeti — jatkuvaa kohinaa, ei häntä — oli päällä. Peti herää joka kerta kun
+elossa oleva näyttämö kutsuu `hold()`ia, eli portin lukema riippui siitä mikä
+näyttämö sattui jäämään pystyyn edellisestä lohkosta.
+
+Ensimmäinen korjausyritys — peli nimikkösivulle, `Music.stop()`,
+`Ambience.stop()` — puhdisti väylän (*ennen 0.00*) ja paljasti toisen puoliskon:
+**houkutusdemo lähti kesken odotuksen** ja alkoi soittaa samalle väylälle
+(*pitäjät TitleScene/… DemoScene/m:level/…*, ikkunat 282,65 viisi kertaa,
+19,4 sekuntia). `game.toTitle()` *ostaa* kaksikymmentä sekuntia; se ei takaa
+mitään. Siksi demo ei ole enää ajastettu vaan **irrotettu**: `startDemo` on
+mittauksen ajan tyhjä ja palautetaan lopuksi.
+
+Kynnyksiin ja odotusaikoihin ei koskettu, ja tahallinen punainen on yhä
+tallella. Todiste on kolme peräkkäistä ajoa, koska yksi vihreä ei kerro mitään
+satunnaisesta viasta: **ääni 0,614 / 0,609 / 0,612, tausta 0,000 joka kerta**,
+eikä yhdessäkään ollut muuta pitäjää kuin nimikkösivu.
+
+Sama parkki annettiin myös konsonantti- ja pomoäänilohkoille, jotka olivat
+tehneet saman käsin ja vajaammin. Niistä kaksi (`every consonant makes a sound
+of its own`, `a fricative is audible…`) menee yhä noin kahdessa ajossa kolmesta
+läpi tyhjänä — *"ei mitattu (äänikello seisoi)"* — ja se on **eri vika**, ei
+sama: päätön Chromium renderöi ääntä ryöppyinä (mitattu *äänikello 3,39 s /
+seinäkello 1,56 s*), ja yhden ryöpyn väliin mahtuu enemmän ääntä kuin
+analysaattorin 743 ms:n muistiin. Ääntä menee siis oikeasti ohi, joten
+"ei mitattu" on totuus eikä liian tiukka raja. Korjaus on mittaustapa joka ei
+voi menettää näytteitä (`AudioWorkletNode`); se on kokeiltu toimivaksi ja
+kirjattu ROADMAPiin.
+
+Samassa erässä `tools/verify.mjs`:n kenttäkiinnikkeet siirrettiin kuudentoista
+rivin ruudukolle: lattia riville 14, kaistat 16/32, pystykoekenttä 48 riville,
+ja `4-F`:n möykkyrivin punainen vaihtui `4-2`:een koska salaisuuksien hajautus
+arpoi uudelleen. Yksi portti (`potkaistu kuori kiihtyy alamäkeen`) ei ollut
+mitannut mitään: kuori syntyi kahdeksan pikseliä lattian sisään, luki lattian
+seinäksi ja pomppi paikallaan koko kokeen ajan — nyt jalat pannaan pinnalle
+`toShell`in jälkeen, ja alamäki nostaa vauhdin 3,4:stä 4,76:een. Sen pari
+(`kävelijä kävelee samaa vauhtia myös rinteessä`) ei ollut sekään: kävelijä ei
+ehtinyt rinteeseen asti yhdeksässäkymmenessä framessa, joten koe vertasi kahta
+tasamaata. Molemmat lukevat nyt myös sen, montako framea rinteessä oikeasti
+kuljettiin.
+
+---
+
 ## v26.08.18.31 — alkuperäisyystarkistus ei ollut koskaan verrannut mitään
 
 Tämä ei ollut listalla. Se löytyi kun kenttädatan rivimäärä piti käydä läpi

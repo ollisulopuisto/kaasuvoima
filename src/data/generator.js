@@ -949,7 +949,25 @@ export const THEME_RULES = {
      * that never lands on a block row or on the player's head. And why it does
      * not reach row 0: see `ceilingPass` — rows 0 and 1 are the two the finale's
      * roof claim is measured on, and this world is its nearest rival. */
-    shape: (c) => ceilingPass(c, 4, 3),
+    /*
+     * The lid sits on rows 2-3 and NOT one row lower, and that is the whole
+     * reason this line is not simply the old one shifted down with everything
+     * else when the grid grew to 16 rows (18.8.2026).
+     *
+     * What matters about the lid is not where it is but **how much room is
+     * left above it**. A lid on rows 3-4 leaves rows 0-2 clear — three rows,
+     * which is exactly `HEAD`, the space a body needs — and `lampFooting`
+     * duly planted a checkpoint lamp on the factory roof. The bot then
+     * respawned on top of the world and ran the rest of the level over the
+     * ceiling, past the flag, without touching it: `jokaisesta kaasulyhdystä
+     * pääsee maaliin voimatasolla 0` failed on 4-5 and 4-7 with the body at
+     * y=32 while the flagpole spanned y=120…224.
+     *
+     * On rows 2-3 the roof keeps two clear rows above it, one short of a body,
+     * and the outside of the factory stays uninhabitable — which is what the
+     * lid was always for.
+     */
+    shape: (c) => ceilingPass(c, 3, 2),
     maxBlockHeight: 7,
     rules: [ruleFactoryCeiling],
     fixtures: [THEME_FIXTURES.factory],

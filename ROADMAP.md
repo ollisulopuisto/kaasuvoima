@@ -460,14 +460,48 @@ kuusi varianttia yhtä vastaan, portissa lukuna). Kahdeksas variantti toiselle
 maailman 8 esiintymälle tekee väitteestä merkilleen toden sen sijaan että se
 on totta vain jos pöhöä ei lasketa kahdesti.
 
-### Pomoäänet odottavat testien korjausta, eivät päätöstä
+### Pomoäänet: este on poistunut (18.8.2026)
 
 Päätös 9.8.2026 on voimassa sellaisenaan: **oma ääni, jaetut toimintaäänet.**
-Este on muualla — puhesynteesin testit (`a spoken line is loud enough to hear`,
-`every consonant makes a sound of its own`, `a fricative is audible…`) kaatuvat
-satunnaisesti, kolmesti 16.8.2026 aikana ja aina eri lukemin. Kuuden uuden
-äänen rakentaminen sen päälle tarkoittaisi kuutta ääntä joiden portti ei kerro
-mitään. **Korjataan mittaus ensin.**
+Este oli mittauksessa, ja se on nyt korjattu — kuusi uutta ääntä voi rakentaa.
+
+Este oli puhesynteesin testeissä (`a spoken line is loud enough to hear`, `every
+consonant makes a sound of its own`, `a fricative is audible…`), jotka kaatuivat
+satunnaisesti ja aina eri lukemin. **Vika ei ollut kynnyksissä eikä
+odotusajoissa** — molempia oli jo kerran säädetty eikä kumpikaan auttanut —
+vaan siinä että mittaus mittasi ympäristöä. Kaksi mitattua syytä:
+
+* **Väylällä oli 24,25 ennen kuin lohko soitti mitään**, ja `Ambience.current`
+  oli `wind`. Tuulipeti on jatkuvaa kohinaa, ja juuri sen muotoinen oli kaatunut
+  ajo: *ikkunat … 5.62 5.62 5.62*, kolme peräkkäistä täsmälleen yhtä suurta
+  lukemaa. Vaimeneva häntä ei tee sitä. Peti herää joka kerta kun elossa oleva
+  näyttämö kutsuu `hold()`ia, eli portti riippui siitä mikä näyttämö sattui
+  olemaan pystyssä edellisen lohkon jäljiltä.
+* **Nimikkösivulle palaaminen yksin ei riitä.** Parkkeerattuna väylä oli puhdas
+  (*ennen 0.00*) ja sitten houkutusdemo lähti kesken odotuksen — *pitäjät
+  TitleScene/… DemoScene/m:level/…*, ikkunat 282,65 viisi kertaa peräkkäin,
+  19,4 sekuntia. `game.toTitle()` *ostaa* kaksikymmentä sekuntia; se ei takaa
+  mitään, ja hitaalla renderöijällä lohko kestää kauemmin.
+
+Korjaus on `tools/verify.mjs`:n `park()`: näyttämö nimikkösivulle, `Music.stop()`,
+`Ambience.stop()` ja **`startDemo` irrotettuna** mittauksen ajaksi, kaikki
+takaisin sen jälkeen. Kynnyksiin ja odotusaikoihin ei koskettu. Todistettu
+kolmella peräkkäisellä ajolla: *ääni 0,614 / 0,609 / 0,612, tausta 0,000 joka
+kerta*, eikä yhdessäkään ollut muuta pitäjää kuin nimikkösivu.
+
+**Mitä jäi jäljelle, ja se on eri vika.** Konsonanttilohkon kaksi porttia
+(`every consonant makes a sound of its own`, `a fricative is audible…`)
+raportoivat yhä noin kahdessa ajossa kolmesta *"ei mitattu (äänikello seisoi)"*,
+eli ne menevät läpi tyhjinä. Syy on mitattu ja se on toinen kuin yllä: **päätön
+Chromium renderöi ääntä ryöppyinä** — mitattu *äänikello 3,39 s / seinäkello
+1,56 s*, eli äänikello ehti yli kaksinkertaista vauhtia — ja yhden ryöpyn väliin
+mahtuu enemmän ääntä kuin analysaattorin 743 ms:n muistiin. Silloin ääntä
+oikeasti menee ohi, joten `meterFor`in `stalled` kertoo totuuden eikä ole liian
+tiukka. Korjaus ei siis ole kynnyksen säätö vaan mittaustapa joka ei voi
+menettää näytteitä: `AudioWorkletNode`, joka näkee jokaisen näytteen
+äänisäikeessä. Kokeiltu erillisellä koeajolla ja se toimii — sadan äänen ryöppy
+vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se on
+`meterFor`in vaihto kuudessa kutsupaikassa eikä mahtunut tähän erään.
 
 ## Jonossa
 

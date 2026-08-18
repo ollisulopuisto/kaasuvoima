@@ -787,15 +787,15 @@ const report = await page.evaluate(async () => {
     {
       const W = 48;
       const floorRows = (bricksAt) => {
-        const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+        const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
         const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-        put(13, 0, '#'.repeat(W));
         put(14, 0, '#'.repeat(W));
-        put(12, 1, '1');
-        put(9, 6, '!');
-        put(12, 44, 'F');
+        put(15, 0, '#'.repeat(W));
+        put(13, 1, '1');
+        put(10, 6, '!');
+        put(13, 44, 'F');
         // Tiililattia keskelle, ja sen alle kuilu johon läpi mennään.
-        put(13, bricksAt, 'B'.repeat(6));
+        put(14, bricksAt, 'B'.repeat(6));
         return rows;
       };
       const brickDef = (bricksAt) => ({
@@ -823,7 +823,7 @@ const report = await page.evaluate(async () => {
         s.entities = s.entities.filter((e) => e.kind !== 'enemy');
         // Jalat tiilirivin päälle ja sieltä ylös se korkeus jota kokeillaan.
         s.player.x = (at + 2) * 16;
-        s.player.y = 13 * 16 - s.player.h - fromAbove;
+        s.player.y = 14 * 16 - s.player.h - fromAbove;
         s.player.vy = 0;
         s.player.onGround = false;
         i.held.down = true; i.pressed.jump = true; i.held.jump = true;
@@ -868,18 +868,18 @@ const report = await page.evaluate(async () => {
       {
         /* Puskukoe tarvitsee oman kenttänsä: iskukokeen tiilirivi on lattiassa
          * ja lattian alla on lattiaa, eli sen alle ei mahdu päätä. Tässä sama
-         * tiili on ilmassa rivillä 9 — kolme tyhjää riviä lattian yllä, eli
+         * tiili on ilmassa rivillä 10 — kolme tyhjää riviä lattian yllä, eli
          * tasan se bumppirivi johon peli muutenkin panee lohkonsa. */
         const bumpAt = 20;
         const bumpDef = () => {
-          const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+          const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
           const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-          put(13, 0, '#'.repeat(W));
           put(14, 0, '#'.repeat(W));
-          put(12, 1, '1');
-          put(9, 6, '!');
-          put(12, 44, 'F');
-          put(9, bumpAt, 'B'.repeat(4));
+          put(15, 0, '#'.repeat(W));
+          put(13, 1, '1');
+          put(10, 6, '!');
+          put(13, 44, 'F');
+          put(10, bumpAt, 'B'.repeat(4));
           return {
             id: 'bBump', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
             boss: false, bossVariant: 0, bands: null, rows,
@@ -895,14 +895,14 @@ const report = await page.evaluate(async () => {
           // Suoraan tiilen alle lattialle, ja hyppy pohjaan.
           const p = s.player;
           p.x = (bumpAt + 1) * 16;
-          p.y = 13 * 16 - p.h;
+          p.y = 14 * 16 - p.h;
           p.vy = 0;
           p.onGround = true;
           i.pressed.jump = true;
           i.held.jump = true;
           let f = 0;
-          while (f < 60 && s.tileAt(bumpAt + 1, 9) === 'B') { s.update(i); i.pressed = blank(); f++; }
-          return s.tileAt(bumpAt + 1, 9) !== 'B';
+          while (f < 60 && s.tileAt(bumpAt + 1, 10) === 'B') { s.update(i); i.pressed = blank(); f++; }
+          return s.tileAt(bumpAt + 1, 10) !== 'B';
         };
         const smallDive = dive({ type: null, level: 0 }, 150);
         const smallBump = bump({ type: null, level: 0 });
@@ -952,18 +952,18 @@ const report = await page.evaluate(async () => {
     {
       const W = 48;
       const wallRows = () => {
-        const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+        const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
         const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-        put(13, 0, '#'.repeat(W));
         put(14, 0, '#'.repeat(W));
-        put(12, 1, '1');
-        put(9, 6, '!');
-        put(12, 44, 'F');
-        /* Rivit 11 ja 12, koska juuri ne kaksi häntä yltää: pelaajan jalat
-         * ovat rivin 13 päällä ja `tailBox` on koko vartalon korkuinen, eli
-         * voimatasolla 2 (h 30 px) se kattaa y 178…207 = rivit 11 ja 12.
-         * Rivi 10 olisi väite hännästä joka yltää pään yli. */
-        for (const y of [11, 12]) { put(y, 20, 'B'); put(y, 16, 'B'); }
+        put(15, 0, '#'.repeat(W));
+        put(13, 1, '1');
+        put(10, 6, '!');
+        put(13, 44, 'F');
+        /* Rivit 12 ja 13, koska juuri ne kaksi häntä yltää: pelaajan jalat
+         * ovat rivin 14 päällä ja `tailBox` on koko vartalon korkuinen, eli
+         * voimatasolla 2 (h 30 px) se kattaa y 194…223 = rivit 12 ja 13.
+         * Rivi 11 olisi väite hännästä joka yltää pään yli. */
+        for (const y of [12, 13]) { put(y, 20, 'B'); put(y, 16, 'B'); }
         return rows;
       };
       const tailDef = () => ({
@@ -982,7 +982,7 @@ const report = await page.evaluate(async () => {
          * neljän sarakkeen päässä — kauempana kuin hännän ulottuvuus (14 px)
          * kummallakaan puolella. */
         s.player.x = facing > 0 ? 20 * 16 - s.player.w : 17 * 16;
-        s.player.y = 13 * 16 - s.player.h;
+        s.player.y = 14 * 16 - s.player.h;
         s.player.vy = 0;
         s.player.facing = facing;
         // Juoksunappi pyöräyttää hännän; suunta pidetään käsin, koska
@@ -998,12 +998,12 @@ const report = await page.evaluate(async () => {
 
       const right = swipe(1);
       const left = swipe(-1);
-      const gone = (s, x) => [11, 12].filter((y) => s.tileAt(x, y) !== 'B').length;
+      const gone = (s, x) => [12, 13].filter((y) => s.tileAt(x, y) !== 'B').length;
       /* Salaiset tiilet eivät hajoa, joten mittari on "vähintään yksi hajosi
        * sillä puolella jonne häntä osoitti, eikä yhtään toisella" — ja
        * salaisten määrä luetaan kentästä, jotta koe ei vaadi kuutta hajonnutta
        * tiiltä silloin kun yksi niistä on pyhä. */
-      const holy = (s, x) => [11, 12].filter((y) => s.brickSecret(x, y)).length;
+      const holy = (s, x) => [12, 13].filter((y) => s.brickSecret(x, y)).length;
       expect('hännänpyörähdys rikkoo tiilen siltä puolelta jonne häntä osoittaa',
         gone(right, 20) === 2 - holy(right, 20) && gone(right, 16) === 0
         && gone(left, 16) === 2 - holy(left, 16) && gone(left, 20) === 0,
@@ -1041,14 +1041,14 @@ const report = await page.evaluate(async () => {
     /** Koekenttä: pitkä lattia ja yksi lauta, ei muuta. */
     const springDef = () => {
       const W = 60;
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
       const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-      put(13, 0, '#'.repeat(W));
       put(14, 0, '#'.repeat(W));
-      put(12, 1, '1');
-      put(9, 4, '!');
-      put(13, 40, T.SPRING);   // lattiariviin, ks. `grass_jet`
-      put(12, 58, 'F');
+      put(15, 0, '#'.repeat(W));
+      put(13, 1, '1');
+      put(10, 4, '!');
+      put(14, 40, T.SPRING);   // lattiariviin, ks. `grass_jet`
+      put(13, 58, 'F');
       return {
         id: 'jFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
         boss: false, bossVariant: 0, bands: null, rows,
@@ -1067,7 +1067,7 @@ const report = await page.evaluate(async () => {
       // Lähtöpaikka valitaan vauhdinoton mukaan: pitkä matka täyttää mittarin,
       // lyhyt ei ehdi. Mittaria ei aseteta käsin — se on se asia jota mitataan.
       p.x = (40 - runUp) * 16;
-      p.y = 13 * 16 - p.h;
+      p.y = 14 * 16 - p.h;
       p.vx = 0;
       p.vy = 0;
       p.onGround = true;
@@ -1130,12 +1130,12 @@ const report = await page.evaluate(async () => {
 
     /** Koekenttä, jonka leveys annetaan: tasainen lattia ja maali lopussa. */
     const lampDef = (W) => {
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
       const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-      put(13, 0, '#'.repeat(W));
       put(14, 0, '#'.repeat(W));
-      put(12, 1, '1');
-      put(12, W - 2, 'F');
+      put(15, 0, '#'.repeat(W));
+      put(13, 1, '1');
+      put(13, W - 2, 'F');
       return {
         id: 'lFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
         boss: false, bossVariant: 0, bands: null, rows,
@@ -1202,7 +1202,7 @@ const report = await page.evaluate(async () => {
     const againLamp = lampsIn(again)[0];
     expect('kuoleman jälkeen kenttä alkaa lyhdyltä, ja lyhty palaa jo',
       Math.abs(startCol - lamp.tx) <= 1 && againLamp && againLamp.lit
-        && again.player.y < 13 * 16,
+        && again.player.y < 14 * 16,
       `pelaaja aloitti sarakkeesta ${startCol} (lyhty ${lamp.tx}), `
       + `lyhty ${againLamp && againLamp.lit ? 'palaa' : 'on sammunut'}, `
       + `rivillä ${Math.round(again.player.y / 16)}`);
@@ -1353,13 +1353,13 @@ const report = await page.evaluate(async () => {
     const E = await import('/src/entities/enemies.js');
     const W = 40;
     const testDef = (put) => {
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
       const set = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-      set(13, 0, '#'.repeat(W));
       set(14, 0, '#'.repeat(W));
-      set(12, 1, '1');
-      set(9, 4, '!');
-      set(12, 38, 'F');
+      set(15, 0, '#'.repeat(W));
+      set(13, 1, '1');
+      set(10, 4, '!');
+      set(13, 38, 'F');
       if (put) put(set);
       return {
         id: 'zoo', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
@@ -1379,7 +1379,7 @@ const report = await page.evaluate(async () => {
        * siivous poistaisi juuri sen. */
       const p = s.player;
       p.x = at * 16;
-      p.y = 13 * 16 - p.h;
+      p.y = 14 * 16 - p.h;
       p.vx = 0;
       p.vy = 0;
       p.onGround = true;
@@ -1537,7 +1537,7 @@ const report = await page.evaluate(async () => {
       }
       const cost = p.powerLevel < level0 || p.dying;
       expect('yökin karvapallo vierii lattiaa pitkin, kiihtyy, eikä sitä voi tallata',
-        !!ball && onFloor === 13 && toward > 0 && late > early
+        !!ball && onFloor === 14 && toward > 0 && late > early
         && ball.spiky && cost && !ball.remove,
         ball ? `vauhti ${early.toFixed(2)} -> ${late.toFixed(2)}, kulki ${Math.round(toward)} px`
           + ` rivillä ${onFloor}, piikikäs ${ball.spiky}`
@@ -4145,7 +4145,7 @@ const report = await page.evaluate(async () => {
      * found ground, and never flushed the gap counter. Every geometry rule was
      * switched off and nothing said so. This asserts the one case that cannot
      * be guessed around: a tall level with no start marker is an error. */
-    const tall = levelIds().map((id) => getLevel(id)).find((d) => d.rows.length > 15);
+    const tall = levelIds().map((id) => getLevel(id)).find((d) => d.rows.length > 16);
     if (tall) {
       const stripped = tall.rows.map((row) => row.replace('1', ' '));
       const problems = validateLevel(stripped, budget);
@@ -4259,46 +4259,51 @@ const report = await page.evaluate(async () => {
      * you arrive small and you grow in there. */
     const tallFixture = ({ skyCeiling = 5, ledgeOverCaveExit = false } = {}) => {
       const W = 64;
-      const g = Array.from({ length: 45 }, () => ' '.repeat(W));
+      /* Kolme kaistaa, kuusitoista riviä kukin (18.8.2026, `SKY_PAD`): kaistojen
+       * ylälaidat ovat 0, 16 ja 32, ja kaistan sisällä kaikki on siirtynyt
+       * yhden rivin alaspäin. Luvut ovat tässä kirjoitettuina eivätkä
+       * johdettuina, koska koekentän koko tehtävä on olla se ruudukko jonka
+       * mitat on tarkistettu käsin. */
+      const g = Array.from({ length: 48 }, () => ' '.repeat(W));
       const put = (y, x, s) => { g[y] = g[y].slice(0, x) + s + g[y].slice(x + s.length); };
       const room = (top, ceiling, left, width, floorChar) => {
-        put(top + ceiling, left, 'X'.repeat(width));
-        for (let y = top + ceiling + 1; y <= top + 12; y++) {
+        put(top + ceiling + 1, left, 'X'.repeat(width));
+        for (let y = top + ceiling + 2; y <= top + 13; y++) {
           put(y, left, 'X'); put(y, left + width - 1, 'X');
         }
-        put(top + 13, left, floorChar.repeat(width));
         put(top + 14, left, floorChar.repeat(width));
+        put(top + 15, left, floorChar.repeat(width));
       };
 
       // Route band: flat ground, a start, a power-up inside the first quarter,
       // a flag, and the two warp pipes.
-      put(28, 0, '#'.repeat(W)); put(29, 0, '#'.repeat(W));
-      put(27, 2, '1');
-      put(24, 8, '!');
-      put(27, 60, 'F');
-      put(27, 20, '()');   // down into the cave room: a pipe you stand on
-      /* Up into the sky loft, and therefore a pipe that hangs. Row 24 is the
+      put(30, 0, '#'.repeat(W)); put(31, 0, '#'.repeat(W));
+      put(29, 2, '1');
+      put(26, 8, '!');
+      put(29, 60, 'F');
+      put(29, 20, '()');   // down into the cave room: a pipe you stand on
+      /* Up into the sky loft, and therefore a pipe that hangs. Row 26 is the
        * mouth because it leaves the three clear rows the tallest body needs
-       * between it and the ground at row 28 — see `WARP_UP_REACH`. */
-      put(24, 40, '()');
-      for (let y = 18; y < 24; y++) put(y, 40, '{}');
+       * between it and the ground at row 30 — see `WARP_UP_REACH`. */
+      put(26, 40, '()');
+      for (let y = 20; y < 26; y++) put(y, 40, '{}');
       // The fault: two tiles of ground on the surface right over the cave
       // room's exit, so the warp back up has nowhere to put a 21x43 body.
-      if (ledgeOverCaveExit) { put(26, 23, '####'); put(27, 23, '####'); }
+      if (ledgeOverCaveExit) { put(28, 23, '####'); put(29, 23, '####'); }
 
       // Sky loft over the pipe at column 40. `skyCeiling` is its ceiling row:
       // 5 leaves the tallest size three clear rows over the floor, 10 leaves
       // two, which is the one-row-too-low fault.
       room(0, skyCeiling, 36, 14, '#');
-      put(9, 42, '!');
-      put(12, 46, '()');   // the way back down
+      put(10, 42, '!');
+      put(13, 46, '()');   // the way back down
 
       // Cave room under the pipe at column 20. The way back up hangs from its
-      // ceiling, three clear rows over the floor at row 43.
-      room(30, 5, 14, 14, 'X');
-      put(39, 18, '!');
-      for (let y = 36; y < 39; y++) put(y, 24, '{}');
-      put(39, 24, '()');   // the way back up
+      // ceiling, three clear rows over the floor at row 46.
+      room(32, 5, 14, 14, 'X');
+      put(42, 18, '!');
+      for (let y = 39; y < 42; y++) put(y, 24, '{}');
+      put(42, 24, '()');   // the way back up
       return g;
     };
 
@@ -4333,41 +4338,42 @@ const report = await page.evaluate(async () => {
      * to come back silent — otherwise this proves nothing about the rule and
      * only that some level somewhere is unusual.
      */
-    const vineFixture = ({ endsAt = 27, pit = false, pillar = false } = {}) => {
+    const vineFixture = ({ endsAt = 29, pit = false, pillar = false } = {}) => {
       const W = 32;
-      const g = Array.from({ length: 45 }, () => ' '.repeat(W));
+      /* Kolme kuudentoista rivin kaistaa, ks. `tallFixture` yllä. */
+      const g = Array.from({ length: 48 }, () => ' '.repeat(W));
       const put = (y, x, s) => { g[y] = g[y].slice(0, x) + s + g[y].slice(x + s.length); };
 
       // Route band: flat ground, a start, an early power-up, a flag.
-      put(28, 0, '#'.repeat(W)); put(29, 0, '#'.repeat(W));
-      put(27, 2, '1');
-      put(24, 5, '!');
-      put(27, 28, 'F');
+      put(30, 0, '#'.repeat(W)); put(31, 0, '#'.repeat(W));
+      put(29, 2, '1');
+      put(26, 5, '!');
+      put(29, 28, 'F');
       /* The vine, from the floor up through the seam into the sky band. A
        * pillar raises the floor under it so the run is only three tiles long
        * on this side of the seam — too short to hang a block in. */
-      const top = pillar ? 14 : 6;
-      if (pillar) for (let y = 17; y <= 29; y++) put(y, 16, 'X');
+      const top = pillar ? 15 : 7;
+      if (pillar) for (let y = 18; y <= 31; y++) put(y, 16, 'X');
       for (let y = top; y <= endsAt; y++) put(y, 16, 'v');
       /* A pit right under the vine, lidded with lava the way `assembleTall`
        * lids one: the stalk has nothing to stand in and the bean nowhere to
        * land. */
-      if (pit) { put(28, 15, '   '); put(29, 15, '   '); put(30, 15, 'WWW'); }
+      if (pit) { put(30, 15, '   '); put(31, 15, '   '); put(32, 15, 'WWW'); }
 
       // The sky garden the vine arrives in, shaped like the shipped one: the
       // vine runs three rows past the planks so you step off sideways, the
       // planks start in the column beside it so nothing solid is ever next to
       // the vine, and the open bottom edge is how you get home.
-      put(9, 17, '--------');
-      put(8, 18, 'ooo');
-      put(6, 19, '!');
+      put(10, 17, '--------');
+      put(9, 18, 'ooo');
+      put(7, 19, '!');
       return g;
     };
 
     const grown = validateLevel(vineFixture(), budget);
-    const hanging = validateLevel(vineFixture({ endsAt: 24 }), budget);
+    const hanging = validateLevel(vineFixture({ endsAt: 26 }), budget);
     const overPit = validateLevel(vineFixture({ pit: true }), budget);
-    const stumpy = validateLevel(vineFixture({ endsAt: 16, pillar: true }), budget);
+    const stumpy = validateLevel(vineFixture({ endsAt: 17, pillar: true }), budget);
 
     expect('a beanstalk that stops in mid-air instead of reaching the floor is reported',
       hanging.some((p) => p.includes('instead of standing on the floor')),
@@ -4414,7 +4420,7 @@ const report = await page.evaluate(async () => {
     const { CHUNKS, assemble } = await import('/src/data/chunks.js');
     const { LOOSE, MAX_LIFT, RUNWAY, RUN_ROWS, applyTerrain, liftCap, seamReady, terrainProfile }
       = await import('/src/data/terrain.js');
-    const FLOOR = 13;
+    const FLOOR = 14;
     const SLOPE = '/\\';
 
     const withTerrain = levelIds().filter((id) => getLevel(id).terrain);
@@ -5303,7 +5309,7 @@ const report = await page.evaluate(async () => {
      * akselillaan lohkossa "pystykentät kentissä": puolet sen jalansijasta on
      * pakattua pilveä, bonushuoneen nollaa vastaan. Väite koskee siis edelleen
      * jokaista tämän maailman omaa kenttää. */
-    const levels = ['7-1', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 13) }));
+    const levels = ['7-1', '7-3'].map((id) => ({ id, ...shares(getLevel(id).rows, 14) }));
     const garden = shares(CHUNKS.sky_garden.rows, 13);
     const worstGround = levels.reduce((m, l) => Math.min(m, l.ground), 100);
     const worstPlank = levels.reduce((m, l) => Math.max(m, l.plank), 0);
@@ -5342,19 +5348,19 @@ const report = await page.evaluate(async () => {
      * mittaa mitään, koska se laskeutuu sille kannelle. */
     let top = null;
     /* Sama rajaus kuin kohdassa 3 ja samasta syystä: pystykentässä `7-T`:ssä
-     * rivit 0..12 eivät ole taivas vaan kiipeilyä, ja tämä silmukka etsii
+     * rivit 0..13 eivät ole taivas vaan kiipeilyä, ja tämä silmukka etsii
      * maailman ylintä *lautaa lattian yläpuolelta*. Se löytäisi sieltä lavan
-     * riviltä 3 ja mittaisi sukelluksen kentässä jossa ei ole lattiaa mihin
+     * riviltä 5 ja mittaisi sukelluksen kentässä jossa ei ole lattiaa mihin
      * sukeltaa. `cloud_anvil` on edelleen `7-3`:ssa, eli väite mittaa saman
      * kannen kuin ennen. */
     for (const id of ['7-1', '7-3']) {
       const rows = getLevel(id).rows;
-      for (let y = 0; y < 13 && (!top || y < top.y); y++) {
+      for (let y = 0; y < 14 && (!top || y < top.y); y++) {
         for (let x = 0; x < rows[y].length - 1; x++) {
           if (rows[y][x] !== '-' || rows[y][x + 1] === '-') continue;
           let clear = true;
-          for (let d = y; d <= 12; d++) if (rows[d][x + 1] !== ' ') clear = false;
-          if (!clear || rows[13][x + 1] !== '#') continue;
+          for (let d = y; d <= 13; d++) if (rows[d][x + 1] !== ' ') clear = false;
+          if (!clear || rows[14][x + 1] !== '#') continue;
           top = { id, x: x + 1, y };
           break;
         }
@@ -5387,16 +5393,16 @@ const report = await page.evaluate(async () => {
     });
     const fromFloor = top && dive(top.id, (p, step) => {
       p.x = top.x * 16 + 1;
-      p.y = 12 * 16 - p.h;
+      p.y = 14 * 16 - p.h;
       for (let f = 0; f < 20; f++) step();
       step({ jump: true }, { jump: true });
       for (let f = 0; f < 60 && p.vy < 0; f++) step({ jump: true });
     });
-    /* Rivi 5 on `cloud_anvil`in kansi, ja se on osa väitettä eikä sen kuvaus:
+    /* Rivi 6 on `cloud_anvil`in kansi, ja se on osa väitettä eikä sen kuvaus:
      * maailma jonka ylin lauta valuisi alaspäin lakkaisi olemasta se paikka
      * jossa liikkeellä on tilaa, ja tekisi sen huomaamatta. */
     expect('pilvimaailman ylimmältä laudalta maahanisku tappaa, lattiahypystä ei',
-      !!fromDeck && !!fromFloor && top.y <= 5 && fromDeck.kills && !fromFloor.kills,
+      !!fromDeck && !!fromFloor && top.y <= 6 && fromDeck.kills && !fromFloor.kills,
       top
         ? `ylin lauta ${top.id} rivi ${top.y}: voima ${fromDeck ? fromDeck.strength.toFixed(2) : '—'}`
         + ` (${fromDeck && fromDeck.kills ? 'tappaa' : 'ei tapa'}), lattiahypystä `
@@ -5445,7 +5451,7 @@ const report = await page.evaluate(async () => {
     const ids = levelIds().filter((id) => !getLevel(id).vertical);
     const inWorld = (n) => ids.filter((id) => id.startsWith(`${n}-`));
     const w8 = inWorld(8);
-    const FLOOR = 13;
+    const FLOOR = 14;
     const STONE = '#X';
     /* Sama kaistasääntö kuin `rules.js`:llä ja vaikeusmittarilla: reitti on se
      * viisitoista riviä joilla pelaaja aloittaa. Ilman tätä korkean kentän
@@ -5455,10 +5461,15 @@ const report = await page.evaluate(async () => {
      * väitteen toinen puolisko. */
     const routeOf = (id) => {
       const rows = getLevel(id).rows;
-      if (rows.length <= 15) return rows;
+      if (rows.length <= 16) return rows;
       const start = rows.findIndex((row) => row.includes('1'));
-      const top = Math.floor(Math.max(start, 0) / 15) * 15;
-      return rows.slice(top, top + 15);
+      /* Kiinni ruudukon pohjaan, ja se on korjaus eikä varovaisuutta: kaista on
+       * 16 riviä mutta jokainen korkea kenttä ei ole kaistojen monikerta —
+       * osioitu 7-P on 45 riviä, ja sen aloitusmerkki on niin alhaalla että
+       * `top + 16` menisi ruudukon yli. Ennen 18.8.2026 sitä ei voinut
+       * huomata, koska 45 on tasan kolme viidentoista kaistaa. */
+      const top = Math.min(Math.floor(Math.max(start, 0) / 16) * 16, rows.length - 16);
+      return rows.slice(top, top + 16);
     };
 
     /*
@@ -5526,6 +5537,18 @@ const report = await page.evaluate(async () => {
       const w = rows[0].length;
       let roofed = 0;
       for (let x = 0; x < w; x++) {
+        /*
+         * Rivit 0-1, ja ne pysyivät siellä vaikka kaikki muu siirtyi rivin
+         * alaspäin 18.8.2026. Tämä oli hetken 1-2, ja se oli väärin tavalla
+         * joka kannattaa lukea: kokoajan lisäämä taivasrivi on **kopio
+         * ylimmästä**, joten linnakkeen kansi näkyy riveillä 0 ja 1 kuten
+         * ennenkin — mutta tehtaan kansi asuu riveillä 2-3, ja rivin 2
+         * lukeminen laski senkin katoksi. Maailma 4 hyppäsi 56,6 %:sta 78
+         * %:iin ja vertailu lakkasi erottamasta mitään.
+         *
+         * Väite on "ylimmässä kahdessa rivissä on kiveä", ja ylimmät kaksi
+         * riviä ovat 0 ja 1 riippumatta siitä montako rivejä kentässä on.
+         */
         if (STONE.includes(rows[0][x]) || STONE.includes(rows[1][x])) roofed++;
       }
       return (roofed / w) * 100;
@@ -6924,47 +6947,47 @@ const report = await page.evaluate(async () => {
     for (const power of [{ type: null, level: 0 }, { type: 'leaf', level: 5 }]) {
       const s = mk(power);
       const i = mkInput();
-      put(s, 150, 28);
+      put(s, 150, 30);
       leap(s, i, 40);
-      const planted = s.rawTileAt(150, 24) !== '?';
+      const planted = s.rawTileAt(150, 26) !== '?';
       hold(s, i, [], 140);
       hold(s, i, ['up'], 360);
-      const up = s.player.y + s.player.h < 15 * 16;
+      const up = s.player.y + s.player.h < 16 * 16;
       hold(s, i, ['right'], 60);
-      const onPlatform = s.player.onGround && Math.round(s.player.y + s.player.h) === 9 * 16;
+      const onPlatform = s.player.onGround && Math.round(s.player.y + s.player.h) === 10 * 16;
       const coins = game.state.coins;
       hold(s, i, ['right'], 180);          // walk off the edge and fall home
       expect(`power ${power.level} plants the bean, climbs it and gets back down`,
         planted && up && onPlatform && game.state.coins > coins && s.player.onGround
-        && !s.player.dying && s.player.y + s.player.h > 27 * 16,
+        && !s.player.dying && s.player.y + s.player.h > 29 * 16,
         `lohko ${planted}, taivaassa ${up}, lavalla ${onPlatform}, `
         + `jalat ${Math.round(s.player.y + s.player.h)}`);
 
       // Down the pipe, and — the part that matters — back out of it. A bonus
       // area you cannot leave is a trap, not a bonus.
       const c = mk(power);
-      put(c, 229, 26);
+      put(c, 229, 28);
       // 90 and not 40: going down a pipe is a slide now, and there is still a
       // drop to the cave floor at the end of it.
       hold(c, i, ['down'], 90);
-      const inCave = c.player.y > 30 * 16 && c.player.onGround && !c.player.dying;
+      const inCave = c.player.y > 32 * 16 && c.player.onGround && !c.player.dying;
       /* Standing on the room's floor under the exit, not on top of a pipe: the
        * way out hangs from the ceiling now, and you leave the way you came —
        * facing the mouth you are about to travel through. */
-      put(c, 250, 43);
+      put(c, 250, 46);
       hold(c, i, [], 3);
       c.player.warpLock = 0;
       hold(c, i, ['up'], 90);
       hold(c, i, [], 20);
       expect(`the warp pipe takes power ${power.level} down and the cave lets it out`,
-        inCave && c.player.y < 30 * 16 && c.player.onGround && !c.player.dying
+        inCave && c.player.y < 32 * 16 && c.player.onGround && !c.player.dying
         && c.state === 'play',
         `luolassa ${inCave}, paluu ${Math.round(c.player.y + c.player.h)}`);
     }
 
     const s = mk({ type: null, level: 0 });
     const i = mkInput();
-    put(s, 229, 26);
+    put(s, 229, 28);
     const y0 = s.player.y;
     hold(s, i, ['up'], 60);
     expect('a warp pipe will not throw you into empty sky',
@@ -6984,7 +7007,7 @@ const report = await page.evaluate(async () => {
 
     // And walking the ordinary route must never show the band above or below.
     const run = mk({ type: 'shroom', level: 1 });
-    let worst = 15 * 16;
+    let worst = 16 * 16;
     for (let f = 0; f < 900 && run.state === 'play'; f++) {
       i.held = blank(); i.held.right = true; i.held.run = true;
       i.pressed = blank();
@@ -6992,7 +7015,7 @@ const report = await page.evaluate(async () => {
       run.update(i);
       worst = Math.max(worst, run.cam.y);
     }
-    expect('the ground route never shows another band', worst <= 15 * 16 + 32,
+    expect('the ground route never shows another band', worst <= 16 * 16 + 32,
       `cam.y ${Math.round(worst)}`);
   }
 
@@ -7043,17 +7066,17 @@ const report = await page.evaluate(async () => {
       }
     };
     const i = mkInput();
-    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (15 * 16));
+    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (16 * 16));
 
     /* The five hidden rooms in the game, and the two journeys each one owes
      * the player. `into` is the band the way in arrives in: 0 is the sky, 2 is
      * the cave, and coming back always means band 1. */
     const ROOMS = [
-      { room: 'cave_room (1-2)', id: '1-2', in: [229, 26, 'down'], out: [250, 43, 'up'], into: 2 },
-      { room: 'tomb_cave (2-2)', id: '2-2', in: [229, 26, 'down'], out: [235, 43, 'up'], into: 2 },
-      { room: 'cave_room (3-2)', id: '3-2', in: [233, 26, 'down'], out: [254, 43, 'up'], into: 2 },
-      { room: 'fac_cellar (4-2)', id: '4-2', in: [133, 26, 'down'], out: [140, 43, 'up'], into: 2 },
-      { room: 'fac_loft (4-2)', id: '4-2', in: [245, 28, 'up'], out: [252, 12, 'down'], into: 0 },
+      { room: 'cave_room (1-2)', id: '1-2', in: [229, 28, 'down'], out: [250, 46, 'up'], into: 2 },
+      { room: 'tomb_cave (2-2)', id: '2-2', in: [229, 28, 'down'], out: [235, 46, 'up'], into: 2 },
+      { room: 'cave_room (3-2)', id: '3-2', in: [233, 28, 'down'], out: [254, 46, 'up'], into: 2 },
+      { room: 'fac_cellar (4-2)', id: '4-2', in: [133, 28, 'down'], out: [140, 46, 'up'], into: 2 },
+      { room: 'fac_loft (4-2)', id: '4-2', in: [245, 30, 'up'], out: [252, 13, 'down'], into: 0 },
     ];
 
     for (const r of ROOMS) {
@@ -7095,9 +7118,9 @@ const report = await page.evaluate(async () => {
      * on top of and the top of a pipe is capped.
      */
     const floorPipe = mk({ type: null, level: 0 });
-    floorPipe.grid[42][252] = '(';
-    floorPipe.grid[42][253] = ')';
-    put(floorPipe, 252, 42);
+    floorPipe.grid[45][252] = '(';
+    floorPipe.grid[45][253] = ')';
+    put(floorPipe, 252, 45);
     const stayY = floorPipe.player.y;
     hold(floorPipe, i, ['up'], 60);
     expect('pressing up on a pipe standing on the floor is not a way in',
@@ -7108,9 +7131,9 @@ const report = await page.evaluate(async () => {
      * of the reason: below it is the bottom of the level. Nothing about the
      * fixture is a warp that happens to be broken. */
     const noBand = mk({ type: null, level: 0 });
-    noBand.grid[42][252] = '(';
-    noBand.grid[42][253] = ')';
-    put(noBand, 252, 42);
+    noBand.grid[45][252] = '(';
+    noBand.grid[45][253] = ')';
+    put(noBand, 252, 45);
     const downY = noBand.player.y;
     hold(noBand, i, ['down'], 60);
     expect('a warp with no band under it stays put',
@@ -7126,7 +7149,7 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = mk({ type: 'shroom', level: 1 });
-      put(s, 229, 26);
+      put(s, 229, 28);
       /* Measured at the feet, not at `y`. Pressing down ducks a big player on
        * the way in, and `applySize` pins the bottom of the body and moves `y`;
        * the feet are the thing that is actually one band lower afterwards. */
@@ -7140,7 +7163,7 @@ const report = await page.evaluate(async () => {
        * (hahmo ilmestyi tyhjään ilmaan). Nyt pää on se putken suu jonka
        * `plantWarpExits` pystytti, ja koe kysyy sitä samasta paikasta kuin peli.
        */
-      const exitRow = s.warpExits.get('229,26');
+      const exitRow = s.warpExits.get('229,28');
       const target = exitRow * 16;
       let frames = 0;
       let acted = 0;
@@ -7183,8 +7206,8 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = mk({ type: 'shroom', level: 1 });
-      put(s, 229, 26);
-      const target = s.warpExits.get('229,26') * 16;         // putken suu, ks. yllä
+      put(s, 229, 28);
+      const target = s.warpExits.get('229,28') * 16;         // putken suu, ks. yllä
       game.setScene(s);
       i.held = blank(); i.held.down = true; i.pressed = blank();
       for (let f = 0; f < 8; f++) s.update(i);
@@ -7214,7 +7237,7 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = mk({ type: null, level: 0 });
-      put(s, 229, 26);
+      put(s, 229, 28);
       s.time = 1;
       s.timeSub = 20;      // four frames from zero, and the trip lasts thirty
       i.held = blank(); i.held.down = true; i.pressed = blank();
@@ -7223,7 +7246,7 @@ const report = await page.evaluate(async () => {
       while (s.player.transit && ticked < 200) { s.update(i); ticked++; }
       const clockHeld = s.time === 1 && s.state === 'play';
       const forced = mk({ type: null, level: 0 });
-      put(forced, 229, 26);
+      put(forced, 229, 28);
       forced.update(i);
       const running = !!forced.player.transit;
       forced.player.die('debug');
@@ -7534,7 +7557,7 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = mk({ type: 'shroom', level: 1 }, '1-2');
-      put(s, 229, 26);
+      put(s, 229, 28);
       const i = mkInput();
       const tap = listen();
       let inSound = null;
@@ -7668,7 +7691,7 @@ const report = await page.evaluate(async () => {
       }
     };
     const i = mkInput();
-    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (15 * 16));
+    const bandOf = (s) => Math.floor((s.player.y + s.player.h - 1) / (16 * 16));
     const found = (id) => ((game.state.secrets || {})[id] || []).filter((k) => k === 'cave').length;
 
     /* 1. Raita vaihtuu kaistan mukaan ja vaihtuu takaisin. Molemmat suunnat
@@ -7677,12 +7700,12 @@ const report = await page.evaluate(async () => {
     {
       const s = mk('1-2', { type: 'shroom', level: 1 });
       const own = Music.current;
-      put(s, 229, 26);
+      put(s, 229, 28);
       hold(s, i, ['down'], 120);
       hold(s, i, [], 60);
       const inCave = Music.current;
       const caveBand = bandOf(s);
-      put(s, 250, 43);
+      put(s, 250, 46);
       hold(s, i, [], 3);
       s.player.warpLock = 0;
       hold(s, i, ['up'], 120);
@@ -7699,7 +7722,7 @@ const report = await page.evaluate(async () => {
     {
       const s = mk('4-2', { type: 'shroom', level: 1 });
       const own = Music.current;
-      put(s, 245, 28);
+      put(s, 245, 30);
       hold(s, i, ['up'], 120);
       hold(s, i, [], 90);
       expect('the sky band keeps the level\'s own music',
@@ -7716,7 +7739,7 @@ const report = await page.evaluate(async () => {
      * isku, ja matka on tapahtuma. Siksi tässä mitataan myös se väli. */
     {
       const s = mk('1-2');
-      put(s, 229, 26);
+      put(s, 229, 28);
       let foundAt = -1;
       let controlAt = -1;
       let musicAt = -1;
@@ -7743,18 +7766,18 @@ const report = await page.evaluate(async () => {
      * soisi kerran; paikan ääni soi joka kerta. */
     {
       const s = mk('1-2');
-      put(s, 229, 26);
+      put(s, 229, 28);
       hold(s, i, ['down'], 120);
       hold(s, i, [], 60);
       const first = Music.current;
       const firstFinds = found('1-2');
-      put(s, 250, 43);
+      put(s, 250, 46);
       hold(s, i, [], 3);
       s.player.warpLock = 0;
       hold(s, i, ['up'], 120);
       hold(s, i, [], 90);
       const between = Music.current;
-      put(s, 229, 26);
+      put(s, 229, 28);
       hold(s, i, ['down'], 120);
       hold(s, i, [], 60);
       expect('the music is a place: the second visit sounds like the first, the find does not',
@@ -7768,7 +7791,7 @@ const report = await page.evaluate(async () => {
      * se ei saa lukea raitaa kenttädatasta vaan siitä missä jalat ovat. */
     {
       const s = mk('1-2');
-      put(s, 229, 26);
+      put(s, 229, 28);
       hold(s, i, ['down'], 120);
       hold(s, i, [], 60);
       const saved = Music.current;
@@ -7817,7 +7840,7 @@ const report = await page.evaluate(async () => {
      * juuri sen signaalin joka on jo ansaittu. */
     {
       const s = mk('1-2', { type: null, level: 0 }, 90);
-      put(s, 229, 26);
+      put(s, 229, 28);
       hold(s, i, ['down'], 120);
       hold(s, i, [], 60);
       expect('entering the cave with the clock low keeps the hurry',
@@ -7965,19 +7988,19 @@ const report = await page.evaluate(async () => {
     /** Koekenttä: neljän ruudun siilo neljän tiilen päällä, ja tasainen lattia. */
     const pourDef = () => {
       const W = 40;
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
       const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-      put(13, 0, '#'.repeat(W));
       put(14, 0, '#'.repeat(W));
-      put(12, 1, '1');
+      put(15, 0, '#'.repeat(W));
+      put(13, 1, '1');
       /* Tehostus ensimmäiseen neljännekseen, koska `validateLevel` vaatii sen
        * jokaiselta kentältä — myös koekentältä. Se kaatoi tämän kokeen kerran,
        * ja se on oikein: koekenttä jota säännöt eivät hyväksy ei ole se peli
        * jonka lopputilaa tässä mitataan. */
-      put(9, 4, '!');
-      put(6, 10, '~~~~');
-      put(7, 10, 'BBBB');
-      put(12, 38, 'F');
+      put(10, 4, '!');
+      put(7, 10, '~~~~');
+      put(8, 10, 'BBBB');
+      put(13, 38, 'F');
       return {
         id: 'sFix', theme: 'desert', bg: 'dunes', music: 'level', time: 9999,
         boss: false, bossVariant: 0, bands: null, rows,
@@ -8001,26 +8024,26 @@ const report = await page.evaluate(async () => {
     s.clockStopped = true;
     // Pelaaja pois siilon alta, jotta koe mittaa hiekkaa eikä uppoamista.
     s.player.x = 2 * 16;
-    s.player.y = 13 * 16 - s.player.h;
+    s.player.y = 14 * 16 - s.player.h;
     // Oikea reitti: iso pelaaja puskee tiilen, kuten pelissä.
-    s.bumpTile(10, 7, s.player);
+    s.bumpTile(10, 8, s.player);
     settle(s);
     const drained = sandAt(s, 10);
     const kept = sandAt(s, 11);
     expect('rikottu tiili tyhjentää oman sarakkeensa hiekan, ja vain sen',
-      drained.length === 1 && drained[0] === 12
-      && kept.length === 1 && kept[0] === 6,
-      `sarake 10: hiekka rivillä ${drained.join(',') || '–'} (odotus 12, lattia 13), `
-      + `sarake 11: rivillä ${kept.join(',') || '–'} (odotus 6, koskematon)`);
+      drained.length === 1 && drained[0] === 13
+      && kept.length === 1 && kept[0] === 7,
+      `sarake 10: hiekka rivillä ${drained.join(',') || '–'} (odotus 13, lattia 14), `
+      + `sarake 11: rivillä ${kept.join(',') || '–'} (odotus 7, koskematon)`);
 
     // Ja loput kolme perään: koko siilo alas.
-    for (const tx of [11, 12, 13]) s.bumpTile(tx, 7, s.player);
+    for (const tx of [11, 12, 13]) s.bumpTile(tx, 8, s.player);
     settle(s);
     const heap = [10, 11, 12, 13].map((tx) => sandAt(s, tx).join('') || '–').join(' ');
     const endRows = s.grid.map((row) => row.join(''));
     const problems = validateLevel(endRows, JUMP_BUDGET);
     expect('valuneen hiekan jälkeen kenttä läpäisee yhä omat sääntönsä',
-      heap === '12 12 12 12' && problems.length === 0,
+      heap === '13 13 13 13' && problems.length === 0,
       `kasa sarakkeittain: ${heap}; säännöt: ${problems.slice(0, 2).join('; ') || 'ei huomautuksia'}`);
 
     /*
@@ -8111,13 +8134,13 @@ const report = await page.evaluate(async () => {
     /** Koekenttä: tasainen lattia ja yksi seinä sarakkeessa 30. */
     const shelfDef = (wall = true) => {
       const W = 60;
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
       const put = (y, x, str) => { rows[y] = rows[y].slice(0, x) + str + rows[y].slice(x + str.length); };
-      put(13, 0, '#'.repeat(W));
       put(14, 0, '#'.repeat(W));
-      put(12, 1, '1');
-      if (wall) for (let y = 8; y <= 12; y++) put(y, 30, '#');
-      put(12, 58, 'F');
+      put(15, 0, '#'.repeat(W));
+      put(13, 1, '1');
+      if (wall) for (let y = 9; y <= 13; y++) put(y, 30, '#');
+      put(13, 58, 'F');
       return {
         id: 'gFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
         boss: false, bossVariant: 0, bands: null, rows,
@@ -8139,7 +8162,7 @@ const report = await page.evaluate(async () => {
       s.clockStopped = true;
       const p = s.player;
       p.x = 20 * 16;
-      p.y = 13 * 16 - p.h;
+      p.y = 14 * 16 - p.h;
       p.vx = 0; p.vy = 0; p.onGround = true;
       s.centerCamera();
       s.add(new FartBall(s, p.x + p.w, p.y + p.h * 0.45, 1));
@@ -9242,7 +9265,7 @@ const report = await page.evaluate(async () => {
         bg: 'none',
         time: 400,
         segments: [{ toCol: 20, vertical: false }, { toCol: 999, vertical: true }],
-        rows: Array.from({ length: 45 }, (_, y) => (y === 13 || y === 28 || y === 43
+        rows: Array.from({ length: 48 }, (_, y) => (y === 14 || y === 30 || y === 46
           ? '#'.repeat(40) : ' '.repeat(40))),
       });
       reset();
@@ -9253,7 +9276,7 @@ const report = await page.evaluate(async () => {
       const banded = !!sg.bands;
       sg.camPageFrames = 60;
       sg.player.x = 30 * 16;
-      sg.player.y = 27 * 16 - sg.player.h;
+      sg.player.y = 29 * 16 - sg.player.h;
       sg.update(idle);
       const turned = sg.vertical;
       const paged = sg.camPage > 0;
@@ -9981,7 +10004,7 @@ const report = await page.evaluate(async () => {
       const barons = s.entities.filter((e) => e instanceof E.BeanBaron);
       const p = s.player;
       p.x = (barons[0].cx + barons[1].cx) / 2;
-      p.y = 12 * 16 - p.h;
+      p.y = 13 * 16 - p.h;
       s.centerCamera();
       const thrown = new Set();
       let strayed = 0;
@@ -10001,7 +10024,7 @@ const report = await page.evaluate(async () => {
           sank = Math.max(sank, b.y + b.h);
         }
       }
-      const onPlinth = sank <= 11 * 16 + 1;
+      const onPlinth = sank <= 12 * 16 + 1;
       expect('paroonit heittelevät ja pysyvät jalustoillaan',
         thrown.size >= 4 && strayed <= 32 && onPlinth,
         `${thrown.size} pommia, poikkeama ${Math.round(strayed)} px, jalustalla ${onPlinth}`);
@@ -10510,7 +10533,7 @@ const report = await page.evaluate(async () => {
     for (const h of hints) {
       for (const c of h.coins) {
         let sy = -1;
-        for (let ty = c.ty + 1; ty < h.e.top + 15; ty++) {
+        for (let ty = c.ty + 1; ty < h.e.top + 16; ty++) {
           if (STANDABLE.has(h.sc.rawTileAt(c.tx, ty))) { sy = ty; break; }
         }
         if (sy < 0) { dangling.push(`${h.e.where} ${c.tx},${c.ty}`); continue; }
@@ -10620,11 +10643,18 @@ const report = await page.evaluate(async () => {
     const { getLevel } = await import('/src/data/levels.js');
 
     /* 1a. A level with a known secret, and one with none. 1-2 is the tall level
-     * of world 1: a room above, a cave below and three loaded bricks. 1-1 is
-     * the opening level and hides nothing at all. */
+     * of world 1: a room above, a cave below and one loaded brick. 1-1 is the
+     * opening level and hides nothing at all.
+     *
+     * **Kolme eikä viisi 18.8.2026 alkaen.** Piilotiili on sijainnin hajautus
+     * (`hashPlace(tx, ty)`), ja kun kenttädata kasvoi 15 rivistä 16:een jokainen
+     * ruutu siirtyi rivin alaspäin — eli jokainen piilotiili koko pelissä
+     * arvottiin uudestaan. Mitattuna: 98 piilotiiltä ennen, 79 jälkeen, ja
+     * 1-2:n kolmesta jäi yksi. Luku on siis mitattu uudestaan eikä löysätty,
+     * ja 1-1:n nolla on yhä nolla — se on se puolisko joka on väite. */
     const tall = secretKeys('1-2');
     expect('salaisuuslaskenta osaa kentän jossa on salaisuuksia ja kentän jossa ei ole',
-      secretTotal('1-2') === 5 && tall.includes(SKY) && tall.includes(CAVE)
+      secretTotal('1-2') === 3 && tall.includes(SKY) && tall.includes(CAVE)
       && secretTotal('1-1') === 0,
       `1-2: ${tall.join(' ')} / 1-1: ${secretTotal('1-1')}`);
 
@@ -10676,7 +10706,7 @@ const report = await page.evaluate(async () => {
     scene.update(mkInput());
     const afterSky = secretTally(game.state, '1-2');
     expect('salaisuus löytyy silloin kun se antaa sen mitä se kätki',
-      afterBrick.found === 1 && afterBrick.total === 5
+      afterBrick.found === 1 && afterBrick.total === 3
       && afterSky.found === 2 && foundKeys(game.state, '1-2').includes(SKY),
       `tiili ${afterBrick.found}/${afterBrick.total} → alue ${afterSky.found}`);
 
@@ -10698,7 +10728,7 @@ const report = await page.evaluate(async () => {
     const oldReads = old && secretTally(old, '1-2');
     expect('vanha tallennus ilman salaisuustietoa latautuu ja lukee nollaksi',
       !!old && old.lives === 3 && !!old.secrets && oldReads.found === 0
-      && oldReads.total === 5 && DEFAULT_SAVE().secrets
+      && oldReads.total === 3 && DEFAULT_SAVE().secrets
       && noteSecret(old, '1-2', brick) === true,
       oldErr || `lives ${old && old.lives}  ${oldReads && oldReads.found}/${oldReads && oldReads.total}`);
     if (before === null) localStorage.removeItem('sfb3.save.v2');
@@ -13580,7 +13610,7 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = arena();
-      const floor = 13;
+      const floor = 14;
       const a = walkerAt(s, 6, floor);
       const b = walkerAt(s, 8, floor);
       const p = s.player;
@@ -13629,7 +13659,7 @@ const report = await page.evaluate(async () => {
      */
     {
       const s = arena();
-      const floor = 13;
+      const floor = 14;
       const shell = new enemies.ShellGuy(s, 5 * TILE, floor * TILE);
       shell.x = 5 * TILE;
       shell.y = floor * TILE - shell.h;
@@ -15886,7 +15916,7 @@ const report = await page.evaluate(async () => {
             if (!sl.vertical) {
               const floor = def.rows[sl.floorRow].slice(sl.from, sl.to);
               if (!/[#X]/.test(floor)) bad.push(`${id} osio ${sl.i + 1}: johdetulla lattiarivillä ${sl.floorRow} ei ole maata`);
-              if (sl.rows.length !== 15) bad.push(`${id} osio ${sl.i + 1}: kaista on ${sl.rows.length} riviä`);
+              if (sl.rows.length !== 16) bad.push(`${id} osio ${sl.i + 1}: kaista on ${sl.rows.length} riviä`);
             } else {
               const neighbours = slices.filter((o) => !o.vertical).map((o) => o.floorRow);
               if (!neighbours.includes(sl.entryRow)) bad.push(`${id} osio ${sl.i + 1}: tulorivi ${sl.entryRow} ei ole minkään vaakaosion lattia`);
@@ -16182,7 +16212,7 @@ const report = await page.evaluate(async () => {
       // with the sun overhead and awake — it wakes with the camera, and the
       // level puts it eleven chunks earlier.
       s.player.x = 230 * TILE;
-      s.player.y = cave + 10 * TILE;
+      s.player.y = cave + 11 * TILE;
       s.player.vy = 0;
       sun.x = s.player.x - 84;
       sun.active = true;
@@ -16324,7 +16354,7 @@ const report = await page.evaluate(async () => {
   }
 
   /* -------------------------------- audio ------------------------------ */
-  const { Sfx, Music, audioTap } = await import('/src/core/audio.js');
+  const { Sfx, Music, Ambience: Bed, audioTap } = await import('/src/core/audio.js');
 
   /*
    * ÄÄNIMITTAUKSEN KAKSI APURIA, ja miksi ne ovat olemassa.
@@ -16462,6 +16492,44 @@ const report = await page.evaluate(async () => {
      * mitätöisi koko lohkon, portti ohittaisi mittauksen joka onnistui. */
     return { peakFor, settle, stalled: () => stalled, clear: () => { stalled = false; } };
   };
+  /**
+   * PELI PARKKIIN ÄÄNIMITTAUKSEN AJAKSI, ja se on näiden porttien korjaus.
+   *
+   * Mitattu, ja molemmat luvut ovat tässä koska ne ovat koko todiste.
+   *
+   *   1. **Väylällä oli 24,25 ennen kuin lohko soitti mitään**, ja pedin tila
+   *      oli `wind`. Tuulipeti on jatkuvaa kohinaa, ja juuri sen muotoinen oli
+   *      kaatunut ajo: *ikkunat … 5.62 5.62 5.62*, kolme peräkkäistä
+   *      täsmälleen yhtä suurta lukemaa. Vaimeneva häntä ei tee sitä. Peti
+   *      herää joka kerta kun elossa oleva näyttämö kutsuu `hold()`ia, eli
+   *      mittaus riippui siitä mikä näyttämö sattui olemaan pystyssä.
+   *   2. Pelkkä `game.toTitle()` ei riitä, ja sekin on mitattu: parkkeerattuna
+   *      väylä oli puhdas (*ennen 0.00*) — ja sitten **houkutusdemo lähti
+   *      kesken odotuksen** (*pitäjät TitleScene/… DemoScene/m:level/…*,
+   *      ikkunat 282.65 viisi kertaa peräkkäin, 19,4 sekuntia). Nimikkösivulle
+   *      palaaminen *ostaa* kaksikymmentä sekuntia; se ei takaa mitään, ja
+   *      hitaalla renderöijällä lohko kestää kauemmin.
+   *
+   * Siksi demo ei ole ajastettu vaan **irrotettu**: `startDemo` on mittauksen
+   * ajan tyhjä, ja se pannaan takaisin lopuksi. Kynnyksiin ja odotusaikoihin ei
+   * kosketa — kumpaakin on jo kerran yritetty, ks. alempana.
+   *
+   * @param {boolean} restoreScene palautetaanko parkkia edeltänyt näyttämö.
+   */
+  const park = (restoreScene = false) => {
+    const wasScene = game.scene;
+    const ownDemo = Object.prototype.hasOwnProperty.call(game, 'startDemo');
+    const wasDemo = game.startDemo;
+    game.startDemo = () => {};
+    game.toTitle();
+    Music.stop();
+    Bed.stop();
+    return () => {
+      if (ownDemo) game.startDemo = wasDemo;
+      else delete game.startDemo;
+      if (restoreScene && wasScene) game.scene = wasScene;
+    };
+  };
   const keepRendering = (tap) => {
     if (!tap) return () => {};
     const osc = tap.ctx.createOscillator();
@@ -16505,8 +16573,34 @@ const report = await page.evaluate(async () => {
     let note = '';
     let stalled = false;
     const stopWake = keepRendering(tap);
+    let unpark = null;
     if (tap && tap.ctx.state === 'running') {
-      Music.stop();
+      /*
+       * PELI PARKKIIN MITTAUKSEN AJAKSI, ja tämä on se korjaus jota kolme
+       * edellistä yritystä etsi testin omista luvuista.
+       *
+       * Mitattu, ja se on tässä koska se on koko todiste. Diagnostiikkarivi
+       * juuri ennen kuin tämä lohko soitti mitään:
+       *
+       *     ennen 24.25 @ WorldMapScene/m:-/a:wind
+       *
+       * Kaksi asiaa kerralla. **Väylällä oli jo 24,25** — eli lohkon oma
+       * neljän äänen "punainen" ei ollut se mitä odotus kuunteli, vaan koko
+       * suiten jäänne. Ja **`Ambience.current` oli `wind`**: tuulipeti on
+       * jatkuvaa kohinaa eikä hännällinen ääni, ja se on tasan se muoto jonka
+       * kaatunut ajo näytti — *ikkunat … 5.62 5.62 5.62*, kolme peräkkäistä
+       * täsmälleen yhtä suurta lukemaa. Vaimeneva häntä ei tee sitä; tasainen
+       * lähde tekee. Peti nousee henkiin joka kerta kun jokin näyttämö kutsuu
+       * `hold()`ia, eli se mitä tämä portti mittasi riippui siitä mikä
+       * näyttämö sattui olemaan elossa edellisen lohkon jäljiltä.
+       *
+       * Siksi peli parkkeerataan: nimikkönäyttämö (joka samalla virittää uudelleen
+       * sen kahdenkymmenen sekunnin houkutusajastimen, ks. konsonanttilohko),
+       * musiikki kiinni ja peti kiinni. Kynnystä ei löysätty eikä odotusta
+       * pidennetty — kumpikin oli jo kerran yritetty, ks. alla. Näyttämö
+       * palautetaan mittauksen jälkeen.
+       */
+      unpark = park(true);
       /* Punainen ennen vihreää, ja satunnaiselle vialle se tarkoittaa että
        * vika pitää **tuottaa tahallaan**. Kaatuneissa ajoissa tausta oli 0,379
        * … 3,029 — se ei ole yhden äänen häntä vaan muutama päällekkäinen ääni,
@@ -16514,7 +16608,6 @@ const report = await page.evaluate(async () => {
        * saman joka ajolla ja pysyy siinä suuruusluokassa jonka oikeat
        * kaatumiset näyttivät; kymmenen ääntä olisi tuottanut leikkaavan
        * 19,450:n eli vian jota suite ei koskaan tuota itse. */
-      for (const s of ['sprout', 'bigfart', 'burst', 'flight']) Sfx.play(s);
       const an = tap.ctx.createAnalyser();
       /* 743 ms yhtäjaksoista aaltoa eikä 46 ms, ja syy on renderöijän ryöppy:
        * lyhyt ikkuna ei muista kuin murusen siitä mitä yhden ryöpyn aikana
@@ -16524,6 +16617,17 @@ const report = await page.evaluate(async () => {
       tap.bus.connect(an);
       const meter = meterFor(tap, an);
       const peakFor = meter.peakFor;
+      /*
+       * Väylän taso **ennen** kuin tämä lohko soittaa mitään, ja se jää riville
+       * pysyvästi. Juuri tämä luku paljasti vian: parkkeeraamattomana se oli
+       * 24,25, eli lohkon oma neljän äänen punainen oli murto-osa siitä mitä
+       * odotus todella kuunteli. Jos se joskus taas kasvaa, rivi kertoo sen
+       * heti eikä vasta silloin kun odotus loppuu kesken. */
+      const before = await peakFor(200);
+      const beforeWho = `${game.scene ? game.scene.constructor.name : '-'}`
+        + `/m:${Music.current || '-'}/a:${Bed.current || '-'}${Bed.live ? '+' : ''}`;
+      for (const s of ['sprout', 'bigfart', 'burst', 'flight']) Sfx.play(s);
+      meter.clear();
       /* Odota hiljaisuutta, älä kelloa.
        *
        * Tässä oli kiinteä 900 ms odotus ja perustelu "suite on soittanut ääniä
@@ -16564,9 +16668,15 @@ const report = await page.evaluate(async () => {
        * omista luvuista, ja jokainen niistä olisi loppunut minuutissa jos rivi
        * olisi kertonut kuka ääntä piti. */
       const windows = [];
+      /* Kuka ääntä pitää, ikkuna ikkunalta: näyttämö, raita ja peti. Peti on
+       * niistä se joka kaatoi tämän portin — jatkuva kohina ei vaimene, joten
+       * `Ambience.current` kuuluu riville siinä missä ikkunoiden sarjakin. */
+      const holders = [];
       while (calm < 2 && tap.ctx.currentTime - ct0 < 6) {
         floorNoise = await peakFor(200);
         windows.push(floorNoise.toFixed(2));
+        holders.push(`${game.scene ? game.scene.constructor.name : '-'}`
+          + `/m:${Music.current || '-'}/a:${Bed.current || '-'}${Bed.live ? '+' : ''}`);
         calm = floorNoise > QUIET ? 0 : calm + 1;
         if (performance.now() - t0 > 40000) break;      // renderöijä seisoo, ks. alla
       }
@@ -16585,10 +16695,13 @@ const report = await page.evaluate(async () => {
       Sfx.play('yeah');
       voice = await peakFor(420);
       an.disconnect();
+      unpark();                            // parkki purettu, ks. `park`
       stalled = meter.stalled() || !heard;
       note = ` (hiljeni ${waited} ms, näyttämö ${live}`
         + `, äänikello ${ctWaited.toFixed(2)} s / seinäkello ${(waited / 1000).toFixed(2)} s`
-        + `, ikkunat ${windows.slice(-8).join(' ')})`;
+        + `, ikkunat ${windows.slice(-8).join(' ')}`
+        + `, ennen ${before.toFixed(2)} @ ${beforeWho}`
+        + `, pitäjät ${[...new Set(holders)].join(' ')})`;
     }
     stopWake();
     const measured = metered(tap, stalled);
@@ -16678,9 +16791,7 @@ const report = await page.evaluate(async () => {
        * twenty seconds this block needs — the readings below were varying by a
        * factor of two before, and it was the demo landing a coin in the window.
        */
-      game.toTitle();
-      Music.stop();
-      Ambience.stop();                       // no room tail across the closures
+      const unpark = park();                 // näyttämö, raita, peti ja demo
       const stopWake = keepRendering(tap);
       const an = tap.ctx.createAnalyser();
       an.fftSize = 32768;                    // 743 ms of contiguous waveform at 44.1k
@@ -16719,9 +16830,13 @@ const report = await page.evaluate(async () => {
           meter.clear();
           noisy = false;
           const [ok, detail] = await fn();
+          const why = meter.stalled() ? 'äänikello seisoi'
+            : noisy ? `väylä ei rauhoittunut, pitäjä ${game.scene ? game.scene.constructor.name : '-'}`
+              + `/m:${Music.current || '-'}/a:${Bed.current || '-'}${Bed.live ? '+' : ''}`
+              : 'edellinen mittaus jäi kesken';
           const real = metered(tap, meter.stalled() || noisy) && !inconclusive;
           if (!real) inconclusive = true;
-          expect(name, !real || ok, real ? detail : `ei mitattu (äänikello seisoi): ${detail}`);
+          expect(name, !real || ok, real ? detail : `ei mitattu (${why}): ${detail}`);
         } catch (err) {
           expect(name, false, `heitti: ${err.message}`);
         }
@@ -16800,6 +16915,7 @@ const report = await page.evaluate(async () => {
           + `purskeen jälkeen ${after.toFixed(2)}`];
       });
       an.disconnect();
+      unpark();
       stopWake();
     }
   }
@@ -16825,10 +16941,7 @@ const report = await page.evaluate(async () => {
     let stalled = false;
     const stopWake = keepRendering(tap);
     if (running) {
-      game.toTitle();
-      Music.stop();
-      const { Ambience: Amb } = await import('/src/core/audio.js');
-      Amb.stop();
+      const unpark = park();
       const an = tap.ctx.createAnalyser();
       an.fftSize = 16384;
       an.smoothingTimeConstant = 0;
@@ -16863,6 +16976,7 @@ const report = await page.evaluate(async () => {
       }
       stalled = meter.stalled();
       an.disconnect();
+      unpark();
     }
     stopWake();
     const measured = running && metered(tap, stalled);
@@ -20770,8 +20884,8 @@ const report = await page.evaluate(async () => {
       };
       const s = new LevelScene(game, '1-1');
       s.entities = s.entities.filter((e) => e.kind !== 'enemy');
-      const shell = new E.ShellGuy(s, 6 * 16, 12 * 16);
-      shell.y = 12 * 16 - shell.h;
+      const shell = new E.ShellGuy(s, 6 * 16, 13 * 16);
+      shell.y = 13 * 16 - shell.h;
       shell.active = true;
       shell.alwaysActive = true;
       s.add(shell);
@@ -20826,8 +20940,8 @@ const report = await page.evaluate(async () => {
       };
       const s = new LevelScene(game, '1-1');
       s.entities = s.entities.filter((e) => e.kind !== 'enemy');
-      const e = new E.Walker(s, 6 * 16, 12 * 16);
-      e.y = 12 * 16 - e.h;
+      const e = new E.Walker(s, 6 * 16, 13 * 16);
+      e.y = 13 * 16 - e.h;
       e.active = true;
       e.alwaysActive = true;
       e.spawnGrace = 0;
@@ -20846,8 +20960,8 @@ const report = await page.evaluate(async () => {
 
       /* Ja ketju isku → kumoon → nieleminen on ehjä ilman kuplaa: se oli
        * VERBI 6:n koko rakenne, ja maahanisku lakkasi tänään vangitsemasta. */
-      const e2 = new E.Walker(s, 6 * 16, 12 * 16);
-      e2.y = 12 * 16 - e2.h;
+      const e2 = new E.Walker(s, 6 * 16, 13 * 16);
+      e2.y = 13 * 16 - e2.h;
       e2.active = true;
       e2.alwaysActive = true;
       e2.spawnGrace = 0;
@@ -21133,6 +21247,273 @@ const report = await page.evaluate(async () => {
         + ` (${back} takaisin), perustaajuus ${Math.abs(square[1]).toFixed(2)}`);
     }
 
+    /* --- 9 d. SID-sanaston loppu: varastettu kanava, rengas, sync, taulukot --- */
+    /*
+     * NELJÄ TEKNIIKKAA, NELJÄ MITTAUSTA, EIKÄ YHTÄÄN OLEMASSAOLOVÄITETTÄ.
+     *
+     * ROADMAPin "mitä SID-sanastosta jäi tekemättä" oli neljä kohtaa, ja
+     * jokainen niistä on sellainen jonka voi *melkein* tehdä: rumpu basson
+     * päällä on melkein varastettu kanava, korkeampi nuotti on melkein hard
+     * sync, ja äänen vibrato on melkein nuotin vibrato. Portti joka tarkistaa
+     * että parametri on asetettu hyväksyisi kaikki kolme melkeinversiota, ja
+     * siksi jokainen näistä on **luku signaalista** eikä luku taulusta.
+     *
+     * Se on mahdollista vasta nyt: `renderTone` rakentaa saman graafin jonka
+     * peli soittaa, mutta offline-kontekstiin, joten ääni on taulukko eikä
+     * korvahavainto. Mittaus on siis toistettava eikä räpsyvä, eikä se tarvitse
+     * äänikorttia — ja se mittaa oikeaa koodia eikä mallia siitä.
+     */
+    {
+      const audio = await import('/src/core/audio.js');
+      const { Music, Sfx, audioDiag, audioTap } = audio;
+      const RATE = 44100;
+      /* Goertzel-tyylinen yhden taajuuden magnitudi. Koko FFT olisi tässä
+       * ylimitoitettu: jokainen väite koskee nimettyjä taajuuksia, ja
+       * ruudukkoon pyöristetty binni osuisi niiden viereen. */
+      const mag = (buf, a, n, f) => {
+        const w = (2 * Math.PI * f) / RATE;
+        let re = 0;
+        let im = 0;
+        for (let i = 0; i < n; i++) {
+          const x = buf[a + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n));
+          re += x * Math.cos(w * i);
+          im += x * Math.sin(w * i);
+        }
+        return Math.hypot(re, im) / n;
+      };
+      /** Nollan ylitykset alhaalta ylös, osanäytteen tarkkuudella. */
+      const rises = (b, a, n) => {
+        const out = [];
+        for (let i = a + 1; i < a + n; i++) {
+          if (b[i - 1] < 0 && b[i] >= 0) out.push(i - 1 + (-b[i - 1]) / (b[i] - b[i - 1]));
+        }
+        return out;
+      };
+      /** Hetkellinen taajuus jaksosta jaksoon: portamento ja vibrato lukuina. */
+      const insideOut = (b, a, n) => {
+        const c = rises(b, a, n);
+        if (c.length < 3) return { first: 0, lo: 0, hi: 0 };
+        let lo = 1e9;
+        let hi = 0;
+        for (let i = 1; i < c.length; i++) {
+          const f = RATE / (c[i] - c[i - 1]);
+          lo = Math.min(lo, f);
+          hi = Math.max(hi, f);
+        }
+        return { first: RATE / (c[1] - c[0]), lo, hi };
+      };
+
+      /*
+       * 1. RENGASMODULAATIO, ja se että se on **tulo eikä sekoitus**.
+       *
+       * Rengasmodulaatio ei lisää ääneen mitään: se korvaa kantoaallon kahdella
+       * sivunauhalla, `f(r−1)` ja `f(r+1)`, ja kantoaalto itse **katoaa**. Juuri
+       * siitä epäharmoninen kellon ääni syntyy, ja juuri siksi "kuulostaa
+       * kirkkaammalta" ei ole sama asia. Kolme lukua samasta renderöinnistä:
+       * kantoaallon vaimeneminen, molemmat sivunauhat paikallaan, eikä
+       * kumpikaan lähellä kokonaislukumonikertaa.
+       */
+      {
+        const A = Math.round(0.05 * RATE);
+        const N = 8192;
+        const F = 880;
+        const R = 2.41;
+        const wet = await audio.renderTone(
+          { type: 'triangle', from: F, dur: 0.25, gain: 0.5, attack: 0.003, hold: 0.5, ring: R },
+          0.35);
+        const dry = await audio.renderTone(
+          { type: 'triangle', from: F, dur: 0.25, gain: 0.5, attack: 0.003, hold: 0.5 }, 0.35);
+        const carrier = mag(wet, A, N, F);
+        const dryCarrier = mag(dry, A, N, F);
+        const lo = mag(wet, A, N, F * (R - 1));
+        const hi = mag(wet, A, N, F * (R + 1));
+        const off = (x) => Math.abs(x - Math.round(x));
+        const killed = dryCarrier / Math.max(1e-9, carrier);
+        expect('rengasmodulaatio vaimentaa kantoaallon ja tuo kaksi epäharmonista sivunauhaa',
+          killed > 100 && lo > dryCarrier * 0.2 && hi > dryCarrier * 0.2
+          && off(R - 1) > 0.2 && off(R + 1) > 0.2,
+          `kantoaalto ${carrier.toExponential(2)} vs kuiva ${dryCarrier.toFixed(4)}`
+          + ` (${Math.round(killed)}× vaimeampi), sivunauhat ${lo.toFixed(4)} ja ${hi.toFixed(4)}`
+          + ` kohdissa ${(R - 1).toFixed(2)}× ja ${(R + 1).toFixed(2)}× perustaajuutta`);
+      }
+
+      /*
+       * 2. KOVA SYNKRONOINTI, ja se että se on **eri asia kuin korkeampi nuotti**.
+       *
+       * Jaksotettu uudelleenkäynnistys tuottaa aallon jonka jakso on isännän ja
+       * jonka muoto on orjan. Se erottuu kahdesta naapuriratkaisustaan eri
+       * luvulla kummastakin, ja molemmat naapurit ovat sellaisia jotka menisivät
+       * läpi jos portti tarkistaisi vain että jotain tapahtui:
+       *
+       *   - **Ei ole vain kirkkaampi ääni.** Spektrin huippu siirtyy isännän
+       *     ensimmäisestä osaäänestä neljänteen kun suhde kasvaa 1:stä 4:ään.
+       *   - **Ei ole vain korkeampi nuotti.** Sama neljäs osaääni saadaan
+       *     soittamalla nelinkertainen taajuus — mutta silloin perustaajuutta ei
+       *     ole *ollenkaan*. Synkronoidussa se on tallella, ja se on se sävel
+       *     jonka korva kuulee.
+       *
+       * Ja kolmas luku joka pitää tämän ratkaisun rehellisenä: energia sijaitsee
+       * isännän monikerroilla eikä niiden välissä. Ilman sitä sama huippu voisi
+       * olla mitä tahansa säröä.
+       */
+      {
+        const A = Math.round(0.05 * RATE);
+        const N = 8192;
+        const M = 220;
+        const shape = (buf) => {
+          const on = [];
+          const off = [];
+          for (let k = 1; k <= 8; k++) {
+            on.push(mag(buf, A, N, M * k));
+            off.push(mag(buf, A, N, M * (k + 0.5)));
+          }
+          const sum = (xs) => xs.reduce((p, q) => p + q, 0);
+          let peakK = 1;
+          on.forEach((m2, i) => { if (m2 > on[peakK - 1]) peakK = i + 1; });
+          return { on, peakK, comb: sum(on) / Math.max(1e-9, sum(off)) };
+        };
+        const base = { type: 'sawtooth', from: M, dur: 0.35, gain: 0.5, attack: 0.005, hold: 0.95 };
+        const flat = shape(await audio.renderTone({ ...base, sync: 1 }, 0.45));
+        const screamed = shape(await audio.renderTone({ ...base, sync: 4 }, 0.45));
+        const higher = shape(await audio.renderTone({ ...base, from: M * 4 }, 0.45));
+        expect('kova synkronointi siirtää sointiväriä muttei sävelkorkeutta',
+          flat.peakK === 1 && screamed.peakK === 4
+          && screamed.on[0] > higher.on[0] * 20 && screamed.comb > 10,
+          `huippu osaäänessä ${flat.peakK} (suhde 1) -> ${screamed.peakK} (suhde 4);`
+          + ` perustaajuus synkronoituna ${screamed.on[0].toFixed(4)},`
+          + ` nelinkertaisella nuotilla ${higher.on[0].toFixed(4)};`
+          + ` energiaa isännän monikerroilla ${screamed.comb.toFixed(0)}× välien verran`);
+      }
+
+      /*
+       * 3. NUOTTIKOHTAINEN VIBRATO JA PORTAMENTO.
+       *
+       * Kaksi lukua, ja molemmat mittaavat *aikaa nuotin sisällä* — se on koko
+       * ero äänen ominaisuuteen. Portamento saapuu perille kesken nuottia ja
+       * pysyy siellä; viivästetty vibrato on alussa suora ja lopussa syvä.
+       * Jälkimmäinen mitataan samaa nuottia vasten jolla ei ole viivettä, koska
+       * "loppu väreilee" olisi tosi myös ilman koko ominaisuutta.
+       */
+      {
+        const glided = await audio.renderTone(
+          { type: 'triangle', from: 220, to: 330, dur: 0.4, gain: 0.5, attack: 0.005, hold: 0.95, glide: 0.5 },
+          0.5);
+        const at = (sec) => insideOut(glided, Math.round(sec * RATE), 1500).first;
+        const start = at(0.01);
+        const half = at(0.21);
+        const end = at(0.35);
+        expect('portamento saapuu perille kesken nuottia eikä sen lopussa',
+          start < 245 && Math.abs(half - 330) < 6 && Math.abs(end - 330) < 6,
+          `${start.toFixed(0)} Hz alussa, ${half.toFixed(0)} Hz puolivälissä,`
+          + ` ${end.toFixed(0)} Hz lopussa (kohde 330)`);
+
+        const wide = (buf, sec) => {
+          const w = insideOut(buf, Math.round(sec * RATE), 8000);
+          return w.hi - w.lo;
+        };
+        const shape = { type: 'triangle', from: 440, dur: 0.9, gain: 0.5, attack: 0.005, hold: 0.98, vibrato: 14, vibratoRate: 5 };
+        const delayed = await audio.renderTone({ ...shape, vibDelay: 0.35 }, 1.0);
+        const plain = await audio.renderTone(shape, 1.0);
+        const early = wide(delayed, 0.02);
+        const late = wide(delayed, 0.5);
+        const always = wide(plain, 0.02);
+        expect('viivästetty vibrato on alussa suora ja lopussa yhtä syvä kuin viiveetön',
+          early < always * 0.5 && late > always * 0.85,
+          `viiveellä alussa ${early.toFixed(1)} Hz ja lopussa ${late.toFixed(1)} Hz,`
+          + ` ilman viivettä alusta asti ${always.toFixed(1)} Hz`);
+      }
+
+      /*
+       * 4. VARASTETTU KANAVA, ja se että reikä on olemassa.
+       *
+       * Kaksi laskuria `audioDiag`ista, ja ne on tahallaan kaksi: osumat ilman
+       * vaikenemista tarkoittaisi että rumpu tuli basson *päälle*, eli lisätty
+       * rumpuraita uudella nimellä. Kolmas luku on `_spanOf`, joka on ainoa osa
+       * varkaudesta jota emittoiduista nuoteista ei näe — `level`-basson
+       * nuotit ovat kaikki yhden askeleen mittaisia, joten katkaisu ei laukea
+       * kertaakaan, ja mittaamaton haara on rikki heti kun joku kirjoittaa
+       * pidemmän nuotin. Ja neljäs: raita jolla ei ole `steal`ia ei varasta.
+       */
+      {
+        Sfx.resume();
+        const tap = audioTap();
+        const run = (name) => {
+          Music.play(name);
+          const dur = Music._stepDur;
+          const t0 = tap.ctx.currentTime + 0.25;
+          for (let s = 0; s < 32; s++) Music._emit(s, t0 + s * dur, false, dur);
+          const out = { hits: audioDiag().stolen, silenced: audioDiag().silenced, dur };
+          return out;
+        };
+        const level = run('level');
+        const span = { cut: Music._spanOf('bass', 4, 8), free: Music._spanOf('lead', 4, 8) };
+        Music.stop();
+        const quiet = run('title');
+        Music.stop();
+        const hole = 6 / 50;
+        expect('varastettu kanava soittaa rummun ja jättää bassoon reiän',
+          level.hits === 4 && level.silenced === 4 && span.cut === 2 && span.free === 8
+          && quiet.hits === 0,
+          `level: ${level.hits} osumaa ja ${level.silenced} vaiennettua nuottia`
+          + ` 32 askeleella (varaus ${Math.round(hole * 1000)} ms,`
+          + ` askel ${Math.round(level.dur * 1000)} ms); pitkä bassonuotti katkeaa`
+          + ` ${span.cut} askeleeseen, lyijy soi ${span.free}; title ${quiet.hits} osumaa`);
+      }
+
+      /*
+       * 5. JA SE HINTA JOKA PITÄÄ MITATA TAI SE KARKAA.
+       *
+       * Jaksotettu uudelleenkäynnistys maksaa yhden oskillaattorin isäntäjaksoa
+       * kohti, eli hinta kasvaa sävelkorkeuden ja keston mukana. Se on
+       * hyväksyttävä ratkaisu vain niin kauan kuin merkittyjä nuotteja on vähän
+       * ja ne ovat matalalla — ja kumpikin ehto on sellainen jonka yksi
+       * huolimaton nuottimerkki rikkoisi ilman että mikään muu portti näkisi
+       * sitä. Katto on `SYNC_MAX_SEGMENTS` (128); tämä vaatii reilusti alle,
+       * koska katon saavuttaminen tarkoittaisi että nuotin loppu soi
+       * synkronoimatta.
+       */
+      {
+        const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        Sfx.resume();
+        let worst = 0;
+        let marked = 0;
+        let where = '';
+        for (const name of Music.names()) {
+          Music.play(name);
+          const step = Music._stepDur;
+          for (const voice of Music._voices || []) {
+            if (!voice.marks) continue;
+            for (const [at, note] of voice.map) {
+              const m = voice.marks[note[2]];
+              if (!m || !m.sync) continue;
+              marked++;
+              const ac = new OAC(1, 512, RATE);
+              /* Pahin tapaus eikä kirjoitettu tapaus: lyijy nousee oktaavin
+               * `lead octave up` -osiossa ja sävellaji kiipeää kvintin
+               * (`KEY_PLAN`), ja hinta kaksinkertaistuu oktaavia kohti. */
+              const worstOctave = (voice.octave || 0)
+                + (voice.name === 'lead' ? 12 : 0) + 7;
+              const n = audio.syncVoice(ac, {
+                type: voice.wave,
+                master: 440 * Math.pow(2, (note[0] + worstOctave) / 12),
+                ratio: m.sync,
+                ratioTo: m.syncTo,
+                dur: note[1] * step * (voice.staccato || 0.98),
+                t0: 0,
+                dest: ac.destination,
+              }).length;
+              if (n > worst) { worst = n; where = `${name}/${voice.name}@${at}`; }
+            }
+          }
+          Music.stop();
+        }
+        expect('kova synkronointi on nuotin ominaisuus eikä raidan, ja sen hinta on mitattu',
+          marked > 0 && marked <= 8 && worst < 96,
+          `${marked} merkittyä nuottia koko pelissä, kallein ${worst} oskillaattoria`
+          + ` (${where}), katto 128`);
+      }
+    }
+
     /* --- 9. rinteet: maasto jonka pinta on vinossa --- */
     /*
      * RINNE ON MUUNNIN EIKÄ LIUKUMÄKI (IDEAS.md kohta 1, omistajan tuomio
@@ -21187,7 +21568,7 @@ const report = await page.evaluate(async () => {
       {
         const s = arena((sc) => rampUp(sc, 8, 5));
         const p = s.player;
-        p.x = 3 * 16; p.y = 12 * 16 - p.h; p.vx = 0; p.vy = 0;
+        p.x = 3 * 16; p.y = 13 * 16 - p.h; p.vx = 0; p.vy = 0;
         let air = 0;
         let startY = null;
         let topY = null;
@@ -21248,11 +21629,11 @@ const report = await page.evaluate(async () => {
         }
         const up = arena((sc) => rampUp(sc, 8, 5));
         const upP = up.player;
-        upP.x = 3 * 16; upP.y = 12 * 16 - upP.h; upP.vx = 0; upP.vy = 0;
+        upP.x = 3 * 16; upP.y = 13 * 16 - upP.h; upP.vx = 0; upP.vy = 0;
         let climbed = 0;
         for (let f = 0; f < 300; f++) {
           up.update(press(1, false));
-          climbed = Math.max(climbed, (12 * 16 - upP.h) - upP.y);
+          climbed = Math.max(climbed, (13 * 16 - upP.h) - upP.y);
         }
         expect('alamäki lainaa ylimmän nopeuden, ylämäki hidastaa muttei pysäytä',
           fastest > flat + 0.5 && fastest <= 3.5 + 0.001 && climbed > 60,
@@ -21289,9 +21670,9 @@ const report = await page.evaluate(async () => {
           s.time = 9999;
           s.clockStopped = true;
           const p = s.player;
-          const col = s.grid[12].indexOf('/');
+          const col = s.grid[13].indexOf('/');
           p.x = (col - 6) * 16;
-          p.y = 12 * 16 - p.h;
+          p.y = 13 * 16 - p.h;
           let last = p.x;
           let still = 0;
           let stalledAt = null;
@@ -21322,7 +21703,7 @@ const report = await page.evaluate(async () => {
             for (let ty = 13; ty <= 14; ty++) for (let tx = 20; tx < 40; tx++) sc.setTile(tx, ty, '#');
           });
           const p = s.player;
-          p.x = 2 * 16; p.y = 12 * 16 - p.h; p.vx = 0; p.vy = 0;
+          p.x = 2 * 16; p.y = 13 * 16 - p.h; p.vx = 0; p.vy = 0;
           let peak = 1e9;
           let lift = null;
           for (let f = 0; f < 300; f++) {
@@ -22265,8 +22646,8 @@ const report = await page.evaluate(async () => {
       /* Sarake kaukana pelaajasta, jonka lattia on ehjä ja jonka yllä on tilaa. */
       let tx = -1;
       for (let x = Math.floor(p.x / 16) + 10; x < s.w - 4; x++) {
-        if (s.grid[13][x] === T.GROUND && s.grid[12][x] === ' '
-          && s.grid[11][x] === ' ' && s.grid[10][x] === ' ' && s.grid[9][x] === ' ') { tx = x; break; }
+        if (s.grid[14][x] === T.GROUND && s.grid[13][x] === ' '
+          && s.grid[12][x] === ' ' && s.grid[11][x] === ' ' && s.grid[10][x] === ' ') { tx = x; break; }
       }
       if (tx < 0) return null;
       s.setTile(tx, 10, T.LUMP);
@@ -22279,7 +22660,7 @@ const report = await page.evaluate(async () => {
       else {
         const { s, tx } = f;
         const i = mkInput();
-        const victim = put(s, new Walker(s, tx * 16, 12 * 16));
+        const victim = put(s, new Walker(s, tx * 16, 13 * 16));
         victim.speed = 0;
         victim.vx = 0;
         s.smashBrick(tx, 11);
@@ -22309,7 +22690,7 @@ const report = await page.evaluate(async () => {
         const i = mkInput();
         const p = s.player;
         p.x = tx * 16;
-        p.y = 13 * 16 - p.h;
+        p.y = 14 * 16 - p.h;
         p.vy = 0;
         const before = p.powerLevel;
         s.smashBrick(tx, 11);
@@ -22420,13 +22801,13 @@ const report = await page.evaluate(async () => {
      * huomautus samasta koekentästä. Yksi vika kerrallaan, kuten
      * hiekkakoekentässä. */
     const fixture = (over = {}) => {
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(32));
       const set = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
-      set(8, '              C ');
-      set(9, '      !       B ');
-      set(12, '  1                         F   ');
-      set(13, '################################');
+      set(9, '              C ');
+      set(10, '      !       B ');
+      set(13, '  1                         F   ');
       set(14, '################################');
+      set(15, '################################');
       for (const [y, s] of Object.entries(over)) set(Number(y), s);
       return rows;
     };
@@ -22437,17 +22818,17 @@ const report = await page.evaluate(async () => {
       clean.length === 0,
       clean.length ? clean.join('; ') : 'möykky tiilen päällä, ilmaa yllä — ei huomautuksia');
 
-    const hanging = validateLevel(fixture({ 9: '      !         ' }), budget);
+    const hanging = validateLevel(fixture({ 10: '      !         ' }), budget);
     expect('ilmassa roikkuva möykky raportoidaan',
       lumpProblems(hanging).length > 0,
       lumpProblems(hanging)[0] || `ei huomautusta (${hanging.join('; ') || 'ei mitään'})`);
 
-    const onPlank = validateLevel(fixture({ 9: '      !       % ' }), budget);
+    const onPlank = validateLevel(fixture({ 10: '      !       % ' }), budget);
     expect('möykky murenevan laudan päällä raportoidaan',
       lumpProblems(onPlank).length > 0,
       lumpProblems(onPlank)[0] || `ei huomautusta (${onPlank.join('; ') || 'ei mitään'})`);
 
-    const walkedOn = validateLevel(fixture({ 7: '              o ' }), budget);
+    const walkedOn = validateLevel(fixture({ 8: '              o ' }), budget);
     expect('möykyn päälle ei rakenneta reittiä',
       lumpProblems(walkedOn).length > 0,
       lumpProblems(walkedOn)[0] || `ei huomautusta (${walkedOn.join('; ') || 'ei mitään'})`);
@@ -22736,6 +23117,169 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
+/* ---- rinne koskee muutakin kuin pelaajaa ---- */
+/*
+ * SE MIKÄ LIUKUU TAI VIERII TOTTELEE RINNETTÄ, SE MIKÄ KÄVELEE EI.
+ *
+ * ROADMAP kirjasi puuttuvan puoliskon rinteistä (v26.08.18.13): *"kuori
+ * kiihtyy alamäkeen kuten pelaajakin, mutta kukaan ei ole vielä suunnitellut
+ * sitä."* Suunnitelma on yksi lause, ja se on tässä mitattuna kolmesta
+ * suunnasta — koska sen molemmat puolet ovat väitteitä ja kumpikin voi mennä
+ * rikki hiljaa.
+ *
+ *   1  kuori      potkaistu kuori kiihtyy alamäkeen ja hidastuu ylämäkeen
+ *   2  kävelijä   kävelijä ei tee kumpaakaan — sen vauhti on sen sopimus
+ *   3  yksi laki  pelaaja ja kuori käyttävät samaa funktiota, eivät kopiota
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const S = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { Walker, ShellGuy } = await import('/src/entities/enemies.js');
+    const { T } = await import('/src/gfx/tiles.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    /*
+     * Koeasetelma: tasainen kenttä johon kirjoitetaan alamäki. Rinne tehdään
+     * käsin eikä etsitä kentästä, jotta mitattava asia on rinne eikä se mikä
+     * sattuu olemaan sen vieressä.
+     */
+    const ramp = (down) => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      /* Kaistale tasamaata, ja sen keskellä neljän laatan pudotus tai nousu. */
+      for (let tx = 2; tx < 40; tx++) {
+        for (let ty = 7; ty < 14; ty++) s.setTile(tx, ty, T.EMPTY);
+        s.setTile(tx, 14, T.GROUND);
+        s.setTile(tx, 15, T.GROUND);
+      }
+      if (down !== 0) {
+        for (let j = 0; j < 4; j++) {
+          const tx = 10 + j;
+          /* Alamäki kirjoitetaan `\\`:llä ja ylämäki `/`:llä; kummankin alla
+           * on kiveä, koska rinne on maan pinta eikä kelluva viiva. */
+          const top = down > 0 ? 10 + j : 13 - j;
+          s.setTile(tx, top, down > 0 ? T.SLOPE_L : T.SLOPE_R);
+          for (let ty = top + 1; ty < 14; ty++) s.setTile(tx, ty, T.GROUND);
+        }
+        if (down > 0) {
+          for (let tx = 2; tx < 10; tx++) for (let ty = 10; ty < 14; ty++) s.setTile(tx, ty, T.GROUND);
+        }
+      }
+      return s;
+    };
+    const run = (make, down) => {
+      const s = ramp(down);
+      const i = mkInput();
+      const e = make(s);
+      /*
+       * Jalat pinnalle, ja vasta `make`n jälkeen. Kaksi mitattua syytä:
+       *
+       *   - **Keho ei ole se jonka koko konstruktori antaa.** `toShell`
+       *     kutistaa kuoren 24 pikselistä 14:ään, joten konstruktorille
+       *     annettu rivi ei kerro missä jalat ovat. Ilman tätä riviä kuori
+       *     syntyi kahdeksan pikseliä lattian sisään, `moveX` luki lattian
+       *     seinäksi ja kuori pomppi paikallaan koko kokeen ajan.
+       *   - **Alamäessä pinta ei ole rivillä 14.** `ramp` nostaa ylätasanteen
+       *     riville 10, koska rinne kulkee alaspäin eikä kentässä ole tilaa
+       *     rivin 15 alapuolella. Riville 14 pantu kuori olisi kiven sisässä.
+       */
+      e.y = (down > 0 ? 10 : 14) * 16 - e.h;
+      e.active = true;
+      e.alwaysActive = true;
+      s.entities.push(e);
+      /*
+       * Kolme lukua eikä yksi, ja `slope` on niistä se tärkein.
+       *
+       * Huippuvauhti yksin ei voi nähdä ylämäkeä lainkaan: potku antaa
+       * lähtövauhdin, ja jarruttava rinne ei koskaan ylitä sitä. Ja kumpikaan
+       * luku ei kerro *kävikö keho rinteessä* — juuri se oli tämän kokeen
+       * ensimmäinen vika, ja se meni läpi vihreänä.
+       */
+      let top = 0;
+      let low = Infinity;
+      let slope = 0;
+      for (let f = 0; f < 90; f++) {
+        s.update(i);
+        top = Math.max(top, Math.abs(e.vx));
+        if (e.onSlope) { low = Math.min(low, Math.abs(e.vx)); slope++; }
+      }
+      const r = (v) => Math.round(v * 100) / 100;
+      return { top: r(top), low: low === Infinity ? null : r(low), slope };
+    };
+    const shell = (s) => {
+      const e = new ShellGuy(s, 6 * 16, 13 * 16);
+      e.toShell();
+      e.kick(1);
+      return e;
+    };
+    /* Sarake 9 eikä 6, ja se on mitattu: kävelijä kulkee 0,55 px/frame, eli
+     * yhdeksässäkymmenessä framessa 49 pikselia. Sarakkeesta 6 lähtenyt ei
+     * yltänyt rinteen alkuun (sarake 10) lainkaan, joten koe vertasi kahta
+     * tasamaata toisiinsa. Suunta pannaan käsin samasta syystä: vasemmalle
+     * kääntynyt kävelijä kävelee poispäin rinteestä. */
+    const walker = (s) => {
+      const e = new Walker(s, 9 * 16, 13 * 16);
+      e.facing = 1;
+      e.vx = e.speed;
+      return e;
+    };
+    const out = {
+      shellFlat: run(shell, 0), shellDown: run(shell, 1), shellUp: run(shell, -1),
+      walkFlat: run(walker, 0), walkDown: run(walker, 1),
+    };
+    const phys = await import('/src/level/physics.js');
+    out.shared = typeof phys.slopePull === 'function';
+    return out;
+  });
+
+  expect('potkaistu kuori kiihtyy alamäkeen',
+    S.shellDown.slope > 0 && S.shellDown.top > S.shellFlat.top + 0.2,
+    `tasamaalla ${S.shellFlat.top} px/frame, alamäkeen ${S.shellDown.top}`
+    + ` (${S.shellDown.slope} framea rinteessä)`);
+
+  /* Ja toinen puoli samasta lauseesta. Hitain vauhti rinteessä eikä nopein,
+   * koska nopein on se jolla kuori saapui: ylämäki syö vauhtia eikä anna, ja
+   * huippumittari ei näe sitä koskaan. */
+  expect('potkaistu kuori hidastuu ylämäkeen',
+    S.shellUp.slope > 0 && S.shellUp.low < S.shellFlat.top - 0.2,
+    `tasamaalla ${S.shellFlat.top} px/frame, ylämäessä hitaimmillaan ${S.shellUp.low}`
+    + ` (${S.shellUp.slope} framea rinteessä)`);
+
+  /* `slope > 0` on tässä yhtä tärkeä kuin itse vertailu: kävelijä joka ei
+   * koskaan astunut rinteeseen kävelee tietysti samaa vauhtia. */
+  expect('kävelijä kävelee samaa vauhtia myös rinteessä',
+    S.walkDown.slope > 0 && Math.abs(S.walkDown.top - S.walkFlat.top) < 0.05,
+    `tasamaalla ${S.walkFlat.top} px/frame, alamäkeen ${S.walkDown.top}`
+    + ` (${S.walkDown.slope} framea rinteessä)`);
+
+  expect('rinteen sääntö on yksi funktio eikä kopio kehoa kohti',
+    S.shared, `physics.js vie slopePullin ulos: ${S.shared}`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- rinne: loppu ---- */
 /* ---- katamari: karvapallo kerää ---- */
 /*
  * PALLO KERÄÄ SEN MINKÄ YLI SE VIERII.
@@ -22795,7 +23339,7 @@ const report = await page.evaluate(async () => {
     {
       const s = scene();
       const i = mkInput();
-      const floor = 13;
+      const floor = 14;
       const walkers = [3, 5, 7, 9, 11, 13].map((tx) => {
         const w = put(s, new Walker(s, tx * 16, floor * 16 - 16));
         w.speed = 0;
@@ -22822,7 +23366,7 @@ const report = await page.evaluate(async () => {
     {
       const s = scene();
       const i = mkInput();
-      const floor = 13;
+      const floor = 14;
       const walkers = [3, 5, 7].map((tx) => {
         const w = put(s, new Walker(s, tx * 16, floor * 16 - 16));
         w.speed = 0;
@@ -22846,7 +23390,7 @@ const report = await page.evaluate(async () => {
     {
       const s = scene();
       const i = mkInput();
-      const floor = 13;
+      const floor = 14;
       const w = put(s, new Walker(s, 5 * 16, floor * 16 - 16));
       w.speed = 0;
       w.vx = 0;
@@ -23330,8 +23874,8 @@ const report = await page.evaluate(async () => {
  *      hiljaa pieleen: salaisuutta kätkevä tiili ei hajoa millään koolla
  *      (`bumpTile`) eikä potkaistulle kuorelle (`smashAhead`) — se muuttuu
  *      käytetyksi lohkoksi. Sen päällä möykky ei voi koskaan pudota, eli se
- *      olisi koriste. Mitattu 4-F:n omasta rivistä: neljästä tiilestä
- *      **kolme kätkee jotain**, joten oikeita sarakkeita oli yksi.
+ *      olisi koriste. Mitattu 4-2:n omasta rivistä: neljästä tiilestä
+ *      **yksi kätkee jotain**, joten oikeita sarakkeita on kolme.
  *   4. **kanonisointi lukee sen kiinteänä.** `tools/originality.mjs` taittaa
  *      tuntemattoman merkin ilmaksi, joten `C`:n sisältävä kenttä
  *      verrattaisiin korpukseen reikä keskellä. Väite on käyttäytymisestä eikä
@@ -23418,11 +23962,19 @@ const report = await page.evaluate(async () => {
   }
 
   /* Ja se toinen puolisko samasta ehdosta: että mittaus osaisi huomata vian.
-   * Punainen ilman että mitään rikotaan — luetaan sama rivi 4-F:stä ja
-   * kysytään mitä sen muut tiilet kätkevät. */
+   * Punainen ilman että mitään rikotaan — luetaan sama rivi siitä kentästä
+   * jossa möykky on, ja kysytään mitä sen muut tiilet kätkevät.
+   *
+   * **Kenttä vaihdettiin 4-F:stä 4-2:een, ja se on uudelleenmittaus eikä
+   * maun muutos.** `brickSecret` on paikan hajautus, joten kun kootun kentän
+   * rivimäärä kasvoi viidestätoista kuuteentoista, jokainen tiili sai uuden
+   * arvan: 4-F:n möykkyrivillä oli ennen kolme kätkevää tiiltä neljästä ja
+   * nyt niitä on nolla — koko kentässä ei ole yhtään. 4-2:n möykky seisoo
+   * samanlaisella rivillä, ja siellä neljästä tiilestä yksi kätkee. Väite on
+   * sama kuin ennen; vain se paikka josta se voidaan mitata siirtyi. */
   {
-    const lump = lumps.find((l) => l.id === '4-F');
-    const rows = getLevel('4-F').rows;
+    const lump = lumps.find((l) => l.id === '4-2');
+    const rows = getLevel('4-2').rows;
     const row = lump ? rows[lump.y + 1] : '';
     const bricks = [];
     for (let x = 0; x < row.length; x++) if (row[x] === 'B') bricks.push(x);
@@ -23431,10 +23983,10 @@ const report = await page.evaluate(async () => {
     expect('salaisuutta kätkevä tiili tunnistetaan, eli ehto ei ole tyhjä',
       !!lump && near.length > 1 && hiding.length > 0,
       lump
-        ? `4-F rivi ${lump.y + 1}: `
+        ? `4-2 rivi ${lump.y + 1}: `
           + `${near.map((x) => `${x}=${brickHides(x, lump.y + 1) ? 'kätkee' : 'hajoaa'}`).join(' ')}`
           + ` — möykky on sarakkeessa ${lump.x}`
-        : '4-F:ssä ei ole möykkyä');
+        : '4-2:ssa ei ole möykkyä');
   }
 
   /* Ehto 5: kanonisointi. Käyttäytyminen eikä rivin sisältö — rakennetaan
@@ -23444,19 +23996,26 @@ const report = await page.evaluate(async () => {
   {
     const { hitsAgainst, WINDOW } = await import('./originality.mjs');
     const H = 14;
+    /* Kolikko mukaan, ja se on `arrangement`-säännön takia: ikkuna jossa on
+     * vain maata ja ilmaa ei ole sommitelma eikä sitä verrata lainkaan
+     * (`originality.mjs`). Möykyn kanonisointia ei siis voi mitata pelkällä
+     * möykyllä — ikkunassa on oltava jotain sijoitettua, ja kolikko on
+     * kevyin mahdollinen. */
     const at = (ch) => {
       const rows = [];
       for (let y = 0; y < H; y++) {
-        rows.push(y === 5 ? `   ${ch}    ` : ' '.repeat(WINDOW));
+        rows.push(y === 5 ? `   ${ch}  o ` : ' '.repeat(WINDOW));
       }
       return rows;
     };
-    /* Korpuksen kanonisointi: kiinteä on 'X', kaikki muu '-'. Avain on
-     * `windows()`in muoto — sarakkeet pystyssä, putkella eroteltuina. */
+    /* Korpuksen kanonisointi: kiinteä on 'X', kolikko 'o', kaikki muu '-'.
+     * Avain on `windows()`in muoto — sarakkeet pystyssä, putkella eroteltuina. */
     const cols = [];
     for (let x = 0; x < WINDOW; x++) {
       let col = '';
-      for (let y = 0; y < H; y++) col += (y === 5 && x === 3) ? 'X' : '-';
+      for (let y = 0; y < H; y++) {
+        col += (y === 5 && x === 3) ? 'X' : (y === 5 && x === 6) ? 'o' : '-';
+      }
       cols.push(col);
     }
     const index = { keys: new Set([cols.join('|')]), files: 1 };
@@ -24955,13 +25514,13 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    */
   const W = 32;
   const fixture = (ch) => {
-    const rows = Array.from({ length: 15 }, () => ' '.repeat(W));
+    const rows = Array.from({ length: 16 }, () => ' '.repeat(W));
     const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
-    put(9, '      !');
-    put(12, '  1                         F   ');
-    put(13, '#'.repeat(W));
+    put(10, '      !');
+    put(13, '  1                         F   ');
     put(14, '#'.repeat(W));
-    rows[12] = `${rows[12].slice(0, 16)}${ch}${rows[12].slice(17)}`;
+    put(15, '#'.repeat(W));
+    rows[13] = `${rows[13].slice(0, 16)}${ch}${rows[13].slice(17)}`;
     return rows;
   };
 
@@ -25264,12 +25823,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    * hiekkatörmä ja siihen kaivettu kahden ruudun syvyinen lammikko. Sama pohja
    * joka vialle, yksi vika kerrallaan. */
   const fixture = (over = {}) => {
-    const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+    const rows = Array.from({ length: 16 }, () => ' '.repeat(32));
     const put = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
-    put(9, '      !');
-    put(12, '  1             XXX~~~XXXX  F   ');
-    put(13, '################XXX~~~XXXX######');
-    put(14, '################################');
+    put(10, '      !');
+    put(13, '  1             XXX~~~XXXX  F   ');
+    put(14, '################XXX~~~XXXX######');
+    put(15, '################################');
     for (const [y, s] of Object.entries(over)) put(Number(y), s);
     return rows;
   };
@@ -25287,8 +25846,8 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   /* Pohjaton lammikko: hiekka maalattu kuilun päälle. Tämä on se tapaus jossa
    * "hiekka on tavallista maata" menisi hiljaa läpi. */
   const noFloor = validateLevel(fixture({
-    13: '################XXX~~~XXXX######',
-    14: '###################   ##########',
+    14: '################XXX~~~XXXX######',
+    15: '###################   ##########',
   }), budget);
   report.checks.push({
     name: 'pohjaton hiekkalammikko raportoidaan, ei siunata maana',
@@ -25303,8 +25862,8 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    * ei kuilu, koska hiekasta noustaan pintaan ja kahlataan yli. Jos tämä alkaa
    * raportoida "gap of 9", validaattori on alkanut lukea hiekkaa kuiluna. */
   const wide = validateLevel(fixture({
-    12: '  1          XXX~~~~~~~~~XXX F  ',
-    13: '#############XXX~~~~~~~~~XXX####',
+    13: '  1          XXX~~~~~~~~~XXX F  ',
+    14: '#############XXX~~~~~~~~~XXX####',
   }), budget);
   report.checks.push({
     name: 'leveä hiekkalammikko ei ole kuilu',
@@ -25322,10 +25881,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
   const walled = validateLevel(fixture({
     7: '                XXX   XXXX      ',
     8: '                XXX   XXXX      ',
-    9: '      !         XXX   XXXX      ',
-    10: '                XXX   XXXX      ',
+    9: '                XXX   XXXX      ',
+    10: '      !         XXX   XXXX      ',
     11: '                XXX   XXXX      ',
-    12: '  1             XXX~~~XXXX  F   ',
+    12: '                XXX   XXXX      ',
+    13: '                XXX   XXXX      ',
+    14: '  1             XXX~~~XXXX  F   ',
   }), budget);
   report.checks.push({
     name: 'hiekkakuoppa jonka reunalle ei nousta raportoidaan',
@@ -25341,8 +25902,8 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    * käyrä on väärä ja `verify.mjs`:n muototarkistus mittaa väärää kenttää. */
   const withSand = scoreRows(fixture());
   const withoutSand = scoreRows(fixture({
-    12: '  1             XXXXXXXXXX  F   ',
-    13: '################XXXXXXXXXX######',
+    13: '  1             XXXXXXXXXX  F   ',
+    14: '################XXXXXXXXXX######',
   }));
   report.checks.push({
     name: 'vaikeusmittari näkee juoksuhiekan',
@@ -25370,29 +25931,29 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    */
   /** Tasamaata, lattia rivillä 13, ja yksi pilvi rivillä `y` sarakkeessa 12. */
   const cloudFix = (y) => {
-    const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+    const rows = Array.from({ length: 16 }, () => ' '.repeat(32));
     const put = (ty, s) => { rows[ty] = s.padEnd(32, ' ').slice(0, 32); };
-    put(9, '      !');
-    put(12, '  1                         F   ');
-    put(13, '################################');
+    put(10, '      !');
+    put(13, '  1                         F   ');
     put(14, '################################');
+    put(15, '################################');
     put(y, `${rows[y].slice(0, 12)}r${rows[y].slice(13)}`);
     return rows;
   };
   const bobProblems = (list) => list.filter((p) => /bobs into/.test(p));
 
-  const highCloud = validateLevel(cloudFix(11), budget);
+  const highCloud = validateLevel(cloudFix(12), budget);
   report.checks.push({
     name: 'lattian yläpuolella keinuva pilvi ei ole validaattorille ongelma',
     ok: bobProblems(highCloud).length === 0,
     detail: bobProblems(highCloud)[0]
-      || `merkki rivillä 11, lattia rivillä 13 — keinu yltää riville ${11 + RULE_CONSTANTS.STINK_BOB_ROWS}`,
+      || `merkki rivillä 12, lattia rivillä 14 — keinu yltää riville ${12 + RULE_CONSTANTS.STINK_BOB_ROWS}`,
   });
   if (bobProblems(highCloud).length) {
     report.failures.push(...bobProblems(highCloud).map((p) => `pilvikoekenttä: ${p}`));
   }
 
-  const lowCloud = validateLevel(cloudFix(12), budget);
+  const lowCloud = validateLevel(cloudFix(13), budget);
   report.checks.push({
     name: 'lattiaan asti keinuva pilvi raportoidaan, ei siunata ilmaksi',
     ok: bobProblems(lowCloud).length > 0,
@@ -25419,12 +25980,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    */
   {
     const iceFix = (over = {}) => {
-      const rows = Array.from({ length: 15 }, () => ' '.repeat(32));
+      const rows = Array.from({ length: 16 }, () => ' '.repeat(32));
       const put = (y, s) => { rows[y] = s.padEnd(32, ' ').slice(0, 32); };
-      put(9, '      !');
-      put(12, '  1                         F   ');
-      put(13, '#########IIIIIIII###############');
-      put(14, '################################');
+      put(10, '      !');
+      put(13, '  1                         F   ');
+      put(14, '#########IIIIIIII###############');
+      put(15, '################################');
       for (const [y, s] of Object.entries(over)) put(Number(y), s);
       return rows;
     };
@@ -25442,8 +26003,8 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
      * läpi. Jos tämä alkaa raportoida, sääntö on lakannut olemasta mitta ja
      * muuttunut kielloksi. */
     const wideRaft = validateLevel(iceFix({
-      13: '######   IIIII   ###############',
-      14: '######   #####   ###############',
+      14: '######   IIIII   ###############',
+      15: '######   #####   ###############',
     }), budget);
     report.checks.push({
       name: 'kyllin leveä kelluva jäälautta kelpaa — sääntö on mitta eikä kielto',
@@ -25458,8 +26019,8 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     /* Kolmen laatan lautta: sille laskeudutaan kaaressa eikä sen päällä ehdi
      * pysähtyä, ja se on tasan se asetelma jota mikään muu sääntö ei näe. */
     const narrowRaft = validateLevel(iceFix({
-      13: '######   III     ###############',
-      14: '######   ###     ###############',
+      14: '######   III     ###############',
+      15: '######   ###     ###############',
     }), budget);
     report.checks.push({
       name: 'liian kapea kelluva jäälautta raportoidaan',
@@ -25475,12 +26036,12 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
      * on uhka joka vääristää maailman käyrän. Jään hinta on tarkkuudessa, joten
      * vertailukenttä on sama tasanko kivenä. */
     const withIce = scoreRows(iceFix({
-      13: '######   IIIII   ###############',
-      14: '######   #####   ###############',
+      14: '######   IIIII   ###############',
+      15: '######   #####   ###############',
     }));
     const withoutIce = scoreRows(iceFix({
-      13: '######   #####   ###############',
       14: '######   #####   ###############',
+      15: '######   #####   ###############',
     }));
     report.checks.push({
       name: 'vaikeusmittari näkee jään',
@@ -25499,26 +26060,36 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
    * Sama kuria kuin hiekalla yllä: yksi koekenttä, yksi vika kerrallaan, ja
    * sama kenttä ilman vikoja on puhdas. Ero on siinä että tässä koekenttä on
    * kokonaan uusi *muoto* eikä uusi ruutumerkki — 20 saraketta (yksi ruutu,
-   * ks. `VERTICAL_COLS`) ja 45 riviä, kolmentoista lankun tikkaat kolmen
+   * ks. `VERTICAL_COLS`) ja 48 riviä, kolmentoista lankun tikkaat kolmen
    * ruudun välein, tehostuspalikka alimmassa neljänneksessä, kallio pohjalla
    * koska putoaminen on takaisku eikä kuolema, lippu ylhäällä.
    *
+   * **Rivimäärä on kolme kokonaista kaistaa eikä pyöreä luku**, ja se on ehto
+   * eikä maku: vaakalukija paloittelee korkean kentän `ROWS`:n mittaisiin
+   * kaistoihin, joten ruudukko joka ei jakaudu tasan ei ole sille korkea kenttä
+   * vaan sekava. Kaistan kasvettua viidestätoista kuuteentoista riviin tämä
+   * koekenttä oli yhä 45-rivinen — kolme vanhaa kaistaa — ja vaakaluku romahti
+   * yhteen huomautukseen ("cannot tell which band is the route", eli punainen
+   * lakkasi olemasta se punainen jonka se väittää olevansa). Nyt 48 riviä, ja
+   * jokainen rivinumero alla siirtyi kolmella.
+   *
    * **Punainen sanoi ensin tämän**, ja se on kirjattu koska se on koko syy
    * siihen että pystykäsittely on olemassa: sama ruudukko vaakasuoraan luettuna
-   * raportoi kuusi ongelmaa joista yksikään ei ole totta —
+   * raportoi seitsemän ongelmaa joista yksikään ei ole totta —
    * `no power-up in the first quarter`, neljä kertaa `platform at … leads to
-   * nothing`, ja `nothing leads into the sky band`. Vaikeusmittari luki samasta
-   * ruudukosta **73.1** pistettä (viisinkertaistettuna sarakeleveydellä 20) ja
-   * ensimmäinen pystyversio **1920.5**, kun oikea luku on 104.3.
+   * nothing`, ja kahdesti `nothing leads into the sky band`. Vaikeusmittari
+   * lukee samasta ruudukosta **80.5** pistettä (jaettuna sarakeleveydellä 20)
+   * kun oikea, riveinä luettu luku on **108.4**; ensimmäinen pystyversio antoi
+   * aikanaan 1920.5. Kaikki nämä luvut on mitattu uudelleen 48 riville.
    */
   {
     const W = 20;
-    const H = 45;
+    const H = 48;
     const climb = (over = {}) => {
       const rows = Array.from({ length: H }, () => ' '.repeat(W));
       const put = (y, s) => { rows[y] = s.padEnd(W, ' ').slice(0, W); };
-      put(3, '              F     ');
-      [4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40].forEach((y, i) => {
+      put(6, '              F     ');
+      [7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43].forEach((y, i) => {
         /* Ei jaettua saraketta, ks. `checkClimbTraverse`. Tämä koekenttä oli
          * kirjoitettu samalla päällekkäisellä lankulla kuin 7-T, ja kun sääntö
          * tuli, se kaatoi molemmat — mikä on juuri se mitä koekentän kuuluu
@@ -25526,10 +26097,10 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
          * jokainen sääntö jonka kelvollisen kiipeilyn on täytettävä. */
         put(y, i % 2 === 0 ? '          --------- ' : ' ---------          ');
       });
-      put(39, '     !              ');
-      put(42, '  1                 ');
-      put(43, '####################');
-      put(44, '####################');
+      put(42, '     !              ');
+      put(45, '  1                 ');
+      put(46, '####################');
+      put(47, '####################');
       for (const [y, s] of Object.entries(over)) put(Number(y), s);
       return rows;
     };
@@ -25539,7 +26110,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     report.checks.push({
       name: 'kelvollinen pystykenttä ei ole validaattorille ongelma',
       ok: clean.length === 0,
-      detail: clean.length ? clean.join('; ') : '20 saraketta, 45 riviä, 13 lankkua, ei huomautuksia',
+      detail: clean.length ? clean.join('; ') : '20 saraketta, 48 riviä, 13 lankkua, ei huomautuksia',
     });
     if (clean.length) report.failures.push(...clean.map((p) => `pystykoekenttä: ${p}`));
 
@@ -25559,14 +26130,14 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     /* Neljä vikaa, yksi kerrallaan. Jokainen on pystyakselin vastine jollekin
      * vaakasäännölle, ja jokaisen pitää löytyä nimeltä eikä sivutuotteena. */
     const faults = [
-      ['liian korkea loikka raportoidaan', { 34: '                    ' }, /the climb stops at/],
-      ['pohjaton sarake raportoidaan', { 43: '########  ##########', 44: '########  ##########' },
+      ['liian korkea loikka raportoidaan', { 37: '                    ' }, /the climb stops at/],
+      ['pohjaton sarake raportoidaan', { 46: '########  ##########', 47: '########  ##########' },
         /has no floor at the bottom/],
-      ['piikit putoamisen päässä raportoidaan', { 42: '  1     ^^^^        ' },
+      ['piikit putoamisen päässä raportoidaan', { 45: '  1     ^^^^        ' },
         /lands you on "\^"/],
-      ['tehostus alkuneljänneksen ulkopuolella raportoidaan', { 39: '                    ' },
+      ['tehostus alkuneljänneksen ulkopuolella raportoidaan', { 42: '                    ' },
         /first quarter of the climb/],
-      ['umpiperä jonka päällä ei ole mitään raportoidaan', { 21: '               ---- ' },
+      ['umpiperä jonka päällä ei ole mitään raportoidaan', { 24: '               ---- ' },
         /stairway to nothing/],
     ];
     for (const [name, over, re] of faults) {
@@ -25589,7 +26160,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     }
 
     /* Ja mittari. Kaksi lukua samasta ruudukosta: vaakana se on hölynpölyä
-     * (jaettuna 20 sarakkeella eikä 45 rivillä), pystynä se on maailman 1
+     * (jaettuna 20 sarakkeella eikä 48 rivillä), pystynä se on maailman 1
      * tason luokkaa. Väitetään haarukkana eikä tarkkana lukuna, koska tarkka
      * luku olisi tämän koekentän ominaisuus eikä mittarin. */
     const upScore = scoreRows(climb(), { vertical: true });
@@ -25605,7 +26176,7 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
 
     /* Ja se että mittari näkee kiipeilyn vaikeuden: kaksi identtistä tikapuuta,
      * toisen askel yhtä ruutua korkeampi. Sama vika jonka piikkikävelijä teki. */
-    const steeper = scoreRows(climb({ 34: '                    ', 33: '         ---------- ' }), { vertical: true });
+    const steeper = scoreRows(climb({ 37: '                    ', 36: '         ---------- ' }), { vertical: true });
     report.checks.push({
       name: 'vaikeusmittari näkee korkeamman askelman',
       ok: steeper > upScore + 0.5,
@@ -25630,6 +26201,30 @@ if (unknownAudio.length) report.failures.push(...unknownAudio);
     });
     if (viewW / tilePx !== RULE_CONSTANTS.VERTICAL_COLS) {
       report.failures.push('VERTICAL_COLS ei vastaa ruudun leveyttä');
+    }
+
+    /*
+     * JA SAMA KORKEUDELLE, ja tämä portti on olemassa siksi että sen puuttuminen
+     * maksoi jo kerran.
+     *
+     * `tools/difficulty.mjs`in `SCREEN_ROWS` oli 13 (= vanha `VIEW_H` 208 / 16)
+     * vielä sen jälkeen kun HUD-nauha purettiin 17.8.2026 ja ikkuna kasvoi
+     * 240:een. Luku ei kaada mitään eikä näy missään — se vain lukee
+     * kiipeilykentän putoamiset **kaksi laattaa liian aikaisin** kuvan
+     * ulkopuolelle vieviksi, eli kolmen kentän vaikeusluku oli mitattu
+     * ruudulla jota ei ole. Leveydellä oli portti ja korkeudella ei; nyt on.
+     */
+    const diffSrc = await readFile(join(ROOT, 'tools/difficulty.mjs'), 'utf8');
+    const viewH = Number((camSrc.match(/export const VIEW_H = (\d+)/) || [])[1]);
+    const screenRows = Number((diffSrc.match(/const SCREEN_ROWS = (\d+)/) || [])[1]);
+    report.checks.push({
+      name: 'vaikeusmittarin ruutukorkeus on sama luku kuin ruudun korkeus',
+      ok: !!viewH && viewH / tilePx === screenRows,
+      detail: `VIEW_H ${viewH} / TILE ${tilePx} = ${viewH / tilePx}, `
+        + `difficulty.mjs sanoo ${screenRows}`,
+    });
+    if (!viewH || viewH / tilePx !== screenRows) {
+      report.failures.push('SCREEN_ROWS ei vastaa ruudun korkeutta');
     }
   }
 
