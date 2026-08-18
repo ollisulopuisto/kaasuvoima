@@ -2,6 +2,21 @@ import { TILE, info } from '../gfx/tiles.js';
 
 let nextId = 1;
 
+/**
+ * Nostaa tunnuslaskurin annetun luvun yli.
+ *
+ * `savestate.js` kutsuu tätä palautuksen jälkeen, ja syy on hiljainen vika:
+ * tunnukset kopioituvat tallennukseen omina kenttinään, mutta laskuri ei —
+ * joten sivun latauksen jälkeen ladattu tallennus toisi takaisin olion
+ * tunnuksella 57, ja seuraava syntyvä olio saisi saman. Yksikään olio ei
+ * viittaa toiseen suoraan (ks. `savestate.js`), joten viittaukset ovat
+ * tunnuksia — ja kaksi samaa tunnusta on kaksi eri oliota jotka luulevat
+ * olevansa sama.
+ */
+export function claimIds(upTo) {
+  if (Number.isFinite(upTo) && upTo >= nextId) nextId = Math.floor(upTo) + 1;
+}
+
 export class Entity {
   constructor(level, x, y, w, h) {
     this.id = nextId++;

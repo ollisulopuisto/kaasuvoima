@@ -1518,8 +1518,46 @@ function karvapalloBody(ctx, x, y, spin, facing) {
   else ctx.fillRect(px + 11, py + 8, 1, 2);
 }
 
-export function drawKarvapallo(ctx, x, y, spin, facing) {
-  outlined(ctx, (g) => karvapalloBody(g, x, y, spin, facing));
+/*
+ * KASVANUT KERÄ, ja skaalaus on **naapurikuvapiste** eikä venytys.
+ *
+ * Katamari (`Karvapallo.collect`) kasvattaa palloa neljä pikseliä kyytiläistä
+ * kohti, eli kertoimet ovat 1 · 1⅓ · 1⅔ · 2 · 2⅓ — puolikkaita ja
+ * kolmasosia. `ctx.scale` niillä antaisi murtopikseliset reunat ja canvas
+ * pehmentäisi ne, mikä on tässä pelissä väärä kuva kahdesta syystä: se ei ole
+ * pikselitaidetta, ja pehmeä reuna on juuri se mitä `outlined` yrittää estää.
+ *
+ * Sama vastaus kuin pelaajan voimatasoilla 2…5 (`drawPlayer`): piirrä kerran
+ * omaan puskuriin ja kopioi se kuvaan skaalattuna **pehmennys pois päältä**.
+ * Kerä on kaksitoista pikseliä joka suuntaan, joten puskuri on pieni ja sama
+ * joka framella.
+ */
+const KARVA_BUF = 16;
+let karvaCanvas = null;
+function karvaScratch() {
+  if (!karvaCanvas) {
+    karvaCanvas = document.createElement('canvas');
+    karvaCanvas.width = KARVA_BUF;
+    karvaCanvas.height = KARVA_BUF;
+  }
+  return karvaCanvas.getContext('2d');
+}
+
+export function drawKarvapallo(ctx, x, y, spin, facing, size = 12) {
+  if (size === 12) {
+    outlined(ctx, (g) => karvapalloBody(g, x, y, spin, facing));
+    return;
+  }
+  const b = karvaScratch();
+  b.clearRect(0, 0, KARVA_BUF, KARVA_BUF);
+  outlined(b, (g) => karvapalloBody(g, 2, 2, spin, facing));
+  const k = size / 12;
+  const prev = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(karvaCanvas, 0, 0, KARVA_BUF, KARVA_BUF,
+    Math.round(x - 2 * k), Math.round(y - 2 * k),
+    Math.round(KARVA_BUF * k), Math.round(KARVA_BUF * k));
+  ctx.imageSmoothingEnabled = prev;
 }
 
 /* ------------------------------ paukkupöhö -------------------------------- */

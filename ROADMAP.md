@@ -1159,6 +1159,20 @@ kertoo että emergentit lopputulokset ovat sen mittauksen ulkopuolella.
 | murenevat lavat murenevat vihollisen alta | luumaailman lankku ei enää kanna ketä tahansa |
 | tuuli kantaa kuoria ja vihollisia | pilvimaailman tuuli koskee kaikkea |
 | potkaistu kuori tappaa sen mihin osuu | puhdas olio ↔ olio, ei maastoa |
+| ↑ **täydennetty 18.8.2026** | ks. alla: *maa heittää, ja pallo kerää* |
+
+**Toinen erä 18.8.2026, ja molemmat ovat lakeja jotka mahtuvat kohtaan 1.**
+
+| laki | mitä muuttuu |
+| --- | --- |
+| maanjäristys nytkäyttää sitä mikä on maassa | `quakeborne`, oletus **kyllä** — tuuli kantaa valikoiden, maa päästää irti kaikesta |
+| pyörremyrsky vetää ja nostaa | kulkee tuulen `push`-tietä, eli laki 3 pätee sellaisenaan |
+| karvapallo kerää sen minkä yli se vierii | ensimmäinen laki jossa **olio tarttuu olioon**: kyyti on lainaa, kyytiläisellä ei ole laatikkoa, ja pallo päästää irti puhjetessaan |
+
+Karvapallon kolmas kohta on se joka piti kirjoittaa ennen koodia: kyytiläinen
+on ketju jonka *pallo* aloitti, joten laki 2 kieltää sitä koskemasta pelaajaan.
+Tyhjä laatikko sanoo sen rakenteellisesti — kieltoa ei tarvitse muistaa
+yhdessäkään törmäyssilmukassa.
 
 **Omistajan lisäehto murenevaan lavaan: lankun on kasvettava takaisin.**
 Se on tarkka ja se on syy miksi tämä laki mahtuu kohtaan 1: lava joka putoaa

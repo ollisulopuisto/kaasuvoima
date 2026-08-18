@@ -7,6 +7,55 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.18.28 — karvapallo kerää: katamari kaasukehässä
+
+Omistaja 18.8.2026: *"muokkaa jotain vihollista niin, että se voi tarttua
+yhteen toisen vihollisen kanssa ja liikkua yhdessä; niiden koko kasvaa
+spiraalin muodossa eli vähän kuin katamari damacyssä mutta siten, että
+vihollinen itse kasvattaa itsestään isomman."*
+
+**Karvapallo, eikä uusi laji.** Pyyntö luettiin kirjaimellisesti ("muokkaa
+jotain vihollista"), ja karvapallo on se ainoa jolle tämä sopii ilman uutta
+lakia: se on pallo, se vierii jo, se kasvattaa vauhtiaan jo — ja se **kuolee
+itsestään** (`KARVA_LIFE`, seinään puhkeaminen). Kasvava pallo on siis
+tilapäinen tapahtuma eikä kentän uusi pysyvä muoto. Nimikin sanoo sen:
+karva*pallo*, ja katamari on juuri se mitä karvapallo oikeassa maailmassa tekee.
+
+Pallo nappaa yli vierimänsä kävelijät, kuoret, piikkiukot, korkkiukot ja yökit
+(`rollable`, oletus ei — kyky eikä lajilista), kasvaa neljä pikseliä kutakin
+kohti neljään asti, ja kyytiläiset asettuvat **arkhimedeen spiraalille**:
+mitattuna säteet 19 · 24 · 29 · 34 px, ja ne kiertävät pallon oman pyörinnän
+mukana. Kasvun resepti on pomon (`applyScale`) pienempänä — jalat ja keskiviive
+pysyvät — ja skaalaus on naapurikuvapiste omaan puskuriin, sama vastaus kuin
+pelaajan voimatasoilla 2…5.
+
+**Kolme rajaa, ja jokainen oli jo kirjoitettu jonnekin muualle.**
+
+1. **Kyyti on lainaa, ei tappo.** Puhjetessaan pallo päästää irti ja
+   kyytiläiset putoavat maahan elävinä — sama sääntö kuin murenevalla laudalla
+   ja kuuran jäljellä. Siitä seuraa myös se mikä tekee tästä pelattavan: pallon
+   annettu vieriä **siivoaa reitin hetkeksi** mutta kasvaa samalla isommaksi
+   esteeksi. Kauppa on pelaajan, ja hän näkee molemmat puolet koko ajan.
+2. **Ei uutta vahingon lähdettä.** Kyytiläisen laatikko on nolla × nolla, eli
+   mikään törmäyssilmukka ei löydä sitä. Laki 2 (*vain oma ketju satuttaa*)
+   pitää siis rakenteellisesti eikä muistamalla: pelaajaa satuttaa yhä
+   täsmälleen se sama pallo jonka hän näkee tulevan.
+3. **Ei viittauksia olioiden välillä.** Kyytiläinen kantaa pallon **tunnusta**
+   eikä pallon oliota, koska `savestate.js` kopioi jokaisen oman kentän —
+   oliokenttä palautuisi prototyypittömänä kaksoiskappaleena eikä yksikään
+   portti huomaisi sitä. Samalla korjattiin se mikä teki tunnuksista
+   turvallisia: `claimIds` nostaa laskurin palautettujen tunnusten yli, koska
+   laskuri ei ole tallenteessa mutta tunnukset ovat.
+
+Yksi vika löytyi portista eikä pelistä: puhjennut pallo ehti vielä yhden
+`update`in ennen kuin se poistettiin listalta, ja keräsi juuri päästämänsä
+takaisin — jolloin jäljelle jäi kyytiläisiä joiden kyyti oli poissa, eli
+näkymättömiä olioita ilman laatikkoa. *"Vapaana 1"* kolmesta.
+
+Viisi uutta porttia.
+
+---
+
 ## v26.08.18.27 — potenssit, arpova lohko ja kuolema joka on tämän hahmon oma
 
 Kolme omistajan pyyntöä, ja kaksi niistä korjaa aiemman päätöksen sen omilla

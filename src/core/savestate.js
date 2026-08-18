@@ -6,6 +6,7 @@ import {
   Hossotin,
 } from '../entities/enemies.js';
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
+import { claimIds } from '../entities/entity.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
 
 /**
@@ -224,6 +225,10 @@ export function restoreState(game, snap) {
   if (data.pillars) scene.pillars = data.pillars.map((s) => ({ ...s }));
   scene.frost = new Map((data.frost || []).map(([k, v]) => [k, { ...v }]));
   scene.burning = new Map((data.burning || []).map(([k, v]) => [k, { ...v }]));
+  /* Tunnuslaskuri palautettujen tunnusten yli, ks. `claimIds`. Tämä on se rivi
+   * joka pitää olioiden väliset viittaukset (karvapallon kyyti) ehjinä sivun
+   * latauksen jälkeen tehdyssä pikalatauksessa. */
+  claimIds(Math.max(0, ...scene.entities.map((e) => e.id || 0)));
   // Ja vanhempi tilannekuva on otettu ennen kuin yksikään laatta putosi.
   scene.falls = new Map(data.falls || []);
   scene.switchTimer = data.switchTimer || 0;

@@ -22736,6 +22736,180 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
+/* ---- katamari: karvapallo kerää ---- */
+/*
+ * PALLO KERÄÄ SEN MINKÄ YLI SE VIERII.
+ *
+ * Omistaja 18.8.2026: *"muokkaa jotain vihollista niin, että se voi tarttua
+ * yhteen toisen vihollisen kanssa ja liikkua yhdessä; niiden koko kasvaa
+ * spiraalin muodossa … mutta siten, että vihollinen itse kasvattaa itsestään
+ * isomman."*
+ *
+ * Tämä on ensimmäinen laki jossa **olio tarttuu olioon**, ja siksi se
+ * mitataan neljästä suunnasta. Kolme ensimmäistä ovat sen omat väitteet;
+ * neljäs on se raja jonka rikkoutuminen olisi hiljainen ja epäreilu.
+ *
+ *   1  kerää     pallo nappaa kävelijän, kasvaa, ja kyytiläisiä on katto
+ *   2  spiraali  kyytiläiset ovat eri etäisyyksillä ja liikkuvat pallon mukana
+ *   3  laina     puhjetessaan pallo päästää irti — kentästä ei katoa ketään
+ *   4  reiluus   kyytiläinen ei satuta pelaajaa (laki 2: vain oma ketju)
+ */
+{
+  const checks = [];
+  const failures = [];
+  const expect = (name, ok, detail = '') => {
+    checks.push({ name, ok, detail });
+    if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+  };
+
+  const K = await page.evaluate(async () => {
+    const { LevelScene } = await import('/src/scenes/level.js');
+    const { Walker, Karvapallo } = await import('/src/entities/enemies.js');
+    const { captureState, restoreState } = await import('/src/core/savestate.js');
+    const game = window.sfb3;
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const scene = () => {
+      game.state = {
+        lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 1 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+      };
+      game.finishLevel = () => {};
+      const s = new LevelScene(game, '1-1');
+      game.setScene(s);
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      s.player.x = 8;
+      return s;
+    };
+    const put = (s, e) => { e.active = true; e.alwaysActive = true; s.entities.push(e); return e; };
+    const out = {};
+
+    /* 1 + 2. Rivi kävelijöitä, pallo niiden päälle. */
+    {
+      const s = scene();
+      const i = mkInput();
+      const floor = 13;
+      const walkers = [3, 5, 7, 9, 11, 13].map((tx) => {
+        const w = put(s, new Walker(s, tx * 16, floor * 16 - 16));
+        w.speed = 0;
+        w.vx = 0;
+        return w;
+      });
+      const ball = put(s, new Karvapallo(s, 2 * 16, floor * 16 - 12, 1));
+      const w0 = ball.w;
+      for (let f = 0; f < 260; f++) s.update(i);
+      const riders = walkers.filter((w) => w.rolledBy === ball.id);
+      const radii = riders.map((w) => Math.round(Math.hypot(w.cx - ball.cx, w.cy - ball.cy)));
+      const before = riders.map((w) => `${Math.round(w.x)},${Math.round(w.y)}`);
+      for (let f = 0; f < 12; f++) s.update(i);
+      const moved = riders.filter((w, k) => `${Math.round(w.x)},${Math.round(w.y)}` !== before[k]);
+      out.roll = {
+        riders: riders.length, grew: ball.w - w0, size: ball.w,
+        boxes: riders.map((w) => w.box.w),
+        radii: [...new Set(radii)].sort((a, b) => a - b),
+        moved: moved.length, gone: ball.remove,
+      };
+    }
+
+    /* 3. Puhkeaminen päästää irti. */
+    {
+      const s = scene();
+      const i = mkInput();
+      const floor = 13;
+      const walkers = [3, 5, 7].map((tx) => {
+        const w = put(s, new Walker(s, tx * 16, floor * 16 - 16));
+        w.speed = 0;
+        w.vx = 0;
+        return w;
+      });
+      const ball = put(s, new Karvapallo(s, 2 * 16, floor * 16 - 12, 1));
+      for (let f = 0; f < 120 && !ball.remove; f++) s.update(i);
+      const caught = walkers.filter((w) => w.rolledBy).length;
+      ball.burst();
+      for (let f = 0; f < 40; f++) s.update(i);
+      out.release = {
+        caught,
+        alive: walkers.filter((w) => !w.remove).length,
+        free: walkers.filter((w) => !w.rolledBy).length,
+        boxed: walkers.filter((w) => w.box.w > 0).length,
+      };
+    }
+
+    /* 4. Reiluus ja pikatallennus. */
+    {
+      const s = scene();
+      const i = mkInput();
+      const floor = 13;
+      const w = put(s, new Walker(s, 5 * 16, floor * 16 - 16));
+      w.speed = 0;
+      w.vx = 0;
+      const ball = put(s, new Karvapallo(s, 4 * 16, floor * 16 - 12, 1));
+      for (let f = 0; f < 90 && !w.rolledBy; f++) s.update(i);
+      /*
+       * Laki 2: kyytiläinen ei satuta. Mitataan kahdesta suunnasta, koska
+       * pelkkä "pelaaja kyytiläisen päälle" mittaisi **palloa** — kyytiläinen
+       * kiertää pallon vieressä, joten sen kohdalla seisova osuu palloon,
+       * ja pallo satuttaa aivan oikein. Siksi pallo siirretään ensin pois:
+       * mitattava asia on se laatikko joka jää.
+       */
+      const p = s.player;
+      const emptyBox = w.box.w === 0 && w.box.h === 0;
+      ball.x = w.x + 4000;
+      ball.y = w.y;
+      p.x = w.x;
+      p.y = w.y;
+      p.invuln = 0;
+      const powerBefore = p.power.level;
+      s.collisions(i);
+      out.fair = {
+        caught: !!w.rolledBy, emptyBox, hurt: p.power.level !== powerBefore || p.dying,
+      };
+
+      captureState(game, 0);
+      restoreState(game, 0);
+      const back = game.scene.entities.find((e) => e.constructor.name === 'Walker');
+      const ballBack = game.scene.entities.find((e) => e.constructor.name === 'Karvapallo');
+      out.saved = {
+        pairs: !!back && !!ballBack && back.rolledBy === ballBack.id,
+        size: ballBack ? ballBack.w : 0,
+      };
+    }
+    return out;
+  });
+
+  expect('karvapallo kerää kävelijöitä, kasvaa niiden mukana ja lopettaa kattoon',
+    K.roll.riders > 1 && K.roll.riders <= 4 && K.roll.grew === K.roll.riders * 4,
+    `${K.roll.riders} kyytiläistä, koko 12 → ${K.roll.size} px`);
+
+  expect('kyytiläiset ovat spiraalilla: eri etäisyyksillä ja liikkeessä pallon mukana',
+    K.roll.radii.length === K.roll.riders && K.roll.moved === K.roll.riders,
+    `säteet ${K.roll.radii.join(' · ')} px, liikkui ${K.roll.moved}/${K.roll.riders}`);
+
+  expect('puhjennut pallo päästää irti: kentästä ei katoa ketään',
+    K.release.caught > 0 && K.release.alive === 3 && K.release.free === 3
+    && K.release.boxed === 3,
+    `keräsi ${K.release.caught}, elossa ${K.release.alive}/3, vapaana ${K.release.free},`
+    + ` laatikko takaisin ${K.release.boxed}`);
+
+  expect('kyytiläinen ei satuta pelaajaa — vain se ketju jonka pelaaja aloitti',
+    K.fair.caught && K.fair.emptyBox && !K.fair.hurt,
+    `kerätty: ${K.fair.caught}, laatikko tyhjä: ${K.fair.emptyBox}, satutti: ${K.fair.hurt}`);
+
+  expect('kyyti kestää pikatallennuksen',
+    K.saved.pairs && K.saved.size > 12,
+    `pari säilyi: ${K.saved.pairs}, pallon koko ${K.saved.size}`);
+
+  report.checks.push(...checks);
+  report.failures.push(...failures);
+}
+/* ---- katamari: loppu ---- */
 /* ---- kuolema on oma kuvansa ---- */
 /*
  * KUOLEMA EI OLE HYPPY.
