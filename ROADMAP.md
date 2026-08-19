@@ -602,6 +602,50 @@ Save compatibility (DESIGN.md item 6): a trace is new data, so it is additive
 and absent-tolerant. An old save has no ghost and the level plays exactly as
 it does today.
 
+#### Sharing turns the privacy problem into the feature
+
+*(Owner, 19.8.2026: "running against your own personal ghost is a personal
+achievement, that much is true. But then we can ask the player — hey, would
+you like to share this for others to compete against? Which is explicit
+sharing of their data, which we can then use for level development.")*
+
+This resolves the thing above rather than sidestepping it. The trace is
+awkward *because* it is a record of one person playing; asking that person
+whether to publish it is not a workaround for the awkwardness, it is the only
+correct use of it. And the moment to ask is the moment the answer means
+something — right after they beat their own best, when they are proud of the
+run — rather than a checkbox on a settings page that nobody reads and nobody
+remembers agreeing to.
+
+Two things about *where a shared ghost goes*, and they are not the same
+question:
+
+**Player to player: the carrier already exists, and has a decided shape.**
+`challenge.js` already sends a result to a friend in a link — no server, no
+endpoint, no global table, which is the standing decision *"pistetaulu ei mene
+palvelimelle, tulos menee linkkiin"*. A shared ghost is the same idea one step
+deeper: not "I scored 45200" but "here is the run, beat it." But it does not
+fit the same envelope. That file is explicit that every parameter is short
+because the link is read **on a phone's address bar**, and a trace is
+hundreds of bytes at best — delta-encoded and varint-packed, a minute of
+running is perhaps 600–900 bytes, which is a fine thing to paste into a chat
+and a terrible thing to look at. So the ghost is a *second* carrier alongside
+the challenge link, not a fourth parameter on it, and choosing between a long
+link and a small file is a real decision rather than a detail.
+
+**Player to us: it is a different act, and it needs its own asking.** A
+friend-to-friend link gives level development nothing — it never comes past
+the two of them, which is exactly what makes it safe. Getting traces back for
+level work therefore cannot ride on the same yes. The honest shape is the one
+`telemetry.js` already uses for its own log: **export is a file the player
+chooses to hand over** (`downloadExport`). Same artifact, second destination,
+second question. Anything else means building the server this project decided
+twice not to build.
+
+One warning about the asking itself: a prompt after every personal best is
+nagging, and a nagged yes is not consent. Ask once per level, remember a no,
+and never ask again for that level.
+
 ### A speed skill that pays while you are already fast
 
 *(Owner, 19.8.2026, on the pumping rhythm: "is the whole mechanism overwrought,
