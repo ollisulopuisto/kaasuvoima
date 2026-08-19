@@ -610,44 +610,55 @@ the expensive part: the isometric work went into `DieScene`, the screen
 the screen you stand on inside a world, was never touched. Two scenes. The
 owner found out by opening the deployed build.
 
-### The way out of a world: the spare edges, and a numbering that fights it
+### The transpose: level n of world w is the door to world n
 
-*(Owner, 20.8.2026: "if it's from 1-2 to 2-1, then the next connector is 2-3 to
-3-2, maybe? And 3-4 to 4-3? Etc." — and separately, the unlock rhythm: "at
-first you can only access 1-1, and after unlocking that you can move to 1-2,
-after that you got 1-1, 1-2 and 2-1.")*
+*(Owner, 20.8.2026, giving the rule outright: "you CAN clear each world
+sequentially, by going from 1-1 to 1-8, which then unfolds to 2-1. But there
+are ALSO shortcuts, e.g. from 1-2 to 2-1, from 1-3 to 3-1 etc. And then in
+following worlds, from 2-3 you get to 3-2… and from 2-7 you get to 7-2.")*
 
-The unlock rhythm is built. The connector is not, because measuring the
-proposal against the shape turned up a conflict worth settling before code.
+The rule is **w-n ↔ n-w**, and all four of the examples fit it exactly. It is
+the transpose of the level grid, and it is worth saying plainly how much falls
+out of that one line:
 
-**The pattern assumes worlds come in a line, and they do not.** Worlds are the
-faces of the outer octahedron and neighbours are `i^1, i^2, i^4`, so "world n
-borders world n+1" is true for 1→2, 3→4, 5→6 and 7→8 and **false** for 2→3,
-4→5 and 6→7. Checked, not assumed. A connector at 2-3 → 3-2 would join two
-worlds that share no edge.
+- **It is self-inverse.** A door works from both ends and there is no return
+  trip to author. 8 × 7 ÷ 2 = **28 distinct doors**, which is exactly the edge
+  count of the complete graph on eight worlds.
+- **It is a mnemonic, not a map to memorise.** To reach world 5, find level 5.
+  Wherever you are.
+- **The depth balances itself with no tuning at all.** From world w you always
+  arrive at level w of wherever you go — so an early shortcut lands you shallow
+  in a hard world and a late one lands you deep. The risk of skipping ahead is
+  priced by the numbering.
+- **Every world has exactly one level with no door**: the one numbered like
+  itself. 1-1 in world 1, 2-2 in world 2. A quiet place in each world, for free.
 
-Three ways it could still work, and they are different games:
+**What it costs is the cube.** The world graph becomes complete, and
+`worldDoors(i) = [i^1, i^2, i^4]` — three doors, chosen after a fortress — is
+what the die scene exists to present. Under the transpose every world borders
+every other, so the die's three-door choice is not a smaller version of this
+rule, it is a different rule. One of them has to go, or the die has to become
+an overview rather than a chooser.
 
-1. **Along the Gray path.** `1 → 2 → 4 → 3 → 7 → 8 → 6 → 5` is a Hamiltonian
-   path on the cube — every consecutive pair really is adjacent, verified. Read
-   "the next world" as the next along that path and the owner's rule works
-   unchanged; only the numbers in it differ. The cost is that the *displayed*
-   world numbers stop matching the order you meet them in.
-2. **Per-edge depth instead of a counter.** A world has three exits, not one,
-   because the player chooses a door after each fortress — so there is no
-   global "next". But the escalation the pattern is really made of survives if
-   the *depth* of an exit is tied to what is behind it: the door to an easier
-   neighbour opens early in the world, the door to a harder one deep in it.
-   `worldTier` already measures that. This keeps the cube and keeps the feel.
-3. **Renumber the worlds** so the sequence is the path. Honest, and the most
-   expensive: every level id from `1-1` to `8-4` carries the old numbering.
+**Where the doors physically are** is the one thing the geometry does not hand
+over. Seven doors are needed per solid, one per face bar one. A face has six
+edges and the level chain uses two, so there is room — but the spare *hex*
+edges lead to other faces of the same solid, so a world door cannot honestly be
+one of them. The squares can be: a face touches three, a square touches four
+faces, and **where a square takes you depending on which face you walked in
+from** makes the cut corners into interchanges. That is honest, it is one door
+per (face, square) pair, and there are more of them than the rule needs.
 
-**Where a connector would live is already decided by the geometry.** The cube
-has 12 edges, the level chain uses 7, and the five left over are one on each
-middle face and two at each end. Those spare edges are shut today (grey, and
-the gate refuses them at the hub). They are exactly the right size for the ways
-out — one per world with four to spare for secrets — and no new geometry is
-needed to turn them on.
+Two points the rule as stated does not settle, and they change what gets built:
+
+1. **The fortress.** "1-1 to 1-8, which then unfolds to 2-1" makes level 8 the
+   sequential spine to world w+1. The transpose would instead make it a door to
+   world 8 — straight to the final castle after eight levels. Both cannot be
+   the same edge.
+2. **Level 1.** The examples start at n=2. If level 1 carries no door then
+   1-2 → 2-1 exists but 2-1 → 1-2 does not, and the shortcuts are one-way
+   despite looking symmetric. Giving level 1 a door restores the involution at
+   the cost of a "go home" exit in every world.
 
 ### ✔ The world **die** goes isometric 2.5D — built 19.8.2026
 
