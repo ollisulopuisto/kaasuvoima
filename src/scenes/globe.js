@@ -92,6 +92,31 @@ const LAND_FRAMES = 9;
 /** How far the pawn walks per frame, in face radii. */
 const WALK = 0.022;
 
+/**
+ * ARRIVING IN A WORLD: he is dropped on the first level.
+ *
+ * The flat map had a start node — a plaque saying MATKA ALKAA TASTA that you
+ * stood on, walked off, and never used again. It was a node so that the road
+ * had somewhere to begin, and on a solid the road begins in the middle of a
+ * face, so there is nothing left for it to be.
+ *
+ * Which is an opportunity rather than a hole. A world can *start* instead of
+ * merely being entered: he falls out of the sky onto level one, the solid
+ * takes the hit, and the dust rings out from where he landed. It says the same
+ * thing the plaque said — this is where it begins — and it says it once,
+ * without occupying a square of the map forever afterwards.
+ *
+ * `DROP_FALL` accelerates (the height goes as one minus t squared, which is
+ * what falling does); `DROP_LAND` is the beat afterwards where nothing happens
+ * except the consequences.
+ */
+const DROP_FALL = 26;
+const DROP_LAND = 18;
+/* 110 and not 150: he has to *be seen* falling. From 150 the first third of
+ * the fall happened above the top of the screen, which reads as the scene
+ * hesitating before it starts rather than as a drop. */
+const DROP_HIGH = 110;
+
 /** Three tones per colour, quantised. The die's rule, and for the same reason. */
 const TONES = [1, 0.66, 0.42];
 const INK = '#12121c';
@@ -220,10 +245,18 @@ export class GlobeScene {
     this.house = null;
     this.message = null;
     this.messageTimer = 0;
+    this.dust = 0;
+    this.dropT = 0;
+    this.landed = false;
     /* Start on the face of the node the save is standing on, so coming back
      * from a level puts you where you left rather than at the beginning. */
     const here = this.byFace.findIndex((n) => n && n.id === game.state.node);
     this.face = face !== null ? face : (here >= 0 ? here : STRIP[0]);
+    /* Nothing to stand on yet means the world has not been entered: the save
+     * knows no node of it, so this is an arrival and not a return. Asked of
+     * the save rather than remembered in a flag, so reloading mid-world does
+     * not drop him out of the sky a second time. */
+    this.arriving = face === null && here < 0;
     this.tick = 0;
     this.rot = tilted(qBetween(FACES[this.face].normal, [0, 0, 1]));
     this.mode = 'idle';
@@ -290,6 +323,8 @@ export class GlobeScene {
   update(input) {
     this.tick++;
     if (this.messageTimer > 0) this.messageTimer--;
+    if (this.dust > 0) this.dust = Math.max(0, this.dust - 1 / 16);
+    if (this.arriving) { this.updateDrop(); return; }
     if (this.mode === 'house') { this.house.update(input); return; }
     if (this.mode === 'roll') { this.updateRoll(); return; }
     if (this.squash !== 0) this.squash *= 0.82;
@@ -325,6 +360,49 @@ export class GlobeScene {
     }
 
     if (this.mode === 'walk') this.updateWalk();
+  }
+
+  /**
+   * The fall, the hit, and the beat after it.
+   *
+   * The landing is the only frame that does anything: it stamps the save with
+   * the node he came down on, so a reload afterwards is a return rather than
+   * another arrival, and it hands the solid a positive squash — the bounce,
+   * the same one the roll lands with, because a thing landing on a thing
+   * should look the same however it got there.
+   */
+  updateDrop() {
+    this.dropT += 1 / (DROP_FALL + DROP_LAND);
+    const fall = DROP_FALL / (DROP_FALL + DROP_LAND);
+    if (this.dropT < fall) return;
+    /* No anticipation before this one, unlike the roll: the solid cannot flinch
+     * at something it has no way of knowing is coming. All of the reaction is
+     * on the far side of the impact. */
+    if (!this.landed) {
+      this.landed = true;
+      this.squash = 0.8;
+      this.dust = 1;
+      const node = this.byFace[this.face];
+      if (node) {
+        this.game.state.node = node.id;
+        this.game.persist();
+      }
+      Sfx.play('jysahdys');
+    }
+    this.squash *= 0.84;
+    if (this.dropT >= 1) {
+      this.arriving = false;
+      this.squash = 0;
+      this.mode = 'idle';
+    }
+  }
+
+  /** How far above the face he still is, in screen pixels. 0 once landed. */
+  dropHeight() {
+    if (!this.arriving) return 0;
+    const fall = DROP_FALL / (DROP_FALL + DROP_LAND);
+    const t = Math.min(1, this.dropT / fall);
+    return Math.round(DROP_HIGH * (1 - t * t));
   }
 
   updateWalk() {
@@ -378,6 +456,9 @@ export class GlobeScene {
         this.house = null;
     this.message = null;
     this.messageTimer = 0;
+    this.dust = 0;
+    this.dropT = 0;
+    this.landed = false;
         this.mode = 'walk';
         this.walkOut = false;
         if (text) { this.message = text; this.messageTimer = 110; }
@@ -536,19 +617,37 @@ export class GlobeScene {
 
   drawPawn(ctx) {
     const p = this.onHere(this.at.u, this.at.v);
+    const drop = this.dropHeight();
+    if (this.dust > 0) {
+      /* A ring rather than a cloud: four pixels walking outwards along the
+       * face, which is the only direction dust can go on a surface you are
+       * looking across. It fades as it widens. */
+      const r = Math.round(4 + (1 - this.dust) * 26);
+      ctx.fillStyle = `rgba(240,240,248,${Math.min(1, this.dust * 1.2).toFixed(3)})`;
+      for (let a = 0; a < 10; a++) {
+        const th = (a / 10) * Math.PI * 2;
+        const k = 3 - Math.round((1 - this.dust) * 2);
+        ctx.fillRect(Math.round(p.x + Math.cos(th) * r) - 1,
+          Math.round(p.y + Math.sin(th) * r * 0.45) - 1, k, k);
+      }
+    }
     const power = normalizePower(this.game.state.power);
     /* Lifted by the sprite's own height, the same measurement the map makes:
      * the feet belong on the road, not the middle of the body. */
     const lift = power.level === 0 ? 10 : 16 + power.level * 4;
     const bob = this.mode === 'idle' ? Math.round(Math.sin(this.tick / 12)) : 0;
-    ctx.fillStyle = 'rgba(8,8,16,0.5)';
-    ctx.fillRect(Math.round(p.x) - 4, Math.round(p.y) - 1, 9, 3);
-    drawPlayer(ctx, p.x - 6, p.y - lift + bob, {
+    /* The shadow stays on the ground and shrinks as he falls towards it: a
+     * shadow that rode down with him would say he was never in the air. */
+    const near = 1 - Math.min(1, drop / DROP_HIGH);
+    ctx.fillStyle = `rgba(8,8,16,${(0.15 + 0.35 * near).toFixed(3)})`;
+    const w = Math.round(3 + 6 * near);
+    ctx.fillRect(Math.round(p.x) - Math.round(w / 2), Math.round(p.y) - 1, w, 3);
+    drawPlayer(ctx, p.x - 6, p.y - lift + bob - drop, {
       type: power.type,
       level: power.level,
       facing: 1,
       frame: Math.floor(this.tick / 8) % 3,
-      state: this.mode === 'idle' ? 'idle' : 'walk',
+      state: drop > 0 ? 'jump' : this.mode === 'idle' ? 'idle' : 'walk',
       ducking: false,
       running: false,
     });
