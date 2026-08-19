@@ -37,7 +37,16 @@ export const DEFAULT_SAVE = () => ({
   world: 0,
   node: null,
   cleared: {},      // nodeId -> true
-  worldsOpen: 1,    // how many worlds are reachable
+  worldsOpen: 1,    // how many worlds have been open; see `visited`
+  /*
+   * Mitkä kuution kärjet on käyty (19.8.2026). Indeksi -> true.
+   *
+   * Ilman uutta versionumeroa ja samasta syystä kuin `secrets` aikanaan: vanha
+   * tallennus ei sisällä tätä, ja `{}` ei ole arvaus vaan totuus — kukaan ei
+   * ollut kirjannut käyntejä. `worldsOpen` jää paikalleen eikä sitä lueta
+   * uudelleen miksikään muuksi (DESIGN.md kohta 6).
+   */
+  visited: {},
   usedSaveState: false,   // set once a run has been rewound from a save state
   continues: 0,           // continues this run has used; the board shows the count
   /*
@@ -182,6 +191,7 @@ export const Save = {
         node: state.node,
         cleared: state.cleared,
         worldsOpen: state.worldsOpen,
+        visited: state.visited || {},
         usedSaveState: !!state.usedSaveState,
         continues: state.continues || 0,
         secrets: state.secrets || {},

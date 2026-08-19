@@ -7,6 +7,161 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.44 — eight worlds on a cube, and three doors out of every one
+
+Owner: *"instead of moving on a 2D map, let's have the character move on an
+eight-sided die, but the die has been cut open, like a map projection. And it's
+also a hyper object."*
+
+**The two halves of that are one object, and it is a theorem rather than a
+coincidence.** An octahedron has eight faces; two faces are neighbours when they
+share an edge; that graph *is* the cube, because the octahedron's dual is the
+cube. Eight worlds, three doors each, twelve doors in all.
+
+**And no table was needed.** Number the worlds from zero and **the index is the
+cube vertex**: the neighbours of world `i` are `i^1`, `i^2` and `i^4`. One line,
+nothing to keep in sync with the levels, and no hand-written pairing that can
+drift.
+
+**The tiers were already in the levels.** A cube wants its worlds grouped 1/3/3/1
+by distance from the start corner, and the measured medians — 101 · 126 · 163 ·
+201 · 200 · 252 · 272 · 318 — fall into exactly that shape. Checked rather than
+hoped: **every door that leads away from the start leads somewhere harder**, and
+there is a gate on it. Difficulty stops being a curve and becomes a coordinate.
+
+**A run is half the game, and that is the owner's decision rather than a side
+effect.** Four worlds of eight, one of six route orders. The other four are why
+you would play again.
+
+`completeWorld` no longer goes to world *n + 1*. It marks where you have been,
+and — unless you have just cleared the far corner, which ends the run — hands you
+`DoorScene`: three neighbours, sorted easiest first, each with its name, its
+difficulty as the map's own five-pip bar, and whether you have been there.
+
+**The pips were nearly a lie.** The first version wrote them as text,
+`'●'.repeat(n)`, and the game's bitmap font has no such glyph — the bar came out
+empty. A door with no difficulty on it is a blind choice, and a blind choice is
+not picking your difficulty, it is drawing lots. That is the exact thing the
+whole design is for, so the pips are drawn now, with `worldmap.js`'s own bar and
+colours, so the meter never has to be learned twice.
+
+`visited` joins the save without a version bump, for the same reason `secrets`
+did: an old save simply has none, and `{}` is not a guess but the truth.
+`worldsOpen` stays and still means what it meant; it just no longer steers
+anything, because on a cube "open" is adjacency rather than a running total.
+
+Not done, deliberately, and the owner said to punt it: the curriculum. Mechanics
+are still introduced in world order, and three doors out of world 1 will meet
+them out of sequence. The measurement tool for it already exists
+(`tools/curriculum.mjs`) and the levels get reshuffled once the mechanic feels
+right.
+
+---
+
+## v26.08.19.43 — two piles, one glass
+
+Owner: *"I wanted the red and gold coins to go in the same pile, but now the
+reds are placed apart. Red coins at bottom, yellow on top? Have them overlay a
+bit so the yellow coins are partly obscured by the red ones, thus letting you
+see the exact number of red coins and approx number of yellow simultaneously."*
+And then, seeing the first attempt: *"let's have the reds cover 2/3 of the
+yellows sideways."*
+
+The second sentence is the design and the first is the requirement it serves:
+**exact reds, approximate yellows, one glance.** Discs stack from the bottom
+with `TUBE_RED_STEP` smaller than `TUBE_RED_H`, so the pile reads as a pile and
+every disc is still countable; the yellow keeps its own scale above and beside
+them.
+
+**The reds are in front, never underneath.** If they took space from the tube,
+collecting lives would shorten the clock — a reward that costs time. The yellow
+surface is still measured from the floor of the glass, so `COIN_CAP` coins is
+still the whole tube and two minutes is still two minutes.
+
+**Sideways is what makes it readable, and the first version proved it.** Full-
+width discs hid the yellow surface exactly when it mattered: ten lives is about
+thirty pixels of pile, `FUEL_HURRY` is seventeen coins, so the meter would have
+vanished at the moment it is being watched. That version needed a bright line
+drawn over the pile to rescue the reading. At two thirds of the width the
+problem does not exist — a third of the yellow column shows for its whole
+height — and the rescue line is gone with it.
+
+**And the corner is empty now.** Lives were drawn there as red coins yesterday;
+two places telling the same thing is what DESIGN.md §8 forbids, and of the two
+the glass is the one that also tells the *ratio* — how many lives, how much
+time, in one look. The score left on 18.8, the coin count on the 18th too, and
+this is the third readout to go.
+
+One measurement decision hides in a hex: the disc highlight was `#ff8a8a`, whose
+green channel is 138, and the tube's own gate reads anything above 130 as gold —
+so the life pile was inflating the measured height of the yellow column. The
+highlight is `#ff6060` now. A red coin should not be painting gold pixels.
+
+---
+
+## v26.08.19.42 — the slope is a catapult if you hit its edge
+
+Owner, 19.8.2026: *"well-timed jumps should be rewarded, maybe with a somersault
+and extra distance/speed? The most obvious place is off an upwards climb, i.e.
+right on the edge of a `/`, which kinda functions like a catapult. Reward good
+timing."*
+
+**This is pumping's opposite shape, deliberately.** Pumping was removed the same
+day because ignoring it was the better game than attempting it: a missed press
+vented a segment, so the mechanic punished trying. Here the launch happens
+anyway — it has been automatic since slopes existed — and timing only **adds**.
+Mistiming is exactly identical to not trying, and nobody loses anything by never
+learning this exists.
+
+It also pays where the player is already fast, which was the other lesson from
+pumping's measurement: fill-time can buy nothing, because only 1.6 seconds of a
+minute-long level are spent below the speed cap. After the terrain pass there
+are slopes in 43 levels, and every one of them is a place where speed is already
+at its ceiling.
+
+**The reward is vertical and never touches `vx`.** Same rule the gate taught
+about the tailwind: `gapTiles` 6 and `wallTiles` 4 are measured at the P cap and
+every level's clearability rests on them. A higher arc is still a longer arc —
+airtime carries the same horizontal speed further — so the extra distance
+arrives without the speed moving at all. Measured, on 1-3's first ramp:
+
+| | peak | distance |
+| --- | --- | --- |
+| no press | 95 px | 40 px |
+| **timed press** | **67 px** | **150 px** |
+| pressed 14 frames late | 95 px | 40 px |
+
+Horizontal speed reads 2.5 in all three, against a cap of 3.5.
+
+**Two things the measurement found, and the second is the interesting one.**
+
+The window was written as `jumpBuffer` — "pressed just before the crest" — and
+that branch is unreachable. A jump pressed while standing on the slope fires the
+ground-jump branch and spends the buffer before the crest arrives. The only
+moment a press can *mean the slope* is when the body has just left it, so the
+window is `SLOPE_GRACE` frames **after** the launch. That also matches what the
+player is looking at: the crest is not marked on screen, so you aim at the angle
+of the ground, and you pass it before you notice passing it.
+
+And **the catapult already existed, untimed and free.** `coyote` — the few
+frames of mercy that let you jump after walking off an edge — was still running
+when the slope threw you, so a press after the launch hit the ground-jump branch
+and added a whole jump on top. Measured: 80 px of extra rise, for nothing, and
+nobody knew it was there. A launch is not walking off an edge: the body did not
+step into the air, it was thrown. Coyote belongs to whoever fell; whoever flew
+gets `slopeGrace`.
+
+Clearing it takes away a free jump players may have been leaning on, so the
+ground-route gate is the one that matters here: `playable.mjs` still clears every
+level at the smallest size.
+
+The somersault is a picture and nothing else — its own field, no hitbox, because
+`spin` is the leaf's tail attack and carries one. It tumbles faster than the tail
+spins and lasts longer: an attack is a hit whose direction must be read, a
+somersault is a flourish whose spin should be seen.
+
+---
+
 ## v26.08.19.41 — the reserve stopped cycling, and pumping was removed
 
 ### Damage was a swap, not a loss

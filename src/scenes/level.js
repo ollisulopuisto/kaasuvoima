@@ -7,8 +7,7 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
-import { drawGoal, drawItem, drawLifeCoins,
-} from '../gfx/sprites.js';
+import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
   Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
@@ -198,6 +197,32 @@ export const COIN_CAP = 100;
  * hundred stays, `FUEL_DRAIN` stays at 72 frames, and a full tube is still the
  * two minutes the old `AIKA 300` clock gave.
  */
+/*
+ * KAKSI PINOA SAMASSA LASISSA (19.8.2026).
+ *
+ * Omistaja: *"I wanted the red and gold coins to go in the same pile, but now
+ * the reds are placed apart. Red coins at bottom, yellow on top? Have them
+ * overlay a bit so the yellow coins are partly obscured by the red ones, thus
+ * letting you see the exact number of red coins and approx number of yellow
+ * simultaneously."* — ja jälkimmäinen lause on koko mitoituksen peruste.
+ *
+ * Punaiset ovat **edessä** eivätkä alla, ja se on se ero joka pitää kellon
+ * ennallaan: keltainen pinta mitataan yhä lasin pohjasta, eli `COIN_CAP`
+ * kolikkoa on yhä koko putkilo ja kaksi minuuttia on yhä kaksi minuuttia.
+ * Punaiset peittävät pohjimmaiset keltaiset, eivät syrjäytä niitä — jos ne
+ * söisivät tilaa, monta elämää lyhentäisi kelloa, ja elämien kerääminen
+ * rankaisisi ajassa.
+ *
+ * `TUBE_RED_STEP` on pienempi kuin `TUBE_RED_H`, eli kiekot menevät limittäin:
+ * pino luetaan pinoksi eikä palkiksi, ja jokainen kiekko on silti erikseen
+ * laskettavissa. Se on juuri se ero jota omistaja pyysi — punaisia on *tasan*
+ * niin monta kuin niitä näkyy, keltaisia *suunnilleen* pinnan verran.
+ */
+export const TUBE_RED_H = 5;
+export const TUBE_RED_STEP = 3;
+/** Kuinka monta kiekkoa piirretään yksitellen; loput ovat plus. */
+export const TUBE_RED_MAX = 10;
+
 export const RED_COST = 64;
 export const RED_KEEP = COIN_CAP - RED_COST;
 
@@ -3404,6 +3429,46 @@ export class LevelScene {
       ctx.fillStyle = tenth ? '#ffe070' : '#f0b000';
       ctx.fillRect(inner, Math.round(y), innerW, Math.max(1, Math.round(box.pxPerCoin)));
     }
+    /*
+     * PUNAISET PÄÄLLE, POHJASTA YLÖS. Ks. `TUBE_RED_H` — pino on edessä eikä
+     * alla, joten keltaisen mitta-asteikko ei muutu miksikään.
+     */
+    const lives = Math.max(0, this.game.state.lives | 0);
+    const reds = Math.min(TUBE_RED_MAX, lives);
+    /*
+     * KAKSI KOLMASOSAA LEVEYDESTÄ, ei koko lasia.
+     *
+     * Omistaja: *"let's have the reds cover 2/3 of the yellows sideways."* —
+     * ja se on parempi kuin edellinen yritys kahdesta syystä. Ensimmäinen on
+     * luettavuus: kolmasosa keltaista jää näkyviin **koko matkalta**, joten
+     * pinta on aina luettavissa eikä kymmenen elämän pino peitä kelloa juuri
+     * silloin kun se on loppumassa. Toinen on että sivuttain limittäin menevät
+     * pinot ovat *kaksi pinoa samassa lasissa* eivätkä kerros toisen päällä —
+     * mitä pyydettiinkin.
+     *
+     * Sisätila on 8 px, joten punaiset ovat 5 px ja keltaista jää 3 px.
+     */
+    const redW = Math.max(2, Math.round((innerW * 2) / 3));
+    for (let i = 0; i < reds; i++) {
+      const y = Math.round(box.bottom - 1 - (i + 1) * TUBE_RED_STEP - (TUBE_RED_H - TUBE_RED_STEP));
+      ctx.fillStyle = '#5c0c0c';
+      ctx.fillRect(inner, y, redW, TUBE_RED_H);
+      ctx.fillStyle = '#d83030';
+      ctx.fillRect(inner, y, redW - 1, TUBE_RED_H - 1);
+      /* Korostus on punainen eikä vaaleanpunainen, ja se on mittausvirhe eikä
+       * makuasia: `#ff8a8a` on vihreältä kanavaltaan 138, ja portti lukee
+       * kullaksi kaiken minkä vihreä on yli 130 — eli elämäpino olisi
+       * kasvattanut keltaisen mitattua korkeutta. */
+      ctx.fillStyle = '#ff6060';
+      ctx.fillRect(inner + 1, y + 1, redW - 3, 1);
+    }
+    if (lives > TUBE_RED_MAX) {
+      const y = box.bottom - 1 - reds * TUBE_RED_STEP - TUBE_RED_H;
+      ctx.fillStyle = '#ff6060';
+      ctx.fillRect(inner + 1, y - 2, redW - 2, 1);
+      ctx.fillRect(inner + Math.floor(redW / 2) - 1, y - 4, 1, 5);
+    }
+
     if (this.tubeFlash > 0 && shown > 0) {
       ctx.fillStyle = `rgba(255,255,255,${(this.tubeFlash / 8) * 0.7})`;
       ctx.fillRect(inner, Math.round(box.bottom - shown * box.pxPerCoin), innerW, 2);
@@ -6766,26 +6831,17 @@ export class LevelScene {
       ctx.save();
       ctx.globalAlpha = ink;
       /*
-       * PISTEET EIVÄT OLE ENÄÄ RUUDULLA, ja elämät eivät ole enää luku.
+       * YLÄNURKKA ON TYHJÄ, ja se on kolmas lukema joka lähti (19.8.2026).
        *
-       * Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why
-       * do we even need to show the score before the game over hiscores
-       * table?"* — and the honest answer is that we do not. A running total is
-       * a number nobody acts on: it cannot be spent, it changes nothing about
-       * the next jump, and every payment it records has **already** said so
-       * where it happened, as a figure popping off the thing that paid
-       * (`addScorePop`). The total still exists and still matters; it is read
-       * out at the end in `scenes/scores.js`, which is where somebody is
-       * actually deciding whether the run was any good.
-       *
-       * Lives take the freed row as red coins, because a life *is* a red coin
-       * now (`RED_COST`). `KV *4` was a label, a star and a digit standing in
-       * for a thing the player owns; four red coins are the thing itself, drawn
-       * the same size as the yellow ones in the tube on the other side of the
-       * screen, so the exchange rate is a picture rather than a rule.
+       * Pisteet lähtivät ruudulta 18.8. — juokseva summa on luku jolle ei voi
+       * tehdä mitään, ja jokainen maksu on jo ilmoittanut itsensä siinä missä
+       * se tapahtui. Elämät piirrettiin sen jälkeen tähän punaisina kolikkoina,
+       * ja nyt ne ovat siellä minne ne kuuluvat: **samassa lasissa keltaisten
+       * kanssa** (`drawCoinTube`). Kaksi paikkaa jotka kertovat saman asian on
+       * tasan se mitä DESIGN.md kohta 8 kieltää, ja näistä kahdesta lasi on se
+       * joka kertoo myös suhteen — montako elämää, kuinka paljon aikaa, ja
+       * kumpaakin yhdellä silmäyksellä.
        */
-      const row = drawLifeCoins(ctx, OVERLAY.left, 6, st.lives, S);
-      if (row.over) drawText(ctx, '+', row.end, 5, { color: '#ff8a8a', shadow: S });
       ctx.restore();
     }
 
