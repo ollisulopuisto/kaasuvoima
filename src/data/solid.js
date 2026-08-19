@@ -160,6 +160,22 @@ export const hexDoors = (i) => HEXES[i].sides
   .filter((s) => s.to && s.to.kind === 'hex').map((s) => s.to.index);
 
 /**
+ * THE GRAY-CODE WALK: the order the faces are visited in.
+ *
+ * Consecutive entries differ by exactly one bit, so consecutive faces share an
+ * edge — which makes this a Hamiltonian path over all eight, and therefore the
+ * natural order to lay a world's levels out in: level `k` sits on face
+ * `STRIP[k]`, and level `k + 1` is one edge away.
+ *
+ * The cube has 12 edges and the path uses 7, so **five are left over**. Those
+ * are the spare doors: each of the six faces in the middle of the path has
+ * exactly one, and the two at the ends have two. That is where a room, a
+ * secret or the way out of the world goes, and it is a count that falls out of
+ * the shape rather than one anybody chose.
+ */
+export const STRIP = [0, 1, 3, 2, 6, 7, 5, 4];
+
+/**
  * A face-local point in 3D. `u` and `v` are in units of the face's own radius,
  * so (0,0) is the middle of the face and anything with `hypot(u,v) <= 1` is on
  * it. This is the whole interface the road layout needs.

@@ -199,8 +199,22 @@ class Game {
     return 'cleared';
   }
 
+  /**
+   * The one door back to the overworld, and now it has two rooms behind it.
+   *
+   * Every return from a level comes through here — cleared, died, skipped — so
+   * this is the only place that has to know which overworld the player is
+   * using. `overworld` is unset for anything that has not deliberately entered
+   * the globe, which is every existing path and every gate check, so the flat
+   * map stays the default until the globe can do the things it cannot yet:
+   * houses, the gambling games, secrets and the branch boards.
+   */
   toWorldMap() {
-    this.setScene(new WorldMapScene(this));
+    if (this.overworld === 'map') {
+      this.setScene(new WorldMapScene(this));
+      return;
+    }
+    this.setScene(new GlobeScene(this, this.state.world));
   }
 
   /* ----------------------------- päivän pieru --------------------------- */
@@ -721,10 +735,22 @@ class Game {
      * built, so the prototype is reachable without displacing either of the
      * screens the gate already tests.
      */
+    /*
+     * ON THE DIE THIS KEY MEANS "the other overworld", everywhere else it
+     * means "skip ahead".
+     *
+     * Warping from an overworld has always opened the doors, and that did not
+     * stop being true when the overworld became a solid — a shortcut whose
+     * meaning depends on which of two maps you happen to be looking at is a
+     * shortcut nobody can use. So the doors keep the key, and the flat map,
+     * which is now the fallback rather than the map, is reached from the
+     * screen between worlds. Globe → doors → flat map → doors.
+     */
     if (this.scene instanceof DieScene) {
-      this.toast('WARP: PALLO (KOE)');
+      this.overworld = this.overworld === 'map' ? 'globe' : 'map';
+      this.toast(this.overworld === 'map' ? 'WARP: LITTEA KARTTA' : 'WARP: PALLO');
       Sfx.play('powerup');
-      this.setScene(new GlobeScene(this, this.state.world));
+      this.toWorldMap();
       return;
     }
     this.state.debugWarped = true;

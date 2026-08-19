@@ -47,6 +47,19 @@ function serve() {
   return new Promise((resolve) => server.listen(PORT, '127.0.0.1', () => resolve(server)));
 }
 
+/**
+ * WHAT COUNTS AS "the overworld".
+ *
+ * There are two of them since 19.8.2026 — the globe is the default and the
+ * flat map is the fallback — and three checks below care that a level, a
+ * continue or a challenge link lands you on one, not which one. Naming the
+ * pair once keeps that from decaying into "some scene appeared", which is
+ * what each of those checks would have become if it had been relaxed on its
+ * own.
+ */
+const OVERWORLDS = ['GlobeScene', 'WorldMapScene'];
+const isOverworld = (name) => OVERWORLDS.includes(name);
+
 let chromium;
 let devices;
 try {
@@ -79,7 +92,11 @@ await page.waitForTimeout(400);
 
 const booted = await page.evaluate(() => !!window.sfb3);
 
-const report = await page.evaluate(async () => {
+const report = await page.evaluate(async (OVERWORLDS) => {
+  /* Handed in rather than written twice: this body runs in the page and the
+   * challenge-link check below runs in node, and two lists of what an
+   * overworld is are two lists that can disagree. */
+  const isOverworld = (name) => OVERWORLDS.includes(name);
   const { LevelScene } = await import('/src/scenes/level.js');
   const { PLAYER_SIZES, FLOOR_REACH } = await import('/src/gfx/sprites.js');
   const { isSolid, isSemi } = await import('/src/gfx/tiles.js');
@@ -8504,7 +8521,7 @@ const report = await page.evaluate(async () => {
     i.pressed.jump = true;
     game.scene.update(i);
     expect('continuing resumes the run and banks nothing',
-      game.scene.constructor.name === 'WorldMapScene' && scores.loadScores().length === 0,
+      isOverworld(game.scene.constructor.name) && scores.loadScores().length === 0,
       `${game.scene.constructor.name}, ${scores.loadScores().length} riviä`);
 
     // Start over: the run is finished, so the score goes to the board.
@@ -8688,7 +8705,7 @@ const report = await page.evaluate(async () => {
     }
     expect('continuing counts the continue, resumes the run and banks nothing',
       game.state.continues === 2
-      && game.scene.constructor.name === 'WorldMapScene'
+      && isOverworld(game.scene.constructor.name)
       && scores.loadScores().length === 0,
       `jatkot ${game.state.continues}, ${game.scene.constructor.name},`
       + ` ${scores.loadScores().length} riviä`);
@@ -19286,7 +19303,7 @@ const report = await page.evaluate(async () => {
     audio: { sfx: Sfx.names(), music: Music.names() },
     trackSources: TRACK_SOURCES || {},
   };
-});
+}, OVERWORLDS);
 
 /* ---------------------- kosketusohjaus puhelimen mitoissa ----------------- */
 /*
@@ -19702,7 +19719,7 @@ const report = await page.evaluate(async () => {
       if (!got.booted) { bad.push(`${why}: ei bootannut`); return; }
       if (got.title !== 'TitleScene') bad.push(`${why}: alkuruutu oli ${got.title}`);
       if (got.colors < 5) bad.push(`${why}: ruutu tyhjä (${got.colors} väriä)`);
-      if (got.started !== 'WorldMapScene') bad.push(`${why}: peli ei lähtenyt (${got.started})`);
+      if (!isOverworld(got.started)) bad.push(`${why}: peli ei lähtenyt (${got.started})`);
       const c = got.challenge;
       if (!want && c) bad.push(`${why}: haaste syntyi tyhjästä (${JSON.stringify(c)})`);
       if (want && !c) bad.push(`${why}: haaste jäi lukematta`);
