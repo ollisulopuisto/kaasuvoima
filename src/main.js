@@ -210,11 +210,11 @@ class Game {
    * houses, the gambling games, secrets and the branch boards.
    */
   toWorldMap() {
-    if (this.overworld === 'globe') {
-      this.setScene(new GlobeScene(this, this.state.world));
+    if (this.overworld === 'map') {
+      this.setScene(new WorldMapScene(this));
       return;
     }
-    this.setScene(new WorldMapScene(this));
+    this.setScene(new GlobeScene(this, this.state.world));
   }
 
   /* ----------------------------- päivän pieru --------------------------- */
@@ -735,18 +735,22 @@ class Game {
      * built, so the prototype is reachable without displacing either of the
      * screens the gate already tests.
      */
-    if (this.scene instanceof GlobeScene) {
-      this.overworld = 'map';
-      this.toast('WARP: LITTEA KARTTA');
+    /*
+     * ON THE DIE THIS KEY MEANS "the other overworld", everywhere else it
+     * means "skip ahead".
+     *
+     * Warping from an overworld has always opened the doors, and that did not
+     * stop being true when the overworld became a solid — a shortcut whose
+     * meaning depends on which of two maps you happen to be looking at is a
+     * shortcut nobody can use. So the doors keep the key, and the flat map,
+     * which is now the fallback rather than the map, is reached from the
+     * screen between worlds. Globe → doors → flat map → doors.
+     */
+    if (this.scene instanceof DieScene) {
+      this.overworld = this.overworld === 'map' ? 'globe' : 'map';
+      this.toast(this.overworld === 'map' ? 'WARP: LITTEA KARTTA' : 'WARP: PALLO');
       Sfx.play('powerup');
       this.toWorldMap();
-      return;
-    }
-    if (this.scene instanceof DieScene) {
-      this.overworld = 'globe';
-      this.toast('WARP: PALLO (KOE)');
-      Sfx.play('powerup');
-      this.setScene(new GlobeScene(this, this.state.world));
       return;
     }
     this.state.debugWarped = true;
