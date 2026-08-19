@@ -7,6 +7,67 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.46 — the world die, and it opens
+
+Owner: *"maybe I wasn't being clear: I wanted new VISUALS and a new GAME
+MECHANIC in the overworld, you've only given me one. I want a FOLDING &
+UNFOLDING ANIMATION in there… maybe pseudo-3D, maybe isometric? Impress me!"*
+
+Fair. The mechanic was there — worlds are cube vertices and every one has three
+doors — and it was showing as a list. A list is not a map.
+
+**An octahedron, in real 3D, on the 320×240 buffer.** Eight faces, one world
+each, and the face index *is* its sign triple: bit 0 is the sign of x, bit 1 of
+y, bit 2 of z. Two faces are neighbours when they differ in one sign — which is
+`i^1`, `i^2`, `i^4`, the same line the game already reads. There is no neighbour
+table in the drawing code that could disagree with the one in the rules.
+
+**Why the octahedron when the graph is a cube:** eight worlds fit the cube's
+*vertices* and the octahedron's *faces*, and those are the same graph. A face is
+the half you can stand on — it has area, it holds a name, it can be turned
+toward the camera. A vertex is a point.
+
+**Quaternions, because the die turns from face to face.** Between any two
+orientations there is a shortest way round, and slerp finds it without anyone
+choosing axes by hand; the same turn in Euler angles is three numbers of which
+two are wrong near the poles. The opposite-face case — the one that is undefined
+because the axis could be anything — is the one that gets forgotten, and it is
+handled: three of the eight faces are opposite the one you stand on.
+
+**The unfold is vertex lerp, not hinges, and that is a stated compromise.** A
+true unfolding rotates each face about its hinge along a spanning tree; it is
+beautiful and it is where this kind of thing usually breaks, because the tree
+has to be chosen, the angles computed, and the in-between states tangle. Here
+each corner *slides* from where it is on the solid to where it belongs in the
+flat strip, and the strip is a Gray code, so consecutive faces differ by one bit
+and neighbourliness shows up as a shared edge.
+
+**Two things the first version got wrong, both visible in a frame grab.**
+
+Everything moved at once, and eight faces crossing the screen together is an
+explosion, not a fold. Paper does not open like that: it opens **from where
+your finger is**. The unfold is staggered by ring now — the face you stand on
+holds still, its three neighbours swing out, then theirs, then the far one — and
+each corner travels on an arc rather than a straight line, so the motion reads
+as turning rather than sliding.
+
+And every face was drawing its name, so the back ones bled through the front and
+the die read as glass. While it is solid only the nearest face is named.
+
+**It spins before it opens.** The screen used to start mid-fold, and a fold
+without an introduction is a heap of triangles: the eye never gets to learn that
+this *is* a solid before it stops being one. Forty frames of slow rotation first.
+
+Gates on what can be measured — that it opens on its own and does not stall,
+that every face lands inside 320×240 when flat (checked through the same method
+the drawing uses, so it measures what is seen), that the arrows change faces,
+and that accepting steps to a **neighbour** rather than to any world at all.
+
+The old `DoorScene` is deleted rather than left beside it. Two ways to leave a
+fortress would have been two things to keep in step.
+
+---
+
 ## v26.08.19.45 — the debug warp goes through a door
 
 Owner, looking at the deployed game: *"hmm we're deployed but where's the cube

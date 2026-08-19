@@ -10290,7 +10290,7 @@ const report = await page.evaluate(async () => {
      * ovat kuution kärkiä: numeron kasvattaminen olisi ainoa paikka pelissä
      * joka kulkee seinän läpi. Merkintä tehdään heti, maailma vaihtuu vasta
      * kun ovi valitaan — joten "liikkui" tarkoittaa nyt "ruutu tarjoaa ovia". */
-    const doorScene = game.scene && game.scene.constructor.name === 'DoorScene';
+    const doorScene = game.scene && game.scene.constructor.name === 'DieScene';
     const moved = doorScene && game.state.debugWarped === true;
     if (doorScene) game.scene.pick(game.scene.doors[0].i);
     const landed = game.state.world !== world0;
@@ -10370,7 +10370,7 @@ const report = await page.evaluate(async () => {
     const before = game.state.world;
     game.toWorldMap();
     game.debugWarp();
-    const offered = game.scene && game.scene.constructor.name === 'DoorScene';
+    const offered = game.scene && game.scene.constructor.name === 'DieScene';
     if (offered) game.scene.pick(game.scene.doors[0].i);
     const step = before ^ game.state.world;
     expect('kartalla ohitusnäppäin vie oville, ja ovi vie naapuriin',
@@ -10403,7 +10403,7 @@ const report = await page.evaluate(async () => {
     const cleared = game.paused === false;
     /* Warppi vie oville, ja ovet ovat yhtä lailla "jokin muu ruutu": tämä
      * väite koskee `paused`-lippua eikä sitä mihin päädyttiin. */
-    const onMap = game.scene.constructor.name === 'DoorScene';
+    const onMap = game.scene.constructor.name === 'DieScene';
 
     /* Asserted on the flag and not by running a frame: `game.step()` drives the
      * whole loop, including the attract-mode idle counter, and a test that
@@ -23702,6 +23702,77 @@ const report = await page.evaluate(async () => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* ------------------------------ maailmannoppa -------------------------- */
+  /*
+   * NOPPA AUKEAA JA SULKEUTUU (19.8.2026).
+   *
+   * Ovivalinta oli valikko, ja valikko ei ole maailmankartta. Tämä on se
+   * kappale: oktaedri jonka tahkot ovat maailmat, hidas pyörintä, taitos auki
+   * litteäksi nauhaksi ja takaisin kiinni valitun tahkon ympärille.
+   *
+   * Neljä väitettä, ja ne koskevat **mekaniikkaa eikä kauneutta** — kuvaa ei
+   * voi mitata, mutta sen voi mitata ettei ruutu jää jumiin, että jokainen
+   * tahko päätyy nauhaan ruudun sisälle, ja että valinta vie naapuriin.
+   */
+  {
+    const N = await page.evaluate(async () => {
+      const { DieScene } = await import('/src/scenes/die.js');
+      const game = window.sfb3;
+      game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+        reserve: null, world: 0, node: null, cleared: {}, worldsOpen: 1, cards: [],
+        secrets: {}, checks: {}, doors: {}, visited: {}, usedSaveState: false,
+        continues: 0, bestTimes: {} };
+      let picked = -1;
+      const sc = new DieScene(game, 0, (i) => { picked = i; });
+      const idle = { held: {}, pressed: {}, released: {}, consume() {} };
+      const press = (k) => ({ held: {}, pressed: { [k]: true }, released: {}, consume() {} });
+
+      /* 1. Se aukeaa itsestään, eikä jää kesken. */
+      let openedAt = -1;
+      for (let f = 0; f < 400 && openedAt < 0; f++) {
+        sc.update(idle);
+        if (sc.phase === 'choosing') openedAt = f;
+      }
+
+      /* 2. Litteänä jokainen tahko on ruudulla. Kolmion kärjet lasketaan
+       *    samasta metodista jota piirto käyttää, joten tämä mittaa sitä mitä
+       *    näkyy eikä sitä mitä aiottiin. */
+      let inside = true;
+      const box = [999, 999, -999, -999];
+      for (let i = 0; i < 8; i++) {
+        for (const [x, y] of sc.facePoints(i).pts) {
+          if (x < 0 || x > 320 || y < 0 || y > 240) inside = false;
+          box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y);
+          box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], y);
+        }
+      }
+
+      /* 3. Valinta liikkuu ja 4. hyväksyntä sulkee nopan ja vie naapuriin. */
+      const first = sc.target;
+      sc.update(press('right'));
+      const moved = sc.target !== first;
+      sc.tick = 100;
+      sc.update(press('jump'));
+      const shutting = sc.phase === 'shutting';
+      for (let f = 0; f < 400 && picked < 0; f++) sc.update(idle);
+      const step = picked >= 0 ? (0 ^ picked) : -1;
+      return { openedAt, inside, box: box.map((n) => Math.round(n)), moved, shutting,
+        picked, neighbour: step > 0 && (step & (step - 1)) === 0 };
+    });
+
+    expect('noppa aukeaa itsestään eikä jää kesken',
+      N.openedAt > 0 && N.openedAt < 200, `aukesi framella ${N.openedAt}`);
+
+    expect('litteänä jokainen tahko mahtuu ruudulle',
+      N.inside, `laatikko ${N.box.join(',')} vastaan 0,0,320,240`);
+
+    expect('nuoli vaihtaa tahkoa ja hyväksyntä sulkee nopan',
+      N.moved && N.shutting, `vaihtui ${N.moved}, sulkeutuu ${N.shutting}`);
+
+    expect('nopasta astutaan naapuriin, ei mihin tahansa maailmaan',
+      N.picked >= 0 && N.neighbour, `valittiin ${N.picked}, naapuri ${N.neighbour}`);
+  }
+
   /* ---------------------------- kuutiokartta ---------------------------- */
   /*
    * MAAILMAT KUUTION KÄRJISSÄ (19.8.2026).
@@ -23718,7 +23789,8 @@ const report = await page.evaluate(async () => {
     const C = await page.evaluate(async () => {
       const { WORLDS, worldDoors, worldTier, startNode } = await import('/src/data/worlds.js');
       const { DIFFICULTY } = await import('/src/data/difficulty.js');
-      const { DoorScene, EndingScene } = await import('/src/scenes/cards.js');
+      const { EndingScene } = await import('/src/scenes/cards.js');
+      const { DieScene } = await import('/src/scenes/die.js');
       const med = (i) => {
         const lv = (WORLDS[i].nodes || []).filter((n) => n.level && DIFFICULTY[n.level] !== undefined)
           .map((n) => DIFFICULTY[n.level]).sort((a, b) => a - b);
@@ -23756,9 +23828,9 @@ const report = await page.evaluate(async () => {
       game.state = mkState(0);
       game.completeWorld();
       const mid = game.scene;
-      const offered = mid instanceof DoorScene ? mid.doors.length : -1;
-      const picked = mid instanceof DoorScene ? mid.doors[0].i : -1;
-      if (mid instanceof DoorScene) mid.pick(picked);
+      const offered = mid instanceof DieScene ? mid.doors.length : -1;
+      const picked = mid instanceof DieScene ? mid.doors[0].i : -1;
+      if (mid instanceof DieScene) mid.pick(picked);
       const landedWorld = game.state.world;
       const landedNode = game.state.node;
       const wantNode = startNode(WORLDS[picked]).id;

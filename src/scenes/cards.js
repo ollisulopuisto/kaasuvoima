@@ -6,21 +6,6 @@ import { CONTINUE_LIVES } from '../core/save.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise } from '../core/utils.js';
 import { normalizePower, POWER_NAMES } from '../entities/player.js';
-import { WORLDS, worldDoors, worldTier, pipsFor } from '../data/worlds.js';
-import { TIER_COLORS, PIP_OFF } from './worldmap.js';
-import { DIFFICULTY } from '../data/difficulty.js';
-
-/** Maailman vaikeusmediaani, laskettuna sen omista kentistä. */
-function worldMedian(i) {
-  const lv = (WORLDS[i].nodes || [])
-    .filter((n) => n.level && DIFFICULTY[n.level] !== undefined)
-    .map((n) => DIFFICULTY[n.level])
-    .sort((a, b) => a - b);
-  return lv.length ? Math.round(lv[Math.floor(lv.length / 2)]) : 0;
-}
-
-/** Portaan väri: sama neljä askelmaa kuin kuution kärjissä. */
-const TIER_INK = ['#8fe04a', '#ffd048', '#f09030', '#e05252'];
 
 /** The "MAAILMA 1-1 / KV x 4" card shown before every level. */
 export class InterludeScene {
@@ -205,112 +190,6 @@ export class GameOverScene {
     this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'KIERROS PAATTYY, PISTEET TAULUUN', 150);
 
     drawText(ctx, 'NUOLET VALITSE   ENTER HYVAKSY', 160, 200, {
-      color: '#8890b0', align: 'center',
-    });
-  }
-}
-
-/**
- * OVIVALINTA: kolme naapuria, ja se on koko kuutio yhtenä ruutuna.
- *
- * Linnakkeen jälkeen peli ei enää mene maailmaan `n + 1`. Maailmat ovat
- * kuution kärjissä (`worldDoors` `data/worlds.js`:ssä), joten jokaisesta on
- * tasan kolme ovea, ja pelaaja valitsee minkä. Kierros käy siis neljässä
- * maailmassa kahdeksasta, ja **puolet pelistä jää näkemättä** — se on
- * vaihtokauppa, ei virhe: reitti on se mitä pelataan uudestaan.
- *
- * Ruutu kertoo kolme asiaa jokaisesta ovesta, ja jokainen niistä on jo
- * mitattu: maailman nimi, sen **vaikeusmediaani**, ja onko siellä käyty. Ilman
- * mediaania valinta olisi sokea, ja sokea valinta ei ole vaikeustason
- * valitsemista vaan arpomista — juuri se ero jonka takia karttaa ei sumenneta.
- */
-export class DoorScene {
-  constructor(game, from, pick) {
-    this.game = game;
-    this.from = from;
-    this.pick = pick;
-    this.tick = 0;
-    this.choice = 0;
-    this.doors = worldDoors(from).map((i) => ({
-      i,
-      world: WORLDS[i],
-      tier: worldTier(i),
-      seen: !!(game.state.visited && game.state.visited[i]),
-      med: worldMedian(i),
-    }));
-    /* Helpoin ensin. Kolme ovea ilman järjestystä olisi kolme yhtä hyvää
-     * vaihtoehtoa, ja ne eivät ole: yksi niistä vie takaisin sinne mistä
-     * tultiin, ja se kuuluu listan loppuun eikä kärkeen. */
-    this.doors.sort((a, b) => a.med - b.med);
-  }
-
-  enter() {
-    Music.play('map');
-    Sfx.play('doorin');
-  }
-
-  update(input) {
-    this.tick++;
-    if (input.pressed.up || input.pressed.left) {
-      input.consume('up'); input.consume('left');
-      this.choice = (this.choice + this.doors.length - 1) % this.doors.length;
-      Sfx.play('cursor');
-    }
-    if (input.pressed.down || input.pressed.right) {
-      input.consume('down'); input.consume('right');
-      this.choice = (this.choice + 1) % this.doors.length;
-      Sfx.play('cursor');
-    }
-    if (this.tick > 20 && (input.pressed.jump || input.pressed.start)) {
-      input.consume('jump'); input.consume('start');
-      Sfx.play('select');
-      this.pick(this.doors[this.choice].i);
-    }
-  }
-
-  draw(ctx) {
-    ctx.fillStyle = '#101018';
-    ctx.fillRect(0, 0, 320, 240);
-    drawText(ctx, 'LINNAKE KAATUI', 160, 34, {
-      color: '#ffffff', align: 'center', shadow: '#303048', scale: 2,
-    });
-    drawText(ctx, 'KOLME OVEA. VALITSE.', 160, 60, { color: '#8fe04a', align: 'center' });
-
-    this.doors.forEach((d, k) => {
-      const y = 90 + k * 38;
-      const on = this.choice === k;
-      const blink = on && Math.floor(this.tick / 8) % 2 === 0;
-      if (on) {
-        ctx.fillStyle = '#24243c';
-        ctx.fillRect(30, y - 6, 260, 32);
-        ctx.fillStyle = blink ? '#ffd048' : '#8fe04a';
-        ctx.fillRect(30, y - 6, 260, 1);
-        ctx.fillRect(30, y + 25, 260, 1);
-      }
-      drawText(ctx, on ? '>' : ' ', 40, y, { color: '#ffd048' });
-      drawText(ctx, d.world.name, 56, y, {
-        color: on ? TIER_INK[d.tier] : '#70708c', shadow: on ? '#101018' : null,
-      });
-      /*
-       * Vaikeus **piirrettynä** eikä kirjoitettuna, ja tämä oli mittausvirhe
-       * eikä tyylivalinta: rivissä luki `'●'.repeat(pips)`, eikä pelin omassa
-       * bittikartttafontissa ole sellaista merkkiä — palkki jäi tyhjäksi ja
-       * ovivalinta oli juuri se sokea arvonta jota vastaan koko kartta on
-       * suunniteltu. Nyt käytössä on sama viiden pisteen palkki ja samat värit
-       * kuin kartalla (`worldmap.js`), joten mittaria ei tarvitse opetella
-       * kahdesti.
-       */
-      const pips = pipsFor(d.med);
-      for (let i = 0; i < 5; i++) {
-        ctx.fillStyle = i < pips ? TIER_COLORS[pips] : PIP_OFF;
-        ctx.fillRect(56 + i * 4, y + 13, 2, 3);
-      }
-      drawText(ctx, d.seen ? 'KAYTY' : 'UUSI', 284, y + 12, {
-        color: d.seen ? '#50506a' : '#ffd048', align: 'right',
-      });
-    });
-
-    drawText(ctx, 'NUOLET VALITSE   ENTER HYVAKSY', 160, 214, {
       color: '#8890b0', align: 'center',
     });
   }

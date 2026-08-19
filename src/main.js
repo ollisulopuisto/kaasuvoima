@@ -8,8 +8,9 @@ import { WorldMapScene } from './scenes/worldmap.js';
 import { LevelScene } from './scenes/level.js';
 import { DemoScene } from './scenes/demo.js';
 import {
-  InterludeScene, GameOverScene, EndingScene, VictoryScene, DoorScene,
+  InterludeScene, GameOverScene, EndingScene, VictoryScene,
 } from './scenes/cards.js';
+import { DieScene } from './scenes/die.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
@@ -567,7 +568,7 @@ class Game {
       this.setScene(new EndingScene(this));
       return;
     }
-    this.setScene(new DoorScene(this, from, (next) => this.enterWorld(next)));
+    this.setScene(new DieScene(this, from, (next) => this.enterWorld(next)));
   }
 
   /** Astuminen valitusta ovesta: sama työ kuin ennen, ilman "seuraavaa". */
@@ -713,7 +714,7 @@ class Game {
     this.persist();
     this.toast('WARP: OVET (PISTETAULU POIS)');
     Sfx.play('powerup');
-    this.setScene(new DoorScene(this, this.state.world, (next) => this.enterWorld(next)));
+    this.setScene(new DieScene(this, this.state.world, (next) => this.enterWorld(next)));
   }
 
   /**
