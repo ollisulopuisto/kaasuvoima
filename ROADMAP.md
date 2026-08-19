@@ -846,6 +846,13 @@ back on the music.
 mechanisms. The current levels still feel too… flat, not just literally but
 there's not enough variation. Something fractal, generative, organic, genetic?")*
 
+**Measured, and half built — 20.8.2026.** The diagnosis below was checked
+against the code and it is correct. What came out of acting on it is a new
+meter (`tools/grammar.mjs`), a grammar layer in the generator that is **shipped
+switched off**, and a partial result. Read `## Mitattu tila` at the end of this
+section before touching any of it; the short version is that the measurement
+was worth more than the prototype.
+
 Not started — a research task, and the brief is **variation** rather than
 novelty for its own sake. What the generator does today is honest and narrow: it
 samples mined pacing histograms for rhythm and arranges this game's own set
@@ -860,6 +867,111 @@ cave systems, WaveFunctionCollapse for local-constraint tiling, grammar-based
 expansion. The measuring rig this repo already has — `difficulty.mjs`,
 `playable.mjs`, `variety.mjs`, `curriculum.mjs` — is the expensive half of any
 search-based method, and it exists.
+
+## Mitattu tila (20.8.2026)
+
+### The trap that decided the design
+
+The four meters above are a fitness vector, and a search that optimises a
+fitness vector converges on whatever it does not measure. **None of the four
+measures grammar.** `variety.mjs` measures variety *between* levels over
+eight-column arrangements, i.e. over words; a set of levels built out of
+disjoint vocabularies by one identical procedure scores well on all four and is
+exactly the complaint. So the first deliverable was a meter that can tell "same
+sentence, different words" from real variation, and it had to exist before any
+generator work, or the generator work would have been graded by the thing that
+already could not see the problem.
+
+`tools/grammar.mjs` reads a level as one letter per column (hazard, void,
+enemy, overhead structure, step, treat, calm), run-length encodes that into
+clauses, and reports three numbers. Every one of them is an excess over a null
+that holds the level's material fixed and destroys only its arrangement, and
+the scale's far end is **measured rather than argued**: eight levels built with
+nothing but the seed changed, which is "one grammar rolled eight times".
+
+Two mistakes it made first are written up in the file, because both looked like
+findings:
+
+- **`S` meant "ground off its usual height"** and the terrain pass leaves whole
+  stretches lifted, so one letter covered 45 % of every generated level and
+  drowned the rest. A plateau is walking, not terrain challenge. `S` is now the
+  column where the surface *moves*.
+- **The factory and fortress lids** made every column "overhead structure", and
+  those two themes measured as the most stationary in the game. A row that is
+  solid across the whole level above the floor is furniture and is struck out.
+
+### The numbers
+
+| | KAARI | MURRE | TOISTO |
+| --- | --- | --- | --- |
+| one grammar, eight rolls (fixed point) | −0.49 | 0.86 | 32.6 % |
+| the 25 shipped generated levels | −0.55 | 1.39 | 28.9 % |
+| the 36 hand-made levels | −0.28 | 1.64 | **11.5 %** |
+
+TOISTO is the number that says it plainest: **a generated level shares 28.9 % of
+its five-clause phrases with one other generated level, against 11.5 % for a
+hand-made one** — two and a half times the repetition, and two thirds of the way
+to being literally one grammar.
+
+**KAARI is a measured negative and worth keeping as one.** Levels do not have
+arcs — not the generated ones and not the hand-made ones; every set sits within
+half a standard deviation of its own shuffled null. Whatever "flat" means, it is
+not "the level fails to go anywhere over its length". Do not spend work there
+without new evidence.
+
+### What was prototyped, and what it bought
+
+Grammar expansion, per the first candidate on the list. The generator's loop was
+`rest(); piece = weightedDraw(); piece()` — a stationary first-order draw with
+no memory, which cannot build a motif. It now has **productions**: two or three
+pieces in a fixed order with pacing written into them, drawn from categories
+rather than named pieces so every `drop` list and theme subtraction still holds.
+
+The first attempt was ten hand-written productions with each level choosing
+among them, and **it made TOISTO worse** (32.6 % → 33.4 %): ten shared
+productions are ten shared sentences, so it swapped one sentence for a ten-line
+phrasebook. The productions are therefore drawn *per level* now. Measured across
+12 runs (4 themes × 3 seed bases, 8 levels each):
+
+| | grammar off | grammar on |
+| --- | --- | --- |
+| MURRE | 0.86 mean | **1.30 mean**, better in 12/12 |
+| TOISTO | 32.5 % mean | 27.1 % mean, better in 10/12 |
+
+So it closes roughly **56 % of the MURRE gap to hand-made and 26 % of the
+TOISTO gap**. That is a real improvement on one axis and a weak one on the
+other, and it is nowhere near hand-made.
+
+### Why it ships switched off, and what the next person has to do
+
+`buildLevel` takes `grammar: false` by default, and the flag is **not**
+timidity. Two committed artefacts are functions of this loop's exact random
+stream and both are gates: `src/data/generated.js` (26 corpus-checked,
+difficulty-aimed, power-0-proven levels) and `src/data/daily-origin.js`, whose
+fingerprint `tools/verify.mjs` recomputes from `buildLevel` on every run. Both
+can only be rebuilt with the corpus behind `VGLC_DIR`, which is not in the
+repository. Turning the layer on without the corpus would either turn the suite
+red or — worse — go green by rewriting 26 levels as `origin: 'not checked'`,
+trading the guarantee the whole approach rests on for a partial gain.
+
+Off is byte-identical to the old loop, and that is checked rather than claimed:
+`node tools/gen-levels.mjs` rewrites `src/data/generated.js` with every grid row
+unchanged (only the `origin` markings move, and only because there was no
+corpus). Nothing is drawn from `rnd` on the off path.
+
+**To finish this, with the corpus in hand:** turn `grammar` on in
+`gen-levels.mjs`, regenerate, and expect per-level `seedOffset` work — the
+history in that file says regeneration has broken the power-0 gate before.
+Validator pass rates are comparable with the layer on (measured per theme over
+80 seeds: grass 21→15, cloud 3→13, fortress 33→38), so the 80-seed search still
+has candidates to choose between.
+
+**And the biggest single lead is not the productions.** Measured: hand-made
+levels put two challenges back to back in **15.2 %** of adjacent clause pairs,
+generated levels in **4.9 %**, because `PIECES.rest` floors at three columns and
+so the generator *cannot* emit two challenges without calm between them. That
+is one hard structural signature separating the two sets, it is cheap to test,
+and it was not touched here.
 
 ### Trouble jumping in 1-1 (19.8.2026, unresolved)
 
