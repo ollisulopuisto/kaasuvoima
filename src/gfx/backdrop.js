@@ -223,6 +223,7 @@ function drawSkyTower(ctx, tower, camX, groundY, th) {
     haze: 0.5,
     sky,
     phase: tower.tick || 0,
+    rising: tower.rising === undefined ? 1 : tower.rising,
   });
 }
 

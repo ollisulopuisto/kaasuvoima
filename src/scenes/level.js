@@ -3452,6 +3452,21 @@ export class LevelScene {
    * pinta kertoo yhdellä silmäyksellä "yli puolivälin", ja merkit kertovat
    * halutessa tarkan luvun ilman että lukua tarvitsee kirjoittaa mihinkään.
    */
+  /**
+   * The coin surface as it is being *drawn*, which is not always the count.
+   *
+   * While the tube is flushing, `tubeFill` has already jumped to what will be
+   * left and `coins` has already paid — the difference between them **is** the
+   * animation. One reading, because the cube on the horizon and the glass in
+   * the corner have to be draining the same liquid; two would be two gauges
+   * disagreeing about the same sixty-four coins.
+   */
+  tubeShown() {
+    if (this.tubeFlush <= 0) return this.tubeFill;
+    const t = this.tubeFlush / COIN_FLUSH;
+    return Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * t);
+  }
+
   drawCoinTube(ctx) {
     const box = this.tubeBox();
     const h = box.bottom - box.top;
@@ -3473,9 +3488,7 @@ export class LevelScene {
     /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
      * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
     const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
-    const shown = this.tubeFlush > 0
-      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
-      : this.tubeFill;
+    const shown = this.tubeShown();
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -6231,9 +6244,13 @@ export class LevelScene {
      */
     const tower = this.def.bg === 'none' || this.vertical ? null : {
       at: 300,
-      fill: this.tubeFill,
+      fill: this.tubeShown(),
       lives: Math.max(0, this.game.state.lives | 0),
       tick: this.tick,
+      /* 0 while a red is climbing out of the cube, 1 once it is in place. See
+       * `drawTower`: this is the conversion, and it is the one thing the
+       * corner glass said that the cube did not. */
+      rising: this.tubeFlush > 0 ? 1 - this.tubeFlush / COIN_FLUSH : 1,
     };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock, tower);

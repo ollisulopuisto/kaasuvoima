@@ -93,7 +93,7 @@ function spin(phase) {
  * horizon.
  */
 export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
-  sky = [150, 190, 240], r = CUBE_R, phase = 0 } = {}) {
+  sky = [150, 190, 240], r = CUBE_R, phase = 0, rising = 1 } = {}) {
   const q = spin(phase);
   const pts = VERTS.map((v) => {
     const p = qApply(q, v);
@@ -176,14 +176,40 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
    * that can be taken away, and a number that moves is one you keep half an
    * eye on.
    */
+  /*
+   * THE NEWEST RED CLIMBS OUT OF THE CUBE.
+   *
+   * Owner: *"rethink the yellow/red cohabitation… yellow coins running out in
+   * the current/old version feels good, I don't wanna lose that affordance."*
+   *
+   * The draining was never in danger — the level falls whether the glass is a
+   * corner or a cube. What the corner glass had and this did not is the
+   * **conversion**: sixty-four yellows turning into one red *in the same
+   * column*, so you watched the substance change rather than watching one
+   * number fall and another appear somewhere else.
+   *
+   * So the conversion is an ascent. `rising` runs 0 to 1 over the flush: the
+   * gold drains out of the cube and the new red rises out of the top of it to
+   * take its place in the stack. It is the old event with its two halves
+   * further apart, which is what putting the gauge in the sky cost — and
+   * paying it back this way makes the moment bigger than it was, because now
+   * the coins visibly *go somewhere*.
+   */
+  const climb = Math.max(0, Math.min(1, rising));
+  const eased = climb < 0.5 ? 2 * climb * climb : 1 - ((-2 * climb + 2) ** 2) / 2;
   for (let i = 0; i < Math.min(lives, 6); i++) {
     const bob = Math.round(Math.sin(phase / 26 + i * 1.1) * 2);
-    const cy = Math.round(top - 8 - i * (RED_H + 2) + bob);
+    const home = top - 8 - i * (RED_H + 2) + bob;
+    const newest = i === Math.min(lives, 6) - 1 && climb < 1;
+    /* Out of the middle of the cube, not off its lid: it was in there. */
+    const cy = Math.round(newest ? y + (home - y) * eased : home);
+    if (newest) ctx.globalAlpha = Math.min(1, eased * 2.2);
     ctx.fillStyle = faded('#5c0c0c', haze * 0.3, sky);
     ctx.fillRect(Math.round(x - 6), cy, 12, RED_H);
     ctx.fillStyle = faded('#d83030', haze * 0.3, sky);
     ctx.fillRect(Math.round(x - 6), cy, 11, RED_H - 1);
     ctx.fillStyle = faded('#ff6060', haze * 0.3, sky);
     ctx.fillRect(Math.round(x - 5), cy + 1, 8, 1);
+    ctx.globalAlpha = 1;
   }
 }
