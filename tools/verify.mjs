@@ -21177,7 +21177,19 @@ const report = await page.evaluate(async () => {
         + ` sama aika toisella kameralla ${moved ? `${moved.x},${moved.y}` : 'ei löytynyt'}`);
     }
 
-    /* --- 6. kentän nimi on taivaalla, ja se lähtee sieltä --- */
+    /* --- 6. kentän nimi: tienvarressa siellä missä on tie, taivaalla muualla ---
+     *
+     * THE NAME MOVED (19.8.2026). It used to be smoke writing in the sky in
+     * every level. It is now a roadside board that scrolls past — placed off
+     * the right edge by `updateProps` and carried in by the backdrop's own
+     * parallax — except where the camera climbs instead of running, because a
+     * sign beside a road that is not there can never arrive.
+     *
+     * So the assertion is a **split**, not a replacement, and that is the part
+     * worth gating: exactly one of the two says the name in any given level.
+     * If both ever fired, that is DESIGN.md item 8 broken in the most literal
+     * way the game can break it — the same words in two places at once.
+     */
     {
       const c = document.createElement('canvas');
       c.width = VIEW_W;
@@ -21197,16 +21209,41 @@ const report = await page.evaluate(async () => {
         world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
         usedSaveState: false, continues: 0, bestTimes: {},
       };
-      const sky = new LevelScene(game, '1-1');
+      /* Pystykenttä: nimi on yhä taivaalla, ja se käy pois ja palaa. */
+      const sky = new LevelScene(game, '7-T');
       const intro = inkAt(sky, 100);
       const after = inkAt(sky, 600);
       const back = inkAt(sky, 240 + 1080 + 120);
+      /* Vaakakenttä: taivas on tyhjä, ja kyltti on tiessä. */
+      const road = new LevelScene(game, '1-1');
+      const roadSky = inkAt(road, 100);
       const room = new LevelScene(game, '1-F');
       const inside = inkAt(room, 100);
-      expect('kentän nimi kirjoitetaan taivaalle, käy pois ja palaa — muttei sisätiloissa',
-        intro > 100 && after === 0 && back > 100 && inside === 0,
-        `alussa ${intro} px, 600 framen kohdalla ${after} px, kierroksen jälkeen ${back} px,`
+
+      /* Kyltti mitataan piirtämällä, samoin kuin savukirjoitus: kysytään
+       * kerroksen omalta piirtäjältä montako pikseliä se jättää. */
+      road.tick = 0;
+      road.updateProps();
+      const carded = road.props.has('card');
+      g.clearRect(0, 0, VIEW_W, VIEW_H);
+      road.props.draw(g, road.cam.x, VIEW_W, VIEW_H);
+      let boardPx = 0;
+      {
+        const d = g.getImageData(0, 0, VIEW_W, VIEW_H).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) boardPx++;
+      }
+
+      expect('kentän nimi kirjoitetaan taivaalle vain siellä missä ei ole tietä',
+        intro > 100 && after === 0 && back > 100 && roadSky === 0 && inside === 0,
+        `pystykentässä alussa ${intro} px, 600 framen kohdalla ${after} px,`
+        + ` kierroksen jälkeen ${back} px; vaakakentän taivaalla ${roadSky} px,`
         + ` linnakkeessa ${inside} px`);
+
+      expect('vaakakentässä nimi on tienvarressa, ja se syntyy ruudun ulkopuolella',
+        carded && boardPx === 0 && road.props.list[0].x - road.cam.x * 0.6 >= VIEW_W,
+        `kyltti asetettu ${carded}, ruudulla ${boardPx} px,`
+        + ` reunan takana ${carded ? Math.round(road.props.list[0].x - road.cam.x * 0.6) : -1}`
+        + ` (ruudun leveys ${VIEW_W})`);
     }
 
     /* --- 7. karannut kuori ja pallojen katto --- */
@@ -23727,10 +23764,18 @@ const report = await page.evaluate(async () => {
       const idle = { held: {}, pressed: {}, released: {}, consume() {} };
       const press = (k) => ({ held: {}, pressed: { [k]: true }, released: {}, consume() {} });
 
-      /* 1. Se aukeaa itsestään, eikä jää kesken. */
+      /* 1. Se aukeaa itsestään, eikä jää kesken. Matkalla lasketaan myös
+       *    kuinka monta framea kappale seisoo paikallaan isometrisessä
+       *    kulmassa ennen kuin taitos alkaa: ks. `ISO_BEAT`. */
       let openedAt = -1;
+      let stillAt = 0;
+      let restRot = null;
       for (let f = 0; f < 400 && openedAt < 0; f++) {
         sc.update(idle);
+        if (sc.phase === 'settling' && sc.turn >= 1) {
+          stillAt++;
+          restRot = sc.rot.slice();
+        }
         if (sc.phase === 'choosing') openedAt = f;
       }
 
@@ -23756,8 +23801,16 @@ const report = await page.evaluate(async () => {
       const shutting = sc.phase === 'shutting';
       for (let f = 0; f < 400 && picked < 0; f++) sc.update(idle);
       const step = picked >= 0 ? (0 ^ picked) : -1;
+      /* 5. Levossa näkyy kolme tahkoa eikä yksi. Sama laskenta kuin
+       *    piirrossa: tahko on edessä kun `front` on tosi. */
+      let facesAtRest = 0;
+      if (restRot) {
+        sc.rot = restRot;
+        sc.fold = 0;
+        for (let i = 0; i < 8; i++) if (sc.facePoints(i).front) facesAtRest++;
+      }
       return { openedAt, inside, box: box.map((n) => Math.round(n)), moved, shutting,
-        picked, neighbour: step > 0 && (step & (step - 1)) === 0 };
+        picked, neighbour: step > 0 && (step & (step - 1)) === 0, stillAt, facesAtRest };
     });
 
     expect('noppa aukeaa itsestään eikä jää kesken',
@@ -23771,6 +23824,26 @@ const report = await page.evaluate(async () => {
 
     expect('nopasta astutaan naapuriin, ei mihin tahansa maailmaan',
       N.picked >= 0 && N.neighbour, `valittiin ${N.picked}, naapuri ${N.neighbour}`);
+
+    /*
+     * ISOMETRINEN LEPO (19.8.2026). Kaksi väitettä joita kumpaakin rikottiin
+     * kerran rakentamisen aikana, ja kummankin oire oli sama: kappale lakkasi
+     * lukemasta kappaleena.
+     *
+     * Ensimmäinen on ajoitus. Kiinteä kamera on koko isometrisen kuvan ehto,
+     * ja jos asettuminen luovuttaa vuoron taitokselle samalla framella jolla
+     * se saapuu, kiinteää kameraa ei ole ollut olemassa yhtenäkään framena.
+     *
+     * Toinen on geometria. Oktaedria suoraan tahkoa päin katsottaessa näkyy
+     * **yksi** tahko: kolme naapuria ovat 109 asteen päässä ja osoittavat
+     * kaikki poispäin. Lepoasento ei siis voi olla pelkkä `facing()`, ja tämä
+     * on se tarkistus joka huomaa jos kallistus joskus nollataan.
+     */
+    expect('noppa seisoo isometrisessä kulmassa ennen kuin se aukeaa',
+      N.stillAt >= 12, `paikallaan ${N.stillAt} framea`);
+
+    expect('levossa näkyy useampi tahko kuin yksi, eli kappale lukee kappaleena',
+      N.facesAtRest >= 3, `${N.facesAtRest} tahkoa edessä`);
   }
 
   /* ---------------------------- kuutiokartta ---------------------------- */

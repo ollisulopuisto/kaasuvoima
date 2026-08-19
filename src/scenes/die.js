@@ -62,6 +62,17 @@ const CY = 108;
  * siihen että silmä lukee tilavuuden, ja se on sama temppu jolla jokainen
  * pelin alkuruutu on aina esitellyt palkintonsa. */
 const HOLD_FRAMES = 40;
+/**
+ * A beat at the isometric angle before the fold starts.
+ *
+ * Without it the settle handed straight over to the opening and the fixed
+ * camera existed for exactly zero frames: the die spun, swung towards the
+ * angle, and was already coming apart by the time it got there. The whole
+ * point of settling is that the eye gets to see the solid *from the angle the
+ * rest of the screen is drawn at* — floor, shadow and all — and that takes a
+ * moment of stillness, not just an arrival.
+ */
+const ISO_BEAT = 16;
 const OPEN_FRAMES = 46;
 const SHUT_FRAMES = 30;
 const TURN_FRAMES = 26;
@@ -151,20 +162,112 @@ function qApply(q, v) {
 /** Se kierto joka kääntää tahkon `i` katsojaa kohti. */
 const facing = (i) => qBetween(faceNormal(i), [0, 0, 1]);
 
+/**
+ * THE ANGLE THE DIE COMES TO REST AT, and the price of going isometric.
+ *
+ * An isometric picture has a fixed camera — that is what makes it isometric —
+ * and the forty frames of slow rotation that teach the eye this is a solid
+ * rather than a paper star cannot survive a fixed camera. Both were worth
+ * keeping, so the die does both in order: **it spins, it settles into the
+ * isometric angle, and only then does it open.** The spin proves the volume,
+ * the settle establishes the camera, and every frame after that obeys it.
+ *
+ * The tilt is applied in *world* space on top of `facing`, so the world you
+ * are standing on still turns to meet you — it is simply met from above,
+ * which is where the floor is seen from.
+ */
+/**
+ * Tilt *and* yaw, and the yaw is not decoration — it is the difference
+ * between a solid and a kite. An octahedron looked at straight down one of
+ * its faces shows exactly **one** face: the three that touch it are at 109°
+ * and every one of them points away from you. Face-on is therefore the one
+ * angle at which this shape cannot prove it has a volume, which is precisely
+ * what the spin before it just spent forty frames proving. Turning off-axis
+ * in both directions brings three faces into view, and three faces meeting at
+ * a vertex is the picture that says "solid" without any shading at all.
+ */
+const ISO_TILT = 0.60;
+const ISO_YAW = 0.58;
+const isoRest = (i) => qNorm(qMul(
+  [0, Math.sin(ISO_YAW / 2), 0, Math.cos(ISO_YAW / 2)],
+  qMul([Math.sin(ISO_TILT / 2), 0, 0, Math.cos(ISO_TILT / 2)], facing(i)),
+));
+
 /** Litteän nauhan kolmiot: sama kolmio ylös ja alas vuorotellen. */
 /* Nauhan mitat ovat ruudun mitta jaettuna: kahdeksan kolmiota limittäin vie
  * `x0 + 3.5 * W + W`, ja 320 px kehyksessä se tarkoittaa 62 px kolmiota. Isompi
  * näyttäisi paremmalta ja jäisi reunan taakse, mikä ei näyttäisi miltään. */
 const STRIP_W = 62;
-const STRIP_H = 58;
+/* Taller than the 58 it was drawn at flat against the glass, because the net
+ * no longer lies against the glass: it lies on the floor, and the floor eats
+ * `FLOOR_SQUASH` of every vertical measurement. 74 × 0.62 is 46 on screen,
+ * which is the same triangle the eye used to get. */
+const STRIP_H = 74;
 function stripTri(k) {
   const up = k % 2 === 0;
-  const x = 13 + k * (STRIP_W / 2);
+  const x = 20 + k * (STRIP_W / 2);
   const y = CY - STRIP_H / 2;
   return up
     ? [[x, y + STRIP_H], [x + STRIP_W, y + STRIP_H], [x + STRIP_W / 2, y]]
     : [[x, y], [x + STRIP_W, y], [x + STRIP_W / 2, y + STRIP_H]];
 }
+
+/**
+ * THE FLOOR — and the whole of what "isometric 2.5D" means here.
+ *
+ * The net used to unfold flat against the glass: eight triangles in a row,
+ * face-on, in the plane of the screen. That is a diagram. This lays the same
+ * eight triangles down on a *plane the camera looks across*, which is the one
+ * change that turns a diagram back into a place — you can stand on a floor,
+ * and a thing on a floor has a shadow and a near end and a far end.
+ *
+ * Three numbers, and they were chosen by looking rather than by trigonometry,
+ * because a true 2:1 isometric ran a 294-pixel strip 147 pixels down the
+ * screen and off the bottom of a 240-pixel frame. Depth is therefore
+ * compressed rather than honest:
+ *
+ *   `FLOOR_SQUASH` 0.62 — how much of a step *away* survives as a step *up*
+ *     the screen. 0.42 was tried in the prototype and pressed the open map
+ *     into an unreadable band.
+ *   `FLOOR_SHEAR` 0.35 — how far a step away also slides left. This is the
+ *     part that makes it read as a plane rather than as a squashed diagram.
+ *   `FLOOR_TILT` 0.11 — the strip's own slope, so the far end of the road is
+ *     higher on the screen than the near end.
+ *
+ * The projection is deliberately affine — no divide, no vanishing point. A
+ * perspective floor would fight the solid's own weak perspective, and two
+ * different depth rules in one picture read as a bug even when neither is.
+ */
+const FLOOR_SQUASH = 0.62;
+const FLOOR_SHEAR = 0.35;
+const FLOOR_TILT = 0.11;
+const FLOOR_Y = 138;
+
+function onFloor(px, py) {
+  const d = py - CY;
+  return [px - d * FLOOR_SHEAR, FLOOR_Y + (px - CX) * FLOOR_TILT + d * FLOOR_SQUASH];
+}
+
+/**
+ * THREE TONES, NOT A RAMP.
+ *
+ * The solid used to be shaded by a continuous function of depth, which is
+ * what a renderer does. Three quantised steps is what a person with three
+ * pens does, and on a chunky grid the difference between those two is the
+ * entire difference between "3D graphics" and "drawn". Everything else in
+ * this file — the shadow, the floor, the outline — is support for this one
+ * decision.
+ */
+const TONES = [1, 0.66, 0.42];
+const toneAt = (depth) => (depth > 0.3 ? 0 : depth > -0.2 ? 1 : 2);
+
+/** Ink: the outline, and the hole the drop shadow punches in the floor. */
+const INK = '#12121c';
+const FLOOR_BG = '#0c0c14';
+const SHADOW = '#000000';
+/** The shadow is offset, hard and unblurred — no light source, just a fact. */
+const SHADOW_DX = 5;
+const SHADOW_DY = 4;
 
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
 
@@ -233,7 +336,23 @@ export class DieScene {
        * eikä kappaleen, jolloin se näyttää pyörivältä eikä kieppuvalta. */
       const a = 0.012;
       this.rot = qNorm(qMul([0, Math.sin(a), 0, Math.cos(a)], this.rot));
-      if (this.tick >= HOLD_FRAMES) this.phase = 'opening';
+      if (this.tick >= HOLD_FRAMES) {
+        /* Spin over, camera not yet fixed. See `isoRest`: the settle is the
+         * handover between the two, and it is a slerp rather than a cut
+         * because a cut would throw away the volume the spin just proved. */
+        this.phase = 'settling';
+        this.rotFrom = this.rot;
+        this.rotTo = isoRest(this.from);
+        this.turn = 0;
+      }
+      return;
+    }
+    if (this.phase === 'settling') {
+      this.turn = Math.min(1, this.turn + 1 / TURN_FRAMES);
+      this.rot = qSlerp(this.rotFrom, this.rotTo, ease(this.turn));
+      if (this.turn >= 1 && this.tick >= HOLD_FRAMES + TURN_FRAMES + ISO_BEAT) {
+        this.phase = 'opening';
+      }
       return;
     }
     const step = this.phase === 'opening' ? 1 / OPEN_FRAMES : 1 / SHUT_FRAMES;
@@ -267,7 +386,7 @@ export class DieScene {
         this.phase = 'shutting';
         this.foldTo = 0;
         this.rotFrom = this.rot;
-        this.rotTo = facing(this.target);
+        this.rotTo = isoRest(this.target);
         this.turn = 0;
       }
     }
@@ -294,7 +413,7 @@ export class DieScene {
    */
   facePoints(i) {
     const k = STRIP.indexOf(i);
-    const flat = stripTri(k);
+    const flat = stripTri(k).map(([x, y]) => onFloor(x, y));
     const ring = hamming(i, this.from);
     const span = 1 - STAGGER * 3;
     const t = ease(clamp((this.fold - ring * STAGGER) / span, 0, 1));
@@ -317,62 +436,115 @@ export class DieScene {
     return { pts, depth, front: depth > -0.02 };
   }
 
-  draw(ctx) {
-    ctx.fillStyle = '#0c0c14';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  /**
+   * THE FLOOR, drawn as chunky dots rather than as a surface.
+   *
+   * Nothing here is decoration. Without a floor there is nothing for the drop
+   * shadow to fall on, and without the shadow the isometric angle is a claim
+   * the picture never backs up — eight triangles over black are a diagram
+   * again the moment the ground disappears. The dots also do the job a
+   * perspective grid would do, at a fraction of the ink: they are laid out on
+   * the same plane by the same `onFloor`, so their rows lean by exactly the
+   * amount everything else leans by, and the eye takes the angle from them.
+   *
+   * Two tones, near and far, quantised like everything else.
+   */
+  drawFloor(ctx) {
+    for (let py = CY - 132; py <= CY + 132; py += 16) {
+      const far = py < CY - 20;
+      ctx.fillStyle = far ? '#1a1a28' : '#26263a';
+      for (let px = -160; px <= 480; px += 20) {
+        const [x, y] = onFloor(px, py);
+        if (x < -2 || x > VIEW_W || y < 0 || y > VIEW_H) continue;
+        ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+      }
+    }
+  }
 
-    const faces = [];
-    for (let i = 0; i < 8; i++) faces.push({ i, ...this.facePoints(i) });
-    /* Maalarin algoritmi: takimmaiset ensin. Litteänä syvyys on nolla ja
-     * järjestys on nauhan järjestys, mikä on juuri se mitä halutaan. */
-    faces.sort((a, b) => a.depth - b.depth);
+  draw(ctx) {
+    ctx.fillStyle = FLOOR_BG;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    this.drawFloor(ctx);
 
     const flatT = ease(this.fold);
+    const faces = [];
+    for (let i = 0; i < 8; i++) faces.push({ i, ...this.facePoints(i) });
+    /* Maalarin algoritmi, ja järjestysluku vaihtuu taitoksen mukana: pystyssä
+     * "takana" on pieni syvyys, lattialla se on ylempänä ruudulla. Kahden
+     * säännön sekoitus `flatT`:llä pitää järjestyksen jatkuvana koko taitoksen
+     * yli sen sijaan että se napsahtaisi puolivälissä. */
     for (const f of faces) {
+      const mid = (f.pts[0][1] + f.pts[1][1] + f.pts[2][1]) / 3;
+      f.order = f.depth * (1 - flatT) + ((mid - CY) / 40) * flatT;
+    }
+    faces.sort((a, b) => a.order - b.order);
+
+    const visible = faces.filter((f) => f.front || flatT >= 0.5);
+
+    /* THE DROP SHADOW, and the trick that makes it work on a black ground:
+     * it is not a dark shape drawn *on* the floor, it is a hole punched *in*
+     * it. The dots stop where the die is, offset down and to the right, hard
+     * edged and unblurred. One pass before any face, so a shadow can never
+     * land on top of the thing casting it. */
+    ctx.fillStyle = SHADOW;
+    for (const f of visible) {
+      tri(ctx, f.pts, SHADOW_DX, SHADOW_DY);
+      ctx.fill();
+    }
+
+    ctx.lineJoin = 'round';
+    const nearest = faces[faces.length - 1];
+    for (const f of visible) {
       const isHere = f.i === this.from;
       const isTarget = this.phase !== 'opening' && f.i === this.target;
       const door = this.doors.some((d) => d.i === f.i);
-      /* Takatahkot piirretään vain litteänä: kappaleena ne ovat kappaleen
-       * sisällä, ja läpi näkyvä noppa on lasia eikä noppaa. */
-      if (!f.front && flatT < 0.5) continue;
-      const tier = worldTier(f.i);
+      const k = STRIP.indexOf(f.i);
+      /* Kolme sävyä, ei ramppia. Pystyssä sävy tulee syvyydestä; lattialla
+       * syvyyttä ei ole, joten se tulee kolmion suunnasta — ylös ja alas
+       * vuorotellen, jolloin litteä nauha lukee taitettuna peltinä eikä
+       * yhtenä maalattuna kaistana.
+       *
+       * Saavuttamaton maailma on **yhden sävyn syvemmällä** eikä
+       * läpikuultava. Läpikuultavuus oli tässä ennen, ja se toi takaisin juuri
+       * sen portaattoman liu'un jonka kolmeen sävyyn siirtyminen poisti. */
+      let step = flatT > 0.5 ? k % 2 : toneAt(f.depth);
+      if (!door && !isHere) step = Math.min(TONES.length - 1, step + 1);
       const lit = isHere || isTarget;
-      ctx.beginPath();
-      ctx.moveTo(f.pts[0][0], f.pts[0][1]);
-      ctx.lineTo(f.pts[1][0], f.pts[1][1]);
-      ctx.lineTo(f.pts[2][0], f.pts[2][1]);
-      ctx.closePath();
-      /* Syvyysvarjostus: takana oleva tahko on tummempi. Yksi kerroin, ei
-       * valonlähdettä — tämä on pikselitaide eikä renderöijä. */
-      const shade = clamp(0.55 + (f.depth + 1) * 0.3, 0.35, 1);
       const base = TIER_COLORS[Math.max(1, pipsFor(worldMedian(f.i)))];
-      ctx.globalAlpha = door || isHere ? 1 : 0.55;
-      ctx.fillStyle = lit ? base : shadeHex(base, shade * (door ? 0.85 : 0.55));
+
+      tri(ctx, f.pts, 0, 0);
+      ctx.fillStyle = lit ? shadeHex(base, TONES[0]) : shadeHex(base, TONES[step]);
       ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = isTarget ? '#ffffff' : isHere ? '#ffd048' : '#20202e';
-      ctx.lineWidth = lit ? 2 : 1;
+      /* Paksu reunus on se joka lukee pursotuksena ilman geometriaa:
+       * oktaedrin tahkojen oikea pursotus jättää raot särmiin, kolmen
+       * pikselin muste ei. */
+      ctx.strokeStyle = isTarget ? '#ffffff' : isHere ? '#ffd048' : INK;
+      ctx.lineWidth = 3;
       ctx.stroke();
 
       /* Kappaleena nimen saa **vain lähin tahko**. Ilman tätä takatahkojen
        * nimet vuotivat etutahkon läpi ja noppa luki lasilta. */
-      const nearest = faces[faces.length - 1];
       if (flatT > 0.4 || f === nearest) {
         const cx = (f.pts[0][0] + f.pts[1][0] + f.pts[2][0]) / 3;
-        const cy = (f.pts[0][1] + f.pts[1][1] + f.pts[2][1]) / 3;
+        /* A centroid is the middle of the *area*, not the middle of the room:
+         * two thirds of the way towards the apex, a 62-wide triangle is only
+         * 41 wide, and an eight-letter name is 47. So the label steps towards
+         * the base — down for the triangles that point up, up for the ones
+         * that point down — which is where the width it needs actually is. */
+        const towardsBase = flatT > 0.5 ? (STRIP.indexOf(f.i) % 2 ? -6 : 6) : 0;
+        const cy = (f.pts[0][1] + f.pts[1][1] + f.pts[2][1]) / 3 + towardsBase;
         const name = WORLDS[f.i].name;
-        const short = name.length > 8 ? `${name.slice(0, 7)}.` : name;
+        const short = name.length > 7 ? `${name.slice(0, 6)}.` : name;
+        // Dark ink on the two light tones, light ink on the deepest one.
+        const ink = lit || step < 2 ? '#101018' : '#d8d8e8';
         ctx.globalAlpha = flatT > 0.4 ? clamp((flatT - 0.4) * 3, 0, 1) : 0.95;
-        drawText(ctx, short, cx, cy - 3, {
-          color: lit ? '#101018' : '#0c0c14', align: 'center',
-        });
+        drawText(ctx, short, cx, cy - 3, { color: ink, align: 'center' });
         const pips = Math.max(1, pipsFor(worldMedian(f.i)));
         for (let n = 0; n < 5; n++) {
-          ctx.fillStyle = n < pips ? '#101018' : 'rgba(16,16,24,0.35)';
+          ctx.fillStyle = n < pips ? ink : 'rgba(16,16,24,0.35)';
           ctx.fillRect(Math.round(cx - 10 + n * 4), Math.round(cy + 6), 2, 3);
         }
         ctx.globalAlpha = 1;
-        void tier;
       }
     }
 
@@ -390,11 +562,20 @@ export class DieScene {
         color: '#50506a', align: 'center',
       });
     } else {
-      const label = this.phase === 'solid' ? 'MAAILMOJA KAHDEKSAN'
+      const label = this.phase === 'solid' || this.phase === 'settling' ? 'MAAILMOJA KAHDEKSAN'
         : this.phase === 'opening' ? 'NOPPA AUKEAA' : 'NOPPA SULKEUTUU';
       drawText(ctx, label, 160, 210, { color: '#50506a', align: 'center' });
     }
   }
+}
+
+/** One triangle as a path. `dx`/`dy` is how the drop shadow is offset. */
+function tri(ctx, pts, dx, dy) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0] + dx, pts[0][1] + dy);
+  ctx.lineTo(pts[1][0] + dx, pts[1][1] + dy);
+  ctx.lineTo(pts[2][0] + dx, pts[2][1] + dy);
+  ctx.closePath();
 }
 
 /** Hex-värin himmennys kertoimella. Pikselitaiteen ainoa valaistus. */

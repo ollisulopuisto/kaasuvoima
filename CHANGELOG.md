@@ -7,6 +7,115 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.49 — the die lies down on a floor
+
+Owner: *"I think for the map I prefer iso 2.5D."*
+
+The five pieces the prototype identified are all in, and the two that mattered
+most were the two nobody could have picked from a still image.
+
+**The geometry.** An octahedron looked at straight down one of its faces shows
+exactly **one** face — the three that touch it sit at 109° and every one of
+them points away from you. Face-on is therefore the single angle at which this
+shape cannot prove it has a volume, and it was the angle the die had been
+resting at all along. `ISO_TILT` 0.60 and `ISO_YAW` 0.58 turn it off-axis in
+both directions, which brings three faces and a shared vertex into view. That
+is what says "solid" before any shading is applied at all — and it is why the
+depth ramp could then be quantised down to **three tones** without the shape
+going flat. Continuous shading had been carrying the volume; now the silhouette
+does, and shading is free to look drawn.
+
+**The timing.** Isometric means a fixed camera, and a fixed camera cannot
+survive the forty frames of rotation that teach the eye this is a solid. The
+plan was spin → settle → open, and it was right; what it missed is that the
+settle needs a **beat of stillness at the end of it**. Without `ISO_BEAT` the
+die reached the isometric angle and began coming apart on the same frame, so
+the fixed camera existed for zero frames and the whole look was a claim the
+picture never made.
+
+The rest is what was written down: three quantised tones per tier colour, a
+hard drop shadow, a floor of chunky dots, the net **lying down on that floor**
+in the same projection rather than flat against the glass, and a three-pixel
+silhouette that reads as extrusion without any extrusion in the geometry. The
+shadow's trick is worth naming — it is not a dark shape drawn on the floor, it
+is a **hole punched in the dots**, which is the only way a hard shadow reads on
+a black ground.
+
+The net's own numbers moved with the projection: `FLOOR_SQUASH` 0.62 eats a
+third of every vertical measurement, so the strip triangles went 58 tall to 74
+to arrive at the same 46 on screen. And a name now sits nearer its triangle's
+**base** than its centroid, because two thirds of the way towards the apex a
+62-wide triangle is only 41 wide, and the names were 47.
+
+---
+
+## v26.08.19.48 — the road says it, not the sky
+
+Owner: *"when the player crosses speed X, we render a speed sign into the bg
+offscreen, have it scroll into view and then disappear. No flashing there."*
+And: *"the world-level display could similarly just scroll into view and then
+scroll off the screen as the player moves."*
+
+Both of those need the same thing, and the backdrop did not have it: **a
+position**. Everything back there — hills, cacti, pipes, clouds — is generated
+from the camera every frame, which is right for scenery and useless for
+anything the game wants to say at a particular place. `src/gfx/props.js` is the
+one part of the backdrop with a list.
+
+A prop is placed **off the right edge** and is scenery from that moment on: it
+scrolls in at the layer's own rate, passes, and is reaped on the left. Nothing
+can move it afterwards. That is the whole trick — a sign that appears in front
+of you is a notification, and a sign that slides in from beyond the edge has
+been standing by that road the entire time.
+
+Two things use it:
+
+- **The level name.** It was smoke writing in the sky; it is now a roadside
+  board, on the same `NAME_CYCLE` rhythm so the name can still be *gone back
+  to* rather than read once and lost. The sky writing stays in the levels where
+  the camera climbs instead of running — a sign beside a road that is not there
+  can never arrive — and the gate now asserts the split, because the same name
+  in two places at once is DESIGN.md item 8 broken in the most literal way this
+  game can break it.
+- **Speed limits, escalating.** Hold full P-speed and one more sign turns out
+  to have been standing there: 30, then 50, then 80, then 120, then the
+  end-of-restrictions sign. The road keeps conceding and finally stops trying,
+  which only works in that direction — a road that revised the limit back
+  *down* would be nagging. `SIGN_GAP` 640 px of camera keeps the four beats
+  apart.
+
+Post height is a clearance measurement, not a look: props stand on the
+backdrop's ground line, which is the bottom of the screen, and the bottom rows
+of the screen are tilemap drawn over this layer afterwards. 52 px clears three
+rows of tiles, and the post vanishing into the ground is what a post should do.
+
+---
+
+## v26.08.19.47 — a red coin looks like sixty-four yellow ones
+
+Owner: *"the red coins are WAY TOO SMALL in relation to the yellow ones.
+Shouldn't the red ones be bigger? That would make conceptual sense, too."*
+
+It does, and they were lying about the scale. A red coin **is** `RED_COST` — 64
+yellow ones — and it was drawn three visible pixels tall and narrower than the
+yellow row beside it. The pile should look like what it cost.
+
+Discs go 5 px to 9 with the step 3 to 6, so a life now stands taller than six
+yellow coins stacked. That is still far less than sixty-four, and it is not
+meant to be a scale drawing: what the eye reads is the **order**, and the order
+was wrong.
+
+**The tube widened, 10 px to 14, and that was free only now.** `OVERLAY.left`
+sat at 18 precisely because the tube owned the edge — and there is nothing left
+in that corner to avoid. The score left on the 18th, the coin count with it, and
+the life pips the day after. Three readouts had to go before the fourth could
+have their room.
+
+The height scale is untouched: two pixels per coin and a hundred coins to the
+tube are measured numbers, and width has no part in them.
+
+---
+
 ## v26.08.19.46 — the world die, and it opens
 
 Owner: *"maybe I wasn't being clear: I wanted new VISUALS and a new GAME

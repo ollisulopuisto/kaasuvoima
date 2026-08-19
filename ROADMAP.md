@@ -505,6 +505,147 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### ✔ The overworld goes isometric 2.5D — built 19.8.2026
+
+*(Owner, 19.8.2026, having compared four renderings of the world die:
+"I think for the map I prefer iso 2.5D." The comparison is the artifact
+"Four Dice"; the four looks were the deployed one, chunky contours, isometric,
+and both together.)*
+
+All five pieces are in `src/scenes/die.js` now. The decision was the **look**,
+and the pieces it needed were prototyped cheapest first, in this order:
+
+1. **Three quantised tones per tier colour** instead of a continuous depth ramp.
+   This single change is most of the look: a ramp reads as a render, three steps
+   read as something drawn by hand.
+2. **A hard drop shadow** — the silhouette, flat, offset down and right, no
+   blur. On a black ground it does more for depth than shading does.
+3. **A floor of chunky dots.** Without a floor there is nothing for the shadow
+   to fall on and nothing to fix the camera angle.
+4. **The net lies down on that floor** when the die opens, in the same
+   projection, rather than lying flat against the glass. That is the whole idea
+   in one move: a solid becomes a map without becoming a different object. The
+   squash is 0.62 — 0.42 was tried and pressed the open map into an unreadable
+   band.
+5. **A thick silhouette outline**, two or three chunks of the darkest tone,
+   which reads as extrusion without the geometry. Extruding an octahedron's
+   faces for real leaves gaps where they meet.
+
+**The price, and it is real:** isometric means a fixed camera, and the forty
+frames of slow rotation that teach the eye this is a solid cannot survive one.
+Resolved the way the note guessed — spin, settle, then open — with one thing
+the note did not foresee: the settle needs a **beat of stillness at the end of
+it** (`ISO_BEAT`, 16 frames). Without it the die arrived at the isometric angle
+and started coming apart on the same frame, so the fixed camera the whole look
+is built on existed for exactly zero frames.
+
+The second surprise was geometry rather than timing. An octahedron looked at
+straight down one of its faces shows **one** face — the three that touch it sit
+at 109° and all point away — so the resting orientation could not be `facing()`
+alone. `ISO_TILT` 0.60 and `ISO_YAW` 0.58 turn it off-axis in both directions,
+which brings three faces and a shared vertex into view. That is what says
+"solid" without any shading at all, and it is why the tone quantisation could
+be taken as far as three steps without the shape going flat.
+
+Chunky contour bands were prototyped alongside and are **not** part of this
+decision. If they come back, note what made them work: the small buffer has to
+be quantised — alpha snapped to 0 or 255 and colour snapped to the palette —
+because canvas antialiases every polygon and scaling that up gives a blurred
+render rather than pixel art.
+
+### The ghost car, and where it belongs: telemetry
+
+*(Owner, 19.8.2026: "we've been talking about telemetry, but we definitely
+gotta include a ghost car run mechanic in there, right? So you can compete
+against yourself, and maybe that'll unlock something as well." — and yes, the
+frame is telemetry, not time attack. That is the useful part.)*
+
+Two halves of this are already built and they are in **different** places,
+which is the thing to notice before anyone starts.
+
+Time attack (`startRace` in `level.js`) already stores your best run per level
+and mode, compares against it at `RACE_SPLITS` checkpoints, and says which
+side of it you are on with a flash and two sounds (`edella` / `jaljessa`).
+What it stores is eight numbers. A ghost needs a path.
+
+Telemetry (`src/core/telemetry.js`) already records where you were when
+something happened — level id, tile coordinate, cause, power level — capped at
+`MAX_EVENTS` 800 and never leaving the browser. It is the right machinery and
+the wrong *shape*: it records events, and a ghost is the continuous line
+between them.
+
+So the ghost is a third thing built out of both, and the design question it
+forces is worth writing down now rather than discovering later:
+
+- **A trace is not anonymous the way an event log is.** `telemetry.js` opens
+  by promising anonymity *by construction* — no run id, no wall clock, nothing
+  that ties two records together. A path is a run id: it is one continuous
+  record of one person playing one level, with their hesitations in it. Kept
+  local it is harmless, and it must stay local — but ROADMAP §2 phase 4
+  contemplates sending telemetry somewhere one day, and a death histogram and
+  a movement trace are not the same thing to send. **Separate store, separate
+  key, and the sending decision never inherits the ghost.**
+- **What is recorded.** Position per frame is enough to be a ghost, not enough
+  to be *you* — a ghost that slides is a cursor. Facing, animation phase and
+  airborne-or-not make it read as a player.
+- **What it costs.** A minute-long run is 3600 frames; x and y as 16-bit ints
+  is 14 KB per level, times sixty-five levels. Sampling every fourth frame and
+  interpolating brings the set to roughly 230 KB, which localStorage holds.
+  Every frame for the whole game does not.
+- **What it unlocks.** The owner's "maybe that'll unlock something" is the
+  open half. Beating your own ghost is a *personal* achievement while the
+  world die's completeness bonuses are **global** ones, so a door hung on it
+  opens at a different real difficulty for every player — which is either the
+  best thing about it or the reason not to do it. Decide before building.
+
+Save compatibility (DESIGN.md item 6): a trace is new data, so it is additive
+and absent-tolerant. An old save has no ghost and the level plays exactly as
+it does today.
+
+#### Sharing turns the privacy problem into the feature
+
+*(Owner, 19.8.2026: "running against your own personal ghost is a personal
+achievement, that much is true. But then we can ask the player — hey, would
+you like to share this for others to compete against? Which is explicit
+sharing of their data, which we can then use for level development.")*
+
+This resolves the thing above rather than sidestepping it. The trace is
+awkward *because* it is a record of one person playing; asking that person
+whether to publish it is not a workaround for the awkwardness, it is the only
+correct use of it. And the moment to ask is the moment the answer means
+something — right after they beat their own best, when they are proud of the
+run — rather than a checkbox on a settings page that nobody reads and nobody
+remembers agreeing to.
+
+Two things about *where a shared ghost goes*, and they are not the same
+question:
+
+**Player to player: the carrier already exists, and has a decided shape.**
+`challenge.js` already sends a result to a friend in a link — no server, no
+endpoint, no global table, which is the standing decision *"pistetaulu ei mene
+palvelimelle, tulos menee linkkiin"*. A shared ghost is the same idea one step
+deeper: not "I scored 45200" but "here is the run, beat it." But it does not
+fit the same envelope. That file is explicit that every parameter is short
+because the link is read **on a phone's address bar**, and a trace is
+hundreds of bytes at best — delta-encoded and varint-packed, a minute of
+running is perhaps 600–900 bytes, which is a fine thing to paste into a chat
+and a terrible thing to look at. So the ghost is a *second* carrier alongside
+the challenge link, not a fourth parameter on it, and choosing between a long
+link and a small file is a real decision rather than a detail.
+
+**Player to us: it is a different act, and it needs its own asking.** A
+friend-to-friend link gives level development nothing — it never comes past
+the two of them, which is exactly what makes it safe. Getting traces back for
+level work therefore cannot ride on the same yes. The honest shape is the one
+`telemetry.js` already uses for its own log: **export is a file the player
+chooses to hand over** (`downloadExport`). Same artifact, second destination,
+second question. Anything else means building the server this project decided
+twice not to build.
+
+One warning about the asking itself: a prompt after every personal best is
+nagging, and a nagged yes is not consent. Ask once per level, remember a no,
+and never ask again for that level.
+
 ### A speed skill that pays while you are already fast
 
 *(Owner, 19.8.2026, on the pumping rhythm: "is the whole mechanism overwrought,
@@ -538,6 +679,71 @@ Everything the removal left behind is still in git: the beat clock, the window,
 the tick and the rising hit sound, and `Music.beatFrames`, which locked the
 period to the playing track's own tempo. If a rhythm ever comes back, it comes
 back on the music.
+
+### Generative level design worth stealing from
+
+*(Owner, 19.8.2026: "search GitHub and the web for generative level creation
+mechanisms. The current levels still feel too… flat, not just literally but
+there's not enough variation. Something fractal, generative, organic, genetic?")*
+
+Not started — a research task, and the brief is **variation** rather than
+novelty for its own sake. What the generator does today is honest and narrow: it
+samples mined pacing histograms for rhythm and arranges this game's own set
+pieces against a measured jump budget. Every level therefore has the same
+*grammar*, and that is exactly what "not enough variation" means — the pieces
+differ, the sentence structure does not.
+
+Worth reading up on before writing anything: search-based procedural generation
+with a fitness function (the difficulty meter is already a fitness function),
+genetic approaches that breed and mutate whole levels, cellular automata for
+cave systems, WaveFunctionCollapse for local-constraint tiling, grammar-based
+expansion. The measuring rig this repo already has — `difficulty.mjs`,
+`playable.mjs`, `variety.mjs`, `curriculum.mjs` — is the expensive half of any
+search-based method, and it exists.
+
+### Trouble jumping in 1-1 (19.8.2026, unresolved)
+
+Owner, playing the deployed build: *"I had trouble jumping in 1-1!"*
+
+**First suspect, and it is ours.** The slope catapult cleared `coyote` on launch
+(v26.08.19.42), on the grounds that a body thrown by a ramp did not walk off an
+edge. That removed a free full jump that had existed, untimed, since slopes did
+— and 1-1 has slopes now, because it took `terrain: '1-1a'` in the terrain pass
+(v26.08.19.35). So the level most people play most has both a new ground profile
+and one fewer forgiving jump, and both arrived within a day.
+
+`playable.mjs` still clears 1-1 at power 0, so nothing is impossible — this is
+about feel, which is the thing the gates cannot measure. Check in this order:
+whether the coyote clear is what changed it, whether the terrain seed `1-1a`
+put a ramp where the first jumps are, and only then anything about the jump
+itself.
+
+### Two overworld ideas from play, not yet built
+
+*(Owner, 19.8.2026.)*
+
+**Speed limit signs in the parallax.** The owner's idea, and stated exactly:
+when the player crosses speed X, a road sign is placed into the backdrop
+**off-screen**, scrolls into view as they run, and leaves. Nothing flashes and
+nothing is posted on the HUD — the sign reads as scenery that was always
+standing there, while actually being a reaction to how fast they are going.
+
+A joke first, and useful second: it would be the only place the game ever names
+its three speed tiers (walk 1.5, run 2.5, P 3.5).
+
+Two things to get right when building it. The sign has to be inserted far enough
+ahead that its arrival is never seen — the whole trick dies if it pops in. And
+the backdrop draws procedurally per theme rather than from level data, so this
+needs a small list of live props with world positions, which the backdrop does
+not have today.
+
+**The world-level card scrolls through instead of being posted.** Same trick
+applied to `MAAILMA 1-1`: it enters from one side, passes, and leaves as the
+player moves, rather than appearing and fading in place.
+
+Both share one idea worth keeping: a readout that arrives *through the world*
+is furniture, and furniture is the direction every HUD element in this game has
+already gone.
 
 ### Render audio offline instead of listening to it live
 

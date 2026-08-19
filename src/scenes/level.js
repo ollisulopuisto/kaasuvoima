@@ -7,6 +7,7 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
+import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
@@ -103,8 +104,10 @@ const HURRY_TIME = 100;
  * kysymys "mikä näistä pitää olla näkyvissä silloinkin kun se ei kerro mitään".
  * Vastaus oli: ei mikään.
  *
- *   `left`  18  Vasen ylänurkka. 18 eikä 6, koska kolikkoputkilo vie reunan
- *               (`TUBE_X` 3 + `TUBE_W` 10 = 13, ja viisi pikseliä väliin).
+ *   `left`  18  Vasen ylänurkka, ja **tyhjä 19.8.2026 alkaen**: pisteet,
+ *               elämät ja kolikkoluku ovat kaikki lähteneet ruudulta. Luku on
+ *               yhä tässä koska se on putkilon oikea raja (`TUBE_X` 3 +
+ *               `TUBE_W` 14 = 17), eli se kertoo mihin asti reuna on varattu.
  *   `right` 314 Oikea ylänurkka, oikeaan reunustettuna.
  *   `box`   294 Varalokero, oikea alanurkka. Sama x kuin kartan paneelissa.
  *
@@ -157,7 +160,24 @@ const HUD_DIM = 0;
  * koko putkilo.
  */
 const TUBE_X = 3;
-const TUBE_W = 10;
+/*
+ * PUTKILON LEVEYS, ja se kasvoi 10:stä 14:ään (19.8.2026).
+ *
+ * Omistaja: *"the red coins are WAY TOO SMALL in relation to the yellow ones.
+ * Shouldn't the red ones be bigger? That would make conceptual sense, too."*
+ *
+ * Ja tekee: punainen kolikko **on** 64 keltaista (`RED_COST`), joten se joka on
+ * kolme pikseliä korkea ja kapeampi kuin keltainen rivi valehtelee mittakaavasta
+ * — pinon pitää näyttää siltä mitä se maksoi.
+ *
+ * Leveneminen oli ilmaista, ja se on ilmaista **vasta nyt**: `OVERLAY.left` oli
+ * 18 juuri siksi että putkilo vei reunan (`TUBE_X` 3 + `TUBE_W` 10 = 13), ja
+ * yläkulmassa ei ole enää mitään mitä väistää — pisteet, kolikkoluku ja
+ * elämälukema ovat kaikki lähteneet. Korkeusasteikkoon ei koskettu: kaksi
+ * pikseliä kolikkoa kohti ja sata kolikkoa koko putkilo ovat mitattuja lukuja
+ * eikä leveydellä ole niihin osaa.
+ */
+const TUBE_W = 14;
 const TUBE_PAD = 4;
 const COIN_PX = 2;
 export const COIN_CAP = 100;
@@ -217,9 +237,15 @@ export const COIN_CAP = 100;
  * pino luetaan pinoksi eikä palkiksi, ja jokainen kiekko on silti erikseen
  * laskettavissa. Se on juuri se ero jota omistaja pyysi — punaisia on *tasan*
  * niin monta kuin niitä näkyy, keltaisia *suunnilleen* pinnan verran.
+ *
+ * Mitat kasvoivat 19.8.2026 (5/3 -> 9/6) samasta syystä kuin putkilo leveni:
+ * yksi punainen on 64 keltaista, ja kolmen pikselin raita ei ole 64:n näköinen.
+ * Nyt kiekko on korkeampi kuin kuusi keltaista kolikkoa päällekkäin, mikä on
+ * yhä vähemmän kuin sen hinta — mutta se on **enemmän** kuin naapurinsa, ja
+ * suuruusjärjestys on se minkä silmä lukee.
  */
-export const TUBE_RED_H = 5;
-export const TUBE_RED_STEP = 3;
+export const TUBE_RED_H = 9;
+export const TUBE_RED_STEP = 6;
 /** Kuinka monta kiekkoa piirretään yksitellen; loput ovat plus. */
 export const TUBE_RED_MAX = 10;
 
@@ -268,6 +294,23 @@ const NAME_CYCLE = 1080;
 const NAME_FADE = 45;
 /** Kirjoituskorkeus: sen verran ylhäällä ettei se ole mäkien seassa. */
 const NAME_Y = 22;
+
+/**
+ * THE ROAD ARGUES BACK.
+ *
+ * Every time the player holds full P-speed, one more limit sign has been
+ * standing by the road all along — 30, then 50, then 80, then 120, and then
+ * the sign that says the road has stopped setting limits. It is a joke with
+ * four beats, so it needs four beats of room: `SIGN_GAP` pixels of camera
+ * between them, which at running speed is several seconds and never two signs
+ * in one straight.
+ *
+ * The escalation is the whole gag and it only works in one direction. A road
+ * that raised the limit *back down* would be nagging; a road that keeps
+ * conceding is funny, and the last sign is the concession.
+ */
+const SIGN_LIMITS = [30, 50, 80, 120, 0];
+const SIGN_GAP = 640;
 
 /*
  * AIKA-AJON JAKO. Nauhan kadottua tämä on ainoa lukema joka ilmestyy keskelle
@@ -1790,6 +1833,16 @@ export class LevelScene {
      * `driftFrames` framea siitä kun se viimeksi siirtyi. Ks. `DRIFT_GRACE`. */
     this.driftAt = { x: 0, y: 0 };
     this.driftFrames = 0;
+
+    /* Roadside props. Everything about them is in `src/gfx/props.js`; what
+     * belongs here is only *when* one is placed, which is the part that knows
+     * about the level. `signLimit` walks the escalating limits and `signAt`
+     * is the camera position of the last one, so the road cannot shout three
+     * numbers at the same straight. */
+    this.props = new PropLayer();
+    this.signLimit = 0;
+    this.signAt = -1e9;
+    this.cardAt = -1e9;
     this.stallFrames = 0;
     this.stuckLogged = new Set();
     this.telemetryDone = false;
@@ -4563,6 +4616,7 @@ export class LevelScene {
     this.updateEntities();
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
+    this.updateProps();
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
@@ -6160,6 +6214,11 @@ export class LevelScene {
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock);
+    /* Props sit in front of the haze that softens the hill/tilemap seam: they
+     * are roadside and the hills are landscape, so the haze belongs behind
+     * them. Still behind the camera translate — a prop is backdrop, and the
+     * layer does its own parallax. */
+    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop);
     /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
      * taustan päälle ja ennen kameraa: savukirjoitus on kaukana, eikä kaukana
      * oleva liiku kameran mukana kuin nimeksi. */
@@ -6429,8 +6488,60 @@ export class LevelScene {
    * Ei linnakkeessa eikä muissa sisätiloissa (`bg === 'none'`): siellä ei ole
    * taivasta johon kirjoittaa, ja seinään ilmestyvä teksti olisi taas HUD.
    */
+  /**
+   * WHEN A SIGN IS PLACED. Where and how it is drawn is `src/gfx/props.js`.
+   *
+   * Both of the things the road says are placed here rather than drawn here,
+   * and that is the point of the split: placing is a level decision (how fast
+   * is the player going, how long since the name was last said) while drawing
+   * is scenery. Once placed, neither the level nor the player can move a prop
+   * — it stands in the world and the world scrolls past it.
+   *
+   * Only where there is a road. A vertical level's camera climbs instead of
+   * running, so a roadside sign would never arrive; there the name goes back
+   * to the sky, which is why `drawSkyName` tests the same two conditions from
+   * the other side. One level, one way of saying it — DESIGN.md item 8.
+   */
+  updateProps() {
+    const camX = this.cam.x;
+    this.props.update(camX, VIEW_W);
+    if (this.vertical || this.def.bg === 'none') {
+      /* A segmented level can turn vertical **under a sign that is already
+       * standing there** (`this.vertical` is per segment, not per level). The
+       * layer is reaped by camera movement and a climb has almost none, so a
+       * sign left behind would not scroll away — it would park in mid-air for
+       * the rest of the climb. Clearing is the only honest answer, and the
+       * name's clock is reset with it so the road says it again when there is
+       * a road again. */
+      if (this.props.list.length) {
+        this.props.clear();
+        this.cardAt = -1e9;
+      }
+      return;
+    }
+    if (this.state !== 'play') return;
+
+    /* The name keeps the cycle the sky writing kept: once on arrival, and
+     * again every NAME_CYCLE, so the name can be *gone to look at* rather
+     * than read once and lost. */
+    if (this.tick - this.cardAt > NAME_CYCLE && !this.props.has('card')) {
+      this.cardAt = this.tick;
+      this.props.place('card', camX, VIEW_W, { text: this.title });
+    }
+
+    if (this.player && this.player.pFull && this.signLimit < SIGN_LIMITS.length
+        && camX - this.signAt > SIGN_GAP && !this.props.has('speed')) {
+      this.props.place('speed', camX, VIEW_W, { limit: SIGN_LIMITS[this.signLimit] });
+      this.signLimit++;
+      this.signAt = camX;
+    }
+  }
+
   drawSkyName(ctx) {
-    if (this.def.bg === 'none') return;
+    /* Vertical levels only, since #111: where the camera runs sideways the
+     * name is a roadside board instead (`updateProps`), and the same name in
+     * two places at once is the thing DESIGN.md item 8 forbids. */
+    if (this.def.bg === 'none' || !this.vertical) return;
     const t = this.tick;
     let a = 0;
     if (t < NAME_INTRO) {
