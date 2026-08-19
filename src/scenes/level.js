@@ -3489,37 +3489,42 @@ export class LevelScene {
     const lives = Math.max(0, this.game.state.lives | 0);
     const reds = Math.min(TUBE_RED_MAX, lives);
     /*
-     * KAKSI KOLMASOSAA LEVEYDESTÄ, ei koko lasia.
+     * TOO BIG FOR THE GLASS, and that is the point.
      *
-     * Omistaja: *"let's have the reds cover 2/3 of the yellows sideways."* —
-     * ja se on parempi kuin edellinen yritys kahdesta syystä. Ensimmäinen on
-     * luettavuus: kolmasosa keltaista jää näkyviin **koko matkalta**, joten
-     * pinta on aina luettavissa eikä kymmenen elämän pino peitä kelloa juuri
-     * silloin kun se on loppumassa. Toinen on että sivuttain limittäin menevät
-     * pinot ovat *kaksi pinoa samassa lasissa* eivätkä kerros toisen päällä —
-     * mitä pyydettiinkin.
+     * Owner: *"the red coins are SMALLER than the golden ones!"* — and they
+     * were, in the only dimension the eye uses to compare two coins. A red
+     * disc was two thirds of the tube's width against a yellow coin's full
+     * width, so it was **narrower than the thing it is worth sixty-four of**.
+     * Taller, yes, and nobody reads height as size when the widths differ.
      *
-     * Sisätila on 8 px, joten punaiset ovat 5 px ja keltaista jää 3 px.
+     * The fix keeps the 2/3 sideways overlap that was asked for earlier and
+     * gets the size back by moving the stack **left, out of the tube**: a red
+     * disc is now as wide as the whole yellow column and hangs over the
+     * glass's left wall. Two thirds of the yellow column is covered exactly as
+     * before — the right third stays readable the whole way up — but the disc
+     * that does the covering is no longer a smaller object. It is an object
+     * that does not fit, which is what sixty-four coins should look like.
      */
-    const redW = Math.max(2, Math.round((innerW * 2) / 3));
+    const redW = innerW;
+    const redX = Math.max(0, inner - 4);
     for (let i = 0; i < reds; i++) {
       const y = Math.round(box.bottom - 1 - (i + 1) * TUBE_RED_STEP - (TUBE_RED_H - TUBE_RED_STEP));
       ctx.fillStyle = '#5c0c0c';
-      ctx.fillRect(inner, y, redW, TUBE_RED_H);
+      ctx.fillRect(redX, y, redW, TUBE_RED_H);
       ctx.fillStyle = '#d83030';
-      ctx.fillRect(inner, y, redW - 1, TUBE_RED_H - 1);
+      ctx.fillRect(redX, y, redW - 1, TUBE_RED_H - 1);
       /* Korostus on punainen eikä vaaleanpunainen, ja se on mittausvirhe eikä
        * makuasia: `#ff8a8a` on vihreältä kanavaltaan 138, ja portti lukee
        * kullaksi kaiken minkä vihreä on yli 130 — eli elämäpino olisi
        * kasvattanut keltaisen mitattua korkeutta. */
       ctx.fillStyle = '#ff6060';
-      ctx.fillRect(inner + 1, y + 1, redW - 3, 1);
+      ctx.fillRect(redX + 1, y + 1, redW - 3, 1);
     }
     if (lives > TUBE_RED_MAX) {
       const y = box.bottom - 1 - reds * TUBE_RED_STEP - TUBE_RED_H;
       ctx.fillStyle = '#ff6060';
-      ctx.fillRect(inner + 1, y - 2, redW - 2, 1);
-      ctx.fillRect(inner + Math.floor(redW / 2) - 1, y - 4, 1, 5);
+      ctx.fillRect(redX + 1, y - 2, redW - 2, 1);
+      ctx.fillRect(redX + Math.floor(redW / 2) - 1, y - 4, 1, 5);
     }
 
     if (this.tubeFlash > 0 && shown > 0) {
