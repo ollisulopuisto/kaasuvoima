@@ -10286,9 +10286,17 @@ const report = await page.evaluate(async () => {
 
     game.debug = true;
     game.debugWarp();
-    const moved = game.state.world !== world0 && game.state.debugWarped === true;
-    expect('the debug warp needs the overlay and marks the run',
-      blocked && moved, `ilman debugia ${blocked}, debugilla ${moved}`);
+    /* Warppi vie nyt oville eikä maailmaan `n + 1` (19.8.2026), koska maailmat
+     * ovat kuution kärkiä: numeron kasvattaminen olisi ainoa paikka pelissä
+     * joka kulkee seinän läpi. Merkintä tehdään heti, maailma vaihtuu vasta
+     * kun ovi valitaan — joten "liikkui" tarkoittaa nyt "ruutu tarjoaa ovia". */
+    const doorScene = game.scene && game.scene.constructor.name === 'DoorScene';
+    const moved = doorScene && game.state.debugWarped === true;
+    if (doorScene) game.scene.pick(game.scene.doors[0].i);
+    const landed = game.state.world !== world0;
+    expect('the debug warp needs the overlay, marks the run and offers doors',
+      blocked && moved && landed,
+      `ilman debugia ${blocked}, debugilla ovet ${moved}, ovesta läpi ${landed}`);
 
     scores.clearScores();
     game.state.score = 999999;
@@ -10350,15 +10358,24 @@ const report = await page.evaluate(async () => {
       !!link && map.isLinkOpen(link),
       link ? `${link.a}->${link.b} auki ${map.isLinkOpen(link)}` : 'ei linkkiä');
 
-    /* Kartalla sama näppäin tarkoittaa yhä maailmaa. */
+    /*
+     * Kartalla sama näppäin tarkoittaa yhä maailmaa — mutta **ovea** eikä
+     * seuraavaa numeroa (19.8.2026). Väite on nyt se joka kuutiosta seuraa:
+     * warpilla päädytään naapuriin, eli kohteen ja lähdön indeksit eroavat
+     * tasan yhdellä bitillä. Se on tiukempi väite kuin vanha `+1`, koska se
+     * kaatuu myös silloin jos ovilista joskus lakkaa olemasta kuutio.
+     */
     reset();
     game.debug = true;
     const before = game.state.world;
     game.toWorldMap();
     game.debugWarp();
-    expect('kartalla ohitusnäppäin vie yhä seuraavaan maailmaan',
-      game.state.world === (before + 1) % worldmap.WORLDS.length,
-      `${before} -> ${game.state.world}`);
+    const offered = game.scene && game.scene.constructor.name === 'DoorScene';
+    if (offered) game.scene.pick(game.scene.doors[0].i);
+    const step = before ^ game.state.world;
+    expect('kartalla ohitusnäppäin vie oville, ja ovi vie naapuriin',
+      offered && step !== 0 && (step & (step - 1)) === 0,
+      `${before} -> ${game.state.world}, ovia tarjottiin ${offered}`);
 
     game.debug = false;
     game.state.debugWarped = false;
@@ -10384,7 +10401,9 @@ const report = await page.evaluate(async () => {
     game.paused = true;
     game.debugWarp();
     const cleared = game.paused === false;
-    const onMap = game.scene.constructor.name === 'WorldMapScene';
+    /* Warppi vie oville, ja ovet ovat yhtä lailla "jokin muu ruutu": tämä
+     * väite koskee `paused`-lippua eikä sitä mihin päädyttiin. */
+    const onMap = game.scene.constructor.name === 'DoorScene';
 
     /* Asserted on the flag and not by running a frame: `game.step()` drives the
      * whole loop, including the attract-mode idle counter, and a test that

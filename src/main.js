@@ -697,15 +697,23 @@ class Game {
       this.finishLevel({ cleared: true, card: null });
       return;
     }
-    const next = (this.state.world + 1) % WORLDS.length;
-    this.state.world = next;
-    this.state.worldsOpen = Math.max(this.state.worldsOpen, next + 1);
-    this.state.node = startNode(WORLDS[next]).id;
+    /*
+     * WARPPI KULKEE OVESTA, EI NUMEROSTA (19.8.2026).
+     *
+     * Tässä luki `(world + 1) % WORLDS.length`, ja se oli oikein niin kauan
+     * kuin maailmat olivat jono. Ne ovat kuution kärkiä (`worldDoors`), joten
+     * numeron kasvattaminen olisi ainoa paikka pelissä joka kulkee seinän
+     * läpi — ja nimenomaan se paikka jolla mekaniikkaa testataan, eli se olisi
+     * mennyt rikki huomaamatta juuri sitä testattaessa.
+     *
+     * Ovivalinta suoraan, ilman linnaketta: warppi on kehittäjän oikotie, ja
+     * oikotien kuuluu viedä samaan ruutuun johon linnakekin vie.
+     */
     this.state.debugWarped = true;
     this.persist();
-    this.toast(`WARP: MAAILMA ${next + 1} (PISTETAULU POIS)`);
+    this.toast('WARP: OVET (PISTETAULU POIS)');
     Sfx.play('powerup');
-    this.toWorldMap();
+    this.setScene(new DoorScene(this, this.state.world, (next) => this.enterWorld(next)));
   }
 
   /**
