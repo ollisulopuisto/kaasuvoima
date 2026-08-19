@@ -7,6 +7,31 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.45 — the debug warp goes through a door
+
+Owner, looking at the deployed game: *"hmm we're deployed but where's the cube
+map"* — and the honest answer is that the cube is a **rule**, not a screen. The
+world map is unchanged; the three doors appear after a fortress falls. Which
+made the fastest way to see the thing the one path that had not been moved onto
+the cube.
+
+`debugWarp` still read `(world + 1) % WORLDS.length`. That was right while the
+worlds were a queue and wrong the moment they became the vertices of a cube:
+incrementing an index is the one move in the game that walks through a wall —
+and it was the move a developer makes *to test the cube*. It would have gone
+wrong unnoticed precisely while being used to check that nothing had.
+
+The warp now opens `DoorScene`, the same screen the fortress opens. A shortcut
+should arrive where the long way arrives.
+
+Three gates moved with it, and one got stronger rather than weaker. *"kartalla
+ohitusnäppäin vie yhä seuraavaan maailmaan"* asserted `before + 1`; it now
+asserts that the world you land in differs from the one you left **by exactly
+one bit**. That fails if the door list ever stops being a cube, which the old
+form could not have noticed.
+
+---
+
 ## v26.08.19.44 — eight worlds on a cube, and three doors out of every one
 
 Owner: *"instead of moving on a 2D map, let's have the character move on an
