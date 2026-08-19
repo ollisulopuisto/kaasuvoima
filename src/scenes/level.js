@@ -6223,7 +6223,12 @@ export class LevelScene {
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the
      * layer does its own parallax. */
-    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop);
+    /* The ground a prop stands on is asked of the tilemap, column by column,
+     * rather than assumed to be the bottom of the screen — see `groundUnder`.
+     * Owner, from play: a speed sign on a level with a raised ledge had its
+     * post buried and its head hanging over a drop. */
+    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop,
+      (screenX) => this.groundUnder(screenX));
     /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
      * taustan päälle ja ennen kameraa: savukirjoitus on kaukana, eikä kaukana
      * oleva liiku kameran mukana kuin nimeksi. */
@@ -6493,6 +6498,34 @@ export class LevelScene {
    * Ei linnakkeessa eikä muissa sisätiloissa (`bg === 'none'`): siellä ei ole
    * taivasta johon kirjoittaa, ja seinään ilmestyvä teksti olisi taas HUD.
    */
+  /**
+   * THE SURFACE OF THE TILEMAP UNDER A SCREEN COLUMN, or null where there is
+   * none.
+   *
+   * Owner, from play: *"the speed signs etc should read the height of the
+   * terrain so they don't render partly under it."* They were standing on the
+   * backdrop's ground line, which is the bottom of the screen — right on a
+   * level whose floor is the bottom two rows, and wrong the moment the floor
+   * rises. The sign in the report had its post buried in a ledge and its head
+   * out over the drop beyond it.
+   *
+   * The column is the one **under the drawn sign**, not under the prop's own
+   * position: a prop is on a parallax layer and its world x is not the world x
+   * the player is walking along, so the honest question is "what is beneath
+   * this on the screen" and not "where is this in the world".
+   *
+   * Null where the column is empty — over a pit the sign keeps the backdrop's
+   * ground line, because the alternative is a signpost planted on nothing.
+   */
+  groundUnder(screenX) {
+    const tx = Math.floor((screenX + this.cam.x) / TILE);
+    if (tx < 0 || tx >= this.w) return null;
+    for (let ty = 0; ty < this.h; ty++) {
+      if (this.solidAt(tx, ty)) return Math.round(ty * TILE - this.cam.y);
+    }
+    return null;
+  }
+
   /**
    * WHEN A SIGN IS PLACED. Where and how it is drawn is `src/gfx/props.js`.
    *

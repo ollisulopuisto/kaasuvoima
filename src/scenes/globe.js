@@ -8,6 +8,8 @@ import { TIER_COLORS } from './worldmap.js';
 import { secretTally } from '../core/secrets.js';
 import { clamp } from '../core/utils.js';
 import { House } from './house.js';
+import { drawScenery } from '../gfx/scenery.js';
+import { hashNoise } from '../core/utils.js';
 import { qMul, qNorm, qSlerp, qApply, qAxis, qBetween } from '../core/quat.js';
 import { drawPlayer } from '../gfx/sprites.js';
 import { normalizePower } from '../entities/player.js';
@@ -54,8 +56,14 @@ import { FACES, HEX_COUNT, STRIP, onFace, sideAt } from '../data/solid.js';
 const VIEW_W = 320;
 const VIEW_H = 240;
 
-/** Screen radius of the solid, and how far away the eye is. */
-const R = 62;
+/**
+ * Screen radius of the solid.
+ *
+ * Grown from 62 once the labels moved into two bands: the top band ends at 36
+ * and the bottom begins at 174, so there are 138 pixels for the solid to be as
+ * big as it likes in. 68 fills them. Owner: *"we can make the shape bigger!"*
+ */
+const R = 68;
 const CAM_Z = 4.6;
 const CX = 160;
 const CY = 106;
@@ -235,6 +243,72 @@ function facesOfWorld(world) {
   return { byFace, rooms };
 }
 
+/**
+ * WHAT GROWS ON A FACE.
+ *
+ * Owner: *"bring back the dancing trees etc from the old 2d map, right?"* —
+ * and yes, because they are the difference between a place with weather and a
+ * shape with colours on it. The drawing is `gfx/scenery.js`, the same glyphs
+ * the flat map plants, swaying on the same clock.
+ *
+ * Where they go is decided once per face and never again: a ring of candidate
+ * spots, kept if the face's own noise says so and if they are clear of the
+ * roads. Deterministic, so a face looks the same every time you roll back onto
+ * it — a map whose trees moved while you were away would not be a map.
+ *
+ * They are laid out **between** the spokes rather than dodging them one at a
+ * time. The road has to have somewhere to be, which is the same rule
+ * `TALL_TERRAIN` exists for on the flat map, and the cheapest way to obey it
+ * is to never plant on the road in the first place.
+ */
+/* Only glyphs from `TALL_TERRAIN`. The flat ones — sand, plating, bare bone,
+ * cloud-surface — are *ground textures*: on the map they fill a tile the road
+ * runs over, and on a face they would draw a 16 px square of pattern standing
+ * on end. A face's own colour is its ground; what grows on it has to be a
+ * thing that grows. */
+const SCENERY_BY_THEME = {
+  grass: 'TTPTR',
+  desert: 'CCRCC',
+  ice: 'PMPMP',
+  factory: 'EERE',
+  bone: 'KK"K',
+  cloud: 'PTPU',
+  fortress: 'AUAA',
+};
+
+function sceneryOf(face, theme, rooms) {
+  const glyphs = SCENERY_BY_THEME[theme] || SCENERY_BY_THEME.grass;
+  const spokes = spokesOf(face, rooms).map((k) => sideAt(face, k));
+  const out = [];
+  /* Twenty-six candidates and a low gate, because two filters run after this
+   * one and they are not gentle: the road corridor alone rejected six of
+   * fourteen on face 0 and left it bare. Counted rather than eyeballed —
+   * a face that grows nothing is the one outcome this is for. */
+  for (let i = 0; i < 26; i++) {
+    const n = hashNoise(face.index * 31 + i, i * 7 + 3);
+    if (n < 0.30) continue;
+    const th = (i / 26) * Math.PI * 2 + n;
+    /* Out to 0.66 of the radius and no further: a glyph is 16 px wide and
+     * drawn from its middle, so anything planted nearer the rim than this
+     * hangs over onto the face next door. */
+    const rad = 0.34 + ((n * 97) % 1) * 0.32;
+    const u = Math.cos(th) * rad;
+    const v = Math.sin(th) * rad;
+    /* Clear of every spoke, measured to the line rather than to its ends: a
+     * bush beside the middle of a road is as much in the way as one at the
+     * junction. */
+    const onRoad = spokes.some((sd) => {
+      const len = Math.hypot(sd.u, sd.v) || 1;
+      const along = (u * sd.u + v * sd.v) / len;
+      if (along < -0.1 || along > len + 0.1) return false;
+      return Math.abs(u * (sd.v / len) - v * (sd.u / len)) < 0.20;
+    });
+    if (onRoad) continue;
+    out.push({ u, v, ch: glyphs[Math.floor(n * 613) % glyphs.length], i });
+  }
+  return out;
+}
+
 export class GlobeScene {
   constructor(game, world = 0, face = null) {
     this.game = game;
@@ -247,6 +321,7 @@ export class GlobeScene {
     this.messageTimer = 0;
     this.dust = 0;
     this.dropT = 0;
+    this.grown = new Map();
     this.landed = false;
     /* Start on the face of the node the save is standing on, so coming back
      * from a level puts you where you left rather than at the beginning. */
@@ -458,6 +533,7 @@ export class GlobeScene {
     this.messageTimer = 0;
     this.dust = 0;
     this.dropT = 0;
+    this.grown = new Map();
     this.landed = false;
         this.mode = 'walk';
         this.walkOut = false;
@@ -570,6 +646,7 @@ export class GlobeScene {
       ctx.stroke();
     }
 
+    this.drawGrowth(ctx);
     this.drawRoads(ctx);
     this.drawPawn(ctx);
     this.drawLabels(ctx);
@@ -589,6 +666,34 @@ export class GlobeScene {
       for (let x = -8; x < VIEW_W; x += 16) {
         ctx.fillRect(x + ((y / 12) % 2 ? 8 : 0), y, 2, 2);
       }
+    }
+  }
+
+/* eslint-disable-next-line class-methods-use-this */
+  /**
+   * The scenery of the face you are standing on, drawn as billboards.
+   *
+   * Only this face: a hexagon seen edge-on is four pixels of colour, and a
+   * tree standing on it would be a tree standing in the air beside the solid.
+   * The face you are reading is the one with room for detail, which is also
+   * the only one you can do anything with.
+   *
+   * `i` becomes the sway phase, so no two of them lean together — the same
+   * trick the flat map plays with tile coordinates, which is all `tx`/`ty`
+   * ever were to `drawScenery`.
+   */
+  drawGrowth(ctx) {
+    if (!this.grown.has(this.face)) {
+      this.grown.set(this.face, sceneryOf(this.here, WORLDS[this.world].theme, this.rooms));
+    }
+    for (const g of this.grown.get(this.face)) {
+      const p = this.onHere(g.u, g.v);
+      drawScenery(ctx, g.ch, Math.round(p.x) - 8, Math.round(p.y) - 14, {
+        theme: WORLDS[this.world].theme,
+        tick: this.tick,
+        tx: g.i * 3,
+        ty: this.face * 5,
+      });
     }
   }
 
