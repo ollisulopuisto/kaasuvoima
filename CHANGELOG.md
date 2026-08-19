@@ -7,6 +7,76 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.41 — the reserve stopped cycling, and pumping was removed
+
+### Damage was a swap, not a loss
+
+Owner, playing 2-1: *"hit the sun = lost tanooki power but instantly gained some
+other skill, then hit the sun again = lost the powerup but regained tanooki.
+It's like they're forever cycling?"*
+
+They were. **Two separately correct rules met and made a loop:**
+
+  1. Taking damage drops your reserve on the ground (`dropReserve`) — SMB3's own
+     move, giving the level you just lost a second chance.
+  2. Picking up a power banks the one you were wearing (`collect`) — so walking
+     into a mushroom does not cost you a tail.
+
+Together: the leaf falls out of the box, you grab it, the flower goes into the
+box, the next hit drops the flower. **The pair never wore out**, so damage cost
+one level and two seconds and nothing else.
+
+Both rules stay. Only the case where they meet is now named: an item that fell
+out of the reserve is marked `recovered`, and a recovered item does not bank
+what it replaces — it *is* the box, and using the box is the whole point of it.
+
+### Pumping is gone, and the number that removed it
+
+Owner: *"I don't see when to reload the speed… is the whole mechanism
+overwrought, maybe?"*
+
+Measured before answering, on flat ground:
+
+| played how | 8 seconds of distance |
+| --- | --- |
+| hold run | 1511 px |
+| **perfect rhythm**, five presses a second | **1533 px** |
+| two frames late, every time | **755 px** |
+
+**Perfect execution buys 1.5 %. Getting it slightly wrong halves your speed.**
+Nobody should rationally attempt that, and the mechanic punished trying thirty
+times harder than it paid.
+
+**And it was structural, which is why no tuning could have saved it.** The
+meter's only job is to reach P-speed; P-speed is a hard cap; so anything that
+only makes the meter *fill faster* is bounded by the 1.6 seconds spent below the
+cap in a level that lasts a minute. There was a second contradiction underneath:
+**to pump you must release run**, and releasing run drops your cap to walking —
+the mechanic fought the thing it rewarded.
+
+Removed: the beat clock, the window, the vent, `pumptick`, the rising `pump`
+note, the body flash, and `Music.beatFrames`. Kept, because none of them were
+ever part of it: `pfull` and `pspent`, the speed pulse, the warble at full
+speed, and the 48 px look-ahead — which is everything the owner said felt good.
+
+Two claims survive as gates, and they are the two the rest of the game rests on:
+holding the button fills the meter (the power-0 bot in `playable.mjs` holds it,
+so DESIGN.md §5 depends on this), and nothing exceeds `MAX_P`.
+
+The door it leaves open is written down in ROADMAP under *Jonossa*: a speed
+skill has to pay **while you are already at the cap** — holding P-speed through
+a landing, a slope, a bump — because the ramp is too short to sell anything.
+
+**Removing a mechanic from a file this dense is its own hazard**, and the gate
+caught it twice: the first cut took `variation` and `pace` out of `Music` with
+`beatFrames`, and the second took `jumpBuffer`, `flying`, `spin` and `invuln`
+out of the player's constructor along with the pump's two fields. An undefined
+`invuln` broke every stomp in the game. A field list compared against `HEAD`
+found what a sorted diff had hidden — those fields are assigned in other methods
+too, so they never looked missing.
+
+---
+
 ## v26.08.19.40 — the rhythm is the music's, and full speed is felt
 
 Two owner questions in one batch, and both had an answer already half-written in

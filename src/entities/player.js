@@ -15,7 +15,7 @@ import { WALK_FRAMES, DEEP_IDLE, DEATH_POP } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 /* Vauhtimittarin suihku, ks. `ventPlume`. Sama pilvi kuin muuallakin. */
 import { Puff } from './effects.js';
-import { Music, Sfx } from '../core/audio.js';
+import { Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
 /* Poimitun esineen hinta on pistetaulukon asia, ks. `points.js`. */
 import { PTS } from '../core/points.js';
@@ -351,72 +351,6 @@ const PLUME_SLOW = 10;
 const PLUME_FAST = 2;
 
 /*
- * PUMPING: the P-meter gains a second way to fill, and it is a rhythm.
- *
- * Owner, 18.8.2026: *"could a mechanic work where tapping run repeatedly gives
- * you more speed? Not continuous mashing — a meter where hitting the right
- * moment in the cooldown gives a boost, like the active reload in Gears of
- * War."* The proposal and its reasoning are in IDEAS.md; this is the build.
- *
- * **One meter, two ways to fill it.** Holding run fills at `P_FILL` exactly as
- * it always has and nothing about that changed — DESIGN.md §8 forbids two ways
- * of saying the same thing, and the P-meter already means "you have run long
- * enough to go faster". A second gauge beside it would be a second answer to
- * one question. So this is a technique for filling the gauge, not a gauge.
- *
- * **It fills faster, it does not go higher.** `cap` reads `pFull ? MAX_P : …`,
- * so the ceiling is untouched: rhythm reaches P-speed sooner and never exceeds
- * it. That matters beyond taste — `gapTiles` 6 and `wallTiles` 4 are measured
- * at P-speed and every level in the game is validated against them, so a
- * mechanic that raised the ceiling would invalidate the jump budget and with it
- * every level's proof of passability.
- *
- * **A miss has to cost, or it is mashing.** Gears jams the rifle, and that
- * punishment is the entire reason the choice is interesting. Here the cost is
- * the thematically exact one: a mistimed pump **vents**, and the gauge drops a
- * whole segment.
- *
- * Measured, empty gauge to full, in 1-1 at power 1:
- *
- * | how it is played | frames | note |
- * | --- | --- | --- |
- * | hold the button | **100** | unchanged from before this existed |
- * | on the beat | **78** | 22 % faster |
- * | one frame early | **77** | the window straddles the beat on purpose |
- * | off the beat | **491** | 36 vents — far worse than simply holding |
- * | mashing | never fills | see below |
- *
- * **Mashing turns out to punish itself, and not the way this comment first
- * claimed.** The estimate here was that mashing would land a third of its
- * presses and run at a loss. What actually happens is simpler and better: with
- * the button up half the time the body never reaches running speed at all, so
- * `pumping` is false, no press counts, and the gauge drains to zero. You
- * cannot mash the run button and run at the same time. The vent is what
- * punishes a *rhythm* that is wrong, which is the interesting case.
- *
- * **No cue, no punishment.** Below `PLUME_START` the body does not smoke,
- * there is no beat to hear or see, and a press does nothing at all — neither
- * gain nor vent. You get up to speed by holding, the plume starts, and only
- * then is there a rhythm to play. The mechanic teaches itself in that order.
- *
- * The beat is shown and not heard, and that is a limitation rather than a
- * decision: the cue is a fat puff on the beat, because a metronome would need
- * a sound of its own and a new sound is a separate argument (see the "every
- * sound the code asks for exists" gate and DESIGN.md §8). Venting is audible
- * because that is the half you must not miss.
- */
-/*
- * Mitattu jakso, ja nyt **tavoite** eikä vakio: `Music.beatFrames` etsii sen
- * kappaleen oman jaon joka on tätä lähinnä, jotta tahti on musiikin tahti.
- * Pääkappaleella (156 BPM) kahdeksasosa on 11,5 → 12, eli tämä luku on yhä
- * täsmälleen se jolla mekaniikka mitattiin.
- */
-const PUMP_TARGET = 12;
-const PUMP_WINDOW = 4;
-const PUMP_GAIN = 20;
-const PUMP_VENT = P_METER_MAX / P_SEGMENTS;
-
-/*
  * Supertähti. Long enough to be worth having — about twelve seconds, three or
  * four chunks at a run — and short enough that the level is not handed over.
  *
@@ -543,11 +477,6 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
-    /* Pumping (see PUMP_TARGET): the beat clock, and how long the last
-     * successful pump still shows on the body. Both are plain numbers, so
-     * `savestate.js` carries them without knowing they exist. */
-    this.pumpTick = 0;
-    this.pumpFlash = 0;
     /* Minkä suuntaisessa rinteessä keho on juuri nyt (1 nousee oikealle, -1
      * vasemmalle, 0 ei rinnettä). `moveY` kirjoittaa, `slopePull` lukee. */
     this.onSlope = 0;
@@ -566,10 +495,6 @@ export class Player extends Entity {
     this.flying = 0;
     this.spin = 0;
     this.invuln = 0;
-    /* Nielty kyky oli tässä kahtena kenttänä, `swallowKind` ja `swallowTimer`.
-     * Se on nyt `power.type` siinä missä lehti ja kukka — ks. `GIFT_TYPES` —
-     * eli pikatallennus sarjallistaa sen samalla rivillä kuin tehostuksen,
-     * eikä kumpaakaan kenttää tarvitse enää olla olemassa. */
     this.frozen = 0;
     this.corked = 0;
     this.star = 0;
@@ -1002,7 +927,6 @@ export class Player extends Entity {
       this.pMeter = Math.max(0, this.pMeter - P_DRAIN);   // flight burns the gauge
     }
     // Otherwise the gauge is frozen: SMB3 leaves it alone while you are airborne.
-    this.updatePump(input);
     this.ventPlume();
 
     /* -------------------------------- jump ---------------------------- */
@@ -1687,82 +1611,6 @@ export class Player extends Entity {
    * can start when the filling starts — which is the moment the mechanic is
    * about.
    */
-  get pumping() {
-    return this.onGround && this.corked <= 0 && !this.dying
-      && Math.abs(this.vx) > MAX_WALK + 0.1;
-  }
-
-  /** Where in the beat we are, 0 at the puff. See PUMP_TARGET. */
-  /** Jakso frameina, kappaleen tahdissa. Ks. `Music.beatFrames`. */
-  get pumpPeriod() { return Music.beatFrames(PUMP_TARGET); }
-
-  get pumpPhase() { return this.pumpTick % this.pumpPeriod; }
-
-  /**
-   * Is a press right now on the beat?
-   *
-   * The window **straddles** the puff — one frame early, three late — because
-   * you aim at a thing you can see and being a hair early is the same mistake
-   * as being a hair late. It is still four frames of twelve in total, and that
-   * total is what keeps mashing unprofitable: a press every other frame lands
-   * a third of them here, which is `PUMP_GAIN` twice against `PUMP_VENT` four
-   * times. Widening it to half the cycle would flip that sign.
-   */
-  get pumpOnBeat() {
-    const p = this.pumpPhase;
-    return p < PUMP_WINDOW - 1 || p === this.pumpPeriod - 1;
-  }
-
-  /**
-   * One frame of the pump.
-   *
-   * The clock only runs while there is a beat (`pumping`), and it resets when
-   * there is not — so the rhythm always starts from the puff the player just
-   * saw rather than from an invisible counter that kept running while he was
-   * in the air.
-   */
-  updatePump(input) {
-    if (!this.pumping) {
-      this.pumpTick = 0;
-      this.pumpFlash = 0;
-      return;
-    }
-    this.pumpTick++;
-    if (this.pumpFlash > 0) this.pumpFlash--;
-    /*
-     * The metronome is its own puff and not a louder frame of the plume, and
-     * that is the difference between a beat and a coincidence: the plume's own
-     * rhythm runs from `PLUME_SLOW` to `PLUME_FAST` as the gauge fills, so a
-     * cue that rode it would drift against the pump's fixed period and land on
-     * the beat only by accident. This one is fat, slow and exactly on time.
-     */
-    if (this.pumpPhase === 0) {
-      const back = this.cx - this.facing * (this.w / 2 + 1);
-      this.level.add(new Puff(this.level, back, this.y + this.h - 4, {
-        spread: 0.5, size: 5, life: PUMP_WINDOW * 3,
-      }));
-      /* Ja kuuluu. Pöllähdys on merkki jota ei voi seurata silmällä joka on
-       * varattu siihen mihin hypätään — ks. `pumptick`. */
-      Sfx.play('pumptick');
-    }
-    if (!input || !input.pressed || !input.pressed.run) return;
-    if (this.pumpOnBeat) {
-      this.pMeter = Math.min(P_METER_MAX, this.pMeter + PUMP_GAIN);
-      this.pumpFlash = PUMP_WINDOW * 2;
-      /* Osuma kuuluu ja näkyy. Kumpikaan ei ollut totta ennen tätä:
-       * `pumpFlash` asetettiin eikä sitä lukenut kukaan, ja ainoa ääni jonka
-       * pumppaava sai oli se joka kertoi hänen osuneen ohi. */
-      Sfx.play('pump', this.pMeter / P_METER_MAX);
-    } else {
-      /* Vent. A whole segment, so the loss is one the segmented gauge can
-       * actually show — half a segment would have been a number that only the
-       * code knew about. */
-      this.pMeter = Math.max(0, this.pMeter - PUMP_VENT);
-      this.level.spawnPuff(this.cx - this.facing * (this.w / 2 + 2), this.cy, true);
-      Sfx.play('sylkaisy');
-    }
-  }
-
   ventPlume() {
     if (!this.onGround || this.corked > 0 || this.dying) return;
     const t = this.pMeter / P_METER_MAX;
@@ -1777,7 +1625,11 @@ export class Player extends Entity {
     }));
   }
 
-  collect(itemKind) {
+  /**
+   * @param {boolean} recovered — tämä on oma pudonnut varalokero eikä uusi
+   *   tehostus. Ks. alla; ero on se joka lopettaa ikuisen kierron.
+   */
+  collect(itemKind, recovered = false) {
     switch (itemKind) {
       case 'shroom':
       case 'flower':
@@ -1794,10 +1646,31 @@ export class Player extends Entity {
            * oikeasti muuttuu ja lokerointi on sivutuote. */
           Sfx.play('reserve');
         } else {
-          // Swapping to a different power banks the one you were wearing.
-          // Losing a tail just because you walked into a mushroom is the kind
-          // of thing that feels like the game cheated you.
-          if (this.power.type && this.power.type !== itemKind) {
+          /*
+           * VAIHTO LOKEROI SEN JOTA PITI PÄÄLLÄ — mutta ei silloin kun poimittu
+           * **on** se lokero (19.8.2026).
+           *
+           * Omistaja pelasi 2-1:tä: *"hit the sun = lost tanooki power but
+           * instantly gained some other skill, then hit the sun again = lost
+           * the powerup but regained tanooki. It's like they're forever
+           * cycling?"* — ja niin ne olivat. Kaksi erikseen oikeaa sääntöä
+           * muodostivat silmukan:
+           *
+           *   1. Osuma pudottaa varalokeron maahan (`dropReserve`, ja tämä on
+           *      SMB3:n oma tapa: menetetty taso saa toisen mahdollisuuden).
+           *   2. Poimittu tehostus lokeroi sen jota piti päällä (tämä rivi,
+           *      jotta sieneen kävely ei vie häntää).
+           *
+           * Yhdessä ne tekivät osumasta **vaihdon**: lehti putoaa lokerosta,
+           * poimit sen, kukka menee lokeroon, seuraava osuma pudottaa kukan.
+           * Pari ei kulunut koskaan, eli vahinko ei maksanut mitään paitsi
+           * yhden tason ja kaksi sekuntia. Molemmat säännöt jäävät; vain se
+           * tapaus jossa ne kohtaavat on nyt nimetty.
+           *
+           * Takaisin poimittu lokero **on käytetty** — se on koko sen idea —
+           * joten mikään ei mene sen tilalle.
+           */
+          if (!recovered && this.power.type && this.power.type !== itemKind) {
             this.level.storeReserve(this.power.type);
           }
           this.startMorph(this.power.level);
@@ -1934,11 +1807,6 @@ export class Player extends Entity {
     if (this.star > 0) tint = STAR_TINTS[Math.floor(this.tick / 3) % STAR_TINTS.length];
     else if (this.frozen > 0) tint = TINTS.frozen;
     else if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) tint = TINTS.flash;
-    /* Osuma välähtää kehossa, koska mittaria ei ole ruudulla: vauhti kerrotaan
-     * pelaajan ympärillä (`drawSpeedPulse`) eikä palkkina, joten myös sen
-     * karttuminen kuuluu kertoa siinä. Viimeisenä ketjussa — tähti, jää ja
-     * osumattomuus ovat kaikki tiloja, ja tämä on tapahtuma. */
-    else if (this.pumpFlash > 0) tint = TINTS.flash;
     const spinning = this.spin > 0;
     drawPlayer(ctx, this.x, this.y, {
       type: this.power.type,

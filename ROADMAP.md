@@ -505,6 +505,40 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### A speed skill that pays while you are already fast
+
+*(Owner, 19.8.2026, on the pumping rhythm: "is the whole mechanism overwrought,
+maybe?" — it was, and it was removed the same day. This is the door it left
+open.)*
+
+The measurement that killed pumping is also the specification for whatever
+replaces it. Perfect rhythm bought **1533 px against 1511 px over eight
+seconds** — 1.5 % more distance — while being two frames late halved it. And the
+reason is structural rather than a tuning failure: the P-meter's only job is to
+reach P-speed, P-speed is a hard cap, so *anything that only changes fill time
+is bounded by the 1.6 seconds you spend below the cap* in a level that lasts a
+minute. No window, tempo or cue could have saved it.
+
+So a speed skill has to pay **while you are already at the cap**, not on the way
+to it. The shape worth trying: pumping (or any input flourish) *holds* P-speed
+through the things that normally cost it — a landing, an uphill slope, a bump, a
+turn. That inverts the maths: instead of buying 1.6 seconds of ramp once, it
+pays every time the level would otherwise slow you down, which in a level built
+of slopes and jumps is continuous.
+
+Two things it must not do, both already measured:
+
+- **It must not raise the cap.** `gapTiles` 6 and `wallTiles` 4 are measured at
+  P-speed and every level's clearability is proved against them.
+- **It must not punish ignoring it.** The vent made a miss five times worse than
+  never trying, so the rational play was to not engage — a mechanic nobody
+  should attempt is worse than no mechanic.
+
+Everything the removal left behind is still in git: the beat clock, the window,
+the tick and the rising hit sound, and `Music.beatFrames`, which locked the
+period to the playing track's own tempo. If a rhythm ever comes back, it comes
+back on the music.
+
 ### Render audio offline instead of listening to it live
 
 *(Owner, 18.8.2026: "should we do audio testing in some other way, if headless

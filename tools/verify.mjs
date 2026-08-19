@@ -23515,26 +23515,26 @@ const report = await page.evaluate(async () => {
   report.failures.push(...failures);
 }
 /* ---- sää: loppu ---- */
-/* ---- pumping: rhythm fills the P-meter ---- */
+/* ---- vauhtimittari ---- */
 /*
- * TAPPING RUN ON THE BEAT FILLS THE GAUGE FASTER THAN HOLDING IT.
+ * MITTARI TÄYTTYY NAPPI POHJASSA, JA P-NOPEUS ON KATTO.
  *
- * Owner's idea, 18.8.2026: the active reload from Gears of War, applied to the
- * P-meter. The design argument is in IDEAS.md and the numbers are in
- * `player.js` next to `PUMP_PERIOD`; this block is what keeps them true.
+ * Tässä mitattiin 18.-19.8.2026 rytmipumppausta: nappia tahdissa napsauttamalla
+ * mittari täyttyi 100 framen sijaan 78:ssa. Mekaniikka on poistettu 19.8.2026
+ * ja poiston perustelu on mittaus, ei maku — ks. CHANGELOG. Lyhyesti:
+ * täydellinen suoritus tuotti kahdeksassa sekunnissa 1533 px vastaan 1511 px,
+ * eli **1,5 % lisää matkaa**, ja kaksi framea myöhässä puolitti vauhdin.
+ * Mittarin ainoa tehtävä on viedä P-nopeuteen, P-nopeus on katto, joten
+ * täyttymisnopeudella voi ostaa vain sen 1,6 sekuntia joka kuluu katon alla.
  *
- * Five claims, and the last two are the ones that would rot quietly:
+ * Kaksi väitettä jäi, ja ne ovat ne kaksi joiden varassa muu lepää:
  *
- *   1  faster    on the beat fills the gauge faster than holding
- *   2  forgiving one frame early still counts — the window straddles the beat
- *   3  costly    off the beat vents, and is far worse than simply holding
- *   4  ceiling   rhythm reaches P-speed sooner and never exceeds it
- *   5  optional  holding alone still fills the gauge exactly as it always did
+ *   1  pohjassa pitäminen täyttää mittarin
+ *   2  katto on `MAX_P`, eikä mikään vie sen yli
  *
- * Claim 5 is the promise DESIGN.md §5 rests on. The power-0 bot in
- * `playable.mjs` holds the button and cannot play this mechanic, so if a level
- * ever came to require rhythm that gate would fail — but only if holding still
- * works, which is what this measures.
+ * Väite 1 on se lupaus johon DESIGN.md kohta 5 nojaa: `playable.mjs`:n
+ * voimatason 0 botti pitää nappia pohjassa, joten jos kenttä joskus vaatisi
+ * muuta, se portti kaatuisi.
  */
 {
   const checks = [];
@@ -23583,10 +23583,6 @@ const report = await page.evaluate(async () => {
         i.pressed = blank();
         i.held.right = true;
         i.held.run = true;
-        if (style === 'rhythm' && p.pumping && p.pumpPhase === offset % 12) {
-          i.held.run = false;
-          i.pressed.run = true;
-        }
         const before = p.pMeter;
         s.update(i);
         topSpeed = Math.max(topSpeed, Math.abs(p.vx));
@@ -23597,9 +23593,6 @@ const report = await page.evaluate(async () => {
     };
     const out = { max: { P: MAX_P, run: MAX_RUN } };
     out.hold = play('hold');
-    out.beat = play('rhythm', 0);
-    out.early = play('rhythm', 11);
-    out.off = play('rhythm', 6);
 
     /* And the ceiling, measured after the gauge is full: run on for a while
      * and see how fast the body actually goes. */
@@ -23614,7 +23607,6 @@ const report = await page.evaluate(async () => {
       i.pressed = blank();
       i.held.right = true;
       i.held.run = true;
-      if (p.pumping && p.pumpPhase === 0) { i.held.run = false; i.pressed.run = true; }
       s.update(i);
       fastest = Math.max(fastest, Math.abs(p.vx));
     }
@@ -23691,6 +23683,69 @@ const report = await page.evaluate(async () => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* ------------------------ varalokeron kierto -------------------------- */
+  /*
+   * OSUMA EI OLE VAIHTO (19.8.2026).
+   *
+   * Omistaja pelasi 2-1:tä: *"hit the sun = lost tanooki power but instantly
+   * gained some other skill, then hit the sun again = lost the powerup but
+   * regained tanooki. It's like they're forever cycling?"*
+   *
+   * Ja niin ne olivat. Kaksi erikseen oikeaa sääntöä muodostivat silmukan:
+   * osuma pudottaa varalokeron maahan, ja poimittu tehostus lokeroi sen jota
+   * piti päällä. Yhdessä: lehti putoaa, poimit sen, kukka menee lokeroon,
+   * seuraava osuma pudottaa kukan — pari ei kulunut koskaan, eli vahinko ei
+   * maksanut mitään.
+   *
+   * Väite on siis se että **takaisin poimittu lokero on käytetty**. Mitataan
+   * kierros kerrallaan: osuma, poiminta, ja lokeron on oltava tyhjä.
+   */
+  {
+    const R = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      game.state = { lives: 5, coins: 90, score: 0, power: { type: 'leaf', level: 2 },
+        reserve: 'flower', world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+        secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+      const sc = new LevelScene(game, '1-1');
+      game.setScene(sc);
+      sc.time = 9999;
+      sc.clockStopped = true;
+      const p = sc.player;
+      const before = { type: p.power.type, level: p.power.level, reserve: game.state.reserve };
+
+      p.hurt('test');
+      const dropped = sc.entities.filter((e) => e.kind === 'item').map((e) => e.itemKind);
+      const afterHit = { type: p.power.type, reserve: game.state.reserve };
+
+      /* Poimitaan pudonnut: sama reitti kuin pelissä, `collect` lipun kanssa. */
+      const item = sc.entities.find((e) => e.kind === 'item');
+      if (item) {
+        p.collect(item.itemKind, !!item.recovered);
+        /* Sama kuin oikealla reitillä (`scenes/level.js`): poimittu katoaa.
+         * Ilman tätä alla laskettaisiin sama esine uudelleen. */
+        item.remove = true;
+        sc.entities = sc.entities.filter((e) => !e.remove);
+      }
+      const afterPick = { type: p.power.type, reserve: game.state.reserve };
+
+      /* Ja sama uudelleen: toinen osuma ei saa pudottaa mitään, koska lokero
+       * on tyhjä — juuri tämä oli se ikuinen kierto. */
+      p.invuln = 0;
+      p.hurt('test');
+      const secondDrop = sc.entities.filter((e) => e.kind === 'item').length;
+      return { before, dropped, afterHit, afterPick, secondDrop };
+    });
+
+    expect('osuma pudottaa varalokeron, ja takaisin poimittu lokero on käytetty',
+      R.dropped.join() === 'flower' && R.afterHit.reserve === null
+      && R.afterPick.type === 'flower' && R.afterPick.reserve === null
+      && R.secondDrop === 0,
+      `lokerossa ${R.before.reserve}, osuma pudotti [${R.dropped.join()}],`
+      + ` poiminnan jälkeen voima ${R.afterPick.type} ja lokero`
+      + ` ${R.afterPick.reserve || 'tyhjä'}; toinen osuma pudotti ${R.secondDrop}`);
+  }
+
   /* --------------------------- ketjun elämä ----------------------------- */
   /*
    * KETJUN ELÄMÄ TULEE VAIN KAKKOSEN POTENSSILLA (19.8.2026).
@@ -23725,138 +23780,18 @@ const report = await page.evaluate(async () => {
       `elämät ketjun pituuksilla ${C.lives.join(', ') || 'ei yhtään'}`);
   }
 
-  /* ----------------------- rytmin opettaminen --------------------------- */
-  /*
-   * MITEN PELAAJA OPPII TAHDIN (19.8.2026).
-   *
-   * Omistaja: *"how do we teach the rhythm to the player? Is there any
-   * audiovisual feedback?"* — ja vastaus oli: on, mutta väärinpäin. Ohi
-   * mennyt painallus kuului (`sylkaisy`) ja osunut ei kuulunut eikä näkynyt;
-   * `pumpFlash` asetettiin eikä sitä lukenut yksikään rivi. Peli opetti
-   * rytmiä pelkällä rangaistuksella.
-   *
-   * Neljä väitettä, ja ensimmäinen on se joka tekee muista mahdollisia: tahti
-   * on **kappaleen** tahti. Kiinteä 12 framea on 150 BPM ja pääkappale käy
-   * 156:tta, eli korvaan syötettiin yhtä tempoa ja sormille toista.
-   */
-  {
-    const R = await page.evaluate(async () => {
-      const { Music, Sfx } = await import('/src/core/audio.js');
-      const { drawPlayer } = await import('/src/gfx/sprites.js');
-      const was = Music.current;
-
-      /* 1. Jakso seuraa kappaletta, ja pääkappaleella se on yhä mitattu 12. */
-      const periods = {};
-      for (const name of ['level', 'jaatie', 'factory', 'cave', 'bone']) {
-        Music.current = name;
-        periods[name] = Music.beatFrames(12);
-      }
-      Music.current = null;
-      const noTrack = Music.beatFrames(12);
-      Music.current = was;
-
-      /* 2. Kuka soittaa mitäkin: vakooja `Sfx.play`n päällä, yksi kenttä
-       *    pumpattuna tahdissa ja toinen tahdin ohi. */
-      const { LevelScene } = await import('/src/scenes/level.js');
-      const game = window.sfb3;
-      const heard = [];
-      const real = Sfx.play.bind(Sfx);
-      Sfx.play = (name, arg) => { heard.push(name); real(name, arg); };
-      const runPump = (onBeat) => {
-        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
-          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
-          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
-        const sc = new LevelScene(game, '1-1');
-        game.setScene(sc);
-        sc.time = 9999;
-        sc.clockStopped = true;
-        heard.length = 0;
-        const blank = () => ({});
-        const inp = { held: blank(), pressed: blank(), released: blank(),
-          consume(a) { this.pressed[a] = false; } };
-        for (let f = 0; f < 240; f++) {
-          inp.held = {}; inp.pressed = {};
-          inp.held.right = true;
-          inp.held.run = true;
-          const ph = sc.player.pumpPhase;
-          const want = onBeat ? ph === 0 : ph === Math.floor(sc.player.pumpPeriod / 2);
-          if (sc.player.pumping && want) { inp.held.run = false; inp.pressed.run = true; }
-          sc.update(inp);
-        }
-        const count = (n) => heard.filter((x) => x === n).length;
-        return { tick: count('pumptick'), hit: count('pump'), miss: count('sylkaisy') };
-      };
-      const beat = runPump(true);
-      const off = runPump(false);
-      Sfx.play = real;
-
-      /* 3. Välähdys päätyy kuvaan asti: sama frame kahdesti, `pumpFlash`
-       *    nollana ja päällä, ja pikselien on erottava. */
-      const shot = (flash) => {
-        const c = document.createElement('canvas');
-        c.width = 64; c.height = 64;
-        const g = c.getContext('2d');
-        g.imageSmoothingEnabled = false;
-        const pl = { type: 'shroom', level: 1, facing: 1, frame: 0, state: 'stand',
-          ducking: false, running: true, tick: 4, wag: 0 };
-        drawPlayer(g, 20, 20, flash ? { ...pl, tint: window.__flashTint } : pl);
-        return g.getImageData(0, 0, 64, 64).data;
-      };
-      const { TINTS } = await import('/src/gfx/sprites.js');
-      window.__flashTint = TINTS.flash;
-      const plain = shot(false);
-      const lit = shot(true);
-      let diff = 0;
-      for (let i = 0; i < plain.length; i += 4) if (plain[i] !== lit[i]) diff++;
-      return { periods, noTrack, beat, off, diff };
-    });
-
-    expect('pumpun tahti on kappaleen tahti, eikä pääkappaleella liikahda mitatusta',
-      R.periods.level === 12 && R.noTrack === 12
-      && new Set(Object.values(R.periods)).size > 1
-      && Object.values(R.periods).every((f) => f >= 6 && f <= 20),
-      `${Object.entries(R.periods).map(([k, v]) => `${k} ${v}`).join(', ')};`
-      + ` ilman kappaletta ${R.noTrack}`);
-
-    expect('tahti naksahtaa, jotta sen voi kuulla katsomatta jalkoihinsa',
-      R.beat.tick > 8 && R.off.tick > 8,
-      `tahdissa ${R.beat.tick} naksausta, ohi ${R.off.tick}`);
-
-    expect('osuma kuuluu ja ohi mennyt kuuluu eri äänellä',
-      R.beat.hit > 4 && R.beat.miss === 0 && R.off.miss > 4 && R.off.hit === 0,
-      `tahdissa ${R.beat.hit} osumaa / ${R.beat.miss} ohi,`
-      + ` tahdin ohi ${R.off.hit} osumaa / ${R.off.miss} ohi`);
-
-    expect('välähdys päätyy kuvaan asti eikä jää kentäksi jota kukaan ei lue',
-      R.diff > 40, `${R.diff} pikseliä erosi`);
-  }
-
-  expect('rytmissä painettu juoksunäppäin täyttää mittarin nopeammin kuin pohjassa pidetty',
-    P.beat.frames < P.hold.frames * 0.9 && P.beat.vents === 0,
-    `pohjassa ${P.hold.frames} framea, rytmissä ${P.beat.frames}`
-    + ` (${Math.round((1 - P.beat.frames / P.hold.frames) * 100)} % nopeammin)`);
-
-  expect('yksi frame etuajassa kelpaa: ikkuna on lyönnin molemmin puolin',
-    P.early.frames < P.hold.frames && P.early.vents === 0,
-    `frame etuajassa ${P.early.frames} framea, ${P.early.vents} tyhjennystä`);
-
-  expect('väärässä tahdissa painaminen tyhjentää, ja on pohjassa pitämistä huonompi',
-    P.off.vents > 5 && P.off.frames > P.hold.frames * 1.5,
-    `väärässä tahdissa ${P.off.frames} framea ja ${P.off.vents} tyhjennystä`
-    + ` — pohjassa ${P.hold.frames} ja 0`);
-
-  expect('rytmi vie P-nopeuteen nopeammin muttei sen yli',
+  expect('täysi mittari vie P-nopeuteen eikä mikään vie sen yli',
     P.ceiling <= P.max.P + 0.001 && P.ceiling > P.max.run,
     `nopein ${P.ceiling} px/frame, P-katto ${P.max.P}, juoksukatto ${P.max.run}`);
 
-  expect('pohjassa pitäminen täyttää mittarin yhä kuten ennenkin',
+  expect('pohjassa pitäminen täyttää mittarin',
     P.hold.meter >= 112 && P.hold.vents === 0 && P.hold.frames < 200,
     `${P.hold.frames} framea, mittari ${P.hold.meter}, tyhjennyksiä ${P.hold.vents}`);
 
   report.checks.push(...checks);
   report.failures.push(...failures);
 }
-/* ---- pumping: loppu ---- */
+/* ---- vauhtimittari: loppu ---- */
 /* ---- rinne koskee muutakin kuin pelaajaa ---- */
 /*
  * SE MIKÄ LIUKUU TAI VIERII TOTTELEE RINNETTÄ, SE MIKÄ KÄVELEE EI.

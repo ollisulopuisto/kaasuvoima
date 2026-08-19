@@ -31,10 +31,15 @@ const FART_LIGHT_I = 0.78;
 
 export class Item extends Entity {
   /** @param {'shroom'|'flower'|'leaf'|'pop'|'soup'|'star'} itemKind */
-  constructor(level, x, y, itemKind, { emerge = true, still = false } = {}) {
+  constructor(level, x, y, itemKind, { emerge = true, still = false, recovered = false } = {}) {
     super(level, x, y, 16, 16);
     this.kind = 'item';
     this.itemKind = itemKind;
+    /*
+     * OMA PUDONNUT VARALOKERO, ei uusi tehostus. Ks. `Player.collect` — tämä
+     * lippu on se ero jonka takia takaisin poimittu ei mene lokeroon uudelleen.
+     */
+    this.recovered = recovered;
     this.alwaysActive = true;
     this.active = true;
     this.emerging = emerge ? EMERGE_FRAMES : 0;

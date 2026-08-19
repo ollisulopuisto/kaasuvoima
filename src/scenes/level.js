@@ -3438,7 +3438,8 @@ export class LevelScene {
     const kind = this.game.state.reserve;
     if (!kind) return;
     this.game.state.reserve = null;
-    this.add(new Item(this, this.player.cx - 8, this.player.y - 20, kind, { emerge: false }));
+    this.add(new Item(this, this.player.cx - 8, this.player.y - 20, kind,
+      { emerge: false, recovered: true }));
   }
 
   /**
@@ -5718,7 +5719,7 @@ export class LevelScene {
       if (e.kind === 'item') {
         if (e.emerging > 0) continue;
         if (overlaps(p.box, e.box)) {
-          p.collect(e.itemKind);
+          p.collect(e.itemKind, !!e.recovered);
           e.remove = true;
         }
         continue;
