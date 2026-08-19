@@ -334,7 +334,19 @@ export class DieScene {
       /* Hidas kierto y-akselin ympäri: pieni kvaternioni joka framelle, ja
        * `qMul` sen eteen niin että kierto tapahtuu **maailman** akselin ympäri
        * eikä kappaleen, jolloin se näyttää pyörivältä eikä kieppuvalta. */
-      const a = 0.012;
+      /*
+       * 0.030 and not 0.012, and an onion skin of the whole sequence is what
+       * caught it: at 0.012 the forty frames of `HOLD_FRAMES` turn the die
+       * **27°**, less than a third of a right angle, and the stacked poses
+       * showed a solid standing almost still rather than one being shown off.
+       * A rotation that small cannot do the job this phase exists for — the
+       * eye needs to see faces leave and arrive to believe there is a back.
+       *
+       * 0.030 gives 69° in the same forty frames, which brings a new face
+       * round and takes one away, and it makes the settle that follows a real
+       * swing into place instead of the small correction it had become.
+       */
+      const a = 0.030;
       this.rot = qNorm(qMul([0, Math.sin(a), 0, Math.cos(a)], this.rot));
       if (this.tick >= HOLD_FRAMES) {
         /* Spin over, camera not yet fixed. See `isoRest`: the settle is the
