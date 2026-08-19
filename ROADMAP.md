@@ -505,12 +505,69 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
-### ✔ The overworld goes isometric 2.5D — built 19.8.2026
+### The pointy sphere: the overworld is the solid, and you walk on it
+
+*(Owner, 19.8.2026, after three redirections that each turned out to be the
+same idea getting sharper: "I thought the world maps would be three
+dimensional too… eight triangles connected to each other" → "one side takes
+you back to the previous level, one to the next level, and one to the next
+world" → "what if they're hex shaped? So they have six edges… each side that
+you can enter has a path leading to it, and if you walk down that path we
+animate and rotate to the next hex when we cross over.")*
+
+Built as a prototype: `src/data/solid.js`, `src/scenes/globe.js`. Reachable
+with the warp key from the die (map → die → globe).
+
+**The solid is the die with its corners cut off.** Truncate the octahedron and
+every triangular face opens into a hexagon, and that single fact is why none of
+the game's existing structure had to change: the eight hexagons *are* the eight
+faces, same indices, and face `i` still borders `i^1`, `i^2`, `i^4` — which is
+`worldDoors`, now checked against the geometry instead of asserted beside it.
+The adjacency, the winding and the edge midpoints are all derived from the 24
+corner points, so there is no table that can drift from the shape.
+
+Numbers that made the fit worth taking seriously rather than merely liking:
+
+- 8 hexagons + 6 squares, 36 edges, 24 vertices.
+- A hexagon's sides **alternate**: three to hexagons, three to squares.
+- **Every world has exactly 8 levels**, and there are 8 worlds — 64. So one
+  level per hexagon is an exact fit for content that already exists, not a
+  scheme the content has to be bent into.
+- The squares are what the cut corners left behind, and each touches four
+  hexagons — so a room is a place four levels share rather than a node hanging
+  off one of them. That is where the house and the gambling games belong.
+
+**Four spokes, and no arrow ever means two things.** Six sides, four arrow
+keys. The owner's answer — *"no junction never needs more than four roads"* —
+falls out of the geometry with no junction-splitting at all: three level doors
+plus one room door is exactly four. And the keys are not bound to sides. A
+pressed arrow picks the spoke whose direction **on the screen right now** best
+matches it, which is the only rule that can survive a solid that has just
+rolled: a key meaning "north-east on face three" is a lie one roll later.
+
+**The roll is a real roll**, not a slerp to the next orientation: a rotation
+about the shared edge itself, the axis being the edge and the angle the one
+that brings the neighbour's normal to where this face's normal was. Both signs
+are tried and the one that lands is kept, which is two dot products against
+deriving a winding rule that would have to be right for all thirty-six edges.
+The pawn rides the face down. There is anticipation before the tip and a bounce
+on landing, and that squash is the only thing in the file that is not geometry.
+
+Still open: which sides a world actually opens (today every hexagon opens its
+three level doors and the first room door), what the six squares hold, and how
+the fortress hands off to the outer solid.
+
+### ✔ The world **die** goes isometric 2.5D — built 19.8.2026
 
 *(Owner, 19.8.2026, having compared four renderings of the world die:
 "I think for the map I prefer iso 2.5D." The comparison is the artifact
 "Four Dice"; the four looks were the deployed one, chunky contours, isometric,
 and both together.)*
+
+*(Titled "the overworld" when it was written, and the owner caught it on the
+deployed build: the die is the screen **between** worlds and `WorldMapScene` is
+the one you stand on inside one. Two scenes; this entry only ever covered the
+first.)*
 
 All five pieces are in `src/scenes/die.js` now. The decision was the **look**,
 and the pieces it needed were prototyped cheapest first, in this order:
