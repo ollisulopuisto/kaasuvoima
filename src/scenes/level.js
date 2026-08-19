@@ -6217,8 +6217,26 @@ export class LevelScene {
      */
     const span = Math.max(1, this.widthPx - VIEW_W);
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
+    /*
+     * The coin gauge is a tower on the horizon now, so it is handed to the
+     * backdrop rather than drawn over the picture afterwards: it has to be
+     * *inside* the layers, between the far ridge and the middle one, or the
+     * hills cannot sweep across its feet. `tubeBox` and the corner glass are
+     * gone with it — see `drawCoinTube`.
+     *
+     * `at` is a fixed starting offset and not a function of progress: the
+     * tower drifts at its own slow rate (`drawSkyTower`), so it says "far
+     * away" and nothing else. Position-as-progress would be a second answer
+     * to the question the sky already answers.
+     */
+    const tower = this.def.bg === 'none' || this.vertical ? null : {
+      at: 300,
+      fill: this.tubeFill,
+      lives: Math.max(0, this.game.state.lives | 0),
+      tick: this.tick,
+    };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
-      bandDrop, clock);
+      bandDrop, clock, tower);
     /* Props sit in front of the haze that softens the hill/tilemap seam: they
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the
