@@ -8,7 +8,7 @@ import {
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
 import { PropLayer } from '../gfx/props.js';
-import { drawGoal, drawItem } from '../gfx/sprites.js';
+import { drawGoal, drawItem, drawPlayer, WALK_FRAMES, TINTS } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
   Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
@@ -27,6 +27,16 @@ import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
 } from '../core/timeattack.js';
+/*
+ * The ghost is time attack's missing half: the best time is eight numbers, and
+ * this is the path they were made on. Its own store and its own key — the
+ * reasoning is in `ghost.js`, and it is the reason this import is not from
+ * `telemetry.js`.
+ */
+import {
+  STEP as GHOST_STEP, MAX_SAMPLES as GHOST_MAX_SAMPLES,
+  getGhost, putGhost, dropGhost, packFlags, poseAt,
+} from '../core/ghost.js';
 import { clamp, hashNoise, hashPlace, overlaps } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
 import { DAILY_TITLE } from '../core/daily.js';
@@ -1401,6 +1411,18 @@ const WARBLE_AMP = 1;
 const SPEED_PULSE_FULL = 14;
 const SPEED_PULSE_SPENT = 9;
 
+/**
+ * How solid the time-attack ghost is drawn. See `drawGhost`.
+ *
+ * 0.45 rather than a fainter number because the ghost has to be findable
+ * against a tilemap while it is what you are chasing, and rather than a
+ * stronger one because everything else on this screen at full opacity is
+ * something that can touch you. The gate measures both halves of that: the
+ * ghost has to put ink on the screen, and every pixel of it has to be a blend
+ * with what was already there rather than a replacement of it.
+ */
+const GHOST_ALPHA = 0.45;
+
 /* Telemetry: "stuck" means no new ground gained for this many frames. Eight
  * seconds is long enough that a careful player lining up a jump is not counted,
  * and short enough that a wall someone cannot pass shows up on the first try. */
@@ -1884,6 +1906,10 @@ export class LevelScene {
      */
     this.race = null;
     this.raceResult = null;
+    /* Same rule as `race` and for the same reason: the ghost exists only in
+     * time attack, so on an ordinary round every question about it is one
+     * comparison against null. `startRace` is what fills it in. */
+    this.ghost = null;
     if (game.timeAttack) this.startRace();
   }
 
@@ -1915,6 +1941,79 @@ export class LevelScene {
       flash: 0,
       best: bestFor(this.game.state, raceKey(this.id, this.mode)),
     };
+
+    /*
+     * THE GHOST — recording this run, and replaying the one that set the best.
+     *
+     * It hangs off `startRace` and nowhere else, so it exists in exactly the
+     * mode that asked for it. The reasons it is not also in an ordinary round
+     * are three, and only the first is about cost:
+     *
+     *   1. There is nothing to race. An ordinary round has no clock on screen,
+     *      no split and no stored time, so a second body running the level
+     *      would be a picture with no reading attached to it.
+     *   2. The routes are not the same run twice. A time-attack line is the
+     *      fast one; an ordinary round stops for coins, secrets and the odd
+     *      enemy. A ghost of the fast line, shown to somebody exploring, is
+     *      just a stranger sprinting away from them.
+     *   3. Recording is not free of consequence, and a trace is a record of a
+     *      person playing (see `ghost.js`). Time attack is a mode you enter on
+     *      purpose from the title screen; an ordinary round is what the game
+     *      does when you press start. Keeping the recorder inside the mode
+     *      keeps "is a trace being made of me" answerable by looking at which
+     *      mode is on, which is the only honest place that question can live
+     *      until the sharing half of the ROADMAP entry is decided.
+     *
+     * The stored ghost is only played back if its length still matches the
+     * best time on the clock. They live in different stores on purpose, so
+     * they *can* disagree — an old build drops `bestTimes` when it writes the
+     * save (DESIGN.md §6) and this key survives — and a ghost that is not the
+     * run the split is comparing against would be a quiet lie about which run
+     * you are chasing. Mismatched means no ghost, which is a state the level
+     * already handles for the first run on every level.
+     */
+    this.ghost = { play: null, pose: null, rec: { x: [], y: [], flags: [] }, over: false };
+    const saved = getGhost(raceKey(this.id, this.mode));
+    if (saved && this.race.best && saved.frames === this.race.best.frames) {
+      this.ghost.play = saved;
+    }
+  }
+
+  /**
+   * One sample of the run, every `GHOST_STEP`th race frame.
+   *
+   * `t` is the race clock, so the sample index is the clock divided by the
+   * step — which is what lets playback find the pose for a frame without
+   * searching, and what makes the pause menu (`tickPaused`) record a repeat of
+   * the last position rather than a gap. The clock runs in that menu, so the
+   * trace has to as well, or every pause would slide the ghost forward
+   * relative to the time it is supposed to be showing.
+   *
+   * Nothing here touches the simulation: it reads five fields off the player
+   * and pushes numbers. `tools/verify.mjs` proves that as a frame sequence
+   * rather than by reading this comment.
+   */
+  sampleGhost(t) {
+    const g = this.ghost;
+    if (!g || g.over || t % GHOST_STEP !== 0) return;
+    if (g.rec.x.length >= GHOST_MAX_SAMPLES) {
+      g.over = true;
+      return;
+    }
+    const p = this.player;
+    g.rec.x.push(Math.round(p.x));
+    g.rec.y.push(Math.round(p.y));
+    g.rec.flags.push(packFlags({
+      state: p.state(), facing: p.facing, level: p.power.level,
+    }));
+  }
+
+  /** Record this frame and move the replayed ghost to where it was on it. */
+  tickGhost(t) {
+    const g = this.ghost;
+    if (!g) return;
+    this.sampleGhost(t);
+    g.pose = g.play ? poseAt(g.play, t, WALK_FRAMES) : null;
   }
 
   /** Kuljettu osuus radasta, 0...1. */
@@ -1941,6 +2040,9 @@ export class LevelScene {
     const r = this.race;
     r.frames++;
     if (r.flash > 0) r.flash--;
+    /* After the player has already moved this frame: the sample is where the
+     * body ended up, not where it started. */
+    this.tickGhost(r.frames - 1);
     while (r.next < RACE_SPLITS && this.raceProgress() >= (r.next + 1) / RACE_SPLITS) {
       r.marks[r.next] = r.frames;
       if (r.best && r.best.marks[r.next] > 0) {
@@ -1966,6 +2068,11 @@ export class LevelScene {
     if (!this.race || this.state !== 'play') return;
     this.race.frames++;
     if (this.race.flash > 0) this.race.flash--;
+    /* The ghost keeps running while the menu is open, and the recorder keeps
+     * writing down that you did not. Both follow from the clock running: a
+     * ghost that waited for you would be selling the seconds the mode charges
+     * for. */
+    this.tickGhost(this.race.frames - 1);
   }
 
   /** Maali: aika talteen, jos se oli nopeampi. */
@@ -1973,9 +2080,26 @@ export class LevelScene {
     const r = this.race;
     if (!r) return;
     const before = r.best;
-    const record = setBest(this.game.state, raceKey(this.id, this.mode),
-      { frames: r.frames, marks: r.marks });
+    const key = raceKey(this.id, this.mode);
+    const record = setBest(this.game.state, key, { frames: r.frames, marks: r.marks });
     if (record) this.game.persist();
+    /*
+     * The trace follows the record, and only the record: the ghost is *the*
+     * best run, so a slower run must not overwrite it and a run that was never
+     * finished never gets here at all.
+     *
+     * A run that outgrew `MAX_SAMPLES` still counts as a time — the clock is
+     * the clock — but it leaves no path, and then the previous ghost has to go
+     * as well. It belongs to a time that no longer exists, and playback would
+     * refuse it anyway; dropping it here means the store does not carry a
+     * corpse around until the level is raced again.
+     */
+    const g = this.ghost;
+    if (record) {
+      const kept = g && !g.over
+        && putGhost(key, { frames: r.frames, x: g.rec.x, y: g.rec.y, flags: g.rec.flags });
+      if (!kept) dropGhost(key);
+    }
     this.raceResult = { frames: r.frames, best: before ? before.frames : null, record };
     if (record && before) Sfx.play('yeah');
   }
@@ -6257,6 +6381,11 @@ export class LevelScene {
      *
      * Aiming it also clears last frame's world lights, so it has to come before
      * the entities offer theirs. */
+    /* Before everything alive, and that is the whole placement argument: a
+     * translucent body drawn *in front of* an enemy looks like something that
+     * could be hit by it. Behind them it is scenery with a memory. */
+    this.drawGhost(ctx, camX);
+
     const lit = !!this.def.spotlight;
     if (lit) PostFX.setFocus(this.player.cx - camX, this.player.cy - camY + this.bar);
 
@@ -6442,6 +6571,56 @@ export class LevelScene {
    * three sides is so nothing gets clipped that was not meant to be — the
    * shake jitter can push a frame a couple of pixels either way.
    */
+  /**
+   * THE GHOST ON SCREEN: the run you already did, and nothing else.
+   *
+   * Three rules, and each of them is there so that the picture cannot be
+   * misread as a body:
+   *
+   *   1. **Translucent.** `GHOST_ALPHA` 0.45 — solid enough to follow across a
+   *      busy tilemap, faint enough that the ground shows through it. A thing
+   *      you can see through is a thing you cannot walk into.
+   *   2. **Drained of colour.** `TINTS.ghost` takes almost all the hue out, so
+   *      what is left is a silhouette with a stride rather than a second
+   *      player in the same overalls.
+   *   3. **Behind.** Drawn before the entities and therefore before the
+   *      player, so nothing living is ever hidden by it.
+   *
+   * It touches nothing: no hitbox, no entity list, no light, no sound. It is
+   * not in `this.entities`, which is also why `savestate.js`'s REGISTRY has
+   * nothing to say about it.
+   *
+   * It stops being drawn when its own run ended (`pose.done`). A ghost frozen
+   * mid-stride at the flagpole would read as a bug rather than as a finish —
+   * and by then the split has already said what happened.
+   */
+  drawGhost(ctx, camX) {
+    const g = this.ghost;
+    if (!g || !g.pose || g.pose.done || this.state !== 'play') return;
+    const pose = g.pose;
+    // Same cull as the entity loop, with the widest body's margin.
+    if (pose.x + 48 < camX || pose.x - 48 > camX + VIEW_W) return;
+    ctx.save();
+    ctx.globalAlpha = GHOST_ALPHA;
+    drawPlayer(ctx, Math.round(pose.x), Math.round(pose.y), {
+      type: null,
+      level: pose.level,
+      facing: pose.facing,
+      frame: pose.walk,
+      state: pose.state,
+      ducking: pose.state === 'duck',
+      /* No `running`, no `spinLegs`, no idle performance: those are flourishes
+       * the live body earns, and a ghost doing them competes for the eye with
+       * the player it is being compared to. */
+      running: false,
+      tick: this.tick,
+      idle: 0,
+      theme: this.theme,
+      tint: TINTS.ghost,
+    });
+    ctx.restore();
+  }
+
   drawPlayerInto(ctx, camX, camY) {
     const t = this.player.transit;
     if (!t || t.hide === null || t.hide === undefined) {

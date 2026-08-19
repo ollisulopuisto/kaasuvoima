@@ -762,7 +762,36 @@ Save compatibility (DESIGN.md item 6): a trace is new data, so it is additive
 and absent-tolerant. An old save has no ghost and the level plays exactly as
 it does today.
 
+**✔ The local half is built (20.8.2026, `src/core/ghost.js`, v26.08.20.50).**
+Four things this entry predicted came out differently enough to write down:
+
+1. **The sampling cost was right and the error estimate was not.** 3.0 bytes
+   per sample measured, so a minute is 3.6 KB and the full 65 levels are
+   ~236 KB — the entry's ~230 KB, near enough. But the interpolation error is
+   not the parabola's sag (0.625 px, which is the *average*): the worst frames
+   are **impacts**, 8–9.4 px where a landing falls inside a gap. Easing the
+   curve around them was tried and did nothing; the numbers are in the
+   changelog.
+2. **The animation phase did not need storing.** It is a function of distance
+   covered, which is already in the path, so it is derived at playback. Facing,
+   pose and body size are stored because they cannot be recomputed.
+3. **The two stores can disagree, and that had to be designed for.** A trace is
+   only replayed when its length matches the best time it claims to be — an old
+   build drops `bestTimes` while this key survives, and the wrong ghost is
+   worse than no ghost.
+4. **Normal play does not get one**, and the deciding reason is not cost: time
+   attack is a mode you enter on purpose, so keeping the recorder inside it
+   keeps "is a trace being made of me" answerable by looking at the mode.
+
+**The "unlock" question above is still open and was deliberately not answered
+by building anything.** Nothing is gated on beating a ghost.
+
 #### Sharing turns the privacy problem into the feature
+
+**Not built, and nothing was written towards it.** `ghost.js` has no exporter,
+no link format and no network call, which is the state this decision should
+find the code in. `tools/verify.mjs` checks that the module exports nothing
+that looks like a way out, so the first person to add one has to mean it.
 
 *(Owner, 19.8.2026: "running against your own personal ghost is a personal
 achievement, that much is true. But then we can ask the player — hey, would

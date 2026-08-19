@@ -29,6 +29,8 @@ import {
   PAUSE_TITLE, PAUSE_KEYS, NO_SAVESTATES, CONFIRM_RESET, TIMES_CLEARED,
   NOTHING_TO_CLEAR, bestTimes, clearBestTimes,
 } from './core/timeattack.js';
+/* Ghosts are wiped by the same key that wipes the times — see `resetBestTimes`. */
+import { clearGhosts } from './core/ghost.js';
 
 const W = 320;
 const H = 240;
@@ -193,6 +195,14 @@ class Game {
     }
     this.resetArmed = 0;
     const n = clearBestTimes(this.state);
+    /*
+     * The paths go with the numbers. They are two stores on purpose (see
+     * `ghost.js`), and this is the one place that has to know it: a player who
+     * asks for their times to be wiped is not asking for a recording of them
+     * running the level to stay behind, and a ghost with no time to belong to
+     * would never be played back anyway.
+     */
+    clearGhosts();
     this.persist();
     this.toast(`${TIMES_CLEARED}  ${n}`);
     Sfx.play('powerdown');
