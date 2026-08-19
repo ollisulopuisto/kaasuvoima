@@ -7,6 +7,47 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.43 — two piles, one glass
+
+Owner: *"I wanted the red and gold coins to go in the same pile, but now the
+reds are placed apart. Red coins at bottom, yellow on top? Have them overlay a
+bit so the yellow coins are partly obscured by the red ones, thus letting you
+see the exact number of red coins and approx number of yellow simultaneously."*
+And then, seeing the first attempt: *"let's have the reds cover 2/3 of the
+yellows sideways."*
+
+The second sentence is the design and the first is the requirement it serves:
+**exact reds, approximate yellows, one glance.** Discs stack from the bottom
+with `TUBE_RED_STEP` smaller than `TUBE_RED_H`, so the pile reads as a pile and
+every disc is still countable; the yellow keeps its own scale above and beside
+them.
+
+**The reds are in front, never underneath.** If they took space from the tube,
+collecting lives would shorten the clock — a reward that costs time. The yellow
+surface is still measured from the floor of the glass, so `COIN_CAP` coins is
+still the whole tube and two minutes is still two minutes.
+
+**Sideways is what makes it readable, and the first version proved it.** Full-
+width discs hid the yellow surface exactly when it mattered: ten lives is about
+thirty pixels of pile, `FUEL_HURRY` is seventeen coins, so the meter would have
+vanished at the moment it is being watched. That version needed a bright line
+drawn over the pile to rescue the reading. At two thirds of the width the
+problem does not exist — a third of the yellow column shows for its whole
+height — and the rescue line is gone with it.
+
+**And the corner is empty now.** Lives were drawn there as red coins yesterday;
+two places telling the same thing is what DESIGN.md §8 forbids, and of the two
+the glass is the one that also tells the *ratio* — how many lives, how much
+time, in one look. The score left on 18.8, the coin count on the 18th too, and
+this is the third readout to go.
+
+One measurement decision hides in a hex: the disc highlight was `#ff8a8a`, whose
+green channel is 138, and the tube's own gate reads anything above 130 as gold —
+so the life pile was inflating the measured height of the yellow column. The
+highlight is `#ff6060` now. A red coin should not be painting gold pixels.
+
+---
+
 ## v26.08.19.42 — the slope is a catapult if you hit its edge
 
 Owner, 19.8.2026: *"well-timed jumps should be rewarded, maybe with a somersault
