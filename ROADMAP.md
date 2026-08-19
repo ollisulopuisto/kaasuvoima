@@ -505,7 +505,58 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
-### ✔ The overworld goes isometric 2.5D — built 19.8.2026
+### The overworld map cannot be leaned without giving something up
+
+*(Owner, 19.8.2026, on opening the deployed build:
+"WHERE IS THE NEW WORLD MAP? IT'S STILL THE SAME FLAT 2D MAP!!!!")*
+
+He was right, and the entry below is the reason: the isometric work went into
+`DieScene`, which is the screen **between** worlds, and `WorldMapScene` — the
+one you stand on inside a world — was never touched. Two scenes. The changelog
+called it "the overworld" and it was not.
+
+The map is converted now (`isoAt`, the slab, the standing props), and doing it
+turned up a constraint nobody had written down: **every shipped map is exactly
+320 px wide, one screen, and not one of them scrolls.** The camera in
+`worldmap.js` exists entirely for maps that do not exist yet.
+
+That is what makes the lateral lean expensive. A 0.35 shear over a 144 px band
+slides the back row 50 px right of the front one, so all eight maps become
+370 px wide and all eight start scrolling under the pawn — a camera moving on a
+map that fits, bought with nothing. Cropping instead only moves the loss:
+world 1's start node is at the far left and its fortress at the far right, so a
+lean pushes one or the other off the edge. There is no third option that keeps
+the tile pitch.
+
+Five gate rules say the same thing from the other side, and they are the
+decision rather than the obstacle:
+
+- road ↔ nearest tall scenery, 8 px required, **1 px** measured
+- node ↔ node, 8 px required, **1 px**
+- road ↔ unrelated node, 8 px required, **2 px**
+- and the scroll rule above, 50 px against 0
+
+Those clearances were written for an orthographic map, where two things that
+overlap are a layout mistake. In a projected one, near things covering far
+things is not a mistake — it is the only thing depth *means* — so the honest
+replacement is **drawn in depth order**, not **kept apart**. The node loop
+already sorts by row for exactly this reason. Rewriting four legibility rules
+to say the new thing is a decision about the project's quality bar and it is
+the owner's, not something to slip in under a graphics change.
+
+Three ways out, cheapest first:
+
+1. **Ship it and rewrite the rules** as depth-order assertions. The map looks
+   right today; the risk is that "overlapping is fine now" is exactly the
+   licence under which a genuinely unreadable map later passes the gate.
+2. **Squash without leaning.** Keeps every rule green and was tried: at 0.85 it
+   is indistinguishable from the flat map, which is the thing being complained
+   about. There is no useful setting between them — the band is too dense.
+3. **Re-lay out the maps for isometry**: fewer, wider rows, smaller standing
+   art, a taller band. The real answer, and the largest job — it changes the
+   eight hand-made maps rather than the code that draws them.
+
+### ✔ The die goes isometric 2.5D — built 19.8.2026
 
 *(Owner, 19.8.2026, having compared four renderings of the world die:
 "I think for the map I prefer iso 2.5D." The comparison is the artifact

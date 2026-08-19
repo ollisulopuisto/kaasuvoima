@@ -1,6 +1,6 @@
 import {
   WORLDS, findNode, startNode, linkPoints, linkCurve, routeByLink, branchAt, nodePips,
-  PIPS, REWARDS, TILE, BEND_MAX,
+  PIPS, REWARDS, TILE, BEND_MAX, TALL_TERRAIN,
 } from '../data/worlds.js';
 import { drawText } from '../gfx/font.js';
 import { drawItem, drawLifeCoins, drawPlayer } from '../gfx/sprites.js';
@@ -121,6 +121,84 @@ const WALK_SPEED = 1.4;
  * the whole of the next node before stepping off the one you are on — and 64
  * clears that with the four pixels a bend can add.
  */
+/**
+ * THE GROUND IS A PLANE THE CAMERA LOOKS ACROSS.
+ *
+ * Owner, having seen the world die go isometric and the map stay flat:
+ * *"WHERE IS THE NEW WORLD MAP? IT'S STILL THE SAME FLAT 2D MAP!!!!"* — and it
+ * was, because the die is the screen *between* worlds and this is the screen
+ * you stand on inside one. Two scenes, one of them converted. This is the
+ * other one.
+ *
+ * The numbers are the die's numbers on purpose (`FLOOR_SQUASH`, `FLOOR_SHEAR`
+ * in `die.js`): one game cannot have two isometries. A step *away* from the
+ * camera survives as `ISO_SQUASH` of a step up the screen and slides
+ * `ISO_SHEAR` to the left, and that is all the projection is — affine, no
+ * vanishing point, no divide. A perspective map would fight the die's own
+ * projection, and two depth rules in one game read as a bug even when neither
+ * one is.
+ *
+ * `ISO_LEAN` is how far the back row has slid by the time it reaches the
+ * front, and every column of the map is shifted right by it so the map's own
+ * left edge is the *diagonal* rather than something that has walked off the
+ * screen. The camera pays for it in `maxScroll`.
+ *
+ * **What lies down and what stands up** is not a judgement call made here: the
+ * data already answers it. `TALL_TERRAIN` names the ten glyphs that stand up
+ * out of the ground, and it exists because a road must not be covered by
+ * something growing beside it. That is the same distinction an isometric
+ * picture needs — the floor is projected, the things standing on it are not,
+ * because a projected tree is a leaning tree.
+ */
+const ISO_SQUASH = 0.62;
+/*
+ * NO LATERAL LEAN, and the gate is what settled it rather than taste.
+ *
+ * The first version sheared at the die's 0.35, which slides the back row 50 px
+ * right of the front one. Then the gate pointed out the thing nobody had
+ * written down: **every shipped map is exactly 320 px wide**, one screen, and
+ * not one of them scrolls. A lean makes all eight of them 370 px wide, so all
+ * eight would begin sliding under the pawn — a camera wobbling across a map
+ * that fits on the screen, to buy an angle. Cropping instead of scrolling only
+ * moves the loss: world 1's start node sits at the far left and world 1's
+ * fortress at the far right, so a lean pushes one or the other off the edge.
+ *
+ * The honest reading is that this map is **too dense to lean**: nine rows of
+ * 16 px in a 144 px band, with 16 px of art standing on each. Depth has to
+ * come from somewhere that costs no width, and it does — the slab's own front
+ * face, the hard shadows, and the props standing up out of a floor that
+ * recedes. See ROADMAP for what a full isometry would need instead.
+ */
+const ISO_SHEAR = 0.35;
+const ISO_LEAN = Math.round(MAP_H * ISO_SHEAR);
+/* Not centred in the band: the slab is pushed **down** until its front face
+ * lands on the panel, so the space the squash frees up all ends up in one
+ * place — above — where it is sky for the clouds to cross. Split evenly it was
+ * a gap under the map as well, and a gap under a map reads as a bug. */
+/** How thick the slab is under the front edge. Depth you can see the side of. */
+const ISO_EDGE = 10;
+
+const ISO_TOP = Math.max(0, Math.round(MAP_H - MAP_H * ISO_SQUASH) - ISO_EDGE);
+
+/** Map pixels to screen pixels. `my` is measured from the top of the band. */
+export function isoAt(mx, my) {
+  /*
+   * ROUNDED, and `camX`'s own comment says why in as many words: everything on
+   * this map is drawn on whole pixels, and a fractional offset softens every
+   * edge it moves — the plaque's border, the seams inside the stamp, the
+   * four-pixel pips. The gate measures those from rendered pixels by exact
+   * colour, so an antialiased plaque does not merely look worse, it stops
+   * being findable at all. `0.62` and `0.35` produce a fraction for almost
+   * every row, so this is not an optimisation; without it the projection
+   * silently blurs the entire map.
+   */
+  return {
+    x: Math.round(mx + ISO_LEAN - my * ISO_SHEAR),
+    y: Math.round(MAP_Y + ISO_TOP + my * ISO_SQUASH),
+  };
+}
+
+
 const CAM_DEAD_ZONE = 96;
 
 /*
@@ -238,6 +316,13 @@ const PIP_PITCH = 4;                          // 2 px of pip, 2 px of air
 const PIP_BAR_W = PIPS * PIP_PITCH - (PIP_PITCH - PIP_W);
 const PIP_PAD = 1;                            // the dark rim the bar carries
 const PIP_TOP = 14;                           // 2 clear rows under the plaque
+
+/** Hex dimmed by a factor. The map's only lighting, same trick as the die. */
+function shadeHexMap(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${Math.round(((n >> 16) & 255) * k)},`
+    + `${Math.round(((n >> 8) & 255) * k)},${Math.round((n & 255) * k)})`;
+}
 
 export class WorldMapScene {
   constructor(game) {
@@ -452,7 +537,21 @@ export class WorldMapScene {
 
   /** The furthest left edge the window may have. 0 on a map 20 tiles wide. */
   maxScroll() {
-    return Math.max(0, this.mapWidthPx() - VIEW_W);
+    /* `ISO_LEAN` is 0 today and the term is kept anyway: it is the one place
+     * the camera would have to pay for a lean, and a lean reintroduced without
+     * it would silently make the map's far corner unreachable. */
+    return Math.max(0, this.mapWidthPx() + ISO_LEAN - VIEW_W);
+  }
+
+  /**
+   * Where the camera thinks the pawn is: its **projected** x, not its map x.
+   *
+   * A pawn walking a road that runs towards the camera moves left on screen
+   * while its map x stands still, and a camera following the map x would let
+   * it drift out of frame doing nothing wrong.
+   */
+  focusX() {
+    return isoAt(this.pos.x, this.pos.y).x;
   }
 
   /**
@@ -493,7 +592,7 @@ export class WorldMapScene {
    * first. See `snapCamera`'s only caller.
    */
   snapCamera() {
-    this.scroll = clamp(this.pos.x - VIEW_W / 2, 0, this.maxScroll());
+    this.scroll = clamp(this.focusX() - VIEW_W / 2, 0, this.maxScroll());
   }
 
   /**
@@ -506,7 +605,7 @@ export class WorldMapScene {
    * stops, this cannot, because the drift it is fed is zero on that frame.
    */
   updateCamera() {
-    const drift = (this.pos.x - VIEW_W / 2) - this.scroll;
+    const drift = (this.focusX() - VIEW_W / 2) - this.scroll;
     if (Math.abs(drift) > CAM_DEAD_ZONE) {
       this.scroll += drift - Math.sign(drift) * CAM_DEAD_ZONE;
     }
@@ -816,7 +915,9 @@ export class WorldMapScene {
       const span = 320 + 60;
       const x = Math.round(((seed * span + this.tick * (0.10 + seed * 0.14)) % span + span)
         % span - 40);
-      const y = MAP_Y + 6 + Math.round(seed * (MAP_H - 40));
+      /* The sky is the band above the slab now — see `ISO_TOP`. A cloud
+       * drawn over the ground would read as lying on it. */
+      const y = MAP_Y + 2 + Math.round(seed * Math.max(8, ISO_TOP - 12));
       const s = seed > 0.6 ? 2 : 1;
       ctx.fillStyle = color;
       ctx.fillRect(x, y + 3 * s, 22 * s, 3 * s);
@@ -829,7 +930,8 @@ export class WorldMapScene {
         const span = 320 + 80;
         const x = Math.round(((seed * span - this.tick * (0.3 + seed * 0.2)) % span + span)
           % span - 40);
-        const y = MAP_Y + 10 + Math.round(seed * 26) + Math.round(Math.sin(this.tick / 40 + i) * 3);
+        const y = MAP_Y + 6 + Math.round(seed * Math.max(6, ISO_TOP - 20))
+          + Math.round(Math.sin(this.tick / 40 + i) * 3);
         const flap = Math.floor(this.tick / 8 + i) % 2;
         ctx.fillStyle = 'rgba(30,40,60,0.55)';
         ctx.fillRect(x, y, 2, 1);
@@ -855,8 +957,44 @@ export class WorldMapScene {
     const dark = th === 'desert' ? '#c89c48' : th === 'ice' ? '#a8c8e8'
       : th === 'factory' ? '#332f44' : th === 'bone' ? '#3e4038'
         : th === 'cloud' ? '#b6c6e4' : th === 'fortress' ? '#26263a' : '#348a34';
-    ctx.fillStyle = base;
-    ctx.fillRect(0, MAP_Y, VIEW_W, MAP_H);
+    /*
+     * THE SLAB. The ground used to be a screen-wide rectangle; it is now the
+     * projected parallelogram of the map itself, with a **front face** under
+     * its near edge. That face is the whole of the "2.5D": a plane has no
+     * thickness and cannot be stood on, and ten pixels of visible side is the
+     * cheapest possible way to say the map is an object rather than a picture.
+     *
+     * Drawn inside the camera translate, unlike the rectangle it replaces,
+     * because it now has a left end and a right end.
+     */
+    {
+      const wide = this.mapWidthPx();
+      const corners = [isoAt(-TILE, 0), isoAt(wide + TILE, 0),
+        isoAt(wide + TILE, MAP_H), isoAt(-TILE, MAP_H)];
+      ctx.save();
+      ctx.translate(-this.camX(), 0);
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (const c of corners.slice(1)) ctx.lineTo(c.x, c.y);
+      ctx.closePath();
+      ctx.fillStyle = base;
+      ctx.fill();
+      /* The side is a **third** tone rather than the terrain's `dark`, which is
+       * the shading of details on top and far too close to `base` in the grass
+       * world to read as a different surface — 0x4cb04c against 0x348a34 is a
+       * shadow, not an edge. Half of dark says "this face is turned away". */
+      ctx.fillStyle = shadeHexMap(dark, 0.55);
+      ctx.beginPath();
+      ctx.moveTo(corners[3].x, corners[3].y);
+      ctx.lineTo(corners[2].x, corners[2].y);
+      ctx.lineTo(corners[2].x, corners[2].y + ISO_EDGE);
+      ctx.lineTo(corners[3].x, corners[3].y + ISO_EDGE);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#101018';
+      ctx.fillRect(corners[3].x, corners[3].y + ISO_EDGE, corners[2].x - corners[3].x, 1);
+      ctx.restore();
+    }
 
     /*
      * Only the columns the window is over.
@@ -872,8 +1010,12 @@ export class WorldMapScene {
      * cheap enough.
      */
     const cam = this.camX();
-    const from = Math.max(0, Math.floor(cam / TILE) - 1);
-    const to = Math.floor((cam + VIEW_W - 1) / TILE) + 1;
+    /* One column of bleed became `ISO_LEAN` worth of columns: a tile's screen
+     * position depends on how far back it sits, so the window covers a wider
+     * band of map columns than it used to. */
+    const bleed = Math.ceil(ISO_LEAN / TILE) + 1;
+    const from = Math.max(0, Math.floor(cam / TILE) - bleed);
+    const to = Math.floor((cam + VIEW_W - 1) / TILE) + bleed;
     ctx.save();
     ctx.translate(-cam, 0);
 
@@ -881,10 +1023,33 @@ export class WorldMapScene {
       const row = this.world.terrain[ty];
       const last = Math.min(to, row.length - 1);
       for (let tx = from; tx <= last; tx++) {
-        const x = tx * TILE;
-        const y = MAP_Y + ty * TILE;
         const ch = row[tx];
-        if (hashNoise(tx, ty) > 0.72) {
+        /*
+         * EVERY GLYPH IS DRAWN AT THE ORIGIN, and the transform decides what
+         * kind of thing it is. That is why none of the art below had to be
+         * touched: it already draws inside its own 16 px tile, so putting the
+         * tile somewhere else is a matter of where the origin is.
+         *
+         * A flat glyph gets the **floor** transform and is squashed and
+         * sheared onto its own parallelogram — water lies down, plating lies
+         * down, sand lies down. A `TALL_TERRAIN` glyph gets a plain translate
+         * to the projected **base** of its tile and keeps its full height,
+         * because a projected tree is a leaning tree.
+         */
+        const tall = TALL_TERRAIN.includes(ch);
+        const p = isoAt(tx * TILE, ty * TILE + (tall ? TILE : 0));
+        ctx.save();
+        if (tall) {
+          ctx.translate(p.x, p.y - TILE);
+        } else {
+          ctx.translate(p.x, p.y);
+          ctx.transform(1, 0, -ISO_SHEAR, ISO_SQUASH, 0, 0);
+        }
+        const x = 0;
+        const y = 0;
+        // Grit on the ground, so it is skipped under anything standing up:
+        // on a tall tile the origin is the sprite's, and y+4 is mid-trunk.
+        if (!tall && hashNoise(tx, ty) > 0.72) {
           ctx.fillStyle = dark;
           ctx.fillRect(x + Math.floor(hashNoise(ty, tx) * 10), y + 4, 4, 2);
         }
@@ -1147,6 +1312,7 @@ export class WorldMapScene {
           default:
             break;
         }
+        ctx.restore();
       }
     }
     ctx.restore();
@@ -1263,7 +1429,9 @@ export class WorldMapScene {
    */
   onView(x0, x1) {
     const cam = this.camX();
-    return x1 >= cam - TILE / 2 && x0 <= cam + VIEW_W + TILE / 2;
+    /* The lean on both sides: a map column lands anywhere between its own x
+     * and `ISO_LEAN` to the right of it, depending on how far back it sits. */
+    return x1 >= cam - TILE / 2 - ISO_LEAN && x0 <= cam + VIEW_W + TILE / 2 + ISO_LEAN;
   }
 
   /**
@@ -1311,8 +1479,13 @@ export class WorldMapScene {
       const steps = Math.max(2, Math.round(total / 8));
       for (let s = 1; s < steps; s++) {
         const at = WorldMapScene.pointAlong(line, (total * s) / steps);
-        const x = at.x;
-        const y = MAP_Y + at.y;
+        /* The road is painted **on** the ground, so its points go through the
+         * projection like any other floor pixel. The dots themselves stay
+         * square rather than being squashed into lozenges: they are marks on
+         * the road, and four pixels squashed to two is a smudge. */
+        const p = isoAt(at.x, at.y);
+        const x = p.x;
+        const y = p.y;
         /* Outline first, then the dot.
          *
          * Without it the ice world was unreadable: the open path is #f8e0a0
@@ -1340,7 +1513,8 @@ export class WorldMapScene {
       const curve = linkCurve(this.world, route.links[0]);
       const line = route.links[0].b === route.via[0] ? curve : [...curve].reverse();
       const at = WorldMapScene.pointAlong(line, 1.5 * TILE);
-      this.drawRewardMark(ctx, at.x, MAP_Y + at.y);
+      const p = isoAt(at.x, at.y);
+      this.drawRewardMark(ctx, p.x, p.y);
     }
     ctx.restore();
   }
@@ -1348,12 +1522,32 @@ export class WorldMapScene {
   drawNodes(ctx) {
     ctx.save();
     ctx.translate(-this.camX(), 0);
-    for (const node of this.world.nodes) {
-      const x = node.tx * TILE;
+    /* BACK TO FRONT. On a flat map the drawing order of two nodes could not
+     * matter, because the layout rules guaranteed they never touched. On a
+     * projected one they do touch — that is what depth *is* — and the only
+     * question that remains is which of the two is in front. Sorting by map
+     * row answers it, and it is the same answer the terrain has always given
+     * by looping its rows downwards. */
+    const ordered = [...this.world.nodes].sort((a, b) => a.ty - b.ty);
+    for (const node of ordered) {
+      const mx = node.tx * TILE;
       /* The stamp starts one pixel left of the tile and ends three past it —
        * see STAMP_BLEED — and `onView` adds half a tile on top of that. */
-      if (!this.onView(x - 1, x + TILE + STAMP_BLEED)) continue;
-      const y = MAP_Y + node.ty * TILE;
+      if (!this.onView(mx - 1, mx + TILE + STAMP_BLEED)) continue;
+      /*
+       * A node stands on the map rather than being printed on it, so what is
+       * projected is the **base** of its tile and the plaque is built upwards
+       * from there at its own full height. Everything below draws relative to
+       * `x, y` and none of it had to change.
+       */
+      const foot = isoAt(mx, node.ty * TILE + TILE);
+      const x = foot.x;
+      const y = foot.y - TILE;
+      /* The hard drop shadow, same rule as the die: offset down and right, no
+       * blur, no light source. It is what fixes the plaque to the ground —
+       * without it a node floats over the map instead of standing on it. */
+      ctx.fillStyle = 'rgba(8,8,16,0.45)';
+      ctx.fillRect(x + 3, foot.y - 3, TILE, 4);
       const cleared = this.isCleared(node.id);
       /* The bar used to be squeezed inside the same 16 px cell as the plaque,
        * on the grounds that a bar which overflowed would land on neighbouring
@@ -1460,7 +1654,13 @@ export class WorldMapScene {
      * so the sprite lands exactly where it did before the camera existed. */
     ctx.save();
     ctx.translate(-this.camX(), 0);
-    drawPlayer(ctx, this.pos.x - 6, MAP_Y + this.pos.y - lift + bob, {
+    const foot = isoAt(this.pos.x, this.pos.y);
+    /* His own shadow, drawn before him and on the ground he is standing on.
+     * The pawn is the one thing on this map that moves, so it is the one that
+     * would most obviously float without one. */
+    ctx.fillStyle = 'rgba(8,8,16,0.45)';
+    ctx.fillRect(Math.round(foot.x) - 4, Math.round(foot.y) - 1, 11, 3);
+    drawPlayer(ctx, foot.x - 6, foot.y - lift + bob, {
       type: power.type,
       level: power.level,
       facing: glance ? -1 : 1,
