@@ -8,8 +8,9 @@ import { WorldMapScene } from './scenes/worldmap.js';
 import { LevelScene } from './scenes/level.js';
 import { DemoScene } from './scenes/demo.js';
 import {
-  InterludeScene, GameOverScene, EndingScene, VictoryScene, DoorScene,
+  InterludeScene, GameOverScene, EndingScene, VictoryScene,
 } from './scenes/cards.js';
+import { DieScene } from './scenes/die.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
@@ -567,7 +568,7 @@ class Game {
       this.setScene(new EndingScene(this));
       return;
     }
-    this.setScene(new DoorScene(this, from, (next) => this.enterWorld(next)));
+    this.setScene(new DieScene(this, from, (next) => this.enterWorld(next)));
   }
 
   /** Astuminen valitusta ovesta: sama työ kuin ennen, ilman "seuraavaa". */
@@ -697,15 +698,23 @@ class Game {
       this.finishLevel({ cleared: true, card: null });
       return;
     }
-    const next = (this.state.world + 1) % WORLDS.length;
-    this.state.world = next;
-    this.state.worldsOpen = Math.max(this.state.worldsOpen, next + 1);
-    this.state.node = startNode(WORLDS[next]).id;
+    /*
+     * WARPPI KULKEE OVESTA, EI NUMEROSTA (19.8.2026).
+     *
+     * Tässä luki `(world + 1) % WORLDS.length`, ja se oli oikein niin kauan
+     * kuin maailmat olivat jono. Ne ovat kuution kärkiä (`worldDoors`), joten
+     * numeron kasvattaminen olisi ainoa paikka pelissä joka kulkee seinän
+     * läpi — ja nimenomaan se paikka jolla mekaniikkaa testataan, eli se olisi
+     * mennyt rikki huomaamatta juuri sitä testattaessa.
+     *
+     * Ovivalinta suoraan, ilman linnaketta: warppi on kehittäjän oikotie, ja
+     * oikotien kuuluu viedä samaan ruutuun johon linnakekin vie.
+     */
     this.state.debugWarped = true;
     this.persist();
-    this.toast(`WARP: MAAILMA ${next + 1} (PISTETAULU POIS)`);
+    this.toast('WARP: OVET (PISTETAULU POIS)');
     Sfx.play('powerup');
-    this.toWorldMap();
+    this.setScene(new DieScene(this, this.state.world, (next) => this.enterWorld(next)));
   }
 
   /**
