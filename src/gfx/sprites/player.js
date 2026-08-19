@@ -78,8 +78,33 @@ const BASE_DUCK = { w: 14, h: 16 };
  * the head is a quarter of the picture, and a tier you cannot name at a glance
  * is not a tier.
  */
+/*
+ * SWALLOWED ABILITIES ARE ROWS IN THIS TABLE TOO (19.8.2026).
+ *
+ * An ability is a power now (`GIFT_TYPES` in `entities/player.js`): one slot,
+ * one backup, and swallowing a spike guy displaces your leaf into the box. That
+ * makes this table the answer to "what am I carrying", because it is keyed on
+ * exactly the field that changed — and the body it colours is already in the
+ * middle of the screen, which is where the old countdown in the corner wanted
+ * the player to look instead.
+ *
+ * Each row borrows from the enemy it came from rather than being invented, so
+ * the colour is a memory of the thing you ate: `C.spike` is the spike guy's own
+ * magenta, `C.shell` the shell's green, frost the pale blue of `Kuura`'s trail.
+ * A player who has never read a word of this can still tell what they took,
+ * because they watched it walk around a minute ago.
+ */
 const POWER_LOOKS = {
   none: { hair: C.brownDark, suit: '#6a7488', shade: '#39414f', legs: '#4c5666' },
+  piikki: { hair: C.spikeShade, suit: C.spike, shade: C.spikeShade, legs: C.spikeDark },
+  /* Siivet ja kylmä olivat molemmat vaaleansinisiä ja lukivat vilkaisulla
+   * samalta. Siivet on nyt pilvi — melkein valkoinen, lämmin reunus — ja kylmä
+   * on jää: kylläisempi, vihertävämpi, tummempi pohja. */
+  siivet: { hair: '#a8c4e4', suit: '#f0f6ff', shade: '#8898b8', legs: '#d0dcf0', mark: '#ffffff' },
+  kylmä: { hair: '#1f5c7c', suit: '#4cc0d8', shade: '#164458', legs: '#2c90ac', mark: '#d8feff' },
+  magneetti: { hair: '#4c5666', suit: '#d02828', shade: '#6a1414', legs: '#8a9099', mark: '#f8f8f8' },
+  kuori: { hair: C.shellDark, suit: C.shell, shade: C.shellDark, legs: '#2c8028', mark: C.rim },
+  sylky: { hair: C.poopDark, suit: C.poop, shade: '#4c4402', legs: C.poopDark },
   shroom: { hair: C.greenDark, suit: C.gas, shade: C.greenDark, legs: C.gasDark, mark: '#e8ffc0' },
   flower: { hair: C.purpleDark, suit: C.purple, shade: '#3c1840', legs: C.purpleDark },
   /*

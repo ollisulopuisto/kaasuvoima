@@ -7,6 +7,64 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.38 — one power slot, and an enemy's ability goes in it
+
+Owner, 19.8.2026, naming the direction first: *"You know Vampire Survivors? I
+was thinking we should go for a similar ideology, not with projectile numbers
+but speed. Emphasize speed. Emphasize moving forwards. Let's only have one power
+available — one power and one backup slot. If you pick up a power from an enemy,
+that's what you have, and the power-up goes to the backup slot. The player
+should always be in a bit of a rush, always wanting to move forwards instead of
+considering and backtracking."*
+
+**The rule already existed, for items and only for items.** Taking a mushroom
+while holding a leaf banks the leaf (`storeReserve` in `takeItem`) — one power,
+one backup, and the game has worked that way for as long as there have been two
+power-ups. A swallowed ability ignored every word of it: its own field, its own
+eight-second timer, no cost at all. Three places to look for "what do I have",
+and the third one was free.
+
+The six abilities are types now, in the same slot as the other four. Swallowing
+a spike guy puts your leaf in the box.
+
+**Three things fall out, and the third is the one worth having.**
+
+  1. **Swallowing costs something.** What you gain replaces rather than adds,
+     and the price is the thing you were already carrying.
+  2. **A timer disappears.** Eight seconds was measured honestly — seventy tiles
+     at running speed, long enough to be a plan and too short to be equipment —
+     but it was measuring the wrong question. The ability was free, so *something*
+     had to limit it, and time was the only limit available. Being replaceable is
+     the limit now, and a countdown that forces waiting is exactly what a game
+     about moving forwards should not have. The corner readout it was moved into
+     yesterday is gone with it.
+  3. **The character is the readout.** `POWER_LOOKS` is keyed on the type that
+     changed, so the answer to "what am I carrying" is the body already in the
+     middle of the screen. Each of the six borrows the colours of the enemy it
+     came from — the spike guy's magenta, the shell's green, the pale blue of a
+     `Kuura` trail — so a player who has read none of this can still tell what
+     they took, having watched it walk around a minute earlier.
+
+**What it does not cost: the body.** `power.level` is untouched by a swallow.
+Which power you carry and how gassed you are were never the same question, and
+charging a size for the fastest verb in the game would have made it the most
+expensive one. A small player can swallow too — `normalizePower` now keeps a
+gift type at level 0, because a small body with wings is a real state and it is
+the state a small player who swallows ends up in.
+
+The shell is the one ability that still ends on its own: it takes a hit and
+leaves the slot empty, keeping the level, which is what its own shell always
+did.
+
+**A gate that had been measuring nothing.** The worst-case HUD fixture set
+`scene.player.powerLevel`, `.type` and `.swallowed` — all three getters, inside
+`page.evaluate`, which runs sloppy. The assignments were silent no-ops and the
+check had been rendering whatever the constructor happened to produce. One write
+to `power` does all three now, and the corner check passes on a fixture that is
+actually the worst case.
+
+---
+
 ## v26.08.18.37 — five bundlings, and one readout that had to go
 
 Owner, after the red coin: *"I like the double feature they now serve, that

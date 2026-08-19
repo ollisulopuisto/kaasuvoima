@@ -12538,15 +12538,33 @@ const report = await page.evaluate(async () => {
         + `magneetti veti ${pulled}`);
     }
 
-    /* 3. KYKY LOPPUU. Lainattu on lainattu. */
+    /*
+     * 3. KYKY EI KULU AJASSA VAAN PAIKASTA (19.8.2026).
+     *
+     * Tämä tarkisti ennen että kyky loppuu kahdeksassa sekunnissa. Se raja on
+     * poistettu tarkoituksella: kyky vie tehostuksen paikan ja työntää sen
+     * varalokeroon, eli sillä on hinta eikä kelloa. Kolme väitettä:
+     *
+     *   - kyky **pysyy** vaikka kello kävisi kuinka pitkään
+     *   - nieleminen **maksaa**: lehti on varalokerossa jälkeenpäin
+     *   - keho **ei kutistu**: taso on sama ennen ja jälkeen, koska "mikä
+     *     voima" ja "kuinka kaasuinen" ovat eri kysymyksiä
+     */
     {
       const { s, p } = withBubble(E6.Flyer);
+      p.power = { type: 'leaf', level: 3 };
+      s.game.state.reserve = null;
+      const levelBefore = p.power.level;
       s.update(up());
-      const start = p.swallowTimer;
-      for (let f = 0; f < start + 4; f++) s.update(mkInput());
-      expect('nielty kyky on lainassa ja kuluu loppuun',
-        start > 0 && p.swallowed === null,
-        `${start} framea, lopuksi ${p.swallowed || 'ei mitään'}`);
+      const got = p.swallowed;
+      const banked = s.game.state.reserve;
+      for (let f = 0; f < 900; f++) s.update(mkInput());
+      expect('nielty kyky ei kulu ajassa, se maksaa tehostuksen paikan',
+        got === 'siivet' && banked === 'leaf' && p.swallowed === 'siivet'
+        && p.power.level === levelBefore,
+        `sai ${got || 'ei mitään'}, lokeroon ${banked || 'ei mitään'},`
+        + ` 900 framen jälkeen ${p.swallowed || 'ei mitään'},`
+        + ` taso ${levelBefore} -> ${p.power.level}`);
     }
 
     /* 4. EIKÄ YKSIKÄÄN KUPLATTAVA LAJI JÄÄ ILMAN LAHJAA. Poikkeuslistaa ei ole:
@@ -20807,12 +20825,14 @@ const report = await page.evaluate(async () => {
       scene.tick = 12;
       scene.time = 90;                    // kello kriisissä eli näkyvissä
       scene.player.pMeter = 999;
-      scene.player.powerLevel = 5;
-      scene.player.type = 'leaf';
-      /* Pisin nielty kyky ja pisin lähtölaskenta yhtä aikaa: kumpikin varaa
-       * oman kolonsa, eivätkä ne ole toistensa vaihtoehtoja. */
-      scene.player.swallowed = 'magneetti';
-      scene.player.swallowTimer = 480;
+      /*
+       * `powerLevel`, `type` ja `swallowed` ovat kaikki getterejä, ja tämä
+       * lohko sijoitti niihin — `page.evaluate` ajaa löysässä tilassa, joten
+       * sijoitukset olivat äänettömiä tyhjäkäyntejä ja koe mittasi mitä
+       * konstruktori sattui antamaan. Yksi kirjoitus oikeaan kenttään tekee
+       * kaikki kolme, koska nielty kyky **on** voimapaikka (19.8.2026).
+       */
+      scene.player.power = { type: 'magneetti', level: 5 };
       scene.player.corked = 9 * 60;
       g.clearRect(0, 0, VIEW_W, VIEW_H);
       scene.drawOverlay(g);
@@ -21273,9 +21293,9 @@ const report = await page.evaluate(async () => {
       const p2 = s.player;
       const ate = s.swallowEnemy(p2, e2);
       expect('kumossa olevan voi niellä: ketju isku → kumoon → kyky on ehjä',
-        ate === true && !!p2.swallowed && p2.swallowTimer > 0 && e2.remove,
+        ate === true && !!p2.swallowed && p2.power.type === p2.swallowed && e2.remove,
         `nieltiin ${ate}, kyky ${p2.swallowed || 'ei mitään'},`
-        + ` kello ${p2.swallowTimer}`);
+        + ` voimapaikassa ${p2.power.type || 'ei mitään'}`);
     }
 
     /* --- 8 a. hätä ja ladattu laukaus --- */

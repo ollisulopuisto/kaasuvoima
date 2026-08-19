@@ -446,11 +446,52 @@ export const MAX_POWER_LEVEL = 5;
  * 'bean' on old saves, where it meant the plain mushroom.
  */
 export const POWER_TYPES = ['shroom', 'flower', 'leaf', 'pop'];
+
+/**
+ * ONE POWER SLOT, AND AN ENEMY'S ABILITY GOES IN IT (19.8.2026).
+ *
+ * Owner: *"let's only have one power available — one power and one backup slot.
+ * If you pick up a power from an enemy, that's what you have, and the power-up
+ * goes to the backup slot. The player should always be in a bit of a rush,
+ * always wanting to move forwards instead of considering and backtracking."*
+ *
+ * The rule already existed for items and only for items: taking a mushroom
+ * while holding a leaf banks the leaf (`storeReserve`, see `takeItem`). A
+ * swallowed ability ignored all of it — it was a third channel with its own
+ * field, its own eight-second timer and no cost at all, so the answer to "what
+ * do I have" needed three places to look and one of them was free.
+ *
+ * These six are now types like the other four. That buys three things and the
+ * third is the one worth having:
+ *
+ *   1. **Swallowing costs something.** Your leaf goes to the backup slot, and
+ *      what you gain replaces rather than adds.
+ *   2. **A timer disappears.** An ability lasted eight seconds because nothing
+ *      else limited it; being replaceable is the limit now, and a countdown
+ *      nobody has to watch is a countdown that need not be drawn.
+ *   3. **The character is the readout.** `POWER_LOOKS` is keyed on this type,
+ *      so wearing an ability changes the colours you are looking at anyway —
+ *      the answer to "what am I carrying" is the thing already in the middle
+ *      of the screen.
+ *
+ * They are a separate list from `POWER_TYPES` because that one is what a block
+ * may hand out, and no block hands out a spike. What makes them the same kind
+ * of thing is the slot, not the source.
+ */
+export const GIFT_TYPES = ['piikki', 'siivet', 'kylmä', 'magneetti', 'kuori', 'sylky'];
+const GIFTS = new Set(GIFT_TYPES);
+
 export const POWER_NAMES = {
   shroom: 'PIERUSIENI',
   flower: 'PIERUKUKKA',
   leaf: 'KAASULEHTI',
   pop: 'PAUKKUPAPU',
+  piikki: 'PIIKIT',
+  siivet: 'SIIVET',
+  kylmä: 'KYLMÄ',
+  magneetti: 'MAGNEETTI',
+  kuori: 'KUORI',
+  sylky: 'SYLKY',
 };
 
 /** Power-ups stack: the level drives both body size and ability strength. */
@@ -465,7 +506,13 @@ export function normalizePower(power) {
     return makePower(power, 1);
   }
   const level = Math.max(0, Math.min(MAX_POWER_LEVEL, power.level | 0));
-  return makePower(level === 0 ? null : power.type, level);
+  /* Level 0 wipes an item type, because level *is* what a mushroom bought and
+   * a mushroom at level zero is not a mushroom. A swallowed ability is not
+   * bought with level and does not vanish with it: a small body with wings is
+   * a real and deliberate state, and it is the one a player who swallows while
+   * small ends up in. */
+  const keep = GIFTS.has(power.type) || level > 0;
+  return makePower(keep ? power.type : null, level);
 }
 
 /** Pure power-up rule, shared by the level and the world map inventory. */
@@ -513,17 +560,10 @@ export class Player extends Entity {
     this.flying = 0;
     this.spin = 0;
     this.invuln = 0;
-    /*
-     * SUUSSA OLEVA KYKY, kaksi tavallista kenttää eikä oliota.
-     *
-     * `swallowKind` on mikä ja `swallowTimer` kuinka kauan. Kaksi lukua eikä
-     * `{ kind, frames }`, koska `savestate.js` sarjallistaa jokaisen oman
-     * kentän sellaisenaan — pikatallennus keskellä kykyä palauttaa sen
-     * jäljellä olevine frameineen ilman riviäkään tallennuskoodia, ja juuri se
-     * on tässä tiedostossa jo kolmesti todettu halvin tapa.
-     */
-    this.swallowKind = null;
-    this.swallowTimer = 0;
+    /* Nielty kyky oli tässä kahtena kenttänä, `swallowKind` ja `swallowTimer`.
+     * Se on nyt `power.type` siinä missä lehti ja kukka — ks. `GIFT_TYPES` —
+     * eli pikatallennus sarjallistaa sen samalla rivillä kuin tehostuksen,
+     * eikä kumpaakaan kenttää tarvitse enää olla olemassa. */
     this.frozen = 0;
     this.corked = 0;
     this.star = 0;
@@ -625,7 +665,8 @@ export class Player extends Entity {
   }
 
   /** Mikä kyky suussa on juuri nyt, tai `null`. Ks. `swallow`. */
-  get swallowed() { return this.swallowTimer > 0 ? this.swallowKind : null; }
+  /** The ability in the power slot, or null when the slot holds an item power. */
+  get swallowed() { return GIFTS.has(this.power.type) ? this.power.type : null; }
 
   /** True from the moment down + jump is taken until he can steer again. */
   get pounding() { return this.poundPhase !== ''; }
@@ -1061,18 +1102,17 @@ export class Player extends Entity {
     this.slopeLaunch(wasSlope);
 
     /*
-     * Nielty kyky kuluu ajassa, ja **kylmä maksaa jäljen jokaisesta
-     * laskeutumisesta**: kuura jättää jälkeensä liukasta maata kävellessään,
-     * ja se joka on niellyt kuuran tekee saman hyppiessään. Sama laki, sama
-     * kello, sama sulaminen — kyky on lainattu eikä keksitty.
+     * Nielty kyky **ei kulu ajassa** (19.8.2026) — se kuluu siihen että jokin
+     * toinen otetaan tilalle. `kylmä` maksaa yhä jäljen jokaisesta
+     * laskeutumisesta: kuura jättää jälkeensä liukasta maata kävellessään, ja
+     * se joka on niellyt kuuran tekee saman hyppiessään. Sama laki, sama
+     * sulaminen — kyky on lainattu eikä keksitty.
      */
-    if (this.swallowTimer > 0) {
-      this.swallowTimer--;
-      if (this.swallowKind === 'kylmä' && this.onGround && this.level.frostTile) {
-        this.level.frostTile(Math.floor(this.cx / TILE), Math.floor((this.y + this.h) / TILE));
-      }
-      if (this.swallowKind === 'magneetti' && this.level.pullCoins) this.level.pullCoins(this);
+    const gift = this.swallowed;
+    if (gift === 'kylmä' && this.onGround && this.level.frostTile) {
+      this.level.frostTile(Math.floor(this.cx / TILE), Math.floor((this.y + this.h) / TILE));
     }
+    if (gift === 'magneetti' && this.level.pullCoins) this.level.pullCoins(this);
 
     /* Ketju katkeaa maakosketukseen, ja se luetaan **liikkeen jälkeen**: se on
      * ainoa hetki jolla `onGround` kertoo tämän framen totuuden. Kohtauksesta
@@ -1538,7 +1578,10 @@ export class Player extends Entity {
     /* Kuori ottaa yhden osuman ja katoaa. Se on nielty kuoriukko, ja se tekee
      * saman minkä sen oma kuori teki: kestää kerran. */
     if (this.swallowed === 'kuori') {
-      this.swallowTimer = 0;
+      /* The shell takes the hit and leaves the slot empty rather than empty-
+       * handed: the body keeps whatever level it had, so a big player who
+       * swallowed a shell is a big player again, not a small one. */
+      this.power = makePower(null, this.power.level);
       this.invuln = 90;
       Sfx.play('kick');
       this.level.addScorePop(this.cx, this.y - 8, 'KUORI MENI');

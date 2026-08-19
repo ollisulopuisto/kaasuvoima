@@ -10,7 +10,9 @@ import { drawBackdrop } from '../gfx/backdrop.js';
 import { drawGoal, drawItem, drawLifeCoins,
 } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
-import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
+import {
+  Player, P_METER_MAX, MAX_RUN, HURT_FLASH, POWER_NAMES, makePower,
+} from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
@@ -534,18 +536,6 @@ const WILDFIRE_ASH = 240;
 const WILDFIRE_STEP = 26;
 const WILDFIRE_REACH = 2;
 
-/**
- * Kuinka kauan nielty kyky kestää, frameina. Ks. `swallowEnemy`.
- *
- * Kahdeksan sekuntia: juoksuvauhdilla noin seitsemänkymmentä laattaa eli kolme
- * ja puoli ruutua. Suunnitelmaksi tarpeeksi, varusteeksi liian vähän.
- */
-const SWALLOW_FRAMES = 480;
-/** Mitä pistepomppu sanoo kun jokin niellään. */
-const SWALLOW_NAMES = {
-  piikki: 'PIIKIT', siivet: 'SIIVET', kylmä: 'KYLMÄ',
-  magneetti: 'MAGNEETTI', kuori: 'KUORI', sylky: 'SYLKY',
-};
 /** Magneetin säde laattoina. Ks. `pullCoins`. */
 const MAGNET_R = 4;
 
@@ -2693,13 +2683,19 @@ export class LevelScene {
   }
 
   /**
-   * Nieleminen: kupla katoaa, kyky jää — `SWALLOW_FRAMES` framea.
+   * Nieleminen: kupla katoaa, kyky jää — **kunnes jokin toinen ottaa paikan**.
    *
-   * Kahdeksan sekuntia on mitattu kentän mitasta eikä tunnelmasta: pelaaja
-   * juoksee sekunnissa 150 px eli yhdeksän laattaa, joten kyky kantaa noin
-   * seitsemänkymmentä laattaa — kolme ja puoli ruutua. Se on tarpeeksi pitkä
-   * ollakseen suunnitelma ("nielen tämän ja menen tuonne") ja liian lyhyt
-   * ollakseen varuste.
+   * Kahdeksan sekunnin kello oli mitattu kentän mitasta: juoksuvauhdilla noin
+   * seitsemänkymmentä laattaa, tarpeeksi pitkä ollakseen suunnitelma ja liian
+   * lyhyt ollakseen varuste. Se mittaus oli oikein sille kysymykselle jota
+   * silloin kysyttiin — kyky oli ilmainen, joten jonkin oli rajoitettava sitä,
+   * ja aika oli ainoa käytettävissä oleva raja.
+   *
+   * Kyky ei ole enää ilmainen (19.8.2026): se vie tehostuksen paikan ja
+   * työntää sen varalokeroon, ja raja on se että seuraava ottaa sen paikan.
+   * Kello olisi nyt kahden rajan päällekkäisyys ja niistä huonompi — se
+   * pakottaisi odottamaan, ja odottaminen on täsmälleen se mitä tämä peli ei
+   * halua pelaajan tekevän.
    */
   swallowEnemy(p, e) {
     /*
@@ -2717,12 +2713,26 @@ export class LevelScene {
     if ((!e.bubbled && !e.flipped) || e.dying) return false;
     const kind = this.swallowGift(e);
     e.remove = true;
-    p.swallowKind = kind;
-    p.swallowTimer = SWALLOW_FRAMES;
+    /*
+     * THE ABILITY TAKES THE POWER SLOT, and what was in it goes to the backup
+     * (19.8.2026). This is the same two lines `takeItem` runs when a mushroom
+     * displaces a leaf — see `storeReserve` — and that is the point: there is
+     * one slot, and everything that wants it pays the same way.
+     *
+     * Only an item power is banked. An ability has no item form to put in a
+     * box, so swallowing over an ability simply replaces it; the box is for
+     * things a block could have handed you.
+     *
+     * The body keeps its level. Swapping which power you carry is not the same
+     * question as how gassed you are, and making a swallow cost a size would
+     * turn the fastest thing in the game into the most expensive one.
+     */
+    if (p.power.type && !p.swallowed) this.storeReserve(p.power.type);
+    p.power = makePower(kind, p.power.level);
     this.awardScore(e.score, e.cx, e.y);
     this.spawnPuff(p.cx, p.cy);
     Sfx.play('nielu');
-    this.addScorePop(p.cx, p.y - 12, SWALLOW_NAMES[kind] || kind);
+    this.addScorePop(p.cx, p.y - 12, POWER_NAMES[kind] || kind);
     return true;
   }
 
@@ -6564,29 +6574,6 @@ export class LevelScene {
       const secs = Math.ceil(this.player.corked / 60);
       drawText(ctx, `UMMETUS ${secs}`, OVERLAY.right, 17, {
         color: Math.floor(this.tick / 6) % 2 ? '#ff8040' : '#c85820',
-        align: 'right',
-        shadow: S,
-      });
-    } else if (this.player.swallowed) {
-      /*
-       * NIELTY KYKY ON LÄHTÖLASKENTA SIINÄ MISSÄ MUUTKIN (18.8.2026).
-       *
-       * Sillä oli oma nimi ja oma palkki varalokeron vieressä, ja perustelu
-       * kuului: pelaajan on tiedettävä *mikä* ja *kuinka kauan vielä*. Se on
-       * yhä totta — ja se on täsmälleen se pari jonka tämä kolo on jo viisi
-       * kertaa kertonut. `TÄHTI 6` sanoo mikä ja kuinka kauan yhdellä rivillä;
-       * `SIIVET 6` sanoo saman saman levyisenä samassa paikassa.
-       *
-       * Kolo on yhä yksi, eli tähti voittaa kyvyn. Se on sama valinta joka
-       * tehtiin viidelle edelliselle: kaksi lähtölaskentaa yhtä aikaa on tila
-       * jossa kumpaakaan ei ehdi lukea, ja jos molemmat ovat käynnissä, tähti
-       * on se joka päättyy ikävämmin.
-       */
-      const secs = Math.ceil(this.player.swallowTimer / 60);
-      const name = SWALLOW_NAMES[this.player.swallowed] || this.player.swallowed;
-      drawText(ctx, `${name} ${secs}`, OVERLAY.right, 17, {
-        color: this.player.swallowTimer < SWITCH_WARN && Math.floor(this.tick / 6) % 2
-          ? '#ff8040' : '#a8e04a',
         align: 'right',
         shadow: S,
       });
