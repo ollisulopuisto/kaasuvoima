@@ -13,7 +13,9 @@ import { hashNoise } from '../core/utils.js';
 import { qMul, qNorm, qSlerp, qApply, qAxis, qBetween } from '../core/quat.js';
 import { drawPlayer } from '../gfx/sprites.js';
 import { normalizePower } from '../entities/player.js';
-import { FACES, HEX_COUNT, STRIP, onFace, sideAt } from '../data/solid.js';
+import {
+  FACES, HEX_COUNT, STRIP, onFace, sideAt, netLayout, netCorners,
+} from '../data/solid.js';
 
 /**
  * THE POINTY SPHERE YOU WALK ON.
@@ -95,6 +97,35 @@ const SCALE = 1 / Math.sqrt(5);
 /** Frames a roll takes, and the beats either side of it. */
 const ROLL_FRAMES = 30;
 const TIP_FRAMES = 7;
+
+/**
+ * THE FOLD: what a change of *world* looks like, as against a change of level.
+ *
+ * Owner: *"I wanna see a hyperobject folding & unfolding when we're walking
+ * between WORLDS; the level change can be just a regular 3D rotation of the
+ * shape."* — and that is the right split, because the two moves are not the
+ * same size. Rolling over an edge keeps you on the same object. Walking out of
+ * a world replaces the object, and an animation that said the same thing for
+ * both would be telling you the smaller of the two truths.
+ *
+ * So the solid opens out flat around the face you are standing on, the faces
+ * become the *next* world's while they are lying down, and it shuts again.
+ * The net (`netLayout`) is centred on home for a reason: the face you were
+ * reading stays where it is and everything else comes apart around it, which
+ * makes this a transition rather than a cut to another screen.
+ *
+ * It shrinks as it opens. The net is six and a bit face-radii across and the
+ * solid is one, so a fold that kept its scale would be four times the width of
+ * the screen — and receding as it flattens is what opening out looks like
+ * anyway.
+ */
+const FOLD_OPEN = 34;
+const FOLD_FLAT = 12;
+const FOLD_SHUT = 30;
+const NET_SCALE = 0.30;
+
+/** The die's easing, so the two solids in this game move the same way. */
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
 const LAND_FRAMES = 9;
 
 /** How far the pawn walks per frame, in face radii. */
@@ -432,6 +463,8 @@ export class GlobeScene {
     this.dropT = 0;
     this.grown = new Map();
     this.leaving = null;
+    this.fold = 0;
+    this.folding = null;
     this.landed = false;
     /* Start on the face of the node the save is standing on, so coming back
      * from a level puts you where you left rather than at the beginning. */
@@ -461,6 +494,71 @@ export class GlobeScene {
   get here() { return FACES[this.face]; }
 
   /* ------------------------------ projection --------------------------- */
+
+  /**
+   * A face's corners on the screen, lerped between the solid and the net.
+   *
+   * Staggered by how far the face is from home — the face you are standing on
+   * leaves last and arrives first — because everything moving at once is an
+   * explosion and not a fold. The die learned this the same way.
+   */
+  faceCorners(face) {
+    const solid = face.verts.map((v) => this.project(v));
+    if (this.fold <= 0) return solid;
+    const home = this.here;
+    if (!this.net || this.netHome !== home) {
+      this.net = netLayout(home);
+      this.netHome = home;
+    }
+    const spot = this.net.get(face);
+    /*
+     * THE OUTSIDE PEELS OFF FIRST AND HOME GOES LAST — the opposite of the
+     * die's fold, and for a reason the die did not have. Home is already
+     * square to the camera and its place in the net is the middle, so moving
+     * it first swung a full-size hexagon across the screen and hid the rest of
+     * the solid behind it for a third of the animation. Letting it sit while
+     * everything peels away around it is also what the sentence describing
+     * this says out loud: the world comes apart around the face you are
+     * standing on.
+     */
+    const ring = face === home ? 2
+      : home.sides.some((sd) => sd.to && sd.to.kind === face.kind
+        && sd.to.index === face.index) ? 1 : 0;
+    const span = 1 - 0.18 * 2;
+    const t = ease(clamp((this.fold - ring * 0.18) / span, 0, 1));
+    if (t <= 0) return solid;
+    const flat = netCorners(home, face, spot).map(([x, y]) => ({
+      x: CX + x * R,
+      y: CY + y * R,
+      z: 0,
+    }));
+    /* An arc, so a face reads as swinging down rather than sliding across. */
+    const lift = Math.sin(t * Math.PI) * 16;
+    /*
+     * THE SHRINK IS GLOBAL, and that is the whole difference between a fold
+     * and a collapse. Building the net at `NET_SCALE` directly meant the home
+     * face — which leaves first — was at a third of its size while the outer
+     * faces were still full sized, and the middle of the animation was a
+     * sliver with everything piled in the centre. The net is built full size
+     * and the *picture* recedes as it opens, so every face shrinks together
+     * and the shape stays a shape the whole way.
+     */
+    /* The shrink LEADS the spread rather than tracking it: eased in step with
+     * the fold, the faces reached their far positions while the picture was
+     * still most of its full size and half a dozen of them flew off the edges
+     * of the screen. Reaching net scale by two thirds of the way through keeps
+     * the whole net in frame at the moment it is widest. */
+    const k = 1 - (1 - NET_SCALE) * Math.min(1, this.fold * 1.6);
+    return solid.map((p, i) => {
+      const x = p.x + (flat[i].x - p.x) * t;
+      const y = p.y + (flat[i].y - p.y) * t - lift;
+      return {
+        x: CX + (x - CX) * k,
+        y: CY + (y - CY) * k,
+        z: p.z * (1 - t),
+      };
+    });
+  }
 
   /** A solid-local point on the screen, plus its depth for painter order. */
   project(p) {
@@ -580,6 +678,7 @@ export class GlobeScene {
     if (this.messageTimer > 0) this.messageTimer--;
     if (this.dust > 0) this.dust = Math.max(0, this.dust - 1 / 16);
     if (this.arriving) { this.updateDrop(); return; }
+    if (this.mode === 'fold') { this.updateFold(); return; }
     if (this.mode === 'house') { this.house.update(input); return; }
     if (this.mode === 'roll') { this.updateRoll(); return; }
     if (this.squash !== 0) this.squash *= 0.82;
@@ -635,6 +734,52 @@ export class GlobeScene {
    * the same one the roll lands with, because a thing landing on a thing
    * should look the same however it got there.
    */
+  /**
+   * Opening out, changing world while flat, and shutting again.
+   *
+   * The swap happens at the flattest point and it is a *rebuild*, not a
+   * repaint: the new world has its own levels, its own house and its own
+   * doors, and every one of them is read from the same `facesOfWorld` the
+   * constructor uses. The scene is not replaced, because replacing it would
+   * throw away the fold that is halfway through happening.
+   */
+  updateFold() {
+    const f = this.folding;
+    const total = FOLD_OPEN + FOLD_FLAT + FOLD_SHUT;
+    f.t += 1;
+    if (f.t <= FOLD_OPEN) {
+      this.fold = f.t / FOLD_OPEN;
+    } else if (f.t <= FOLD_OPEN + FOLD_FLAT) {
+      this.fold = 1;
+      if (!f.swapped) {
+        f.swapped = true;
+        this.world = f.door.world;
+        const laid = facesOfWorld(WORLDS[this.world]);
+        this.byFace = laid.byFace;
+        this.rooms = laid.rooms;
+        this.grown = new Map();
+        this.game.state.world = this.world;
+        this.game.state.node = f.land.id;
+        this.game.persist();
+        Music.play('map');
+        Sfx.play('doorin');
+      }
+    } else {
+      this.fold = Math.max(0, 1 - (f.t - FOLD_OPEN - FOLD_FLAT) / FOLD_SHUT);
+    }
+    if (f.t >= total) {
+      /* Arriving on the face the door led to, standing on its edge, walking
+       * in — the same ending the roll has, because you did arrive by walking. */
+      this.fold = 0;
+      this.face = f.door.face;
+      this.rot = tilted(qBetween(this.here.normal, [0, 0, 1]));
+      this.net = null;
+      this.at = { u: 0, v: 0 };
+      this.mode = 'idle';
+      this.folding = null;
+    }
+  }
+
   updateDrop() {
     this.dropT += 1 / (DROP_FALL + DROP_LAND);
     const fall = DROP_FALL / (DROP_FALL + DROP_LAND);
@@ -721,12 +866,8 @@ export class GlobeScene {
         const land = levels[door.from - 1];
         if (!land) { this.walkOut = false; return; }
         Sfx.play('pipe');
-        this.game.state.world = door.world;
-        this.game.state.node = land.id;
-        this.game.persist();
-        const next = new GlobeScene(this.game, door.world, door.face);
-        next.arriving = true;
-        this.game.setScene(next);
+        this.folding = { t: 0, door, land };
+        this.mode = 'fold';
         return;
       }
       if (this.game.state.cleared[node.id]) {
@@ -745,6 +886,8 @@ export class GlobeScene {
     this.dropT = 0;
     this.grown = new Map();
     this.leaving = null;
+    this.fold = 0;
+    this.folding = null;
     this.landed = false;
         this.mode = 'walk';
         this.walkOut = false;
@@ -826,10 +969,10 @@ export class GlobeScene {
     this.drawFloor(ctx);
 
     const drawn = FACES.map((f) => {
-      const pts = f.verts.map((v) => this.project(v));
+      const pts = this.faceCorners(f);
       const depth = pts.reduce((s, p) => s + p.z, 0) / pts.length;
       return { f, pts, depth };
-    }).filter((d) => d.depth > 0.05).sort((a, b) => a.depth - b.depth);
+    }).filter((d) => d.depth > 0.05 || this.fold > 0.5).sort((a, b) => a.depth - b.depth);
 
     ctx.fillStyle = SHADOW;
     for (const d of drawn) {
@@ -862,9 +1005,16 @@ export class GlobeScene {
       ctx.stroke();
     }
 
-    this.drawGrowth(ctx);
-    this.drawRoads(ctx);
-    this.drawPawn(ctx);
+    /* Roads, scenery and the pawn are on the face, and while the solid is in
+     * pieces there is no face to be on. They fade out as it opens and back in
+     * as it shuts. */
+    if (this.fold < 0.35) {
+      ctx.globalAlpha = 1 - this.fold / 0.35;
+      this.drawGrowth(ctx);
+      this.drawRoads(ctx);
+      this.drawPawn(ctx);
+      ctx.globalAlpha = 1;
+    }
     this.drawLabels(ctx);
     /* The room is drawn over everything, because you are inside it. */
     if (this.house) this.house.draw(ctx);
