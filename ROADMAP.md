@@ -610,6 +610,45 @@ the expensive part: the isometric work went into `DieScene`, the screen
 the screen you stand on inside a world, was never touched. Two scenes. The
 owner found out by opening the deployed build.
 
+### The way out of a world: the spare edges, and a numbering that fights it
+
+*(Owner, 20.8.2026: "if it's from 1-2 to 2-1, then the next connector is 2-3 to
+3-2, maybe? And 3-4 to 4-3? Etc." — and separately, the unlock rhythm: "at
+first you can only access 1-1, and after unlocking that you can move to 1-2,
+after that you got 1-1, 1-2 and 2-1.")*
+
+The unlock rhythm is built. The connector is not, because measuring the
+proposal against the shape turned up a conflict worth settling before code.
+
+**The pattern assumes worlds come in a line, and they do not.** Worlds are the
+faces of the outer octahedron and neighbours are `i^1, i^2, i^4`, so "world n
+borders world n+1" is true for 1→2, 3→4, 5→6 and 7→8 and **false** for 2→3,
+4→5 and 6→7. Checked, not assumed. A connector at 2-3 → 3-2 would join two
+worlds that share no edge.
+
+Three ways it could still work, and they are different games:
+
+1. **Along the Gray path.** `1 → 2 → 4 → 3 → 7 → 8 → 6 → 5` is a Hamiltonian
+   path on the cube — every consecutive pair really is adjacent, verified. Read
+   "the next world" as the next along that path and the owner's rule works
+   unchanged; only the numbers in it differ. The cost is that the *displayed*
+   world numbers stop matching the order you meet them in.
+2. **Per-edge depth instead of a counter.** A world has three exits, not one,
+   because the player chooses a door after each fortress — so there is no
+   global "next". But the escalation the pattern is really made of survives if
+   the *depth* of an exit is tied to what is behind it: the door to an easier
+   neighbour opens early in the world, the door to a harder one deep in it.
+   `worldTier` already measures that. This keeps the cube and keeps the feel.
+3. **Renumber the worlds** so the sequence is the path. Honest, and the most
+   expensive: every level id from `1-1` to `8-4` carries the old numbering.
+
+**Where a connector would live is already decided by the geometry.** The cube
+has 12 edges, the level chain uses 7, and the five left over are one on each
+middle face and two at each end. Those spare edges are shut today (grey, and
+the gate refuses them at the hub). They are exactly the right size for the ways
+out — one per world with four to spare for secrets — and no new geometry is
+needed to turn them on.
+
 ### ✔ The world **die** goes isometric 2.5D — built 19.8.2026
 
 *(Owner, 19.8.2026, having compared four renderings of the world die:

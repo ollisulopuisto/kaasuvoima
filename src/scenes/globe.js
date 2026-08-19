@@ -309,6 +309,46 @@ function sceneryOf(face, theme, rooms) {
   return out;
 }
 
+/**
+ * WHICH FACES ARE OPEN, AND WHY IT IS NOT ALL OF THEM.
+ *
+ * Owner: *"it's not like EVERY facet is instantly available! At first you can
+ * only access 1-1, and after unlocking that you can move to 1-2… there's still
+ * unlocking to be done, but you don't necessarily have to unlock EVERYTHING."*
+ *
+ * He was right and this was a regression rather than a decision: when the
+ * faces became levels I opened all three hex doors on every face, so the solid
+ * handed out the whole world at once. The flat map had never done that —
+ * `isLinkOpen` says a road is open when **either end has been cleared**, which
+ * is what makes a world unfold ahead of you instead of arriving finished.
+ *
+ * **Along the chain, not around the neighbourhood.** Reading the rule as "any
+ * face sharing an edge" was the first attempt and it opened three at a time,
+ * because a hexagon has three level doors — one clear and a quarter of the
+ * world arrived at once. The owner's rhythm is one at a time: *"after
+ * unlocking that you can move to 1-2, after that you got 1-1, 1-2 and 2-1."*
+ * So the gate follows `STRIP`, the Gray path that laid the levels out in the
+ * first place: the next level along it opens, and the one behind stays open
+ * because you have already stood there.
+ *
+ * Which leaves the **spare edges** — the five of the cube's twelve that the
+ * path does not use, one on each middle face and two at each end. They are
+ * shut here and they are where the ways out of the world belong; see ROADMAP.
+ */
+function faceOpen(byFace, cleared, face) {
+  const k = STRIP.indexOf(face);
+  if (k <= 0) return true;
+  const node = byFace[face];
+  if (!node) return false;
+  if (cleared[node.id]) return true;
+  /* Backwards is always open once you have been there, so a cleared world can
+   * be walked over again — the chain gates what is *ahead*, not where you have
+   * already stood. */
+  const at = (i) => (i >= 0 && i < STRIP.length ? byFace[STRIP[i]] : null);
+  const done = (n) => !!(n && cleared[n.id]);
+  return done(at(k - 1)) || done(at(k + 1));
+}
+
 export class GlobeScene {
   constructor(game, world = 0, face = null) {
     this.game = game;
@@ -395,6 +435,27 @@ export class GlobeScene {
     return best ? best.k : null;
   }
 
+  /**
+   * What is on the other side of spoke `k`, as one word. The colours below and
+   * the refusal above both read it, so a road cannot look walkable and then
+   * not be.
+   */
+  spokeLeads(k) {
+    const side = this.here.sides[k];
+    if (!side.to) return 'none';
+    if (side.to.kind === 'square') {
+      const node = this.rooms.get(side.to.index);
+      return node && this.game.state.cleared[node.id] ? 'spent' : 'room';
+    }
+    if (!faceOpen(this.byFace, this.game.state.cleared, side.to.index)) return 'locked';
+    const node = this.byFace[side.to.index];
+    return node && this.game.state.cleared[node.id] ? 'cleared' : 'open';
+  }
+
+  spokeOpen(k) {
+    return this.spokeLeads(k) !== 'locked';
+  }
+
   update(input) {
     this.tick++;
     if (this.messageTimer > 0) this.messageTimer--;
@@ -426,6 +487,15 @@ export class GlobeScene {
         input.consume(key);
         const k = this.spokeFor(key);
         if (k === null) { Sfx.play('bump'); break; }
+        /* Refused here rather than at the far end of the road: walking the
+         * length of a spoke to be told no is the same information delivered
+         * late and with a wasted second attached to it. */
+        if (!this.spokeOpen(k)) {
+          this.message = 'LUKOSSA';
+          this.messageTimer = 70;
+          Sfx.play('bump');
+          break;
+        }
         this.spoke = k;
         this.walkOut = true;
         this.mode = 'walk';
@@ -637,7 +707,12 @@ export class GlobeScene {
       const base = room ? '#8890b0'
         : node ? TIER_COLORS[Math.max(1, nodePips(node))]
           : TIER_COLORS[Math.max(1, pipsFor(worldMedian(this.world)))];
-      const step = here ? 0 : Math.min(2, d.depth > 0.55 ? 1 : 2);
+      /* A locked face is a tone deeper than the depth alone would make it, so
+       * the solid shows how much of the world is still shut from any angle. */
+      const shut = d.f.kind === 'hex'
+        && !faceOpen(this.byFace, this.game.state.cleared, d.f.index);
+      const step = here ? 0
+        : Math.min(2, (d.depth > 0.55 ? 1 : 2) + (shut ? 1 : 0));
       poly(ctx, d.pts, 0, 0);
       ctx.fillStyle = shade(base, TONES[step]);
       ctx.fill();
@@ -703,14 +778,28 @@ export class GlobeScene {
       const s = sideAt(this.here, k);
       const end = this.onHere(s.u * 0.92, s.v * 0.92);
       const steps = Math.max(2, Math.round(Math.hypot(end.x - hub.x, end.y - hub.y) / 7));
-      const room = this.here.sides[k].to.kind === 'square';
+      /*
+       * THE ROAD SAYS WHERE IT GOES.
+       *
+       * Owner: *"could the colours of the sides or the paths give you a hint
+       * about where you're going?"* — and the geometry had already sorted the
+       * doors into the categories the answer needs, so this is only a matter
+       * of printing what it knows. Gold is somewhere new, green is somewhere
+       * you have been, grey is not yet, and the room doors take the colour of
+       * the square they lead to so the road and its destination match.
+       */
+      const lead = this.spokeLeads(k);
+      const ink = lead === 'locked' ? '#4a4a5e'
+        : lead === 'cleared' ? '#8fe04a'
+          : lead === 'room' ? '#c8b0e8'
+            : lead === 'spent' ? '#5a5a76' : '#ffd048';
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const x = Math.round(hub.x + (end.x - hub.x) * t);
         const y = Math.round(hub.y + (end.y - hub.y) * t);
         ctx.fillStyle = 'rgba(24,20,16,0.72)';
         ctx.fillRect(x - 3, y - 3, 6, 6);
-        ctx.fillStyle = room ? '#8fe04a' : '#ffd048';
+        ctx.fillStyle = ink;
         ctx.fillRect(x - 2, y - 2, 4, 4);
       }
     }
