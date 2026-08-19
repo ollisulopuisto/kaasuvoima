@@ -345,6 +345,48 @@ const SLOPE_UP = 0.045;
 const SLOPE_LAUNCH = 0.85;
 const SLOPE_LAUNCH_MIN = MAX_WALK + 0.3;
 
+/*
+ * AJOITETTU LÄHTÖ: RINNE ON KATAPULTTI JOS OSUT SEN HUIPPUUN.
+ *
+ * Omistaja 19.8.2026: *"well-timed jumps should be rewarded, maybe with a
+ * somersault and extra distance? The most obvious place is right on the edge of
+ * a `/`, which kinda functions like a catapult."*
+ *
+ * Tämä on **muodoltaan pumppauksen vastakohta**, ja se on tahallista. Pumppaus
+ * poistettiin koska sen ohittaminen oli parempi peli kuin sen yrittäminen:
+ * ohilyönti maksoi segmentin, eli mekaniikka rankaisi yrittämisestä. Tässä
+ * lähtö tapahtuu joka tapauksessa — se on ollut automaattinen alusta asti — ja
+ * ajoitus **lisää** siihen. Väärin ajoitettu on tasan sama kuin ei ajoitettu,
+ * eikä kukaan menetä mitään sillä ettei tiedä tämän olevan olemassa.
+ *
+ * Se maksaa myös siellä missä pelaaja on jo nopea, mikä oli pumppauksen
+ * mittauksen toinen opetus: täyttymisnopeudella ei voi ostaa mitään, koska
+ * katon alla vietetään puolitoista sekuntia koko kentästä. Rinteitä on
+ * maastopassin jälkeen 43 kentässä, ja jokainen on paikka jossa vauhti on jo
+ * huipussaan.
+ *
+ * **Palkinto on pystysuora eikä koske `vx`:ään.** Sama sääntö jonka portti
+ * opetti myötätuulesta: `gapTiles` 6 ja `wallTiles` 4 on mitattu P-katolla ja
+ * jokaisen kentän todistus lepää niiden päällä. Korkeampi kaari on silti
+ * pidempi kaari — ilmassa vietetty aika kantaa samaa vaakavauhtia pidemmälle —
+ * eli luvattu lisämatka tulee koskematta nopeuteen.
+ *
+ * Ikkuna on `SLOPE_GRACE` framea **lähdön jälkeen**, ja se on siinä missä se on
+ * mitattuna eikä suunniteltuna. Ensimmäinen versio luki `jumpBuffer`ia, eli
+ * "painoi juuri ennen huippua" — ja se haara on tavoittamaton: maassa tai
+ * rinteessä painettu hyppy laukaisee maahyppyhaaran ja kuluttaa puskurin ennen
+ * kuin huippu ehtii tulla. Ainoa hetki jolloin painallus voi tarkoittaa
+ * *rinnettä* on se jolloin keho on jo ilmassa mutta vasta lähtenyt.
+ *
+ * Se sopii myös siihen mitä pelaaja katsoo: rinteen huippu ei ole ruudulla
+ * mikään merkitty kohta, joten tähdätään siihen mitä nähdään, ja mitä nähdään
+ * on maan kulma — jonka ohittaa ennen kuin sen huomaa ohittaneensa.
+ */
+const SLOPE_KICK = 1.35;
+const SLOPE_GRACE = 5;
+/** Kuinka kauan kuperkeikka pyörii. Pelkkä kuva, ks. `flip`. */
+const FLIP_FRAMES = 24;
+
 const PLUME_START = 0.38;
 /** Framen väli suihkun purskeiden välissä, alarajalla ja täydellä mittarilla. */
 const PLUME_SLOW = 10;
@@ -494,6 +536,12 @@ export class Player extends Entity {
     this.jumpBuffer = 0;
     this.flying = 0;
     this.spin = 0;
+    /* Kuperkeikka: pelkkä kuva, ei osumakoteloa — `spin` on lehden häntäisku ja
+     * kantaa omansa, eikä ajoitettu lähtö ole hyökkäys. Ja `slopeGrace` on se
+     * ikkuna jonka ajan myöhässä tullut painallus vielä kelpaa. */
+    this.flip = 0;
+    this.slopeGrace = 0;
+    this.slopeKickBase = 0;
     this.invuln = 0;
     this.frozen = 0;
     this.corked = 0;
@@ -700,6 +748,8 @@ export class Player extends Entity {
     this.pFullEntry = this.pFull;
     if (this.invuln > 0) this.invuln--;
     if (this.spin > 0) this.spin--;
+    if (this.flip > 0) this.flip--;
+    if (this.slopeGrace > 0) this.slopeGrace--;
     if (this.corked > 0) this.corked--;
     if (this.hurtFlash > 0) this.hurtFlash--;
     if (this.morphTimer > 0) this.morphTimer--;
@@ -948,6 +998,11 @@ export class Player extends Entity {
       this.coyote = 0;
       this.jumpHeld = true;
       Sfx.play(this.big ? 'bigjump' : 'jump');
+    } else if (jumpPressed && this.slopeGrace > 0 && this.timeSlopeKick()) {
+      /* Myöhässä osunut lähtö. **Ennen lentoa ja pieruhyppyä ketjussa**, koska
+       * molemmat kuluttaisivat saman painalluksen johonkin muuhun — ja pelaaja
+       * joka painoi rinteen huipulla tarkoitti rinnettä. */
+      this.jumpBuffer = 0;
     } else if (jumpPressed && canFly && this.flying <= 0) {
       this.jumpBuffer = 0;
       this.flying = 180 + this.power.level * 30;     // take off
@@ -1565,8 +1620,29 @@ export class Player extends Entity {
     if (Math.sign(this.vx) !== Math.sign(wasSlope)) return;
     const speed = Math.abs(this.vx);
     if (speed < SLOPE_LAUNCH_MIN) return;
+    /* Puskuroitu painallus = osuma huippuun. `jumpBuffer` on jo se kenttä joka
+     * muistaa "painoi juuri äsken", ja se kuluu tähän niin ettei sama painallus
+     * laukaise vielä hyppyä ilmassa. Myöhässä tuleva hoidetaan `slopeGrace`n
+     * kautta, ks. `timeSlopeKick`. */
     this.vy = -speed * SLOPE_LAUNCH;
+    this.slopeKickBase = speed * SLOPE_LAUNCH;
+    this.slopeGrace = SLOPE_GRACE;
     this.onGround = false;
+    /*
+     * KOJOTTIAIKA NOLLATAAN, ja ilman tätä koko ajoitus on kuollut kirjain.
+     *
+     * `coyote` on se armo joka antaa hypätä muutama frame reunalta astumisen
+     * jälkeen, ja rinteen huipulta lähtevällä se oli yhä käynnissä: painallus
+     * lähdön jälkeen osui **maahyppyhaaraan** ja antoi täyden hypyn lähdön
+     * päälle. Mitattuna se oli 80 px lisää nousua, ilmaiseksi ja ilman
+     * ajoitusta — eli katapultti oli jo olemassa, se vain ei vaatinut mitään
+     * eikä kukaan tiennyt sitä olevan.
+     *
+     * Lähtö ei ole reunalta astumista: keho ei kävellyt tyhjän päälle vaan
+     * heitettiin. Kojotti kuuluu sille joka putosi, ja sille joka lensi kuuluu
+     * `slopeGrace`.
+     */
+    this.coyote = 0;
     /* Sama kevyt painovoima kuin hypyssä niin kauan kuin nappi on pohjassa:
      * rinne antaa lähdön, pelaaja päättää kuinka pitkälle sitä venyttää. Ilman
      * tätä nousu olisi 12 px eikä 40, eli sama liike ilman sitä osaa joka
@@ -1574,6 +1650,30 @@ export class Player extends Entity {
     this.jumpHeld = true;
     this.level.spawnPuff(this.cx, this.y + this.h);
     Sfx.play('jump');
+  }
+
+  /**
+   * Myöhässä tullut painallus, `SLOPE_GRACE`n sisällä: sama potku kuin ajoissa
+   * tulleella, lisättynä jälkikäteen.
+   *
+   * Erotus eikä uusi nopeus, koska nousu on jo alkanut: painovoima on syönyt
+   * osan siitä ja `jumpHeld` on venyttänyt sitä, ja jos tähän kirjoitettaisiin
+   * `-speed * SLOPE_LAUNCH * SLOPE_KICK`, myöhässä painanut saisi enemmän kuin
+   * ajoissa painanut — mitä myöhemmin, sitä enemmän.
+   */
+  timeSlopeKick() {
+    if (this.slopeGrace <= 0 || this.vy >= 0) return false;
+    this.slopeGrace = 0;
+    this.vy -= this.slopeKickBase * (SLOPE_KICK - 1);
+    this.startFlip();
+    this.level.spawnPuff(this.cx, this.y + this.h);
+    Sfx.play('loikka');
+    return true;
+  }
+
+  /** Kuperkeikka, ja se on kuva eikä tila: mikään ei lue tätä paitsi piirros. */
+  startFlip() {
+    this.flip = FLIP_FRAMES;
   }
 
   /**
@@ -1808,6 +1908,11 @@ export class Player extends Entity {
     else if (this.frozen > 0) tint = TINTS.frozen;
     else if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) tint = TINTS.flash;
     const spinning = this.spin > 0;
+    /* Kuperkeikka pyörii nopeammin kuin häntäisku ja kestää pidempään: isku on
+     * osuma jonka suunta on luettava, keikka on ele jonka pyörinnän kuuluu
+     * näkyä. Sama keino kummallakin — hahmo katsoo vuoroin taakse — koska se
+     * on tässä kuvakoossa ainoa pyörimisen kieli joka luetaan pyörimiseksi. */
+    const tumbling = this.flip > 0;
     drawPlayer(ctx, this.x, this.y, {
       type: this.power.type,
       // Flickering between the old body and the new one. The hitbox is already
@@ -1815,7 +1920,9 @@ export class Player extends Entity {
       // is decided by which frame you are on.
       level: this.morphTimer > 0 && Math.floor(this.tick / 3) % 2
         ? this.morphFrom : this.power.level,
-      facing: spinning ? (Math.floor(this.spin / 3) % 2 ? -this.facing : this.facing) : this.facing,
+      facing: spinning || tumbling
+        ? (Math.floor((spinning ? this.spin / 3 : this.flip / 2)) % 2 ? -this.facing : this.facing)
+        : this.facing,
       frame: this.animFrame,
       state: this.state(),
       ducking: this.ducking,

@@ -23683,6 +23683,96 @@ const report = await page.evaluate(async () => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* --------------------------- rinnekatapultti -------------------------- */
+  /*
+   * AJOITETTU LÄHTÖ RINTEEN HUIPULTA (19.8.2026).
+   *
+   * Omistaja: *"well-timed jumps should be rewarded, maybe with a somersault
+   * and extra distance? The most obvious place is right on the edge of a `/`,
+   * which kinda functions like a catapult."*
+   *
+   * Neljä väitettä, ja kaksi viimeistä ovat ne joita ilman tämä olisi
+   * pumppaus uudestaan:
+   *
+   *   1  ajoissa painettu nousee korkeammalle ja kantaa pidemmälle
+   *   2  ikkuna sulkeutuu: myöhässä painettu on **tasan** sama kuin ei mitään
+   *   3  vaakanopeus ei nouse — `MAX_P` on hyppybudjetin mitta ja pysyy
+   *   4  ohittaminen ei maksa mitään: lähtö tapahtuu joka tapauksessa
+   */
+  {
+    const S = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { MAX_P } = await import('/src/entities/player.js');
+      const game = window.sfb3;
+      const runSlope = (pressAt) => {
+        game.state = { lives: 3, coins: 90, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, '1-3');
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        sc.entities = sc.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        let at = null;
+        for (let ty = 0; ty < sc.h && !at; ty++) {
+          for (let tx = 20; tx < sc.w - 20; tx++) {
+            if (sc.grid[ty][tx] === '/') { at = { tx, ty }; break; }
+          }
+        }
+        if (!at) return null;
+        const p = sc.player;
+        p.x = (at.tx - 14) * 16;
+        p.y = (at.ty - 1) * 16;
+        p.vx = 0; p.vy = 0;
+        const inp = { held: {}, pressed: {}, released: {}, consume(a) { this.pressed[a] = false; } };
+        let launched = -1;
+        let peak = 0;
+        let x0 = 0;
+        let dist = 0;
+        let topVx = 0;
+        let flipped = false;
+        for (let f = 0; f < 260; f++) {
+          inp.held = { right: true, run: true };
+          inp.pressed = {};
+          const wasGround = p.onGround;
+          if (launched >= 0 && f - launched === pressAt) {
+            inp.pressed.jump = true;
+            inp.held.jump = true;
+          }
+          if (launched >= 0 && p.vy < 0) inp.held.jump = true;
+          sc.update(inp);
+          topVx = Math.max(topVx, Math.abs(p.vx));
+          if (p.flip > 0) flipped = true;
+          if (launched < 0 && wasGround && !p.onGround && p.vy < 0) {
+            launched = f; x0 = p.cx; peak = p.cy;
+          }
+          if (launched >= 0) {
+            peak = Math.min(peak, p.cy);
+            if (p.onGround && f > launched + 4) { dist = Math.round(p.cx - x0); break; }
+          }
+        }
+        return { peak: Math.round(peak), dist, topVx: Math.round(topVx * 1000) / 1000, flipped };
+      };
+      return { none: runSlope(-1), timed: runSlope(3), late: runSlope(14), cap: MAX_P };
+    });
+
+    expect('rinteen huipulla ajoitettu painallus nousee korkeammalle ja kantaa pidemmälle',
+      !!S.timed && S.timed.peak < S.none.peak - 10 && S.timed.dist > S.none.dist * 1.5,
+      `ilman ${S.none.peak} px / ${S.none.dist} px, ajoissa ${S.timed.peak} px / ${S.timed.dist} px`);
+
+    expect('ikkuna sulkeutuu: myöhässä painettu on sama kuin ei mitään',
+      S.late.peak === S.none.peak && S.late.dist === S.none.dist,
+      `myöhässä ${S.late.peak} px / ${S.late.dist} px, ilman ${S.none.peak} px / ${S.none.dist} px`);
+
+    expect('katapultti on pystysuora: vaakanopeus ei ylitä P-kattoa',
+      S.timed.topVx <= S.cap + 0.001 && S.none.topVx <= S.cap + 0.001,
+      `ajoissa ${S.timed.topVx}, ilman ${S.none.topVx}, katto ${S.cap}`);
+
+    expect('kuperkeikka pyörii vain ajoitetusta lähdöstä',
+      S.timed.flipped && !S.none.flipped && !S.late.flipped,
+      `ajoissa ${S.timed.flipped}, ilman ${S.none.flipped}, myöhässä ${S.late.flipped}`);
+  }
+
   /* ------------------------ varalokeron kierto -------------------------- */
   /*
    * OSUMA EI OLE VAIHTO (19.8.2026).

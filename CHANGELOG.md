@@ -7,6 +7,69 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.42 — the slope is a catapult if you hit its edge
+
+Owner, 19.8.2026: *"well-timed jumps should be rewarded, maybe with a somersault
+and extra distance/speed? The most obvious place is off an upwards climb, i.e.
+right on the edge of a `/`, which kinda functions like a catapult. Reward good
+timing."*
+
+**This is pumping's opposite shape, deliberately.** Pumping was removed the same
+day because ignoring it was the better game than attempting it: a missed press
+vented a segment, so the mechanic punished trying. Here the launch happens
+anyway — it has been automatic since slopes existed — and timing only **adds**.
+Mistiming is exactly identical to not trying, and nobody loses anything by never
+learning this exists.
+
+It also pays where the player is already fast, which was the other lesson from
+pumping's measurement: fill-time can buy nothing, because only 1.6 seconds of a
+minute-long level are spent below the speed cap. After the terrain pass there
+are slopes in 43 levels, and every one of them is a place where speed is already
+at its ceiling.
+
+**The reward is vertical and never touches `vx`.** Same rule the gate taught
+about the tailwind: `gapTiles` 6 and `wallTiles` 4 are measured at the P cap and
+every level's clearability rests on them. A higher arc is still a longer arc —
+airtime carries the same horizontal speed further — so the extra distance
+arrives without the speed moving at all. Measured, on 1-3's first ramp:
+
+| | peak | distance |
+| --- | --- | --- |
+| no press | 95 px | 40 px |
+| **timed press** | **67 px** | **150 px** |
+| pressed 14 frames late | 95 px | 40 px |
+
+Horizontal speed reads 2.5 in all three, against a cap of 3.5.
+
+**Two things the measurement found, and the second is the interesting one.**
+
+The window was written as `jumpBuffer` — "pressed just before the crest" — and
+that branch is unreachable. A jump pressed while standing on the slope fires the
+ground-jump branch and spends the buffer before the crest arrives. The only
+moment a press can *mean the slope* is when the body has just left it, so the
+window is `SLOPE_GRACE` frames **after** the launch. That also matches what the
+player is looking at: the crest is not marked on screen, so you aim at the angle
+of the ground, and you pass it before you notice passing it.
+
+And **the catapult already existed, untimed and free.** `coyote` — the few
+frames of mercy that let you jump after walking off an edge — was still running
+when the slope threw you, so a press after the launch hit the ground-jump branch
+and added a whole jump on top. Measured: 80 px of extra rise, for nothing, and
+nobody knew it was there. A launch is not walking off an edge: the body did not
+step into the air, it was thrown. Coyote belongs to whoever fell; whoever flew
+gets `slopeGrace`.
+
+Clearing it takes away a free jump players may have been leaning on, so the
+ground-route gate is the one that matters here: `playable.mjs` still clears every
+level at the smallest size.
+
+The somersault is a picture and nothing else — its own field, no hitbox, because
+`spin` is the leaf's tail attack and carries one. It tumbles faster than the tail
+spins and lasts longer: an attack is a hit whose direction must be read, a
+somersault is a flourish whose spin should be seen.
+
+---
+
 ## v26.08.19.41 — the reserve stopped cycling, and pumping was removed
 
 ### Damage was a swap, not a loss
