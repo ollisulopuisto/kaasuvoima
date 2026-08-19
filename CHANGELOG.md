@@ -7,6 +7,57 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.44 — eight worlds on a cube, and three doors out of every one
+
+Owner: *"instead of moving on a 2D map, let's have the character move on an
+eight-sided die, but the die has been cut open, like a map projection. And it's
+also a hyper object."*
+
+**The two halves of that are one object, and it is a theorem rather than a
+coincidence.** An octahedron has eight faces; two faces are neighbours when they
+share an edge; that graph *is* the cube, because the octahedron's dual is the
+cube. Eight worlds, three doors each, twelve doors in all.
+
+**And no table was needed.** Number the worlds from zero and **the index is the
+cube vertex**: the neighbours of world `i` are `i^1`, `i^2` and `i^4`. One line,
+nothing to keep in sync with the levels, and no hand-written pairing that can
+drift.
+
+**The tiers were already in the levels.** A cube wants its worlds grouped 1/3/3/1
+by distance from the start corner, and the measured medians — 101 · 126 · 163 ·
+201 · 200 · 252 · 272 · 318 — fall into exactly that shape. Checked rather than
+hoped: **every door that leads away from the start leads somewhere harder**, and
+there is a gate on it. Difficulty stops being a curve and becomes a coordinate.
+
+**A run is half the game, and that is the owner's decision rather than a side
+effect.** Four worlds of eight, one of six route orders. The other four are why
+you would play again.
+
+`completeWorld` no longer goes to world *n + 1*. It marks where you have been,
+and — unless you have just cleared the far corner, which ends the run — hands you
+`DoorScene`: three neighbours, sorted easiest first, each with its name, its
+difficulty as the map's own five-pip bar, and whether you have been there.
+
+**The pips were nearly a lie.** The first version wrote them as text,
+`'●'.repeat(n)`, and the game's bitmap font has no such glyph — the bar came out
+empty. A door with no difficulty on it is a blind choice, and a blind choice is
+not picking your difficulty, it is drawing lots. That is the exact thing the
+whole design is for, so the pips are drawn now, with `worldmap.js`'s own bar and
+colours, so the meter never has to be learned twice.
+
+`visited` joins the save without a version bump, for the same reason `secrets`
+did: an old save simply has none, and `{}` is not a guess but the truth.
+`worldsOpen` stays and still means what it meant; it just no longer steers
+anything, because on a cube "open" is adjacency rather than a running total.
+
+Not done, deliberately, and the owner said to punt it: the curriculum. Mechanics
+are still introduced in world order, and three doors out of world 1 will meet
+them out of sequence. The measurement tool for it already exists
+(`tools/curriculum.mjs`) and the levels get reshuffled once the mechanic feels
+right.
+
+---
+
 ## v26.08.19.43 — two piles, one glass
 
 Owner: *"I wanted the red and gold coins to go in the same pile, but now the

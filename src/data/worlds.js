@@ -663,6 +663,32 @@ const WORLD_DEFS = [
 
 export const WORLDS = WORLD_DEFS.map((w) => ({ ...w, terrain: normalizeRows(w.terrain) }));
 
+/*
+ * MAAILMAT KUUTION KÄRJISSÄ (19.8.2026).
+ *
+ * Omistaja: kahdeksan maailmaa kahdeksansivuisen nopan tahkoilla, noppa
+ * leikattuna auki. Kaksi tahkoa on naapureita kun niillä on yhteinen särmä —
+ * ja se verkko **on** kuutio, koska oktaedrin duaali on kuutio. Kahdeksan
+ * tahkoa, kolme ovea kustakin, kaksitoista ovea kaikkiaan.
+ *
+ * Ja tässä ei tarvita taulukkoa, mikä on tämän rivin koko pointti: kun
+ * maailmat numeroidaan nollasta, **indeksi itse on kuution kärki**, ja naapuri
+ * on se jonka indeksi eroaa yhdellä bitillä. Kolme ovea ovat siis `i^1`, `i^2`
+ * ja `i^4`, eikä niiden välissä ole yhtään käsin kirjoitettua paria joka voisi
+ * mennä epäsynkkaan kentien kanssa.
+ *
+ * Mitattu, ei toivottu: jokainen **eteenpäin** vievä ovi — se jonka kärjessä on
+ * enemmän ykkösbittejä — johtaa vaikeampaan maailmaan. Mediaanit ovat
+ * 101 · 126 · 163 · 201 · 200 · 252 · 272 · 318, ja kuutio vaatii ryhmittelyn
+ * 1/3/3/1 etäisyyden mukaan. Se ryhmittely oli kentissä valmiina ennen kuin
+ * kukaan piirsi kuutiota, eli vaikeus lakkaa olemasta käyrä ja muuttuu
+ * **koordinaatiksi**: kuinka kaukana lähtökärjestä ollaan.
+ */
+export const worldDoors = (i) => [i ^ 1, i ^ 2, i ^ 4];
+
+/** Kuinka monta askelta lähtökärjestä, 0…3. Viimeinen maailma on 3. */
+export const worldTier = (i) => (i & 1) + ((i >> 1) & 1) + ((i >> 2) & 1);
+
 export const MAP_W = 20;
 export const MAP_H = 9;
 export const TILE = 16;

@@ -2,12 +2,14 @@ import { Input } from './core/input.js';
 import { Save, CONTINUE_LIVES } from './core/save.js';
 import { Music, Sfx, toggleMute, isMuted, audioDiag } from './core/audio.js';
 import { drawText } from './gfx/font.js';
-import { WORLDS, startNode, findNode } from './data/worlds.js';
+import { WORLDS, startNode, findNode, worldTier } from './data/worlds.js';
 import { TitleScene } from './scenes/title.js';
 import { WorldMapScene } from './scenes/worldmap.js';
 import { LevelScene } from './scenes/level.js';
 import { DemoScene } from './scenes/demo.js';
-import { InterludeScene, GameOverScene, EndingScene, VictoryScene } from './scenes/cards.js';
+import {
+  InterludeScene, GameOverScene, EndingScene, VictoryScene, DoorScene,
+} from './scenes/cards.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
@@ -545,13 +547,37 @@ class Game {
     Sfx.play('oneup');
   }
 
+  /**
+   * LINNAKKEEN JÄLKEEN VALITAAN OVI, EI SEURAAVAA NUMEROA (19.8.2026).
+   *
+   * Maailmat ovat kuution kärjissä (`worldDoors`), joten jokaisesta on kolme
+   * ovea eikä yhtä. Kierros käy neljässä maailmassa kahdeksasta ja jättää
+   * puolet pelistä näkemättä — omistajan oma päätös, ja se on koko idean
+   * hinta: reitti on se mitä pelataan uudestaan.
+   *
+   * Loppu tulee kärjestä eikä listan lopusta. `worldTier` 3 on se yksi kärki
+   * joka on kolmen bitin päässä lähdöstä, eli viimeinen maailma — ja se on
+   * sama maailma kuin ennenkin, koska indeksi *on* kärki.
+   */
   completeWorld() {
-    const next = this.state.world + 1;
-    if (next >= WORLDS.length) {
+    const from = this.state.world;
+    if (!this.state.visited) this.state.visited = {};
+    this.state.visited[from] = true;
+    if (worldTier(from) === 3) {
       this.setScene(new EndingScene(this));
       return;
     }
+    this.setScene(new DoorScene(this, from, (next) => this.enterWorld(next)));
+  }
+
+  /** Astuminen valitusta ovesta: sama työ kuin ennen, ilman "seuraavaa". */
+  enterWorld(next) {
     this.state.world = next;
+    if (!this.state.visited) this.state.visited = {};
+    this.state.visited[next] = true;
+    /* `worldsOpen` on yhä olemassa ja tarkoittaa yhä samaa — kuinka moni
+     * maailma on ollut auki — mutta se ei enää ohjaa mitään: kuutiossa
+     * "auki" on naapuruus eikä järjestysluku. Ks. `visited`. */
     this.state.worldsOpen = Math.max(this.state.worldsOpen, next + 1);
     this.state.node = startNode(WORLDS[next]).id;
     this.persist();
