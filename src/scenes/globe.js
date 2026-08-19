@@ -159,6 +159,23 @@ const DROP_HIGH = 110;
 /** Three tones per colour, quantised. The die's rule, and for the same reason. */
 const TONES = [1, 0.66, 0.42];
 const INK = '#12121c';
+
+/**
+ * FIVE STATES, FIVE COLOURS, named once.
+ *
+ * They were spelled out inline in the drawing, and that is where a legend goes
+ * to rot: the refusal, the marker and the road all need the same answer, and
+ * three copies of a colour table are three tables that can disagree.
+ */
+const ROAD_INK = {
+  open: '#ffd048',      // a level you have not played
+  cleared: '#8fe04a',   // one you have
+  locked: '#4a4a5e',    // not yet
+  room: '#c8b0e8',      // a house
+  spent: '#5a5a76',     // a house already emptied
+  out: '#40d0f0',       // the way out of this world
+  shut: '#4a4a5e',      // a way out that is not open yet
+};
 const GROUND = '#0c0c14';
 const SHADOW = '#000000';
 const SHADOW_DX = 5;
@@ -1063,32 +1080,36 @@ export class GlobeScene {
     }
   }
 
+  /**
+   * THE ROADS, AND WHAT IS AT THE END OF EACH ONE.
+   *
+   * Owner, having walked to a bonus house without knowing it was there:
+   * *"does the bonus house show up at all? I mean I walked to it, but didn't
+   * even realise it was in that direction"* — and *"make sure the colour
+   * coding is VERY CLEAR."*
+   *
+   * Colour alone was never going to be enough. Five states in five hues is a
+   * legend you have to have been given, and the thing a player actually wants
+   * to know — *what is down there* — is not a state at all. So every road now
+   * ends in the thing it leads to: the level's number on its plaque, the
+   * house, the gate out of the world, or a bar across a road that is shut.
+   * Colour carries the state, the marker carries the destination. Two channels
+   * for two questions instead of one channel for both.
+   */
   drawRoads(ctx) {
     const hub = this.onHere(0, 0);
     for (const k of spokesOf(this.here, this.rooms, this.doorHere())) {
       const s = sideAt(this.here, k);
       const end = this.onHere(s.u * 0.92, s.v * 0.92);
       const steps = Math.max(2, Math.round(Math.hypot(end.x - hub.x, end.y - hub.y) / 7));
-      /*
-       * THE ROAD SAYS WHERE IT GOES.
-       *
-       * Owner: *"could the colours of the sides or the paths give you a hint
-       * about where you're going?"* — and the geometry had already sorted the
-       * doors into the categories the answer needs, so this is only a matter
-       * of printing what it knows. Gold is somewhere new, green is somewhere
-       * you have been, grey is not yet, and the room doors take the colour of
-       * the square they lead to so the road and its destination match.
-       */
       const lead = this.spokeLeads(k);
-      const ink = lead === 'locked' || lead === 'shut' ? '#4a4a5e'
-        : lead === 'cleared' ? '#8fe04a'
-          : lead === 'room' ? '#c8b0e8'
-            : lead === 'spent' ? '#5a5a76'
-              /* The way out of the world is its own colour and not a brighter
-               * gold: it is not a longer step along this world, it is a
-               * different kind of move. */
-              : lead === 'out' ? '#40d0f0' : '#ffd048';
+      const ink = ROAD_INK[lead] || '#ffd048';
+      /* A shut road is dotted half as densely as an open one. Two roads that
+       * differ only in hue are one road to anybody not already looking for the
+       * difference; two that differ in *rhythm* come apart at a glance. */
+      const every = lead === 'locked' || lead === 'shut' ? 2 : 1;
       for (let i = 1; i <= steps; i++) {
+        if (i % every !== 0) continue;
         const t = i / steps;
         const x = Math.round(hub.x + (end.x - hub.x) * t);
         const y = Math.round(hub.y + (end.y - hub.y) * t);
@@ -1097,11 +1118,74 @@ export class GlobeScene {
         ctx.fillStyle = ink;
         ctx.fillRect(x - 2, y - 2, 4, 4);
       }
+      this.drawMarker(ctx, k, lead, this.onHere(s.u, s.v), ink);
     }
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(Math.round(hub.x) - 3, Math.round(hub.y) - 3, 6, 6);
     ctx.fillStyle = INK;
     ctx.fillRect(Math.round(hub.x) - 2, Math.round(hub.y) - 2, 4, 4);
+  }
+
+  /** What sits at the far end of a road, drawn at its edge. */
+  drawMarker(ctx, k, lead, at, ink) {
+    const x = Math.round(at.x);
+    const y = Math.round(at.y);
+    if (lead === 'locked' || lead === 'shut') {
+      /* A bar across the road. The one marker that says "not this way"
+       * without having to say what is behind it. */
+      ctx.fillStyle = '#20202e';
+      ctx.fillRect(x - 7, y - 5, 14, 10);
+      ctx.fillStyle = ink;
+      ctx.fillRect(x - 5, y - 1, 10, 2);
+      return;
+    }
+    if (lead === 'room' || lead === 'spent') {
+      /* The house, drawn the way the flat map's stamp draws it, because it is
+       * the same house and somebody who learned it there should not have to
+       * learn it twice. */
+      const spent = lead === 'spent';
+      ctx.fillStyle = '#20202e';
+      ctx.fillRect(x - 9, y - 9, 18, 17);
+      ctx.fillStyle = spent ? '#9a6a6a' : '#e04040';
+      ctx.fillRect(x - 7, y - 7, 14, 7);
+      ctx.fillStyle = '#f8f8f8';
+      ctx.fillRect(x - 5, y - 6, 3, 3);
+      ctx.fillRect(x + 2, y - 5, 3, 3);
+      ctx.fillStyle = '#f0d8b0';
+      ctx.fillRect(x - 5, y, 10, 5);
+      ctx.fillStyle = '#6a4018';
+      ctx.fillRect(x - 2, y + 1, 4, 4);
+      return;
+    }
+    if (lead === 'out') {
+      /* A gate with the number of the world it opens on: the only marker here
+       * that is a *doorway* rather than a place, because it is the only road
+       * that leaves. */
+      const door = this.doorHere();
+      ctx.fillStyle = '#20202e';
+      ctx.fillRect(x - 9, y - 10, 18, 17);
+      ctx.fillStyle = ink;
+      ctx.fillRect(x - 7, y - 8, 3, 13);
+      ctx.fillRect(x + 4, y - 8, 3, 13);
+      ctx.fillRect(x - 7, y - 8, 14, 3);
+      if (door) {
+        drawText(ctx, String(door.level), x, y - 2, { color: ink, align: 'center' });
+      }
+      return;
+    }
+    /* A level: its own plaque with its own number, the shape the flat map
+     * uses, tinted by whether it has been cleared. */
+    const side = this.here.sides[k];
+    const node = side.to && side.to.kind === 'hex' ? this.byFace[side.to.index] : null;
+    const label = node && node.level ? node.level.split('-')[1] : '?';
+    const done = lead === 'cleared';
+    ctx.fillStyle = '#202038';
+    ctx.fillRect(x - 8, y - 7, 16, 15);
+    ctx.fillStyle = done ? '#404060' : '#f8f8f8';
+    ctx.fillRect(x - 7, y - 6, 14, 13);
+    drawText(ctx, label, x, y - 3, {
+      color: done ? '#8fe04a' : '#202038', align: 'center',
+    });
   }
 
   drawPawn(ctx) {
