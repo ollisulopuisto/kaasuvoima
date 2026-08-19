@@ -3921,9 +3921,11 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     if (door.length) {
       s2.player.x = door[0].tx * 16;
       s2.player.y = door[0].ty * 16;
-      // 260 and not 200: going in is a walk now, and the clear sequence that
-      // used to start on contact starts when the body is gone. See below.
-      for (let f = 0; f < 260 && !finished; f++) { s2.update(i); i.pressed = blank(); }
+      // 300 and not 200: going in is a walk now, and the clear sequence that
+      // used to start on contact starts when the body is gone. See below. The
+      // walk itself grew from 14 frames to 32 on 20.8.2026, when it became a
+      // crossing of the whole doorway rather than a step into its near jamb.
+      for (let f = 0; f < 300 && !finished; f++) { s2.update(i); i.pressed = blank(); }
     }
     /* The door is several tiles now — big enough that the largest power level
      * walks through it rather than steps over it — so what matters is that it
@@ -4030,13 +4032,256 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         `kosketus ${contactAt}, selvä ${clearAt}, piilossa ${hidden} framea, `
         + `poissa ${gone}, käveli vielä ${strolled.toFixed(1)} px`);
       /* And where the clear sequence sits: on the frame the body is gone, not
-       * on the frame it touched the door. 14 frames of walking in plus 5 of
-       * empty doorway, so ~19; asserted as a window, because the exact number
-       * is a tuning constant and the ordering is the decision. */
+       * on the frame it touched the door. Measured 20.8.2026: 32 frames of
+       * walking across the doorway plus 5 of empty doorway, so 36 from contact
+       * (the window used to be 15…25, for a 14-frame step into the near jamb —
+       * widened here honestly, because the walk-in got longer on purpose and
+       * not because the assertion was wrong). It is still a window, because
+       * the exact number is a tuning constant and the ordering is the
+       * decision. */
       expect('and the clear jingle waits for the picture, not the other way round',
-        contactAt >= 0 && clearAt - contactAt >= 15 && clearAt - contactAt <= 25
+        contactAt >= 0 && clearAt - contactAt >= 30 && clearAt - contactAt <= 45
         && done === null,
         `kosketuksesta selväksi ${clearAt - contactAt} framea, finished ${JSON.stringify(done)}`);
+
+      /*
+       * WHERE HE GOES BEHIND THE DOOR, MEASURED IN PIXELS.
+       *
+       * Omistaja, 20.8.2026: *"make sure they seem to ENTER the door, ie. go
+       * behind it only AFTER they start hitting the right border of the
+       * door."* Red before green: the clip line used to be `p.x + p.w` on the
+       * frame of contact, and this check measured the old code losing its
+       * first pixels **on frame 0 at x 2755.3** — 3 px past the near jamb of a
+       * doorway that runs 2752…2784, i.e. at the wrong end of the door and
+       * before the walk had started. Green: frame 18, x 2782.5.
+       *
+       * Measured from rendered pixels rather than from the transit's fields,
+       * because the claim is about the picture: paint the frame, paint it
+       * again with the player suppressed, and the pixels that differ are the
+       * body as the screen actually shows it. A third paint with `hide` lifted
+       * gives what an unclipped body would have covered, so "is he whole" is a
+       * comparison of two numbers from the same frame and needs no reference
+       * image.
+       *
+       * And it is the door's border and not a frame number: the same walk is
+       * run twice from two different starting distances, and the assertion is
+       * that the flip lands on the same **x** while landing on a different
+       * **frame**. A fixed-frame implementation passes the first half of that
+       * and fails the second.
+       */
+      const doorRun = (backOff) => {
+        reset({ type: 'shroom', level: 1 });
+        const s4 = new LevelScene(game, '1-F');
+        s4.entities = s4.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+        s4.time = 9999;
+        s4.clockStopped = true;
+        game.setScene(s4);
+        game.finishLevel = () => {};
+        s4.bossDefeated = s4.tick + 1;
+        for (let f = 0; f < 40; f++) s4.tick++;      // let the leaves finish swinging
+        const px = [];
+        for (let ty = 0; ty < s4.h; ty++) {
+          for (let tx = 0; tx < s4.w; tx++) if (s4.grid[ty][tx] === 'D') px.push({ tx, ty });
+        }
+        const l = Math.min(...px.map((c) => c.tx));
+        const r = Math.max(...px.map((c) => c.tx));
+        const bot = Math.max(...px.map((c) => c.ty));
+        const p = s4.player;
+        p.x = l * 16 - p.w + 2 - backOff;
+        p.y = (bot + 1) * 16 - p.h;
+        p.onGround = true;
+        s4.centerCamera();
+        const go = mkInput();
+        go.held.right = true;
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        const g = canvas.getContext('2d');
+        const paint = () => {
+          g.clearRect(0, 0, 320, 240);
+          s4.draw(g);
+          return g.getImageData(0, 0, 320, 240).data;
+        };
+        const differing = (a, b) => {
+          let n = 0;
+          for (let q = 0; q < a.length; q += 4) {
+            if (a[q] !== b[q] || a[q + 1] !== b[q + 1] || a[q + 2] !== b[q + 2]) n++;
+          }
+          return n;
+        };
+        const realDraw = s4.drawPlayerInto.bind(s4);
+        const out = {
+          doorR: (r + 1) * 16, flipAt: -1, flipNose: 0, wholeUntil: -1, endVisible: -1,
+        };
+        for (let f = 0; f < 160 && s4.state !== 'clear'; f++) {
+          go.pressed = blank();
+          s4.update(go);
+          const t = p.transit;
+          const shown = paint();
+          s4.drawPlayerInto = () => {};
+          const bare = paint();
+          s4.drawPlayerInto = realDraw;
+          const visible = differing(shown, bare);
+          let whole = visible;
+          if (t && t.hide !== null && t.hide !== undefined) {
+            const keep = t.hide;
+            t.hide = null;
+            whole = differing(paint(), bare);
+            t.hide = keep;
+          }
+          if (out.flipAt < 0 && visible < whole) {
+            out.flipAt = f;
+            /* The sprite is allowed to overhang its 14 px box by a pixel, so
+             * the border is crossed by the *drawing* a frame before the box
+             * reaches it. Recording the box edge keeps the number readable;
+             * the tolerance below is what pays for the overhang. */
+            out.flipNose = p.x + p.w;
+          } else if (out.flipAt < 0) out.wholeUntil = f;
+          out.endVisible = visible;
+        }
+        return out;
+      };
+      const near = doorRun(0);
+      const far = doorRun(12);
+      const atBorder = (run) => Math.abs(run.flipNose - run.doorR) <= 2;
+      expect('the body goes behind the door at its far border, not on contact',
+        near.flipAt > 0 && atBorder(near) && near.wholeUntil === near.flipAt - 1
+        && near.endVisible === 0,
+        `flip framella ${near.flipAt} kohdassa ${near.flipNose.toFixed(1)}, `
+        + `ovi ${near.doorR}, kokonaisena ${near.wholeUntil} asti, `
+        + `lopussa ${near.endVisible} px näkyvissä`);
+      expect('and it is the door that decides that, not the frame counter',
+        far.flipAt > 0 && atBorder(far) && far.flipAt !== near.flipAt
+        && Math.abs(far.flipNose - near.flipNose) <= 2,
+        `12 px kauempaa: flip framella ${far.flipAt} (lähempää ${near.flipAt}), `
+        + `kohdassa ${far.flipNose.toFixed(1)} (lähempää ${near.flipNose.toFixed(1)})`);
+    }
+  }
+
+  /*
+   * A CLEARED LEVEL ENDS WITH HIM OUT OF THE PICTURE.
+   *
+   * Omistaja, 20.8.2026: *"after a normal level, the character should walk out
+   * the right hand side."*
+   *
+   * Red before green, measured on 1-1 before the change: the flagpole is at
+   * x 5696, the level ends at 6112, and 170 frames after the grab the scene
+   * cut with the body at x 5931 — **screen column 142 of 320**, dead centre,
+   * 349 painted pixels of him still on the glass, walking on the spot. All
+   * fifty flagpole levels failed this the same way. Two things stood in the
+   * way and both are asserted here rather than remembered: the clear sequence
+   * ended on a frame count that knew nothing about where he was, and `moveX`
+   * treats every column past the grid as `T.HARD`, so the last 14 px of the
+   * walk were into a wall that is not in any level's data.
+   *
+   * Every level with a flagpole is run, because "he leaves the frame" is a
+   * claim about the *level's* last stretch — how much ground there is past the
+   * goal, and whether it is walkable — and one level cannot answer it for
+   * fifty. The fortresses have no flagpole and are the block above.
+   */
+  {
+    const { VIEW_W } = await import('/src/scenes/level.js');
+    const rows = [];
+    for (const id of levelIds()) {
+      reset({ type: 'shroom', level: 1 });
+      const s = new LevelScene(game, id);
+      if (!s.goal) continue;                     // fortress: its exit is a door
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      game.setScene(s);
+      let fin = null;
+      game.finishLevel = (r) => { fin = r; };
+      const p = s.player;
+      /* Stood at the pole's foot on whatever the level put under it, then
+       * cleared outright: this measures the walk-out, and the climb to the
+       * pole is `grabGoal`'s own business and its own check. */
+      let ty = s.goal.ty;
+      while (ty < s.h && !isSolid(s.tileAt(s.goal.tx, ty))) ty++;
+      p.x = s.goal.x - 2;
+      p.y = ty * 16 - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.onGround = true;
+      s.centerCamera();
+      s.completeLevel('star');
+      const idle = mkInput();
+      let f = 0;
+      for (; f < 900 && !fin; f++) { idle.pressed = blank(); s.update(idle); }
+      rows.push({
+        id,
+        f,
+        cleared: !!fin && !!fin.cleared,
+        // Not "he moved right" but "he is not in shot": the left edge of the
+        // box past the right edge of the view, which is the only reading of
+        // "walks out the right hand side" that a screenshot could confirm.
+        out: p.x >= s.cam.x + VIEW_W,
+        col: Math.round(p.x - s.cam.x),
+      });
+      game.finishLevel = () => {};
+    }
+    const stuck = rows.filter((r) => !r.cleared || !r.out);
+    const slowest = rows.reduce((a, b) => (b.f > a.f ? b : a), rows[0] || { f: 0, id: '-' });
+    expect('a cleared level ends with the player walked out of the view',
+      rows.length > 20 && stuck.length === 0,
+      stuck.length
+        ? `${stuck.length}/${rows.length} jäi kuvaan: `
+          + stuck.slice(0, 6).map((r) => `${r.id} sarake ${r.col} (${r.f} framea)`).join(', ')
+        : `${rows.length} kenttää, pisin ${slowest.id} ${slowest.f} framea`);
+    /* The fuse (`WALKOUT_MAX`) exists so a level whose ground ends at the goal
+     * cannot hang the scene, and a fuse that fires in normal play is a fuse
+     * that has become the rule. It burns at `CLEAR_HOLD` + 240 = 410 frames;
+     * the longest real walk-out measured over the levels above is 320, so 400
+     * is a ceiling that a genuine walk clears and the fuse does not. */
+    expect('and the walk-out is a walk, not the safety fuse firing',
+      rows.every((r) => r.f < 400),
+      `pisin ${slowest.id} ${slowest.f} framea`);
+    /* And the picture agrees with the number. 1-1 because that is the level
+     * the complaint was measured on: it is where "he stops dead centre" was
+     * read off the screen, so it is where "there is nothing of him left" has
+     * to be read off it too. */
+    {
+      reset({ type: 'shroom', level: 1 });
+      const s = new LevelScene(game, '1-1');
+      s.entities = s.entities.filter((e) => e.kind !== 'enemy' && e.kind !== 'hazard');
+      s.time = 9999;
+      s.clockStopped = true;
+      game.setScene(s);
+      let fin = null;
+      game.finishLevel = (r) => { fin = r; };
+      const p = s.player;
+      let ty = s.goal.ty;
+      while (ty < s.h && !isSolid(s.tileAt(s.goal.tx, ty))) ty++;
+      p.x = s.goal.x - 2;
+      p.y = ty * 16 - p.h;
+      p.onGround = true;
+      s.centerCamera();
+      s.completeLevel('star');
+      const idle = mkInput();
+      for (let f = 0; f < 900 && !fin; f++) { idle.pressed = blank(); s.update(idle); }
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 240;
+      const g = canvas.getContext('2d');
+      const paint = () => {
+        g.clearRect(0, 0, 320, 240);
+        s.draw(g);
+        return g.getImageData(0, 0, 320, 240).data;
+      };
+      const shown = paint();
+      const real = s.drawPlayerInto.bind(s);
+      s.drawPlayerInto = () => {};
+      const bare = paint();
+      s.drawPlayerInto = real;
+      let left = 0;
+      for (let q = 0; q < shown.length; q += 4) {
+        if (shown[q] !== bare[q] || shown[q + 1] !== bare[q + 1]
+          || shown[q + 2] !== bare[q + 2]) left++;
+      }
+      expect('and on the last frame of 1-1 there is nothing of him left on screen',
+        !!fin && fin.cleared && left === 0,
+        `${left} px näkyvissä, x ${Math.round(p.x)}, kamera ${Math.round(s.cam.x)}`);
+      game.finishLevel = () => {};
     }
   }
 

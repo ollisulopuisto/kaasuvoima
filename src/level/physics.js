@@ -133,7 +133,20 @@ export function moveX(entity, level) {
 
   if (entity.vx > 0) {
     const tx = Math.floor((entity.x + entity.w - 1) / TILE);
-    for (let ty = top; ty <= bottom; ty++) {
+    /*
+     * The one body that is allowed out of the level, and only through the
+     * level's own last column.
+     *
+     * `tileAt` answers `T.HARD` for every column past the grid (it is what
+     * makes the sides walls at all), so a cleared player walking out of the
+     * right of the picture would be stopped 14 px short of leaving it — the
+     * wall is not in the level data, it is in the lookup. Waiving it for a
+     * flagged body waives *that* wall and nothing else: a real tile in the
+     * last real column still stops him, which is the honest outcome, and the
+     * clear sequence has its own fuse for it. See `Player.offstage`.
+     */
+    const outward = entity.offstage && tx >= level.w;
+    for (let ty = top; ty <= bottom && !outward; ty++) {
       if (isSolid(level.tileAt(tx, ty)) && !rampFill(entity, level, tx, ty)
           && !stepUp(entity, level, tx, ty)) {
         entity.x = tx * TILE - entity.w;
@@ -159,7 +172,7 @@ export function moveX(entity, level) {
     hit = true;
   }
   const maxX = level.widthPx - entity.w;
-  if (entity.x > maxX) {
+  if (entity.x > maxX && !entity.offstage) {
     entity.x = maxX;
     hit = true;
   }

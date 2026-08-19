@@ -561,6 +561,12 @@ export class Player extends Entity {
     this.animFrame = 0;
     this.wag = 0;
     this.autoWalk = false;
+    /* Allowed to walk out of the level's right-hand edge, which is a wall for
+     * everything else in the room. Set by `LevelScene.completeLevel` and never
+     * unset, because the only thing that happens after it is set is the scene
+     * ending — see `moveX` for the wall it waives and `walkedOut` for what the
+     * scene does with the result. */
+    this.offstage = false;
     this.controllable = true;
     this.jumpHeld = false;
     this.coyote = 0;
@@ -1120,24 +1126,35 @@ export class Player extends Entity {
     if (this.idle >= DEEP_IDLE - 60 && this.threatNear()) this.idle = 0;
 
     const speed = Math.abs(this.vx);
-    if (this.onGround && speed > 0.1) {
-      /*
-       * `* WALK_FRAMES / 3` keeps the cadence the frame order changed. Contacts
-       * used to fall 1 and 2 advances apart in a three-frame cycle — 1.5 on
-       * average, and uneven, which is the stutter — and fall 2 apart in the
-       * four-frame one. Left alone that is a third fewer steps for the same
-       * ground speed: measured at the walk cap it is 6.8 px of travel per step
-       * against a 7 px gap between the boot prints, which is as close to not
-       * sliding as this sprite gets, and 9.1 px against the same 7 px if the
-       * rate is not scaled with the cycle.
-       */
-      this.animTimer += (0.12 + speed * 0.14) * (WALK_FRAMES / 3);
-      if (this.animTimer >= 1) {
-        this.animTimer = 0;
-        this.animFrame = (this.animFrame + 1) % WALK_FRAMES;
-      }
-    } else if (this.onGround) {
-      this.animFrame = 0;
+    if (this.onGround && speed > 0.1) this.walkAnim(speed);
+    else if (this.onGround) this.animFrame = 0;
+  }
+
+  /**
+   * One step of the walk cycle for a body covering `speed` px this frame.
+   *
+   * Its own method because **the doorway walks too**. A transit drives the
+   * body from the scene and `update` returns before it reaches this, so the
+   * legs used to be frozen mid-stride for the whole of it — 14 frames, which
+   * nobody noticed, and 32 once the door became something you cross rather
+   * than something you touch (see `LevelScene.enterDoor`). Two copies of the
+   * cadence would be two answers to "how fast does he step", so there is one
+   * and `updateTransit` calls it.
+   *
+   * `* WALK_FRAMES / 3` keeps the cadence the frame order changed. Contacts
+   * used to fall 1 and 2 advances apart in a three-frame cycle — 1.5 on
+   * average, and uneven, which is the stutter — and fall 2 apart in the
+   * four-frame one. Left alone that is a third fewer steps for the same
+   * ground speed: measured at the walk cap it is 6.8 px of travel per step
+   * against a 7 px gap between the boot prints, which is as close to not
+   * sliding as this sprite gets, and 9.1 px against the same 7 px if the
+   * rate is not scaled with the cycle.
+   */
+  walkAnim(speed) {
+    this.animTimer += (0.12 + speed * 0.14) * (WALK_FRAMES / 3);
+    if (this.animTimer >= 1) {
+      this.animTimer = 0;
+      this.animFrame = (this.animFrame + 1) % WALK_FRAMES;
     }
   }
 

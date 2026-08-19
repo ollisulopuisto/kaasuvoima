@@ -11,7 +11,7 @@ import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
-  Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
+  Player, P_METER_MAX, MAX_WALK, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
 } from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
@@ -1252,6 +1252,56 @@ const PALETTE = {
 const TRANSIT_IN = 14;        // sliding into the mouth, until the body is gone
 const TRANSIT_HOLD = 5;       // the beat where nothing is on screen
 const TRANSIT_OUT = 13;       // and back out at the far end
+
+/*
+ * THE DOORWAY IS WALKED ACROSS, NOT STEPPED INTO (20.8.2026).
+ *
+ * `TRANSIT_IN` is a frame count, and for a pipe that is the right shape of
+ * number: the mouth is one tile and the body is swallowed by it whole. A door
+ * is not one tile. The shipped fortress door is **two tiles wide, 2752…2784 px
+ * in 1-F**, and the body that walks into it is 14 px, so from where he touches
+ * it to where his back heel has cleared the far jamb is 48 px — the 44 px of
+ * doorway and body, plus the 4 px of margin `enterDoor` adds. Covering that in
+ * 14 frames is 3.4 px a frame, more than twice a walk, and the legs are frozen
+ * while a transit runs: it read as a shove rather than a step.
+ *
+ * So the walk-in is a **distance at walking pace** and the frame count is
+ * derived from it. `MAX_WALK` and not a fresh constant: the picture is a man
+ * walking, and the speed a man walks at is already written down. The old pair
+ * happened to give 18/14 = 1.29 px a frame, i.e. this within a rounding error
+ * — which is why nobody noticed the units were wrong until the door got wide.
+ */
+const DOOR_STEP = MAX_WALK;
+
+/*
+ * HE LEAVES ON HIS OWN FEET (20.8.2026).
+ *
+ * Omistaja: *"after a normal level, the character should walk out the right
+ * hand side."* The clear sequence already set `autoWalk`, so he was already
+ * walking; what he was not doing was **arriving anywhere**. Measured on 1-1:
+ * the flagpole is at x 5696, the level ends at 6112, the camera runs out of
+ * level at 5792 and stops, and 170 frames later the scene cut with him stood
+ * at x 5931 — screen column 142 of 320, i.e. dead centre, with 349 painted
+ * pixels of him still on the glass. The last thing the level showed was a man
+ * walking on the spot.
+ *
+ * `CLEAR_HOLD` is the old 170 and it is a **minimum, not the length**: the
+ * jingle is the reward and cutting it short to chase a short walk-out would
+ * trade one mismatch for another. The scene now ends on the later of the two,
+ * the jingle finishing and the body leaving the frame.
+ *
+ * `WALKOUT_MAX` is the fuse. A walk-out is real physics — he can be stopped by
+ * a wall the level happens to end with, and if the ground runs out past the
+ * goal he falls instead of walks — and a clear sequence that never ends is
+ * worse than an early cut. Measured across every level with a flagpole
+ * (tools/verify.mjs, "a cleared level ends with the player walked out of the
+ * view"): the longest is 3-1 at **320 frames** from the grab, i.e. 150 past
+ * the jingle, and 240 leaves room for a level whose goal sits further from its
+ * end than any of today's. The same gate asserts the fuse does not fire, so if
+ * one ever does the failure is a named level and not a shrug.
+ */
+const CLEAR_HOLD = 170;
+const WALKOUT_MAX = 240;
 
 /*
  * How far above the ground a ceiling pipe's mouth may be and still be enterable.
@@ -3975,11 +4025,34 @@ export class LevelScene {
   /**
    * Walking into the fortress door once it has swung open.
    *
-   * It is the same transit as a pipe, turned on its side: the body slides its
-   * own width further in and is not drawn past the line it was already
-   * standing at, so it goes *into* the doorway rather than stopping in front
-   * of it. Nothing arrives at the far end, because the far end of this one is
-   * the end of the level — see the 'hold' branch of `updateTransit`.
+   * It is the same transit as a pipe, turned on its side: the body walks
+   * further in and is not drawn past the line it disappears behind, so it goes
+   * *into* the doorway rather than stopping in front of it. Nothing arrives at
+   * the far end, because the far end of this one is the end of the level — see
+   * the 'hold' branch of `updateTransit`.
+   *
+   * WHERE HE GOES BEHIND THE DOOR, AND WHY IT IS THE FAR JAMB (20.8.2026).
+   *
+   * Omistaja: *"make sure they seem to ENTER the door, ie. go behind it only
+   * AFTER they start hitting the right border of the door."*
+   *
+   * The line was `p.x + p.w` — wherever his nose happened to be on the frame
+   * the tile was touched. Measured in 1-F that is x 2754.05, i.e. **2 px past
+   * the near jamb of a doorway that runs 2752…2784**: the clip started on the
+   * first frame and ate him from the front while he was still standing in the
+   * opening. Read as a man being swallowed by the doorframe, not one walking
+   * through a door.
+   *
+   * It is now the door's own far border, so the whole approach and the whole
+   * crossing are drawn in front — the leaves are open and he passes them — and
+   * the clip only begins on the frame his leading edge reaches the far jamb.
+   * `far` and not "right", because a door entered from the right is the same
+   * event mirrored, and the near jamb is then the one he must clear.
+   *
+   * The slide follows from the line rather than from his own width: it has to
+   * carry the *whole* body past `far`, which in 1-F is 48 px and not 18. See
+   * `DOOR_STEP` for why the frame count is derived from that distance and not
+   * the other way round.
    */
   enterDoor(tx, ty) {
     const p = this.player;
@@ -3990,6 +4063,10 @@ export class LevelScene {
     while (right < this.w - 1 && info(this.tileAt(right + 1, ty)).door) right++;
     const middle = (left + right + 1) * TILE / 2;
     const dirX = middle >= p.cx ? 1 : -1;
+    // The jamb at the far end of the walk, and the 4 px past it that make the
+    // difference between "gone" and "gone but for a pixel of shoulder".
+    const far = dirX > 0 ? (right + 1) * TILE : left * TILE;
+    const slide = dirX > 0 ? (far + 4) - p.x : (far - 4) - (p.x + p.w);
 
     p.vx = 0;
     p.vy = 0;
@@ -3998,12 +4075,9 @@ export class LevelScene {
     p.beginTransit({
       kind: 'door',
       axis: 'x',
-      slide: dirX * (p.w + 4),
-      /* The edge the body disappears behind is where its leading edge already
-       * is, not the door's own boundary: the player is inside the frame by the
-       * time this runs, and clipping at the frame would chop them on the first
-       * frame instead of taking them in. */
-      hide: dirX > 0 ? p.x + p.w : p.x,
+      slide,
+      inFrames: Math.max(1, Math.round(Math.abs(slide) / DOOR_STEP)),
+      hide: far,
       hideDir: dirX,
     });
     /* `doorin` eikä `door`: oven aukeaminen ja siitä sisään käveleminen olivat
@@ -4043,10 +4117,28 @@ export class LevelScene {
     t.f++;
 
     if (t.phase === 'in') {
-      const k = Math.min(1, t.f / TRANSIT_IN);
+      /* A pipe swallows a body whole and takes the same time doing it whatever
+       * the body is, so `TRANSIT_IN` is right for it and stays its default. A
+       * door is a distance (see `enterDoor`), so it brings its own count. The
+       * fallback is also what an old quicksave's transit deserialises to. */
+      const frames = t.inFrames || TRANSIT_IN;
+      const k = Math.min(1, t.f / frames);
       if (t.axis === 'x') p.x = t.fromX + t.slide * k;
       else p.y = t.fromY + t.slide * k;
-      if (t.f >= TRANSIT_IN) { t.phase = 'hold'; t.f = 0; }
+      if (t.kind === 'door') {
+        /* WALKING, NOT BEING PUSHED. The scene owns the body while a transit
+         * runs and `Player.update` returns before its own animation, so the
+         * legs are frozen unless someone steps them — and `state()` reads
+         * `onGround` and `vx`, which `beginTransit` cleared, so the sprite was
+         * drawn in its **jump** pose for the whole walk-in. Both are put back
+         * here from the transit's own numbers rather than guessed: the pace is
+         * the slide divided by its frames, which is `DOOR_STEP` by
+         * construction. */
+        p.onGround = true;
+        p.vx = t.slide / frames;
+        p.walkAnim(Math.abs(p.vx));
+      }
+      if (t.f >= frames) { t.phase = 'hold'; t.f = 0; }
       return;
     }
 
@@ -4565,7 +4657,7 @@ export class LevelScene {
     } else if (this.state === 'clear') {
       this.player.update(input);
       this.stateTimer++;
-      if (this.stateTimer > 170) {
+      if (this.stateTimer > CLEAR_HOLD && this.walkedOut()) {
         this.game.finishLevel({ cleared: true, card: this.wonCard });
         return;
       }
@@ -6160,6 +6252,14 @@ export class LevelScene {
     this.player.controllable = false;
     this.player.autoWalk = true;
     this.player.ducking = false;
+    /* The last thing a cleared level shows is him leaving it — see
+     * `walkedOut`. The flag is what lets him past the level's own right edge,
+     * which is otherwise a wall (`moveX`), and it is set here and not in the
+     * clear branch because there is exactly one caller with a body still in
+     * the room. **The fortress is the other caller and it is not one**: the
+     * door's transit ends with him inside the doorway and out of sight, and a
+     * man who has just entered a door does not then also walk off the map. */
+    this.player.offstage = !this.player.transit;
     /* Jäljellä oleva polttoaine pisteinä. Kolikoita **ei kuluteta** — säiliö
      * kannetaan seuraavaan kenttään — eli tämä on kuitti säästämisestä eikä
      * lunastus: nopea läpimeno maksaa enemmän kuin hidas, ja silti kaikki
@@ -6169,6 +6269,34 @@ export class LevelScene {
     Music.stop();
     Ambience.stop();
     Sfx.play('clear');
+  }
+
+  /**
+   * Is the cleared level's last picture over?
+   *
+   * Asked every frame once the jingle has had its `CLEAR_HOLD` frames, and it
+   * answers the only question the scene still has: **is he still in shot.**
+   *
+   * Three ways to be done, and each is a different level:
+   *
+   *   - **No body in the room.** The fortress ends inside its door and the
+   *     transit holds him there ('gone', see `updateTransit`); asking such a
+   *     body to leave the frame would keep the scene up for the fuse's whole
+   *     length with nothing on screen but an empty doorway.
+   *   - **Out of the frame.** The ordinary answer. The left edge of the box
+   *     past the right edge of the view, plus the 8 px of slack the sprite is
+   *     allowed to overhang its box by — the same 8 `drawPlayerInto` clips
+   *     with, and for the same reason.
+   *   - **The fuse.** Below the frame counts too: past the goal the ground is
+   *     whatever the level happened to end with, and a man who has walked off
+   *     the last tile is as gone as one who walked off the side. `WALKOUT_MAX`
+   *     covers the rest — a wall, a pit he is still falling down.
+   */
+  walkedOut() {
+    const p = this.player;
+    if (p.transit) return true;
+    if (this.stateTimer > CLEAR_HOLD + WALKOUT_MAX) return true;
+    return p.x >= this.cam.x + VIEW_W + 8 || p.y >= this.cam.y + this.viewH + 8;
   }
 
   /* --------------------------------- draw ------------------------------ */
