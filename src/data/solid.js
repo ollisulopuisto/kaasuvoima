@@ -184,6 +184,94 @@ export function onFace(face, u, v) {
   return add(face.centre, add(mul(face.u, u * face.radius), mul(face.v, v * face.radius)));
 }
 
+/**
+ * THE NET: where every face goes when the solid is opened out flat.
+ *
+ * A flower rather than a strip, and centred on whichever face you are standing
+ * on — the one you are reading stays where it is and the solid comes apart
+ * around it, which is the difference between a transition and a scene change.
+ *
+ * Ring 1 is the six faces sharing an edge with home, each pushed out along the
+ * direction of the edge they share, far enough that the two polygons meet
+ * rather than overlap: home's apothem plus their own. Ring 2 is everything
+ * else, out along the direction its centre already lies in, at whatever
+ * distance the ring-1 faces have left free. Nothing here is a *correct* net —
+ * a truncated octahedron has thousands and choosing one is a spanning tree —
+ * but every face lands the right size, the right way up and clear of its
+ * neighbours, which is what an unfolding has to look like.
+ *
+ * Returned in **face-local units of the home face**, so the caller scales it
+ * by whatever the solid is drawn at.
+ */
+export function netLayout(home) {
+  const apothem = (f) => f.radius * Math.cos(Math.PI / f.verts.length);
+  const sub2 = (p) => [
+    dot(sub(p, home.centre), home.u),
+    dot(sub(p, home.centre), home.v),
+  ];
+  const out = new Map();
+  out.set(home, { x: 0, y: 0, angle: 0 });
+
+  const touching = new Set();
+  for (const side of home.sides) {
+    if (!side.to) continue;
+    const f = FACES.find((g) => g.kind === side.to.kind && g.index === side.to.index);
+    touching.add(f);
+    const [mx, my] = sub2(side.mid);
+    const a = Math.atan2(my, mx);
+    const d = apothem(home) + apothem(f);
+    out.set(f, { x: Math.cos(a) * d, y: Math.sin(a) * d, angle: a });
+  }
+
+  /*
+   * RING 2 IS SPACED EVENLY, not sent out along its own direction.
+   *
+   * Direction was the obvious rule and it fails on exactly one face: the one
+   * directly opposite home projects to the centre of home's frame, so it has
+   * no direction at all, and `atan2(0, 0)` puts it at zero on top of whatever
+   * else is there. Measured across all fourteen possible home faces, the
+   * tightest pair overlapped by a full face radius.
+   *
+   * So the seven remaining faces are sorted by whatever direction they do have
+   * and then dealt evenly round the circle. The order still comes from the
+   * solid, so the net does not reshuffle itself between frames; only the
+   * spacing is imposed.
+   */
+  /* Far enough that ring 2 clears ring 1 *radially* as well as around: a
+   * ring-1 hexagon reaches 3.674 out and a ring-2 hexagon reaches 1.2247 in,
+   * so anything under 4.9 has them overlapping wherever the two rings line
+   * up. Measured, not chosen. */
+  const far = apothem(home) + 2 * apothem(FACES[0]) + 1.28;
+  const rest = FACES.filter((f) => !out.has(f)).map((f) => {
+    const [cx, cy] = sub2(f.centre);
+    return { f, a: Math.atan2(cy, cx) };
+  }).sort((p, q) => p.a - q.a);
+  rest.forEach(({ f }, i) => {
+    const a = (i / rest.length) * Math.PI * 2;
+    out.set(f, { x: Math.cos(a) * far, y: Math.sin(a) * far, angle: a });
+  });
+  return out;
+}
+
+/**
+ * A face's corners once it has lain down, in the home face's 2D frame.
+ *
+ * The polygon keeps its own size and vertex count and is turned so its first
+ * corner points the same way it does on the solid — without that, a face
+ * spins as it flattens and the fold reads as a shuffle rather than a hinge.
+ */
+export function netCorners(home, face, spot) {
+  const n = face.verts.length;
+  const first = sub(face.verts[0], face.centre);
+  const a0 = Math.atan2(dot(first, home.v), dot(first, home.u));
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * Math.PI * 2;
+    pts.push([spot.x + Math.cos(a) * face.radius, spot.y + Math.sin(a) * face.radius]);
+  }
+  return pts;
+}
+
 /** Where side `k`'s midpoint falls in face-local units. */
 export function sideAt(face, k) {
   const p = sub(face.sides[k].mid, face.centre);
