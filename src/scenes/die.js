@@ -42,6 +42,7 @@ import { WORLDS, worldDoors, worldTier, pipsFor } from '../data/worlds.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { TIER_COLORS, PIP_OFF } from './worldmap.js';
 import { clamp } from '../core/utils.js';
+import { STRIP } from '../data/solid.js';
 import { qMul, qNorm, qBetween, qSlerp, qApply } from '../core/quat.js';
 
 const VIEW_W = 320;
@@ -78,8 +79,8 @@ const OPEN_FRAMES = 46;
 const SHUT_FRAMES = 30;
 const TURN_FRAMES = 26;
 
-/** Nauhan järjestys: Gray-koodi, eli peräkkäisillä on yhteinen särmä. */
-const STRIP = [0, 1, 3, 2, 6, 7, 5, 4];
+/* Nauhan järjestys on `data/solid.js`:ssä, koska sama Gray-koodi järjestää
+ * pallon tahkot: kaksi kopiota olisi kaksi järjestystä jotka voivat erota. */
 
 /** Tahkon kolme kärkeä yksikköinä: x-, y- ja z-akselin päät merkkeineen. */
 function faceVerts(i) {

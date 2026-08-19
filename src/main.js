@@ -199,7 +199,21 @@ class Game {
     return 'cleared';
   }
 
+  /**
+   * The one door back to the overworld, and now it has two rooms behind it.
+   *
+   * Every return from a level comes through here — cleared, died, skipped — so
+   * this is the only place that has to know which overworld the player is
+   * using. `overworld` is unset for anything that has not deliberately entered
+   * the globe, which is every existing path and every gate check, so the flat
+   * map stays the default until the globe can do the things it cannot yet:
+   * houses, the gambling games, secrets and the branch boards.
+   */
   toWorldMap() {
+    if (this.overworld === 'globe') {
+      this.setScene(new GlobeScene(this, this.state.world));
+      return;
+    }
     this.setScene(new WorldMapScene(this));
   }
 
@@ -721,7 +735,15 @@ class Game {
      * built, so the prototype is reachable without displacing either of the
      * screens the gate already tests.
      */
+    if (this.scene instanceof GlobeScene) {
+      this.overworld = 'map';
+      this.toast('WARP: LITTEA KARTTA');
+      Sfx.play('powerup');
+      this.toWorldMap();
+      return;
+    }
     if (this.scene instanceof DieScene) {
+      this.overworld = 'globe';
       this.toast('WARP: PALLO (KOE)');
       Sfx.play('powerup');
       this.setScene(new GlobeScene(this, this.state.world));

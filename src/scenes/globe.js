@@ -1,13 +1,13 @@
 import { drawText } from '../gfx/font.js';
 import { Music, Sfx } from '../core/audio.js';
-import { WORLDS, pipsFor } from '../data/worlds.js';
+import { WORLDS, pipsFor, nodePips, startNode, fortressNode } from '../data/worlds.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { TIER_COLORS } from './worldmap.js';
 import { clamp } from '../core/utils.js';
 import { qMul, qNorm, qSlerp, qApply, qAxis, qBetween } from '../core/quat.js';
 import { drawPlayer } from '../gfx/sprites.js';
 import { normalizePower } from '../entities/player.js';
-import { FACES, HEX_COUNT, onFace, sideAt } from '../data/solid.js';
+import { FACES, HEX_COUNT, STRIP, onFace, sideAt } from '../data/solid.js';
 
 /**
  * THE POINTY SPHERE YOU WALK ON.
@@ -128,13 +128,66 @@ function spokesOf(face) {
   return open;
 }
 
+/**
+ * THE EIGHT LEVELS OF A WORLD, ON THE EIGHT FACES.
+ *
+ * Not eight *worlds* — that is the outer solid, and `die.js` is already it.
+ * Every world in this game has exactly eight level-bearing nodes (seven levels
+ * and a fortress), which is the number of hexagons, so the fit is exact rather
+ * than a scheme the content is bent into.
+ *
+ * The order is the world's own chain from its start to its fortress, laid
+ * along `STRIP` — the Gray code — so level `k + 1` is always one edge away
+ * from level `k`. Walking forward is therefore a walk, and the fortress ends
+ * up at the far end of the path with a spare edge to leave the world by.
+ *
+ * The nodes that carry no level — the start marker and the house — are not
+ * faces. The house is a **room**, and a room is a square: three of a
+ * hexagon's six sides lead to them, and a square touches four hexagons, so a
+ * house is a place four levels share instead of a stub hanging off one.
+ */
+function facesOfWorld(world) {
+  const chain = [];
+  const seen = new Set();
+  const next = new Map();
+  for (const l of world.links) {
+    if (!next.has(l.a)) next.set(l.a, []);
+    next.get(l.a).push(l.b);
+  }
+  const walk = (id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const node = world.nodes.find((n) => n.id === id);
+    if (node && node.level) chain.push(node);
+    for (const to of next.get(id) || []) walk(to);
+  };
+  const start = startNode(world);
+  walk(start ? start.id : world.nodes[0].id);
+  /* Depth-first from the start reaches a branch's own nodes in order, and
+   * anything the links somehow miss is appended rather than dropped: a level
+   * with no face is a level you cannot play. */
+  for (const n of world.nodes) if (n.level && !chain.includes(n)) chain.push(n);
+  const fort = fortressNode(world);
+  if (fort && chain.includes(fort)) {
+    chain.splice(chain.indexOf(fort), 1);
+    chain.push(fort);
+  }
+  const byFace = new Array(HEX_COUNT).fill(null);
+  chain.slice(0, HEX_COUNT).forEach((node, k) => { byFace[STRIP[k]] = node; });
+  return byFace;
+}
+
 export class GlobeScene {
-  constructor(game, face = 0, onEnter = null) {
+  constructor(game, world = 0, face = null) {
     this.game = game;
-    this.onEnter = onEnter;
-    this.face = face;
+    this.world = world;
+    this.byFace = facesOfWorld(WORLDS[world]);
+    /* Start on the face of the node the save is standing on, so coming back
+     * from a level puts you where you left rather than at the beginning. */
+    const here = this.byFace.findIndex((n) => n && n.id === game.state.node);
+    this.face = face !== null ? face : (here >= 0 ? here : STRIP[0]);
     this.tick = 0;
-    this.rot = tilted(qBetween(FACES[face].normal, [0, 0, 1]));
+    this.rot = tilted(qBetween(FACES[this.face].normal, [0, 0, 1]));
     this.mode = 'idle';
     /* Face-local position of the pawn, in radii. The hub is the middle. */
     this.at = { u: 0, v: 0 };
@@ -202,6 +255,22 @@ export class GlobeScene {
     if (this.squash !== 0) this.squash *= 0.82;
 
     if (this.mode === 'idle') {
+      if (input.pressed.jump || input.pressed.start) {
+        input.consume('jump');
+        input.consume('start');
+        const node = this.byFace[this.face];
+        if (node) {
+          Sfx.play('select');
+          /* The one door out of this scene, and it is the map's own door: the
+           * globe decides *which* node and `startLevel` does the rest, so
+           * there is no second way into a level that could drift from the
+           * first. See `toWorldMap` for the way back. */
+          this.game.overworld = 'globe';
+          this.game.startLevel(node);
+          return;
+        }
+        Sfx.play('bump');
+      }
       for (const key of ['left', 'right', 'up', 'down']) {
         if (!input.pressed[key]) continue;
         input.consume(key);
@@ -336,8 +405,13 @@ export class GlobeScene {
     for (const d of drawn) {
       const here = d.f === this.here;
       const room = d.f.kind === 'square';
+      const node = d.f.kind === 'hex' ? this.byFace[d.f.index] : null;
+      /* A face is the colour of its level's difficulty, so the solid is a
+       * difficulty chart you can turn over — the same five tiers the map's
+       * plaques use, from the same `nodePips`. */
       const base = room ? '#8890b0'
-        : TIER_COLORS[Math.max(1, pipsFor(worldMedian(d.f.index % HEX_COUNT)))];
+        : node ? TIER_COLORS[Math.max(1, nodePips(node))]
+          : TIER_COLORS[Math.max(1, pipsFor(worldMedian(this.world)))];
       const step = here ? 0 : Math.min(2, d.depth > 0.55 ? 1 : 2);
       poly(ctx, d.pts, 0, 0);
       ctx.fillStyle = shade(base, TONES[step]);
@@ -406,11 +480,24 @@ export class GlobeScene {
   }
 
   drawLabels(ctx) {
-    const i = this.face % HEX_COUNT;
-    drawText(ctx, WORLDS[i].name, 160, 12, {
+    drawText(ctx, WORLDS[this.world].name, 160, 10, {
       color: '#ffffff', align: 'center', shadow: '#303048',
     });
-    drawText(ctx, this.mode === 'roll' ? 'KIERII' : 'NUOLET KULJE', 160, 226, {
+    const node = this.byFace[this.face];
+    if (node) {
+      const cleared = !!this.game.state.cleared[node.id];
+      drawText(ctx, node.name || node.level, 160, 202, {
+        color: cleared ? '#8fe04a' : '#ffd048', align: 'center', shadow: '#101018',
+      });
+      /* The difficulty bar, drawn rather than typed — the bitmap font has no
+       * pip glyph, and a missing glyph leaves a hole and moves on. */
+      const pips = Math.max(1, nodePips(node));
+      for (let n = 0; n < 5; n++) {
+        ctx.fillStyle = n < pips ? TIER_COLORS[pips] : '#3a3a52';
+        ctx.fillRect(150 + n * 4, 213, 2, 3);
+      }
+    }
+    drawText(ctx, this.mode === 'roll' ? 'KIERII' : 'NUOLET KULJE   ENTER PELAA', 160, 226, {
       color: '#50506a', align: 'center',
     });
   }
