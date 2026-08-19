@@ -7,6 +7,108 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.50 — the music pass: double time, six genres and a bend
+
+Owner: *"i want a music pass: SID chip sounds are lovely! love em. go write in
+different genres: a waltz, a polka, trad Eastern European folk music, something
+South of Sahara, Middle-East etc. but avoid cliches. then spread them around the
+maps."* And: *"the speedup in the first tune sounds bad. i think it'd better be
+a doubletime kinda thing where only one instrument switches to a faster
+subdivision but the others keep the same tempo."* And: *"i frigging LOOOOVE
+dramatic strings with bends, like gorecki and other 20th century non-romantic
+composers."*
+
+### The speed-up, and why it sounded bad
+
+There were **two** of them and only one was the clock's. `HURRY_SPEED` shortened
+every step by a factor of 1.4 when the coins ran low, and the `double time`
+variation shortened it by 2 every tenth pass. Both moved the *pulse*, which is
+the one thing a listener is counting: the drums, the bass and the tune all sped
+up together, so nothing was heard against anything and the effect read as a tape
+running fast rather than as urgency.
+
+Both are gone. In their place, exactly one named voice re-articulates each of
+its notes as two of half the length — a written eighth becomes two sixteenths in
+that line and nowhere else — while the step length, the drums and every other
+voice are untouched. Measured on `jaatie` over 32 steps: **lead 14 onsets → 28,
+comp 4 → 4, bass 16 → 16, step 105.634 ms → 105.634 ms.** All four numbers are
+in the gate, because any three of them are also true of a tempo change.
+
+Which line doubles is named per track rather than guessed, and the reason is
+measured too: `level`'s comp is single-step stabs, and halved they are a 12 ms
+click. And **a borrowed melody is never the doubled voice** — `cave`, `bone` and
+`autiovuori` name their accompaniment, because re-cutting somebody else's tune
+into twice as many notes is exactly the slide DESIGN.md kohta 1 b is written
+against. `jouset` opts out entirely.
+
+Going with them: the lead-in bar's tempo ramp, which existed to slide into a
+gear change that no longer exists. The only thing that still moves a clock is
+the cave's `accel`, which is a slope and not a gear.
+
+### Six genres, and the cliché each one is written against
+
+All six are composed for this game — no `source` field, and none is asked for:
+the naming rule in DESIGN.md kohta 1 b is about borrowed *works*, and a genre is
+a convention (kohta 2). Each one takes the genre's **structure** rather than its
+costume, which is also the half that can be checked from the notes:
+
+| track | what it is | the cliché it refuses | what the gate counts |
+| --- | --- | --- | --- |
+| `valssi` | slow B-minor valse triste, 3/4 | the Viennese oom-pah | not one bass note on beat one; every part a multiple of six; exactly one raised leading tone |
+| `polkka` | A mixolydian, 2/4, fast | oom-pah again, and the ballroom | eight chords in four bars and none on a beat; no bass pitch twice in a bar; flat seventh present, leading tone absent |
+| `seiska` | 7/8 as 2+2+3, drone and tune | Hava Nagila's augmented second | every length a multiple of seven, loop 112; every bar of the tune is exactly 2+2+3 |
+| `kello` | interlocking cycles of 12, 8 and 5 | pentatonic plus a hand drum | the three periods read off the note lists, none dividing another, meeting only after 120 steps — two and a half passes |
+| `makam` | maqam Bayati on D over Maqsum | the harmonic minor in a costume | every B natural followed by something higher and every B flat by something lower; the neutral second carries +50 cents and nothing else does |
+| `jouset` | Górecki/Pärt strings, tempo 66 | romantic swells | the canon is the tune 16 steps late and a fifth down, note for note; the tintinnabuli voice is only A, C and E; no third anywhere in the bass |
+
+### The bend, which had to be built first
+
+`tone` could sweep a pitch and the sequencer could slide *into* a note from
+wherever the voice last was (`glide`, since the cloud world). Neither could say
+"play this note and then leave it", which is the gesture the owner asked for by
+name. Two new note-mark fields do: `bend`, a slide out of the written pitch by a
+number of semitones that need not be whole, and `cents`, a fixed microtonal
+offset. `jouset` ends three of its four phrases on one, once by a semitone and
+once by a **quarter tone** — which has nowhere to land, and that is the effect.
+`cents` is what makes `makam` possible at all: Bayati's second degree is neither
+a minor nor a major second, and the twelve-tone grid this sequencer counts in
+cannot spell it.
+
+### Where they went
+
+Nothing lost its music. Two worlds that had been sharing the generic track got
+one of their own, and four rooms that had been borrowing somebody else's or
+playing nothing at all got one too:
+
+- **world 2** (the desert, seven levels) → `makam`, and the desert daily field with it
+- **world 5** (the rematch, seven levels) → `seiska`; the world whose themes are a tour of everybody else's finally sounds like one place
+- **the four houses** → `valssi`; they had no music at all, so a room you walked into sounded like the map you left
+- **the fortress-cleared card** → `polkka`, in place of the title theme, which is the sound of not having started yet
+- **world 8's seven fights** → `kello`, in place of the shared `boss` track. 8-F is untouched: its music is the one that has to end the way the fight ends.
+- **game over and the ending card** → `jouset`. Two opposite screens, one piece, deliberately: the music this is written after is a lament that ends in light, and nothing in the notes decides which one you are hearing — the screen supplies that.
+- the daily's theme table also gained `ice: 'jaatie'`, which was a hole rather than a decision.
+
+**World 1 kept `level`.** It is the front door, the most-heard track in the
+game, and the one whose bass the drum steals a channel from; moving it would
+have made a documented technique nearly inaudible.
+
+### Loudness
+
+Music never approaches the death sound's measured 0.57 — it is on `musicBus` and
+every voice is a fraction. What can regress is internal, so the ceiling is
+measured off the tracks that were already here: `title` sums to 0.380 and
+`level`'s bass is the loudest single voice at 0.200. The gate holds every track,
+old and new, under both. The loudest new track is `jouset` at 0.375.
+
+### What is not proven without ears
+
+The gates read notes, periods and counts. Whether a displaced bass *sounds* like
+a valse triste, whether the quarter-tone bend lands as grief or as a mistake,
+and whether the polka is any fun are all listening questions, and none of them
+is in this file.
+
+---
+
 ## v26.08.19.49 — the die lies down on a floor
 
 Owner: *"I think for the map I prefer iso 2.5D."*

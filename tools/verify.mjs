@@ -18144,6 +18144,531 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     Music.stop();
   }
 
+
+  /* ===================== THE MUSIC PASS, 20.8.2026 ====================== *
+   *
+   * Ten gates, and every one of them reads notes rather than labels. That is
+   * the whole difficulty with music in a test suite: a track called "a waltz"
+   * is a waltz because somebody typed the word, and a gate that checks the word
+   * checks nothing. So each of these picks the one thing about a piece that
+   * would stop being true if the piece were written the ordinary way, and
+   * counts it.
+   * ===================================================================== */
+
+  /*
+   * 1. DOUBLE TIME IS DENSITY, NOT TEMPO.
+   *
+   * Owner, 20.8.2026: *"the speedup in the first tune sounds bad. i think it'd
+   * better be a doubletime kinda thing where only one instrument switches to a
+   * faster subdivision but the others keep the same tempo."*
+   *
+   * The old hurry multiplied the step by 1.4 and the `double time` section
+   * multiplied it by 2, so everything moved together and nothing was heard
+   * against anything. What replaced it has to be measured as **three numbers at
+   * once**, because any two of them are satisfiable by the old behaviour too:
+   *
+   *   - the named voice's onsets **double**. A faster tempo does that as well.
+   *   - every other voice's onsets are **unchanged**. This is the one the old
+   *     gear could not do, and it is why the counts are per voice.
+   *   - the step length is **the same number**. Without it, a tempo change that
+   *     happened to keep the note count would pass.
+   *
+   * `jaatie` is the track under test because every note in its lead is an
+   * eighth or longer, so the doubling is exact rather than approximate — the
+   * `DOUBLE_MIN_LEN` floor never fires and the count is arithmetic. The counts
+   * come out of the sequencer itself (`audioDiag().onsets`), so what is
+   * measured is the code that plays and not a model of it.
+   */
+  {
+    const { audioDiag: diag } = await import('/src/core/audio.js');
+    Sfx.resume();
+    const runPass = (name, hurried) => {
+      Music.stop();
+      Music.current = null;
+      Music.play(name);
+      /* `play` primes the lookahead, so one or two steps are already scheduled
+       * and counted before `setHurry` can be called — and those would be calm
+       * steps inside the hurried tally, which is exactly the kind of off-by-two
+       * that makes an exact claim into an approximate one. Stop the clock and
+       * zero the counters, then drive the steps by hand. */
+      if (Music._timer) { clearTimeout(Music._timer); Music._timer = null; }
+      Music.setHurry(hurried);
+      Music._onsets.clear();
+      const dur = Music._stepDur;
+      const t0 = (audioTap() ? audioTap().ctx.currentTime : 0) + 0.25;
+      for (let s = 0; s < 32; s++) Music._emit(s, t0 + s * dur, false, dur);
+      return { onsets: diag().onsets, doubling: diag().doubling, dur };
+    };
+    const calm = runPass('jaatie', false);
+    const rush = runPass('jaatie', true);
+    Music.stop();
+    Music.current = null;
+    const named = rush.doubling;
+    const others = Object.keys(calm.onsets).filter((k) => k !== named);
+    const doubled = calm.onsets[named] > 0
+      && rush.onsets[named] === calm.onsets[named] * 2;
+    const steady = others.length > 0
+      && others.every((k) => rush.onsets[k] === calm.onsets[k]);
+    const sameClock = Math.abs(rush.dur - calm.dur) < 1e-12;
+    const show = (o) => Object.entries(o).map(([k, n]) => `${k} ${n}`).join(' ');
+    expect('kaksinkertainen jako tihentää yhtä ääntä eikä liikuta pulssia',
+      named !== 'none' && doubled && steady && sameClock,
+      `tihennetty ${named}; rauhassa ${show(calm.onsets)}; kiireessä `
+      + `${show(rush.onsets)}; askel ${(calm.dur * 1000).toFixed(3)} -> `
+      + `${(rush.dur * 1000).toFixed(3)} ms`);
+  }
+
+  /*
+   * 2. AND THE ARRANGEMENT'S OWN DOUBLE-TIME SECTION IS THE SAME MECHANISM.
+   *
+   * There were two speed-ups and only one of them was the clock's. The
+   * `double time` variation used to carry `speed: 2`, which is the same fault
+   * in the other half of the engine — and a fix that left it there would have
+   * meant the owner still heard a tempo jump, just every tenth pass instead of
+   * when the coins ran low. Section 7 of `SECTIONS` is that variation; landing
+   * on it must change what `_doubling` answers and must not change `_stepDur`.
+   */
+  {
+    const { audioDiag } = await import('/src/core/audio.js');
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('level');
+    const plain = { step: Music._stepDur, label: Music.variation(), on: audioDiag().doubling };
+    /* Cycle 12 is the first pass of section 7 (six sections of two passes
+     * before it). Set the counter and re-apply rather than waiting for it. */
+    Music._cycle = 12;
+    Music._applyVariation();
+    const geared = { step: Music._stepDur, label: Music.variation(), on: audioDiag().doubling };
+    Music.stop();
+    Music.current = null;
+    expect('tuplatempo-osio tihentää yhden äänen eikä kiristä tempoa',
+      /double time/.test(geared.label) && geared.on === 'lead'
+      && plain.on === 'none' && Math.abs(geared.step - plain.step) < 1e-12,
+      `${plain.label} (${plain.on}, ${(plain.step * 1000).toFixed(3)} ms) -> `
+      + `${geared.label} (${geared.on}, ${(geared.step * 1000).toFixed(3)} ms)`);
+  }
+
+  /*
+   * 3. EVERY TRACK NAMES A LINE IT CAN ACTUALLY SUBDIVIDE.
+   *
+   * `double` is a voice name, and the two ways to get it wrong are both silent:
+   * name a voice the track does not have, and nothing happens; name one whose
+   * notes are all single steps, and nothing happens either, because
+   * `DOUBLE_MIN_LEN` skips them one at a time. Both look exactly like a track
+   * that opted out — and opting out is legal (`jouset` does), which is what
+   * makes the difference invisible without this.
+   */
+  {
+    Sfx.resume();
+    const bad = [];
+    const rows = [];
+    for (const name of Music.names()) {
+      Music.stop();
+      Music.current = null;
+      Music.play(name);
+      const track = Music._track;
+      const named = track.double;
+      if (named === undefined) { bad.push(`${name}: ei kenttää double`); continue; }
+      if (named === null) { rows.push(`${name} —`); continue; }
+      const voice = (Music._voices || []).find((v) => v.name === named);
+      if (!voice) { bad.push(`${name}: double '${named}' ei ole ääni`); continue; }
+      const long = voice.notes.filter((n) => n[0] !== null && n[1] >= 2).length;
+      if (!long) bad.push(`${name}: ${named} ei sisällä yhtään jaettavaa nuottia`);
+      rows.push(`${name} ${named}/${long}`);
+    }
+    Music.stop();
+    Music.current = null;
+    expect('jokainen raita nimeää äänen jonka se voi jakaa, tai kieltäytyy nimeltä',
+      bad.length === 0, bad.join('; ') || rows.join(', '));
+  }
+
+  /*
+   * 4. UUSI RAITA EI SAA OLLA ÄÄNEKKÄÄMPI KUIN VANHAT.
+   *
+   * Kuoleman ääni on tämän tiedoston mitattu katto (0,57; kolikko 0,32,
+   * tehostus 0,60), eikä musiikki ole lähelläkään sitä — se kulkee `musicBus`in
+   * kautta ja jokainen ääni on murto-osa. Se mikä *voi* mennä pieleen on
+   * sisäinen: uusi raita kirjoitettuna kovemmaksi kuin yksikään vanha nousee
+   * ääniefektien päälle ja pakottaa säätämään koko miksauksen.
+   *
+   * Siksi katto on **mitattu vanhoista raidoista**: `title` on suurin summa
+   * (0,380 = 0,15 + 0,07 + 0,16) ja `level`in basso suurin yksittäinen ääni
+   * (0,20). Kumpikaan luku ei ole makuasia vaan se mitä pelissä on jo ollut
+   * kuukauden, ja kumpikin rikkoutuu yhdestä huolimattomasta nollasta.
+   *
+   * Summa eikä huippu, koska äänet soivat yhtä aikaa: kolme ääntä 0,15:llä on
+   * kovempi kuin yksi 0,20:llä, ja juuri se on se tapa jolla raita hiipii yli
+   * ilman että yksikään rivi näyttää väärältä.
+   */
+  {
+    const SUM_MAX = 0.381;      // title, mitattu taulusta
+    const ONE_MAX = 0.201;      // level/bass, mitattu taulusta
+    Sfx.resume();
+    const loud = [];
+    const rows = [];
+    for (const name of Music.names()) {
+      Music.stop();
+      Music.current = null;
+      Music.play(name);
+      const voices = Music._voices || [];
+      const sum = voices.reduce((s, v) => s + (v.gain || 0), 0);
+      const top = Math.max(0, ...voices.map((v) => v.gain || 0));
+      rows.push(`${name} ${sum.toFixed(3)}`);
+      if (sum > SUM_MAX) loud.push(`${name}: summa ${sum.toFixed(3)} > ${SUM_MAX}`);
+      if (top > ONE_MAX) loud.push(`${name}: yksi ääni ${top.toFixed(3)} > ${ONE_MAX}`);
+    }
+    Music.stop();
+    Music.current = null;
+    expect('yksikään raita ei ole kirjoitettu kovemmaksi kuin kovin vanha raita',
+      loud.length === 0, loud.join('; ') || rows.join(', '));
+  }
+
+  /*
+   * 5. VALSSI — kolmijakoisuus ja **siirretty basso**.
+   *
+   * Kaksi väitettä ja molemmat ovat sellaisia jotka yksi nuotti rikkoo.
+   *
+   * Kolmijakoisuus on sama vaatimus kuin luulaaksolla ja samasta syystä:
+   * sekvensserin tahti on kuusitoista askelta, joten valssi pysyy valssina vain
+   * jos jokainen ääni ja jokainen rumpukuvio on kuuden monikerta.
+   *
+   * Siirretty basso on se joka erottaa tämän wieniläisvalssista, ja se on
+   * kirjaimellisesti luettavissa: **yhtäkään bassonuottia ei ole tahdin
+   * ykkösellä.** Yksikin pohja iskulle yksi ja um-pa-pa on takaisin — ei
+   * rikkinäisenä vaan tavallisena, mikä on juuri se vika jota kukaan ei osaa
+   * etsiä. Kolmantena: korotettu johtosävel (A#) soi tasan yhdessä soinnussa,
+   * eli kadenssi on tapahtuma eikä väritys.
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('valssi');
+    const track = Music._track;
+    const lens = [
+      ...(Music._voices || []).map((v) => `${v.name} ${v.len}`),
+      ...(Music._phrases || []).map((p, i) => `fraasi${i} ${p.len}`),
+      ...Object.entries(track.drums || {}).map(([k, p]) => `${k} ${p.length}`),
+    ];
+    const inThree = lens.length > 0
+      && lens.every((s) => Number(s.split(' ')[1]) % 6 === 0);
+    const bassVoice = (Music._voices || []).find((v) => v.name === 'bass');
+    const onBeatOne = [...(bassVoice ? bassVoice.map.keys() : [])].filter((s) => s % 6 === 0);
+    let leading = 0;
+    for (const [semi] of (track.harm || {}).notes || []) {
+      for (const s of Array.isArray(semi) ? semi : [semi]) {
+        if (s !== null && ((s % 12) + 12) % 12 === 1) leading++;
+      }
+    }
+    expect('valssi on kolmijakoinen ja sen basso on siirretty pois ykköseltä',
+      inThree && bassVoice && onBeatOne.length === 0 && bassVoice.map.size === 16,
+      `${lens.join(', ')}; bassonuotteja ${bassVoice ? bassVoice.map.size : 0}, `
+      + `niistä ykkösellä ${onBeatOne.length}`);
+    expect('valssin ainoa korotettu johtosävel on kadenssissa',
+      leading === 1,
+      `A#-säveliä säestyksessä ${leading} kpl`);
+  }
+
+  /*
+   * 6. POLKKA — nopeus on rummuissa, kiinnostus on muualla.
+   *
+   * Kielletty asia on um-pa: pohja ykkösellä, sointu kakkosella, ikuisesti. Se
+   * on juuri se kuvio joka tekee polkasta karaokea, ja sen poissaolo on
+   * mitattavissa kahdesta paikasta.
+   *
+   *   - **Sointu ei ole koskaan iskulla.** Jokainen `harm`in isku osuu
+   *     kuudestoistaosalle joka ei ole neljän monikerta, eli takapotkulle.
+   *   - **Basso on linja eikä pumppu.** Yhdessäkään tahdissa ei soi samaa
+   *     säveltä kahdesti. Um-pa-basso rikkoo tämän ensimmäisellä tahdilla.
+   *
+   * Ja moodi: matala septimi (G) soi ja johtosäveltä (G#) ei ole kertaakaan.
+   * Yksi G# ja tämä on tavallinen A-duuri, mikä kuulostaisi vain
+   * tavallisemmalta — sama vika kuin pilviraidan lyydisellä kvartilla.
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('polkka');
+    const harm = (Music._voices || []).find((v) => v.name === 'harm');
+    const bass = (Music._voices || []).find((v) => v.name === 'bass');
+    const stabs = [...(harm ? harm.map.keys() : [])];
+    const onBeat = stabs.filter((s) => s % 4 === 0);
+    let repeats = 0;
+    if (bass) {
+      for (let bar = 0; bar < bass.len; bar += 8) {
+        const seen = new Set();
+        for (let s = bar; s < bar + 8; s++) {
+          const note = bass.map.get(s);
+          if (!note) continue;
+          if (seen.has(note[0])) repeats++;
+          seen.add(note[0]);
+        }
+      }
+    }
+    const pc = new Array(12).fill(0);
+    for (const name of ['lead', 'harm', 'bass']) {
+      const voice = (Music._track || {})[name];
+      if (!voice) continue;
+      for (const list of [voice.notes, ...(voice.phrases || [])]) {
+        for (const [semi] of list) {
+          if (semi === null || semi === undefined) continue;
+          for (const s of Array.isArray(semi) ? semi : [semi]) pc[((s % 12) + 12) % 12]++;
+        }
+      }
+    }
+    Music.stop();
+    Music.current = null;
+    expect('polkan säestys ei ole um-pa: sointu on takapotkulla ja basso on linja',
+      stabs.length === 8 && onBeat.length === 0 && repeats === 0,
+      `${stabs.length} sointua, iskulla ${onBeat.length}, `
+      + `bassossa toistoja tahdin sisällä ${repeats}`);
+    expect('polkka on miksolyydinen: matala septimi soi, johtosäveltä ei ole',
+      pc[10] >= 4 && pc[11] === 0,
+      `G ${pc[10]} kertaa, G# ${pc[11]} kertaa`);
+  }
+
+  /*
+   * 7. SEISKA — 7/8 on rakenne eikä maku.
+   *
+   * Kaksi asiaa, ja niistä jälkimmäinen on se joka tekee epäsymmetrisestä
+   * tahtilajista musiikkia eikä laskuharjoitusta.
+   *
+   *   - **Kaikki on seitsemää ja sataakahtatoista.** Seitsemän ja kuusitoista
+   *     sopivat yhteen vasta 112 askeleen kohdalla, joten yksikin ääni väärän
+   *     mittaisena panee raidan vaeltamaan omaa sovitustaan vasten. Se
+   *     kuulostaisi rikkinäiseltä, ei väärältä.
+   *   - **Melodia on ryhmitelty 2+2+3.** Jokainen seitsemän askeleen tahti
+   *     lyijyssä on tasan kolme nuottia, ja niiden pituudet ovat 2, 2 ja 3
+   *     siinä järjestyksessä. Ilman tätä metri olisi vain rumpukuvio, ja rummut
+   *     pudotetaan kahdessa osiossa kymmenestä.
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('seiska');
+    const track = Music._track;
+    const lens = [
+      ...(Music._voices || []).map((v) => `${v.name} ${v.len}`),
+      ...Object.entries(track.drums || {}).map(([k, p]) => `${k} ${p.length}`),
+    ];
+    const sevens = lens.every((s) => Number(s.split(' ')[1]) % 7 === 0);
+    const loopOk = Music._loopLen === 112;
+    const lead = track.lead.notes;
+    const wrong = [];
+    for (let i = 0; i < lead.length; i += 3) {
+      const group = [lead[i], lead[i + 1], lead[i + 2]].map((n) => (n ? n[1] : '?'));
+      if (group.join(',') !== '2,2,3') wrong.push(`tahti ${i / 3}: ${group.join('+')}`);
+    }
+    Music.stop();
+    Music.current = null;
+    expect('seiska on 7/8 ja pysyy siinä: kaikki pituudet ovat seitsemän monikertoja',
+      sevens && loopOk, `${lens.join(', ')}; kierros ${Music._loopLen}`);
+    expect('seiskan melodia on ryhmitelty 2+2+3 joka tahdissa',
+      wrong.length === 0 && lead.length === 48,
+      wrong.slice(0, 4).join('; ') || `${lead.length} nuottia, 16 tahtia, kaikki 2+2+3`);
+  }
+
+  /*
+   * 8. KELLO — kolme jaksoa, ja ne kohtaavat kerran.
+   *
+   * "Jotain Saharan eteläpuolelta" tehdään yleensä asteikolla ja rummulla, ja
+   * kumpikin on väärä puoli. Se mikä siirtyy on **arkkitehtuuri**: monta eri
+   * mittaista jaksoa yhtä aikaa, jokainen yksinkertainen, ja yhdistelmä joka
+   * kestää paljon kauemmin kuin yksikään osansa.
+   *
+   * Se on aritmetiikkaa ja siksi mitattavissa: kolmen äänen pituuksien pienin
+   * yhteinen jaettava **on** kierros. Muuta yhtä jaksoa askeleella ja joko
+   * teos hajoaa tai siitä tulee neljä kertaa pidempi, ja kumpikin näkyy tässä.
+   *
+   * Toinen väite koskee kelloa itseään: sen iskujen välit eivät ole
+   * yhtäsuuria. Tasavälinen kello on metronomi, ja metronomi on täsmälleen se
+   * asia jota vastaan koko rakenne on kirjoitettu.
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('kello');
+    const byName = Object.fromEntries((Music._voices || []).map((v) => [v.name, v]));
+    /*
+     * The period of a written figure, measured rather than declared: the
+     * smallest shift under which the voice's own note table is unchanged. It
+     * has to be this and not `voice.len`, because every voice here is a whole
+     * pass long (48) — what interlocks is the figure inside them, and a voice
+     * whose figure had been edited would still add up to 48.
+     */
+    const periodOf = (voice) => {
+      for (let p = 1; p <= voice.len; p++) {
+        if (voice.len % p) continue;
+        let same = true;
+        for (const [at, note] of voice.map) {
+          const other = voice.map.get((at + p) % voice.len);
+          if (!other || JSON.stringify(other) !== JSON.stringify(note)) { same = false; break; }
+        }
+        if (same && voice.map.size % (voice.len / p) === 0) return p;
+      }
+      return voice.len;
+    };
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const lcm = (a, b) => (a * b) / gcd(a, b);
+    const bell = byName.comp;
+    const hits = bell ? [...bell.map.keys()].filter((s) => s < 12).sort((a, b) => a - b) : [];
+    const gaps = hits.map((s, i) => (i ? s - hits[i - 1] : s + 12 - hits[hits.length - 1]));
+    const even = gaps.length > 0 && gaps.every((g) => g === gaps[0]);
+    const periods = {
+      comp: bell ? periodOf(bell) : 0,
+      bass: byName.bass ? periodOf(byName.bass) : 0,
+      hat: (Music._track.drums || {}).hat ? Music._track.drums.hat.length : 0,
+    };
+    const three = Object.values(periods);
+    const meet = three.every((n) => n > 0) ? three.reduce((a, b) => lcm(a, b), 1) : 0;
+    /* No two the same, and none a divisor of another: either would mean two of
+     * the three come round together every time, which is one cycle wearing two
+     * hats rather than two cycles. */
+    const nested = three.some((a, i) => three.some((b, j) => i !== j && a % b === 0));
+    Music.stop();
+    Music.current = null;
+    expect('kellon kolme jaksoa ovat eri mittaisia eivätkä kohtaa kierroksen sisällä',
+      periods.comp === 12 && periods.bass === 8 && periods.hat === 5
+      && !nested && meet === 120 && meet > Music._loopLen,
+      `jaksot ${Object.entries(periods).map(([k, n]) => `${k} ${n}`).join(', ')}; `
+      + `kohtaavat ${meet} askeleen välein, kierros ${Music._loopLen}`);
+    expect('kellokuvio on epätasainen, eli kello eikä metronomi',
+      hits.length === 5 && !even,
+      `iskut ${hits.join(' ')}, välit ${gaps.join(' ')}`);
+  }
+
+  /*
+   * 9. MAKAM — asteikko joka ei ole sama ylös ja alas, ja se sävel jota ei ole.
+   *
+   * Kielletty asia on ylinouseva sekunti, eli se 1800-luvun eurooppalainen
+   * lyhennysmerkki jolla "itämainen" yleensä tehdään. Sen tilalla on kaksi
+   * asiaa jotka ovat maqamissa oikeasti rakennetta:
+   *
+   *   - **Sama sävelaskel eri suuntiin eri korkeudella.** Bayati nousee
+   *     H:n kautta ja laskee B:n kautta, eli kuudes aste riippuu siitä minne
+   *     ollaan menossa. Datassa se on tämä: jokaista H:ta seuraa korkeampi
+   *     sävel ja jokaista B:tä matalampi. Kirjoita asteikko asteikkona ja tämä
+   *     kaatuu — mikä on koko ero.
+   *   - **Toinen aste ei ole puolisävelaskel eikä kokosävelaskel.** Se on
+   *     niiden välissä, ja se on pelin ensimmäinen mikrointervalli. Portti
+   *     vaatii että `cents`-merkki on olemassa, että se on 50 ja että sitä
+   *     kantaa **vain** toinen aste — merkki muualla olisi epävire eikä maqam.
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('makam');
+    const lead = Music._track.lead;
+    const notes = lead.notes;
+    const FLAT_SIX = 1;        // B flat, a semitone above A
+    const NAT_SIX = 2;         // B natural
+    const bad = [];
+    let ups = 0;
+    let downs = 0;
+    for (let i = 0; i < notes.length; i++) {
+      const [semi] = notes[i];
+      const next = notes[i + 1];
+      if (semi === NAT_SIX) {
+        ups++;
+        if (!next || next[0] <= semi) bad.push(`H @${i} ei jatka ylöspäin`);
+      }
+      if (semi === FLAT_SIX) {
+        downs++;
+        if (!next || next[0] >= semi) bad.push(`B @${i} ei jatka alaspäin`);
+      }
+    }
+    const marked = notes.filter((n) => n[2] === 'n');
+    const second = marked.every((n) => n[0] === -6);
+    const cents = ((lead.marks || {}).n || {}).cents;
+    Music.stop();
+    Music.current = null;
+    expect('makam nousee ja laskee eri säveliä pitkin',
+      ups > 0 && downs > 0 && bad.length === 0,
+      bad.join('; ') || `nousevia H ${ups}, laskevia B ${downs}`);
+    expect('makamin toinen aste on neutraali sekunti, eikä mikään muu sävel ole',
+      cents === 50 && marked.length >= 3 && second,
+      `${marked.length} merkittyä nuottia, viritys ${cents} senttiä, `
+      + `kaikki toisella asteella ${second}`);
+  }
+
+  /*
+   * 10. JOUSET — kaanon, tintinnabuli ja se että kaari lähtee nuotista.
+   *
+   * Omistaja pyysi tätä nimeltä ("dramatic strings with bends, like gorecki"),
+   * ja kolme kohtaa siitä pussista on sellaisia jotka joko ovat datassa tai
+   * eivät ole olemassa.
+   *
+   *   - **Kaanon.** `harm` on sama linja tahtia myöhemmin ja kvinttiä alempaa.
+   *     Portti lukee molempien käännetyt nuottitaulut ja vaatii että jokainen
+   *     harmonian nuotti on lyijyn nuotti kuusitoista askelta aiemmin, seitsemän
+   *     puolisävelaskelta alempana. Kaanon jonka toinen ääni ei ole sama linja
+   *     on sointukierto jolla on tarina.
+   *   - **Tintinnabuli.** `comp` soittaa **vain** toonikakolmisoinnun säveliä.
+   *     Yksi neljäs sävel ja Pärtin temppu on pelkkä säestys.
+   *   - **Kaari lähtee nuotista.** Uusi `bend`-kenttä on koko syy tämän raidan
+   *     olemassaoloon, ja siitä on kaksi kokoa: puolisävelaskel ja
+   *     **neljännessävelaskel**, jolla ei ole mihin laskeutua. Portti vaatii
+   *     että molemmat ovat käytössä oikeasti eivätkä vain taulussa.
+   *
+   * Ja se mitä raidassa **ei** ole: yhtään terssiä bassossa. Avoin kvintti
+   * kantaa sekä valituksen että aamun, mikä on sama ratkaisu kuin
+   * `autiovuori`ssa ja samasta syystä — sama säestys soi kahden vastakkaisen
+   * ruudun alla (peli ohi / lopputekstit).
+   */
+  {
+    Sfx.resume();
+    Music.stop();
+    Music.current = null;
+    Music.play('jouset');
+    const track = Music._track;
+    const byName = Object.fromEntries((Music._voices || []).map((v) => [v.name, v]));
+    const lead = byName.lead;
+    const harm = byName.harm;
+    const off = [];
+    if (lead && harm) {
+      for (const [at, note] of harm.map) {
+        const src = lead.map.get(at - 16);
+        if (!src) { off.push(`@${at}: lyijyllä ei ole nuottia @${at - 16}`); continue; }
+        if (note[0] !== src[0] - 7) off.push(`@${at}: ${note[0]} vs ${src[0]} - 7`);
+      }
+    }
+    const TRIAD = [0, 3, 7];
+    const strays = ((track.comp || {}).notes || [])
+      .filter(([s]) => s !== null && !TRIAD.includes(((s % 12) + 12) % 12));
+    let thirds = 0;
+    for (const [semi] of (track.bass || {}).notes || []) {
+      for (const s of Array.isArray(semi) ? semi : [semi]) {
+        const p = ((s % 12) + 12) % 12;
+        if (p === 3 || p === 4) thirds++;
+      }
+    }
+    const marks = (track.lead || {}).marks || {};
+    const bends = new Set();
+    for (const list of [track.lead.notes, ...(track.lead.phrases || [])]) {
+      for (const [, , mark] of list) {
+        if (mark && marks[mark] && marks[mark].bend) bends.add(marks[mark].bend);
+      }
+    }
+    Music.stop();
+    Music.current = null;
+    expect('jousten toinen ääni on sama linja tahtia myöhemmin ja kvinttiä alempaa',
+      harm && harm.map.size >= 6 && off.length === 0,
+      off.slice(0, 3).join('; ') || `${harm ? harm.map.size : 0} nuottia kaanonissa`);
+    expect('jousten tintinnabuli soittaa vain toonikakolmisoinnun säveliä',
+      strays.length === 0 && ((track.comp || {}).notes || []).length >= 6,
+      strays.map(([s]) => s).join(' ') || `${((track.comp || {}).notes || []).length} nuottia, `
+      + `kaikki A C E; bassossa terssejä ${thirds}`);
+    expect('jousten kaaret lähtevät nuotista, ja toinen niistä on neljännessävelaskel',
+      bends.has(-1) && bends.has(-0.5) && thirds === 0,
+      `käytetyt kaaret ${[...bends].sort().join(' ')} puolisävelaskelta, `
+      + `bassossa terssejä ${thirds}`);
+  }
+
   /* ------------------------------ rendering ---------------------------- */
   {
     const { drawBackdrop } = await import('/src/gfx/backdrop.js');
