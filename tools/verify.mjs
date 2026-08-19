@@ -23423,6 +23423,81 @@ const report = await page.evaluate(async () => {
     `kehä ${W.twister.rim} px/frame, ydin ${W.twister.core} px/frame,`
     + ` kaukana ${W.twister.far}, kuoren kanto ${W.twister.carries}`);
 
+  /* ------------------------- ajelehtiva pelaaja ------------------------- */
+  /*
+   * SÄÄ RANKAISEE PAIKALLAAN OLOSTA (19.8.2026).
+   *
+   * Neljä väitettä, ja kolmas on se jonka takia tämä lohko on olemassa.
+   *
+   *   1. Paikallaan olo kerää mittaria, liike nollaa sen. Kumpi tahansa
+   *      akseli, koska mitta on etäisyys ankkurista eikä suunta.
+   *   2. Areenassa ei ajelehdita: siellä ei ole rataa jota edetä.
+   *   3. **Liikkuvalle pelaajalle kerroin on tasan 1.** Tämä on se lupaus
+   *      jonka rikkominen kaatoi 4-3:n kehitysvaiheessa: kekälesade on kuvio
+   *      eikä määrä, ja jokainen mitattu luku on todistettu sitä kuviota
+   *      vastaan jonka kerroin 1 tuottaa. Jos tämä luku liikahtaa, jokainen
+   *      läpäistävyystodistus koskee eri kenttää kuin se joka julkaistaan.
+   *   4. Vastatuuli lakkaa siitä framesta jolla pelaaja painaa suuntaa —
+   *      muuten se vaikeuttaisi juuri sitä hyppyä johon on jääty kiinni.
+   */
+  {
+    const D = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const fresh = (id) => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, id);
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        return sc;
+      };
+      const idle = () => ({ held: {}, pressed: {}, consume() {} });
+      const right = () => ({ held: { right: true }, pressed: {}, consume() {} });
+
+      const s = fresh('1-1');
+      const moving = s.weatherScale;
+      for (let f = 0; f < 400; f++) s.update(idle());
+      const stood = { drift: s.drift, scale: s.weatherScale };
+      /* Sama seisominen, mutta suunta pohjassa: mittari kerää yhä, tuuli ei
+       * puhalla. `vx` luetaan ennen ja jälkeen yhden framen, pelaaja ilmassa
+       * jotta puolitus ei sotke lukemaa. */
+      s.player.onGround = false;
+      s.player.vx = 0;
+      s.updateDriftWind(right());
+      const tryingPush = s.player.vx;
+      s.player.vx = 0;
+      s.updateDriftWind(idle());
+      const idlePush = s.player.vx;
+
+      const m = fresh('1-1');
+      for (let f = 0; f < 400; f++) m.update(right());
+      const ran = { drift: m.drift, scale: m.weatherScale, moved: m.player.cx > m.spawn.x + 32 };
+
+      const arena = fresh('1-F');
+      for (let f = 0; f < 400; f++) arena.update(idle());
+      const boss = { drift: arena.drift, isBoss: !!arena.def.boss };
+      return { moving, stood, ran, boss, tryingPush, idlePush };
+    });
+
+    expect('paikallaan seisominen kerää ajelehtimista, juokseminen ei',
+      D.stood.drift === 1 && D.ran.drift === 0 && D.ran.moved,
+      `seisten ${D.stood.drift}, juosten ${D.ran.drift} (eteni ${D.ran.moved})`);
+
+    expect('liikkuvan pelaajan sää on tasan mitattu sää, kerroin 1',
+      D.moving === 1 && D.ran.scale === 1 && D.stood.scale > 1,
+      `alussa ${D.moving}, juosten ${D.ran.scale}, seisten ${D.stood.scale}`);
+
+    expect('pomoareenassa ei ajelehdita, koska siellä ei ole rataa',
+      D.boss.isBoss && D.boss.drift === 0, `areena ${D.boss.isBoss}, ajelehdus ${D.boss.drift}`);
+
+    expect('vastatuuli väistyy heti kun pelaaja painaa suuntaa',
+      D.tryingPush === 0 && D.idlePush < 0,
+      `suunta pohjassa ${D.tryingPush}, joutilaana ${D.idlePush}`);
+  }
+
   expect('tulimyrsky varoittaa ennen kuin se sataa, ja varoitus on lyhyempi kuin sade',
     W.storm.order.join('→') === 'rauha→varoitus→sade'
     && W.storm.warn > 0 && W.storm.rain > W.storm.warn,

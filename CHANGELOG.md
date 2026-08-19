@@ -7,6 +7,77 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.39 — the weather punishes standing still
+
+Owner, turning the plan around before it was built: *"What if we go the other
+way around? What if the weather punishes you for stopping? But if you keep
+moving, then things are gonna be okay — unless then the wind goes in your
+favour."*
+
+The version this replaced escalated on a **clock**: the longer you spent in a
+level the worse it got. That is the Vampire Survivors shape and it is the wrong
+one here, for a reason about teaching rather than balance. **A clock is
+invisible until it bites.** Nothing on screen connects the ember that killed you
+to the thirty seconds you spent looking for a secret. Tie it to standing still
+and the rule teaches itself in one second: you stop, the wind rises, you move,
+it stops. Nobody has to be told, and no tutorial has to exist.
+
+It is also what lets the secrets stay, which the owner was explicit about.
+Hunting a hidden block is no longer cheap — but it is a **risk you take** rather
+than a **cost you pay**, and a risk is a thing worth taking.
+
+**The meter is the telemetry's own.** `STUCK_PROGRESS` — eight pixels of new
+ground — has been the log's definition of progress since it was written, so the
+weather now punishes exactly what the log already calls being stuck. One
+definition, two readers.
+
+**Three versions of the measure, and the gate wrote the last two.** It started
+as `player.cx`, because that is what `bestX` reads. 6-K digs downward and 7-P
+changes axis halfway, so an x-measure read "not moving" for the whole level and
+the climbing bot took a permanent headwind. Second try measured distance to the
+goal, which fixed the climbs and broke the segmented level, where the axis
+changes and distance-to-goal stops being a measure of the route. The third is
+what was actually asked for: **standing still needs no notion of forward.** The
+anchor is where the counter last reset, and moving `STUCK_PROGRESS` from it in
+any direction on either axis resets it again. No goal, no axis, no segments, no
+level type that is an exception.
+
+The price, said out loud: **running back and forth does not drift.** Accepted —
+the law is about stopping, not backtracking, and a player pacing a corridor
+hunting a secret is doing exactly the moving this game wants to see.
+
+**Two things the gate refused, and both were right.**
+
+The first version blew in **both** directions: a headwind for drifting, a
+tailwind for moving. *"Rytmi vie P-nopeuteen muttei sen yli"* read **3.511
+against a cap of 3.5** — the tailwind had pushed past the measured ceiling, and
+`gapTiles` 6 and `wallTiles` 4 are measured on that ceiling. Five other physics
+measurements went with it, from air friction to wading through sand. So the
+tailwind is gone and the reward for moving is *what does not happen*.
+
+The second was the direction of the whole law. Weather started at full strength
+and **relaxed** to 60 % for a moving player, which sounds kinder and cost 4-3
+its checkpoint route (69 %, stuck). The reason is worth keeping: **ember rain is
+a pattern, not an amount.** `EMBER_EVERY` 10 thinned to 17 is not fewer embers
+in the same places, it is embers in *different* places — and every level's
+clearability is proved against the pattern the measured numbers produce. A
+thinner rain is not an easier rain, it is another rain. So the multiplier is
+exactly **1** while the player moves, every pattern and proof untouched, and
+drift can only add. `DRIFT_BITE` 0.6 at full drift means ember rain thickens
+from every 10 frames to every 6, and forest fire steps every 16 instead of 26.
+
+**And the headwind lets go the moment you press a direction.** Without that, a
+player stuck at a hard jump drifts, so they get a headwind, *on the jump they
+are stuck on* — a spiral rather than an incentive, and it is what took 4-3 to
+69 % on the first attempt. Holding a direction is trying, and trying is not
+idling. The drift itself keeps climbing, because standing still with the buttons
+held is still standing still; only the wind stops.
+
+The quake is untouched. A tremor is a tremor, and its kick is a measured
+constant with a gate on it.
+
+---
+
 ## v26.08.19.38 — one power slot, and an enemy's ability goes in it
 
 Owner, 19.8.2026, naming the direction first: *"You know Vampire Survivors? I

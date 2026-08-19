@@ -1336,6 +1336,96 @@ const SPEED_PULSE_SPENT = 9;
 const STUCK_FRAMES = 480;
 const STUCK_PROGRESS = 8;     // px of new ground that counts as progress
 
+/*
+ * AJELEHTIMINEN: SÄÄ RANKAISEE PAIKALLAAN OLOSTA, EI KELLOSTA (19.8.2026).
+ *
+ * Owner: *"what if the weather punishes you for stopping? But if you keep
+ * moving, then things are gonna be okay. Unless then the wind goes in your
+ * favour."*
+ *
+ * The version this replaced escalated on a clock — the longer you were in a
+ * level, the worse it got. That is the Vampire Survivors shape and it is the
+ * wrong one here, for a reason that is about teaching rather than balance: a
+ * clock is **invisible until it bites**. Nothing on screen connects the ember
+ * that killed you to the thirty seconds you spent looking for a secret. Tie it
+ * to standing still instead and the rule teaches itself in one second — you
+ * stop, the wind turns, you move, it stops. Nobody has to be told.
+ *
+ * It also keeps the secrets, which is the point the owner was explicit about.
+ * Hunting a hidden block is no longer *cheap* — but it is a **risk you take**
+ * rather than a **cost you pay**, and a risk is a thing worth taking.
+ *
+ * `STUCK_PROGRESS` and the stall counter are the telemetry's, not new: the log
+ * has been measuring "no new ground" since it was written, so the weather now
+ * punishes exactly what the log already calls being stuck. One definition, two
+ * readers, and the data keeps meaning what it meant.
+ *
+ * The two numbers below are the ones to tune from real play, and they are
+ * deliberately both earlier than `STUCK_FRAMES`: the log's eight seconds are
+ * for *"this player cannot pass"*, and these are for *"this player has stopped
+ * moving"*, which is a smaller thing and has to be felt sooner.
+ *
+ *   `DRIFT_GRACE`  two seconds that cost nothing. Lining up a jump, bumping a
+ *                  brick, fighting something — all legitimate, all free.
+ *   `DRIFT_FULL`   six seconds, and the weather is as bad as that level's
+ *                  weather gets.
+ */
+const DRIFT_GRACE = 120;
+const DRIFT_FULL = 360;
+
+/*
+ * PAIKALLAAN OLO KIRISTÄÄ SÄÄN. LIIKE EI LÖYSÄÄ SITÄ — ja tämä suunta on
+ * portin opettama, ei valittu.
+ *
+ * Ensimmäinen versio meni toisin päin: kentän sää täydellä voimalla oli se
+ * mitä sai seisoskelusta, ja liikkuva pelaaja piti sen 60 %:ssa. Se kuulosti
+ * lempeämmältä ja se kaatoi *"jokaisesta kaasulyhdystä pääsee maaliin
+ * voimatasolla 0"* — 4-3 jäi 69 %:iin.
+ *
+ * Syy on se joka kannattaa muistaa ensi kerralla: **kekälesade on kuvio, ei
+ * määrä.** `EMBER_EVERY` 10 harvennettuna 17:ään ei ole vähemmän kekäleitä
+ * samoissa paikoissa, se on kekäleitä **eri** paikoissa — ja kentän
+ * läpäistävyys on todistettu sitä kuviota vastaan jonka mitatut luvut
+ * tuottavat. Harvempi sade ei ole helpompi sade, se on toinen sade.
+ *
+ * Siksi kerroin on tasan 1 kun pelaaja liikkuu: jokainen kuvio, jokainen
+ * mitattu luku ja jokainen olemassa oleva todistus pysyy koskemattomana, ja
+ * `drift` voi vain lisätä. Palkinto liikkumisesta on se ettei mikään pahene —
+ * mikä on täsmälleen se mitä omistaja pyysi (*"if you keep moving, then things
+ * are gonna be okay"*) ja sattuu olemaan ainoa muotoilu joka ei vaadi
+ * kuudenkymmenenviiden kentän uudelleenmittausta.
+ *
+ * `DRIFT_BITE` on paljonko täysi ajelehtiminen kiristää: 0,6 tarkoittaa että
+ * kekälesade tihenee 10:stä kuuteen ja metsäpalo etenee 26:sta 16 framen
+ * välein. Puolitoistakertainen, eli tuntuva muttei toinen peli.
+ */
+const DRIFT_BITE = 0.6;
+
+/*
+ * VASTATUULI ON VOIMA, MYÖTÄTUULI EI OLE — ja tämä epäsymmetria on mitattu
+ * eikä valittu.
+ *
+ * Ensimmäinen versio työnsi molempiin suuntiin: ajelehtiva sai vastatuulta ja
+ * liikkuva myötätuulta, `vx`:ään lisättynä kuten aavikon puuska. Portti hylkäsi
+ * sen samana iltana ja oli oikeassa — *"rytmi vie P-nopeuteen muttei sen yli"*
+ * luki **3,511 vastaan katto 3,5**. Myötätuuli oli lisännyt nopeutta mitatun
+ * katon yli, ja `gapTiles` 6 ja `wallTiles` 4 on mitattu sillä katolla:
+ * jokaisen kentän läpäistävyystodistus lepää sen päällä. Sama työntö sotki
+ * viisi muuta fysiikkamittaa, ilmakitkasta hiekassa kahlaamiseen.
+ *
+ * Palkinto liikkumisesta on siis se **mitä ei tapahdu**: `weatherScale` pitää
+ * sään alarajallaan ja vastatuuli pysyy poissa. Se on hiljaisempi palkinto
+ * kuin työntö selkään, ja se on ainoa jonka voi antaa rikkomatta lukua johon
+ * kuusikymmentäviisi kenttää nojaa.
+ *
+ * `DRIFT_CALM` on se ajelehtiminen jolta vastatuuli alkaa, eli kaksi
+ * kolmasosaa matkasta täyteen. `DRIFT_WIND` on sen voima, tarkoituksella
+ * pienempi kuin puuskan 0,055: puuska on tapahtuma jonka näkee tulevan, tämä
+ * on pohjavire jonka huomaa vasta kun on seissyt hetken.
+ */
+const DRIFT_CALM = 0.35;
+const DRIFT_WIND = 0.05;
+
 /* How long a crumbling platform holds. Just under a second: long enough to
  * cross two of them at a walk, short enough that standing still is a mistake. */
 const CRUMBLE_FRAMES = 52;
@@ -1668,6 +1758,10 @@ export class LevelScene {
     // Playtest telemetry, tracked per attempt. `bestX` is the furthest the
     // player has got; `stallFrames` counts how long it has stood still.
     this.bestX = 0;
+    /* Ajelehtiminen: `driftAt` on se piste josta liikettä mitataan ja
+     * `driftFrames` framea siitä kun se viimeksi siirtyi. Ks. `DRIFT_GRACE`. */
+    this.driftAt = { x: 0, y: 0 };
+    this.driftFrames = 0;
     this.stallFrames = 0;
     this.stuckLogged = new Set();
     this.telemetryDone = false;
@@ -3482,6 +3576,110 @@ export class LevelScene {
     logStuck({ level: this.id, tx, ty: Math.floor(p.cy / TILE), frames: this.tick });
   }
 
+  /**
+   * Ajelehtimismittari. Kasvaa kun rata ei etene, nollautuu kun se etenee.
+   *
+   * Mitta on `raceProgress()` eikä `bestX`, ja se on ainoa kohta jossa tämä
+   * eroaa telemetrian samasta laskennasta: `bestX` on pelkkä x, ja
+   * pystykentässä x ei ole edistymistä lainkaan — kiipeävää pelaajaa
+   * rangaistaisiin kiipeämisestä. `raceProgress` osaa molemmat akselit ja
+   * hoitaa etumerkin itse, koska se on jo jouduttu opettamaan kilpakellolle.
+   *
+   * Kynnys on `STUCK_PROGRESS` muutettuna osuudeksi radasta: sama kahdeksan
+   * pikseliä uutta maata jonka loki laskee edistymiseksi.
+   */
+  /**
+   * PAIKALLAAN OLO, EIKÄ SUUNTA — ja tämä on kolmas versio samasta mitasta.
+   *
+   * Ensin tässä luki `player.cx`, koska telemetrian `bestX` lukee sitä. Portti
+   * kaatoi sen: `6-K` kaivautuu alaspäin ja `7-P` vaihtaa akselia matkan
+   * varrella, joten x-mitta luki niissä "ei etene" koko kentän ajan ja
+   * kiipeilijäbotti sai pysyvän vastatuulen. Toinen versio mittasi etäisyyttä
+   * maaliin, mikä hoiti pystykentät ja kaatui osioituun: kun akseli vaihtuu
+   * kesken matkan, etäisyys maaliin ei ole matkan mitta.
+   *
+   * Kolmas on se mitä omistaja alun perin pyysi: *"what if the weather
+   * punishes you for stopping"*. **Paikallaan olo ei tarvitse suuntaa.**
+   * Ankkuri on se piste jossa laskuri viimeksi nollattiin, ja liike yli
+   * `STUCK_PROGRESS`in siitä — mihin tahansa suuntaan, kummalla akselilla
+   * tahansa — nollaa sen uudelleen. Ei maalia, ei akselia, ei osioita, eikä
+   * yhtään kenttätyyppiä joka olisi poikkeus.
+   *
+   * Hinta sanottuna ääneen: **edestakaisin juokseva ei ajelehdi.** Se on
+   * hyväksytty, koska laki koskee pysähtymistä eikä peruuttamista — ja koska
+   * salaisuuden etsiminen edestakaisin juosten on juuri sitä liikettä jota
+   * tämä peli haluaa nähdä, vaikka se ei etene mihinkään.
+   */
+  updateDrift() {
+    const p = this.player;
+    const dx = p.cx - this.driftAt.x;
+    const dy = p.cy - this.driftAt.y;
+    if (dx * dx + dy * dy > STUCK_PROGRESS * STUCK_PROGRESS) {
+      this.driftAt = { x: p.cx, y: p.cy };
+      this.driftFrames = 0;
+      return;
+    }
+    this.driftFrames++;
+  }
+
+  /**
+   * Ajelehtiminen 0…1, eli kuinka pahasti pelaaja on jäänyt paikalleen.
+   *
+   * Nolla areenassa ja kaikessa muussa kuin pelissä, eikä se ole poikkeus vaan
+   * määritelmä: pomohuoneessa ei ole rataa jota edetä, joten "ei etene" ei
+   * tarkoita siellä mitään. Sama koskee kuolinanimaatiota ja maalia.
+   */
+  get drift() {
+    if (this.def.boss || this.state !== 'play') return 0;
+    return clamp((this.driftFrames - DRIFT_GRACE) / (DRIFT_FULL - DRIFT_GRACE), 0, 1);
+  }
+
+  /** Sään voimakerroin: 1 liikkeessä, `1 + DRIFT_BITE` paikallaan. */
+  get weatherScale() { return 1 + DRIFT_BITE * this.drift; }
+
+  /**
+   * MYÖTÄ- JA VASTATUULI, ja tämä on se puolisko jonka pelaaja huomaa.
+   *
+   * Työntö menee `vx`:ään samalla tavalla kuin aavikon puuskassa, myös sama
+   * puolitus maassa: jalat maassa on jotain mitä vasten työntää, ilmassa ei
+   * ole. Ero on etumerkissä ja siinä että tämä on koko ajan päällä — puuska on
+   * tapahtuma, tämä on pohjavire.
+   *
+   * Nopeuskattoon ei kosketa. Myötätuuli auttaa pääsemään mitattuun huippuun
+   * nopeammin eikä sen yli, koska `gapTiles` 6 ja `wallTiles` 4 on mitattu
+   * sillä katolla ja jokaisen kentän todistus lepää niiden päällä.
+   */
+  updateDriftWind(input) {
+    if (this.state !== 'play' || this.def.boss) return;
+    /*
+     * TUULI VASTUSTAA JOUTILAISUUTTA, EI YRITTÄMISTÄ — ja tämän opetti portti.
+     *
+     * Ensimmäinen versio puhalsi aina kun `drift` oli yli `DRIFT_CALM`in, ja
+     * *"jokaisesta kaasulyhdystä pääsee maaliin voimatasolla 0"* kaatui: 4-3
+     * jäi 69 %:iin. Syy on ikävämpi kuin luku. Pelaaja joka on jumissa vaikeassa
+     * hypyssä ei etene, joten hän ajelehtii, joten hän saa vastatuulta —
+     * **juuri siihen hyppyyn jota hän yrittää**. Rangaistus vaikeuttaa sitä
+     * mihin on jääty kiinni, eli se on kierre eikä kannustin, ja pahimmillaan
+     * se rikkoo lupauksen jonka koko peli lepää päällä.
+     *
+     * Suunta pohjassa on yrittämistä, ja yrittäminen ei ole joutilaisuutta.
+     * Tuuli siis lakkaa siitä framesta jolla pelaaja painaa johonkin suuntaan,
+     * eikä se voi olla se syy miksi hyppy ei onnistu. Ajelehtiminen itse ei
+     * nollaudu painalluksesta — sään voimakerroin (`weatherScale`) jatkaa
+     * kiristymistään, koska seisominen napit pohjassa on yhä seisomista.
+     */
+    const trying = input && input.held && (input.held.left || input.held.right);
+    if (trying) return;
+    const over = this.drift - DRIFT_CALM;
+    if (over <= 0) return;
+    /* Vastatuuli jarruttaa, se ei sinkoa: työntö menee `vx`:ään samalla
+     * puolituksella kuin puuska — jalat maassa on jotain mitä vasten työntää,
+     * ilmassa ei ole — ja se on aina taaksepäin, joten se ei voi nostaa
+     * vauhtia yhdessäkään suunnassa. Ks. `DRIFT_WIND`. */
+    const push = over * DRIFT_WIND * (this.player.onGround ? 0.5 : 1);
+    this.player.vx -= Math.sign(this.player.vx || 1) * push;
+  }
+
   /* -------------------------------- warping ---------------------------- */
 
   /** True when any column the body covers holds a warp mouth on row `ty`. */
@@ -4188,6 +4386,7 @@ export class LevelScene {
       this.updatePeek();
       this.updateTransit();
       this.updateProgress();
+      this.updateDrift();
       if (this.race) this.updateRace();
     } else if (this.state === 'clear') {
       this.player.update(input);
@@ -4218,6 +4417,7 @@ export class LevelScene {
       }
     }
 
+    this.updateDriftWind(input);
     if (this.def.wind) this.updateWind();
     if (this.def.quake) this.updateQuake();
     if (this.def.twister) this.updateTwister();
@@ -4231,7 +4431,12 @@ export class LevelScene {
      * DESIGN.md kohta 8 kieltää kaksi tapaa sanoa sama asia. Voimakkuus on
      * läheisyys, joten ääni kasvaa kun suppilo lähestyy ja vaimenee kun se
      * menee ohi — sama tieto kuin kuvassa, samasta luvusta. */
-    if (this.state === 'play') Ambience.hold(Math.max(this.gust, this.twisterNear()));
+    /* Ajelehtiva pelaaja **kuulee** sen ennen kuin tuntee sen: sama peti,
+     * sama lukema, ja tuulen nousu on ainoa vihje jonka tämä laki antaa
+     * ennakkoon. Ilman sitä myötä- ja vastatuuli olisi mysteerivoima. */
+    if (this.state === 'play') {
+      Ambience.hold(Math.max(this.gust, this.twisterNear(), this.drift * 0.8));
+    }
     if (this.shakeAmp > 0) {
       this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
       // Vaimennut tärinä ei jätä suuntaansa perinnöksi: seuraava isku saa
@@ -4392,11 +4597,15 @@ export class LevelScene {
     const d = body.cx - eye;
     const away = Math.abs(d);
     if (away > TWISTER_REACH) return;
-    const grip = 1 - away / TWISTER_REACH;
+    /* Ajelehtiminen kertoo otteen molemmilla akseleilla, ja **vain
+     * pelaajalle**: kuori tai kekäle ei seiso paikallaan tai juokse, joten
+     * mittarilla ei ole sille mitään sanottavaa. Ks. `weatherScale`. */
+    const scale = body === this.player ? this.weatherScale : 1;
+    const grip = (1 - away / TWISTER_REACH) * scale;
     const pull = -Math.sign(d) * TWISTER_PULL * grip;
     if (direct) body.vx += pull;
     else body.push(pull);
-    if (away <= TWISTER_CORE) body.vy -= TWISTER_LIFT * (1 - away / TWISTER_CORE);
+    if (away <= TWISTER_CORE) body.vy -= TWISTER_LIFT * (1 - away / TWISTER_CORE) * scale;
   }
 
   /**
@@ -4485,7 +4694,12 @@ export class LevelScene {
       st.age++;
       if (st.age >= WILDFIRE_BURN + WILDFIRE_ASH) this.burning.delete(key);
     }
-    if (this.tick % WILDFIRE_STEP === 0) this.spreadFire();
+    /* Palo on takaa-ajaja, ja takaa-ajaja on juuri se sään laji jolle
+     * paikallaan olo on kohtalokasta: askelväli lyhenee ajelehtimisen mukana,
+     * eli seisova pelaaja tulee kiinni otetuksi ja juokseva ei. */
+    if (this.tick % Math.max(1, Math.round(WILDFIRE_STEP / this.weatherScale)) === 0) {
+      this.spreadFire();
+    }
     if (this.tick % WILDFIRE_CYCLE === 0) this.lightFire();
     this.burnPlayer();
   }
@@ -4558,7 +4772,10 @@ export class LevelScene {
     this.emberWarn = warn;
     if (rain === 0) Sfx.play('dive');
     if (rain < 0 || this.state !== 'play') return;
-    if (rain % EMBER_EVERY) return;
+    /* Sade harvenee liikkeessä: `EMBER_EVERY` on se tiheys jonka seisoskelu
+     * ansaitsee, ja juokseva saa siitä `DRIFT_FLOOR`in verran. Jaettuna eikä
+     * kerrottuna, koska luku on väli eikä määrä. */
+    if (rain % Math.max(1, Math.round(EMBER_EVERY / this.weatherScale))) return;
     /* Syntypaikka on kuvan yläpuolella ja kuvan levyinen: sade on sitä mitä
      * näkyy, eikä ruudun ulkopuolelle kannata pudottaa mitään. Arpa on kellon
      * hajautus, joten sama frame samassa kentässä on sama kekäle. */
