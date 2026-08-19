@@ -617,15 +617,20 @@ itself.
 
 *(Owner, 19.8.2026.)*
 
-**Speed limit signs in the parallax.** Road signs drifting past in the backdrop,
-posting a limit; a joke, and also the only place the game would ever name its
-three speed tiers (walk 1.5, run 2.5, P 3.5). The refinement that makes it work
-is the owner's: **insert the sign dynamically ahead of the player so it scrolls
-into view**, so it reads as scenery that was always there while actually being a
-reaction to how fast they are going. One constraint carried over from 17.8: any
-flash must not be full-screen, because full-screen colour is this game's
-language for taking damage and an advantage must not speak in the voice of a
-loss.
+**Speed limit signs in the parallax.** The owner's idea, and stated exactly:
+when the player crosses speed X, a road sign is placed into the backdrop
+**off-screen**, scrolls into view as they run, and leaves. Nothing flashes and
+nothing is posted on the HUD — the sign reads as scenery that was always
+standing there, while actually being a reaction to how fast they are going.
+
+A joke first, and useful second: it would be the only place the game ever names
+its three speed tiers (walk 1.5, run 2.5, P 3.5).
+
+Two things to get right when building it. The sign has to be inserted far enough
+ahead that its arrival is never seen — the whole trick dies if it pops in. And
+the backdrop draws procedurally per theme rather than from level data, so this
+needs a small list of live props with world positions, which the backdrop does
+not have today.
 
 **The world-level card scrolls through instead of being posted.** Same trick
 applied to `MAAILMA 1-1`: it enters from one side, passes, and leaves as the
