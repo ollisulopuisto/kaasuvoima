@@ -557,6 +557,59 @@ Still open: which sides a world actually opens (today every hexagon opens its
 three level doors and the first room door), what the six squares hold, and how
 the fortress hands off to the outer solid.
 
+### Closed 19.8.2026: the flat map could not be leaned, and three things that outlive it
+
+*(PR #111, closed unmerged. It made `WorldMapScene` isometric by shearing and
+squashing the rectangular band, which looked right and failed five gate rules.
+The pointy sphere replaced the whole screen before the decision it was waiting
+on ever had to be made. Kept here for the findings, which are about this
+codebase rather than about that attempt.)*
+
+**Every shipped map is exactly 320 px wide, one screen, and not one of them
+scrolls.** The camera in `worldmap.js` — `camX`, `maxScroll`, `snapCamera`,
+the dead zone, the rounding — exists entirely for maps that do not exist. That
+is worth knowing before trusting any of it: the horizontal scroll has never
+been exercised by a shipped map, and vertical scrolling was never built at all.
+
+It is also what killed the lean. A 0.35 shear over a 144 px band slides the
+back row 50 px right of the front, so all eight maps become 370 px wide and all
+eight start sliding under the pawn — a camera moving on a map that fits, bought
+with nothing. Cropping instead only moves the loss: world 1's start node is at
+the far left and its fortress at the far right, so a lean pushes one or the
+other off the edge. There is no third option that keeps the tile pitch.
+
+**A projection must round, or it blurs the whole screen.** `isoAt` returned
+fractional coordinates and every plaque, road dot and prop landed on half a
+pixel. `camX`'s own comment had already warned about exactly this — everything
+on that map is drawn on whole pixels and a fractional translate softens every
+edge it moves — and the consequence is worse than ugly: the gate measures the
+plaque by exact colour, so an antialiased plaque is not merely fainter, it
+stops being findable, and four measurements came back as the "nothing here"
+sentinel at once.
+
+**Clearance between two node stamps is two numbers, not a radius.** A stamp is
+about 22 px wide and about 18 px tall once its difficulty bar is counted, and a
+row is worth `ISO_SQUASH` of a column on the screen — so the two axes buy
+completely different amounts and a single distance has to be wrong on one of
+them. Two columns apart, *or* three rows apart, each clears the gate's 8 px.
+Insisting on both is what left world 3's house with nowhere legal to stand
+during the triangular experiment.
+
+**A link's corner point is navigation, and it is asymmetric.** With the corner
+at `[b.column, a.row]` a link leaves `a` sideways and leaves `b` vertically;
+mirrored to `[a.column, b.row]` it is the other way round. There is no
+orientation that gives both ends the same kind of step, so the choice is always
+about *which end needs the vertical one* — and a node on a chain has already
+spent both horizontal arrows on the road. Getting that backwards produces a
+road no key reaches, which is the bug the corner point was introduced to fix in
+the first place.
+
+**And the framing error underneath all of it**, worth keeping because it was
+the expensive part: the isometric work went into `DieScene`, the screen
+*between* worlds, and the changelog called it "the overworld". `WorldMapScene`,
+the screen you stand on inside a world, was never touched. Two scenes. The
+owner found out by opening the deployed build.
+
 ### ✔ The world **die** goes isometric 2.5D — built 19.8.2026
 
 *(Owner, 19.8.2026, having compared four renderings of the world die:
