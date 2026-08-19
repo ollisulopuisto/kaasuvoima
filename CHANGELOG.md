@@ -7,6 +7,355 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.40 — the rhythm is the music's, and full speed is felt
+
+Two owner questions in one batch, and both had an answer already half-written in
+the code.
+
+### "How do we teach the rhythm? Is there any audiovisual feedback?"
+
+There was, and it was **backwards**. A missed press made a sound (`sylkaisy`);
+a landed one made none — `pumpFlash` was assigned on every hit and not one line
+in the game read it. The only signal the mechanic gave was the one that says
+*wrong*.
+
+**And the tempo was fighting itself.** The pump was a fixed 12 frames, which is
+150 BPM as eighths. The level track runs at **156**. Six BPM apart is the worst
+possible distance: they lock, drift apart over about two seconds, and re-lock —
+the ear is fed one tempo while the fingers need another, which is exactly what a
+rhythm you cannot find feels like.
+
+`Music.beatFrames(target)` now returns the playing track's own subdivision
+nearest the measured 12: level 12, jaatie 13, factory 11, cave 10, bone 9. The
+mechanic stays inside the band it was measured in and is locked to the music in
+every world — and on the main track the number does not move at all, which the
+gate proves by still reading 100 frames holding against 78 on the beat.
+
+Base tempo, never the hurry gear: a period that changes mid-level takes the
+muscle memory with it.
+
+Then the three layers, in the only order they work in — a tick at 150 over music
+at 156 would have been worse than silence:
+
+- **`pumptick`**, a short quiet click on the beat. A puff behind the heels
+  cannot be followed by an eye that is busy with where to land.
+- **`pump`**, a hit that rises a fourth as the gauge fills, so a good chain is
+  an ascending phrase and `pfull` is its resolution. `Sfx.play` forwards one
+  optional degree for it.
+- **`pumpFlash` reaches the picture** as a tint. There is no gauge on screen —
+  speed is drawn around the body — so its filling belongs on the body too.
+
+### "When we reach full speed, the screen should warble"
+
+**The look-ahead had stopped compensating exactly where it mattered.** The lean
+was `Math.min(1, speed / MAX_RUN)`, saturating at the running cap of 2.5. P-speed
+is 3.5, so filling the gauge bought *more speed and no more warning*. The cap is
+now `MAX_P / MAX_RUN`, so the lean runs 34 px → **48 px**: what you can see grows
+exactly as fast as what can arrive.
+
+**The warble is a wave, not a shake, and that distinction is the whole design.**
+`shake` is random and short and this game spends it on *impacts* — quakes, ground
+pounds, springs. If speed shook the same way, the best thing in the game would
+read as a continuous hit. So full speed rides a slow sine at **one pixel**, which
+is measured as a ceiling rather than chosen: two pixels move a tile row visibly
+off the grid and make judging a jump harder at exactly the speed where it is
+already hardest. Speed should feel like the edge of control, not past it.
+
+**The full-screen flash was asked for and refused, by the owner's own earlier
+ruling.** 17.8.2026: *"koko ruudun välähdys on huono, se tuntuu damagelta"* — a
+full-screen colour is this game's language for taking a hit, and an advantage
+must not speak in the voice of a loss. There is a gate holding that line
+(*"muttei koko ruudulla"*), it caught the attempt, and the attempt was reverted.
+The warble is the full-screen answer that survives the ruling: it is geometry,
+and geometry is not the colour of damage.
+
+### And the chain was leaking lives
+
+`if (n >= CHAIN.length) return this.gainLife(x, y)` — the ninth kill in a chain
+paid a life, **and so did the tenth, and every one after**. A chain of twelve
+paid four. Owner: *"chained kills give 1UP too easily."*
+
+The ladder now pays points all the way — past the eighth the multiplier holds at
+its ceiling of 128× — and a life lands only on a power of two from `CHAIN_LIFE`
+upward: **16, 32, 64**. Same scale as the rest of `points.js`, and each step is
+twice the work of the one before. The eighth deliberately pays no life: it is the
+kill where the multiplier reaches its ceiling, which is a reward in the currency
+the ladder is made of.
+
+---
+
+## v26.08.19.39 — the weather punishes standing still
+
+Owner, turning the plan around before it was built: *"What if we go the other
+way around? What if the weather punishes you for stopping? But if you keep
+moving, then things are gonna be okay — unless then the wind goes in your
+favour."*
+
+The version this replaced escalated on a **clock**: the longer you spent in a
+level the worse it got. That is the Vampire Survivors shape and it is the wrong
+one here, for a reason about teaching rather than balance. **A clock is
+invisible until it bites.** Nothing on screen connects the ember that killed you
+to the thirty seconds you spent looking for a secret. Tie it to standing still
+and the rule teaches itself in one second: you stop, the wind rises, you move,
+it stops. Nobody has to be told, and no tutorial has to exist.
+
+It is also what lets the secrets stay, which the owner was explicit about.
+Hunting a hidden block is no longer cheap — but it is a **risk you take** rather
+than a **cost you pay**, and a risk is a thing worth taking.
+
+**The meter is the telemetry's own.** `STUCK_PROGRESS` — eight pixels of new
+ground — has been the log's definition of progress since it was written, so the
+weather now punishes exactly what the log already calls being stuck. One
+definition, two readers.
+
+**Three versions of the measure, and the gate wrote the last two.** It started
+as `player.cx`, because that is what `bestX` reads. 6-K digs downward and 7-P
+changes axis halfway, so an x-measure read "not moving" for the whole level and
+the climbing bot took a permanent headwind. Second try measured distance to the
+goal, which fixed the climbs and broke the segmented level, where the axis
+changes and distance-to-goal stops being a measure of the route. The third is
+what was actually asked for: **standing still needs no notion of forward.** The
+anchor is where the counter last reset, and moving `STUCK_PROGRESS` from it in
+any direction on either axis resets it again. No goal, no axis, no segments, no
+level type that is an exception.
+
+The price, said out loud: **running back and forth does not drift.** Accepted —
+the law is about stopping, not backtracking, and a player pacing a corridor
+hunting a secret is doing exactly the moving this game wants to see.
+
+**Two things the gate refused, and both were right.**
+
+The first version blew in **both** directions: a headwind for drifting, a
+tailwind for moving. *"Rytmi vie P-nopeuteen muttei sen yli"* read **3.511
+against a cap of 3.5** — the tailwind had pushed past the measured ceiling, and
+`gapTiles` 6 and `wallTiles` 4 are measured on that ceiling. Five other physics
+measurements went with it, from air friction to wading through sand. So the
+tailwind is gone and the reward for moving is *what does not happen*.
+
+The second was the direction of the whole law. Weather started at full strength
+and **relaxed** to 60 % for a moving player, which sounds kinder and cost 4-3
+its checkpoint route (69 %, stuck). The reason is worth keeping: **ember rain is
+a pattern, not an amount.** `EMBER_EVERY` 10 thinned to 17 is not fewer embers
+in the same places, it is embers in *different* places — and every level's
+clearability is proved against the pattern the measured numbers produce. A
+thinner rain is not an easier rain, it is another rain. So the multiplier is
+exactly **1** while the player moves, every pattern and proof untouched, and
+drift can only add. `DRIFT_BITE` 0.6 at full drift means ember rain thickens
+from every 10 frames to every 6, and forest fire steps every 16 instead of 26.
+
+**And the headwind lets go the moment you press a direction.** Without that, a
+player stuck at a hard jump drifts, so they get a headwind, *on the jump they
+are stuck on* — a spiral rather than an incentive, and it is what took 4-3 to
+69 % on the first attempt. Holding a direction is trying, and trying is not
+idling. The drift itself keeps climbing, because standing still with the buttons
+held is still standing still; only the wind stops.
+
+The quake is untouched. A tremor is a tremor, and its kick is a measured
+constant with a gate on it.
+
+---
+
+## v26.08.19.38 — one power slot, and an enemy's ability goes in it
+
+Owner, 19.8.2026, naming the direction first: *"You know Vampire Survivors? I
+was thinking we should go for a similar ideology, not with projectile numbers
+but speed. Emphasize speed. Emphasize moving forwards. Let's only have one power
+available — one power and one backup slot. If you pick up a power from an enemy,
+that's what you have, and the power-up goes to the backup slot. The player
+should always be in a bit of a rush, always wanting to move forwards instead of
+considering and backtracking."*
+
+**The rule already existed, for items and only for items.** Taking a mushroom
+while holding a leaf banks the leaf (`storeReserve` in `takeItem`) — one power,
+one backup, and the game has worked that way for as long as there have been two
+power-ups. A swallowed ability ignored every word of it: its own field, its own
+eight-second timer, no cost at all. Three places to look for "what do I have",
+and the third one was free.
+
+The six abilities are types now, in the same slot as the other four. Swallowing
+a spike guy puts your leaf in the box.
+
+**Three things fall out, and the third is the one worth having.**
+
+  1. **Swallowing costs something.** What you gain replaces rather than adds,
+     and the price is the thing you were already carrying.
+  2. **A timer disappears.** Eight seconds was measured honestly — seventy tiles
+     at running speed, long enough to be a plan and too short to be equipment —
+     but it was measuring the wrong question. The ability was free, so *something*
+     had to limit it, and time was the only limit available. Being replaceable is
+     the limit now, and a countdown that forces waiting is exactly what a game
+     about moving forwards should not have. The corner readout it was moved into
+     yesterday is gone with it.
+  3. **The character is the readout.** `POWER_LOOKS` is keyed on the type that
+     changed, so the answer to "what am I carrying" is the body already in the
+     middle of the screen. Each of the six borrows the colours of the enemy it
+     came from — the spike guy's magenta, the shell's green, the pale blue of a
+     `Kuura` trail — so a player who has read none of this can still tell what
+     they took, having watched it walk around a minute earlier.
+
+**What it does not cost: the body.** `power.level` is untouched by a swallow.
+Which power you carry and how gassed you are were never the same question, and
+charging a size for the fastest verb in the game would have made it the most
+expensive one. A small player can swallow too — `normalizePower` now keeps a
+gift type at level 0, because a small body with wings is a real state and it is
+the state a small player who swallows ends up in.
+
+The shell is the one ability that still ends on its own: it takes a hit and
+leaves the slot empty, keeping the level, which is what its own shell always
+did.
+
+**A gate that had been measuring nothing.** The worst-case HUD fixture set
+`scene.player.powerLevel`, `.type` and `.swallowed` — all three getters, inside
+`page.evaluate`, which runs sloppy. The assignments were silent no-ops and the
+check had been rendering whatever the constructor happened to produce. One write
+to `power` does all three now, and the corner check passes on a fixture that is
+actually the worst case.
+
+---
+
+## v26.08.18.37 — five bundlings, and one readout that had to go
+
+Owner, after the red coin: *"I like the double feature they now serve, that
+feels elegant! We should try to come up with more bundlings like that, in
+powerups, enemies, GUI."*
+
+The test a bundling has to pass, written down because it predicts which pairs
+work: **the two meanings must move in the same direction.** Coins rise when you
+collect and fall when you spend, and so do time and lives — that is why one tube
+can be both. A pair where one half rises as the other falls is not a bundle, it
+is a confusing dial.
+
+**The coin number is gone from the corner.** It only ever appeared below
+`FUEL_HURRY`, and two diegetic warnings already fire on exactly that coin: the
+`timewarn` sting, and the music changing to its hurry gear and staying there.
+Three ways to say *time is running out*, and the third was the only one that had
+to be read mid-jump.
+
+**A swallowed ability is a countdown like the others.** It had a name and a
+draining bar of its own next to the reserve box, argued on the grounds that the
+player needs *what* and *how long* at a glance. Both true — and both are what
+the top-right slot has been saying five different ways already (`TÄHTI 6`,
+`KYTKIN 4`, `HÄTÄ 3`, `UMMETUS 8`, `OVI AUKI`). `SIIVET 6` is the same sentence
+in the widget that exists, so the bottom-corner widget is deleted and the star
+still wins the slot, because two countdowns at once is a state where neither
+gets read.
+
+The bundling that was proposed and **did not survive the code** is worth
+recording too: a swallowed ability cannot live in the reserve slot, because it
+is not an item you use — it is a mode you are in, and a mode has no icon you
+press.
+
+**A sliding shell throws a switch.** The switch was bumped from below by a head,
+which made a *time* puzzle — ten seconds to cross a room and come back — into a
+*height* puzzle, which is a different question entirely. A shell is already
+something the player aims down a corridor and it already smashes bricks on the
+way, so this is one condition and no new noun. It reads the tile it is about to
+enter, like `smashAhead`, because a shell at speed is inside the next column
+before a frame boundary notices; a switch that fires one tile late fires from
+the far side of the wall it was supposed to open. The consequence is the exact
+complement of the head bump: a shell throws the switches at its own height, and
+a head throws the ones above it.
+
+**A lit lamp fills the tube to `FUEL_FLOOR`.** The level constructor guarantees
+nobody starts under that number, because a level you cannot finish is not a
+level. Lighting a lamp *moves where the level starts* — `spawn` becomes that
+column and death returns you there — so the guarantee has to move with it, or a
+checkpoint is a promise that thins the deeper it sits. It fills and never trims:
+a floor that could take coins away would make lighting a lamp a thing to think
+about twice.
+
+**The continue speaks in red coins**, and looking at it found a bug: lives were
+already being restored in `Game.finishLevel`, *before* the game-over screen was
+built, so ALOITA ALUSTA was silently getting the same four lives as JATKA. Now
+the death path empties the pile and only the chosen branch refills it, with
+`CONTINUE_LIVES = ceil(START_LIVES / 2)` — half a fresh run's stock, derived
+from the same constant so the two cannot drift. A continue keeps the score, the
+cleared nodes, the open worlds and the reserve item, so it must not also pay a
+new run's price; and one life would only return the player to this screen after
+a single mistake, which turns a decision into a door. The row draws the two
+coins it is offering.
+
+**The coin thief swells and bursts.** Owner: *"make kolikkovaras a monster that
+swells up and releases (most) of the coins upon dying."* It grows 14 → 15 → 16
+px with its hoard, capped at one tile because the pöhö and the piikkiukko are
+already 16×16 on the same floors — so a full-grown thief asks no new traversal
+question — and it grows upward from its feet, so under a one-tile ceiling its
+head ends level with the ceiling rather than inside it. The swell is **drawn,
+not scaled**: a scaled copy put every edge between destination pixels, dropped
+the picture 1 px below its box, and read as *nearer* rather than fatter.
+
+It keeps a quarter, rounded down, so 3 in pays 3 out and 8 in pays 6. Rounding
+down is what keeps the old Finnish paragraph true — a thief caught quickly costs
+literally nothing, and the loss is a function of how fat you let it get, which
+is the one thing visible across a room. Dying by shell, tail or burst bubble now
+pays out too; before, only a stomp did, which contradicted the promise the class
+comment had been making since it was written.
+
+Two leftovers found and fixed on the way: `drawLifeCoins` took a `shadow`
+parameter it never used, and the interlude card was still drawing `*  4` — the
+last place in the game that named a life as a number.
+
+---
+
+## v26.08.18.36 — a life is a red coin, and the score left the screen
+
+Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why do we even
+need to show the score before the game over hiscores table? Let's say X yellow
+coins turns into one red coin, and each death takes away one red coin — maybe
+2/3 of the yellow gauge turns into a red coin, all coins fall down and you now
+have +1 red coin and a 1/3 full yellow gauge."*
+
+**The full tube already had an animation, and it was lying.** It was written on
+17.8 when a full tube *was* the 1UP: the glass drains over `COIN_FLUSH` frames,
+the mouth throws a spark "up, where the 1UP came from". A day later coins became
+time, the payout moved to a career counter of 500, and nobody moved the
+animation — so reaching a hundred coins drained the glass, threw the spark, and
+then snapped straight back to full with no life given. The drain was a draw-time
+multiplier on `tubeFill` and `state.coins` was never touched.
+
+Now it is true. At `COIN_CAP` the tube pays `RED_COST` **64** coins out and
+keeps **36**, and `gainLife` fires on the same frame.
+
+**64 and not 66.7.** Two thirds of a hundred is not a number of coins. 64 is 2⁶,
+the scale `core/points.js` is already on, and it leaves 36 — 64 % out against
+the 67 % asked for, a coin and a half of difference, 1,8 seconds of clock.
+
+The cap *was* moved to 96 first, because 96 = 64 + 32 is the prettier
+arithmetic, and the gate priced it within one run: the tube's interior is
+exactly 200 px at **two pixels per coin** and `verify.mjs` measures it. A
+96-coin cap in a 100-coin glass is either a fractional pixel scale or a
+re-measured tube. The hundred stays.
+
+**The trade is deliberately good and deliberately automatic.** 64 coins are 80
+seconds; a level's coins buy 30…54. So a life costs about two levels of income
+and is worth much more than that — which matters, because nobody is asked. A
+price the player would rather not pay, taken without asking, would make a full
+tube something to *avoid*, and the full tube is the one moment this meter exists
+to promise. It also cannot kill: 36 coins are 45 seconds, so the glass is never
+left empty by its own reward.
+
+**`LIFE_COINS = 500` is gone.** Two ways to buy the same thing is DESIGN.md §8,
+and the tube's way is the one you can see. `coinsTotal` stays because the run
+card counts it, not because anything is bought with it.
+
+**The score is off the screen.** A running total is a number nobody acts on: it
+cannot be spent, it changes nothing about the next jump, and every payment it
+records has already said so where it happened, as a figure popping off the thing
+that paid. It is read out at the end in `scenes/scores.js`, where somebody is
+actually deciding whether the run was any good. The world map lost it too — the
+map and the level cannot tell different stories about what the player has.
+
+Lives take the freed row as red coins, drawn the same size as the yellow ones in
+the tube on the other side of the screen, so the exchange rate is a picture
+rather than a rule. Over five lives the row would leave its corner — `verify.mjs`
+measures that the readouts stay in the top corners, and it caught exactly that
+with twelve — so the sixth life onward is a plus.
+
+Gate: *täysi putkilo vaihtuu punaiseksi kolikoksi ja jättää reilun kolmanneksen*
+— pinta 36, coins 36, elämät 3 → 4.
+
+---
+
 ## v26.08.18.35 — the ground moves in 43 levels instead of 19
 
 Owner, having looked at the playtest desk: *"the levels are still super flat."*

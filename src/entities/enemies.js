@@ -4277,17 +4277,62 @@ export class Kuura extends Enemy {
  * vihollinen saadaan **ilman yhtäkään uutta läpäisykysymystä**. Sama peruste
  * kuin pieruhyllyllä: turvallisuus rakenteesta eikä varovaisuudesta.
  *
- * Ja se antaa takaisin. Tallattuna se pudottaa kaiken syömänsä kolikkoina,
- * joten kilpajuoksun hävinnytkään ei menetä mitään pysyvästi — hän vain saa
- * palkintonsa myöhemmin ja työllä. Vihollinen joka veisi lopullisesti olisi
- * rangaistus siitä ettei ehtinyt, ja tämä peli ei rankaise hitaudesta.
+ * Ja se antaa takaisin. Kuollessaan se pudottaa syömänsä kolikkoina yhtä
+ * neljäsosaa lukuun ottamatta — sen se on ehtinyt sulattaa — joten
+ * kilpajuoksun hävinnytkään ei menetä juuri mitään pysyvästi: hän vain saa
+ * palkintonsa myöhemmin ja työllä. Vihollinen joka veisi kaiken lopullisesti
+ * olisi rangaistus siitä ettei ehtinyt, ja tämä peli ei rankaise hitaudesta.
+ *
+ * Why a quarter and not all of it, 18.8.2026. The owner asked for a monster
+ * that swells up and releases *most* of the coins when it dies, and "most" is
+ * the whole design: a race with nothing at stake is not a race. The share is
+ * rounded down (`Math.floor`), which is what keeps the paragraph above true —
+ * a thief that ate one, two or three coins still hands back every one of them,
+ * so being a little slow costs exactly nothing. Only a thief you let gorge
+ * keeps anything, and even then it keeps a quarter and gives up three. The
+ * loss is therefore a function of how fat you let it get, which is the one
+ * thing the player can see across the room, and never of a race lost by half
+ * a second.
  */
 const THIEF_SPEED = 1.15;
 const THIEF_REACH = 10;
+/*
+ * THE BELLY: how fast it grows, where it stops, and what stays inside.
+ *
+ * `THIEF_CAP` is one tile, and the tile is the reason. The thief starts at 14,
+ * and every floor it walks is already a floor walked by bodies of a full tile:
+ * the pöhö and the piikkiukko are both 16x16 and go everywhere. Growing to
+ * exactly a tile therefore adds **no new question about the terrain**, which
+ * is the same promise the class comment above makes about eating coins, and it
+ * is the argument `KARVA_GROW`'s comment makes for its own cap, taken
+ * literally. It is exact rather than nearly exact: the body grows upward from
+ * its feet, so under a ceiling one tile up a full-grown thief's head ends
+ * level with that ceiling and never inside it, and it is no wider than the
+ * gaps a walker already fits through. A fatter cap would have to be argued
+ * corridor by corridor, and there are eight worlds plus a level generator to
+ * argue with.
+ *
+ * `THIEF_PER` 2 spends that budget as three readable states — 14, 15, 16 —
+ * rather than as one step from thin to fat. The body is the coarse tell and the
+ * sack on its back (`varasBody`, six steps) is the fine one; together they are
+ * legible across a room, which is what the size is for.
+ *
+ * `THIEF_KEEP` 4 is the quarter it has digested. Ks. luokan perustelu.
+ *
+ * `THIEF_STAGGER` is `QCOIN_STAGGER` from `level.js` by another name: the same
+ * five frames between coins that a `?` block pays out with. Copied rather than
+ * imported because the scene does not export it, and read as a promise — a
+ * burst of coins looks like the burst the player already knows.
+ */
+const THIEF_BASE = 14;
+const THIEF_CAP = TILE;
+const THIEF_PER = 2;
+const THIEF_KEEP = 4;
+const THIEF_STAGGER = 5;
 
 export class Kolikkovaras extends Enemy {
   constructor(level, x, y) {
-    super(level, x, y, 14, 14);
+    super(level, x, y, THIEF_BASE, THIEF_BASE);
     this.speed = THIEF_SPEED;
     this.facing = 1;
     this.score = PTS.tough;
@@ -4341,23 +4386,97 @@ export class Kolikkovaras extends Enemy {
     if (this.level.tileAt(tx, ty) === T.COIN) {
       this.level.setTile(tx, ty, T.EMPTY);
       this.loot++;
+      this.fatten();
       Sfx.play('coin');
     }
     if (this.y > this.level.heightPx + 32) this.remove = true;
   }
 
-  /** Tallattuna se pudottaa kaiken minkä ehti. Ks. luokan perustelu. */
+  /**
+   * It swells with what it has eaten: the feet and the centre line stay put
+   * and the body grows around them.
+   *
+   * `Karvapallo.grow`'s recipe, and the same recipe for the same reason — a
+   * body that grew from its corner would sink into the floor or hop a pixel
+   * upward in a single frame. The drawing is handed the same number (`draw`),
+   * so the picture cannot promise a box that is not there, nor hide one that
+   * is.
+   */
+  fatten() {
+    const size = Math.min(THIEF_CAP, THIEF_BASE + Math.floor(this.loot / THIEF_PER));
+    if (size === this.w) return;
+    const bottom = this.y + this.h;
+    const cx = this.cx;
+    this.w = size;
+    this.h = size;
+    this.x = Math.round(cx - this.w / 2);
+    this.y = Math.round(bottom - this.h);
+  }
+
+  /**
+   * Death opens the belly: the swollen body pops and the coins scatter.
+   *
+   * The coins go out through `level.addCoin` with `popped` set and the same
+   * five-frame stagger a `?` block uses, because that is the machinery the
+   * player has already been taught to read — one bounce, then the flight to
+   * the tube. They leave in a fan across the body rather than from one point,
+   * so five coins are five coins in the air and not one thick one.
+   *
+   * `loot` is zeroed and the body deflated on the way out, which is both the
+   * picture (the fat thief is empty now) and the guard: whatever kills it, it
+   * can only pay once.
+   */
+  spill() {
+    const kept = Math.floor(this.loot / THIEF_KEEP);
+    const out = this.loot - kept;
+    const cx = this.cx;
+    const top = this.y;
+    const wide = this.w;
+    this.loot = 0;
+    this.fatten();
+    if (out <= 0) return;
+    this.level.spawnPuff(cx, top + wide / 2, true);
+    for (let i = 0; i < out; i++) {
+      /* A fan the width of the body: the outermost coins leave from its
+       * sides, and an odd number leaves one from the middle. A hoard coming
+       * out of a single point would be a pile, not a burst. */
+      const fan = out > 1 ? (i / (out - 1) - 0.5) * wide : 0;
+      this.level.addCoin(Math.round(cx + fan), top - 2, true,
+        { silent: i > 0, delay: i * THIEF_STAGGER });
+    }
+  }
+
+  /** Tallattuna se pudottaa melkein kaiken minkä ehti. Ks. luokan perustelu. */
   stomp() {
     this.remove = true;
     this.level.chainReward(this.score, this.cx, this.y);
-    for (let i = 0; i < this.loot; i++) {
-      this.level.addCoin(this.cx, this.y - 4 - i * 3);
-    }
+    this.spill();
     return true;
   }
 
+  /**
+   * A shell, a tail or a burst bubble kills it too, and it pays the same.
+   *
+   * The old version paid on `stomp` alone, so a thief killed any other way
+   * took the whole hoard with it — the class comment's promise ("it gives
+   * back") held for one of the four ways it can die. Hooked on the transition
+   * into `dying` rather than on each caller, because `flipDie` on a bubbled
+   * enemy dispatches to `popBubble` and the burst is the kill there: one rule,
+   * both doors, and the second `spill` of the same death finds an empty belly
+   * and does nothing.
+   */
+  dies(kill) {
+    const before = this.dying;
+    kill();
+    if (!before && this.dying) this.spill();
+  }
+
+  flipDie(dir = 1) { this.dies(() => super.flipDie(dir)); }
+
+  popBubble(dir = 1) { this.dies(() => super.popBubble(dir)); }
+
   draw(ctx) {
-    drawKolikkovaras(ctx, this.x, this.y, this.tick, this.facing, this.loot);
+    drawKolikkovaras(ctx, this.x, this.y, this.tick, this.facing, this.loot, this.w);
   }
 }
 

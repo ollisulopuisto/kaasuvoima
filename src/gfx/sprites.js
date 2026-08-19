@@ -27,6 +27,7 @@ export {
 export { drawBoss, BOSS_SIZES, BOSS_PLANS, BOSS_LIMBS, FLOOR_REACH, bossSize } from './sprites/boss.js';
 export {
   drawItem, drawFart, drawSprout, drawGasPuff, drawGoal, drawBrickShard, CARD_ICONS,
+  drawLifeCoins, LIFE_PIP, LIFE_PIPS,
 } from './sprites/items.js';
 export {
   C as SPRITE_COLORS, TINTS, STAR_TINTS, GLOWS, recolored,

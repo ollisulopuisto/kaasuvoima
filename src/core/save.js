@@ -2,8 +2,34 @@
  * oletukset päälle, joten sen kautta luettuna puuttuvaa kenttää ei voi nähdä. */
 export const KEY = 'sfb3.save.v2';
 
+/**
+ * ELÄMÄT, JOILLA KIERROS ALKAA.
+ *
+ * A life is a red coin (18.8.2026), so this is a number of *objects* the player
+ * owns, and it must be one number rather than a literal typed once here and
+ * once in the continue. `CONTINUE_LIVES` below is derived from it precisely so
+ * that raising the starting stock cannot leave the continue behind.
+ */
+export const START_LIVES = 4;
+
+/**
+ * MITÄ JATKA ANTAA: puolet uuden kierroksen pinosta.
+ *
+ * The number is argued, not tasted. A continue is not a fresh start — it keeps
+ * the score, the cleared nodes, the open worlds and the reserve item, and the
+ * board records that it happened — so handing out a fresh start's stock would
+ * make PELI POIKKI cost nothing but a keypress. Half of it is the setback: two
+ * mistakes instead of four.
+ *
+ * Not one, and not zero. One life brings the player back to this same screen
+ * after a single mistake, and a menu you visit every ninety seconds stops being
+ * a decision and becomes a door. `Math.ceil` so that the grant can never round
+ * down to nothing if `START_LIVES` is ever lowered.
+ */
+export const CONTINUE_LIVES = Math.ceil(START_LIVES / 2);
+
 export const DEFAULT_SAVE = () => ({
-  lives: 4,
+  lives: START_LIVES,
   coins: 0,
   score: 0,
   power: { type: null, level: 0 },

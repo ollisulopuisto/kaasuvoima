@@ -1,5 +1,8 @@
-import { drawText } from '../gfx/font.js';
-import { drawPlayer, drawItem, drawBoss, WALK_FRAMES } from '../gfx/sprites.js';
+import { drawText, textWidth, GLYPH_H } from '../gfx/font.js';
+import {
+  drawPlayer, drawItem, drawBoss, drawLifeCoins, LIFE_PIP, WALK_FRAMES,
+} from '../gfx/sprites.js';
+import { CONTINUE_LIVES } from '../core/save.js';
 import { Music, Sfx } from '../core/audio.js';
 import { hashNoise } from '../core/utils.js';
 import { normalizePower, POWER_NAMES } from '../entities/player.js';
@@ -53,7 +56,11 @@ export class InterludeScene {
       tick: this.tick,
       wag: this.tick / 20,
     });
-    drawText(ctx, `*  ${this.game.state.lives}`, 158, 122, { color: '#ffffff' });
+    /* Viimeinen paikka jossa elämä oli tähti ja numero (18.8.2026). Punainen
+     * kolikko on se mitä pelaajalla on, ja tämä kortti on juuri se ruutu jossa
+     * hän katsoo mitä hänellä on ennen seuraavaa kenttää. */
+    const row = drawLifeCoins(ctx, 146, 119, this.game.state.lives, null);
+    if (row.over) drawText(ctx, '+', row.end, 118, { color: '#ff8a8a' });
     if (this.game.state.reserve) drawItem(ctx, this.game.state.reserve, 186, 112, this.tick);
     if (power.level > 0) {
       drawText(ctx, `${POWER_NAMES[power.type]} ${power.level}/5`, 160, 150,
@@ -70,6 +77,12 @@ export class InterludeScene {
  * selected one is unmistakable: an arrow, a colour, and a line saying what it
  * will do. A menu whose selection you have to squint at is a menu that gets
  * pressed by accident, and this one decides whether a run survives.
+ *
+ * And the offer is shown rather than named. A continue is "here are some more
+ * lives", a life is a red coin (18.8.2026), so JATKA carries the actual coins
+ * it grants — the same sprite the tube mints and the same one the map and the
+ * level HUD count with. The number would have been a third way of saying a
+ * thing the player already knows how to read.
  */
 export class GameOverScene {
   constructor(game) {
@@ -104,6 +117,14 @@ export class GameOverScene {
         // Nothing is taken away either — no points, no cap on how often. The
         // continue is counted instead, and the count rides to the board with
         // the score, which is why the option below says so before it is picked.
+        //
+        // And the pile is refilled HERE, in the branch the player chose, from
+        // the same constant the option draws its coins from. `Game.finishLevel`
+        // used to do it on the way in, which meant the screen was announcing a
+        // gift already given and giving it to ALOITA ALUSTA as well. A plain
+        // assignment rather than an add: the offer is "these coins", so what
+        // arrives has to be exactly the coins the player was shown.
+        this.game.state.lives = CONTINUE_LIVES;
         this.game.state.continues = (this.game.state.continues || 0) + 1;
         this.game.persist();
         this.game.toWorldMap();
@@ -113,7 +134,13 @@ export class GameOverScene {
     }
   }
 
-  drawOption(ctx, index, label, hint, y) {
+  /**
+   * @param {number} [coins] montako punaista kolikkoa vaihtoehto antaa. Elämä
+   *   on punainen kolikko (18.8.2026), ja jatko on täsmälleen "tässä on lisää
+   *   elämiä" — joten se näytetään kolikkoina otsikkorivillä eikä lukemana
+   *   opastetekstissä. Nolla piirtää tyhjää, jolloin rivi on entisensä.
+   */
+  drawOption(ctx, index, label, hint, y, coins = 0) {
     const on = this.choice === index;
     const blink = on && Math.floor(this.tick / 8) % 2 === 0;
     if (on) {
@@ -127,6 +154,18 @@ export class GameOverScene {
     drawText(ctx, label, 68, y, {
       color: on ? '#ffffff' : '#70708c', shadow: on ? '#101018' : null,
     });
+    if (coins > 0) {
+      /* Kolikot himmenevät valitsematta jäävän vaihtoehdon mukana. Ne ovat
+       * esine eivätkä tekstiä, joten väriä ei vaihdeta — täydellä kirkkaudella
+       * himmeällä rivillä ne olisivat ruudun kirkkain asia siinäkin kohdassa
+       * jota ei ole valittu, ja valinnan pitää olla erehtymätön. */
+      const alpha = ctx.globalAlpha;
+      ctx.globalAlpha = alpha * (on ? 1 : 0.4);
+      const cy = y + Math.round((GLYPH_H - LIFE_PIP) / 2);
+      const row = drawLifeCoins(ctx, 68 + textWidth(label) + 8, cy, coins, null);
+      if (row.over) drawText(ctx, '+', row.end, y, { color: '#ff8a8a' });
+      ctx.globalAlpha = alpha;
+    }
     drawText(ctx, hint, 68, y + 11, { color: on ? '#8fe04a' : '#50506a' });
   }
 
@@ -143,8 +182,12 @@ export class GameOverScene {
       drawText(ctx, `JATKOJA KAYTETTY ${used}`, 160, 84, { color: '#c88040', align: 'center' });
     }
 
-    this.drawOption(ctx, 0, 'JATKA', 'PISTEET SAILYVAT, JATKOT LASKETAAN', 110);
-    this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'PISTEET PISTETAULUUN', 150);
+    /* Opasteet kertovat mitä *tapahtuu*, eivät mitä valinta on nimeltään. Ylin
+     * rivi ei enää lupaa pisteitä, koska pisteitä ei näytetä pelin aikana
+     * lainkaan (18.8.2026) — se nimeää kolikot vieressään ja sen ainoan asian
+     * joka jää kierroksesta jäljelle taululle asti. */
+    this.drawOption(ctx, 0, 'JATKA', 'NAMA ELAMAT, JATKOT LASKETAAN', 110, CONTINUE_LIVES);
+    this.drawOption(ctx, 1, 'ALOITA ALUSTA', 'KIERROS PAATTYY, PISTEET TAULUUN', 150);
 
     drawText(ctx, 'NUOLET VALITSE   ENTER HYVAKSY', 160, 200, {
       color: '#8890b0', align: 'center',

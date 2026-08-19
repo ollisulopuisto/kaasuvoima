@@ -8522,6 +8522,60 @@ const report = await page.evaluate(async () => {
       ['NameEntryScene', 'HighScoreScene'].includes(game.scene.constructor.name),
       game.scene.constructor.name);
     scores.clearScores();
+
+    /*
+     * JATKO ON KOURALLINEN PUNAISIA KOLIKOITA, ei sana.
+     *
+     * Elämä on punainen kolikko (18.8.2026), ja jatko on täsmälleen "tässä on
+     * lisää elämiä" — joten ruudun on annettava ne näkyvästi. Kaksi väitettä
+     * yhdestä valinnasta, ja molemmat tarvitaan: kuolema tyhjentää pinon
+     * (`Game.finishLevel`), joten pelkkä "elämiä on jäljellä" menisi läpi myös
+     * silloin kun kukaan ei antanut mitään, ja piirretty kolikkomäärä ilman
+     * tilatarkistusta olisi lupaus jota kukaan ei pidä.
+     *
+     * Luku luetaan `CONTINUE_LIVES`ista eikä kirjoiteta tähän uudestaan: koko
+     * muutoksen pointti on, ettei aloituspinoa ja jatkon pinoa ole kahtena eri
+     * lukuna kahdessa eri tiedostossa.
+     */
+    {
+      const { Save, CONTINUE_LIVES, START_LIVES } = await import('/src/core/save.js');
+      reset();
+      game.state.lives = 0;          // kuten kuolema jättää pinon
+      game.state.score = 50000;
+      game.setScene(new GameOverScene(game));
+      for (let f = 0; f < 32; f++) game.scene.update(mkInput());
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 240;
+      const g = canvas.getContext('2d');
+      game.scene.draw(g);
+      /* JATKA-rivin kaista. Punainen tunnistetaan erotuksella eikä tarkalla
+       * sävyllä, jotta kolikon kolme sävyä kelpaavat kaikki eikä ruudun
+       * keltainen kehys (255,208,72) tai sininen tausta kelpaa yksikään. */
+      const px = g.getImageData(0, 100, 320, 24).data;
+      const cols = new Set();
+      for (let y = 0; y < 24; y++) {
+        for (let x = 0; x < 320; x++) {
+          const o = ((y * 320) + x) * 4;
+          const r = px[o];
+          if (r > 120 && r - px[o + 1] > 60 && r - px[o + 2] > 60) cols.add(x);
+        }
+      }
+      let coins = 0;
+      for (const x of cols) if (!cols.has(x - 1)) coins++;
+      expect('peli poikki tarjoaa jatkon elämät punaisina kolikkoina',
+        coins === CONTINUE_LIVES && CONTINUE_LIVES > 0 && CONTINUE_LIVES <= START_LIVES,
+        `${coins} kolikkoa rivillä, jatko antaa ${CONTINUE_LIVES}/${START_LIVES}`);
+
+      const k = mkInput();
+      k.pressed.jump = true;
+      game.scene.update(k);
+      expect('jatko antaa täsmälleen ne elämät jotka se näytti, ja ne säilyvät',
+        game.state.lives === CONTINUE_LIVES && Save.load().lives === CONTINUE_LIVES,
+        `elämät ${game.state.lives}, tallennuksessa ${Save.load().lives},`
+        + ` luvattu ${CONTINUE_LIVES}`);
+    }
   }
 
   /* ------------------------------ näppäimet ------------------------------ */
@@ -12484,15 +12538,33 @@ const report = await page.evaluate(async () => {
         + `magneetti veti ${pulled}`);
     }
 
-    /* 3. KYKY LOPPUU. Lainattu on lainattu. */
+    /*
+     * 3. KYKY EI KULU AJASSA VAAN PAIKASTA (19.8.2026).
+     *
+     * Tämä tarkisti ennen että kyky loppuu kahdeksassa sekunnissa. Se raja on
+     * poistettu tarkoituksella: kyky vie tehostuksen paikan ja työntää sen
+     * varalokeroon, eli sillä on hinta eikä kelloa. Kolme väitettä:
+     *
+     *   - kyky **pysyy** vaikka kello kävisi kuinka pitkään
+     *   - nieleminen **maksaa**: lehti on varalokerossa jälkeenpäin
+     *   - keho **ei kutistu**: taso on sama ennen ja jälkeen, koska "mikä
+     *     voima" ja "kuinka kaasuinen" ovat eri kysymyksiä
+     */
     {
       const { s, p } = withBubble(E6.Flyer);
+      p.power = { type: 'leaf', level: 3 };
+      s.game.state.reserve = null;
+      const levelBefore = p.power.level;
       s.update(up());
-      const start = p.swallowTimer;
-      for (let f = 0; f < start + 4; f++) s.update(mkInput());
-      expect('nielty kyky on lainassa ja kuluu loppuun',
-        start > 0 && p.swallowed === null,
-        `${start} framea, lopuksi ${p.swallowed || 'ei mitään'}`);
+      const got = p.swallowed;
+      const banked = s.game.state.reserve;
+      for (let f = 0; f < 900; f++) s.update(mkInput());
+      expect('nielty kyky ei kulu ajassa, se maksaa tehostuksen paikan',
+        got === 'siivet' && banked === 'leaf' && p.swallowed === 'siivet'
+        && p.power.level === levelBefore,
+        `sai ${got || 'ei mitään'}, lokeroon ${banked || 'ei mitään'},`
+        + ` 900 framen jälkeen ${p.swallowed || 'ei mitään'},`
+        + ` taso ${levelBefore} -> ${p.power.level}`);
     }
 
     /* 4. EIKÄ YKSIKÄÄN KUPLATTAVA LAJI JÄÄ ILMAN LAHJAA. Poikkeuslistaa ei ole:
@@ -12983,12 +13055,162 @@ const report = await page.evaluate(async () => {
      * säiliö valuu koko ajan, joten "saiko pelaaja saaliin" on kysymys jonka
      * vain kulumaton luku voi vastata. */
     const purse = game.state.coinsTotal || 0;
+    /* The haul is read before the stomp, because death empties the belly:
+     * `spill` zeroes `loot` precisely so that one hoard cannot pay twice. */
+    const ate = thief.loot;
     thief.stomp();
     for (let f = 0; f < 60; f++) s2.update(idle);
     expect('kolikkovaras syö kolikon ja pudottaa saaliin tallattuna',
-      thief.loot > 0 && coins1 < coins0 && (game.state.coinsTotal || 0) >= purse + thief.loot,
-      `söi ${thief.loot}, kolikoita ${coins0} -> ${coins1},`
+      ate > 0 && coins1 < coins0 && (game.state.coinsTotal || 0) >= purse + ate - Math.floor(ate / 4),
+      `söi ${ate}, kolikoita ${coins0} -> ${coins1},`
       + ` ura ${purse} -> ${game.state.coinsTotal || 0}`);
+
+    /*
+     * 2 b. SE PAISUU SILLÄ MITÄ SE ON SYÖNYT — and the three claims here are
+     * the three that can break each other.
+     *
+     * The body grows with the loot and stops at one tile, which is the cap
+     * that keeps this species out of the terrain question its own class
+     * comment promises to stay out of (`THIEF_CAP`): every corridor a 16x16
+     * walker fits through, a full-grown thief fits through too, and its head
+     * reaches a one-tile ceiling without ever being inside it. The feet stay
+     * on the floor while it grows, because a body that grew from its corner
+     * would grow into the ground. And the box is square at every step, because
+     * the drawing below is measured against it.
+     */
+    const grower = new E3.Kolikkovaras(s2, 8 * 16 + 1, 8 * 16 + 2);
+    const feet0 = grower.y + grower.h;
+    const swell = [];
+    let feetMoved = 0;
+    let broken = 0;
+    for (let n = 0; n <= 10; n++) {
+      grower.loot = n;
+      grower.fatten();
+      swell.push(grower.w);
+      if (grower.y + grower.h !== feet0) feetMoved++;
+      if (grower.w > 16 || grower.h !== grower.w) broken++;
+    }
+    expect('kolikkovaras paisuu saaliistaan laatikkoaan myöten, laattaa isommaksi ei',
+      swell[0] === 14 && swell[10] === 16 && broken === 0 && feetMoved === 0
+      && swell.every((v, i) => i === 0 || v >= swell[i - 1]),
+      `koot ${swell.join(',')}, jalat liikkuivat ${feetMoved} kertaa, laatikko rikki ${broken}`);
+
+    /*
+     * And the picture keeps the box it was given. Measured rather than
+     * asserted, and measured as a *difference*: the art's bounding box against
+     * the entity's box has to come out the same at 14 and at 16. A drawing
+     * that grew at its own rate would show up here as a margin that moved,
+     * which is the one failure that matters — the top edge is where the player
+     * reads whether he may jump on this thing.
+     *
+     * The numbers themselves are the sprite's own habits and not this test's
+     * business: the sack hangs a pixel past the box on the carrying side, and
+     * `outlined` and `breath` each add one below.
+     */
+    const gfxT = await import('/src/gfx/sprites.js');
+    const CW = 48;
+    const cT = document.createElement('canvas');
+    cT.width = CW;
+    cT.height = CW;
+    const gT = cT.getContext('2d', { willReadFrequently: true });
+    const OT = 12;
+    const margins = (loot, size, facing) => {
+      const out = { left: -99, right: -99, top: -99, bottom: -99, h: 0 };
+      for (let t = 0; t < 40; t++) {
+        gT.clearRect(0, 0, CW, CW);
+        gfxT.drawKolikkovaras(gT, OT, OT, t, facing, loot, size);
+        const d = gT.getImageData(0, 0, CW, CW).data;
+        let x0 = 1e9; let y0 = 1e9; let x1 = -1; let y1 = -1;
+        for (let y = 0; y < CW; y++) {
+          for (let x = 0; x < CW; x++) {
+            if (d[((y * CW) + x) * 4 + 3] < 8) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        out.left = Math.max(out.left, OT - x0);
+        out.right = Math.max(out.right, x1 - (OT + size - 1));
+        out.top = Math.max(out.top, OT - y0);
+        out.bottom = Math.max(out.bottom, y1 - (OT + size - 1));
+        out.h = Math.max(out.h, y1 - y0 + 1);
+      }
+      return out;
+    };
+    /* The size pairs are asked of the entity rather than written down here,
+     * so the drawing is measured with the numbers it is actually drawn with;
+     * an invented pair (a full sack in a thin box) would measure a thief that
+     * cannot exist. One coin is the smallest haul on the list because the
+     * empty-handed thief is the only one carrying no sack at all, and a sack
+     * appearing is a different event from a body growing. */
+    const pairs = [1, 2, 4, 10].map((n) => {
+      grower.loot = n;
+      grower.fatten();
+      return [n, grower.w];
+    });
+    const edges = ['left', 'right', 'top', 'bottom'];
+    const drift = [];
+    const seenM = [];
+    for (const facing of [1, -1]) {
+      let ref = null;
+      for (const [n, size] of pairs) {
+        const m = margins(n, size, facing);
+        if (m.h !== size) drift.push(`saalis ${n}: piirros ${m.h} px ${size} px:n laatikossa`);
+        if (!ref) ref = m;
+        else {
+          for (const k of edges) {
+            if (m[k] !== ref[k]) drift.push(`saalis ${n} suunta ${facing}: ${k} ${m[k]}, ohuena ${ref[k]}`);
+          }
+        }
+        seenM.push(`${n}/${size}${facing < 0 ? '<' : '>'} ${edges.map((k) => m[k]).join(' ')}`);
+      }
+    }
+    expect('paisuneen varkaan piirros pitää laatikkonsa',
+      drift.length === 0,
+      drift.length ? drift.join('; ') : `vasen/oikea/ylä/ala: ${seenM.join(', ')}`);
+
+    /*
+     * 2 c. KUOLLESSAAN SE PAMAHTAA AUKI ja pitää neljäsosan.
+     *
+     * The burst is `addCoin` with the `?` block's own stagger, so this reads
+     * the flights the scene actually queued: one per coin, five frames apart,
+     * each from its own point across the body. One coin from one point five
+     * times over would be a pile, and the owner asked for a burst.
+     *
+     * The quarter is rounded down, and the second thief here is that decision
+     * measured: three coins in, three coins out. What you lose is what you let
+     * it get fat on, never a race you lost by half a second — which is the
+     * sentence in the class comment that had to stay true.
+     */
+    const rich = new E3.Kolikkovaras(s2, 8 * 16 + 1, 8 * 16 + 2);
+    s2.add(rich);
+    rich.loot = 8;
+    rich.fatten();
+    s2.coinFlights.length = 0;
+    const purseR = game.state.coinsTotal || 0;
+    rich.stomp();
+    const burst = s2.coinFlights.slice();
+    const paid = (game.state.coinsTotal || 0) - purseR;
+    const fan = new Set(burst.map((f) => f.x0)).size;
+    expect('kuollut varas pamahtaa auki, pitää neljäsosan ja sirottelee loput',
+      paid === 6 && rich.loot === 0 && rich.w === 14 && burst.length === 6 && fan === 6
+      && burst.every((f, i) => f.wait === i * 5 && f.phase === 'pop'),
+      `maksoi ${paid}/8, lentoja ${burst.length}, lähtöpaikkoja ${fan}, `
+      + `odotukset ${burst.map((f) => f.wait).join(',')}`);
+
+    const poor = new E3.Kolikkovaras(s2, 9 * 16 + 1, 8 * 16 + 2);
+    s2.add(poor);
+    poor.loot = 3;
+    poor.fatten();
+    const purseP = game.state.coinsTotal || 0;
+    /* A shell and not a stomp: the same death through the other door, and it
+     * pays the same. Before this batch it paid nothing at all. */
+    poor.flipDie(1);
+    const paidPoor = (game.state.coinsTotal || 0) - purseP;
+    expect('kolmen kolikon varas antaa kuoresta takaisin kaikki kolme',
+      paidPoor === 3 && poor.loot === 0,
+      `maksoi ${paidPoor}/3`);
 
     /*
      * 3. JA JOKAINEN LAJI SELVIÄÄ PIKATALLENNUKSESTA.
@@ -14009,7 +14231,8 @@ const report = await page.evaluate(async () => {
 
   /* ----------------------------- kytkinruudut --------------------------- */
   {
-    const { T } = await import('/src/gfx/tiles.js');
+    const { T, TILE } = await import('/src/gfx/tiles.js');
+    const E = await import('/src/entities/enemies.js');
     reset({ type: 'shroom', level: 1 });
     const s = new LevelScene(game, '3-2');
     game.setScene(s);
@@ -14046,6 +14269,34 @@ const report = await page.evaluate(async () => {
       for (let f = 0; f < 12; f++) s.update(i);
       expect('a switch runs out and the bricks come back',
         s.switchTimer === 0 && s.solidAt(brick.tx, brick.ty), `ajastin ${s.switchTimer}`);
+
+      /*
+       * A SLIDING SHELL THROWS THE SWITCH TOO (18.8.2026).
+       *
+       * The switch was reachable exactly where a jump was, which made a *time*
+       * puzzle into a *height* puzzle. A shell is already something the player
+       * aims down a corridor, so this adds a second way in without adding a
+       * thing to learn — and the two ways must be the same switch, which is
+       * what the second half of this check is for: the tile is consumed to
+       * `T.USED` exactly as a head bump consumes it.
+       *
+       * The shell is placed to the LEFT of the button and pushed right, and
+       * the tile read is the one ahead of the body — a shell at speed is inside
+       * the next column before a frame boundary notices it.
+       */
+      s.switchTimer = 0;
+      s.grid[button.ty][button.tx] = T.SWITCH;
+      const shell = new E.ShellGuy(s, button.tx * TILE, button.ty * TILE);
+      /* Adjacent, not near: `shellThrowsSwitch` reads the tile the body is
+       * about to enter, so the gap has to be under one pixel or the read lands
+       * on the column before the button. */
+      shell.x = button.tx * TILE - shell.w;
+      shell.y = button.ty * TILE;
+      shell.vx = 4;
+      s.shellSweep(shell);
+      expect('liukuva kuori heittää kytkimen, ja se on sama kytkin',
+        s.switchTimer > 0 && s.grid[button.ty][button.tx] === T.USED,
+        `ajastin ${s.switchTimer}, ruutu ${s.grid[button.ty][button.tx]}`);
 
       /* The one way this design could hurt someone is being inside a brick when
        * it comes back. It turns out that cannot happen, and not for the reason
@@ -20574,12 +20825,14 @@ const report = await page.evaluate(async () => {
       scene.tick = 12;
       scene.time = 90;                    // kello kriisissä eli näkyvissä
       scene.player.pMeter = 999;
-      scene.player.powerLevel = 5;
-      scene.player.type = 'leaf';
-      /* Pisin nielty kyky ja pisin lähtölaskenta yhtä aikaa: kumpikin varaa
-       * oman kolonsa, eivätkä ne ole toistensa vaihtoehtoja. */
-      scene.player.swallowed = 'magneetti';
-      scene.player.swallowTimer = 480;
+      /*
+       * `powerLevel`, `type` ja `swallowed` ovat kaikki getterejä, ja tämä
+       * lohko sijoitti niihin — `page.evaluate` ajaa löysässä tilassa, joten
+       * sijoitukset olivat äänettömiä tyhjäkäyntejä ja koe mittasi mitä
+       * konstruktori sattui antamaan. Yksi kirjoitus oikeaan kenttään tekee
+       * kaikki kolme, koska nielty kyky **on** voimapaikka (19.8.2026).
+       */
+      scene.player.power = { type: 'magneetti', level: 5 };
       scene.player.corked = 9 * 60;
       g.clearRect(0, 0, VIEW_W, VIEW_H);
       scene.drawOverlay(g);
@@ -20760,6 +21013,8 @@ const report = await page.evaluate(async () => {
         world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
         usedSaveState: false, continues: 0, bestTimes: {},
       };
+      const { COIN_CAP, RED_COST, RED_KEEP } = await import('/src/scenes/level.js');
+      const { T } = await import('/src/gfx/tiles.js');
       const s = new LevelScene(game, '1-1');
       game.state.coins = 0;
       s.tubeFill = 0;
@@ -20769,31 +21024,88 @@ const report = await page.evaluate(async () => {
       for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
       const landed = s.tubeFill;
       const livesBefore = game.state.lives;
-      game.state.coins = 99;
-      s.tubeFill = 99;
+      game.state.coins = COIN_CAP - 1;
+      s.tubeFill = COIN_CAP - 1;
       s.addCoin(s.player.x + 40, s.player.y);
       for (let f = 0; f < 90 && s.coinFlights.length; f++) s.updateCoinFlights();
       /* Sadas kolikko **ei** nollaa pintaa kertaheitolla vaan aloittaa
        * valumisen (`COIN_FLUSH`): täysi putkilo on se yksi hetki jonka koko
        * mittari on rakennettu lupaamaan, ja se saa kestää. Väite on siis
        * kaksiosainen — heti täysi, ja huuhtelun jälkeen tyhjä. */
-      const atFull = s.tubeFill;
+      const afterMint = s.tubeFill;
+      const coinsAfter = game.state.coins;
       const draining = s.tubeFlush;
       for (let f = 0; f < 90 && s.tubeFlush > 0; f++) s.updateCoinFlights();
-      game.state.coins = 0;
       s.updateCoinFlights();
-      const flushed = s.tubeFill;
-      /* Sadas kolikko **täyttää säiliön** eikä enää anna elämää: kolikot ovat
-       * aika (18.8.2026), ja elämä tulee uran kokonaisluvusta (`LIFE_COINS`
-       * 500). Täysi säiliö on itsessään palkinto — kaksi minuuttia on pisin
-       * mahdollinen kello. */
-      expect('poimittu kolikko lentää putkiloon, ja sadas täyttää sen',
+      const settled = s.tubeFill;
+      /*
+       * TÄYSI SÄILIÖ LYÖ PUNAISEN KOLIKON (18.8.2026).
+       *
+       * Owner: *"X yellow coins turns into one red coin, and each death takes
+       * away one red coin."* `RED_COST` keltaista lähtee, `RED_KEEP` jää, ja
+       * elämä nousee yhdellä — kolme väitettä yhdestä tapahtumasta, ja jokainen
+       * niistä on ollut väärin jossain välissä:
+       *
+       *   - **Elämä.** Ennen tätä täysi säiliö ei antanut mitään; elämä tuli
+       *     uran 500 kolikosta, ja huuhteluanimaatio heitti kipinän "sinne
+       *     mistä 1UP tuli" ilman että 1UP:tä tapahtui.
+       *   - **Hinta.** `coins` on aika, joten 64 kolikkoa on 80 sekuntia. Jos
+       *     tämä ei vähentäisi säiliötä, elämä olisi ilmainen ja mittari
+       *     valehtelisi toiseen suuntaan.
+       *   - **Jäännös.** 32 jää, eli lasi ei koskaan tyhjene maksusta. Nolla
+       *     tarkoittaisi että palkinto voi tappaa.
+       */
+      expect('täysi putkilo vaihtuu punaiseksi kolikoksi ja jättää reilun kolmanneksen',
         inAir === 1 && fillAtPickup === 0 && landed === 1
-        && atFull === 100 && draining > 1 && flushed === 0
-        && game.state.lives === livesBefore,
+        && afterMint === RED_KEEP && coinsAfter === COIN_CAP - RED_COST
+        && draining > 1 && settled === RED_KEEP
+        && game.state.lives === livesBefore + 1,
         `poiminnassa ilmassa ${inAir} pinta ${fillAtPickup}, perillä ${landed};`
-        + ` sadas -> pinta ${atFull} ja huuhtelu ${draining} framea,`
-        + ` valumisen jälkeen ${flushed}, elämät ${livesBefore} -> ${game.state.lives}`);
+        + ` täyttyessä pinta ${afterMint} (odotus ${RED_KEEP}), coins ${coinsAfter}`
+        + ` (odotus ${COIN_CAP - RED_COST}), huuhtelu ${draining} framea,`
+        + ` lopulta ${settled}, elämät ${livesBefore} -> ${game.state.lives}`);
+
+      /*
+       * SYTYTETTY LYHTY TÄYTTÄÄ SÄILIÖN `FUEL_FLOOR`iin (18.8.2026).
+       *
+       * Konstruktori takaa ettei kukaan aloita kenttää sen alle, koska kenttä
+       * jota ei voi läpäistä ei ole kenttä. Lyhty **siirtää sen mistä kenttä
+       * alkaa** — `spawn` on sen sarake ja kuolema palauttaa siihen — joten
+       * saman takuun on siirryttävä mukana. Muuten tarkistuspiste olisi lupaus
+       * joka ohenee mitä syvemmällä se on: pelaaja palaisi paikkaan sillä
+       * polttoaineella joka sattui olemaan jäljellä kun hän kuoli.
+       *
+       * Kaksi puolta, ja jälkimmäinen on se joka voisi rikkoutua hiljaa:
+       * **täyttää muttei koskaan leikkaa**. Rikkaana saapuva pitää kaikkensa,
+       * koska lattia joka voisi viedä kolikoita tekisi lyhdyn sytyttämisestä
+       * asian jota kannattaa harkita.
+       */
+      const { FUEL_FLOOR } = await import('/src/scenes/level.js');
+      const lampScene = new LevelScene(game, '1-1');
+      const lamp = (() => {
+        for (let ty = 0; ty < lampScene.h; ty++) {
+          for (let tx = 0; tx < lampScene.w; tx++) {
+            const ch = lampScene.grid[ty][tx];
+            if (ch === T.LAMP || ch === T.LAMP_LIT) return { tx, ty };
+          }
+        }
+        return null;
+      })();
+      let poorAfter = null;
+      let richAfter = null;
+      if (lamp) {
+        game.state.coins = 4;
+        lampScene.lightLamp(lamp.tx, lamp.ty);
+        poorAfter = game.state.coins;
+        const rich = new LevelScene(game, '1-1');
+        game.state.coins = COIN_CAP - 1;
+        rich.lightLamp(lamp.tx, lamp.ty);
+        richAfter = game.state.coins;
+      }
+      expect('sytytetty lyhty täyttää säiliön kenttään saapumisen lattiaan, muttei leikkaa',
+        !!lamp && poorAfter === FUEL_FLOOR && richAfter === COIN_CAP - 1,
+        lamp ? `köyhänä 4 -> ${poorAfter} (odotus ${FUEL_FLOOR}),`
+          + ` rikkaana ${COIN_CAP - 1} -> ${richAfter}` : '1-1:stä ei löytynyt lyhtyä');
     }
 
     /* --- 5. aurinko on kello, ei maisemaa --- */
@@ -20981,9 +21293,9 @@ const report = await page.evaluate(async () => {
       const p2 = s.player;
       const ate = s.swallowEnemy(p2, e2);
       expect('kumossa olevan voi niellä: ketju isku → kumoon → kyky on ehjä',
-        ate === true && !!p2.swallowed && p2.swallowTimer > 0 && e2.remove,
+        ate === true && !!p2.swallowed && p2.power.type === p2.swallowed && e2.remove,
         `nieltiin ${ate}, kyky ${p2.swallowed || 'ei mitään'},`
-        + ` kello ${p2.swallowTimer}`);
+        + ` voimapaikassa ${p2.power.type || 'ei mitään'}`);
     }
 
     /* --- 8 a. hätä ja ladattu laukaus --- */
@@ -23111,6 +23423,81 @@ const report = await page.evaluate(async () => {
     `kehä ${W.twister.rim} px/frame, ydin ${W.twister.core} px/frame,`
     + ` kaukana ${W.twister.far}, kuoren kanto ${W.twister.carries}`);
 
+  /* ------------------------- ajelehtiva pelaaja ------------------------- */
+  /*
+   * SÄÄ RANKAISEE PAIKALLAAN OLOSTA (19.8.2026).
+   *
+   * Neljä väitettä, ja kolmas on se jonka takia tämä lohko on olemassa.
+   *
+   *   1. Paikallaan olo kerää mittaria, liike nollaa sen. Kumpi tahansa
+   *      akseli, koska mitta on etäisyys ankkurista eikä suunta.
+   *   2. Areenassa ei ajelehdita: siellä ei ole rataa jota edetä.
+   *   3. **Liikkuvalle pelaajalle kerroin on tasan 1.** Tämä on se lupaus
+   *      jonka rikkominen kaatoi 4-3:n kehitysvaiheessa: kekälesade on kuvio
+   *      eikä määrä, ja jokainen mitattu luku on todistettu sitä kuviota
+   *      vastaan jonka kerroin 1 tuottaa. Jos tämä luku liikahtaa, jokainen
+   *      läpäistävyystodistus koskee eri kenttää kuin se joka julkaistaan.
+   *   4. Vastatuuli lakkaa siitä framesta jolla pelaaja painaa suuntaa —
+   *      muuten se vaikeuttaisi juuri sitä hyppyä johon on jääty kiinni.
+   */
+  {
+    const D = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const fresh = (id) => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, id);
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        return sc;
+      };
+      const idle = () => ({ held: {}, pressed: {}, consume() {} });
+      const right = () => ({ held: { right: true }, pressed: {}, consume() {} });
+
+      const s = fresh('1-1');
+      const moving = s.weatherScale;
+      for (let f = 0; f < 400; f++) s.update(idle());
+      const stood = { drift: s.drift, scale: s.weatherScale };
+      /* Sama seisominen, mutta suunta pohjassa: mittari kerää yhä, tuuli ei
+       * puhalla. `vx` luetaan ennen ja jälkeen yhden framen, pelaaja ilmassa
+       * jotta puolitus ei sotke lukemaa. */
+      s.player.onGround = false;
+      s.player.vx = 0;
+      s.updateDriftWind(right());
+      const tryingPush = s.player.vx;
+      s.player.vx = 0;
+      s.updateDriftWind(idle());
+      const idlePush = s.player.vx;
+
+      const m = fresh('1-1');
+      for (let f = 0; f < 400; f++) m.update(right());
+      const ran = { drift: m.drift, scale: m.weatherScale, moved: m.player.cx > m.spawn.x + 32 };
+
+      const arena = fresh('1-F');
+      for (let f = 0; f < 400; f++) arena.update(idle());
+      const boss = { drift: arena.drift, isBoss: !!arena.def.boss };
+      return { moving, stood, ran, boss, tryingPush, idlePush };
+    });
+
+    expect('paikallaan seisominen kerää ajelehtimista, juokseminen ei',
+      D.stood.drift === 1 && D.ran.drift === 0 && D.ran.moved,
+      `seisten ${D.stood.drift}, juosten ${D.ran.drift} (eteni ${D.ran.moved})`);
+
+    expect('liikkuvan pelaajan sää on tasan mitattu sää, kerroin 1',
+      D.moving === 1 && D.ran.scale === 1 && D.stood.scale > 1,
+      `alussa ${D.moving}, juosten ${D.ran.scale}, seisten ${D.stood.scale}`);
+
+    expect('pomoareenassa ei ajelehdita, koska siellä ei ole rataa',
+      D.boss.isBoss && D.boss.drift === 0, `areena ${D.boss.isBoss}, ajelehdus ${D.boss.drift}`);
+
+    expect('vastatuuli väistyy heti kun pelaaja painaa suuntaa',
+      D.tryingPush === 0 && D.idlePush < 0,
+      `suunta pohjassa ${D.tryingPush}, joutilaana ${D.idlePush}`);
+  }
+
   expect('tulimyrsky varoittaa ennen kuin se sataa, ja varoitus on lyhyempi kuin sade',
     W.storm.order.join('→') === 'rauha→varoitus→sade'
     && W.storm.warn > 0 && W.storm.rain > W.storm.warn,
@@ -23234,6 +23621,215 @@ const report = await page.evaluate(async () => {
     out.ceiling = Math.round(fastest * 1000) / 1000;
     return out;
   });
+
+  /* ------------------------- vauhdin merkit ----------------------------- */
+  /*
+   * MITÄ TÄYSI VAUHTI TEKEE RUUDULLE (19.8.2026).
+   *
+   * Omistaja: *"when we reach full speed, the entire screen should warble.
+   * Maybe the screen shifts a bit so you see more of what's ahead, to
+   * compensate for the speed."*
+   *
+   * Kolme väitettä, ja kolmas on se jota ei saa rikkoa vahingossa: huojunta on
+   * **aalto eikä väri**. Kokoruudun väri on tässä pelissä osuman kieli
+   * (17.8.2026, ks. *"merkin on jätettävä ruudun toinen laita rauhaan"*), ja
+   * juuri siksi vauhti puhuu geometrialla — sitä ei voi sekoittaa osumaan.
+   */
+  {
+    const V = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { MAX_RUN, MAX_P } = await import('/src/entities/player.js');
+      const game = window.sfb3;
+      const mk = () => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        return sc;
+      };
+      /* Katse edelle kahdella nopeudella, sama kenttä, kamera ajettuna
+       * tasapainoon kummallakin. */
+      const leanAt = (vx) => {
+        const sc = mk();
+        for (let f = 0; f < 200; f++) {
+          sc.player.vx = vx;
+          sc.player.x += vx;
+          sc.updateCamera();
+        }
+        return Math.abs(Math.round(sc.camLook));
+      };
+      const runLean = leanAt(MAX_RUN);
+      const pLean = leanAt(MAX_P);
+
+      /* Huojunta: sama frame, mittari täynnä ja tyhjä. */
+      const sc = mk();
+      sc.player.pMeter = 0;
+      const calm = sc.warbleOffset();
+      const { P_METER_MAX } = await import('/src/entities/player.js');
+      sc.player.pMeter = P_METER_MAX;
+      let amp = 0;
+      let moved = 0;
+      for (let t = 0; t < 240; t++) {
+        sc.tick = t;
+        const w = sc.warbleOffset();
+        amp = Math.max(amp, Math.abs(w.x), Math.abs(w.y));
+        if (w.x !== 0 || w.y !== 0) moved++;
+      }
+      return { runLean, pLean, calm, amp, moved, full: sc.player.pFull };
+    });
+
+    expect('katse edelle kasvaa P-nopeuteen asti eikä pysähdy juoksukattoon',
+      V.pLean > V.runLean * 1.2 && V.runLean > 0,
+      `juoksuvauhdilla ${V.runLean} px, P-vauhdilla ${V.pLean} px`);
+
+    expect('täysi mittari huojuttaa ruutua, tyhjä ei, ja huojunta on yhden pikselin',
+      V.calm.x === 0 && V.calm.y === 0 && V.full && V.amp === 1 && V.moved > 60,
+      `tyhjänä ${V.calm.x},${V.calm.y}; täynnä amplitudi ${V.amp} px,`
+      + ` liikkeessä ${V.moved}/240 framea`);
+  }
+
+  /* --------------------------- ketjun elämä ----------------------------- */
+  /*
+   * KETJUN ELÄMÄ TULEE VAIN KAKKOSEN POTENSSILLA (19.8.2026).
+   *
+   * Ennen tätä ehto oli *"tikapuut loppuivat"*: yhdeksäs tappo maksoi elämän
+   * ja niin maksoi jokainen sen jälkeen, eli kahdentoista ketju antoi neljä.
+   * Omistaja: *"chained kills give 1UP too easily."*
+   */
+  {
+    const C = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { CHAIN_LIFE } = await import('/src/core/points.js');
+      const game = window.sfb3;
+      game.state = { lives: 0, coins: 60, score: 0, power: { type: null, level: 0 },
+        reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+        secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+      const sc = new LevelScene(game, '1-1');
+      game.setScene(sc);
+      const owner = { chain: 0 };
+      sc.chainOwner = owner;
+      const lives = [];
+      for (let k = 0; k < 40; k++) {
+        const before = game.state.lives;
+        sc.chainReward(256, sc.player.cx, sc.player.cy);
+        if (game.state.lives > before) lives.push(k + 1);
+      }
+      return { lives, first: CHAIN_LIFE, score: game.state.score };
+    });
+
+    expect('ketju maksaa elämän vain kakkosen potenssilla, ensimmäisen kerran 16:lla',
+      C.lives.join(',') === '16,32' && C.first === 16,
+      `elämät ketjun pituuksilla ${C.lives.join(', ') || 'ei yhtään'}`);
+  }
+
+  /* ----------------------- rytmin opettaminen --------------------------- */
+  /*
+   * MITEN PELAAJA OPPII TAHDIN (19.8.2026).
+   *
+   * Omistaja: *"how do we teach the rhythm to the player? Is there any
+   * audiovisual feedback?"* — ja vastaus oli: on, mutta väärinpäin. Ohi
+   * mennyt painallus kuului (`sylkaisy`) ja osunut ei kuulunut eikä näkynyt;
+   * `pumpFlash` asetettiin eikä sitä lukenut yksikään rivi. Peli opetti
+   * rytmiä pelkällä rangaistuksella.
+   *
+   * Neljä väitettä, ja ensimmäinen on se joka tekee muista mahdollisia: tahti
+   * on **kappaleen** tahti. Kiinteä 12 framea on 150 BPM ja pääkappale käy
+   * 156:tta, eli korvaan syötettiin yhtä tempoa ja sormille toista.
+   */
+  {
+    const R = await page.evaluate(async () => {
+      const { Music, Sfx } = await import('/src/core/audio.js');
+      const { drawPlayer } = await import('/src/gfx/sprites.js');
+      const was = Music.current;
+
+      /* 1. Jakso seuraa kappaletta, ja pääkappaleella se on yhä mitattu 12. */
+      const periods = {};
+      for (const name of ['level', 'jaatie', 'factory', 'cave', 'bone']) {
+        Music.current = name;
+        periods[name] = Music.beatFrames(12);
+      }
+      Music.current = null;
+      const noTrack = Music.beatFrames(12);
+      Music.current = was;
+
+      /* 2. Kuka soittaa mitäkin: vakooja `Sfx.play`n päällä, yksi kenttä
+       *    pumpattuna tahdissa ja toinen tahdin ohi. */
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const heard = [];
+      const real = Sfx.play.bind(Sfx);
+      Sfx.play = (name, arg) => { heard.push(name); real(name, arg); };
+      const runPump = (onBeat) => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        heard.length = 0;
+        const blank = () => ({});
+        const inp = { held: blank(), pressed: blank(), released: blank(),
+          consume(a) { this.pressed[a] = false; } };
+        for (let f = 0; f < 240; f++) {
+          inp.held = {}; inp.pressed = {};
+          inp.held.right = true;
+          inp.held.run = true;
+          const ph = sc.player.pumpPhase;
+          const want = onBeat ? ph === 0 : ph === Math.floor(sc.player.pumpPeriod / 2);
+          if (sc.player.pumping && want) { inp.held.run = false; inp.pressed.run = true; }
+          sc.update(inp);
+        }
+        const count = (n) => heard.filter((x) => x === n).length;
+        return { tick: count('pumptick'), hit: count('pump'), miss: count('sylkaisy') };
+      };
+      const beat = runPump(true);
+      const off = runPump(false);
+      Sfx.play = real;
+
+      /* 3. Välähdys päätyy kuvaan asti: sama frame kahdesti, `pumpFlash`
+       *    nollana ja päällä, ja pikselien on erottava. */
+      const shot = (flash) => {
+        const c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        const pl = { type: 'shroom', level: 1, facing: 1, frame: 0, state: 'stand',
+          ducking: false, running: true, tick: 4, wag: 0 };
+        drawPlayer(g, 20, 20, flash ? { ...pl, tint: window.__flashTint } : pl);
+        return g.getImageData(0, 0, 64, 64).data;
+      };
+      const { TINTS } = await import('/src/gfx/sprites.js');
+      window.__flashTint = TINTS.flash;
+      const plain = shot(false);
+      const lit = shot(true);
+      let diff = 0;
+      for (let i = 0; i < plain.length; i += 4) if (plain[i] !== lit[i]) diff++;
+      return { periods, noTrack, beat, off, diff };
+    });
+
+    expect('pumpun tahti on kappaleen tahti, eikä pääkappaleella liikahda mitatusta',
+      R.periods.level === 12 && R.noTrack === 12
+      && new Set(Object.values(R.periods)).size > 1
+      && Object.values(R.periods).every((f) => f >= 6 && f <= 20),
+      `${Object.entries(R.periods).map(([k, v]) => `${k} ${v}`).join(', ')};`
+      + ` ilman kappaletta ${R.noTrack}`);
+
+    expect('tahti naksahtaa, jotta sen voi kuulla katsomatta jalkoihinsa',
+      R.beat.tick > 8 && R.off.tick > 8,
+      `tahdissa ${R.beat.tick} naksausta, ohi ${R.off.tick}`);
+
+    expect('osuma kuuluu ja ohi mennyt kuuluu eri äänellä',
+      R.beat.hit > 4 && R.beat.miss === 0 && R.off.miss > 4 && R.off.hit === 0,
+      `tahdissa ${R.beat.hit} osumaa / ${R.beat.miss} ohi,`
+      + ` tahdin ohi ${R.off.hit} osumaa / ${R.off.miss} ohi`);
+
+    expect('välähdys päätyy kuvaan asti eikä jää kentäksi jota kukaan ei lue',
+      R.diff > 40, `${R.diff} pikseliä erosi`);
+  }
 
   expect('rytmissä painettu juoksunäppäin täyttää mittarin nopeammin kuin pohjassa pidetty',
     P.beat.frames < P.hold.frames * 0.9 && P.beat.vents === 0,

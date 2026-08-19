@@ -7,9 +7,12 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
-import { drawGoal, drawItem } from '../gfx/sprites.js';
+import { drawGoal, drawItem, drawLifeCoins,
+} from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
-import { Player, P_METER_MAX, MAX_RUN, HURT_FLASH } from '../entities/player.js';
+import {
+  Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
+} from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
@@ -19,12 +22,12 @@ import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY, GRAVITY_HELD_CUTOFF } from '../level/physics.js';
 /* Kaikki pistearvot ovat yhdessä tiedostossa, ks. `points.js`. */
-import { PTS, COIN, TIME_SECOND, GOAL_STEPS, CHAIN } from '../core/points.js';
+import { PTS, COIN, TIME_SECOND, GOAL_STEPS, CHAIN, CHAIN_LIFE } from '../core/points.js';
 import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
 } from '../core/timeattack.js';
-import { clamp, hashNoise, hashPlace, overlaps, padNum } from '../core/utils.js';
+import { clamp, hashNoise, hashPlace, overlaps } from '../core/utils.js';
 /* Yksi merkkijono, ja se tulee sieltä missä se on määritelty — ks. DAILY_TITLE. */
 import { DAILY_TITLE } from '../core/daily.js';
 
@@ -158,15 +161,46 @@ const TUBE_X = 3;
 const TUBE_W = 10;
 const TUBE_PAD = 4;
 const COIN_PX = 2;
-const COIN_CAP = 100;
+export const COIN_CAP = 100;
 /*
- * Kuinka monta poimittua kolikkoa on elämä. Omistajan luku (*"maybe 500 coins
- * = extra life"*), ja se on oikea suuruusluokka: kentässä on 25…45 kolikkoa,
- * joten elämä on noin viidentoista kentän työ jos kaikki poimitaan — eli
- * harvinaisempi kuin ennen (sata) ja siksi merkittävämpi. Luku on **uran**
- * kokonaisluku eikä säiliön pinta: säiliö on aika ja se kuluu, ura ei kulu.
+ * PUNAINEN KOLIKKO: mitä täysi säiliö maksaa ja mitä siitä jää.
+ *
+ * `RED_COST` yellow coins leave as one red coin and `RED_KEEP` stay in the
+ * glass. The trade is 80 seconds for a life, and it is a good one at every
+ * point in the game — a level's coins buy 30…54 seconds, so a life costs about
+ * two levels' worth of income and is worth far more than that. It matters that
+ * it is good, because the conversion is **automatic**: a price the player would
+ * rather not pay, paid without asking, would turn a full tube into something to
+ * avoid, and the full tube is the one moment this whole meter was built to
+ * promise.
+ *
+ * It also cannot kill: 32 coins are 40 seconds, so the glass is never left
+ * empty and the conversion is never the reason somebody starves.
  */
-const LIFE_COINS = 500;
+/*
+ * PUNAISEN KOLIKON HINTA, ja miksi se ei ole tasan kaksi kolmasosaa.
+ *
+ * Owner, 18.8.2026: *"maybe 2/3s of the yellow coin gauge turn into a red coin,
+ * all coins fall down and you now have +1 red coin and 1/3 full yellow coin
+ * gauge."*
+ *
+ * Two thirds of a hundred is 66,7, which is not a number of coins. 64 is, and
+ * it is 2⁶ — the same scale everything in `core/points.js` is on. It leaves 36,
+ * so the split is 64 % out and 36 % left where the owner asked for 67 % and
+ * 33 %: a coin and a half of difference, which is 1,8 seconds of clock and
+ * nothing anybody can feel.
+ *
+ * **The cap was moved to 96 first and moved back**, because 96 = 64 + 32 is the
+ * prettier arithmetic and the gate priced it: the tube's interior is exactly
+ * 200 px at **two pixels per coin**, and `verify.mjs` measures that. Ninety-six
+ * coins in a hundred-coin glass is either a fractional pixel scale or a
+ * re-measured tube, and neither is worth buying a rounder number with. The
+ * hundred stays, `FUEL_DRAIN` stays at 72 frames, and a full tube is still the
+ * two minutes the old `AIKA 300` clock gave.
+ */
+export const RED_COST = 64;
+export const RED_KEEP = COIN_CAP - RED_COST;
+
 /** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
 const COIN_ARC = 26;
 const COIN_DROP_G = 0.6;
@@ -502,18 +536,6 @@ const WILDFIRE_ASH = 240;
 const WILDFIRE_STEP = 26;
 const WILDFIRE_REACH = 2;
 
-/**
- * Kuinka kauan nielty kyky kestää, frameina. Ks. `swallowEnemy`.
- *
- * Kahdeksan sekuntia: juoksuvauhdilla noin seitsemänkymmentä laattaa eli kolme
- * ja puoli ruutua. Suunnitelmaksi tarpeeksi, varusteeksi liian vähän.
- */
-const SWALLOW_FRAMES = 480;
-/** Mitä pistepomppu sanoo kun jokin niellään. */
-const SWALLOW_NAMES = {
-  piikki: 'PIIKIT', siivet: 'SIIVET', kylmä: 'KYLMÄ',
-  magneetti: 'MAGNEETTI', kuori: 'KUORI', sylky: 'SYLKY',
-};
 /** Magneetin säde laattoina. Ks. `pullCoins`. */
 const MAGNET_R = 4;
 
@@ -1305,6 +1327,9 @@ const DOOR_OPEN_FRAMES = 30;
  *     `kurnutus`/`loikka`). Valo tulee, valo menee. Menevä on lyhyempi kuin
  *     tuleva, koska se soi useammin.
  */
+/** Huojunnan amplitudi pikseleinä täydellä mittarilla. Ks. `warbleOffset`. */
+const WARBLE_AMP = 1;
+
 const SPEED_PULSE_FULL = 14;
 const SPEED_PULSE_SPENT = 9;
 
@@ -1313,6 +1338,96 @@ const SPEED_PULSE_SPENT = 9;
  * and short enough that a wall someone cannot pass shows up on the first try. */
 const STUCK_FRAMES = 480;
 const STUCK_PROGRESS = 8;     // px of new ground that counts as progress
+
+/*
+ * AJELEHTIMINEN: SÄÄ RANKAISEE PAIKALLAAN OLOSTA, EI KELLOSTA (19.8.2026).
+ *
+ * Owner: *"what if the weather punishes you for stopping? But if you keep
+ * moving, then things are gonna be okay. Unless then the wind goes in your
+ * favour."*
+ *
+ * The version this replaced escalated on a clock — the longer you were in a
+ * level, the worse it got. That is the Vampire Survivors shape and it is the
+ * wrong one here, for a reason that is about teaching rather than balance: a
+ * clock is **invisible until it bites**. Nothing on screen connects the ember
+ * that killed you to the thirty seconds you spent looking for a secret. Tie it
+ * to standing still instead and the rule teaches itself in one second — you
+ * stop, the wind turns, you move, it stops. Nobody has to be told.
+ *
+ * It also keeps the secrets, which is the point the owner was explicit about.
+ * Hunting a hidden block is no longer *cheap* — but it is a **risk you take**
+ * rather than a **cost you pay**, and a risk is a thing worth taking.
+ *
+ * `STUCK_PROGRESS` and the stall counter are the telemetry's, not new: the log
+ * has been measuring "no new ground" since it was written, so the weather now
+ * punishes exactly what the log already calls being stuck. One definition, two
+ * readers, and the data keeps meaning what it meant.
+ *
+ * The two numbers below are the ones to tune from real play, and they are
+ * deliberately both earlier than `STUCK_FRAMES`: the log's eight seconds are
+ * for *"this player cannot pass"*, and these are for *"this player has stopped
+ * moving"*, which is a smaller thing and has to be felt sooner.
+ *
+ *   `DRIFT_GRACE`  two seconds that cost nothing. Lining up a jump, bumping a
+ *                  brick, fighting something — all legitimate, all free.
+ *   `DRIFT_FULL`   six seconds, and the weather is as bad as that level's
+ *                  weather gets.
+ */
+const DRIFT_GRACE = 120;
+const DRIFT_FULL = 360;
+
+/*
+ * PAIKALLAAN OLO KIRISTÄÄ SÄÄN. LIIKE EI LÖYSÄÄ SITÄ — ja tämä suunta on
+ * portin opettama, ei valittu.
+ *
+ * Ensimmäinen versio meni toisin päin: kentän sää täydellä voimalla oli se
+ * mitä sai seisoskelusta, ja liikkuva pelaaja piti sen 60 %:ssa. Se kuulosti
+ * lempeämmältä ja se kaatoi *"jokaisesta kaasulyhdystä pääsee maaliin
+ * voimatasolla 0"* — 4-3 jäi 69 %:iin.
+ *
+ * Syy on se joka kannattaa muistaa ensi kerralla: **kekälesade on kuvio, ei
+ * määrä.** `EMBER_EVERY` 10 harvennettuna 17:ään ei ole vähemmän kekäleitä
+ * samoissa paikoissa, se on kekäleitä **eri** paikoissa — ja kentän
+ * läpäistävyys on todistettu sitä kuviota vastaan jonka mitatut luvut
+ * tuottavat. Harvempi sade ei ole helpompi sade, se on toinen sade.
+ *
+ * Siksi kerroin on tasan 1 kun pelaaja liikkuu: jokainen kuvio, jokainen
+ * mitattu luku ja jokainen olemassa oleva todistus pysyy koskemattomana, ja
+ * `drift` voi vain lisätä. Palkinto liikkumisesta on se ettei mikään pahene —
+ * mikä on täsmälleen se mitä omistaja pyysi (*"if you keep moving, then things
+ * are gonna be okay"*) ja sattuu olemaan ainoa muotoilu joka ei vaadi
+ * kuudenkymmenenviiden kentän uudelleenmittausta.
+ *
+ * `DRIFT_BITE` on paljonko täysi ajelehtiminen kiristää: 0,6 tarkoittaa että
+ * kekälesade tihenee 10:stä kuuteen ja metsäpalo etenee 26:sta 16 framen
+ * välein. Puolitoistakertainen, eli tuntuva muttei toinen peli.
+ */
+const DRIFT_BITE = 0.6;
+
+/*
+ * VASTATUULI ON VOIMA, MYÖTÄTUULI EI OLE — ja tämä epäsymmetria on mitattu
+ * eikä valittu.
+ *
+ * Ensimmäinen versio työnsi molempiin suuntiin: ajelehtiva sai vastatuulta ja
+ * liikkuva myötätuulta, `vx`:ään lisättynä kuten aavikon puuska. Portti hylkäsi
+ * sen samana iltana ja oli oikeassa — *"rytmi vie P-nopeuteen muttei sen yli"*
+ * luki **3,511 vastaan katto 3,5**. Myötätuuli oli lisännyt nopeutta mitatun
+ * katon yli, ja `gapTiles` 6 ja `wallTiles` 4 on mitattu sillä katolla:
+ * jokaisen kentän läpäistävyystodistus lepää sen päällä. Sama työntö sotki
+ * viisi muuta fysiikkamittaa, ilmakitkasta hiekassa kahlaamiseen.
+ *
+ * Palkinto liikkumisesta on siis se **mitä ei tapahdu**: `weatherScale` pitää
+ * sään alarajallaan ja vastatuuli pysyy poissa. Se on hiljaisempi palkinto
+ * kuin työntö selkään, ja se on ainoa jonka voi antaa rikkomatta lukua johon
+ * kuusikymmentäviisi kenttää nojaa.
+ *
+ * `DRIFT_CALM` on se ajelehtiminen jolta vastatuuli alkaa, eli kaksi
+ * kolmasosaa matkasta täyteen. `DRIFT_WIND` on sen voima, tarkoituksella
+ * pienempi kuin puuskan 0,055: puuska on tapahtuma jonka näkee tulevan, tämä
+ * on pohjavire jonka huomaa vasta kun on seissyt hetken.
+ */
+const DRIFT_CALM = 0.35;
+const DRIFT_WIND = 0.05;
 
 /* How long a crumbling platform holds. Just under a second: long enough to
  * cross two of them at a walk, short enough that standing still is a mistake. */
@@ -1646,6 +1761,10 @@ export class LevelScene {
     // Playtest telemetry, tracked per attempt. `bestX` is the furthest the
     // player has got; `stallFrames` counts how long it has stood still.
     this.bestX = 0;
+    /* Ajelehtiminen: `driftAt` on se piste josta liikettä mitataan ja
+     * `driftFrames` framea siitä kun se viimeksi siirtyi. Ks. `DRIFT_GRACE`. */
+    this.driftAt = { x: 0, y: 0 };
+    this.driftFrames = 0;
     this.stallFrames = 0;
     this.stuckLogged = new Set();
     this.telemetryDone = false;
@@ -2083,6 +2202,34 @@ export class LevelScene {
       st.checks[this.id] = tx;
       if (this.game.persist) this.game.persist();
     }
+    /*
+     * A LIT LAMP TOPS THE TUBE UP TO `FUEL_FLOOR`, and the amount is not a
+     * choice — it is the same line the level entrance runs.
+     *
+     * The constructor guarantees that nobody starts a level under `FUEL_FLOOR`
+     * coins, because a level you cannot finish is not a level. Lighting a lamp
+     * *moves* where the level starts: `spawn` becomes this column and death
+     * brings you back here rather than to the gate. So the same guarantee has
+     * to move with it, or a checkpoint would be a promise that gets thinner the
+     * further into a level it sits — you would be returned to a spot with
+     * whatever fuel happened to be left when you died, which is exactly the
+     * situation the entrance floor exists to prevent.
+     *
+     * It tops up and never trims. A player arriving rich keeps everything: this
+     * is a floor, and a floor that could take coins away would make lighting a
+     * lamp a thing to think twice about.
+     *
+     * Coins fly in rather than appearing, and they are **not** collected coins:
+     * no score, no `coinsTotal`. The lamp is not a payout, it is the level
+     * starting again — see `addCoin` for what a real coin does.
+     */
+    const short = FUEL_FLOOR - st.coins;
+    if (short > 0) {
+      st.coins = FUEL_FLOOR;
+      for (let i = 0; i < short; i++) {
+        this.coinToTube(tx * TILE + 8, ty * TILE, true, i * QCOIN_STAGGER);
+      }
+    }
     /* Ääni ja kuva samasta tapahtumasta, ja molemmat kertovat "päällä": liekki
      * jää palamaan ruudulle, sytytys kuuluu kerran. Tärinää ei ole — tärinä on
      * tässä pelissä iskun sana (ks. `shake`), eikä lyhty osu mihinkään. */
@@ -2306,11 +2453,40 @@ export class LevelScene {
    * väite kahdesta sinistä eikä mitattava asia.
    */
   shakeOffset() {
-    if (this.shakeAmp <= 0) return { x: 0, y: 0 };
+    const wob = this.warbleOffset();
+    if (this.shakeAmp <= 0) return wob;
     const w = SHAKE_AXES[this.shakeAxis] || SHAKE_AXES.both;
     return {
-      x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp * w.x),
-      y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * w.y),
+      x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp * w.x) + wob.x,
+      y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * w.y) + wob.y,
+    };
+  }
+
+  /**
+   * HUOJUNTA TÄYDELLÄ MITTARILLA — ja se on aalto eikä tärinä.
+   *
+   * Omistaja 19.8.2026: *"when we reach full speed, the entire screen should
+   * warble or shake."* Kaksi eri asiaa, ja ero on merkityksessä: `shake` on
+   * satunnaista ja lyhyttä, ja tämä peli käyttää sitä **iskuihin** —
+   * järistykseen, maahaniskuun, jouseen. Jos vauhti tärisisi samalla tavalla,
+   * pelin kovin liike lukisi jatkuvana osumana.
+   *
+   * Huojunta on siis siniaalto: hidas, pehmeä, aina samassa vaiheessa itsensä
+   * kanssa. Amplitudi on **yksi pikseli** ja se on mitattu ylärajaksi eikä
+   * makuasiaksi — kaksi pikseliä siirtää laattarivin näkyvästi pois ruudukosta
+   * ja tekee hypyn arvioimisesta vaikeampaa juuri sillä nopeudella jolla se on
+   * jo vaikeinta. Vauhdin pitää tuntua hallinnan reunalta, ei sen takaa.
+   *
+   * Vain vaakakentässä: pystykentässä kamera **leikkaa** sivun kerrallaan eikä
+   * seuraa, ja huojuva leikkaus on rikki eikä nopea.
+   */
+  warbleOffset() {
+    if (this.vertical || this.state !== 'play' || !this.player || !this.player.pFull) {
+      return { x: 0, y: 0 };
+    }
+    return {
+      x: Math.round(Math.sin(this.tick * 0.55) * WARBLE_AMP),
+      y: Math.round(Math.sin(this.tick * 0.31) * WARBLE_AMP),
     };
   }
 
@@ -2633,13 +2809,19 @@ export class LevelScene {
   }
 
   /**
-   * Nieleminen: kupla katoaa, kyky jää — `SWALLOW_FRAMES` framea.
+   * Nieleminen: kupla katoaa, kyky jää — **kunnes jokin toinen ottaa paikan**.
    *
-   * Kahdeksan sekuntia on mitattu kentän mitasta eikä tunnelmasta: pelaaja
-   * juoksee sekunnissa 150 px eli yhdeksän laattaa, joten kyky kantaa noin
-   * seitsemänkymmentä laattaa — kolme ja puoli ruutua. Se on tarpeeksi pitkä
-   * ollakseen suunnitelma ("nielen tämän ja menen tuonne") ja liian lyhyt
-   * ollakseen varuste.
+   * Kahdeksan sekunnin kello oli mitattu kentän mitasta: juoksuvauhdilla noin
+   * seitsemänkymmentä laattaa, tarpeeksi pitkä ollakseen suunnitelma ja liian
+   * lyhyt ollakseen varuste. Se mittaus oli oikein sille kysymykselle jota
+   * silloin kysyttiin — kyky oli ilmainen, joten jonkin oli rajoitettava sitä,
+   * ja aika oli ainoa käytettävissä oleva raja.
+   *
+   * Kyky ei ole enää ilmainen (19.8.2026): se vie tehostuksen paikan ja
+   * työntää sen varalokeroon, ja raja on se että seuraava ottaa sen paikan.
+   * Kello olisi nyt kahden rajan päällekkäisyys ja niistä huonompi — se
+   * pakottaisi odottamaan, ja odottaminen on täsmälleen se mitä tämä peli ei
+   * halua pelaajan tekevän.
    */
   swallowEnemy(p, e) {
     /*
@@ -2657,12 +2839,26 @@ export class LevelScene {
     if ((!e.bubbled && !e.flipped) || e.dying) return false;
     const kind = this.swallowGift(e);
     e.remove = true;
-    p.swallowKind = kind;
-    p.swallowTimer = SWALLOW_FRAMES;
+    /*
+     * THE ABILITY TAKES THE POWER SLOT, and what was in it goes to the backup
+     * (19.8.2026). This is the same two lines `takeItem` runs when a mushroom
+     * displaces a leaf — see `storeReserve` — and that is the point: there is
+     * one slot, and everything that wants it pays the same way.
+     *
+     * Only an item power is banked. An ability has no item form to put in a
+     * box, so swallowing over an ability simply replaces it; the box is for
+     * things a block could have handed you.
+     *
+     * The body keeps its level. Swapping which power you carry is not the same
+     * question as how gassed you are, and making a swallow cost a size would
+     * turn the fastest thing in the game into the most expensive one.
+     */
+    if (p.power.type && !p.swallowed) this.storeReserve(p.power.type);
+    p.power = makePower(kind, p.power.level);
     this.awardScore(e.score, e.cx, e.y);
     this.spawnPuff(p.cx, p.cy);
     Sfx.play('nielu');
-    this.addScorePop(p.cx, p.y - 12, SWALLOW_NAMES[kind] || kind);
+    this.addScorePop(p.cx, p.y - 12, POWER_NAMES[kind] || kind);
     return true;
   }
 
@@ -2967,8 +3163,26 @@ export class LevelScene {
     if (!owner) return this.awardScore(points, x, y);
     const n = owner.chain || 0;
     owner.chain = n + 1;
-    if (n >= CHAIN.length) return this.gainLife(x, y);
-    return this.awardScore(points * CHAIN[n], x, y);
+    /*
+     * KETJUN ELÄMÄ ON HARVINAINEN, JA SE OLI VUOTO (19.8.2026).
+     *
+     * Rivi oli `if (n >= CHAIN.length) return this.gainLife(x, y)`, eli
+     * yhdeksäs tappo maksoi elämän — **ja niin maksoi kymmenes, yhdestoista ja
+     * jokainen seuraava.** Kahdentoista ketju antoi neljä elämää. Omistaja:
+     * *"chained kills give 1UP too easily. Maybe 8 chained gives you
+     * something, then 16 something more, then 32."*
+     *
+     * Nyt tikapuut maksavat pisteinä loppuun asti — yli kahdeksannen kerroin
+     * pysyy ylimmässä, 128× — ja **elämä tulee vain kakkosen potenssilla**,
+     * `CHAIN_LIFE`stä alkaen: 16., 32., 64. Sama asteikko kuin pistetaulukolla
+     * (`points.js`), ja jokainen porras on kaksi kertaa edellisen työ.
+     *
+     * Kahdeksas ei anna elämää eikä se ole tyhjä: se on se tappo jolla kerroin
+     * saavuttaa kattonsa, ja katto on 128 kertaa vihollisen arvo.
+     */
+    const len = n + 1;
+    if (len >= CHAIN_LIFE && (len & (len - 1)) === 0) this.gainLife(x, y);
+    return this.awardScore(points * CHAIN[Math.min(n, CHAIN.length - 1)], x, y);
   }
 
   gainLife(x, y) {
@@ -2985,11 +3199,12 @@ export class LevelScene {
    *      yli — ylimääräinen kolikko ei katoa mihinkään, se vain ei mahdu
    *      *aikaan*. Täyteen ajaminen on itsessään palkinto: kaksi minuuttia on
    *      pisin mahdollinen kello.
-   *   2. **Uran kokonaislukema** (`coinsTotal`), joka ei koskaan kulu. Tästä
-   *      tulee elämä: `LIFE_COINS` kolikkoa poimittuna on 1UP, ja se on
-   *      omistajan oma ehdotus (*"maybe 500 coins = extra life"*). Sadan
-   *      kolikon elämä ei enää kelpaa, koska sata kolikkoa on nyt se säiliö
-   *      jota kulutetaan — palkinto ja mittari eivät voi olla sama luku.
+   *   2. **Uran kokonaislukema** (`coinsTotal`), joka ei koskaan kulu. Sitä
+   *      lukee enää ajokortti; elämä ei tule siitä (18.8.2026). Elämä on se
+   *      punainen kolikko jonka täysi säiliö lyö — `RED_COST` keltaista ulos,
+   *      `RED_KEEP` jää — ja kahta tapaa ostaa sama asia ei ole (DESIGN.md
+   *      kohta 8). Se myös palauttaa mittarille sen lupauksen jonka *kolikot
+   *      ovat aika* otti pois: täydellä säiliöllä on taas seuraus.
    *   3. **Pisteitä**, kuten ennenkin.
    */
   addCoin(x, y, popped = false, { silent = false, delay = 0 } = {}) {
@@ -3006,7 +3221,10 @@ export class LevelScene {
        * joka valehtelee. */
       this.addScorePop(x, y - 8, COIN);
     }
-    if (st.coinsTotal % LIFE_COINS === 0) this.gainLife(x, y);
+    /* No career payout any more: a life is the red coin the tube mints, and
+     * `LIFE_COINS` was the second way of saying the same thing (DESIGN.md §8).
+     * `coinsTotal` stays because the run card counts it, not because anything
+     * is bought with it. */
   }
 
   /* ---------------------------- kolikkoputkilo --------------------------- */
@@ -3120,11 +3338,19 @@ export class LevelScene {
              * lupaamaan meni ohi nopeammin kuin sen ehti nähdä.
              *
              * Nyt pinta **valuu** alas `COIN_FLUSH` framen ajan ja suusta
-             * nousee kipinä: sata kolikkoa lähtee sinne minne ne oli menossa.
-             * Ääni ja 1UP-teksti ovat jo olemassa (`gainLife`), joten tämä on
-             * sama tapahtuma mittarin puolella eikä toinen tapahtuma. */
-            this.tubeFill = COIN_CAP;
+             * nousee kipinä: `RED_COST` kolikkoa lähtee sinne minne ne olivat
+             * menossa. Ääni ja 1UP-teksti ovat jo olemassa (`gainLife`), joten
+             * tämä on sama tapahtuma mittarin puolella eikä toinen tapahtuma. */
+            /* 18.8.2026: the flush finally does what it always said it did.
+             * It was written when a full tube *was* the 1UP, and when coins
+             * became time the payout moved to a career counter and this stayed
+             * behind — a glass that drained over 34 frames, threw a spark
+             * "up, where the 1UP came from", and then snapped back to full
+             * with nothing having happened. Now 64 coins really do leave. */
+            this.game.state.coins -= RED_COST;
+            this.tubeFill = RED_KEEP;
             this.tubeFlush = COIN_FLUSH;
+            this.gainLife(this.player.cx, this.player.cy - 12);
           }
         }
       }
@@ -3166,11 +3392,12 @@ export class LevelScene {
     // pino
     const inner = box.x + 1;
     const innerW = box.w - 2;
-    /* Huuhtelun aikana pinta on `tubeFill` kerrottuna sillä osuudella joka on
-     * vielä valumatta: sata kolikkoa katoaa alaspäin kolmessakymmenessä
-     * framessa. Muulloin kerroin on yksi eikä mitään muutu. */
-    const drain = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 1;
-    const shown = Math.round(this.tubeFill * drain);
+    /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
+     * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
+    const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
+    const shown = this.tubeFlush > 0
+      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
+      : this.tubeFill;
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -3238,6 +3465,40 @@ export class LevelScene {
         this.chained(shell, () => e.hitByShell(Math.sign(shell.vx) || 1));
       }
     }
+    this.shellThrowsSwitch(shell);
+  }
+
+  /**
+   * A SLIDING SHELL THROWS A SWITCH, and this is the cheapest bundling in the
+   * game: no new object, no new verb, one condition.
+   *
+   * The switch block is bumped from below by a head (`bumpBlock`), which means
+   * a switch is reachable exactly where a jump is. That made the switch a
+   * *height* puzzle in a game whose switch is a *time* puzzle — ten seconds to
+   * cross a room and come back — and the two have nothing to do with each
+   * other. A shell already is a thing the player aims down a corridor, and it
+   * already smashes bricks along the way (`ShellGuy.smashAhead`), so letting it
+   * hit the switch adds a way to solve a room without adding a thing to learn.
+   *
+   * It reads the tile the shell is about to enter rather than the one it is in,
+   * for the same reason `smashAhead` does: a shell moving at speed is inside
+   * the next column before a frame boundary notices, and a switch that fires
+   * one tile late fires from the far side of the wall it was meant to open.
+   *
+   * `T.USED` and `startSwitch` are the same two lines the head bump runs, in
+   * the same order — the switch cannot tell which of them threw it, which is
+   * the whole point of it being one switch rather than two.
+   */
+  shellThrowsSwitch(shell) {
+    const dir = Math.sign(shell.vx);
+    if (!dir) return;
+    const box = shell.box;
+    const ahead = Math.floor((dir > 0 ? box.x + box.w + 1 : box.x - 1) / TILE);
+    const ty = Math.floor((box.y + box.h / 2) / TILE);
+    const ch = this.rawTileAt(ahead, ty);
+    if (!info(ch).switch) return;
+    this.setTile(ahead, ty, T.USED);
+    this.startSwitch();
   }
 
   /**
@@ -3363,6 +3624,110 @@ export class LevelScene {
     if (this.stuckLogged.has(tx)) return;
     this.stuckLogged.add(tx);
     logStuck({ level: this.id, tx, ty: Math.floor(p.cy / TILE), frames: this.tick });
+  }
+
+  /**
+   * Ajelehtimismittari. Kasvaa kun rata ei etene, nollautuu kun se etenee.
+   *
+   * Mitta on `raceProgress()` eikä `bestX`, ja se on ainoa kohta jossa tämä
+   * eroaa telemetrian samasta laskennasta: `bestX` on pelkkä x, ja
+   * pystykentässä x ei ole edistymistä lainkaan — kiipeävää pelaajaa
+   * rangaistaisiin kiipeämisestä. `raceProgress` osaa molemmat akselit ja
+   * hoitaa etumerkin itse, koska se on jo jouduttu opettamaan kilpakellolle.
+   *
+   * Kynnys on `STUCK_PROGRESS` muutettuna osuudeksi radasta: sama kahdeksan
+   * pikseliä uutta maata jonka loki laskee edistymiseksi.
+   */
+  /**
+   * PAIKALLAAN OLO, EIKÄ SUUNTA — ja tämä on kolmas versio samasta mitasta.
+   *
+   * Ensin tässä luki `player.cx`, koska telemetrian `bestX` lukee sitä. Portti
+   * kaatoi sen: `6-K` kaivautuu alaspäin ja `7-P` vaihtaa akselia matkan
+   * varrella, joten x-mitta luki niissä "ei etene" koko kentän ajan ja
+   * kiipeilijäbotti sai pysyvän vastatuulen. Toinen versio mittasi etäisyyttä
+   * maaliin, mikä hoiti pystykentät ja kaatui osioituun: kun akseli vaihtuu
+   * kesken matkan, etäisyys maaliin ei ole matkan mitta.
+   *
+   * Kolmas on se mitä omistaja alun perin pyysi: *"what if the weather
+   * punishes you for stopping"*. **Paikallaan olo ei tarvitse suuntaa.**
+   * Ankkuri on se piste jossa laskuri viimeksi nollattiin, ja liike yli
+   * `STUCK_PROGRESS`in siitä — mihin tahansa suuntaan, kummalla akselilla
+   * tahansa — nollaa sen uudelleen. Ei maalia, ei akselia, ei osioita, eikä
+   * yhtään kenttätyyppiä joka olisi poikkeus.
+   *
+   * Hinta sanottuna ääneen: **edestakaisin juokseva ei ajelehdi.** Se on
+   * hyväksytty, koska laki koskee pysähtymistä eikä peruuttamista — ja koska
+   * salaisuuden etsiminen edestakaisin juosten on juuri sitä liikettä jota
+   * tämä peli haluaa nähdä, vaikka se ei etene mihinkään.
+   */
+  updateDrift() {
+    const p = this.player;
+    const dx = p.cx - this.driftAt.x;
+    const dy = p.cy - this.driftAt.y;
+    if (dx * dx + dy * dy > STUCK_PROGRESS * STUCK_PROGRESS) {
+      this.driftAt = { x: p.cx, y: p.cy };
+      this.driftFrames = 0;
+      return;
+    }
+    this.driftFrames++;
+  }
+
+  /**
+   * Ajelehtiminen 0…1, eli kuinka pahasti pelaaja on jäänyt paikalleen.
+   *
+   * Nolla areenassa ja kaikessa muussa kuin pelissä, eikä se ole poikkeus vaan
+   * määritelmä: pomohuoneessa ei ole rataa jota edetä, joten "ei etene" ei
+   * tarkoita siellä mitään. Sama koskee kuolinanimaatiota ja maalia.
+   */
+  get drift() {
+    if (this.def.boss || this.state !== 'play') return 0;
+    return clamp((this.driftFrames - DRIFT_GRACE) / (DRIFT_FULL - DRIFT_GRACE), 0, 1);
+  }
+
+  /** Sään voimakerroin: 1 liikkeessä, `1 + DRIFT_BITE` paikallaan. */
+  get weatherScale() { return 1 + DRIFT_BITE * this.drift; }
+
+  /**
+   * MYÖTÄ- JA VASTATUULI, ja tämä on se puolisko jonka pelaaja huomaa.
+   *
+   * Työntö menee `vx`:ään samalla tavalla kuin aavikon puuskassa, myös sama
+   * puolitus maassa: jalat maassa on jotain mitä vasten työntää, ilmassa ei
+   * ole. Ero on etumerkissä ja siinä että tämä on koko ajan päällä — puuska on
+   * tapahtuma, tämä on pohjavire.
+   *
+   * Nopeuskattoon ei kosketa. Myötätuuli auttaa pääsemään mitattuun huippuun
+   * nopeammin eikä sen yli, koska `gapTiles` 6 ja `wallTiles` 4 on mitattu
+   * sillä katolla ja jokaisen kentän todistus lepää niiden päällä.
+   */
+  updateDriftWind(input) {
+    if (this.state !== 'play' || this.def.boss) return;
+    /*
+     * TUULI VASTUSTAA JOUTILAISUUTTA, EI YRITTÄMISTÄ — ja tämän opetti portti.
+     *
+     * Ensimmäinen versio puhalsi aina kun `drift` oli yli `DRIFT_CALM`in, ja
+     * *"jokaisesta kaasulyhdystä pääsee maaliin voimatasolla 0"* kaatui: 4-3
+     * jäi 69 %:iin. Syy on ikävämpi kuin luku. Pelaaja joka on jumissa vaikeassa
+     * hypyssä ei etene, joten hän ajelehtii, joten hän saa vastatuulta —
+     * **juuri siihen hyppyyn jota hän yrittää**. Rangaistus vaikeuttaa sitä
+     * mihin on jääty kiinni, eli se on kierre eikä kannustin, ja pahimmillaan
+     * se rikkoo lupauksen jonka koko peli lepää päällä.
+     *
+     * Suunta pohjassa on yrittämistä, ja yrittäminen ei ole joutilaisuutta.
+     * Tuuli siis lakkaa siitä framesta jolla pelaaja painaa johonkin suuntaan,
+     * eikä se voi olla se syy miksi hyppy ei onnistu. Ajelehtiminen itse ei
+     * nollaudu painalluksesta — sään voimakerroin (`weatherScale`) jatkaa
+     * kiristymistään, koska seisominen napit pohjassa on yhä seisomista.
+     */
+    const trying = input && input.held && (input.held.left || input.held.right);
+    if (trying) return;
+    const over = this.drift - DRIFT_CALM;
+    if (over <= 0) return;
+    /* Vastatuuli jarruttaa, se ei sinkoa: työntö menee `vx`:ään samalla
+     * puolituksella kuin puuska — jalat maassa on jotain mitä vasten työntää,
+     * ilmassa ei ole — ja se on aina taaksepäin, joten se ei voi nostaa
+     * vauhtia yhdessäkään suunnassa. Ks. `DRIFT_WIND`. */
+    const push = over * DRIFT_WIND * (this.player.onGround ? 0.5 : 1);
+    this.player.vx -= Math.sign(this.player.vx || 1) * push;
   }
 
   /* -------------------------------- warping ---------------------------- */
@@ -4071,6 +4436,7 @@ export class LevelScene {
       this.updatePeek();
       this.updateTransit();
       this.updateProgress();
+      this.updateDrift();
       if (this.race) this.updateRace();
     } else if (this.state === 'clear') {
       this.player.update(input);
@@ -4101,6 +4467,7 @@ export class LevelScene {
       }
     }
 
+    this.updateDriftWind(input);
     if (this.def.wind) this.updateWind();
     if (this.def.quake) this.updateQuake();
     if (this.def.twister) this.updateTwister();
@@ -4114,7 +4481,12 @@ export class LevelScene {
      * DESIGN.md kohta 8 kieltää kaksi tapaa sanoa sama asia. Voimakkuus on
      * läheisyys, joten ääni kasvaa kun suppilo lähestyy ja vaimenee kun se
      * menee ohi — sama tieto kuin kuvassa, samasta luvusta. */
-    if (this.state === 'play') Ambience.hold(Math.max(this.gust, this.twisterNear()));
+    /* Ajelehtiva pelaaja **kuulee** sen ennen kuin tuntee sen: sama peti,
+     * sama lukema, ja tuulen nousu on ainoa vihje jonka tämä laki antaa
+     * ennakkoon. Ilman sitä myötä- ja vastatuuli olisi mysteerivoima. */
+    if (this.state === 'play') {
+      Ambience.hold(Math.max(this.gust, this.twisterNear(), this.drift * 0.8));
+    }
     if (this.shakeAmp > 0) {
       this.shakeAmp = Math.max(0, this.shakeAmp - 0.4);
       // Vaimennut tärinä ei jätä suuntaansa perinnöksi: seuraava isku saa
@@ -4275,11 +4647,15 @@ export class LevelScene {
     const d = body.cx - eye;
     const away = Math.abs(d);
     if (away > TWISTER_REACH) return;
-    const grip = 1 - away / TWISTER_REACH;
+    /* Ajelehtiminen kertoo otteen molemmilla akseleilla, ja **vain
+     * pelaajalle**: kuori tai kekäle ei seiso paikallaan tai juokse, joten
+     * mittarilla ei ole sille mitään sanottavaa. Ks. `weatherScale`. */
+    const scale = body === this.player ? this.weatherScale : 1;
+    const grip = (1 - away / TWISTER_REACH) * scale;
     const pull = -Math.sign(d) * TWISTER_PULL * grip;
     if (direct) body.vx += pull;
     else body.push(pull);
-    if (away <= TWISTER_CORE) body.vy -= TWISTER_LIFT * (1 - away / TWISTER_CORE);
+    if (away <= TWISTER_CORE) body.vy -= TWISTER_LIFT * (1 - away / TWISTER_CORE) * scale;
   }
 
   /**
@@ -4368,7 +4744,12 @@ export class LevelScene {
       st.age++;
       if (st.age >= WILDFIRE_BURN + WILDFIRE_ASH) this.burning.delete(key);
     }
-    if (this.tick % WILDFIRE_STEP === 0) this.spreadFire();
+    /* Palo on takaa-ajaja, ja takaa-ajaja on juuri se sään laji jolle
+     * paikallaan olo on kohtalokasta: askelväli lyhenee ajelehtimisen mukana,
+     * eli seisova pelaaja tulee kiinni otetuksi ja juokseva ei. */
+    if (this.tick % Math.max(1, Math.round(WILDFIRE_STEP / this.weatherScale)) === 0) {
+      this.spreadFire();
+    }
     if (this.tick % WILDFIRE_CYCLE === 0) this.lightFire();
     this.burnPlayer();
   }
@@ -4441,7 +4822,10 @@ export class LevelScene {
     this.emberWarn = warn;
     if (rain === 0) Sfx.play('dive');
     if (rain < 0 || this.state !== 'play') return;
-    if (rain % EMBER_EVERY) return;
+    /* Sade harvenee liikkeessä: `EMBER_EVERY` on se tiheys jonka seisoskelu
+     * ansaitsee, ja juokseva saa siitä `DRIFT_FLOOR`in verran. Jaettuna eikä
+     * kerrottuna, koska luku on väli eikä määrä. */
+    if (rain % Math.max(1, Math.round(EMBER_EVERY / this.weatherScale))) return;
     /* Syntypaikka on kuvan yläpuolella ja kuvan levyinen: sade on sitä mitä
      * näkyy, eikä ruudun ulkopuolelle kannata pudottaa mitään. Arpa on kellon
      * hajautus, joten sama frame samassa kentässä on sama kekäle. */
@@ -5106,8 +5490,23 @@ export class LevelScene {
       this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
       return;
     }
+    /*
+     * KATSE EDELLE, JA SE JATKUU P-NOPEUTEEN ASTI (19.8.2026).
+     *
+     * Kerroin oli `Math.min(1, speed / MAX_RUN)`, eli nojaus kyllästyi
+     * juoksukattoon 2,5. P-nopeus on 3,5, joten mittarin täyttäminen osti
+     * *lisää vauhtia mutta ei yhtään lisää varoitusaikaa* — katse lakkasi
+     * kompensoimasta täsmälleen siinä kohdassa jossa kompensoitavaa tuli
+     * lisää. Omistaja 19.8.2026: *"maybe the screen shifts a bit so you see
+     * more of what's ahead of you, to compensate for the speed."*
+     *
+     * Katto on nyt `MAX_P / MAX_RUN` eli 1,4: täydellä mittarilla nojaus on
+     * 34 px:n sijaan 48 px. Suhde on sama kuin nopeuksien — se mitä ehtii
+     * nähdä kasvaa täsmälleen sen mukana mitä ehtii tulla vastaan.
+     */
     const speed = Math.abs(p.vx);
-    const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * Math.min(1, speed / MAX_RUN) : 0;
+    const lean = Math.min(MAX_P / MAX_RUN, speed / MAX_RUN);
+    const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * lean : 0;
     this.camLook += (wanted - this.camLook) * (Math.abs(wanted) > Math.abs(this.camLook)
       ? CAM_LOOK_GAIN : CAM_LOOK_RETURN);
 
@@ -6307,7 +6706,9 @@ export class LevelScene {
      */
     const gained = st.coins > (this.hudCoins === undefined ? st.coins : this.hudCoins);
     this.hudCoins = st.coins;
-    const seen = `${st.score} ${st.lives} ${st.reserve} ${p.powerLevel}`
+    /* Pisteet eivät ole avaimessa koska ne eivät ole enää nauhalla: lukema
+     * joka ei näy ei voi olla syy herättää se. */
+    const seen = `${st.lives} ${st.reserve} ${p.powerLevel}`
       + ` ${p.type} ${p.swallowed || ''}`;
     if (seen !== this.hudSeen || gained) {
       this.hudSeen = seen;
@@ -6363,8 +6764,27 @@ export class LevelScene {
     if (ink > 0.01) {
       ctx.save();
       ctx.globalAlpha = ink;
-      drawText(ctx, padNum(st.score, 7), OVERLAY.left, 6, { color: '#ffffff', shadow: S });
-      drawText(ctx, `KV *${st.lives}`, OVERLAY.left, 17, { color: '#ffffff', shadow: S });
+      /*
+       * PISTEET EIVÄT OLE ENÄÄ RUUDULLA, ja elämät eivät ole enää luku.
+       *
+       * Owner, 18.8.2026: *"let's keep pushing the trend of diegetic HUD. Why
+       * do we even need to show the score before the game over hiscores
+       * table?"* — and the honest answer is that we do not. A running total is
+       * a number nobody acts on: it cannot be spent, it changes nothing about
+       * the next jump, and every payment it records has **already** said so
+       * where it happened, as a figure popping off the thing that paid
+       * (`addScorePop`). The total still exists and still matters; it is read
+       * out at the end in `scenes/scores.js`, which is where somebody is
+       * actually deciding whether the run was any good.
+       *
+       * Lives take the freed row as red coins, because a life *is* a red coin
+       * now (`RED_COST`). `KV *4` was a label, a star and a digit standing in
+       * for a thing the player owns; four red coins are the thing itself, drawn
+       * the same size as the yellow ones in the tube on the other side of the
+       * screen, so the exchange rate is a picture rather than a rule.
+       */
+      const row = drawLifeCoins(ctx, OVERLAY.left, 6, st.lives, S);
+      if (row.over) drawText(ctx, '+', row.end, 5, { color: '#ff8a8a', shadow: S });
       ctx.restore();
     }
 
@@ -6376,21 +6796,21 @@ export class LevelScene {
      * kumpikaan ei ole pysyvä.
      */
     /*
-     * KELLO ON PUTKILO, ja tämä rivi on vain sen hätähuuto.
+     * KELLO ON PUTKILO, EIKÄ SILLÄ OLE ENÄÄ NUMEROA — ei edes hätätilassa.
      *
-     * `AIKA 300` katosi kokonaan kun kolikot muuttuivat ajaksi (18.8.2026):
-     * lukema on nyt putkilon pinta vasemmassa reunassa, ja se on ruudulla koko
-     * ajan. Numero ilmestyy vain kun polttoaine on vähissä (`FUEL_HURRY`),
-     * koska silloin — ja vain silloin — tarkka luku on eri tieto kuin pinta:
-     * "vielä vähän" ja "kaksitoista sekuntia" ovat eri lauseita.
+     * `AIKA 300` katosi kun kolikot muuttuivat ajaksi (18.8.2026), ja tähän jäi
+     * hätähuuto: `KOLIKOT 12` vilkkumassa oikeassa yläkulmassa alle
+     * `FUEL_HURRY`n. Sen perustelu oli että tarkka luku on silloin eri tieto
+     * kuin pinta — mutta se ei ollut ainoa eikä edes ensimmäinen tapa jolla
+     * peli sen kertoo. Ne kaksi olivat jo olemassa ja ne ovat molemmat
+     * diegeettisiä: `timewarn` soi täsmälleen sillä kolikolla (`updateTimer`),
+     * ja musiikki vaihtaa kiirevaihteelle (`Music.setHurry`) ja pysyy siellä.
+     * Kolme tapaa sanoa "aika loppuu", ja se kolmas oli ainoa joka vaati
+     * lukemaan numeron kesken hypyn.
+     *
+     * Omistaja 18.8.2026: *"let's get rid of the coin counter on the right
+     * side, it's not needed."* Putkilo on koko ajan ruudulla ja se on matala.
      */
-    const urgent = st.coins <= FUEL_HURRY;
-    if (urgent) {
-      const color = Math.floor(this.tick / 8) % 2 ? '#ff6060' : '#ffffff';
-      drawText(ctx, `KOLIKOT ${padNum(st.coins, 2)}`, OVERLAY.right, 6,
-        { color, align: 'right', shadow: S });
-    }
-
     /*
      * AIKA-AJON KELLO ON RUUDULLA, ja se on seurausta siitä että AIKA-kello
      * katosi (18.8.2026: kolikot ovat aika).
@@ -6460,27 +6880,9 @@ export class LevelScene {
     ctx.restore();
     if (st.reserve) drawItem(ctx, st.reserve, OVERLAY.box + 2, by + 2, this.tick);
 
-    /*
-     * NIELTY KYKY, ja se on **nimi ja palkki** eikä kuvake.
-     *
-     * Kyky kestää kahdeksan sekuntia, eli pelaajan on tiedettävä kaksi asiaa
-     * yhdellä silmäyksellä: *mikä* ja *kuinka kauan vielä*. Kuvake vastaisi
-     * ensimmäiseen ja vaatisi opettelua; nimi vastaa siihen suoraan, ja
-     * kutistuva palkki on sama kello jonka pelaaja on jo oppinut lukemaan.
-     * Paikka on varalokeron vieressä, koska molemmat vastaavat kysymykseen
-     * "mitä minulla on mukana".
-     */
-    const gift = this.player.swallowed;
-    if (gift) {
-      const left = this.player.swallowTimer / SWALLOW_FRAMES;
-      drawText(ctx, SWALLOW_NAMES[gift] || gift, OVERLAY.box - 6, by + 2,
-        { color: '#a8e04a', align: 'right', shadow: S });
-      const bw = 44;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, bw, 3);
-      ctx.fillStyle = '#a8e04a';
-      ctx.fillRect(OVERLAY.box - 6 - bw, by + 12, Math.round(bw * left), 3);
-    }
+    /* Nielty kyky oli tässä, nimenä ja palkkina. Se on nyt yläkulman
+     * lähtölaskentakolossa muiden kanssa — ks. `SIIVET 6` siellä ylempänä —
+     * eli alanurkkaan jäi vain varalokero, ja alanurkka on sitä hiljaisempi. */
 
   }
 
