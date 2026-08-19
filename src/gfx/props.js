@@ -78,6 +78,24 @@ export class PropLayer {
     return prop;
   }
 
+  /**
+   * The ground a prop stands on, decided **once, when it is planted**.
+   *
+   * Asking every frame was the first version and it is wrong in a way only
+   * motion shows: a prop is on a parallax layer, so the tilemap column beneath
+   * it changes as the world scrolls past, and the sign rose and sank and its
+   * post grew and shrank while it crossed a ledge. Owner: *"the speed signs
+   * change their size when the screen scrolls. They should always keep their
+   * original height."*
+   *
+   * A signpost is driven into the ground once. Where it was driven in is a
+   * property of the sign, not of what happens to be under it later.
+   */
+  plant(prop, base) {
+    if (base !== null && base !== undefined) prop.base = base;
+    return prop;
+  }
+
   /** True while a prop of that kind is still somewhere in the world. */
   has(kind) {
     return this.list.some((p) => p.kind === kind);
@@ -97,27 +115,15 @@ export class PropLayer {
   }
 
   /**
-   * `groundAt(screenX)` is asked where the tilemap's surface is under each
-   * prop, and that question is the whole of the fix for a bug found in play:
-   * a prop stood on the backdrop's ground line, which is the bottom of the
-   * screen, and that is only the floor on levels whose floor is the bottom
-   * two rows. On anything with a ledge the post was buried and the head hung
-   * out over the drop past it.
-   *
-   * It answers in *screen* pixels because that is the only frame both sides
-   * share: a prop is on a parallax layer, so its world x is not the world x
-   * the player walks along, and "what is under this on the screen" is the
-   * only version of the question with a right answer.
-   *
-   * Null — an empty column, a pit — falls back to the backdrop's line, since
-   * the alternative is a signpost planted on nothing.
+   * Props stand at the height they were planted at (`plant`), falling back to
+   * the backdrop's ground line for anything planted over a pit — the
+   * alternative there being a signpost standing on nothing.
    */
-  draw(ctx, camX, viewW, groundY, groundAt = null) {
+  draw(ctx, camX, viewW, groundY) {
     for (const p of this.list) {
       const x = Math.round(p.x - camX * PROP_PAR);
       if (x > viewW + REAP) continue;
-      const under = groundAt ? groundAt(x) : null;
-      const base = under === null || under === undefined ? groundY : under;
+      const base = p.base === undefined ? groundY : p.base;
       if (p.kind === 'speed') drawSpeedSign(ctx, x, base, p.limit);
       else if (p.kind === 'card') drawNameBoard(ctx, x, base, p.text);
     }

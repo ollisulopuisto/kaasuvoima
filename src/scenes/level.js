@@ -6223,12 +6223,7 @@ export class LevelScene {
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the
      * layer does its own parallax. */
-    /* The ground a prop stands on is asked of the tilemap, column by column,
-     * rather than assumed to be the bottom of the screen — see `groundUnder`.
-     * Owner, from play: a speed sign on a level with a raised ledge had its
-     * post buried and its head hanging over a drop. */
-    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop,
-      (screenX) => this.groundUnder(screenX));
+    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop);
     /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
      * taustan päälle ja ennen kameraa: savukirjoitus on kaukana, eikä kaukana
      * oleva liiku kameran mukana kuin nimeksi. */
@@ -6564,12 +6559,15 @@ export class LevelScene {
      * than read once and lost. */
     if (this.tick - this.cardAt > NAME_CYCLE && !this.props.has('card')) {
       this.cardAt = this.tick;
-      this.props.place('card', camX, VIEW_W, { text: this.title });
+      this.props.plant(this.props.place('card', camX, VIEW_W, { text: this.title }),
+        this.groundUnder(VIEW_W + 48));
     }
 
     if (this.player && this.player.pFull && this.signLimit < SIGN_LIMITS.length
         && camX - this.signAt > SIGN_GAP && !this.props.has('speed')) {
-      this.props.place('speed', camX, VIEW_W, { limit: SIGN_LIMITS[this.signLimit] });
+      this.props.plant(
+        this.props.place('speed', camX, VIEW_W, { limit: SIGN_LIMITS[this.signLimit] }),
+        this.groundUnder(VIEW_W + 48));
       this.signLimit++;
       this.signAt = camX;
     }
