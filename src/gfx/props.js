@@ -47,16 +47,15 @@ export const PROP_PAR = 0.6;
 const REAP = 64;
 
 /**
- * Post height, and it is a clearance measurement rather than a look.
+ * Post height above whatever the prop is standing on.
  *
- * A prop stands on the backdrop's ground line, which is the *bottom of the
- * screen* — and the bottom two or three rows of the screen are tilemap, drawn
- * over this layer afterwards. A short post therefore delivers a sign whose
- * head is buried in the floor. 52 px puts the whole head above three rows of
- * tiles with room to spare, and the post disappearing into the ground is
- * exactly what a post should do.
+ * It used to be 52, and that was three rows of tiles plus room to spare —
+ * a guess at how deep the floor might be, because the prop had no way to ask.
+ * It can ask now (`groundAt` in `draw`), so this is back to being a length
+ * rather than a clearance: how tall a signpost is. The post still vanishes
+ * into the ground it stands on, which is what a post should do.
  */
-const POST_H = 52;
+const POST_H = 26;
 
 export class PropLayer {
   constructor() {
@@ -97,12 +96,30 @@ export class PropLayer {
     void viewW;
   }
 
-  draw(ctx, camX, viewW, groundY) {
+  /**
+   * `groundAt(screenX)` is asked where the tilemap's surface is under each
+   * prop, and that question is the whole of the fix for a bug found in play:
+   * a prop stood on the backdrop's ground line, which is the bottom of the
+   * screen, and that is only the floor on levels whose floor is the bottom
+   * two rows. On anything with a ledge the post was buried and the head hung
+   * out over the drop past it.
+   *
+   * It answers in *screen* pixels because that is the only frame both sides
+   * share: a prop is on a parallax layer, so its world x is not the world x
+   * the player walks along, and "what is under this on the screen" is the
+   * only version of the question with a right answer.
+   *
+   * Null — an empty column, a pit — falls back to the backdrop's line, since
+   * the alternative is a signpost planted on nothing.
+   */
+  draw(ctx, camX, viewW, groundY, groundAt = null) {
     for (const p of this.list) {
       const x = Math.round(p.x - camX * PROP_PAR);
       if (x > viewW + REAP) continue;
-      if (p.kind === 'speed') drawSpeedSign(ctx, x, groundY, p.limit);
-      else if (p.kind === 'card') drawNameBoard(ctx, x, groundY, p.text);
+      const under = groundAt ? groundAt(x) : null;
+      const base = under === null || under === undefined ? groundY : under;
+      if (p.kind === 'speed') drawSpeedSign(ctx, x, base, p.limit);
+      else if (p.kind === 'card') drawNameBoard(ctx, x, base, p.text);
     }
   }
 }
