@@ -15,7 +15,7 @@ import { WALK_FRAMES, DEEP_IDLE, DEATH_POP } from '../gfx/sprites/player.js';
 import { FartBall } from './items.js';
 /* Vauhtimittarin suihku, ks. `ventPlume`. Sama pilvi kuin muuallakin. */
 import { Puff } from './effects.js';
-import { Sfx } from '../core/audio.js';
+import { Music, Sfx } from '../core/audio.js';
 import { approach } from '../core/utils.js';
 /* Poimitun esineen hinta on pistetaulukon asia, ks. `points.js`. */
 import { PTS } from '../core/points.js';
@@ -405,7 +405,13 @@ const PLUME_FAST = 2;
  * sound the code asks for exists" gate and DESIGN.md §8). Venting is audible
  * because that is the half you must not miss.
  */
-const PUMP_PERIOD = 12;
+/*
+ * Mitattu jakso, ja nyt **tavoite** eikä vakio: `Music.beatFrames` etsii sen
+ * kappaleen oman jaon joka on tätä lähinnä, jotta tahti on musiikin tahti.
+ * Pääkappaleella (156 BPM) kahdeksasosa on 11,5 → 12, eli tämä luku on yhä
+ * täsmälleen se jolla mekaniikka mitattiin.
+ */
+const PUMP_TARGET = 12;
 const PUMP_WINDOW = 4;
 const PUMP_GAIN = 20;
 const PUMP_VENT = P_METER_MAX / P_SEGMENTS;
@@ -537,7 +543,7 @@ export class Player extends Entity {
     this.facing = 1;
     this.ducking = false;
     this.pMeter = 0;
-    /* Pumping (see PUMP_PERIOD): the beat clock, and how long the last
+    /* Pumping (see PUMP_TARGET): the beat clock, and how long the last
      * successful pump still shows on the body. Both are plain numbers, so
      * `savestate.js` carries them without knowing they exist. */
     this.pumpTick = 0;
@@ -1686,8 +1692,11 @@ export class Player extends Entity {
       && Math.abs(this.vx) > MAX_WALK + 0.1;
   }
 
-  /** Where in the beat we are, 0 at the puff. See PUMP_PERIOD. */
-  get pumpPhase() { return this.pumpTick % PUMP_PERIOD; }
+  /** Where in the beat we are, 0 at the puff. See PUMP_TARGET. */
+  /** Jakso frameina, kappaleen tahdissa. Ks. `Music.beatFrames`. */
+  get pumpPeriod() { return Music.beatFrames(PUMP_TARGET); }
+
+  get pumpPhase() { return this.pumpTick % this.pumpPeriod; }
 
   /**
    * Is a press right now on the beat?
@@ -1701,7 +1710,7 @@ export class Player extends Entity {
    */
   get pumpOnBeat() {
     const p = this.pumpPhase;
-    return p < PUMP_WINDOW - 1 || p === PUMP_PERIOD - 1;
+    return p < PUMP_WINDOW - 1 || p === this.pumpPeriod - 1;
   }
 
   /**
@@ -1732,11 +1741,18 @@ export class Player extends Entity {
       this.level.add(new Puff(this.level, back, this.y + this.h - 4, {
         spread: 0.5, size: 5, life: PUMP_WINDOW * 3,
       }));
+      /* Ja kuuluu. Pöllähdys on merkki jota ei voi seurata silmällä joka on
+       * varattu siihen mihin hypätään — ks. `pumptick`. */
+      Sfx.play('pumptick');
     }
     if (!input || !input.pressed || !input.pressed.run) return;
     if (this.pumpOnBeat) {
       this.pMeter = Math.min(P_METER_MAX, this.pMeter + PUMP_GAIN);
       this.pumpFlash = PUMP_WINDOW * 2;
+      /* Osuma kuuluu ja näkyy. Kumpikaan ei ollut totta ennen tätä:
+       * `pumpFlash` asetettiin eikä sitä lukenut kukaan, ja ainoa ääni jonka
+       * pumppaava sai oli se joka kertoi hänen osuneen ohi. */
+      Sfx.play('pump', this.pMeter / P_METER_MAX);
     } else {
       /* Vent. A whole segment, so the loss is one the segmented gauge can
        * actually show — half a segment would have been a number that only the
@@ -1918,6 +1934,11 @@ export class Player extends Entity {
     if (this.star > 0) tint = STAR_TINTS[Math.floor(this.tick / 3) % STAR_TINTS.length];
     else if (this.frozen > 0) tint = TINTS.frozen;
     else if (this.invuln > 0 && Math.floor(this.tick / 2) % 2 === 0) tint = TINTS.flash;
+    /* Osuma välähtää kehossa, koska mittaria ei ole ruudulla: vauhti kerrotaan
+     * pelaajan ympärillä (`drawSpeedPulse`) eikä palkkina, joten myös sen
+     * karttuminen kuuluu kertoa siinä. Viimeisenä ketjussa — tähti, jää ja
+     * osumattomuus ovat kaikki tiloja, ja tämä on tapahtuma. */
+    else if (this.pumpFlash > 0) tint = TINTS.flash;
     const spinning = this.spin > 0;
     drawPlayer(ctx, this.x, this.y, {
       type: this.power.type,

@@ -23622,6 +23622,112 @@ const report = await page.evaluate(async () => {
     return out;
   });
 
+  /* ----------------------- rytmin opettaminen --------------------------- */
+  /*
+   * MITEN PELAAJA OPPII TAHDIN (19.8.2026).
+   *
+   * Omistaja: *"how do we teach the rhythm to the player? Is there any
+   * audiovisual feedback?"* — ja vastaus oli: on, mutta väärinpäin. Ohi
+   * mennyt painallus kuului (`sylkaisy`) ja osunut ei kuulunut eikä näkynyt;
+   * `pumpFlash` asetettiin eikä sitä lukenut yksikään rivi. Peli opetti
+   * rytmiä pelkällä rangaistuksella.
+   *
+   * Neljä väitettä, ja ensimmäinen on se joka tekee muista mahdollisia: tahti
+   * on **kappaleen** tahti. Kiinteä 12 framea on 150 BPM ja pääkappale käy
+   * 156:tta, eli korvaan syötettiin yhtä tempoa ja sormille toista.
+   */
+  {
+    const R = await page.evaluate(async () => {
+      const { Music, Sfx } = await import('/src/core/audio.js');
+      const { drawPlayer } = await import('/src/gfx/sprites.js');
+      const was = Music.current;
+
+      /* 1. Jakso seuraa kappaletta, ja pääkappaleella se on yhä mitattu 12. */
+      const periods = {};
+      for (const name of ['level', 'jaatie', 'factory', 'cave', 'bone']) {
+        Music.current = name;
+        periods[name] = Music.beatFrames(12);
+      }
+      Music.current = null;
+      const noTrack = Music.beatFrames(12);
+      Music.current = was;
+
+      /* 2. Kuka soittaa mitäkin: vakooja `Sfx.play`n päällä, yksi kenttä
+       *    pumpattuna tahdissa ja toinen tahdin ohi. */
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const heard = [];
+      const real = Sfx.play.bind(Sfx);
+      Sfx.play = (name, arg) => { heard.push(name); real(name, arg); };
+      const runPump = (onBeat) => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        heard.length = 0;
+        const blank = () => ({});
+        const inp = { held: blank(), pressed: blank(), released: blank(),
+          consume(a) { this.pressed[a] = false; } };
+        for (let f = 0; f < 240; f++) {
+          inp.held = {}; inp.pressed = {};
+          inp.held.right = true;
+          inp.held.run = true;
+          const ph = sc.player.pumpPhase;
+          const want = onBeat ? ph === 0 : ph === Math.floor(sc.player.pumpPeriod / 2);
+          if (sc.player.pumping && want) { inp.held.run = false; inp.pressed.run = true; }
+          sc.update(inp);
+        }
+        const count = (n) => heard.filter((x) => x === n).length;
+        return { tick: count('pumptick'), hit: count('pump'), miss: count('sylkaisy') };
+      };
+      const beat = runPump(true);
+      const off = runPump(false);
+      Sfx.play = real;
+
+      /* 3. Välähdys päätyy kuvaan asti: sama frame kahdesti, `pumpFlash`
+       *    nollana ja päällä, ja pikselien on erottava. */
+      const shot = (flash) => {
+        const c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        const pl = { type: 'shroom', level: 1, facing: 1, frame: 0, state: 'stand',
+          ducking: false, running: true, tick: 4, wag: 0 };
+        drawPlayer(g, 20, 20, flash ? { ...pl, tint: window.__flashTint } : pl);
+        return g.getImageData(0, 0, 64, 64).data;
+      };
+      const { TINTS } = await import('/src/gfx/sprites.js');
+      window.__flashTint = TINTS.flash;
+      const plain = shot(false);
+      const lit = shot(true);
+      let diff = 0;
+      for (let i = 0; i < plain.length; i += 4) if (plain[i] !== lit[i]) diff++;
+      return { periods, noTrack, beat, off, diff };
+    });
+
+    expect('pumpun tahti on kappaleen tahti, eikä pääkappaleella liikahda mitatusta',
+      R.periods.level === 12 && R.noTrack === 12
+      && new Set(Object.values(R.periods)).size > 1
+      && Object.values(R.periods).every((f) => f >= 6 && f <= 20),
+      `${Object.entries(R.periods).map(([k, v]) => `${k} ${v}`).join(', ')};`
+      + ` ilman kappaletta ${R.noTrack}`);
+
+    expect('tahti naksahtaa, jotta sen voi kuulla katsomatta jalkoihinsa',
+      R.beat.tick > 8 && R.off.tick > 8,
+      `tahdissa ${R.beat.tick} naksausta, ohi ${R.off.tick}`);
+
+    expect('osuma kuuluu ja ohi mennyt kuuluu eri äänellä',
+      R.beat.hit > 4 && R.beat.miss === 0 && R.off.miss > 4 && R.off.hit === 0,
+      `tahdissa ${R.beat.hit} osumaa / ${R.beat.miss} ohi,`
+      + ` tahdin ohi ${R.off.hit} osumaa / ${R.off.miss} ohi`);
+
+    expect('välähdys päätyy kuvaan asti eikä jää kentäksi jota kukaan ei lue',
+      R.diff > 40, `${R.diff} pikseliä erosi`);
+  }
+
   expect('rytmissä painettu juoksunäppäin täyttää mittarin nopeammin kuin pohjassa pidetty',
     P.beat.frames < P.hold.frames * 0.9 && P.beat.vents === 0,
     `pohjassa ${P.hold.frames} framea, rytmissä ${P.beat.frames}`

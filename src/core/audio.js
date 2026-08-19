@@ -1732,6 +1732,43 @@ const SFX = {
     noise({ dur: 0.1, from: 300, to: 1400, q: 2, gain: 0.12, attack: 0.008 });
     tone({ type: 'sawtooth', from: 80, to: 400, dur: 0.3, gain: 0.18, vibrato: 8 });
   },
+  /*
+   * METRONOMI: PUMPUN TAHTI, KUULTUNA.
+   *
+   * Tahti oli tähän asti pelkkä pöllähdys kantapäiden takana, eli merkki jota
+   * ei voi seurata samalla kun katsoo mihin hyppää. Rytmiä ei opita silmällä
+   * kun silmä on varattu.
+   *
+   * Tämä on tarkoituksella pieni: lyhyt, hiljainen, korkea naksahdus joka
+   * kuuluu vain juostessa (`updatePump`) eikä koko ajan. Sen tehtävä on antaa
+   * jaksolle **reuna** jota vasten oma painallus kuuluu joko ajoissa tai
+   * myöhässä, ei olla oma soittimensa. Kolmiaalto sinin sijaan, koska tämän
+   * pelin väylä on kapea ja puhdas sini katoaa rummun alle.
+   */
+  pumptick: () => {
+    tone({ type: 'triangle', from: 1568, dur: 0.028, gain: 0.06, hold: 0.2 });
+  },
+
+  /*
+   * OSUMA, JA SE NOUSEE MITTARIN MUKANA.
+   *
+   * Ennen tätä epäonnistuminen kuului (`sylkaisy`) ja onnistuminen ei kuulunut
+   * eikä näkynyt — `pumpFlash` asetettiin eikä sitä lukenut kukaan. Peli siis
+   * opetti rytmiä pelkällä rangaistuksella, mikä on hidas tapa opettaa mitään.
+   *
+   * Aste `t` on mittarin täyttöaste 0…1 ja se nostaa sävelen kvartin matkalla
+   * pohjalta täyteen, joten peräkkäiset osumat ovat **nouseva jono** eivätkä
+   * sama naksahdus seitsemän kertaa: korva kuulee edistymisen ennen kuin
+   * `pfull` vahvistaa sen. Sama sointu kuin `pfull`illa on tahallinen — se on
+   * saman mittarin ääni, ja tämä on sen matka.
+   */
+  pump: (t = 0) => {
+    const step = Math.round(Math.min(1, Math.max(0, t)) * 5);
+    const base = 523.25 * (2 ** (step / 12));
+    tone({ type: 'square', from: base, dur: 0.05, gain: 0.11, hold: 0.45 });
+    tone({ type: 'square', from: base * 1.5, dur: 0.07, gain: 0.07, delay: 0.02, hold: 0.3 });
+  },
+
   pfull: () => {
     /*
      * TÄYSI VAUHTIMITTARI, ja se on tämän pelin ensimmäinen sointu.
@@ -2315,9 +2352,14 @@ export function audioDiag() {
 }
 
 export const Sfx = {
-  play(name) {
+  /**
+   * `arg` on valinnainen aste, ja toistaiseksi sitä lukee yksi ääni: `pump`
+   * nousee sen mukana. Yksi luku eikä oliota, koska "kuinka pitkällä" on ainoa
+   * asia jonka soittaja voi tietää ja soinnin muodosta päättää ääni itse.
+   */
+  play(name, arg) {
     const fn = SFX[name];
-    if (fn) fn();
+    if (fn) fn(arg);
   },
   has: (name) => Object.prototype.hasOwnProperty.call(SFX, name),
   names: () => Object.keys(SFX),
@@ -3544,6 +3586,43 @@ export const Music = {
    * "tähtiraita on pelin nopein" on väite tästä taulusta, ja väitteen pitää
    * olla tarkistettavissa taulusta eikä muistista (ks. `verify.mjs`). */
   tempoOf: (name) => (TRACKS[name] || {}).tempo || 0,
+
+  /**
+   * KAPPALEEN TAHTI FRAMEINA, lähimpänä pyydettyä jaksoa.
+   *
+   * Pumppaus (`entities/player.js`) oli kiinteä 12 framea eli 150 BPM
+   * kahdeksasosina, ja pääkappale käy 156:tta. Kuusi BPM on pahin mahdollinen
+   * ero: ne osuvat yhteen, ajautuvat erilleen parissa sekunnissa ja osuvat
+   * taas — eli pelaajan korvaan syötetään yhtä tempoa samalla kun sormet
+   * tarvitsevat toista. Juuri siltä tuntuu rytmi jota ei löydä.
+   *
+   * Tämä palauttaa sen kappaleen oman jaon joka on lähimpänä `target`ia, eli
+   * mekaniikka pysyy siinä 9…16 framen haarukassa jossa se on mitattu ja on
+   * silti **musiikin tahdissa jokaisessa maailmassa**. Pääkappaleella 156 BPM
+   * kahdeksasosa on 11,5 → 12, eli mitattu luku ei liiku lainkaan.
+   *
+   * `_hurry` jätetään lukematta tarkoituksella. Kiirevaihde nostaa tempoa
+   * kesken kentän, ja jakso joka vaihtuu kesken kentän vie lihasmuistin
+   * mukanaan — kappaleen perustempo on se jonka pelaaja on ehtinyt oppia.
+   */
+  beatFrames(target) {
+    const bpm = (TRACKS[Music.current] || {}).tempo || 0;
+    if (!bpm) return target;
+    const beat = 3600 / bpm;
+    let best = target;
+    let gap = Infinity;
+    for (const div of [1, 2, 4, 8]) {
+      const frames = Math.round(beat / div);
+      /* Alle kuuden framen jako on nopeampi kuin nappia ehtii painaa, eikä
+       * mikään jako sen alapuolella ole ehdokas millään tempolla. */
+      if (frames < 6) continue;
+      if (Math.abs(frames - target) < gap) {
+        gap = Math.abs(frames - target);
+        best = frames;
+      }
+    }
+    return best;
+  },
   variation: () => Music._variation.label + (Music._changing ? ' >>' : ''),
   /** Where the accelerando has got to, as a multiple of the written tempo. */
   pace: () => paceAt(Music._track, Music._step, Music._loopLen),
