@@ -505,15 +505,15 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
-### The overworld goes isometric 2.5D
+### ✔ The overworld goes isometric 2.5D — built 19.8.2026
 
 *(Owner, 19.8.2026, having compared four renderings of the world die:
 "I think for the map I prefer iso 2.5D." The comparison is the artifact
 "Four Dice"; the four looks were the deployed one, chunky contours, isometric,
 and both together.)*
 
-The decision is the **look**, and the pieces it needs are known and were
-prototyped in that order, cheapest first:
+All five pieces are in `src/scenes/die.js` now. The decision was the **look**,
+and the pieces it needed were prototyped cheapest first, in this order:
 
 1. **Three quantised tones per tier colour** instead of a continuous depth ramp.
    This single change is most of the look: a ramp reads as a render, three steps
@@ -533,13 +533,74 @@ prototyped in that order, cheapest first:
 
 **The price, and it is real:** isometric means a fixed camera, and the forty
 frames of slow rotation that teach the eye this is a solid cannot survive one.
-Worth trying: spin, settle into the isometric angle, then open.
+Resolved the way the note guessed — spin, settle, then open — with one thing
+the note did not foresee: the settle needs a **beat of stillness at the end of
+it** (`ISO_BEAT`, 16 frames). Without it the die arrived at the isometric angle
+and started coming apart on the same frame, so the fixed camera the whole look
+is built on existed for exactly zero frames.
+
+The second surprise was geometry rather than timing. An octahedron looked at
+straight down one of its faces shows **one** face — the three that touch it sit
+at 109° and all point away — so the resting orientation could not be `facing()`
+alone. `ISO_TILT` 0.60 and `ISO_YAW` 0.58 turn it off-axis in both directions,
+which brings three faces and a shared vertex into view. That is what says
+"solid" without any shading at all, and it is why the tone quantisation could
+be taken as far as three steps without the shape going flat.
 
 Chunky contour bands were prototyped alongside and are **not** part of this
 decision. If they come back, note what made them work: the small buffer has to
 be quantised — alpha snapped to 0 or 255 and colour snapped to the palette —
 because canvas antialiases every polygon and scaling that up gives a blurred
 render rather than pixel art.
+
+### The ghost car, and where it belongs: telemetry
+
+*(Owner, 19.8.2026: "we've been talking about telemetry, but we definitely
+gotta include a ghost car run mechanic in there, right? So you can compete
+against yourself, and maybe that'll unlock something as well." — and yes, the
+frame is telemetry, not time attack. That is the useful part.)*
+
+Two halves of this are already built and they are in **different** places,
+which is the thing to notice before anyone starts.
+
+Time attack (`startRace` in `level.js`) already stores your best run per level
+and mode, compares against it at `RACE_SPLITS` checkpoints, and says which
+side of it you are on with a flash and two sounds (`edella` / `jaljessa`).
+What it stores is eight numbers. A ghost needs a path.
+
+Telemetry (`src/core/telemetry.js`) already records where you were when
+something happened — level id, tile coordinate, cause, power level — capped at
+`MAX_EVENTS` 800 and never leaving the browser. It is the right machinery and
+the wrong *shape*: it records events, and a ghost is the continuous line
+between them.
+
+So the ghost is a third thing built out of both, and the design question it
+forces is worth writing down now rather than discovering later:
+
+- **A trace is not anonymous the way an event log is.** `telemetry.js` opens
+  by promising anonymity *by construction* — no run id, no wall clock, nothing
+  that ties two records together. A path is a run id: it is one continuous
+  record of one person playing one level, with their hesitations in it. Kept
+  local it is harmless, and it must stay local — but ROADMAP §2 phase 4
+  contemplates sending telemetry somewhere one day, and a death histogram and
+  a movement trace are not the same thing to send. **Separate store, separate
+  key, and the sending decision never inherits the ghost.**
+- **What is recorded.** Position per frame is enough to be a ghost, not enough
+  to be *you* — a ghost that slides is a cursor. Facing, animation phase and
+  airborne-or-not make it read as a player.
+- **What it costs.** A minute-long run is 3600 frames; x and y as 16-bit ints
+  is 14 KB per level, times sixty-five levels. Sampling every fourth frame and
+  interpolating brings the set to roughly 230 KB, which localStorage holds.
+  Every frame for the whole game does not.
+- **What it unlocks.** The owner's "maybe that'll unlock something" is the
+  open half. Beating your own ghost is a *personal* achievement while the
+  world die's completeness bonuses are **global** ones, so a door hung on it
+  opens at a different real difficulty for every player — which is either the
+  best thing about it or the reason not to do it. Decide before building.
+
+Save compatibility (DESIGN.md item 6): a trace is new data, so it is additive
+and absent-tolerant. An old save has no ghost and the level plays exactly as
+it does today.
 
 ### A speed skill that pays while you are already fast
 

@@ -7,6 +7,7 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
+import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
@@ -293,6 +294,23 @@ const NAME_CYCLE = 1080;
 const NAME_FADE = 45;
 /** Kirjoituskorkeus: sen verran ylhäällä ettei se ole mäkien seassa. */
 const NAME_Y = 22;
+
+/**
+ * THE ROAD ARGUES BACK.
+ *
+ * Every time the player holds full P-speed, one more limit sign has been
+ * standing by the road all along — 30, then 50, then 80, then 120, and then
+ * the sign that says the road has stopped setting limits. It is a joke with
+ * four beats, so it needs four beats of room: `SIGN_GAP` pixels of camera
+ * between them, which at running speed is several seconds and never two signs
+ * in one straight.
+ *
+ * The escalation is the whole gag and it only works in one direction. A road
+ * that raised the limit *back down* would be nagging; a road that keeps
+ * conceding is funny, and the last sign is the concession.
+ */
+const SIGN_LIMITS = [30, 50, 80, 120, 0];
+const SIGN_GAP = 640;
 
 /*
  * AIKA-AJON JAKO. Nauhan kadottua tämä on ainoa lukema joka ilmestyy keskelle
@@ -1815,6 +1833,16 @@ export class LevelScene {
      * `driftFrames` framea siitä kun se viimeksi siirtyi. Ks. `DRIFT_GRACE`. */
     this.driftAt = { x: 0, y: 0 };
     this.driftFrames = 0;
+
+    /* Roadside props. Everything about them is in `src/gfx/props.js`; what
+     * belongs here is only *when* one is placed, which is the part that knows
+     * about the level. `signLimit` walks the escalating limits and `signAt`
+     * is the camera position of the last one, so the road cannot shout three
+     * numbers at the same straight. */
+    this.props = new PropLayer();
+    this.signLimit = 0;
+    this.signAt = -1e9;
+    this.cardAt = -1e9;
     this.stallFrames = 0;
     this.stuckLogged = new Set();
     this.telemetryDone = false;
@@ -4588,6 +4616,7 @@ export class LevelScene {
     this.updateEntities();
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
+    this.updateProps();
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
@@ -6185,6 +6214,11 @@ export class LevelScene {
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock);
+    /* Props sit in front of the haze that softens the hill/tilemap seam: they
+     * are roadside and the hills are landscape, so the haze belongs behind
+     * them. Still behind the camera translate — a prop is backdrop, and the
+     * layer does its own parallax. */
+    this.props.draw(ctx, this.cam.x, VIEW_W, this.viewH + bandDrop);
     /* Nimi kuuluu taivaalle eikä nauhaan, ks. `drawSkyName`. Piirretään heti
      * taustan päälle ja ennen kameraa: savukirjoitus on kaukana, eikä kaukana
      * oleva liiku kameran mukana kuin nimeksi. */
@@ -6454,8 +6488,60 @@ export class LevelScene {
    * Ei linnakkeessa eikä muissa sisätiloissa (`bg === 'none'`): siellä ei ole
    * taivasta johon kirjoittaa, ja seinään ilmestyvä teksti olisi taas HUD.
    */
+  /**
+   * WHEN A SIGN IS PLACED. Where and how it is drawn is `src/gfx/props.js`.
+   *
+   * Both of the things the road says are placed here rather than drawn here,
+   * and that is the point of the split: placing is a level decision (how fast
+   * is the player going, how long since the name was last said) while drawing
+   * is scenery. Once placed, neither the level nor the player can move a prop
+   * — it stands in the world and the world scrolls past it.
+   *
+   * Only where there is a road. A vertical level's camera climbs instead of
+   * running, so a roadside sign would never arrive; there the name goes back
+   * to the sky, which is why `drawSkyName` tests the same two conditions from
+   * the other side. One level, one way of saying it — DESIGN.md item 8.
+   */
+  updateProps() {
+    const camX = this.cam.x;
+    this.props.update(camX, VIEW_W);
+    if (this.vertical || this.def.bg === 'none') {
+      /* A segmented level can turn vertical **under a sign that is already
+       * standing there** (`this.vertical` is per segment, not per level). The
+       * layer is reaped by camera movement and a climb has almost none, so a
+       * sign left behind would not scroll away — it would park in mid-air for
+       * the rest of the climb. Clearing is the only honest answer, and the
+       * name's clock is reset with it so the road says it again when there is
+       * a road again. */
+      if (this.props.list.length) {
+        this.props.clear();
+        this.cardAt = -1e9;
+      }
+      return;
+    }
+    if (this.state !== 'play') return;
+
+    /* The name keeps the cycle the sky writing kept: once on arrival, and
+     * again every NAME_CYCLE, so the name can be *gone to look at* rather
+     * than read once and lost. */
+    if (this.tick - this.cardAt > NAME_CYCLE && !this.props.has('card')) {
+      this.cardAt = this.tick;
+      this.props.place('card', camX, VIEW_W, { text: this.title });
+    }
+
+    if (this.player && this.player.pFull && this.signLimit < SIGN_LIMITS.length
+        && camX - this.signAt > SIGN_GAP && !this.props.has('speed')) {
+      this.props.place('speed', camX, VIEW_W, { limit: SIGN_LIMITS[this.signLimit] });
+      this.signLimit++;
+      this.signAt = camX;
+    }
+  }
+
   drawSkyName(ctx) {
-    if (this.def.bg === 'none') return;
+    /* Vertical levels only, since #111: where the camera runs sideways the
+     * name is a roadside board instead (`updateProps`), and the same name in
+     * two places at once is the thing DESIGN.md item 8 forbids. */
+    if (this.def.bg === 'none' || !this.vertical) return;
     const t = this.tick;
     let a = 0;
     if (t < NAME_INTRO) {
