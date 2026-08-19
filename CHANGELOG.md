@@ -7,6 +7,31 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.47 — a red coin looks like sixty-four yellow ones
+
+Owner: *"the red coins are WAY TOO SMALL in relation to the yellow ones.
+Shouldn't the red ones be bigger? That would make conceptual sense, too."*
+
+It does, and they were lying about the scale. A red coin **is** `RED_COST` — 64
+yellow ones — and it was drawn three visible pixels tall and narrower than the
+yellow row beside it. The pile should look like what it cost.
+
+Discs go 5 px to 9 with the step 3 to 6, so a life now stands taller than six
+yellow coins stacked. That is still far less than sixty-four, and it is not
+meant to be a scale drawing: what the eye reads is the **order**, and the order
+was wrong.
+
+**The tube widened, 10 px to 14, and that was free only now.** `OVERLAY.left`
+sat at 18 precisely because the tube owned the edge — and there is nothing left
+in that corner to avoid. The score left on the 18th, the coin count with it, and
+the life pips the day after. Three readouts had to go before the fourth could
+have their room.
+
+The height scale is untouched: two pixels per coin and a hundred coins to the
+tube are measured numbers, and width has no part in them.
+
+---
+
 ## v26.08.19.46 — the world die, and it opens
 
 Owner: *"maybe I wasn't being clear: I wanted new VISUALS and a new GAME

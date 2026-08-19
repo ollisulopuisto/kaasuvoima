@@ -103,8 +103,10 @@ const HURRY_TIME = 100;
  * kysymys "mikä näistä pitää olla näkyvissä silloinkin kun se ei kerro mitään".
  * Vastaus oli: ei mikään.
  *
- *   `left`  18  Vasen ylänurkka. 18 eikä 6, koska kolikkoputkilo vie reunan
- *               (`TUBE_X` 3 + `TUBE_W` 10 = 13, ja viisi pikseliä väliin).
+ *   `left`  18  Vasen ylänurkka, ja **tyhjä 19.8.2026 alkaen**: pisteet,
+ *               elämät ja kolikkoluku ovat kaikki lähteneet ruudulta. Luku on
+ *               yhä tässä koska se on putkilon oikea raja (`TUBE_X` 3 +
+ *               `TUBE_W` 14 = 17), eli se kertoo mihin asti reuna on varattu.
  *   `right` 314 Oikea ylänurkka, oikeaan reunustettuna.
  *   `box`   294 Varalokero, oikea alanurkka. Sama x kuin kartan paneelissa.
  *
@@ -157,7 +159,24 @@ const HUD_DIM = 0;
  * koko putkilo.
  */
 const TUBE_X = 3;
-const TUBE_W = 10;
+/*
+ * PUTKILON LEVEYS, ja se kasvoi 10:stä 14:ään (19.8.2026).
+ *
+ * Omistaja: *"the red coins are WAY TOO SMALL in relation to the yellow ones.
+ * Shouldn't the red ones be bigger? That would make conceptual sense, too."*
+ *
+ * Ja tekee: punainen kolikko **on** 64 keltaista (`RED_COST`), joten se joka on
+ * kolme pikseliä korkea ja kapeampi kuin keltainen rivi valehtelee mittakaavasta
+ * — pinon pitää näyttää siltä mitä se maksoi.
+ *
+ * Leveneminen oli ilmaista, ja se on ilmaista **vasta nyt**: `OVERLAY.left` oli
+ * 18 juuri siksi että putkilo vei reunan (`TUBE_X` 3 + `TUBE_W` 10 = 13), ja
+ * yläkulmassa ei ole enää mitään mitä väistää — pisteet, kolikkoluku ja
+ * elämälukema ovat kaikki lähteneet. Korkeusasteikkoon ei koskettu: kaksi
+ * pikseliä kolikkoa kohti ja sata kolikkoa koko putkilo ovat mitattuja lukuja
+ * eikä leveydellä ole niihin osaa.
+ */
+const TUBE_W = 14;
 const TUBE_PAD = 4;
 const COIN_PX = 2;
 export const COIN_CAP = 100;
@@ -217,9 +236,15 @@ export const COIN_CAP = 100;
  * pino luetaan pinoksi eikä palkiksi, ja jokainen kiekko on silti erikseen
  * laskettavissa. Se on juuri se ero jota omistaja pyysi — punaisia on *tasan*
  * niin monta kuin niitä näkyy, keltaisia *suunnilleen* pinnan verran.
+ *
+ * Mitat kasvoivat 19.8.2026 (5/3 -> 9/6) samasta syystä kuin putkilo leveni:
+ * yksi punainen on 64 keltaista, ja kolmen pikselin raita ei ole 64:n näköinen.
+ * Nyt kiekko on korkeampi kuin kuusi keltaista kolikkoa päällekkäin, mikä on
+ * yhä vähemmän kuin sen hinta — mutta se on **enemmän** kuin naapurinsa, ja
+ * suuruusjärjestys on se minkä silmä lukee.
  */
-export const TUBE_RED_H = 5;
-export const TUBE_RED_STEP = 3;
+export const TUBE_RED_H = 9;
+export const TUBE_RED_STEP = 6;
 /** Kuinka monta kiekkoa piirretään yksitellen; loput ovat plus. */
 export const TUBE_RED_MAX = 10;
 

@@ -505,6 +505,42 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### The overworld goes isometric 2.5D
+
+*(Owner, 19.8.2026, having compared four renderings of the world die:
+"I think for the map I prefer iso 2.5D." The comparison is the artifact
+"Four Dice"; the four looks were the deployed one, chunky contours, isometric,
+and both together.)*
+
+The decision is the **look**, and the pieces it needs are known and were
+prototyped in that order, cheapest first:
+
+1. **Three quantised tones per tier colour** instead of a continuous depth ramp.
+   This single change is most of the look: a ramp reads as a render, three steps
+   read as something drawn by hand.
+2. **A hard drop shadow** — the silhouette, flat, offset down and right, no
+   blur. On a black ground it does more for depth than shading does.
+3. **A floor of chunky dots.** Without a floor there is nothing for the shadow
+   to fall on and nothing to fix the camera angle.
+4. **The net lies down on that floor** when the die opens, in the same
+   projection, rather than lying flat against the glass. That is the whole idea
+   in one move: a solid becomes a map without becoming a different object. The
+   squash is 0.62 — 0.42 was tried and pressed the open map into an unreadable
+   band.
+5. **A thick silhouette outline**, two or three chunks of the darkest tone,
+   which reads as extrusion without the geometry. Extruding an octahedron's
+   faces for real leaves gaps where they meet.
+
+**The price, and it is real:** isometric means a fixed camera, and the forty
+frames of slow rotation that teach the eye this is a solid cannot survive one.
+Worth trying: spin, settle into the isometric angle, then open.
+
+Chunky contour bands were prototyped alongside and are **not** part of this
+decision. If they come back, note what made them work: the small buffer has to
+be quantised — alpha snapped to 0 or 255 and colour snapped to the palette —
+because canvas antialiases every polygon and scaling that up gives a blurred
+render rather than pixel art.
+
 ### A speed skill that pays while you are already fast
 
 *(Owner, 19.8.2026, on the pumping rhythm: "is the whole mechanism overwrought,
@@ -538,6 +574,66 @@ Everything the removal left behind is still in git: the beat clock, the window,
 the tick and the rising hit sound, and `Music.beatFrames`, which locked the
 period to the playing track's own tempo. If a rhythm ever comes back, it comes
 back on the music.
+
+### Generative level design worth stealing from
+
+*(Owner, 19.8.2026: "search GitHub and the web for generative level creation
+mechanisms. The current levels still feel too… flat, not just literally but
+there's not enough variation. Something fractal, generative, organic, genetic?")*
+
+Not started — a research task, and the brief is **variation** rather than
+novelty for its own sake. What the generator does today is honest and narrow: it
+samples mined pacing histograms for rhythm and arranges this game's own set
+pieces against a measured jump budget. Every level therefore has the same
+*grammar*, and that is exactly what "not enough variation" means — the pieces
+differ, the sentence structure does not.
+
+Worth reading up on before writing anything: search-based procedural generation
+with a fitness function (the difficulty meter is already a fitness function),
+genetic approaches that breed and mutate whole levels, cellular automata for
+cave systems, WaveFunctionCollapse for local-constraint tiling, grammar-based
+expansion. The measuring rig this repo already has — `difficulty.mjs`,
+`playable.mjs`, `variety.mjs`, `curriculum.mjs` — is the expensive half of any
+search-based method, and it exists.
+
+### Trouble jumping in 1-1 (19.8.2026, unresolved)
+
+Owner, playing the deployed build: *"I had trouble jumping in 1-1!"*
+
+**First suspect, and it is ours.** The slope catapult cleared `coyote` on launch
+(v26.08.19.42), on the grounds that a body thrown by a ramp did not walk off an
+edge. That removed a free full jump that had existed, untimed, since slopes did
+— and 1-1 has slopes now, because it took `terrain: '1-1a'` in the terrain pass
+(v26.08.19.35). So the level most people play most has both a new ground profile
+and one fewer forgiving jump, and both arrived within a day.
+
+`playable.mjs` still clears 1-1 at power 0, so nothing is impossible — this is
+about feel, which is the thing the gates cannot measure. Check in this order:
+whether the coyote clear is what changed it, whether the terrain seed `1-1a`
+put a ramp where the first jumps are, and only then anything about the jump
+itself.
+
+### Two overworld ideas from play, not yet built
+
+*(Owner, 19.8.2026.)*
+
+**Speed limit signs in the parallax.** Road signs drifting past in the backdrop,
+posting a limit; a joke, and also the only place the game would ever name its
+three speed tiers (walk 1.5, run 2.5, P 3.5). The refinement that makes it work
+is the owner's: **insert the sign dynamically ahead of the player so it scrolls
+into view**, so it reads as scenery that was always there while actually being a
+reaction to how fast they are going. One constraint carried over from 17.8: any
+flash must not be full-screen, because full-screen colour is this game's
+language for taking damage and an advantage must not speak in the voice of a
+loss.
+
+**The world-level card scrolls through instead of being posted.** Same trick
+applied to `MAAILMA 1-1`: it enters from one side, passes, and leaves as the
+player moves, rather than appearing and fading in place.
+
+Both share one idea worth keeping: a readout that arrives *through the world*
+is furniture, and furniture is the direction every HUD element in this game has
+already gone.
 
 ### Render audio offline instead of listening to it live
 
