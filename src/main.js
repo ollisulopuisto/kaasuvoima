@@ -11,6 +11,7 @@ import {
   InterludeScene, GameOverScene, EndingScene, VictoryScene,
 } from './scenes/cards.js';
 import { DieScene } from './scenes/die.js';
+import { GlobeScene } from './scenes/globe.js';
 import { makePower } from './entities/player.js';
 import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
@@ -710,6 +711,22 @@ class Game {
      * Ovivalinta suoraan, ilman linnaketta: warppi on kehittäjän oikotie, ja
      * oikotien kuuluu viedä samaan ruutuun johon linnakekin vie.
      */
+    /*
+     * A THIRD PRESS FROM THE DIE OPENS THE GLOBE (19.8.2026).
+     *
+     * The number row is full — 1 to 0 are all spoken for — and the same
+     * argument that put the world warp on this key applies again: one key
+     * that means "skip ahead to the next way of looking at this" beats a new
+     * one nobody remembers. Map, then die, then globe, in the order they were
+     * built, so the prototype is reachable without displacing either of the
+     * screens the gate already tests.
+     */
+    if (this.scene instanceof DieScene) {
+      this.toast('WARP: PALLO (KOE)');
+      Sfx.play('powerup');
+      this.setScene(new GlobeScene(this, this.state.world));
+      return;
+    }
     this.state.debugWarped = true;
     this.persist();
     this.toast('WARP: OVET (PISTETAULU POIS)');

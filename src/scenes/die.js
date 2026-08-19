@@ -42,6 +42,7 @@ import { WORLDS, worldDoors, worldTier, pipsFor } from '../data/worlds.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { TIER_COLORS, PIP_OFF } from './worldmap.js';
 import { clamp } from '../core/utils.js';
+import { qMul, qNorm, qBetween, qSlerp, qApply } from '../core/quat.js';
 
 const VIEW_W = 320;
 const VIEW_H = 240;
@@ -92,71 +93,6 @@ function faceVerts(i) {
 function faceNormal(i) {
   const k = 1 / Math.sqrt(3);
   return [(i & 1 ? 1 : -1) * k, (i & 2 ? 1 : -1) * k, (i & 4 ? 1 : -1) * k];
-}
-
-/* --------------------------- kvaternionit ----------------------------- */
-/* Kierto kvaternioina eikä kulmina, koska kappale käännetään **tahkosta
- * toiseen**: kahden asennon välillä on aina lyhin tie, ja slerp löytää sen
- * ilman että kukaan valitsee akseleita käsin. Eulerin kulmilla sama käännös
- * olisi kolme lukua joista kaksi on väärin juuri navan kohdalla. */
-const qMul = (a, b) => [
-  a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
-  a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
-  a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
-];
-const qNorm = (q) => {
-  const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
-  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
-};
-function qBetween(from, to) {
-  const d = from[0] * to[0] + from[1] * to[1] + from[2] * to[2];
-  if (d > 0.99999) return [0, 0, 0, 1];
-  if (d < -0.99999) {
-    /* Vastakkaiset normaalit: akseli on mikä tahansa kohtisuora, ja tämä on
-     * se tapaus joka unohtuu — kaksi tahkoa ovat vastakkaiset kolmesti. */
-    let ax = [1, 0, 0];
-    if (Math.abs(from[0]) > 0.9) ax = [0, 1, 0];
-    const c = [
-      from[1] * ax[2] - from[2] * ax[1],
-      from[2] * ax[0] - from[0] * ax[2],
-      from[0] * ax[1] - from[1] * ax[0],
-    ];
-    const n = Math.hypot(...c) || 1;
-    return [c[0] / n, c[1] / n, c[2] / n, 0];
-  }
-  const c = [
-    from[1] * to[2] - from[2] * to[1],
-    from[2] * to[0] - from[0] * to[2],
-    from[0] * to[1] - from[1] * to[0],
-  ];
-  return qNorm([c[0], c[1], c[2], 1 + d]);
-}
-function qSlerp(a, b, t) {
-  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-  let e = b;
-  if (d < 0) { e = [-b[0], -b[1], -b[2], -b[3]]; d = -d; }
-  if (d > 0.9995) {
-    return qNorm([a[0] + (e[0] - a[0]) * t, a[1] + (e[1] - a[1]) * t,
-      a[2] + (e[2] - a[2]) * t, a[3] + (e[3] - a[3]) * t]);
-  }
-  const th = Math.acos(clamp(d, -1, 1));
-  const s = Math.sin(th);
-  const wa = Math.sin((1 - t) * th) / s;
-  const wb = Math.sin(t * th) / s;
-  return [a[0] * wa + e[0] * wb, a[1] * wa + e[1] * wb,
-    a[2] * wa + e[2] * wb, a[3] * wa + e[3] * wb];
-}
-function qApply(q, v) {
-  const [x, y, z, w] = q;
-  const tx = 2 * (y * v[2] - z * v[1]);
-  const ty = 2 * (z * v[0] - x * v[2]);
-  const tz = 2 * (x * v[1] - y * v[0]);
-  return [
-    v[0] + w * tx + (y * tz - z * ty),
-    v[1] + w * ty + (z * tx - x * tz),
-    v[2] + w * tz + (x * ty - y * tx),
-  ];
 }
 
 /** Se kierto joka kääntää tahkon `i` katsojaa kohti. */
@@ -334,19 +270,7 @@ export class DieScene {
       /* Hidas kierto y-akselin ympäri: pieni kvaternioni joka framelle, ja
        * `qMul` sen eteen niin että kierto tapahtuu **maailman** akselin ympäri
        * eikä kappaleen, jolloin se näyttää pyörivältä eikä kieppuvalta. */
-      /*
-       * 0.030 and not 0.012, and an onion skin of the whole sequence is what
-       * caught it: at 0.012 the forty frames of `HOLD_FRAMES` turn the die
-       * **27°**, less than a third of a right angle, and the stacked poses
-       * showed a solid standing almost still rather than one being shown off.
-       * A rotation that small cannot do the job this phase exists for — the
-       * eye needs to see faces leave and arrive to believe there is a back.
-       *
-       * 0.030 gives 69° in the same forty frames, which brings a new face
-       * round and takes one away, and it makes the settle that follows a real
-       * swing into place instead of the small correction it had become.
-       */
-      const a = 0.030;
+      const a = 0.012;
       this.rot = qNorm(qMul([0, Math.sin(a), 0, Math.cos(a)], this.rot));
       if (this.tick >= HOLD_FRAMES) {
         /* Spin over, camera not yet fixed. See `isoRest`: the settle is the
