@@ -23622,6 +23622,109 @@ const report = await page.evaluate(async () => {
     return out;
   });
 
+  /* ------------------------- vauhdin merkit ----------------------------- */
+  /*
+   * MITÄ TÄYSI VAUHTI TEKEE RUUDULLE (19.8.2026).
+   *
+   * Omistaja: *"when we reach full speed, the entire screen should warble.
+   * Maybe the screen shifts a bit so you see more of what's ahead, to
+   * compensate for the speed."*
+   *
+   * Kolme väitettä, ja kolmas on se jota ei saa rikkoa vahingossa: huojunta on
+   * **aalto eikä väri**. Kokoruudun väri on tässä pelissä osuman kieli
+   * (17.8.2026, ks. *"merkin on jätettävä ruudun toinen laita rauhaan"*), ja
+   * juuri siksi vauhti puhuu geometrialla — sitä ei voi sekoittaa osumaan.
+   */
+  {
+    const V = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { MAX_RUN, MAX_P } = await import('/src/entities/player.js');
+      const game = window.sfb3;
+      const mk = () => {
+        game.state = { lives: 3, coins: 60, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+        const sc = new LevelScene(game, '1-1');
+        game.setScene(sc);
+        sc.time = 9999;
+        sc.clockStopped = true;
+        return sc;
+      };
+      /* Katse edelle kahdella nopeudella, sama kenttä, kamera ajettuna
+       * tasapainoon kummallakin. */
+      const leanAt = (vx) => {
+        const sc = mk();
+        for (let f = 0; f < 200; f++) {
+          sc.player.vx = vx;
+          sc.player.x += vx;
+          sc.updateCamera();
+        }
+        return Math.abs(Math.round(sc.camLook));
+      };
+      const runLean = leanAt(MAX_RUN);
+      const pLean = leanAt(MAX_P);
+
+      /* Huojunta: sama frame, mittari täynnä ja tyhjä. */
+      const sc = mk();
+      sc.player.pMeter = 0;
+      const calm = sc.warbleOffset();
+      const { P_METER_MAX } = await import('/src/entities/player.js');
+      sc.player.pMeter = P_METER_MAX;
+      let amp = 0;
+      let moved = 0;
+      for (let t = 0; t < 240; t++) {
+        sc.tick = t;
+        const w = sc.warbleOffset();
+        amp = Math.max(amp, Math.abs(w.x), Math.abs(w.y));
+        if (w.x !== 0 || w.y !== 0) moved++;
+      }
+      return { runLean, pLean, calm, amp, moved, full: sc.player.pFull };
+    });
+
+    expect('katse edelle kasvaa P-nopeuteen asti eikä pysähdy juoksukattoon',
+      V.pLean > V.runLean * 1.2 && V.runLean > 0,
+      `juoksuvauhdilla ${V.runLean} px, P-vauhdilla ${V.pLean} px`);
+
+    expect('täysi mittari huojuttaa ruutua, tyhjä ei, ja huojunta on yhden pikselin',
+      V.calm.x === 0 && V.calm.y === 0 && V.full && V.amp === 1 && V.moved > 60,
+      `tyhjänä ${V.calm.x},${V.calm.y}; täynnä amplitudi ${V.amp} px,`
+      + ` liikkeessä ${V.moved}/240 framea`);
+  }
+
+  /* --------------------------- ketjun elämä ----------------------------- */
+  /*
+   * KETJUN ELÄMÄ TULEE VAIN KAKKOSEN POTENSSILLA (19.8.2026).
+   *
+   * Ennen tätä ehto oli *"tikapuut loppuivat"*: yhdeksäs tappo maksoi elämän
+   * ja niin maksoi jokainen sen jälkeen, eli kahdentoista ketju antoi neljä.
+   * Omistaja: *"chained kills give 1UP too easily."*
+   */
+  {
+    const C = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { CHAIN_LIFE } = await import('/src/core/points.js');
+      const game = window.sfb3;
+      game.state = { lives: 0, coins: 60, score: 0, power: { type: null, level: 0 },
+        reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+        secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0, bestTimes: {} };
+      const sc = new LevelScene(game, '1-1');
+      game.setScene(sc);
+      const owner = { chain: 0 };
+      sc.chainOwner = owner;
+      const lives = [];
+      for (let k = 0; k < 40; k++) {
+        const before = game.state.lives;
+        sc.chainReward(256, sc.player.cx, sc.player.cy);
+        if (game.state.lives > before) lives.push(k + 1);
+      }
+      return { lives, first: CHAIN_LIFE, score: game.state.score };
+    });
+
+    expect('ketju maksaa elämän vain kakkosen potenssilla, ensimmäisen kerran 16:lla',
+      C.lives.join(',') === '16,32' && C.first === 16,
+      `elämät ketjun pituuksilla ${C.lives.join(', ') || 'ei yhtään'}`);
+  }
+
   /* ----------------------- rytmin opettaminen --------------------------- */
   /*
    * MITEN PELAAJA OPPII TAHDIN (19.8.2026).

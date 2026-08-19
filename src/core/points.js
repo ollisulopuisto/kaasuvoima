@@ -121,6 +121,20 @@ export const GOAL_STEPS = [p2(7), p2(9), p2(10), p2(12), p2(13)];
 export const CHAIN = [0, 1, 2, 3, 4, 5, 6, 7].map(p2);
 
 /**
+ * KUINKA PITKÄ KETJU MAKSAA ELÄMÄN, ja siitä eteenpäin joka toinen potenssi.
+ *
+ * Ennen 19.8.2026 elämä tuli yhdeksännestä taposta — ja kymmenennestä, ja
+ * jokaisesta seuraavasta, koska ehto oli *"tikapuut loppuivat"* eikä *"tässä
+ * on porras"*. Kahdentoista ketju maksoi neljä elämää.
+ *
+ * Kuusitoista, ja sen jälkeen 32 ja 64: sama asteikko kuin koko tässä
+ * tiedostossa, ja jokainen porras on kaksi kertaa edellisen työ. Kahdeksan on
+ * tahallaan ilman elämää — se on se tappo jolla kerroin saavuttaa kattonsa
+ * (128× vihollisen arvo), eli palkinto siinä missä muutkin, mutta pisteinä.
+ */
+export const CHAIN_LIFE = 16;
+
+/**
  * Kuplan puhkaisu. Kerroin vihollisen omaan arvoon, ja 2¹ eli kaksinkertainen:
  * pienin kerroin joka on olemassa tällä asteikolla, ja siksi se on tässä.
  */

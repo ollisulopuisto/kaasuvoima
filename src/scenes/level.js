@@ -11,7 +11,7 @@ import { drawGoal, drawItem, drawLifeCoins,
 } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
-  Player, P_METER_MAX, MAX_RUN, HURT_FLASH, POWER_NAMES, makePower,
+  Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
 } from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
@@ -22,7 +22,7 @@ import { logDeath, logClear, logStuck, levelSummary } from '../core/telemetry.js
 import { noteSecret, tileKey, SKY, CAVE } from '../core/secrets.js';
 import { GRAVITY, GRAVITY_HELD_CUTOFF } from '../level/physics.js';
 /* Kaikki pistearvot ovat yhdessä tiedostossa, ks. `points.js`. */
-import { PTS, COIN, TIME_SECOND, GOAL_STEPS, CHAIN } from '../core/points.js';
+import { PTS, COIN, TIME_SECOND, GOAL_STEPS, CHAIN, CHAIN_LIFE } from '../core/points.js';
 import {
   RACE_SPLITS, SPLIT_FLASH, SPLIT_COLORS, NEW_RECORD, FIRST_TIME, RUN_LABEL, BEST_LABEL,
   bestFor, setBest, raceKey, formatTime, formatDelta,
@@ -1327,6 +1327,9 @@ const DOOR_OPEN_FRAMES = 30;
  *     `kurnutus`/`loikka`). Valo tulee, valo menee. Menevä on lyhyempi kuin
  *     tuleva, koska se soi useammin.
  */
+/** Huojunnan amplitudi pikseleinä täydellä mittarilla. Ks. `warbleOffset`. */
+const WARBLE_AMP = 1;
+
 const SPEED_PULSE_FULL = 14;
 const SPEED_PULSE_SPENT = 9;
 
@@ -2450,11 +2453,40 @@ export class LevelScene {
    * väite kahdesta sinistä eikä mitattava asia.
    */
   shakeOffset() {
-    if (this.shakeAmp <= 0) return { x: 0, y: 0 };
+    const wob = this.warbleOffset();
+    if (this.shakeAmp <= 0) return wob;
     const w = SHAKE_AXES[this.shakeAxis] || SHAKE_AXES.both;
     return {
-      x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp * w.x),
-      y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * w.y),
+      x: Math.round(Math.sin(this.tick * 2.1) * this.shakeAmp * w.x) + wob.x,
+      y: Math.round(Math.cos(this.tick * 3.3) * this.shakeAmp * w.y) + wob.y,
+    };
+  }
+
+  /**
+   * HUOJUNTA TÄYDELLÄ MITTARILLA — ja se on aalto eikä tärinä.
+   *
+   * Omistaja 19.8.2026: *"when we reach full speed, the entire screen should
+   * warble or shake."* Kaksi eri asiaa, ja ero on merkityksessä: `shake` on
+   * satunnaista ja lyhyttä, ja tämä peli käyttää sitä **iskuihin** —
+   * järistykseen, maahaniskuun, jouseen. Jos vauhti tärisisi samalla tavalla,
+   * pelin kovin liike lukisi jatkuvana osumana.
+   *
+   * Huojunta on siis siniaalto: hidas, pehmeä, aina samassa vaiheessa itsensä
+   * kanssa. Amplitudi on **yksi pikseli** ja se on mitattu ylärajaksi eikä
+   * makuasiaksi — kaksi pikseliä siirtää laattarivin näkyvästi pois ruudukosta
+   * ja tekee hypyn arvioimisesta vaikeampaa juuri sillä nopeudella jolla se on
+   * jo vaikeinta. Vauhdin pitää tuntua hallinnan reunalta, ei sen takaa.
+   *
+   * Vain vaakakentässä: pystykentässä kamera **leikkaa** sivun kerrallaan eikä
+   * seuraa, ja huojuva leikkaus on rikki eikä nopea.
+   */
+  warbleOffset() {
+    if (this.vertical || this.state !== 'play' || !this.player || !this.player.pFull) {
+      return { x: 0, y: 0 };
+    }
+    return {
+      x: Math.round(Math.sin(this.tick * 0.55) * WARBLE_AMP),
+      y: Math.round(Math.sin(this.tick * 0.31) * WARBLE_AMP),
     };
   }
 
@@ -3131,8 +3163,26 @@ export class LevelScene {
     if (!owner) return this.awardScore(points, x, y);
     const n = owner.chain || 0;
     owner.chain = n + 1;
-    if (n >= CHAIN.length) return this.gainLife(x, y);
-    return this.awardScore(points * CHAIN[n], x, y);
+    /*
+     * KETJUN ELÄMÄ ON HARVINAINEN, JA SE OLI VUOTO (19.8.2026).
+     *
+     * Rivi oli `if (n >= CHAIN.length) return this.gainLife(x, y)`, eli
+     * yhdeksäs tappo maksoi elämän — **ja niin maksoi kymmenes, yhdestoista ja
+     * jokainen seuraava.** Kahdentoista ketju antoi neljä elämää. Omistaja:
+     * *"chained kills give 1UP too easily. Maybe 8 chained gives you
+     * something, then 16 something more, then 32."*
+     *
+     * Nyt tikapuut maksavat pisteinä loppuun asti — yli kahdeksannen kerroin
+     * pysyy ylimmässä, 128× — ja **elämä tulee vain kakkosen potenssilla**,
+     * `CHAIN_LIFE`stä alkaen: 16., 32., 64. Sama asteikko kuin pistetaulukolla
+     * (`points.js`), ja jokainen porras on kaksi kertaa edellisen työ.
+     *
+     * Kahdeksas ei anna elämää eikä se ole tyhjä: se on se tappo jolla kerroin
+     * saavuttaa kattonsa, ja katto on 128 kertaa vihollisen arvo.
+     */
+    const len = n + 1;
+    if (len >= CHAIN_LIFE && (len & (len - 1)) === 0) this.gainLife(x, y);
+    return this.awardScore(points * CHAIN[Math.min(n, CHAIN.length - 1)], x, y);
   }
 
   gainLife(x, y) {
@@ -5440,8 +5490,23 @@ export class LevelScene {
       this.cam.x = clamp(this.player.cx - VIEW_W / 2, 0, Math.max(0, this.widthPx - VIEW_W));
       return;
     }
+    /*
+     * KATSE EDELLE, JA SE JATKUU P-NOPEUTEEN ASTI (19.8.2026).
+     *
+     * Kerroin oli `Math.min(1, speed / MAX_RUN)`, eli nojaus kyllästyi
+     * juoksukattoon 2,5. P-nopeus on 3,5, joten mittarin täyttäminen osti
+     * *lisää vauhtia mutta ei yhtään lisää varoitusaikaa* — katse lakkasi
+     * kompensoimasta täsmälleen siinä kohdassa jossa kompensoitavaa tuli
+     * lisää. Omistaja 19.8.2026: *"maybe the screen shifts a bit so you see
+     * more of what's ahead of you, to compensate for the speed."*
+     *
+     * Katto on nyt `MAX_P / MAX_RUN` eli 1,4: täydellä mittarilla nojaus on
+     * 34 px:n sijaan 48 px. Suhde on sama kuin nopeuksien — se mitä ehtii
+     * nähdä kasvaa täsmälleen sen mukana mitä ehtii tulla vastaan.
+     */
     const speed = Math.abs(p.vx);
-    const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * Math.min(1, speed / MAX_RUN) : 0;
+    const lean = Math.min(MAX_P / MAX_RUN, speed / MAX_RUN);
+    const wanted = speed > 0.4 ? Math.sign(p.vx) * CAM_LOOK_AHEAD * lean : 0;
     this.camLook += (wanted - this.camLook) * (Math.abs(wanted) > Math.abs(this.camLook)
       ? CAM_LOOK_GAIN : CAM_LOOK_RETURN);
 

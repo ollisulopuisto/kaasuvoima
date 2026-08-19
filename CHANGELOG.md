@@ -7,6 +7,83 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.19.40 — the rhythm is the music's, and full speed is felt
+
+Two owner questions in one batch, and both had an answer already half-written in
+the code.
+
+### "How do we teach the rhythm? Is there any audiovisual feedback?"
+
+There was, and it was **backwards**. A missed press made a sound (`sylkaisy`);
+a landed one made none — `pumpFlash` was assigned on every hit and not one line
+in the game read it. The only signal the mechanic gave was the one that says
+*wrong*.
+
+**And the tempo was fighting itself.** The pump was a fixed 12 frames, which is
+150 BPM as eighths. The level track runs at **156**. Six BPM apart is the worst
+possible distance: they lock, drift apart over about two seconds, and re-lock —
+the ear is fed one tempo while the fingers need another, which is exactly what a
+rhythm you cannot find feels like.
+
+`Music.beatFrames(target)` now returns the playing track's own subdivision
+nearest the measured 12: level 12, jaatie 13, factory 11, cave 10, bone 9. The
+mechanic stays inside the band it was measured in and is locked to the music in
+every world — and on the main track the number does not move at all, which the
+gate proves by still reading 100 frames holding against 78 on the beat.
+
+Base tempo, never the hurry gear: a period that changes mid-level takes the
+muscle memory with it.
+
+Then the three layers, in the only order they work in — a tick at 150 over music
+at 156 would have been worse than silence:
+
+- **`pumptick`**, a short quiet click on the beat. A puff behind the heels
+  cannot be followed by an eye that is busy with where to land.
+- **`pump`**, a hit that rises a fourth as the gauge fills, so a good chain is
+  an ascending phrase and `pfull` is its resolution. `Sfx.play` forwards one
+  optional degree for it.
+- **`pumpFlash` reaches the picture** as a tint. There is no gauge on screen —
+  speed is drawn around the body — so its filling belongs on the body too.
+
+### "When we reach full speed, the screen should warble"
+
+**The look-ahead had stopped compensating exactly where it mattered.** The lean
+was `Math.min(1, speed / MAX_RUN)`, saturating at the running cap of 2.5. P-speed
+is 3.5, so filling the gauge bought *more speed and no more warning*. The cap is
+now `MAX_P / MAX_RUN`, so the lean runs 34 px → **48 px**: what you can see grows
+exactly as fast as what can arrive.
+
+**The warble is a wave, not a shake, and that distinction is the whole design.**
+`shake` is random and short and this game spends it on *impacts* — quakes, ground
+pounds, springs. If speed shook the same way, the best thing in the game would
+read as a continuous hit. So full speed rides a slow sine at **one pixel**, which
+is measured as a ceiling rather than chosen: two pixels move a tile row visibly
+off the grid and make judging a jump harder at exactly the speed where it is
+already hardest. Speed should feel like the edge of control, not past it.
+
+**The full-screen flash was asked for and refused, by the owner's own earlier
+ruling.** 17.8.2026: *"koko ruudun välähdys on huono, se tuntuu damagelta"* — a
+full-screen colour is this game's language for taking a hit, and an advantage
+must not speak in the voice of a loss. There is a gate holding that line
+(*"muttei koko ruudulla"*), it caught the attempt, and the attempt was reverted.
+The warble is the full-screen answer that survives the ruling: it is geometry,
+and geometry is not the colour of damage.
+
+### And the chain was leaking lives
+
+`if (n >= CHAIN.length) return this.gainLife(x, y)` — the ninth kill in a chain
+paid a life, **and so did the tenth, and every one after**. A chain of twelve
+paid four. Owner: *"chained kills give 1UP too easily."*
+
+The ladder now pays points all the way — past the eighth the multiplier holds at
+its ceiling of 128× — and a life lands only on a power of two from `CHAIN_LIFE`
+upward: **16, 32, 64**. Same scale as the rest of `points.js`, and each step is
+twice the work of the one before. The eighth deliberately pays no life: it is the
+kill where the multiplier reaches its ceiling, which is a reward in the currency
+the ladder is made of.
+
+---
+
 ## v26.08.19.39 — the weather punishes standing still
 
 Owner, turning the plan around before it was built: *"What if we go the other
