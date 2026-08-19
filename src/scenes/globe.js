@@ -161,14 +161,114 @@ const shade = (hex, k) => {
  * **is** a room, which is at most one square per world today — so a face has
  * three or four spokes, never more, and the four-arrow budget is never spent.
  */
-function spokesOf(face, rooms) {
-  const open = [];
+/**
+ * The roads on a face: prev, next, out, and a room where there is one.
+ *
+ * **Four at most, and never by luck.** A hexagon has three hex edges but the
+ * chain uses two of them — the strip neighbours — and the third abuts a face
+ * that is nowhere near this one in the level order. Drawing it made five
+ * spokes, which is one more than there are arrow keys. It is not a road at
+ * all: it is an edge the graph does not use, so it is not drawn.
+ *
+ * **And the way out is put where there is room for it.** A face's three
+ * squares alternate with its three hexes, so taking the *first* free square
+ * put all four roads on consecutive sides — 180° of the face, with the other
+ * half empty and one road unreachable because no arrow pointed at it. The door
+ * now takes whichever free square sits furthest from everything already
+ * chosen, which spreads the four roads around the face and gives each of them
+ * an arrow of its own.
+ *
+ * One function answers this for the drawing, the input and the walk, so a road
+ * cannot be reachable in one of them and not the others.
+ */
+function roadsOf(face, rooms, door) {
+  const k = STRIP.indexOf(face.index);
+  const chain = new Set([STRIP[k - 1], STRIP[k + 1]].filter((n) => n !== undefined));
+  const used = [];
+  const free = [];
   for (const side of face.sides) {
     if (!side.to) continue;
-    if (side.to.kind === 'hex') { open.push(side.k); continue; }
-    if (rooms && rooms.has(side.to.index)) open.push(side.k);
+    if (side.to.kind === 'hex') {
+      if (chain.has(side.to.index)) used.push(side.k);
+      continue;
+    }
+    if (rooms && rooms.has(side.to.index)) { used.push(side.k); continue; }
+    free.push(side.k);
   }
-  return open;
+  let doorAt = null;
+  if (door && free.length) {
+    const gap = (a, b) => {
+      const d = Math.abs(a - b) % 6;
+      return Math.min(d, 6 - d);
+    };
+    /* Judged on the **largest gap** the finished set leaves round the ring,
+     * not on distance to the nearest neighbour: sides alternate hex and
+     * square, so every free square touches a used hex and "nearest" is always
+     * 1. Minimising the biggest hole is what actually spreads them — putting
+     * the door at 2 leaves {0,1,2,3}, four roads in a row with a gap of three
+     * behind them; putting it at 4 leaves {0,1,3,4} and no gap wider than two. */
+    const widest = (set) => {
+      const r = [...set].sort((a, b) => a - b);
+      let worst = 0;
+      for (let n = 0; n < r.length; n++) {
+        const d = n + 1 < r.length ? r[n + 1] - r[n] : 6 - r[n] + r[0];
+        worst = Math.max(worst, d);
+      }
+      return worst;
+    };
+    doorAt = free.reduce((best, k2) => (
+      best === null || widest([...used, k2]) < widest([...used, best]) ? k2 : best
+    ), null);
+    void gap;
+    used.push(doorAt);
+  }
+  return { sides: used.sort((a, b) => a - b), door: doorAt };
+}
+
+const spokesOf = (face, rooms, door) => roadsOf(face, rooms, door).sides;
+const doorSide = (face, rooms, door) => roadsOf(face, rooms, door).door;
+
+const SCENERY_BY_THEME = {
+  grass: 'TTPTR',
+  desert: 'CCRCC',
+  ice: 'PMPMP',
+  factory: 'EERE',
+  bone: 'KK"K',
+  cloud: 'PTPU',
+  fortress: 'AUAA',
+};
+
+function sceneryOf(face, theme, rooms, door) {
+  const glyphs = SCENERY_BY_THEME[theme] || SCENERY_BY_THEME.grass;
+  const spokes = spokesOf(face, rooms, door).map((k) => sideAt(face, k));
+  const out = [];
+  /* Twenty-six candidates and a low gate, because two filters run after this
+   * one and they are not gentle: the road corridor alone rejected six of
+   * fourteen on face 0 and left it bare. Counted rather than eyeballed —
+   * a face that grows nothing is the one outcome this is for. */
+  for (let i = 0; i < 26; i++) {
+    const n = hashNoise(face.index * 31 + i, i * 7 + 3);
+    if (n < 0.30) continue;
+    const th = (i / 26) * Math.PI * 2 + n;
+    /* Out to 0.66 of the radius and no further: a glyph is 16 px wide and
+     * drawn from its middle, so anything planted nearer the rim than this
+     * hangs over onto the face next door. */
+    const rad = 0.34 + ((n * 97) % 1) * 0.32;
+    const u = Math.cos(th) * rad;
+    const v = Math.sin(th) * rad;
+    /* Clear of every spoke, measured to the line rather than to its ends: a
+     * bush beside the middle of a road is as much in the way as one at the
+     * junction. */
+    const onRoad = spokes.some((sd) => {
+      const len = Math.hypot(sd.u, sd.v) || 1;
+      const along = (u * sd.u + v * sd.v) / len;
+      if (along < -0.1 || along > len + 0.1) return false;
+      return Math.abs(u * (sd.v / len) - v * (sd.u / len)) < 0.20;
+    });
+    if (onRoad) continue;
+    out.push({ u, v, ch: glyphs[Math.floor(n * 613) % glyphs.length], i });
+  }
+  return out;
 }
 
 /**
@@ -244,72 +344,6 @@ function facesOfWorld(world) {
 }
 
 /**
- * WHAT GROWS ON A FACE.
- *
- * Owner: *"bring back the dancing trees etc from the old 2d map, right?"* —
- * and yes, because they are the difference between a place with weather and a
- * shape with colours on it. The drawing is `gfx/scenery.js`, the same glyphs
- * the flat map plants, swaying on the same clock.
- *
- * Where they go is decided once per face and never again: a ring of candidate
- * spots, kept if the face's own noise says so and if they are clear of the
- * roads. Deterministic, so a face looks the same every time you roll back onto
- * it — a map whose trees moved while you were away would not be a map.
- *
- * They are laid out **between** the spokes rather than dodging them one at a
- * time. The road has to have somewhere to be, which is the same rule
- * `TALL_TERRAIN` exists for on the flat map, and the cheapest way to obey it
- * is to never plant on the road in the first place.
- */
-/* Only glyphs from `TALL_TERRAIN`. The flat ones — sand, plating, bare bone,
- * cloud-surface — are *ground textures*: on the map they fill a tile the road
- * runs over, and on a face they would draw a 16 px square of pattern standing
- * on end. A face's own colour is its ground; what grows on it has to be a
- * thing that grows. */
-const SCENERY_BY_THEME = {
-  grass: 'TTPTR',
-  desert: 'CCRCC',
-  ice: 'PMPMP',
-  factory: 'EERE',
-  bone: 'KK"K',
-  cloud: 'PTPU',
-  fortress: 'AUAA',
-};
-
-function sceneryOf(face, theme, rooms) {
-  const glyphs = SCENERY_BY_THEME[theme] || SCENERY_BY_THEME.grass;
-  const spokes = spokesOf(face, rooms).map((k) => sideAt(face, k));
-  const out = [];
-  /* Twenty-six candidates and a low gate, because two filters run after this
-   * one and they are not gentle: the road corridor alone rejected six of
-   * fourteen on face 0 and left it bare. Counted rather than eyeballed —
-   * a face that grows nothing is the one outcome this is for. */
-  for (let i = 0; i < 26; i++) {
-    const n = hashNoise(face.index * 31 + i, i * 7 + 3);
-    if (n < 0.30) continue;
-    const th = (i / 26) * Math.PI * 2 + n;
-    /* Out to 0.66 of the radius and no further: a glyph is 16 px wide and
-     * drawn from its middle, so anything planted nearer the rim than this
-     * hangs over onto the face next door. */
-    const rad = 0.34 + ((n * 97) % 1) * 0.32;
-    const u = Math.cos(th) * rad;
-    const v = Math.sin(th) * rad;
-    /* Clear of every spoke, measured to the line rather than to its ends: a
-     * bush beside the middle of a road is as much in the way as one at the
-     * junction. */
-    const onRoad = spokes.some((sd) => {
-      const len = Math.hypot(sd.u, sd.v) || 1;
-      const along = (u * sd.u + v * sd.v) / len;
-      if (along < -0.1 || along > len + 0.1) return false;
-      return Math.abs(u * (sd.v / len) - v * (sd.u / len)) < 0.20;
-    });
-    if (onRoad) continue;
-    out.push({ u, v, ch: glyphs[Math.floor(n * 613) % glyphs.length], i });
-  }
-  return out;
-}
-
-/**
  * WHICH FACES ARE OPEN, AND WHY IT IS NOT ALL OF THEM.
  *
  * Owner: *"it's not like EVERY facet is instantly available! At first you can
@@ -349,6 +383,41 @@ function faceOpen(byFace, cleared, face) {
   return done(at(k - 1)) || done(at(k + 1));
 }
 
+/**
+ * THE TRANSPOSE: level n of world w is the door to world n, entered at level w.
+ *
+ * Owner, 20.8.2026: *"you can go 1-1 to 1-2, 1-2 to 1-3 etc OR 1-1 to 1-2,
+ * then to 2-1, 2-2, 2-3… or you can diverge from 2-3 to 3-2 etc. But! I think
+ * those paths go in both directions. You can ALWAYS go back and select a
+ * different route if you're blocked on your current one."*
+ *
+ * `w-n ↔ n-w`, and the amount that falls out of that one line is the reason it
+ * is worth building rather than tuning:
+ *
+ * - **Self-inverse.** The door works from both ends, so nothing is authored
+ *   twice and "you can always go back" is not a feature, it is the same edge
+ *   read the other way. 8 × 7 ÷ 2 is 28 doors, the edge count of the complete
+ *   graph on eight worlds.
+ * - **The depth prices itself.** From world w you always arrive at level w of
+ *   wherever you go, so leaving early lands you shallow in a hard world and
+ *   leaving late lands you deep. Nobody tunes that; the numbering does it.
+ * - **One level per world has no door** — the one numbered like its own world.
+ *   1-1, 2-2, 3-3. A quiet room in each, for free.
+ *
+ * The degree works out exactly. A level needs three ways off it: back along
+ * the chain, on along the chain, and out. A hexagon has three hex edges, which
+ * is where the chain lives, and three square edges, which is where **out**
+ * lives — because a square touches four faces, so *where an interchange takes
+ * you depending on which face you walked in from* is honest geometry rather
+ * than an edge that abuts one face and secretly leads somewhere else.
+ */
+function worldDoorOf(worldIndex, faceIndex) {
+  const n = STRIP.indexOf(faceIndex) + 1;      // this face's level number
+  const w = worldIndex + 1;                    // this world's number
+  if (n < 1 || n === w || n > WORLDS.length) return null;
+  return { world: n - 1, face: STRIP[w - 1], level: n, from: w };
+}
+
 export class GlobeScene {
   constructor(game, world = 0, face = null) {
     this.game = game;
@@ -362,6 +431,7 @@ export class GlobeScene {
     this.dust = 0;
     this.dropT = 0;
     this.grown = new Map();
+    this.leaving = null;
     this.landed = false;
     /* Start on the face of the node the save is standing on, so coming back
      * from a level puts you where you left rather than at the beginning. */
@@ -419,25 +489,31 @@ export class GlobeScene {
    * well and the closer of the two wins. On four spokes ninety degrees apart
    * that is never a coin toss.
    */
-  spokeFor(want) {
-    const hub = this.onHere(0, 0);
-    let best = null;
-    for (const k of spokesOf(this.here, this.rooms)) {
-      const s = sideAt(this.here, k);
-      const p = this.onHere(s.u, s.v);
-      const dx = p.x - hub.x;
-      const dy = p.y - hub.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const score = want === 'right' ? dx / len : want === 'left' ? -dx / len
-        : want === 'up' ? -dy / len : dy / len;
-      if (score > 0.35 && (!best || score > best.score)) best = { k, score };
-    }
-    return best ? best.k : null;
+  /**
+   * WHICH ROAD EACH ARROW MEANS, decided as a **whole** rather than one arrow
+   * at a time.
+   *
+   * Scoring each arrow independently was the first version and it loses roads:
+   * four spokes on a hexagon are never at ninety degrees to each other, so two
+   * of them can be the best answer to the same key while a third is the best
+   * answer to none, and that third road becomes unreachable. The way out of
+   * world 1 was unreachable for exactly this reason.
+   *
+   * So it is an assignment: every road is scored against every arrow, the
+   * strongest pairing is taken, both are struck out, and it repeats. Four
+   * roads and four arrows means every road ends up with a key of its own, and
+   * the pairing is recomputed each time it is asked because the solid turns —
+   * a key that meant "the road to 2-1" on one face means nothing on the next.
+   */
+  /** This face's way out of the world, or null on the one level per world
+   *  that is numbered like the world itself. */
+  doorHere() {
+    return worldDoorOf(this.world, this.face);
   }
 
   /**
-   * What is on the other side of spoke `k`, as one word. The colours below and
-   * the refusal above both read it, so a road cannot look walkable and then
+   * What is on the other side of spoke `k`, as one word. The colours, the
+   * refusal and the walk all read it, so a road cannot look walkable and then
    * not be.
    */
   spokeLeads(k) {
@@ -445,7 +521,17 @@ export class GlobeScene {
     if (!side.to) return 'none';
     if (side.to.kind === 'square') {
       const node = this.rooms.get(side.to.index);
-      return node && this.game.state.cleared[node.id] ? 'spent' : 'room';
+      if (node) return this.game.state.cleared[node.id] ? 'spent' : 'room';
+      const door = this.doorHere();
+      if (!door || k !== doorSide(this.here, this.rooms, door)) return 'none';
+      /* Open from **either end**, exactly as `isLinkOpen` reads a road on the
+       * flat map. That is the whole of "you can always go back": the door you
+       * came through is the same edge, and it does not shut behind you. */
+      const here = this.byFace[this.face];
+      const there = (WORLDS[door.world].nodes || [])
+        .filter((n) => n.level)[door.from - 1];
+      const done = (n) => !!(n && this.game.state.cleared[n.id]);
+      return done(here) || done(there) ? 'out' : 'shut';
     }
     if (!faceOpen(this.byFace, this.game.state.cleared, side.to.index)) return 'locked';
     const node = this.byFace[side.to.index];
@@ -453,7 +539,40 @@ export class GlobeScene {
   }
 
   spokeOpen(k) {
-    return this.spokeLeads(k) !== 'locked';
+    const lead = this.spokeLeads(k);
+    return lead !== 'locked' && lead !== 'shut' && lead !== 'none';
+  }
+
+  arrowMap() {
+    const hub = this.onHere(0, 0);
+    const arrows = ['left', 'right', 'up', 'down'];
+    const pairs = [];
+    for (const k of spokesOf(this.here, this.rooms, this.doorHere())) {
+      const sd = sideAt(this.here, k);
+      const p = this.onHere(sd.u, sd.v);
+      const dx = p.x - hub.x;
+      const dy = p.y - hub.y;
+      const len = Math.hypot(dx, dy) || 1;
+      for (const a of arrows) {
+        const score = a === 'right' ? dx / len : a === 'left' ? -dx / len
+          : a === 'up' ? -dy / len : dy / len;
+        pairs.push({ k, a, score });
+      }
+    }
+    pairs.sort((x, y) => y.score - x.score);
+    const out = {};
+    const taken = new Set();
+    for (const p of pairs) {
+      if (out[p.a] !== undefined || taken.has(p.k)) continue;
+      out[p.a] = p.k;
+      taken.add(p.k);
+    }
+    return out;
+  }
+
+  spokeFor(want) {
+    const k = this.arrowMap()[want];
+    return k === undefined ? null : k;
   }
 
   update(input) {
@@ -588,7 +707,28 @@ export class GlobeScene {
      */
     if (side.to.kind === 'square') {
       const node = this.rooms.get(side.to.index);
-      if (!node) { this.walkOut = false; return; }
+      if (!node) {
+        /*
+         * OUT OF THE WORLD, and the arrival is the one this game already has:
+         * the new world's solid gets a fresh scene with `arriving` set, so he
+         * falls onto the face he lands on exactly as he does at the start of
+         * a world. Walking through a door and being dropped in are the same
+         * event from two sides, so they get the same animation.
+         */
+        const door = this.doorHere();
+        if (!door) { this.walkOut = false; return; }
+        const levels = (WORLDS[door.world].nodes || []).filter((n) => n.level);
+        const land = levels[door.from - 1];
+        if (!land) { this.walkOut = false; return; }
+        Sfx.play('pipe');
+        this.game.state.world = door.world;
+        this.game.state.node = land.id;
+        this.game.persist();
+        const next = new GlobeScene(this.game, door.world, door.face);
+        next.arriving = true;
+        this.game.setScene(next);
+        return;
+      }
       if (this.game.state.cleared[node.id]) {
         this.message = 'TALO ON JO TYHJA';
         this.messageTimer = 90;
@@ -604,6 +744,7 @@ export class GlobeScene {
     this.dust = 0;
     this.dropT = 0;
     this.grown = new Map();
+    this.leaving = null;
     this.landed = false;
         this.mode = 'walk';
         this.walkOut = false;
@@ -666,7 +807,7 @@ export class GlobeScene {
        * has a far side you are standing on. */
       const k = this.here.sides.findIndex((s) => `${s.a.join(',')}|${s.b.join(',')}` === r.sideKey
         || `${s.b.join(',')}|${s.a.join(',')}` === r.sideKey);
-      this.spoke = k >= 0 ? k : spokesOf(this.here, this.rooms)[0];
+      this.spoke = k >= 0 ? k : spokesOf(this.here, this.rooms, this.doorHere())[0];
       const s = sideAt(this.here, this.spoke);
       this.at = { u: s.u, v: s.v };
       this.walkOut = false;
@@ -759,7 +900,7 @@ export class GlobeScene {
    */
   drawGrowth(ctx) {
     if (!this.grown.has(this.face)) {
-      this.grown.set(this.face, sceneryOf(this.here, WORLDS[this.world].theme, this.rooms));
+      this.grown.set(this.face, sceneryOf(this.here, WORLDS[this.world].theme, this.rooms, this.doorHere()));
     }
     for (const g of this.grown.get(this.face)) {
       const p = this.onHere(g.u, g.v);
@@ -774,7 +915,7 @@ export class GlobeScene {
 
   drawRoads(ctx) {
     const hub = this.onHere(0, 0);
-    for (const k of spokesOf(this.here, this.rooms)) {
+    for (const k of spokesOf(this.here, this.rooms, this.doorHere())) {
       const s = sideAt(this.here, k);
       const end = this.onHere(s.u * 0.92, s.v * 0.92);
       const steps = Math.max(2, Math.round(Math.hypot(end.x - hub.x, end.y - hub.y) / 7));
@@ -789,10 +930,14 @@ export class GlobeScene {
        * the square they lead to so the road and its destination match.
        */
       const lead = this.spokeLeads(k);
-      const ink = lead === 'locked' ? '#4a4a5e'
+      const ink = lead === 'locked' || lead === 'shut' ? '#4a4a5e'
         : lead === 'cleared' ? '#8fe04a'
           : lead === 'room' ? '#c8b0e8'
-            : lead === 'spent' ? '#5a5a76' : '#ffd048';
+            : lead === 'spent' ? '#5a5a76'
+              /* The way out of the world is its own colour and not a brighter
+               * gold: it is not a longer step along this world, it is a
+               * different kind of move. */
+              : lead === 'out' ? '#40d0f0' : '#ffd048';
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const x = Math.round(hub.x + (end.x - hub.x) * t);
