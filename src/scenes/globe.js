@@ -1,9 +1,13 @@
 import { drawText } from '../gfx/font.js';
 import { Music, Sfx } from '../core/audio.js';
-import { WORLDS, pipsFor, nodePips, startNode, fortressNode } from '../data/worlds.js';
+import {
+  WORLDS, pipsFor, nodePips, startNode, fortressNode, branchAt, REWARDS,
+} from '../data/worlds.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { TIER_COLORS } from './worldmap.js';
+import { secretTally } from '../core/secrets.js';
 import { clamp } from '../core/utils.js';
+import { House } from './house.js';
 import { qMul, qNorm, qSlerp, qApply, qAxis, qBetween } from '../core/quat.js';
 import { drawPlayer } from '../gfx/sprites.js';
 import { normalizePower } from '../entities/player.js';
@@ -54,7 +58,7 @@ const VIEW_H = 240;
 const R = 62;
 const CAM_Z = 4.6;
 const CX = 160;
-const CY = 100;
+const CY = 106;
 
 /**
  * THE ANGLE THE SOLID IS SEEN FROM, and the reason it is not face-on.
@@ -117,13 +121,19 @@ const shade = (hex, k) => {
  * data says otherwise every hexagon opens its three level doors and the first
  * of its three room doors — four spokes, which is the budget.
  */
-function spokesOf(face) {
+/**
+ * The roads on a face: a hub in the middle and a spoke to every open side.
+ *
+ * The three level doors are always open. A room door is open only where there
+ * **is** a room, which is at most one square per world today — so a face has
+ * three or four spokes, never more, and the four-arrow budget is never spent.
+ */
+function spokesOf(face, rooms) {
   const open = [];
-  let rooms = 0;
   for (const side of face.sides) {
     if (!side.to) continue;
     if (side.to.kind === 'hex') { open.push(side.k); continue; }
-    if (rooms === 0) { open.push(side.k); rooms++; }
+    if (rooms && rooms.has(side.to.index)) open.push(side.k);
   }
   return open;
 }
@@ -174,14 +184,42 @@ function facesOfWorld(world) {
   }
   const byFace = new Array(HEX_COUNT).fill(null);
   chain.slice(0, HEX_COUNT).forEach((node, k) => { byFace[STRIP[k]] = node; });
-  return byFace;
+
+  /*
+   * THE HOUSE IS A ROOM, AND A ROOM IS A SQUARE.
+   *
+   * On the flat map a house was a node hanging off one level by one link. Here
+   * it is one of the squares the cut corners left behind, and a square touches
+   * **four** hexagons — so the same house is a door from four different levels
+   * instead of a stub only one of them can see. That is the whole reason the
+   * truncation was worth having, and it costs nothing: the house was always
+   * attached to a level in the data, so which square it is follows from where
+   * that level ended up.
+   */
+  const rooms = new Map();
+  for (const node of world.nodes) {
+    if (node.level || node.type === 'start') continue;
+    const link = world.links.find((l) => l.a === node.id || l.b === node.id);
+    const hostId = link ? (link.a === node.id ? link.b : link.a) : null;
+    const host = byFace.findIndex((n) => n && n.id === hostId);
+    const face = FACES[host >= 0 ? host : STRIP[0]];
+    const side = face.sides.find((sd) => sd.to && sd.to.kind === 'square'
+      && !rooms.has(sd.to.index));
+    if (side) rooms.set(side.to.index, node);
+  }
+  return { byFace, rooms };
 }
 
 export class GlobeScene {
   constructor(game, world = 0, face = null) {
     this.game = game;
     this.world = world;
-    this.byFace = facesOfWorld(WORLDS[world]);
+    const laid = facesOfWorld(WORLDS[world]);
+    this.byFace = laid.byFace;
+    this.rooms = laid.rooms;
+    this.house = null;
+    this.message = null;
+    this.messageTimer = 0;
     /* Start on the face of the node the save is standing on, so coming back
      * from a level puts you where you left rather than at the beginning. */
     const here = this.byFace.findIndex((n) => n && n.id === game.state.node);
@@ -236,7 +274,7 @@ export class GlobeScene {
   spokeFor(want) {
     const hub = this.onHere(0, 0);
     let best = null;
-    for (const k of spokesOf(this.here)) {
+    for (const k of spokesOf(this.here, this.rooms)) {
       const s = sideAt(this.here, k);
       const p = this.onHere(s.u, s.v);
       const dx = p.x - hub.x;
@@ -251,6 +289,8 @@ export class GlobeScene {
 
   update(input) {
     this.tick++;
+    if (this.messageTimer > 0) this.messageTimer--;
+    if (this.mode === 'house') { this.house.update(input); return; }
     if (this.mode === 'roll') { this.updateRoll(); return; }
     if (this.squash !== 0) this.squash *= 0.82;
 
@@ -316,7 +356,35 @@ export class GlobeScene {
    */
   beginRoll() {
     const side = this.here.sides[this.spoke];
-    if (!side.to || side.to.kind !== 'hex') { this.mode = 'idle'; return; }
+    if (!side.to) { this.mode = 'idle'; return; }
+    /*
+     * A room is stepped into, not rolled onto. The solid does not turn for a
+     * square: you are still standing on the same level, having gone in a door
+     * beside it — which is what a house has always been, and is why the walk
+     * back out puts you where you were rather than somewhere new.
+     */
+    if (side.to.kind === 'square') {
+      const node = this.rooms.get(side.to.index);
+      if (!node) { this.walkOut = false; return; }
+      if (this.game.state.cleared[node.id]) {
+        this.message = 'TALO ON JO TYHJA';
+        this.messageTimer = 90;
+        Sfx.play('bump');
+        this.walkOut = false;
+        return;
+      }
+      Sfx.play('select');
+      this.house = new House(this.game, node, (text) => {
+        this.house = null;
+    this.message = null;
+    this.messageTimer = 0;
+        this.mode = 'walk';
+        this.walkOut = false;
+        if (text) { this.message = text; this.messageTimer = 110; }
+      });
+      this.mode = 'house';
+      return;
+    }
     const to = FACES[side.to.index];
     const axis = (() => {
       const d = [side.b[0] - side.a[0], side.b[1] - side.a[1], side.b[2] - side.a[2]];
@@ -371,7 +439,7 @@ export class GlobeScene {
        * has a far side you are standing on. */
       const k = this.here.sides.findIndex((s) => `${s.a.join(',')}|${s.b.join(',')}` === r.sideKey
         || `${s.b.join(',')}|${s.a.join(',')}` === r.sideKey);
-      this.spoke = k >= 0 ? k : spokesOf(this.here)[0];
+      this.spoke = k >= 0 ? k : spokesOf(this.here, this.rooms)[0];
       const s = sideAt(this.here, this.spoke);
       this.at = { u: s.u, v: s.v };
       this.walkOut = false;
@@ -424,6 +492,13 @@ export class GlobeScene {
     this.drawRoads(ctx);
     this.drawPawn(ctx);
     this.drawLabels(ctx);
+    /* The room is drawn over everything, because you are inside it. */
+    if (this.house) this.house.draw(ctx);
+    if (this.messageTimer > 0 && this.message) {
+      drawText(ctx, this.message, 160, 190, {
+        color: '#ffffff', align: 'center', shadow: '#101018',
+      });
+    }
   }
 
   /** The floor of chunky dots, so the shadow has somewhere to land. */
@@ -438,7 +513,7 @@ export class GlobeScene {
 
   drawRoads(ctx) {
     const hub = this.onHere(0, 0);
-    for (const k of spokesOf(this.here)) {
+    for (const k of spokesOf(this.here, this.rooms)) {
       const s = sideAt(this.here, k);
       const end = this.onHere(s.u * 0.92, s.v * 0.92);
       const steps = Math.max(2, Math.round(Math.hypot(end.x - hub.x, end.y - hub.y) / 7));
@@ -479,14 +554,23 @@ export class GlobeScene {
     });
   }
 
+  /**
+   * Two bands, and the solid gets everything between them.
+   *
+   * Where you are goes **above** — world, then level, then its difficulty —
+   * because that is what you read on arrival and never need again. What the
+   * face offers goes **below**, where it can grow: a branch board is two lines
+   * when there is one and nothing at all when there is not. The solid is wide
+   * enough at its middle to eat anything printed across it, so nothing is.
+   */
   drawLabels(ctx) {
-    drawText(ctx, WORLDS[this.world].name, 160, 10, {
+    drawText(ctx, WORLDS[this.world].name, 160, 8, {
       color: '#ffffff', align: 'center', shadow: '#303048',
     });
     const node = this.byFace[this.face];
     if (node) {
       const cleared = !!this.game.state.cleared[node.id];
-      drawText(ctx, node.name || node.level, 160, 202, {
+      drawText(ctx, node.name || node.level, 160, 20, {
         color: cleared ? '#8fe04a' : '#ffd048', align: 'center', shadow: '#101018',
       });
       /* The difficulty bar, drawn rather than typed — the bitmap font has no
@@ -494,12 +578,74 @@ export class GlobeScene {
       const pips = Math.max(1, nodePips(node));
       for (let n = 0; n < 5; n++) {
         ctx.fillStyle = n < pips ? TIER_COLORS[pips] : '#3a3a52';
-        ctx.fillRect(150 + n * 4, 213, 2, 3);
+        ctx.fillRect(150 + n * 4, 31, 2, 3);
       }
     }
+    /* Stacked from one cursor rather than each at its own fixed row: a branch
+     * board is two lines when there is one and nothing at all when there is
+     * not, so anything printed under it has to know where it actually ended.
+     * Fixed rows had the secret count landing inside the second route. */
+    let y = this.drawBranch(ctx, 174);
+    this.drawSecrets(ctx, y);
     drawText(ctx, this.mode === 'roll' ? 'KIERII' : 'NUOLET KULJE   ENTER PELAA', 160, 226, {
       color: '#50506a', align: 'center',
     });
+  }
+
+  /**
+   * WHAT IS HIDDEN IN THE FACE YOU ARE STANDING ON, counted and never located.
+   *
+   * The flat map says this with a three-pixel sparkle in the plaque's gutter,
+   * because a plaque is 16 px wide and there was nowhere else. A face is not a
+   * plaque and has room to say it in words, so it does — but it says the same
+   * two numbers from the same `secretTally`, and it still never says *where*.
+   * One count, two readers.
+   */
+  drawSecrets(ctx, y) {
+    const node = this.byFace[this.face];
+    if (!node || !node.level) return y;
+    const tally = secretTally(this.game.state, node.level, this.game.mode);
+    if (!tally || !tally.total) return y;
+    const all = tally.found >= tally.total;
+    drawText(ctx, `SALAISUUDET ${tally.found}/${tally.total}`, 160, y, {
+      color: all ? '#8fe04a' : '#8890b0', align: 'center',
+    });
+    return y + 10;
+  }
+
+  /**
+   * THE FORK, WHERE THERE IS ONE. Returns the row after it.
+   *
+   * A branch on the flat map was two roads leaving one node; here it is two
+   * hexagons you can roll onto from the one you are on, which is the same
+   * choice made of geometry instead of lines. What the geometry cannot say is
+   * which of the two is harder and which pays — the thing ROADMAP condition 2
+   * exists for, that a reward met only after committing is a surprise and not
+   * a choice — so the board still has to be printed, and it is printed from
+   * `branchAt`, measured, exactly as the panel's was.
+   *
+   * Three columns, and they are measured rather than eyeballed: the longest
+   * route name in the game is 13 characters (77 px), so the pips clear it at
+   * 96 and the prize at 126 still leaves the longest label, `MURTAVA VOIMA`,
+   * finishing at 203 inside a 320 px screen.
+   */
+  drawBranch(ctx, y) {
+    const node = this.byFace[this.face];
+    if (!node) return y;
+    const branch = branchAt(WORLDS[this.world], node.id);
+    if (!branch) return y;
+    drawText(ctx, 'HAARA', 8, y, { color: '#8890b0' });
+    [...branch.routes].sort((a, b) => a.score - b.score).forEach((route, i) => {
+      const row = y + 10 + i * 9;
+      drawText(ctx, route.name, 8, row, { color: TIER_COLORS[route.pips] });
+      for (let n = 0; n < 5; n++) {
+        ctx.fillStyle = n < route.pips ? TIER_COLORS[route.pips] : '#3a3a52';
+        ctx.fillRect(96 + n * 4, row + 2, 2, 3);
+      }
+      const prize = route.reward ? (REWARDS[route.reward] || {}).label : 'EI PALKINTOA';
+      drawText(ctx, prize, 126, row, { color: route.reward ? '#ffd048' : '#5a5a76' });
+    });
+    return y + 10 + branch.routes.length * 9 + 3;
   }
 }
 

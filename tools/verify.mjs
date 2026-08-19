@@ -21470,20 +21470,30 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         houses.length === 8 && unknown.length === 0 && games.size >= 3,
         `${houses.length} taloa, lajit ${[...games].sort().join(' ')}`);
 
+      /*
+       * The gambling games moved out of the map and into `house.js` on
+       * 19.8.2026, because the globe needs the same rooms and a second copy
+       * of a game is a second set of odds. These checks therefore drive the
+       * room rather than the map — which is also the only way they can still
+       * mean anything, since the map no longer decides what a bet pays.
+       */
+      const { House } = await import('/src/scenes/house.js');
+      const openHouse = (kind, coins) => {
+        const m = fresh(coins);
+        const node = houses.find((h) => h.game === kind) || m.node;
+        return new House(game, { ...node, game: kind }, () => {});
+      };
+
       /* 2. Kolikonheitto: voitto tuplaa panoksen, häviö vie sen, eikä
        *    kummassakaan tapauksessa synny tai katoa muuta. */
       let won = null;
       let lost = null;
       for (let i = 0; i < 40 && (won === null || lost === null); i++) {
-        const m = fresh(42);
-        m.houseGame = 'coinflip';
-        m.mode = 'house';
-        m.housePhase = 'pick';
+        const m = openHouse('coinflip', 42);
         m.houseCursor = 1;                       // panos 15
-        m.node = houses.find((h) => h.game === 'coinflip') || m.node;
-        m.updateCoinflip(tap());
+        m.update(tap());
         const after = game.state.coins;
-        for (let f = 0; f < 60 && m.mode === 'house'; f++) m.updateCoinflip(idle());
+        for (let f = 0; f < 60 && !m.done; f++) m.update(idle());
         const end = game.state.coins;
         if (m.houseResult && won === null) won = { after, end };
         if (!m.houseResult && lost === null) lost = { after, end };
@@ -21505,35 +21515,29 @@ const report = await page.evaluate(async (OVERWORLDS) => {
        * palkinto liikkui useimmissa. */
       let moved = 0;
       for (let i = 0; i < 10; i++) {
-        const mm = fresh();
-        mm.houseGame = 'cups';
-        mm.mode = 'house';
-        mm.updateCups(idle());
+        const mm = openHouse('cups');
+        mm.update(idle());
         const start = mm.cupPrize;
-        for (let f = 0; f < 200 && mm.housePhase === 'shuffle'; f++) mm.updateCups(idle());
+        for (let f = 0; f < 200 && mm.housePhase === 'shuffle'; f++) mm.update(idle());
         if (mm.cupPrize !== start) moved++;
       }
       for (let i = 0; i < 30 && (right === null || wrong === null); i++) {
-        const m = fresh();
-        m.houseGame = 'cups';
-        m.mode = 'house';
-        m.updateCups(idle());
-        for (let f = 0; f < 200 && m.housePhase === 'shuffle'; f++) m.updateCups(idle());
+        const m = openHouse('cups');
+        m.update(idle());
+        for (let f = 0; f < 200 && m.housePhase === 'shuffle'; f++) m.update(idle());
         const lives = game.state.lives;
         m.houseCursor = m.cupPrize;              // oikea kuppi
-        m.updateCups(tap());
-        for (let f = 0; f < 80 && m.mode === 'house'; f++) m.updateCups(idle());
+        m.update(tap());
+        for (let f = 0; f < 80 && !m.done; f++) m.update(idle());
         if (right === null) right = game.state.lives - lives;
 
-        const m2 = fresh();
-        m2.houseGame = 'cups';
-        m2.mode = 'house';
-        m2.updateCups(idle());
-        for (let f = 0; f < 200 && m2.housePhase === 'shuffle'; f++) m2.updateCups(idle());
+        const m2 = openHouse('cups');
+        m2.update(idle());
+        for (let f = 0; f < 200 && m2.housePhase === 'shuffle'; f++) m2.update(idle());
         const lives2 = game.state.lives;
         m2.houseCursor = (m2.cupPrize + 1) % 3;  // väärä kuppi
-        m2.updateCups(tap());
-        for (let f = 0; f < 80 && m2.mode === 'house'; f++) m2.updateCups(idle());
+        m2.update(tap());
+        for (let f = 0; f < 80 && !m2.done; f++) m2.update(idle());
         if (wrong === null) wrong = game.state.lives - lives2;
       }
       expect('kuppipeli antaa elämän vain oikeasta kupista, ja sekoitus liikuttaa palkintoa',
@@ -21543,12 +21547,9 @@ const report = await page.evaluate(async (OVERWORLDS) => {
 
       /* 4. Veto elää `state`issa kentän yli: talo ottaa panoksen, `finishLevel`
        *    maksaa tuplat läpäisystä eikä mitään kuolemasta. */
-      const m = fresh(42);
-      m.houseGame = 'bet';
-      m.mode = 'house';
+      const m = openHouse('bet', 42);
       m.houseCursor = 2;                          // panos 30
-      m.node = houses.find((h) => h.game === 'bet') || m.node;
-      m.updateBet(tap());
+      m.update(tap());
       const afterBet = { coins: game.state.coins, bet: game.state.bet };
       /* Prototyypin oma `finishLevel`, ei olion päälle asetettu: aiemmat
        * väitteet korvaavat sen tynkällä (`game.finishLevel = () => {}`), ja
@@ -22748,11 +22749,13 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       try {
         /* a) talossa poimittu esine menee varastoon: kartta ei kasvata mitään. */
         state({});
-        const map = new WorldMapScene(game);
-        map.mode = 'house';
+        /* The room, not the map: `house.js` owns what happens in one since
+         * 19.8.2026, and the sound this check is about is made in there. */
+        const { House: ItemHouse } = await import('/src/scenes/house.js');
+        const map = new ItemHouse(game, { id: 'w1-h', game: 'items' }, () => {});
         map.houseCursor = 0;
         take();
-        map.updateHouse({
+        map.update({
           held: blank(), pressed: { ...blank(), jump: true }, released: blank(), consume() {},
         });
         const toStore = take();
