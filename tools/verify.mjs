@@ -25099,6 +25099,105 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* ------------------------------- lavat --------------------------------- */
+  /*
+   * LIIKKUVAT LAVAT (20.8.2026). Owner, asking again after a long time:
+   * *"also something i asked for a LONG time ago: moving platforms????"*
+   *
+   * Four assertions. The first two are the mechanic; the third is the one that
+   * keeps a lift from beating real terrain; the fourth is the promise that
+   * every level without one is untouched.
+   */
+  {
+    const L = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { Lift } = await import('/src/entities/lift.js');
+      const { TILE } = await import('/src/data/worlds.js');
+      const game = window.sfb3;
+      const fresh = () => {
+        game.state = { lives: 3, coins: 20, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0,
+          bestTimes: {} };
+        return new LevelScene(game, '1-1');
+      };
+      const key = (held = {}, pressed = {}) => ({ held, pressed, released: {}, consume() {} });
+
+      const ride = (axis) => {
+        const sc = fresh();
+        const p = sc.player;
+        for (let f = 0; f < 20; f++) sc.update(key());
+        const lift = new Lift(Math.floor(p.x / TILE) + 3, Math.floor(p.y / TILE) - 3, axis);
+        sc.lifts = [lift];
+        p.x = lift.x + lift.w / 2 - p.w / 2;
+        p.y = lift.y - p.h - 30;
+        p.vy = 0; p.vx = 0; p.onGround = false;
+        let landed = -1;
+        for (let f = 0; f < 120 && landed < 0; f++) { sc.update(key()); if (p.onGround) landed = f; }
+        /* Carried, not merely resting on: measured as drift in his offset from
+         * the deck over two hundred frames, which covers a full reversal. */
+        let slip = 0;
+        const off = { x: p.x - lift.x, y: p.y - lift.y };
+        for (let f = 0; f < 200; f++) {
+          sc.update(key());
+          slip = Math.max(slip, Math.abs((p.x - lift.x) - off.x), Math.abs((p.y - lift.y) - off.y));
+        }
+        const yBefore = p.y;
+        sc.update(key({ jump: true }, { jump: true }));
+        for (let f = 0; f < 8; f++) sc.update(key({ jump: true }));
+        const travelled = axis === 'x' ? lift.x - lift.homeX : lift.y - lift.homeY;
+        return { landed, slip: +slip.toFixed(2), rose: +(yBefore - p.y).toFixed(1),
+          travelled: +travelled.toFixed(1) };
+      };
+      const sideways = ride('x');
+      const climbing = ride('y');
+
+      /* Real ground beats a deck. A lift driven down through the floor must
+       * leave the rider standing on the floor, not carry him through it. */
+      const sc = fresh();
+      const p = sc.player;
+      for (let f = 0; f < 30; f++) sc.update(key());
+      const floorY = p.y;
+      const sunk = new Lift(Math.floor(p.x / TILE), Math.floor(p.y / TILE) - 1, 'x');
+      sunk.y = floorY + 40;                 // deck below the floor he stands on
+      sc.lifts = [sunk];
+      for (let f = 0; f < 40; f++) sc.update(key());
+      const stayed = Math.abs(p.y - floorY) < 2;
+
+      /* And a level with no lifts is frame-identical to itself. */
+      const sig = () => {
+        const s2 = fresh();
+        let out = '';
+        for (let f = 0; f < 120; f++) { s2.update(key({ right: true })); out += `${Math.round(s2.player.x)},`; }
+        return out;
+      };
+      return { sideways, climbing, stayed, untouched: sig() === sig() };
+    });
+
+    expect('lavan päällä seisova kulkee lavan mukana, sivuttain ja pystyyn',
+      L.sideways.landed >= 0 && L.climbing.landed >= 0
+      && L.sideways.slip < 1 && L.climbing.slip < 1,
+      `sivuttain laskeutui framella ${L.sideways.landed}, luisto ${L.sideways.slip} px;`
+      + ` pystyyn framella ${L.climbing.landed}, luisto ${L.climbing.slip} px`);
+
+    expect('lavalta pääsee hyppäämään, ja lava liikkuu',
+      L.sideways.rose > 10 && L.climbing.rose > 10
+      && Math.abs(L.sideways.travelled) > 5 && Math.abs(L.climbing.travelled) > 5,
+      `nousu ${L.sideways.rose} / ${L.climbing.rose} px, matka`
+      + ` ${L.sideways.travelled} / ${L.climbing.travelled} px`);
+
+    /*
+     * The one that keeps a lift from being a cheat: the grid is asked first and
+     * the deck only answers when the tiles said nothing. A lift passing behind
+     * a wall must not lift anybody through it.
+     */
+    expect('oikea maasto voittaa lavan — lava ei kanna lattian läpi',
+      L.stayed, `pysyi lattialla ${L.stayed}`);
+
+    expect('kenttä jossa ei ole lavoja on framelleen ennallaan',
+      L.untouched, `identtinen ${L.untouched}`);
+  }
+
   /* --------------------- ketjuhyppy ja kuilun partaalta ------------------- */
   /*
    * TWO THINGS THE OWNER ASKED FOR, 20.8.2026, and four assertions between

@@ -310,6 +310,22 @@ export function moveY(entity, level, { onHeadBump = null, dropThrough = false } 
         break;
       }
     }
+    /*
+     * A LIFT IS FLOOR THAT IS NOT ON THE GRID.
+     *
+     * Asked only when the tiles said nothing, so a deck can never win against
+     * real ground — a lift passing behind a wall does not lift you through it.
+     * Levels without lifts answer null on the first line and this costs them a
+     * property read.
+     */
+    if (!result.ground && level.liftUnder) {
+      const lift = level.liftUnder(entity, prevBottom, dropThrough);
+      if (lift) {
+        entity.y = lift.y - entity.h;
+        entity.vy = 0;
+        result.ground = true;
+      }
+    }
   } else {
     entity.onSlope = 0;
     const ty = Math.floor(entity.y / TILE);
@@ -348,6 +364,10 @@ function footingBelow(entity, level, dropThrough) {
     if (isSolid(ch)) return true;
     if (!dropThrough && isSemi(ch) && entity.y + entity.h <= ty * TILE + 1) return true;
   }
+  /* Standing on a deck is standing, for the same reason the slope below is:
+   * without it the engine calls a rider airborne every other frame and his
+   * jumps disappear. */
+  if (level.liftFooting && level.liftFooting(entity, dropThrough)) return true;
   /* Rinne on maata vaikkei se ole laatikko: ilman tätä rinteessä seisova on
    * moottorin mielestä ilmassa joka toisella framella, eikä hyppy lähde. */
   const slope = slopeUnder(entity, level);
