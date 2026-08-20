@@ -269,6 +269,42 @@ const P_SEGMENTS = 7;
 const P_FILL = P_METER_MAX / P_SEGMENTS / 8;
 const P_DRAIN = P_METER_MAX / P_SEGMENTS / 24;
 
+/**
+ * THE CHAINED LANDING: what consecutive well-timed jumps actually buy.
+ *
+ * Owner: *"consecutive well-timed jumps should up the speed a bit."* — and
+ * the shape of the answer was already written down, in the ROADMAP entry that
+ * killed pumping. Two measured rules bound anything in this territory:
+ *
+ *   - **It must not raise the cap.** `MAX_P` is what `gapTiles` 6 and
+ *     `wallTiles` 4 were measured at, and every level's clearability is proved
+ *     against them. The slope catapult has its own gate saying its horizontal
+ *     speed does not rise, for exactly this reason.
+ *   - **It must not punish ignoring it.** The vent made a miss five times
+ *     worse than never trying, so the rational play was to not engage.
+ *
+ * That looks like it leaves nothing — until you notice what actually costs you
+ * top speed. It is not the jump. The P-meter is *frozen* in the air and only
+ * drains **on the ground below full running speed**, so the expensive frames
+ * are the ones between touching down and being back at speed. A run across
+ * broken ground is a sawtooth: 3.5 in the air, bleeding on every landing, and
+ * a few contacts is all it takes to drop out of P-speed to 2.5.
+ *
+ * So a chained jump **refunds the landing**. Touch down, leave again within
+ * `CHAIN_WINDOW` frames, and the drain those frames cost is handed back. The
+ * cap never moves; what moves is how much of your time you spend at it. Ignore
+ * it and nothing is taken — you bleed exactly what you bleed today.
+ *
+ * From the third consecutive one it also *fills* a little, so a chain can
+ * carry you **up** to P-speed across ground that would otherwise never let you
+ * reach it. That is the part that is bounded by fill time, and it is why it is
+ * the smaller half of the mechanic rather than the whole of it.
+ */
+const CHAIN_WINDOW = 7;
+const CHAIN_BUILD_AT = 3;
+const CHAIN_FILL = P_METER_MAX / P_SEGMENTS / 10;
+
+
 /*
  * PAINE NÄKYY KEHOSSA. Vauhtimittari on tähän asti ollut pelkkä nauhan palkki,
  * eli lukema jonka lukeminen vaatii katseen pois kentästä juuri siinä hetkessä
@@ -564,6 +600,11 @@ export class Player extends Entity {
     this.controllable = true;
     this.jumpHeld = false;
     this.coyote = 0;
+    /* Frames since this landing, the drain it has cost so far, and how many
+     * well-timed jumps are already strung together. See `CHAIN_WINDOW`. */
+    this.sinceLanding = 999;
+    this.landingDrain = 0;
+    this.chain = 0;
     /* The size change is already frozen for a few frames; this is what those
      * frames are for. `morphFrom` is the body he had a moment ago, and the
      * drawing alternates between the two so the change reads as a change
@@ -970,9 +1011,16 @@ export class Player extends Entity {
     /* ------------------------------- P-meter -------------------------- */
     const atSpeed = Math.abs(this.vx) >= MAX_RUN - 0.05 && run;
     if (this.onGround) {
-      this.pMeter = atSpeed
-        ? Math.min(P_METER_MAX, this.pMeter + P_FILL)
-        : Math.max(0, this.pMeter - P_DRAIN);
+      if (atSpeed) {
+        this.pMeter = Math.min(P_METER_MAX, this.pMeter + P_FILL);
+      } else {
+        const before = this.pMeter;
+        this.pMeter = Math.max(0, this.pMeter - P_DRAIN);
+        /* Remembered rather than prevented: the refund only happens if a jump
+         * actually leaves inside the window, so a landing that is ridden out
+         * costs exactly what it costs today. */
+        if (this.sinceLanding < CHAIN_WINDOW) this.landingDrain += before - this.pMeter;
+      }
     } else if (this.flying > 0) {
       this.pMeter = Math.max(0, this.pMeter - P_DRAIN);   // flight burns the gauge
     }
@@ -982,6 +1030,14 @@ export class Player extends Entity {
     /* -------------------------------- jump ---------------------------- */
     if (this.onGround) {
       this.coyote = COYOTE_FRAMES;
+      /* A contact that outlasts the window ends the chain: the string is of
+       * jumps that *touched* and left, not of jumps that happened eventually. */
+      if (this.sinceLanding === 999) this.sinceLanding = 0;
+      else if (this.sinceLanding >= CHAIN_WINDOW) {
+        this.chain = 0;
+        this.landingDrain = 0;
+      }
+      this.sinceLanding++;
       this.airJumps = 0;
       /* Jäähdytys nollautuu maassa, ei vain laskuri. Muuten kaari joka alkaa
        * heti edellisen perään olisi rangaistu siitä mitä edellisessä tehtiin,
@@ -992,6 +1048,24 @@ export class Player extends Entity {
 
     const canFly = this.type === 'leaf' && this.pFull && !this.corked;
     if (jumpPressed && (this.onGround || this.coyote > 0)) {
+      /*
+       * THE REFUND. Leaving inside the window hands back exactly what this
+       * landing drained — not a bonus, the same number — so a clean chain
+       * costs nothing and a missed one costs what it always did.
+       *
+       * The fill from the third onward is the only part that gives more than
+       * it took, and it is deliberately small: it is bounded by how long you
+       * spend below the cap, which is the measurement that killed pumping.
+       */
+      if (this.sinceLanding < CHAIN_WINDOW) {
+        this.chain++;
+        this.pMeter = Math.min(P_METER_MAX, this.pMeter + this.landingDrain
+          + (this.chain >= CHAIN_BUILD_AT ? CHAIN_FILL : 0));
+      } else {
+        this.chain = 1;
+      }
+      this.landingDrain = 0;
+      this.sinceLanding = 999;
       this.jumpBuffer = 0;
       this.vy = JUMP_BASE - JUMP_SPEED_BONUS[Math.min(3, Math.floor(Math.abs(this.vx)))];
       this.onGround = false;
