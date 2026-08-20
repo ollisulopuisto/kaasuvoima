@@ -750,3 +750,73 @@ My recommendation if it is built: **faster to `MAX_P`, not past it.** It gives
 the technique a real payoff, keeps every measured number in the game valid, and
 leaves the ground route exactly where it is.
 
+## Pieru lähtee takaa — omistajan idea 20.8.2026, ei vielä päätetty
+
+Omistaja: *"is this a dumb idea: the 'fireballs' are actually ejected from the
+rear of the character… cos they're farts? Which means you can't just run and
+gun, you need to turn around to hit enemies with projectiles."*
+
+Ei tyhmä. Se **korjaa** jotain joka on jo koodissa väärin: ammusluokan nimi on
+`FartBall` ja se lähtee edestä. Idea ei siis lisää rajoitusta vaan poistaa
+epäjohdonmukaisuuden.
+
+**Yksi oikea vastaväite.** Peli vierii oikealle, eli uhat tulevat oikealta. Ase
+joka ampuu vain vasemmalle ei ole vaikeampi vaan hyödytön, ja pelaaja lakkaisi
+poimimasta kukkaa — viisiportainen tehostustikas menisi hukkaan.
+
+**Korjaus on Newton.** Kaasu taakse työntää pelaajan eteenpäin:
+
+1. **Kasvot menosuuntaan, laukaus** → ammus suojaa selustan ja saat **työnnön**.
+   Väärä suunta on se palkitseva.
+2. **Kasvot taaksepäin, laukaus maassa** → ammus lähtee kohti sitä mikä on
+   edessä, ja rekyyli työntää sinua siitä poispäin. Perääntyvä taistelu joka
+   maksaa maata.
+
+Jokainen laukaus on siis vaihtokauppa: **maata turvasta tai turvaa vauhdista**.
+Se on parempi verbi kuin "juokse ja ammu", ja se on sama temppu jonka
+ketjuhyppy jo tekee.
+
+**Poikkeus on jo olemassa.** `sylky` on *lainattu* ammus, ja lainattu ammus
+lähtee **suusta** eli eteenpäin. Sääntö kuuluu siis: *oma kaasu taakse, nielty
+eteen.* Se kumoaa "en voi koskaan ampua oikealle" -ongelman fiktion sisällä
+eikä poikkeuksena, ja antaa nielemismekaniikalle tehtävän jota sillä ei nyt ole.
+
+**Ja kolmas porras, omistajan lisäys:** *"let's say this is where the PERFECT
+TIMING comes in — if you execute this in the correct rhythm, there's no
+velocity cost? Like you can jump, turn around, fart, turn back, and keep your
+velocity."*
+
+Tämä tekee vaikeasta liikkeestä nopean, ja se on juuri se muoto jota peli jo
+puhuu: `CHAIN_WINDOW` ja `landingDrain` palauttavat laskeutumisen vuodon jos
+lähdet ajoissa uudestaan. Sama kielioppi, sama vakioperhe:
+
+| Porras | Teko | Osuu | Hinta |
+| --- | --- | --- | --- |
+| 1 | laukaus menosuuntaan | selustaan | ei mitään, saat työnnön |
+| 2 | käänny maassa ja ammu | eteen | menetät maata |
+| 3 | **hyppy, käännös, laukaus, käännös takaisin ikkunan sisällä** | eteen | **ei mitään** — rekyyli palautetaan |
+
+Maassa kääntyminen maksaa vauhtia kuten nytkin. Ilmassa kääntyminen on ilmaista,
+mutta laukauksella on rekyyli — **paitsi** jos koko sarja mahtuu yhteen
+ilmalennon ikkunaan, jolloin rekyyli palautetaan täsmälleen niin kuin
+ketjuhypyssä.
+
+**Mitä pitää mitata ennen kuin tätä rakennetaan**, ja nämä ovat mittauksia
+eivätkä makuasioita:
+
+- **Hyppybudjetti** (`gapTiles` 6, `wallTiles` 4) on mitattu `MAX_P`-vauhdilla
+  3,5. Jos laukaus lisää vauhtia, osa kuiluista muuttuu ilmaisiksi ja kukasta
+  tulee liikkumishuijaus. Todennäköinen ratkaisu: työntö ei saa viedä yli
+  `MAX_P`:n, se vain auttaa *saavuttamaan* sen — täsmälleen kuten hyppyketju.
+- **64 kentän vaikeus** on pisteytetty eteenpäin ampuvalla aseella
+  (`tools/difficulty.mjs`). Eteen sijoitetut viholliset muuttuvat
+  ampumakelvottomiksi. Käyrän siirtymä on mitattavissa ennen kuin kenttädataan
+  koskee.
+- **Kääntyminen täydessä vauhdissa** joko tappaa vauhdin tai vaatii
+  takaperinkävelyn. Animaatio on pieni kysymys; se että porras 3 tekee siitä
+  taidon eikä veron on koko idean ydin.
+
+Rakennusjärjestys jos tämä päätetään: rekyyli ja takaa lähtevä ammus ensin,
+`sylky` eteenpäin, sitten porras 3 — ja hyppybudjetti mitataan **ennen** kuin
+yhteenkään kenttään kosketaan.
+

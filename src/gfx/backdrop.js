@@ -276,6 +276,12 @@ function drawSkyTower(ctx, tower, camX, groundY, th, viewW) {
     lives: tower.lives,
     haze: 0.5,
     sky,
+    /* The landscape you are standing in, so the thing in the sky is made of
+     * the same stuff as the world under your feet. Owner: *"make it have the
+     * colors of the current slate the player is on."* The hill colour rather
+     * than the surface tile, because the surface is the bright end of every
+     * palette and gold has to read on top of it — see `shellOf`. */
+    tint: th.hill,
     phase: tower.tick || 0,
     rising: tower.rising === undefined ? 1 : tower.rising,
   });

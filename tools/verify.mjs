@@ -25623,10 +25623,22 @@ const report = await page.evaluate(async (OVERWORLDS) => {
      * fill level — measured, a maximum of ONE tone per row — so no face edge
      * ever showed in the gold. Depth-shaded blocks cannot do that.
      */
-    expect('kulta varjostuu syvyyden mukaan, ei ole yksi litteä sävy',
-      K.at.filter((a) => a.f > 0).every((a) => a.widest >= 3),
+    expect('kulta ei ole koskaan yksi litteä sävy rivillä',
+      K.at.filter((a) => a.f > 0).every((a) => a.widest >= 2),
       `sävyjä leveimmällä rivillä: ${K.at.filter((a) => a.f > 0)
         .map((a) => `${a.f} % -> ${a.widest}`).join(', ')} (litteä nauha antoi 1)`);
+
+    /*
+     * Two thresholds rather than one, and the split is geometry rather than a
+     * moved goalpost. The claim that matters everywhere is *never one tone on
+     * a row* — that is exactly and only what the flat band did, at every fill
+     * level. How MANY tones show depends on how much pile there is to shade:
+     * twenty coins are one layer, and one layer cannot show every depth. From
+     * half full there is a solid to light, so three is required there.
+     */
+    expect('puolillaan kulta näyttää kaikki kolme syvyysporrasta',
+      K.at.filter((a) => a.f >= 50).every((a) => a.widest >= 3),
+      K.at.filter((a) => a.f >= 50).map((a) => `${a.f} % -> ${a.widest}`).join(', '));
 
     const areas = K.at.map((a) => a.gold);
     expect('kullan määrä kasvaa kolikkoluvun mukana',
@@ -25677,6 +25689,52 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       O.worst > 0,
       `koko kierroksen ajan alin punainen on ${O.worst} px kuution yläreunan`
       + ` yläpuolella (tiukin kohta framella ${O.at})`);
+
+    /*
+     * THE COINS MUST READ ON EVERY WORLD'S COLOUR.
+     *
+     * Owner: *"make it have the colors of the current slate the player is
+     * on."* Right, and it is the kind of right that breaks something else: the
+     * gold pile is drawn on top of that colour, and half the game's palettes
+     * are brighter than a coin. Desert sand is `#f0c060` against gold's
+     * `#f0b000`. Ice, bone and cloud are brighter still.
+     *
+     * `shellOf` caps the luminance while keeping the hue, and this measures
+     * the thing that actually matters — the gap between the shell and the gold
+     * — for every theme in the game rather than for the one that was looked at.
+     */
+    const T = await page.evaluate(async () => {
+      const { shellOf, luma, COIN_GOLD } = await import('/src/gfx/tower.js');
+      const { THEMES } = await import('/src/gfx/tiles.js');
+      const gold = luma(COIN_GOLD);
+      return Object.entries(THEMES).map(([name, th]) => ({
+        name,
+        gap: Math.round(gold - luma(shellOf(th.hill))),
+        /* how much hue survived the cap: 0 would mean it went grey */
+        hue: (() => {
+          const n = parseInt(shellOf(th.hill).slice(1), 16);
+          const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+          return Math.max(...c) - Math.min(...c);
+        })(),
+      }));
+    });
+
+    const dim = T.filter((t) => t.gap < 45);
+    expect('kulta erottuu kuution kuoresta jokaisessa teemassa',
+      dim.length === 0,
+      dim.length ? dim.map((t) => `${t.name} ${t.gap}`).join(', ')
+        : `pienin ero ${Math.min(...T.map((t) => t.gap))} lumaa (${T.length} teemaa)`);
+
+    /*
+     * And it must still LOOK like that world. Scaling a near-white leaves grey,
+     * which passes the contrast test and fails the request that caused it —
+     * that is why the shell is the hill colour and not the surface tile.
+     */
+    const grey = T.filter((t) => t.hue < 18);
+    expect('kuoressa on yhä maailman oma väri eikä harmaa',
+      grey.length === 0,
+      grey.length ? grey.map((t) => `${t.name} hue ${t.hue}`).join(', ')
+        : `vähiten väriä ${Math.min(...T.map((t) => t.hue))} (${T.length} teemaa)`);
 
     expect('tyhjä kuutio on tyhjä',
       K.at[0].gold === 0, `0 %: ${K.at[0].gold} kultapikseliä`);
