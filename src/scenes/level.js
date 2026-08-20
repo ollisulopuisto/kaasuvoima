@@ -7,6 +7,7 @@ import {
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
 import { drawBackdrop } from '../gfx/backdrop.js';
+import { Lift, drawLift } from '../entities/lift.js';
 import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem, drawPlayer, WALK_FRAMES, TINTS } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
@@ -326,6 +327,16 @@ const NAME_Y = 22;
  * level hides under — two is the depth at which a player has stopped choosing
  * and started reacting, which is the moment this reward exists to notice.
  */
+/**
+ * The two level-grid markers that place a moving platform.
+ *
+ * `=` shuttles sideways and `|` climbs, which is what they look like. Neither
+ * is a tile value in `T` and neither appears in any shipped level, so adding
+ * them cannot change a single existing grid.
+ */
+const LIFT_X = '=';
+const LIFT_Y = '|';
+
 const BRINK_DEEP = TILE * 2;
 
 const SIGN_LIMITS = [30, 50, 80, 120, 0];
@@ -1722,6 +1733,7 @@ export class LevelScene {
     this.crumbles = new Map();
     /* Pieruhyllyt: avain "tx,ty" → jäljellä olevat framet. Ks. `gasShelf`. */
     this.shelves = new Map();
+    this.lifts = [];
     /* Liikkeellä oleva hiekka: avaimet "tx,ty". Ks. `updatePours`. */
     this.pours = new Set();
     /* Kuuran jälki: "tx,ty" → { was, left }. Sama muoto kuin murenevilla
@@ -2171,6 +2183,12 @@ export class LevelScene {
         const ch = this.grid[ty][tx];
         if (ch === '1') {
           this.spawn = { x: tx * TILE, y: ty * TILE };
+          this.grid[ty][tx] = ' ';
+        } else if (ch === LIFT_X || ch === LIFT_Y) {
+          /* A lift is not a tile and not an entity — see `lift.js` for why
+           * both. The marker is consumed here so nothing downstream ever sees
+           * a character it has no rule for. */
+          this.lifts.push(new Lift(tx, ty, ch === LIFT_X ? 'x' : 'y'));
           this.grid[ty][tx] = ' ';
         } else if (ENEMY_CHARS[ch]) {
           this.entities.push(ENEMY_CHARS[ch](this, tx, ty, this.def.bossVariant || 0));
@@ -4789,6 +4807,17 @@ export class LevelScene {
 
     if (this.state === 'play') {
       this.updateTimer();
+      /*
+       * LIFTS MOVE FIRST, AND THEIR RIDER MOVES WITH THEM.
+       *
+       * Order is the whole of this: the deck advances, whoever is standing on
+       * it is carried by exactly the same delta, and only then does the body
+       * run its own physics against a world that has already finished moving.
+       * The other order — body first, deck second — sinks the rider into the
+       * deck on every ascending frame and drops him off the back of every
+       * horizontal one.
+       */
+      this.updateLifts();
       this.player.update(input);
       this.playerTiles();
       this.updatePillars();
@@ -6538,6 +6567,9 @@ export class LevelScene {
 
     if (this.def.bands) this.drawUnderground(ctx, camX, camY);
     this.drawTiles(ctx, camX, camY);
+    /* After the tilemap and before anything that stands on them: a lift is
+     * terrain, and terrain is behind whatever is walking on it. */
+    for (const l of this.lifts) drawLift(ctx, l, this.tick);
     /* Suppilo on maastoa eikä olio, joten se on laattojen päällä ja pelaajan
      * takana: sen läpi kuljetaan, eikä se saa peittää sitä keneen se koskee. */
     if (this.def.twister) this.drawTwisters(ctx, camX);
@@ -6919,6 +6951,41 @@ export class LevelScene {
     if (tx < 0 || tx >= this.w) return false;
     for (let y = Math.max(0, ty); y < this.h; y++) if (this.solidAt(tx, y)) return false;
     return true;
+  }
+
+  updateLifts() {
+    if (!this.lifts.length) return;
+    const p = this.player;
+    const riding = p && p.onGround && this.lifts.find((l) => l.carries(p));
+    for (const l of this.lifts) l.update();
+    if (riding) {
+      p.x += riding.dx;
+      p.y += riding.dy;
+      /* Carried down as well as up. A deck descending faster than gravity
+       * would otherwise leave him hanging in the air above it for a frame,
+       * which reads as the platform dropping out from under him. */
+      if (riding.dy > 0) p.y = riding.y - p.h;
+    }
+  }
+
+  /**
+   * The lift a falling box would land on this frame, or null.
+   *
+   * Asked by `moveY` in place of a tile, and by `footingBelow` so that standing
+   * still on a deck still counts as standing. `dropThrough` is honoured for the
+   * same reason a one-way tile honours it: down is a direction a player is
+   * allowed to choose.
+   */
+  liftUnder(box, prevBottom, dropThrough) {
+    if (!this.lifts.length || dropThrough) return null;
+    for (const l of this.lifts) if (l.catches(box, prevBottom)) return l;
+    return null;
+  }
+
+  liftFooting(box, dropThrough) {
+    if (!this.lifts.length || dropThrough) return null;
+    for (const l of this.lifts) if (l.carries(box)) return l;
+    return null;
   }
 
   updateBrink() {
