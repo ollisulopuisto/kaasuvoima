@@ -7542,7 +7542,7 @@ export class LevelScene {
         const ch = this.tileAt(tx, ty + span);
         if (ch === ' ') continue;
         drawTile(ctx, ch, tx * TILE, ty * TILE, this.theme, tx, ty + span, this.tick,
-          this.tileAt(tx, ty + span - 1), {});
+          this.tileAt(tx, ty + span - 1), { skin: this.def.skin });
       }
     }
     /* Yksi juova joka pyyhkäisee ruudun ylhäältä alas vilkaisun mitassa. Se on
@@ -7575,6 +7575,9 @@ export class LevelScene {
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,
           this.tileAt(tx, ty - 1),
           {
+            /* Owner: *"maybe keep the flat stacking, but change the skin?"* —
+             * a per-level flag, so one stage can wear it and be judged. */
+            skin: this.def.skin,
             // How far, not whether: the leaves swing. See DOOR_OPEN_FRAMES.
             doorOpen: this.doorOpen,
             crumble: this.crumbleProgress(tx, ty),

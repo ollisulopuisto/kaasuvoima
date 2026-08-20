@@ -194,6 +194,18 @@ export const WORLD1_LEVELS = {
    */
   '1-3': {
     theme: 'grass', bg: 'peaks', music: 'level',
+    /*
+     * KOEKENTTÄ HEKSANAHALLE. Omistaja: *"could we switch all tiles to be hex
+     * shaped? Maybe keep the flat stacking, but change the skin? This might be
+     * worth trying out on one stage first."*
+     *
+     * Tämä on se yksi kenttä. Käsintehty (generoituun ei saa koskea käsin —
+     * `generated.js` tulee siirrosta ulos tavulleen samana), varhainen, ja
+     * maastopassi antaa sille aaltoilevan maan eli paljon pintaa katsottavaksi.
+     * Lippu koskee vain piirtoa: ruudukko, törmäys ja hyppybudjetti ovat
+     * samat kuin joka muussakin kentässä. Ks. `drawHexSkin`.
+     */
+    skin: 'hex',
     /* Maastopassi (`data/terrain.js`): kokoaja päättää palikoiden lattiatasot
      * ja kirjoittaa siirtymät rinteinä. Maailman 1 kolmesta käsintehdystä
      * kentästä tämä on se joka sen saa — 1-1 opettaa eikä piilota mitään, ja
