@@ -176,6 +176,24 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
    * Ilman `clock`ia (kartta, esittely, mikä tahansa muu piirtäjä) vanha
    * parallaksi jää voimaan: aurinko on silloin maisemaa eikä mittari.
    */
+}
+
+/**
+ * THE SUN IS DRAWN LAST OF EVERYTHING THAT SHARES ITS SKY.
+ *
+ * Raising the arc out of the play area was half the fix and it exposed the
+ * other half: at y=31…72 the sun is in the CLOUD band, so clouds began cutting
+ * it exactly the way blocks used to. Measured, four to ten frames per level
+ * still showed two lobes. There is no height with nothing at it — the play
+ * area is below and the clouds are above.
+ *
+ * So it stops being a question of where and becomes a question of ORDER. The
+ * sun is painted after the clouds, and nothing else is drawn in that band, so
+ * nothing can sever it. A sun in front of a cloud is not how the sky works,
+ * but at sixteen pixels it is how the sky READS — and the alternative is an
+ * object that keeps turning into two objects.
+ */
+function drawSun(ctx, themeName, viewW, viewH, camX, tick, clock) {
   const { x: cx, y: cy } = sunPos(viewW, viewH, clock, camX);
   const sun = SUNS[themeName] || SUNS.default;
   disc(ctx, cx, cy, sun.r, sun.core, sun.rim, tick, sun.rays);
@@ -330,6 +348,30 @@ function drawSkyTower(ctx, tower, camX, groundY, th, viewW) {
  *
  * With a `clock` it rises at the left, crosses, and sets at the right over the
  * length of the level — which is the game's answer to *how far through am I*.
+ *
+ * THE ARC IS SHALLOW AND HIGH, AND THAT IS THE TWO-SUNS FIX.
+ *
+ * Owner, three times, and right every time: *"there are TWO SUNS in this
+ * picture from 2-1."* There is one sun. What there was not is anywhere for it
+ * to hang undisturbed: the arc ran from y=158 at the ends up to y=33, and
+ * y=158 is row ten — the middle of the play area, where floating blocks, coins
+ * and platforms live. Anything opaque crossing the disc leaves a bright lobe
+ * above and a bright lobe below, and two bright lobes twenty pixels apart are
+ * not a sun behind a block. They are two suns.
+ *
+ * That is also why every colour detector kept reporting one sun: it scanned
+ * for the core colour and found it, and never asked whether the pixels it
+ * found were CONNECTED. The report was right and the measurement was answering
+ * a different question — twice.
+ *
+ * So the arc lives in the top quarter, its centre running y=62 down to y=26,
+ * which puts the disc's lowest edge at y=77 — clear of row 5, the highest row
+ * any level actually puts anything on. That last ten pixels was worth finding:
+ * at y=72 two coins on row 5 of 2-1 still clipped the disc in one frame out of
+ * a hundred and forty.
+ *
+ * The reading does not suffer. Horizontal travel is what says how far through
+ * you are; the rise and fall was always the smaller half of the cue.
  * Without one (the map, the interlude, anything not being played) it is
  * scenery again and only drifts with the camera.
  *
@@ -347,7 +389,7 @@ export function sunPos(viewW, viewH, clock, camX) {
     x: timed
       ? Math.round(24 + (viewW - 48) * gone)
       : Math.round(((238 - camX * 0.03) % (viewW + 120) + viewW + 120) % (viewW + 120) - 60),
-    y: timed ? Math.round(viewH * 0.66 - Math.sin(gone * Math.PI) * viewH * 0.52) : 34,
+    y: timed ? Math.round(viewH * 0.26 - Math.sin(gone * Math.PI) * viewH * 0.15) : 34,
     gone,
   };
 }
@@ -884,11 +926,14 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
   sky(ctx, th, theme, viewW, viewH, camX, tick, clock);
 
   if (bg === 'factory') {
+    /* Nothing is drawn above the yard, so here the sun can go straight in. */
+    drawSun(ctx, theme, viewW, viewH, camX, tick, clock);
     factoryYard(ctx, th, camX, viewW, viewH, tick);
     return;
   }
 
   if (bg === 'clouds') {
+    drawSun(ctx, theme, viewW, viewH, camX, tick, clock);
     cloudSea(ctx, th, camX, viewW, viewH, tick, viewH + drop);
     weather(ctx, theme, camX, viewW, viewH, tick);
     return;
@@ -941,6 +986,8 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
     const x = Math.round(((-camX * 0.12 - tick * 0.08 + i * 74 + seed * 60) % span + span) % span - 70);
     cloud(ctx, x, y, 1 + Math.floor(seed * 2), th.cloud, cloudShade);
   }
+  /* Last of everything that shares the sky band. See `drawSun`. */
+  drawSun(ctx, theme, viewW, viewH, camX, tick, clock);
 
   // Mid ridge.
   const MID_H = 124;
