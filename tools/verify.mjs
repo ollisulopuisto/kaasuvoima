@@ -25480,6 +25480,88 @@ const report = await page.evaluate(async (OVERWORLDS) => {
           + ` ${A.length} kentässä (${A.map((r) => r.theme).join(', ')}), aina yksi`);
   }
 
+  /* --------------------------- maahanisku lohkoon ------------------------ */
+  /*
+   * A POUND OPENS A QUESTION BLOCK, BUT ONLY FROM HIGH ENOUGH.
+   *
+   * Owner: *"pounding a question block from above with enough force = same as
+   * hitting it from below"* and *"you gotta be higher than a regular single
+   * jump, so it's harder than jumping up from below."*
+   *
+   * The height is the mechanic, not a detail of it. A block is normally opened
+   * from underneath at the cost of one ordinary jump; if any pound could do it
+   * too, the pound would be a second and EASIER way to the same thing, and the
+   * easier way wins every time. So this gates both halves: a short drop must
+   * do nothing, and a long one must pay exactly what a bump from below pays.
+   *
+   * The threshold is read from `JUMP_BUDGET` rather than typed, so retuning
+   * gravity and re-running the measurement moves the rule with it.
+   */
+  {
+    const P = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { JUMP_BUDGET } = await import('/src/data/pacing.js');
+      const game = window.sfb3;
+      const rise = JUMP_BUDGET.cases.find((c) => c.label === 'standing, held').height;
+
+      /* One question block on a floor, and a player pounded onto it. */
+      const run = (fall) => {
+        game.state = { lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 3 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [] };
+        const sc = new LevelScene(game, '1-1');
+        for (let y = 0; y < sc.h; y++) sc.grid[y] = sc.grid[y].map(() => ' ');
+        for (let y = sc.h - 2; y < sc.h; y++) sc.grid[y] = sc.grid[y].map(() => '#');
+        const bx = 12, by = sc.h - 3;
+        sc.grid[by][bx] = '?';
+        sc.entities = sc.entities.filter((e) => e.kind === 'player');
+        sc.goal = null;
+        const p = sc.player;
+        /* Feet exactly on the block's top face. Placing the player one tile
+         * up put his feet a tile INSIDE the floor, and the block under them
+         * was the ground rather than the `?`. */
+        p.x = bx * 16; p.y = by * 16 - p.h;
+        p.poundFromY = p.y - fall;
+        p.vy = 6;
+        const coins = game.state.coins;
+        sc.poundImpact(p, 0.9);
+        return { opened: !!(sc.lastPound && sc.lastPound.opened),
+          tile: sc.tileAt(bx, by), coins: game.state.coins - coins };
+      };
+
+      /* And what a bump from below pays, for comparison. */
+      const below = (() => {
+        game.state = { lives: 5, coins: 0, score: 0, power: { type: 'shroom', level: 3 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [] };
+        const sc = new LevelScene(game, '1-1');
+        for (let y = 0; y < sc.h; y++) sc.grid[y] = sc.grid[y].map(() => ' ');
+        for (let y = sc.h - 2; y < sc.h; y++) sc.grid[y] = sc.grid[y].map(() => '#');
+        const bx = 12, by = sc.h - 3;
+        sc.grid[by][bx] = '?';
+        sc.entities = sc.entities.filter((e) => e.kind === 'player');
+        const coins = game.state.coins;
+        sc.bumpTile(bx, by, sc.player);
+        return { tile: sc.tileAt(bx, by), coins: game.state.coins - coins };
+      })();
+
+      return { rise, short: run(rise - 12), long: run(rise + 12), below };
+    });
+
+    expect('matala maahanisku ei avaa arvoituslohkoa',
+      !P.short.opened && P.short.tile === '?',
+      `pudotus ${P.rise - 12} px (raja ${P.rise}): avautui ${P.short.opened},`
+      + ` laatta yhä "${P.short.tile}"`);
+
+    expect('yhtä hyppyä korkeammalta tullut isku avaa lohkon',
+      P.long.opened && P.long.tile !== '?',
+      `pudotus ${P.rise + 12} px: avautui ${P.long.opened},`
+      + ` laatta nyt "${P.long.tile}"`);
+
+    expect('ylhäältä avattu lohko maksaa saman kuin alhaalta avattu',
+      P.long.tile === P.below.tile && P.long.coins === P.below.coins,
+      `ylhäältä "${P.long.tile}" +${P.long.coins} kolikkoa,`
+      + ` alhaalta "${P.below.tile}" +${P.below.coins}`);
+  }
+
   /* ------------------------------ heksat --------------------------------- */
   /*
    * THE COIN IS A HEXAGON, AND ONE STAGE WEARS A COMB.

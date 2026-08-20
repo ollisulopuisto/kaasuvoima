@@ -7,6 +7,7 @@ import {
 /* Vain kuninkaan verhoa varten, ks. `onKingForm`: saapuvan muodon maailma on
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
+import { JUMP_BUDGET } from '../data/pacing.js';
 import { drawBackdrop, skyTowerAt } from '../gfx/backdrop.js';
 import { Lift, drawLift } from '../entities/lift.js';
 import { PropLayer } from '../gfx/props.js';
@@ -485,6 +486,22 @@ const POUND_SHAKE_RANGE = 4.5;
  * kaatuvat — reikä lattiassa on tasan sen levyinen kuin isku näytti olevan.
  */
 const POUND_BREAK_AT = 0.72;
+
+/**
+ * How far you must have fallen before a pound can open a question block.
+ *
+ * Owner: *"you gotta be higher than a regular single jump, so it's harder than
+ * jumping up from below."* — and that is a number the game already knows, so
+ * it is read rather than chosen. `JUMP_BUDGET`'s "standing, held" case is what
+ * one ordinary jump rises, measured by `tools/measure-jump.mjs` against the
+ * real physics; clear more than that on the way down and the block is yours
+ * from above too.
+ *
+ * Reading it also means the rule cannot drift: retune gravity, re-run the
+ * measurement, and this moves with it. A hand-picked 71 would not.
+ */
+const POUND_OPEN_FALL = (JUMP_BUDGET.cases.find((c) => c.label === 'standing, held')
+  || { height: 71 }).height;
 
 /**
  * KUINKA KAUAN KUPLA KANTAA, frameina. Ks. `collisions` ja `rideBubble`.
@@ -3299,7 +3316,7 @@ export class LevelScene {
      * what "mitattu, ei muistettu" is about. */
     this.lastPound = {
       x: p.cx, y: feet, fromY: p.poundFromY, fall: p.y - p.poundFromY, room: p.y,
-      strength: t, reach, kills, wave, shake, breaks, broke: 0,
+      strength: t, reach, kills, wave, shake, breaks, broke: 0, opened: false,
     };
 
     for (let i = 0; i < 6; i++) {
@@ -3375,6 +3392,37 @@ export class LevelScene {
       for (let tx = from; tx <= to; tx++) tiles.push([tx, row]);
       this.lastPound.broke = this.burstBricks(tiles);
       if (this.lastPound.broke) Sfx.play('burst');
+    }
+
+    /*
+     * POUNDING A QUESTION BLOCK PAYS IT OUT, IF YOU CAME FROM HIGH ENOUGH.
+     *
+     * Owner: *"pounding a question block from above with enough force = same
+     * as hitting it from below"* and *"you gotta be higher than a regular
+     * single jump, so it's harder than jumping up from below."*
+     *
+     * The height requirement is the whole mechanic. A block is normally opened
+     * from underneath, which costs one ordinary jump; if it could also be
+     * opened by any pound at all, the pound would simply be a second and
+     * easier way to do the same thing, and the easier way wins every time. So
+     * the fall has to beat what a plain standing jump can reach — measured, not
+     * chosen: `POUND_OPEN_FALL` is the rise of the "standing, held" case out of
+     * the jump budget, the same table `gapTiles` comes from. Get above that and
+     * the block is reachable from above as well as below.
+     *
+     * The block bumped is the one UNDER THE FEET, not the reach: the shockwave
+     * spreads sideways and can already break a row of bricks, but opening a
+     * question block is a deliberate act aimed at one block. A pound that
+     * opened every `?` within its radius would make a queue of them one input.
+     */
+    if (p.y - p.poundFromY >= POUND_OPEN_FALL) {
+      const row = Math.floor((feet + 1) / TILE);
+      const col = Math.floor(p.cx / TILE);
+      const meta = info(this.tileAt(col, row));
+      if (meta.question) {
+        this.bumpTile(col, row, p);
+        this.lastPound.opened = true;
+      }
     }
 
     // Pystyyn: koko liike on pystysuora, ja tämä on se frame jolla se osuu.
