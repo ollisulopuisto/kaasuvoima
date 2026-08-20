@@ -7,6 +7,81 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.50 — the same sentence, and a number for it
+
+Owner, twice: *"the current levels still feel too… flat, not just literally
+but, like, there's not enough variation"* and, earlier, *"kentissä on edelleen
+liian vähän varianssia! Ne tuntuvat tasaisilta ja toisteisilta"*. Four fitness
+functions were green both times, so the thing he can feel was on none of their
+axes.
+
+**The trap first, because it decided everything else.** `variety.mjs` measures
+variety *between* levels over eight-column arrangements — over words. A search
+that optimised the existing fitness vector would happily converge on eight
+levels that all score well and are all built the same way, which is the
+complaint passing the test. So the first deliverable is a meter for grammar
+rather than vocabulary, and it had to exist before any generator work.
+
+**`tools/grammar.mjs`.** A level becomes one letter per column — hazard, void,
+enemy, overhead structure, step, treat, calm — run-length encoded into clauses.
+Three numbers, none of them raw: each is an excess over a null that holds the
+level's material fixed and destroys only its arrangement, and the far end of
+the scale is *measured*, not argued — eight levels built with nothing but the
+seed changed. The verdict:
+
+| | KAARI | MURRE | TOISTO |
+| --- | --- | --- | --- |
+| one grammar, eight rolls | −0.49 | 0.86 | 32.6 % |
+| the 25 shipped generated levels | −0.55 | 1.39 | 28.9 % |
+| the 36 hand-made levels | −0.28 | 1.64 | **11.5 %** |
+
+A generated level shares **28.9 %** of its five-clause phrases with another
+generated level against **11.5 %** hand-made — two and a half times the
+repetition, two thirds of the way to being literally one grammar.
+
+**Two of the meter's own mistakes are in the file, because both looked like
+findings.** `S` first meant "ground off its usual height", and since the
+terrain pass leaves whole stretches lifted that one letter covered 45 % of
+every generated level and drowned everything else; a plateau is walking, not
+terrain challenge. And the factory and fortress lids made every column "has
+something overhead", which scored those two themes as the most stationary in
+the game — an artefact, and a total one.
+
+**KAARI is a measured negative and is kept as one.** Levels do not have arcs,
+hand-made ones included: every set sits within half a standard deviation of its
+own shuffled null. Whatever "flat" means, it is not that.
+
+**The prototype: grammar expansion, and it half worked.** The loop was
+`rest(); piece = weightedDraw(); piece()`, a stationary first-order draw with
+no memory, which cannot build a motif. It now has productions — two or three
+pieces in a fixed order with pacing written in, asking for *categories* so
+every `drop` list still holds. The first attempt wrote ten productions down and
+**made TOISTO worse** (32.6 % → 33.4 %), because ten shared productions are ten
+shared sentences: it swapped one sentence for a ten-line phrasebook. Drawing
+the productions per level instead, over 12 runs (4 themes × 3 seed bases):
+MURRE 0.86 → **1.30**, better in 12 of 12; TOISTO 32.5 % → 27.1 %, better in 10
+of 12. That closes about 56 % of the MURRE gap to hand-made and 26 % of the
+TOISTO gap — a clear win on one axis, a weak one on the other, and nowhere near
+hand-made.
+
+**It ships switched off, and the flag is not timidity.** `src/data/generated.js`
+and `src/data/daily-origin.js` are both functions of this loop's exact random
+stream and both are gates; rebuilding either needs the corpus behind
+`VGLC_DIR`, which is not in the repository. Turning the layer on without it
+would either turn the suite red or go green by rewriting 26 levels as
+`origin: 'not checked'` — trading the guarantee the whole approach rests on for
+a partial gain. Off is byte-identical to the old loop and that is checked, not
+claimed: `node tools/gen-levels.mjs` rewrites every grid row unchanged, and the
+daily fingerprint `2179c9f1cefff932` does not move.
+
+**The biggest lead is not the productions.** Hand-made levels put two
+challenges back to back in **15.2 %** of adjacent clause pairs; generated ones
+in **4.9 %**, because `PIECES.rest` floors at three columns and so the
+generator *cannot* emit two challenges without calm between them. One hard
+structural signature, cheap to test, untouched here.
+
+---
+
 ## v26.08.19.49 — the die lies down on a floor
 
 Owner: *"I think for the map I prefer iso 2.5D."*
