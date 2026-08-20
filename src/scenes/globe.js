@@ -61,14 +61,40 @@ const VIEW_H = 240;
 /**
  * Screen radius of the solid.
  *
- * Grown from 62 once the labels moved into two bands: the top band ends at 36
- * and the bottom begins at 174, so there are 138 pixels for the solid to be as
- * big as it likes in. 68 fills them. Owner: *"we can make the shape bigger!"*
+ * Owner: *"the visible side could be larger, maybe we see less of it… some of
+ * the other sides might be cropped out. The side that is facing the player is
+ * too crowded now."*
+ *
+ * All three sentences are one instruction, and the last is the reason. The
+ * face you stand on carries a road, its junctions, the trees, the house and
+ * you — and at a radius chosen to fit the WHOLE SOLID between the label
+ * bands, that face got about a fifth of the frame to hold them all in. The
+ * solid was the thing being framed; the face was what was left over.
+ *
+ * So the framing is inverted. The face is what has to fit and the solid is
+ * what gets cropped. Measured, 100 takes the face from 92 px across to 148 —
+ * three fifths wider, filling the band top to bottom — while the neighbours
+ * run off the left edge, which is the point: a shape whose sides leave the
+ * frame reads as bigger than the window, and one that sits inside it reads as
+ * an object on a table.
+ *
+ * The ceiling is not the face, it is the MARKER RING outside it, which grows
+ * with the radius: at 104 the markers spanned into the title at one end and
+ * the branch board at the other, and at 112 the face itself did too. 100 is
+ * where every marker on all sixty-four faces lands inside the band without
+ * once having to give up clearance. See `markerAt`.
  */
-const R = 68;
-const CAM_Z = 4.6;
-const CX = 160;
-const CY = 106;
+const R = 100;
+
+/*
+ * And the camera comes closer with it. Perspective is doing a second job
+ * here: at 4.6 the eye is far enough that the near face and the far ones are
+ * nearly the same size, so growing R grew everything equally and the face
+ * gained no ground on its neighbours. At 3.0 the near face swells and the
+ * ones turning away shrink, so the face wins twice — once from the radius and
+ * once from the distance — and the solid still reads as a solid.
+ */
+const CAM_Z = 3.0;
 
 /**
  * THE ANGLE THE SOLID IS SEEN FROM, and the reason it is not face-on.
@@ -91,6 +117,36 @@ const tilted = (q) => qNorm(qMul(
 ));
 /** The solid's own circumradius is sqrt(5); this brings it to `R` on screen. */
 const SCALE = 1 / Math.sqrt(5);
+
+/**
+ * WHERE THE MIDDLE OF THE PICTURE IS, and it is not the middle of the solid.
+ *
+ * `rot` is always `tilted(qBetween(normal, [0, 0, 1]))`, so whichever face you
+ * are standing on is turned to face +z and then tipped by the same fixed TILT
+ * and YAW. Its projected centre is therefore the SAME SCREEN POINT for every
+ * face in the game — a constant, computed once here from the geometry rather
+ * than typed in, so it stays right if the tilt is ever retuned.
+ *
+ * The tilt that makes the solid read as a solid is exactly what pushes that
+ * point off centre: tipping away and round moves the face you are reading down
+ * and to the right of the shape's middle. Centring on the shape therefore
+ * centred on the part nobody looks at, and every pixel the face grew by moved
+ * it further into a corner. So the offset is cancelled: the face lands in the
+ * middle of the band, and the solid sits wherever that leaves it.
+ */
+const BAND_MID_Y = 110;
+/** The rows a marker may occupy: clear of the name plate and of the board. */
+const MARK_TOP = 40;
+const MARK_BOT = 170;
+const HOME_OFF = (() => {
+  const home = FACES[0];
+  const rot = tilted(qBetween(home.normal, [0, 0, 1]));
+  const c = qApply(rot, home.centre.map((n) => n * SCALE));
+  const s = CAM_Z / (CAM_Z - c[2]);
+  return { x: c[0] * R * s, y: -c[1] * R * s };
+})();
+const CX = 160 - HOME_OFF.x;
+const CY = BAND_MID_Y - HOME_OFF.y;
 
 /* ------------------------------ the roll ------------------------------- */
 
@@ -1198,12 +1254,42 @@ export class GlobeScene {
        * a marker labels the *door*, and a door is on the boundary rather than
        * inside the room.
        */
-      this.drawMarker(ctx, k, lead, this.onHere(s.u * 1.34, s.v * 1.34), ink);
+      this.drawMarker(ctx, k, lead, this.markerAt(s), ink);
     }
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(Math.round(hub.x) - 3, Math.round(hub.y) - 3, 6, 6);
     ctx.fillStyle = INK;
     ctx.fillRect(Math.round(hub.x) - 2, Math.round(hub.y) - 2, 4, 4);
+  }
+
+  /**
+   * AS FAR OUT AS THERE IS ROOM FOR.
+   *
+   * 1.34 is where a marker wants to be, and at the old radius it always fit.
+   * Once the face grew to fill the band the ring grew with it, and measured
+   * across all sixty-four faces the markers spanned 164 px — into the title
+   * at the top and into the branch board at the bottom, in a band that is
+   * only 138 px tall. No single ring radius fixes that: the ring is simply
+   * bigger than the room, and shrinking it far enough to always fit would
+   * put every marker back on the rim the player stands on, which is the
+   * overlap this ring was raised to escape.
+   *
+   * So the radius is per marker. Each one starts where it wants to be and
+   * walks in along its own spoke only until it is inside the band — so the
+   * markers that were never in trouble do not move at all, and only the one
+   * or two at the top and bottom of the ring give up any clearance. The floor
+   * is 1.12, still outside the rim: a marker that cannot fit even there keeps
+   * its place, because a marker crowded by the player is a smaller loss than
+   * a marker underneath a line of text.
+   */
+  markerAt(s) {
+    let t = 1.34;
+    for (let i = 0; i < 8; i++) {
+      const p = this.onHere(s.u * t, s.v * t);
+      if ((p.y >= MARK_TOP && p.y <= MARK_BOT) || t <= 1.12) return p;
+      t -= 0.03;
+    }
+    return this.onHere(s.u * t, s.v * t);
   }
 
   /** What sits at the far end of a road, drawn at its edge. */

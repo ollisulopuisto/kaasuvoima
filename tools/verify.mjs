@@ -25168,6 +25168,124 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
   }
 
+  /* ---------------------------- kartan rajaus ---------------------------- */
+  /*
+   * THE FRAME IS BUILT ROUND THE FACE, NOT ROUND THE SOLID.
+   *
+   * Owner: *"the visible side could be larger, maybe we see less of it… some
+   * of the other sides might be cropped out. The side that is facing the
+   * player is too crowded now."* Three sentences, one instruction, and the
+   * last is the reason: that face carries a road, its junctions, the trees,
+   * the house and the player, and it was getting about a fifth of the frame
+   * to hold them in, because the thing being framed was the whole solid.
+   *
+   * Two claims, and they are separate. The first is that the face you stand
+   * on lands in the SAME PLACE whichever one it is — `rot` is always
+   * `tilted(qBetween(normal, [0,0,1]))`, so this is provable from the code,
+   * which is exactly why it is worth a gate: the tilt that makes the solid
+   * read as a solid is what pushes that point off centre, and the offset that
+   * cancels it is a constant nobody would notice going stale. The second is
+   * that the face is now big, and the labels still have their rows.
+   */
+  {
+    const F = await page.evaluate(async () => {
+      const { GlobeScene } = await import('/src/scenes/globe.js');
+      const game = window.sfb3;
+      const seen = [];
+      for (let f = 0; f < 8; f++) {
+        const sc = new GlobeScene(game, 0, f);
+        const c = sc.onHere(0, 0);
+        const pts = [];
+        for (let a = 0; a < 6; a++) {
+          const th = (a / 6) * Math.PI * 2;
+          pts.push(sc.onHere(Math.cos(th), Math.sin(th)));
+        }
+        const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+        seen.push({
+          f,
+          cx: Math.round(c.x), cy: Math.round(c.y),
+          w: Math.round(Math.max(...xs) - Math.min(...xs)),
+          h: Math.round(Math.max(...ys) - Math.min(...ys)),
+          top: Math.round(Math.min(...ys)), bottom: Math.round(Math.max(...ys)),
+        });
+      }
+      return seen;
+    });
+
+    /*
+     * The claim is that they all land in the SAME place and that the place is
+     * horizontally centred and inside the band — not that it is one particular
+     * row. Asserting the row would be copying `BAND_MID_Y` into a second file,
+     * and a constant kept in two places is a constant that goes stale in one.
+     */
+    const off = F.filter((a) => a.cx !== F[0].cx || a.cy !== F[0].cy);
+    expect('se sivu jolla seisot on aina ruudun keskellä, oli se mikä tahansa',
+      off.length === 0 && F[0].cx === 160 && F[0].cy > 36 && F[0].cy < 174,
+      off.length ? off.map((a) => `sivu ${a.f} kohdassa ${a.cx},${a.cy}`).join('; ')
+        : `kaikki 8 sivua kohdassa ${F[0].cx},${F[0].cy}`);
+
+    const narrow = F.filter((a) => a.w < 135);
+    expect('sivu täyttää kaistan, ei istu sen keskellä',
+      narrow.length === 0,
+      `kapein sivu ${Math.min(...F.map((a) => a.w))} px leveä`
+      + ` (ennen 92), korkein ${Math.max(...F.map((a) => a.h))} px`);
+
+    /*
+     * THE RING OUTSIDE THE FACE IS WHAT ACTUALLY SETS THE CEILING.
+     *
+     * Markers sit past the rim so the player cannot stand on top of them, so
+     * they grow faster than the face does — measured across all sixty-four
+     * faces they spanned 164 px in a 138 px band, into the name plate at one
+     * end and the branch board at the other. `markerAt` walks each one in
+     * along its own spoke only as far as it must, so this reads the real draw
+     * path rather than the formula, and covers every face in the game.
+     */
+    const M = await page.evaluate(async () => {
+      const { GlobeScene } = await import('/src/scenes/globe.js');
+      const game = window.sfb3;
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const g = c.getContext('2d');
+      let low = -1, high = 999, lowAt = null, highAt = null, n = 0;
+      for (let w = 0; w < 8; w++) {
+        for (let f = 0; f < 8; f++) {
+          let sc;
+          try { sc = new GlobeScene(game, w, f); } catch { continue; }
+          const seen = [];
+          const orig = Object.getPrototypeOf(sc).drawMarker;
+          sc.drawMarker = function (ctx, k, lead, pt, ink) {
+            seen.push(pt.y);
+            return orig.call(this, ctx, k, lead, pt, ink);
+          };
+          try { sc.draw(g); } catch { continue; }
+          for (const y of seen) {
+            n++;
+            if (y > low) { low = y; lowAt = `${w + 1}-${f + 1}`; }
+            if (y < high) { high = y; highAt = `${w + 1}-${f + 1}`; }
+          }
+        }
+      }
+      return { low: Math.round(low), high: Math.round(high), lowAt, highAt, n };
+    });
+
+    expect('yksikään kenttämerkki ei osu nimikilpeen eikä haaralautaan',
+      M.high >= 40 && M.low <= 170,
+      `${M.n} merkkiä 64 sivulla, ylin rivillä ${M.high} (${M.highAt}),`
+      + ` alin rivillä ${M.low} (${M.lowAt}) — sallittu 40..170`);
+
+    /*
+     * The labels keep their rows. A few pixels of the hexagon's top corner
+     * reach row 33 and that is fine — the labels are drawn AFTER the solid,
+     * so a corner behind the difficulty pips is a corner behind them. What
+     * would not be fine is the branch board, which is text on text.
+     */
+    const board = F.filter((a) => a.bottom > 174);
+    expect('nimikilpi ja haaralauta säilyttävät omat rivinsä',
+      board.length === 0 && F.every((a) => a.top > 30),
+      `sivu ulottuu riveille ${Math.min(...F.map((a) => a.top))}`
+      + `..${Math.max(...F.map((a) => a.bottom))} (otsikko loppuu 36, lauta alkaa 174)`);
+  }
+
   /* ------------------------------- kyltit -------------------------------- */
   /*
    * A SIGNPOST HAS TO REACH THE FLOOR.
