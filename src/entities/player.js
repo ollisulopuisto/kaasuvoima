@@ -304,6 +304,60 @@ const CHAIN_WINDOW = 7;
 const CHAIN_BUILD_AT = 3;
 const CHAIN_FILL = P_METER_MAX / P_SEGMENTS / 10;
 
+/*
+ * KAASU LÄHTEE TAKAA, ja siitä seuraa kaikki muu tässä lohkossa.
+ *
+ * Omistaja: *"is this a dumb idea: the 'fireballs' are actually ejected from
+ * the rear of the character… cos they're farts? Which means you can't just run
+ * and gun, you need to turn around to hit enemies with projectiles."*
+ *
+ * Ei tyhmä, ja se **korjaa** epäjohdonmukaisuuden joka oli jo koodissa: ammus
+ * on nimeltään `FartBall` ja se lähti edestä.
+ *
+ * Naiivi versio kaatuisi yhteen asiaan. Peli vierii oikealle, eli uhat tulevat
+ * oikealta, ja ase joka ampuu vain vasemmalle ei ole vaikeampi vaan hyödytön —
+ * pelaaja lakkaisi poimimasta kukkaa ja viisiportainen tehostustikas menisi
+ * hukkaan.
+ *
+ * Korjaus on Newton. Kaasu taakse työntää pelaajaa eteenpäin, joten laukauksia
+ * on kolmea lajia ja jokainen on vaihtokauppa:
+ *
+ *   1. **Kasvot menosuuntaan.** Ammus suojaa selustan ja saat työnnön. Ilmaista.
+ *   2. **Kasvot taaksepäin.** Ammus lähtee kohti sitä mikä on edessä, ja rekyyli
+ *      työntää sinua siitä poispäin: perääntyvä taistelu joka maksaa maata.
+ *   3. **Hyppy, käännös, laukaus, käännös takaisin ikkunan sisällä.** Osuu
+ *      eteen eikä maksa mitään. Ks. `TURN_WINDOW`.
+ *
+ * KAKSI MITATTUA SÄÄNTÖÄ SITOVAT TÄTÄ, samat kuin hyppyketjua ja rinnesinkoa:
+ *
+ *   - **Katto ei nouse.** `MAX_P` on se luku jolla `gapTiles` 6 ja `wallTiles`
+ *     4 on mitattu ja jota vasten jokaisen kentän läpäistävyys on todistettu.
+ *     Työntö saa auttaa *saavuttamaan* sen, ei ylittämään — eli hyppybudjetti
+ *     ei voi rakenteellisesti liikkua.
+ *   - **Huomiotta jättäminen ei rankaise.** Menosuuntaan ampuminen on
+ *     täsmälleen se mitä pelaaja tekee muutenkin, eikä se maksa mitään.
+ */
+const RECOIL = 0.55;
+const RECOIL_BIG = 1.15;
+
+/**
+ * Frameja ilmassa joiden sisällä käännös takaisin palauttaa rekyylin.
+ *
+ * Omistaja: *"let's say this is where the PERFECT TIMING comes in — if you
+ * execute this in the correct rhythm, there's no velocity cost? Like you can
+ * jump, turn around, fart, turn back, and keep your velocity."*
+ *
+ * Sama kielioppi kuin `CHAIN_WINDOW`illa, ja pidempi samasta syystä kuin se on
+ * lyhyt: ketjuhyppy on yksi painallus ajallaan, tämä on kolme (käännös,
+ * laukaus, käännös) ja niille on annettava inhimillinen aika. 14 framea on
+ * neljännessekunti — kyllin tiukka ollakseen taito, kyllin väljä ollakseen
+ * opittavissa.
+ *
+ * Vain ilmassa. Maassa kääntyminen maksaa vauhtia kuten ennenkin, koska maassa
+ * on `SKID` ja ilmassa ei — ja juuri se ero tekee tästä hyppyliikkeen.
+ */
+const TURN_WINDOW = 14;
+
 
 /*
  * PAINE NÄKYY KEHOSSA. Vauhtimittari on tähän asti ollut pelkkä nauhan palkki,
@@ -611,6 +665,11 @@ export class Player extends Entity {
     this.sinceLanding = 999;
     this.landingDrain = 0;
     this.chain = 0;
+    /** Airborne turn bookkeeping for the refunded shot. See `TURN_WINDOW`. */
+    this.turnAt = -999;
+    this.turnFrom = 0;
+    this.turnSpeed = 0;
+    this.recoilOwed = 0;
     /* The size change is already frozen for a few frames; this is what those
      * frames are for. `morphFrom` is the body he had a moment ago, and the
      * drawing alternates between the two so the change reads as a change
@@ -1005,6 +1064,10 @@ export class Player extends Entity {
        * `SURFACES`in oma sääntö kirjoitettuna siihen yhteen kohtaan jossa
        * molemmat luvut ovat näkyvissä: jäällä ei ole vaikeaa lähteä vaan
        * kääntyä, ja kääntyminen on juuri tämä haara. */
+      /* Before the braking, not after: the speed worth remembering is the one
+       * you had when you decided to turn, and by the line below it has already
+       * been spent. Recording it after left the refund 0.13 short. */
+      if (dir !== this.facing && !this.onGround) this.turnAround(dir);
       this.vx = approach(this.vx, cap * dir, skidding ? SKID * grip : ACC);
       if (Math.abs(this.vx) > cap && this.onGround) this.vx = approach(this.vx, cap * dir, 0.06);
       this.facing = dir;
@@ -1038,6 +1101,9 @@ export class Player extends Entity {
       this.coyote = COYOTE_FRAMES;
       /* A contact that outlasts the window ends the chain: the string is of
        * jumps that *touched* and left, not of jumps that happened eventually. */
+      /* The window is airborne only: feet down ends it, unspent. */
+      this.turnAt = -999;
+      this.recoilOwed = 0;
       if (this.sinceLanding === 999) this.sinceLanding = 0;
       else if (this.sinceLanding >= CHAIN_WINDOW) {
         this.chain = 0;
@@ -1590,18 +1656,96 @@ export class Player extends Entity {
       live[i].remove = true;
       this.level.spawnPuff(live[i].cx, live[i].cy);
     }
-    const x = this.facing > 0 ? this.x + this.w : this.x - 8;
+    /*
+     * OMA KAASU TAAKSE, NIELTY ETEEN.
+     *
+     * `sylky` on **lainattu** ammus eikä omaa kaasua, ja lainattu ammus lähtee
+     * suusta. Se ei ole poikkeus säännöstä vaan sääntö itse: se mikä on
+     * nielty tulee ulos sieltä minne se meni. Ja se on myös tämän mekaniikan
+     * vastaus siihen ettei eteenpäin muka voi ampua — voi, nielemällä, ja
+     * nielemismekaniikka saa siitä tehtävän jota sillä ei ennen ollut.
+     */
+    const own = this.swallowed !== 'sylky';
+    const dir = own ? -this.facing : this.facing;
+    const x = dir > 0 ? this.x + this.w : this.x - 8;
+    if (own) this.recoil(charged);
     for (let i = 0; i < spread; i++) {
       /* Ladattu on aina yksi: iso pallo *on* se hajonta. Kolme isoa yhdellä
        * painalluksella olisi ollut ruisku takaisin toisessa muodossa. */
       const big = charged && i === 0;
       const ball = new FartBall(this.level, x, this.y + this.h * 0.45 - (big ? 4 : 0),
-        this.facing, big);
+        dir, big);
       if (!big && i === 1) ball.vy = -2.2;
       if (!big && i === 2) ball.vy = 2.4;
       this.level.add(ball);
       if (big) break;
     }
+  }
+
+  /**
+   * An about-face in mid-air, and the one that pays for itself.
+   *
+   * Turning back to where you were heading inside `TURN_WINDOW` hands back
+   * every pixel of speed the shots in between took — so *jump, turn, fire,
+   * turn back* costs nothing at all, while the same three inputs done slowly
+   * cost exactly what they cost. That is the whole shape of it: the hard
+   * version is the fast one, which is the same trade the jump chain makes.
+   *
+   * The refund goes through the same ceiling as the kick did, so a manoeuvre
+   * can return you to full speed and never above it.
+   */
+  turnAround(dir) {
+    if (dir === this.turnFrom && this.tick - this.turnAt <= TURN_WINDOW
+      && this.recoilOwed !== 0) {
+      /*
+       * THE WHOLE MANOEUVRE IS REFUNDED, not merely the recoil — because the
+       * recoil is the smaller half of what an about-face costs. Measured, a
+       * turn at 3.35 gave back 0.55 of kick and still landed at 2.92: most of
+       * the loss is the AIR BRAKING of two frames spent steering the wrong
+       * way, and refunding only the kick would have left a manoeuvre that
+       * still cost speed while claiming not to.
+       *
+       * So the speed at the moment of turning is restored outright. The
+       * `recoilOwed` test is what keeps that honest: without it, turning and
+       * turning back would cancel air braking for free and hand the player an
+       * air-brake canceller nobody designed. A shot has to have happened —
+       * which is exactly the manoeuvre that was asked for and nothing else.
+       */
+      const ceiling = Math.max(MAX_P, Math.abs(this.turnSpeed));
+      this.vx = Math.sign(this.turnSpeed) * Math.min(Math.abs(this.turnSpeed), ceiling);
+      this.recoilOwed = 0;
+      this.turnAt = -999;
+      this.turnFrom = 0;
+      return;
+    }
+    this.turnAt = this.tick;
+    this.turnFrom = this.facing;
+    this.turnSpeed = this.vx;
+    this.recoilOwed = 0;
+  }
+
+  /**
+   * The shove a shot gives, and the ceiling it may not cross.
+   *
+   * `MAX_P` is what `gapTiles` 6 and `wallTiles` 4 were measured at, so the
+   * kick may carry you TOWARDS the game's top speed and never past it — the
+   * jump budget cannot move, by construction rather than by testing. An
+   * existing over-cap speed (a slope launch borrows one) is never reduced by
+   * the clamp either; it is a ceiling on the kick, not on the player.
+   *
+   * A kick that fights your motion is applied in full, because that is the
+   * whole cost of shooting at something in front of you.
+   */
+  recoil(charged) {
+    const kick = (charged ? RECOIL_BIG : RECOIL) * this.facing;
+    const want = this.vx + kick;
+    const ceiling = Math.max(MAX_P, Math.abs(this.vx));
+    const next = Math.sign(want) * Math.min(Math.abs(want), ceiling);
+    /* Owed while airborne, so a turn back inside the window can hand it back.
+     * Only the part actually applied is owed — a kick swallowed by the ceiling
+     * was never charged for. */
+    if (!this.onGround) this.recoilOwed += next - this.vx;
+    this.vx = next;
   }
 
   bounce() {

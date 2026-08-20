@@ -85,6 +85,39 @@ vaakavauhdin korkeudeksi, joka on pääsy ylemmälle reitille.
 | tarttuminen alamäkeen | **8 px** | ks. `SLOPE_SNAP`, `src/level/physics.js` |
 | askelma rampin päässä | **6 px** | ks. `STEP_UP`, ei riitä mihinkään seinään |
 
+## Takakaasu: rekyyli ja käännösikkuna
+
+Kaasu lähtee takaa, joten laukaus työntää. Kolme lajia, jokainen vaihtokauppa:
+
+| Laukaus | Osuu | Vaikutus vauhtiin |
+| --- | --- | --- |
+| kasvot menosuuntaan | selustaan | **+0.55** (ladattu **+1.15**) |
+| kasvot taaksepäin | eteen | **−0.55** — perääntyvä taistelu |
+| hyppy, käännös, laukaus, käännös takaisin ≤ **14 framea** | eteen | **0** — vauhti palautetaan |
+
+| Vakio | Arvo | Peruste |
+| --- | --- | --- |
+| `RECOIL` | **0.55** | tuntuu potkulta, ei siirrä hyppybudjettia |
+| `RECOIL_BIG` | **1.15** | ladattu pallo on isompi massa |
+| `TURN_WINDOW` | **14 framea** | kolme painallusta tarvitsee inhimillisen ajan; `CHAIN_WINDOW` (7) on yksi |
+
+**Katto on `MAX_P` (3.5), eikä työntö ylitä sitä.** Sama sääntö kuin rinteellä
+ja hyppyketjulla, ja samasta syystä: `gapTiles` 6 ja `wallTiles` 4 on mitattu
+sillä luvulla. Mitattu ennen ja jälkeen — hyppybudjetti ei liikkunut lainkaan.
+
+**Palautus koskee koko liikettä eikä vain rekyyliä.** Mitattuna käännös 3.35:stä
+palautti 0.55 potkua ja päätyi silti 2.92:een: suurin osa tappiosta on
+**ilmajarrutus** eikä rekyyli. Palautus vaatii että laukaus oikeasti tapahtui
+(`recoilOwed`), koska muuten käännös ja paluu kumoaisi ilmajarrutuksen ilmaiseksi
+ja antaisi liikkeen jota kukaan ei suunnitellut.
+
+**Vain ilmassa.** Maassa kääntyminen maksaa kuten ennenkin, koska maassa on
+`SKID` ja ilmassa ei — ja juuri se ero tekee tästä hyppyliikkeen.
+
+**Nielty ammus (`sylky`) lähtee suusta eteenpäin eikä anna rekyyliä.** Se on
+lainattua eikä omaa kaasua, ja se on myös vastaus siihen ettei eteenpäin muka
+voi ampua.
+
 **Kiihtyvyys ei muutu.** `ACC` on yhä yksi vakio sekä kävelylle että juoksulle,
 ja se on sama päätös joka tehtiin jäälle (alempana). Rinne ei kosketa siihen —
 se lisää painovoiman komponentin pintaa pitkin, mikä on eri asia ja myös se
