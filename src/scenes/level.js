@@ -273,6 +273,15 @@ const COIN_DROP_G = 0.6;
  * arrival that takes as long as the journey stops reading as an arrival.
  */
 const COIN_SUCK = 9;
+
+/**
+ * Frames a red coin takes to come apart when the player dies.
+ *
+ * Long enough to be watched, and it can afford to be: the death animation
+ * holds the picture for far longer than this, so the explosion is over well
+ * before the screen changes and nobody has to catch it.
+ */
+const RED_BURST = 34;
 /*
  * Lohkosta lyödyn kolikon pomppu: sama lähtönopeus ja sama painovoima kuin
  * vanhalla `CoinPop`illa, koska se liike oli oikein — vain sen loppu oli
@@ -1887,6 +1896,8 @@ export class LevelScene {
     this.coinFlights = [];
     this.tubeFlash = 0;
     this.tubeFlush = 0;
+    /** Tick the player died on, or null. Drives the red coin's blast. */
+    this.deathAt = null;
 
     /*
      * LINNAKKEEN OVI — mistä kuolema palauttaa, kun areenalle on kerran päästy.
@@ -3537,6 +3548,20 @@ export class LevelScene {
       ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
   }
 
+  /**
+   * How far through the red coin's explosion we are: 0 before, 1 after.
+   *
+   * The stock on screen still includes the coin about to be lost — a life is
+   * not deducted until the level hands its result back — so the one that
+   * blows up is simply the last one on the ring, and by the time the blast
+   * ends and it stops being drawn, the number the game keeps has caught up
+   * with the number the sky was showing. No bookkeeping either side.
+   */
+  redBurst() {
+    if (this.deathAt === null) return 0;
+    return Math.max(0, Math.min(1, (this.tick - this.deathAt) / RED_BURST));
+  }
+
   /** True when the coin cube is in this level's sky at all. */
   skyCube() {
     return !(this.def.bg === 'none' || this.vertical);
@@ -4004,6 +4029,10 @@ export class LevelScene {
   onPlayerDied(cause = 'enemy') {
     this.state = 'dead';
     this.stateTimer = 0;
+    /* Read as a tick difference rather than counted down by a timer, because
+     * a timer needs somebody to tick it and the one thing that is certainly
+     * still running during a death is the clock. See `redBurst`. */
+    this.deathAt = this.tick;
     this.recordDeath(cause);
     Music.stop();
     Ambience.stop();
@@ -6657,6 +6686,12 @@ export class LevelScene {
        * `drawTower`: this is the conversion, and it is the one thing the
        * corner glass said that the cube did not. */
       rising: this.tubeFlush > 0 ? 1 - this.tubeFlush / COIN_FLUSH : 1,
+      /* Owner: *"when the player dies, have one of the rotating red coins
+       * VISIBLY explode!"* — and it belongs up here rather than over the body
+       * because every other mark of a death is already at the player. A life
+       * is spent from the stock, so the stock is where it has to be seen
+       * leaving. See `drawTower`. */
+      burst: this.redBurst(),
     };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock, tower);

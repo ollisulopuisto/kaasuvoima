@@ -89,6 +89,51 @@ const shade = (hex, k) => {
 };
 
 /**
+ * A red coin coming apart, `t` running 0 to 1.
+ *
+ * Ten fragments on fixed angles, thrown out along a square root so they leave
+ * fast and coast — the opposite of the eased arcs everywhere else in this
+ * file, because everything else here is *carried* and this is the one thing
+ * that is *released*. They sag as they go: a little gravity is what separates
+ * an explosion from a starburst.
+ *
+ * The colour runs the way a spark actually cools, pale to red to dark, so the
+ * fragments read as ONE thing losing its heat rather than ten things being
+ * drawn. And they are drawn full size at the start and small at the end, so
+ * the first frame still looks like a coin — the explosion has to be a coin
+ * exploding, not a puff appearing where a coin was.
+ */
+function bang(ctx, o, t, haze, sky) {
+  const reach = Math.sqrt(t) * 26;
+  const fade = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+  /* The flash: two frames of white where the coin was, which is what makes
+   * the eye look up in the first place. Everything after it is aftermath. */
+  if (t < 0.2) {
+    const k = 1 - t / 0.2;
+    const rad = Math.round(4 + (1 - k) * 16);
+    ctx.globalAlpha = k * 0.85;
+    ctx.fillStyle = '#fff0c0';
+    ctx.fillRect(Math.round(o.x - rad), Math.round(o.y - 1), rad * 2, 3);
+    ctx.fillRect(Math.round(o.x - 1), Math.round(o.y - rad), 3, rad * 2);
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = fade;
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2 + 0.31;
+    /* alternating throw distances, or ten fragments on a circle read as a
+     * ring rather than as debris */
+    const far = reach * (k % 2 ? 1 : 0.62);
+    const fx = o.x + Math.cos(a) * far;
+    const fy = o.y + Math.sin(a) * far * 0.8 + t * t * 11;
+    const size = Math.max(1, Math.round(3.4 - t * 2.6));
+    ctx.fillStyle = faded(t < 0.25 ? '#ffd0a0' : t < 0.6 ? '#ff6060' : '#a01c1c',
+      haze * 0.3, sky);
+    ctx.fillRect(Math.round(fx - size / 2), Math.round(fy - size / 2), size, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/**
  * The cube's orientation at `phase` frames.
  *
  * Turning about a tilted axis rather than a straight one, so the same three
@@ -110,7 +155,7 @@ function spin(phase) {
  * horizon.
  */
 export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
-  sky = [150, 190, 240], r = CUBE_R, phase = 0, rising = 1 } = {}) {
+  sky = [150, 190, 240], r = CUBE_R, phase = 0, rising = 1, burst = 0 } = {}) {
   const q = spin(phase);
   const pts = VERTS.map((v) => {
     const p = qApply(q, v);
@@ -287,7 +332,31 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
   }
   orbit.sort((a, b) => a.z - b.z);
 
+  const blast = Math.max(0, Math.min(1, burst));
   for (const o of orbit) {
+    /*
+     * ONE OF THEM VISIBLY EXPLODES. Owner: *"when the player dies, have one
+     * of the rotating red coins VISIBLY explode!"*
+     *
+     * The last one on the ring, and it is the right one without any
+     * bookkeeping: a life is not deducted until the level hands its result
+     * back, so through the whole death animation the stock on screen still
+     * INCLUDES the coin that is about to be lost. The one that dies is
+     * therefore simply the last one drawn, and when the blast finishes and it
+     * stops being drawn, the number the game keeps has caught up with the
+     * number the sky is showing.
+     *
+     * It happens up there rather than over the body on purpose. Every other
+     * thing that marks a death is at the player — the sound, the flip, the
+     * fall — and one more of those is a louder death, not a clearer one.
+     * A life is spent from the stock, so the stock is where it has to be seen
+     * leaving, and the eye is dragged up to the number that just changed.
+     */
+    if (blast > 0 && o.i === n - 1) {
+      if (blast >= 1) continue;                       // spent: gone from the ring
+      bang(ctx, o, blast, haze, sky);
+      continue;
+    }
     const newest = o.i === n - 1 && climb < 1;
     /* Out of the middle of the cube, not off its lid: it was in there. */
     const cy = Math.round(newest ? y + (o.y - y) * eased : o.y);

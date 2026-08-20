@@ -25168,6 +25168,79 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
   }
 
+  /* --------------------------- punaisen räjähdys -------------------------- */
+  /*
+   * WHEN THE PLAYER DIES, A RED COIN VISIBLY COMES APART.
+   *
+   * Owner: *"when the player dies, have one of the rotating red coins VISIBLY
+   * explode!"*
+   *
+   * Measured end to end, from `player.die()` to fragments on the canvas,
+   * because the interesting part of this is the WIRING and not the drawing:
+   * the level has to notice the death, the sky has to be told, and the cube
+   * has to pick the right coin. Any of those three silently doing nothing
+   * would leave a game that still plays perfectly and simply never explodes.
+   *
+   * The coin it picks is the last on the ring, and that is correct without
+   * bookkeeping: a life is not deducted until the level hands its result
+   * back, so the stock on screen still includes the one about to be lost.
+   */
+  {
+    const B = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      game.state.lives = 3;
+      const sc = new LevelScene(game, '1-1');
+      for (let i = 0; i < 40; i++) sc.update(game.input);
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const g = c.getContext('2d');
+      const shot = () => {
+        g.fillStyle = '#000'; g.fillRect(0, 0, 320, 240);
+        sc.draw(g);
+        const d = g.getImageData(0, 0, 320, 240).data;
+        let n = 0, x0 = 999, x1 = -1, y0 = 999, y1 = -1;
+        /* only the sky half: the player and the HUD are red too */
+        for (let y = 0; y < 120; y++) {
+          for (let x = 0; x < 320; x++) {
+            const i = (y * 320 + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+            if (r > 120 && b < 90 && gg < r * 0.45) {
+              n++;
+              if (x < x0) x0 = x; if (x > x1) x1 = x;
+              if (y < y0) y0 = y; if (y > y1) y1 = y;
+            }
+          }
+        }
+        return { n, w: x1 - x0 + 1, h: y1 - y0 + 1, burst: +sc.redBurst().toFixed(2) };
+      };
+      const before = shot();
+      sc.player.die('pit');
+      const during = [];
+      for (let t = 0; t < 40; t++) {
+        sc.update(game.input);
+        during.push(shot());
+      }
+      return { before, during, after: during[during.length - 1] };
+    });
+
+    const spread = B.during.filter((s) => s.w > B.before.w + 6 || s.h > B.before.h + 6);
+    expect('kuolema hajottaa yhden punaisen kolikon näkyvästi',
+      spread.length >= 3,
+      `ennen ${B.before.w}x${B.before.h} px, kuoleman jälkeen leveimmillään`
+      + ` ${Math.max(...B.during.map((s) => s.w))}x${Math.max(...B.during.map((s) => s.h))}`
+      + ` — ${spread.length} framea hajallaan`);
+
+    /*
+     * And it ENDS. A blast that leaves its fragments on the screen is not an
+     * explosion, it is a mess, and the coin has to be gone at the end of it
+     * because the game is about to deduct it.
+     */
+    expect('räjähdys loppuu ja kolikko on poissa',
+      B.after.burst >= 1 && B.after.n < B.before.n,
+      `lopussa burst ${B.after.burst}, punaisia pikseleitä ${B.after.n}`
+      + ` (ennen ${B.before.n})`);
+  }
+
   /* ------------------------------ kolikkoimu ----------------------------- */
   /*
    * A PICKED-UP COIN HAS TO GO SOMEWHERE YOU CAN SEE.
