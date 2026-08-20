@@ -1,6 +1,7 @@
 import { arenaColumn, getLevel } from '../data/levels.js';
 import {
   TILE, T, info, isSolid, isSemi, drawTile, drawCoinSprite, THEMES, SWITCH_MAP, SPIKE_TOP,
+  hexCell, HEX_W, HEX_H, HEX_COL,
   themeTint,
 } from '../gfx/tiles.js';
 /* Vain kuninkaan verhoa varten, ks. `onKingForm`: saapuvan muodon maailma on
@@ -3640,6 +3641,77 @@ export class LevelScene {
     this.cubeLag += (this.cam.y - this.cubeLag) * CUBE_CHASE;
   }
 
+  /** True when this level's terrain is drawn as a hexagonal grid. */
+  get hexGrid() { return this.def.skin === 'hexgrid'; }
+
+  /**
+   * THE TERRAIN AS HEXAGONS, drawn in columns rather than tiles.
+   *
+   * A tile loop cannot draw this, and that is the point: the cells are 18 by
+   * 16 on a 13 px column pitch and have no relationship to the tilemap except
+   * the one imposed here — each column's first cell has its flat top on the
+   * tile boundary, so the walking surface is exactly where it has always been.
+   *
+   * Runs, not columns: a column can hold a floor and a platform above it with
+   * sky between, and each run gets its own stack starting flush with its own
+   * top. Fill the whole column from the first solid tile and the sky under a
+   * ledge fills in with rock.
+   */
+  drawHexTerrain(ctx, camX) {
+    const th = THEMES[this.theme] || THEMES.grass;
+    const first = Math.floor(camX / HEX_COL) - 1;
+    const last = Math.ceil((camX + VIEW_W) / HEX_COL) + 1;
+    const solid = (tx, ty) => {
+      const ch = this.tileAt(tx, ty);
+      return ch === T.GROUND || ch === T.HARD || ch === T.BRICK;
+    };
+    for (let col = first; col <= last; col++) {
+      const cx = col * HEX_COL + Math.floor(HEX_COL / 2);
+      const tx = Math.floor(cx / TILE);
+      let ty = 0;
+      while (ty < this.h) {
+        if (!solid(tx, ty)) { ty++; continue; }
+        const top = ty;
+        while (ty < this.h && solid(tx, ty)) ty++;
+        const bottom = ty;                       // first row past the run
+        let cy = top * TILE + HEX_H / 2;
+        let head = true;
+        while (cy - HEX_H / 2 < bottom * TILE) {
+          if (head) {
+            /*
+             * The head cell is clipped to the floor line, and that is the one
+             * place the overlap must not apply. Closing the holes needs each
+             * cell fattened by a pixel and a half, but a pixel and a half of
+             * fattening on the TOP cell is ground drawn above ground you can
+             * stand on — measured, 231 pixels of it across a screen. Below the
+             * line the overlap stays; above it there is nothing.
+             */
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(cx - HEX_W, top * TILE, HEX_W * 2, 260);
+            ctx.clip();
+          }
+          hexCell(ctx, cx, cy, th.ground, th.groundDark);
+          if (head) {
+            /* Grass on the cells that face the sky, cut to the hexagon so the
+             * skyline is hexagonal too and not a straight green line. */
+            ctx.save();
+            hexCell(ctx, cx, cy, th.ground, null);
+            ctx.clip();
+            ctx.fillStyle = th.groundTop;
+            ctx.fillRect(cx - HEX_W, cy - HEX_H / 2, HEX_W * 2, 5);
+            ctx.fillStyle = th.groundTopDark;
+            ctx.fillRect(cx - HEX_W, cy - HEX_H / 2 + 5, HEX_W * 2, 1);
+            ctx.restore();
+            ctx.restore();
+          }
+          head = false;
+          cy += HEX_H;
+        }
+      }
+    }
+  }
+
   /** True when the coin cube is in this level's sky at all. */
   skyCube() {
     return !(this.def.bg === 'none' || this.vertical);
@@ -6855,6 +6927,9 @@ export class LevelScene {
     ctx.translate(-camX, -camY);
 
     if (this.def.bands) this.drawUnderground(ctx, camX, camY);
+    /* Hex terrain goes down before the tiles, so pipes, spikes, question
+     * blocks and everything else still sit on top of it exactly as before. */
+    if (this.hexGrid) this.drawHexTerrain(ctx, camX);
     this.drawTiles(ctx, camX, camY);
     /* After the tilemap and before anything that stands on them: a lift is
      * terrain, and terrain is behind whatever is walking on it. */
@@ -7570,6 +7645,10 @@ export class LevelScene {
           && Math.floor(this.tick / 6) % 2 === 0;
         const ch = warning ? this.rawTileAt(tx, ty) : this.tileAt(tx, ty);
         if (ch === ' ') continue;
+        /* The hex grid draws the terrain itself, in columns, so the square
+         * versions of those three must not be drawn underneath it. See
+         * `drawHexTerrain`. */
+        if (this.hexGrid && (ch === T.GROUND || ch === T.HARD || ch === T.BRICK)) continue;
         const bump = this.bumps.get(`${tx},${ty}`);
         const offset = bump === undefined ? 0 : Math.round(Math.sin((bump / 10) * Math.PI) * -6);
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,

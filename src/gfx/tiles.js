@@ -2395,6 +2395,66 @@ function hexComb(th) {
   return pat;
 }
 
+/**
+ * A REAL HEXAGONAL GRID, and it is a grid rather than a decoration.
+ *
+ * Owner, after four square-tile mockups: *"no you're still fitting them within
+ * SQUARE TILES, but I want HEX SHAPES."* Correct — all of those were 16 by 16
+ * cells with a hexagon painted inside, and painting a hexagon on a square is
+ * not a hexagonal grid.
+ *
+ * These are flat-top cells: flat top and bottom so there is something to stand
+ * on, points left and right, 18 across and 16 down, columns 13 apart. Nothing
+ * here is 16 by 16 and nothing lines up with the tilemap except where it is
+ * made to.
+ *
+ * WHERE IT IS MADE TO is the walking surface. Owner: *"heksat ja kävelypinta
+ * suora looks workable."* Each column's topmost cell has its flat top exactly
+ * on the tile boundary, so what you stand on is the same straight line as
+ * every other level, to the pixel — collision, the jump budget and every
+ * level's data are untouched. The offset packing survives everywhere it cannot
+ * be stood on, which is everywhere that matters for the look.
+ *
+ * THE HOLES, and why they were there. With columns starting at their own
+ * surface rather than on a fixed half-cell offset, two neighbours whose ground
+ * is level sit exactly abreast — and two hexagons abreast touch only at their
+ * points, leaving a diamond of daylight between them. Owner: *"just make sure
+ * the hexes overlap more so there's no holes."*
+ *
+ * So each cell is drawn twice: once STROKED at width 3 in its own fill colour,
+ * which fattens it by a pixel and a half all round and closes every gap
+ * against its neighbours, and once filled on top. The outline goes on last so
+ * the cells still read as cells. Overlap rather than a background slab,
+ * because a slab would put a straight edge back on the silhouette, which is
+ * the one thing this is for.
+ */
+export const HEX_W = 18;
+export const HEX_H = 16;
+export const HEX_COL = 13;
+
+export function hexCell(ctx, cx, cy, fill, edge) {
+  ctx.beginPath();
+  ctx.moveTo(cx - HEX_W / 2, cy);
+  ctx.lineTo(cx - HEX_W / 4, cy - HEX_H / 2);
+  ctx.lineTo(cx + HEX_W / 4, cy - HEX_H / 2);
+  ctx.lineTo(cx + HEX_W / 2, cy);
+  ctx.lineTo(cx + HEX_W / 4, cy + HEX_H / 2);
+  ctx.lineTo(cx - HEX_W / 4, cy + HEX_H / 2);
+  ctx.closePath();
+  /* the overlap: a fat stroke in the fill colour, before the fill */
+  ctx.strokeStyle = fill;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (edge) {
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
 /** Lays the comb over one tile. The pattern is world-aligned, not tile-aligned. */
 export function drawHexSkin(ctx, x, y, themeName) {
   const th = THEMES[themeName] || THEMES.grass;

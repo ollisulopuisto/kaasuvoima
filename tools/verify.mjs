@@ -25576,9 +25576,122 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `levein rivi ${H.widest} px, litteä yläreuna ${H.flatTop} px`
       + ` — suhde ${H.ratio} (suorakaide antaisi 1.0)`);
 
-    expect('heksanahka on yhdessä kentässä eikä kaikissa',
-      H.hexSkin === 'hex' && H.plainSkin === null,
+    expect('heksaruudukko on yhdessä kentässä eikä kaikissa',
+      H.hexSkin === 'hexgrid' && H.plainSkin === null,
       `1-3 skin ${H.hexSkin}, 1-1 skin ${H.plainSkin}`);
+
+    /*
+     * THE GRID IS REAL, AND IT DOES NOT LIE ABOUT THE FLOOR.
+     *
+     * Owner, after four mockups that were 16 px cells with hexagons painted
+     * inside them: *"no you're still fitting them within SQUARE TILES, but I
+     * want HEX SHAPES."* These are 18 by 16 on a 13 px column pitch and share
+     * nothing with the tilemap except one imposed fact: each column's topmost
+     * cell has its flat top on the tile boundary.
+     *
+     * That fact is the whole safety of the thing, so it is measured. Where a
+     * cell's flat top is, the drawn surface is exactly the collision surface;
+     * between two cells the union dips to where their slopes cross, which is
+     * a couple of pixels. What must never happen is the drawing sitting ABOVE
+     * the floor — that is ground you can see and cannot stand on.
+     *
+     * And: *"just make sure the hexes overlap more so there's no holes."* With
+     * columns starting at their own surface rather than on a fixed half-cell
+     * offset, neighbours on level ground sit abreast and touch only at their
+     * points. Each cell is stroked at width 3 in its own fill colour before it
+     * is filled, which fattens it enough to close every gap.
+     */
+    const G = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const sc = new LevelScene(game, '1-3');
+      const camX = 700;
+      sc.player.x = camX + 60; sc.cam.x = camX;
+      for (let t = 0; t < 6; t++) sc.update(game.input);
+      sc.cam.x = camX;
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.fillStyle = '#000'; g.fillRect(0, 0, 320, 240);
+      sc.draw(g);
+      const d = g.getImageData(0, 0, 320, 240).data;
+      const bar = sc.bar;
+      /*
+       * EXACT theme colours only. The first version matched "brownish or
+       * greenish" and picked up the background mountains, which are within a
+       * few points of the grass — it reported the ground twelve pixels above
+       * the floor and twelve below it, which are simply the two ends of its
+       * own search window.
+       */
+      const { THEMES } = await import('/src/gfx/tiles.js');
+      const th = THEMES[sc.theme];
+      const rgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16),
+        parseInt(h.slice(5, 7), 16)];
+      const inks = [th.ground, th.groundDark, th.groundTop, th.groundTopDark].map(rgb);
+      const isGround = (x, y) => {
+        const k = (y * 320 + x) * 4;
+        return inks.some((c) => d[k] === c[0] && d[k + 1] === c[1] && d[k + 2] === c[2]);
+      };
+      let above = 0, gap = 0, holes = 0, cols = 0;
+      for (let x = 4; x < 316; x++) {
+        const tx = Math.floor((camX + x) / 16);
+        let ty = 0;
+        while (ty < sc.h) {
+          const ch = sc.tileAt(tx, ty);
+          if (ch === '#' || ch === 'X' || ch === 'B') break;
+          ty++;
+        }
+        if (ty >= sc.h) continue;
+        const floor = ty * 16 - Math.round(sc.cam.y) + bar;
+        if (floor < 20 || floor > 210) continue;
+        /*
+         * FLAT STRETCHES ONLY, and that is not a loophole. At a step in the
+         * terrain the higher ledge's wall is legitimately drawn above the
+         * lower column's floor line — that is a wall, not a lie. The claim
+         * being made is about ground you walk along: where the floor is level
+         * for a cell's width either side, nothing may be drawn above it.
+         */
+        const floorAt = (px) => {
+          const t = Math.floor((camX + px) / 16);
+          let r = 0;
+          while (r < sc.h) {
+            const ch = sc.tileAt(t, r);
+            if (ch === '#' || ch === 'X' || ch === 'B') return r;
+            r++;
+          }
+          return -1;
+        };
+        /* A full cell either side: a column ten pixels from a step still has
+         * that step's wall overlapping it, since a cell is eighteen wide. */
+        if (floorAt(x - 16) !== ty || floorAt(x + 16) !== ty) continue;
+        cols++;
+        /* nothing may be drawn above the floor */
+        for (let y = floor - 6; y < floor; y++) if (isGround(x, y)) above++;
+        /* and how far below the floor the drawn surface starts: the union of
+         * two neighbouring cells dips where their slopes cross, which is the
+         * scallop that makes the skyline hexagonal. It has to be small. */
+        let dip = 99;
+        for (let y = floor; y < floor + 12; y++) {
+          if (isGround(x, y)) { dip = y - floor; break; }
+        }
+        gap = Math.max(gap, dip);
+        /* holes: sky inside the mass */
+        for (let y = floor + 8; y < Math.min(238, floor + 40); y++) {
+          const k = (y * 320 + x) * 4;
+          if (d[k + 2] > 180 && d[k + 2] > d[k] + 30) holes++;
+        }
+      }
+      return { above, gap, holes, cols };
+    });
+
+    expect('piirretty maa ei ole koskaan lattian yläpuolella',
+      G.cols > 100 && G.above === 0 && G.gap <= 6,
+      `${G.cols} saraketta: ${G.above} pikseliä lattian yläpuolella,`
+      + ` syvin kuoppa kennojen välissä ${G.gap} px`);
+
+    expect('kennojen välissä ei ole reikiä',
+      G.holes === 0,
+      `${G.holes} taivaspikseliä massan sisällä`);
 
     expect('kenno on ladottu maailmaan eikä laattoihin',
       H.same24 && !H.same16,
