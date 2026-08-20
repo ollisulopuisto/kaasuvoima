@@ -25168,6 +25168,79 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
   }
 
+  /* ------------------------------ SPOILERS ------------------------------- */
+  /*
+   * THE HINTS ARE MADE OF NUMBERS, SO THE NUMBERS ARE CHECKED.
+   *
+   * `SPOILERS.md` gives every level a hint and marks how much it hides. That
+   * count is not itself a secret — the map already prints it — but it IS the
+   * spine of the document: the hints say *what kind* of thing to look for and
+   * the number says *whether to bother*. A document whose numbers have drifted
+   * is worse than no document, because it sends people hunting through levels
+   * that hide nothing.
+   *
+   * The counts come from `secretTally`, the same function the map asks, so
+   * there is one answer and the file is checked against it rather than
+   * carrying a second copy of it. Writing the hints turned up several claims
+   * that were simply wrong — the longest level, the hardest level in three
+   * different worlds, and five weather levels that were invented outright —
+   * and all of those were caught by measuring instead of remembering. This
+   * gate is the part of that which keeps working after today.
+   */
+  {
+    const md = await readFile(join(ROOT, 'SPOILERS.md'), 'utf8');
+    /* rows look like: | **1-2 MÖNKIJÄNIITTY** | … *(5)* | */
+    const claimed = new Map();
+    for (const line of md.split('\n')) {
+      const m = /^\|\s*\*\*([0-9]-[0-9A-ZÄÖ]+)\s/.exec(line);
+      if (!m) continue;
+      const n = /\*\((\d+)\)\*/.exec(line);
+      claimed.set(m[1], n ? Number(n[1]) : null);
+    }
+
+    const truth = await page.evaluate(async () => {
+      const { WORLDS } = await import('/src/data/worlds.js');
+      const { secretTally } = await import('/src/core/secrets.js');
+      const state = { cleared: {}, found: {} };
+      const out = {};
+      for (const w of WORLDS) {
+        for (const node of w.nodes || []) {
+          if (!node.level) continue;
+          const t = secretTally(state, node.level, 'normal');
+          out[node.level] = (t && t.total) || 0;
+        }
+      }
+      return out;
+    });
+
+    const ids = Object.keys(truth);
+    const missing = ids.filter((id) => !claimed.has(id));
+    const extra = [...claimed.keys()].filter((id) => !(id in truth));
+    expect('SPOILERS.md käsittelee jokaisen kentän eikä yhtään olematonta',
+      missing.length === 0 && extra.length === 0,
+      missing.length || extra.length
+        ? `puuttuu ${missing.join(',') || '-'}, tuntematon ${extra.join(',') || '-'}`
+        : `${ids.length} kenttää, kaikki mukana`);
+
+    const wrong = ids.filter((id) => claimed.get(id) !== truth[id]);
+    expect('SPOILERS.md:n salaisuusluvut ovat samat kuin pelin',
+      wrong.length === 0,
+      wrong.length
+        ? wrong.map((id) => `${id}: sanoo ${claimed.get(id)}, on ${truth[id]}`).join('; ')
+        : `${ids.length} lukua täsmää (nollia ${ids.filter((id) => !truth[id]).length})`);
+
+    /*
+     * And the two summary claims the document closes on, because a summary is
+     * exactly the sentence nobody updates.
+     */
+    const zeroes = ids.filter((id) => !truth[id]).length;
+    const best = ids.reduce((a, b) => (truth[b] > truth[a] ? b : a), ids[0]);
+    expect('SPOILERS.md:n yhteenvetoluvut pitävät paikkansa',
+      md.includes('kaksitoista') && zeroes === 12
+      && md.includes(`**${best} `) && truth[best] === 12,
+      `salaisin ${best} (${truth[best]}), nollakenttiä ${zeroes}`);
+  }
+
   /* --------------------------- punaisen räjähdys -------------------------- */
   /*
    * WHEN THE PLAYER DIES, A RED COIN VISIBLY COMES APART.

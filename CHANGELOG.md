@@ -7,6 +7,45 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.51 — the manual, and a hint sheet that cannot go stale
+
+Owner: *"in the morning, after all the work is done, UPDATE THE README. Create
+a separate SPOILERS md where you drop cryptic hints about each world and
+level."*
+
+**README.** Two days of work had gone in without it moving, and the parts it
+described had stopped existing. The overworld is no longer a flat map of nodes
+and paths but a truncated octahedron you walk the faces of, so that section is
+rewritten around the solid: adjacency is `i^1, i^2, i^4`, the shortcut rule is
+a digit swap that is its own inverse, level-to-level is a 3D roll and
+world-to-world is a rotation in the xw plane. The corner coin glass is gone and
+the sky cube took every job it had, so the meters section describes the cube,
+the hundred blocks, the orbiting reds and the sun that tells you how far
+through a level you are. New sections for moving platforms, chained jumps, the
+brink coin and the ghost. Eleven new source files added to the tree.
+
+**SPOILERS.md.** A hint per world and a line per level: what kind of thing is
+hidden, rarely where. The count is printed with each one, because the count is
+not a secret — the map already shows it — but it is what tells you whether to
+bother looking at all. Twelve levels hide nothing, three of them consecutively
+at the very end, and `2-2` hides twelve, more than anywhere else.
+
+**AND THE HINTS ARE GATED**, which is the part worth keeping. A document made
+of numbers rots, and one that rots is worse than none, because it sends people
+hunting through levels that hide nothing. So `verify.mjs` parses the file: every
+level appears exactly once, every printed count is compared against
+`secretTally` — the same function the map asks, so there is one answer rather
+than a carried copy — and the two summary sentences the document closes on are
+checked too, since a summary is exactly the sentence nobody updates.
+
+Writing it turned up six claims that were simply **wrong**, every one of them
+believed before it was measured: the longest level in the game (`3-1`, not
+`7-3`), the hardest level in worlds 4, 5 and 7, the shortest level, the only
+level with extra time — and, worst, wind on `1-3` and a conveyor belt on `4-1`
+that do not exist anywhere in the data. There are exactly five levels with
+their own weather and none of them were the two I had named. Measuring found
+all six; remembering had produced all six.
+
 ## v26.08.20.50 — the run you already did, running beside you
 
 Owner: *"we've been talking about telemetry, but we definitely gotta include a

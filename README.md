@@ -1,8 +1,9 @@
 # Kaasuvoima
 
-Selaimessa pyörivä tasohyppely: oma **maailmankarttamoottori** (solmut, polut,
-avautuvat reitit, hernetalot) ja oma **kenttämoottori** (ruutupohjainen kenttä,
-alipikselifysiikka, viholliset, viisiportaiset tehostukset, maalikortti).
+Selaimessa pyörivä tasohyppely: oma **maailmankarttamoottori** — maailmat ovat
+kahdeksankulmaisen kappaleen sivuja, joita pitkin kävellään ja jota käännellään
+— ja oma **kenttämoottori** (ruutupohjainen kenttä, alipikselifysiikka,
+viholliset, viisiportaiset tehostukset, liikkuvat lavat, maalikortti).
 
 Ei riippuvuuksia, ei build-vaihetta, ei kuva- tai äänitiedostoja — kaikki
 grafiikka piirretään ja kaikki äänet syntetisoidaan ajossa.
@@ -23,6 +24,7 @@ teoksia kuin vapautunut sävellys. Koko lista ja perustelu ovat
 | [CHANGELOG.md](CHANGELOG.md) | muutokset perusteluineen (CalVer) |
 | [PHYSICS.md](PHYSICS.md) | liikkeen vakiot ja mitattu hyppybudjetti |
 | [IDEAS.md](IDEAS.md) | lainattavia mekaniikkoja ja niistä johdettuja omia — harkittavaksi, ei päätettyä |
+| [SPOILERS.md](SPOILERS.md) | vihjeitä jokaisesta maailmasta ja kentästä — **avaa vasta jos haluat tietää** |
 
 Moottorin kompastuskivet ovat [DESIGN.md](DESIGN.md):n kohdassa 6 — lue ne
 ennen kuin muutat moottoria.
@@ -118,6 +120,20 @@ Mistä pisteitä tulee ja mitä ne tekevät:
 | Pomon kaato | 5000–8000 | avaa linnakkeen oven |
 | Kentän läpäisy | jäljellä oleva **aika × 50** | eli nopeus palkitaan |
 
+**Kolikot menevät taivaalla kelluvaan kuutioon.** Poimittu kolikko ei katoa
+vaan lähtee kaarelle ruudun poikki ja kutistuu kuution sisään — se on ainoa
+kolikkomittari, eikä ruudun reunassa ole enää lasia. Kuutio täyttyy sadalla
+palikalla, yksi kutakin kolikkoa kohti, ja kerros on tasan kaksikymmentä.
+Täydestä kuutiosta syntyy **punainen kolikko**, eli lisäelämä, ja punaiset
+kiertävät kuution yläpuolella omalla radallaan. Kun pelaaja kuolee, yksi niistä
+räjähtää.
+
+**Aurinko on kentän kello.** Se nousee kentän alussa vasemmalta, on korkeimmillaan
+puolivälissä ja laskee oikealle maalissa — pystykentässä sama luku luetaan
+korkeudesta, ja linnakkeessa, jossa taivasta ei ole, ikkunoista lankeava valo
+kallistuu ja lämpenee saman matkan mukana. Kentän edistyminen näkyy siis joka
+kentässä ilman yhtään numeroa.
+
 Pisteet näkyvät HUDissa, kartalla ja lopputekstissä, ja pelin päätyttyä ne
 menevät **pistetauluun** (10 parasta, oma nimi). Jos ajon aikana on ladattu
 tilatallennus, nimen perässä on tähti — kelattu suoritus ei kuulu samaan
@@ -196,6 +212,40 @@ suunnitteluperiaate, ei automaattinen takuu. Ks. [DESIGN.md](DESIGN.md) kohta 5.
   kurnutus **puolitoista sekuntia** ennen loikkaa, mikä on pidempään kuin pisin
   hyppy on ilmassa — eli varoitus ehtii aina ennen kuin lähdet maasta. Loikka
   pysyy oman kuilunsa sarakkeessa, joten reunalla seisominen on turvallista.
+
+## Liikkuvat lavat
+
+`src/entities/lift.js`. Lava kulkee joko vaaka- tai pystysuunnassa neljän ruudun
+matkan, pysähtyy päissä hetkeksi ja lähtee takaisin. Pelaaja **kulkee sen
+mukana**: lava tarkistetaan vasta kun ruudukosta ei löytynyt lattiaa, joten
+oikea maasto voittaa aina, eikä lavan alle jäänyt kivi katoa jalkojen alta.
+
+Pystylava nousee siitä mihin se on asetettu eikä laskeudu ensin — muuten se
+uppoaa lattiaan lähtiessään ja pelaaja putoaa läpi ennen kuin lava ehtii nousta.
+
+## Ketjuhypyt ja täpärä pelastus
+
+Rikkonaisella maalla vauhtimittari on saha: 3,5 ilmassa, vuotoa joka
+laskeutumisella, ja muutama kosketus riittää pudottamaan takaisin 2,5:een.
+
+Niinpä **ketjutettu hyppy maksaa laskeutumisen takaisin**. Kosketa maata ja
+lähde uudestaan `CHAIN_WINDOW`-framen (7) sisällä, niin niiden framejen vuoto
+palautetaan. Katto ei liiku — se mikä liikkuu on kuinka suuren osan ajasta olet
+siinä. Ketjun huomiotta jättäminen ei ota mitään: vuodat täsmälleen sen minkä
+ennenkin.
+
+**Kolmannesta peräkkäisestä alkaen** se myös täyttää hieman, joten ketju voi
+kantaa sinut *ylös* P-vauhtiin maalla joka ei muuten päästäisi sinne. Se on
+mekaniikan pienempi puolisko tarkoituksella.
+
+Kuiluun putoaminen ja siitä toisella tai kolmannella hypyllä ulos pääseminen
+antaa kolikon (`updateBrink`): pelastus on temppu, ja temppu maksetaan.
+
+## Haamu
+
+`src/core/ghost.js` tallentaa oman ajon ja toistaa sen seuraavalla yrityksellä
+rinnalla juoksevana haamuna — kilpailu on itseä vastaan. Tallenne on noin
+kolme tavua näytettä kohti.
 
 ## Maailmat
 
@@ -569,14 +619,22 @@ vercel --prod   # käsin, jos automaattinen julkaisu ei ole käytössä
 index.html          canvas 320x240, skaalataan kokonaisluvuilla
 src/main.js         pelisilmukka (kiinteä 60 Hz askel), tilat, debug-ruutu
 src/core/           syöte, kosketus, ääni (WebAudio), tallennus, tilatallennus, pistetaulu, telemetria
+src/core/quat.js    kvaterniot — kappaleen kääntäminen kartalla ja nopalla
+src/core/ghost.js   oman ajon tallennus ja toisto (haamu)
 src/gfx/            bittikarttafontti, ruudut, spritet, taustat, kuvaefektit
+src/gfx/tower.js    kolikkokuutio taivaalla: sata palikkaa ja kiertävät punaiset
+src/gfx/props.js    tienvarsi: nopeusrajoitusmerkit ja maailman nimikilpi
 src/data/           kenttäpalikat, kentät, generoidut kentät, maailmankartat
+src/data/solid.js   katkaistu oktaedri: sivut, särmät ja naapuruudet — johdettu, ei taulukoitu
 src/data/generator.js  kenttägeneraattorin ydin — sama koodi työkalulle ja selaimelle
 src/data/scale.js   vaikeustasot: kentän venytys ja lisäviholliset
 src/entities/       pelaaja, viholliset, esineet, efektit
+src/entities/lift.js  liikkuvat lavat (vaaka ja pysty)
 src/level/          fysiikka ja törmäykset
 src/scenes/         alkuruutu, maailmankartta, kenttä, välikortit, pistetaulu, päivän pieru
-tools/              verify, hyppymittaus, tilastolouhinta, kenttägenerointi
+src/scenes/globe.js   maailmankartta kappaleena — ks. "Maailmankartta on kappale"
+src/scenes/die.js     maailmanvalinnan noppa
+tools/              verify, hyppymittaus, tilastolouhinta, kenttägenerointi, kielioppimittaus
 ```
 
 **Generaattori on yksi eikä kaksi.** `src/data/generator.js` on se mitä kenttä
@@ -644,6 +702,41 @@ cannot take it at all, and `terrainSeedOf` throws rather than ignoring the flag.
 puuska, maanjäristys, pyörremyrsky, tulimyrsky ja metsäpalo. Kukin on
 kenttäkohtainen tarkoituksella — uhka joka on joka kentässä on maastoa, ja
 maasto ei ole uhka.
+
+### Maailmankartta on kappale
+
+Kartta ei ole taso vaan **katkaistu oktaedri**: kahdeksan kuusikulmiota ja kuusi
+neliötä, 36 särmää ja 24 kärkeä. Maailman kahdeksan kenttää ovat sen kahdeksan
+kuusikulmiota, ja pelaaja seisoo yhdellä niistä kerrallaan. Kartan rajaus on
+rakennettu **sen sivun ympäri jolla seisot**, ei kappaleen ympäri: naapurisivut
+jäävät ruudun reunojen taakse tarkoituksella.
+
+`src/data/solid.js` **johtaa** kappaleen eikä taulukoi sitä. Kärjet ovat luvun
+(0, ±1, ±2) kaikki 24 permutaatiota, sivut seuraavat kärjistä ja naapuruus
+särmistä — eli kartan geometria ei voi olla eri mieltä itsensä kanssa, koska
+siitä on vain yksi kappale.
+
+**Kuusikulmion naapurit ovat `i^1`, `i^2` ja `i^4`.** Sivut on numeroitu niin,
+että se toimii: kaksi sivua on naapureita täsmälleen kun niiden numerot eroavat
+yhdellä bitillä. Sama kuvio antaa kartan oikoreitit — kentästä `1-2` pääsee
+kenttään `2-1`, kentästä `2-3` kenttään `3-2` ja niin edelleen, ja **jokainen
+polku kulkee molempiin suuntiin**, joten umpikujaan ei voi jäädä.
+
+Kaikki sivut eivät ole heti auki. Reitti aukeaa sitä mukaa kuin kenttiä
+selvitetään, ja `faceOpen` kertoo mitkä sivut ovat auki juuri nyt.
+
+**Kenttien välillä kappale kääntyy, maailmojen välillä se taittuu.** Kentästä
+toiseen siirtyminen on tavallinen 3D-kierähdys naapurisivulle. Maailmasta
+toiseen siirtyminen on **neliulotteinen**: kappale on tesseraktin kaksi solua ja
+kierto tapahtuu xw-tasossa, eli se avautuu ja sulkeutuu tavalla jota kolmessa
+ulottuvuudessa ei voi tehdä. Perspektiivijako tehdään `W_EYE`:n suhteen.
+
+Kentän merkit (`markerAt`) ovat sivun reunan ulkopuolella, jottei pelaaja seiso
+niiden päällä, ja kukin kävelee sisäänpäin omaa sädettään pitkin vain sen
+verran kuin on pakko mahtuakseen nimikilven ja haaralaudan väliin.
+
+Vanha litteä kartta (`src/scenes/worldmap.js`) on yhä olemassa ja yhä portissa,
+mutta peli avaa kappaleen.
 
 ### Maailmankartan muokkaus
 
