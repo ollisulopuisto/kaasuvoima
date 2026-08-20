@@ -617,6 +617,15 @@ const WORLD4 = [
  *             ensimmäinen notko on jo 5-2:ssa ja 5-3:n 279 on korkeampi kuin
  *             mihin generoitu kenttä tällä sanastolla yltää, joten toisen
  *             notkon paikka on 5-4 ja loput on nousua.
+ *
+ *   music     All seven say `seiska`, and that is a world-level decision rather
+ *             than a per-level one (20.8.2026). This world's themes are a tour
+ *             of the other seven — grass, desert, ice, night, factory — which
+ *             is the joke it is built on; before this it borrowed each theme's
+ *             music with it, so the only world without a voice of its own was
+ *             the one that visits everybody else's. It has one now, in 7/8, and
+ *             the two factory levels give up `factory` for it: a world is a
+ *             place, and a place sounds like one thing.
  */
 const WORLD5 = [
   /*
@@ -627,12 +636,12 @@ const WORLD5 = [
    * mäkiä, eli tavoite on "sama kenttä kuin ennen, nyt maastoa mukana".
    */
   /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
-  { id: '5-1', seedOffset: 1, world: 'w5', theme: 'grass', bg: 'hills', width: 210, intensity: 1.3, aim: 190, attempts: SEARCH },
-  { id: '5-2', world: 'w5', theme: 'desert', width: 230, intensity: 1.0, aim: 160, attempts: SEARCH },
-  { id: '5-3', world: 'w5', theme: 'ice', width: 240, intensity: 1.35, aim: 165, attempts: SEARCH },
+  { id: '5-1', seedOffset: 1, world: 'w5', theme: 'grass', bg: 'hills', music: 'seiska', width: 210, intensity: 1.3, aim: 190, attempts: SEARCH },
+  { id: '5-2', world: 'w5', theme: 'desert', music: 'seiska', width: 230, intensity: 1.0, aim: 160, attempts: SEARCH },
+  { id: '5-3', world: 'w5', theme: 'ice', music: 'seiska', width: 240, intensity: 1.35, aim: 165, attempts: SEARCH },
   /* seedOffset: this level's default seed leaves a hole power 0 cannot cross. */
   {
-    id: '5-4', seedOffset: 1, world: 'w5', theme: 'night', width: 260,
+    id: '5-4', seedOffset: 1, world: 'w5', theme: 'night', music: 'seiska', width: 260,
     enemiesPer100: 9.0, maxGap: 6, aim: 200, minIntro: 32, intensity: 1.15, attempts: SEARCH,
   },
   {
@@ -640,15 +649,15 @@ const WORLD5 = [
      * vaikeus: maailma 5 nousi muuten viisi askelta putkeen, ja `verify.mjs`
      * vaatii kaksi hengähdystä ja korkeintaan kolmen nousun. Tämä on se
      * toinen hengähdys. */
-    id: '5-5', world: 'w5', theme: 'factory', music: 'factory', width: 250,
+    id: '5-5', world: 'w5', theme: 'factory', music: 'seiska', width: 250,
     enemiesPer100: 8.2, maxGap: 6, aim: 192, minIntro: 32, intensity: 1.2, attempts: SEARCH,
   },
   {
-    id: '5-6', world: 'w5', theme: 'ice', width: 240,
+    id: '5-6', world: 'w5', theme: 'ice', music: 'seiska', width: 240,
     enemiesPer100: 10.2, maxGap: 5, aim: 245, minIntro: 48, intensity: 1.45, attempts: SEARCH,
   },
   {
-    id: '5-7', world: 'w5', theme: 'factory', music: 'factory', width: 265,
+    id: '5-7', world: 'w5', theme: 'factory', music: 'seiska', width: 265,
     enemiesPer100: 10.6, maxGap: 6, aim: 300, minIntro: 32, intensity: 1.55, attempts: SEARCH,
   },
 ];

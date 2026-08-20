@@ -11,7 +11,7 @@ import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem, drawPlayer, WALK_FRAMES, TINTS } from '../gfx/sprites.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import {
-  Player, P_METER_MAX, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
+  Player, P_METER_MAX, MAX_WALK, MAX_RUN, MAX_P, HURT_FLASH, POWER_NAMES, makePower,
 } from '../entities/player.js';
 import { Ember, ENEMY_CHARS, FLIP_FRAMES, FLIP_LONG, PANIC_FRAMES } from '../entities/enemies.js';
 import { Item, Beanstalk } from '../entities/items.js';
@@ -319,6 +319,15 @@ const NAME_Y = 22;
  * that raised the limit *back down* would be nagging; a road that keeps
  * conceding is funny, and the last sign is the concession.
  */
+/**
+ * How far below the ground he left counts as *committed* to a fall.
+ *
+ * Two tiles. One is a hop and three is most of the way to the seam a cave
+ * level hides under — two is the depth at which a player has stopped choosing
+ * and started reacting, which is the moment this reward exists to notice.
+ */
+const BRINK_DEEP = TILE * 2;
+
 const SIGN_LIMITS = [30, 50, 80, 120, 0];
 const SIGN_GAP = 640;
 
@@ -1262,6 +1271,56 @@ const PALETTE = {
 const TRANSIT_IN = 14;        // sliding into the mouth, until the body is gone
 const TRANSIT_HOLD = 5;       // the beat where nothing is on screen
 const TRANSIT_OUT = 13;       // and back out at the far end
+
+/*
+ * THE DOORWAY IS WALKED ACROSS, NOT STEPPED INTO (20.8.2026).
+ *
+ * `TRANSIT_IN` is a frame count, and for a pipe that is the right shape of
+ * number: the mouth is one tile and the body is swallowed by it whole. A door
+ * is not one tile. The shipped fortress door is **two tiles wide, 2752…2784 px
+ * in 1-F**, and the body that walks into it is 14 px, so from where he touches
+ * it to where his back heel has cleared the far jamb is 48 px — the 44 px of
+ * doorway and body, plus the 4 px of margin `enterDoor` adds. Covering that in
+ * 14 frames is 3.4 px a frame, more than twice a walk, and the legs are frozen
+ * while a transit runs: it read as a shove rather than a step.
+ *
+ * So the walk-in is a **distance at walking pace** and the frame count is
+ * derived from it. `MAX_WALK` and not a fresh constant: the picture is a man
+ * walking, and the speed a man walks at is already written down. The old pair
+ * happened to give 18/14 = 1.29 px a frame, i.e. this within a rounding error
+ * — which is why nobody noticed the units were wrong until the door got wide.
+ */
+const DOOR_STEP = MAX_WALK;
+
+/*
+ * HE LEAVES ON HIS OWN FEET (20.8.2026).
+ *
+ * Omistaja: *"after a normal level, the character should walk out the right
+ * hand side."* The clear sequence already set `autoWalk`, so he was already
+ * walking; what he was not doing was **arriving anywhere**. Measured on 1-1:
+ * the flagpole is at x 5696, the level ends at 6112, the camera runs out of
+ * level at 5792 and stops, and 170 frames later the scene cut with him stood
+ * at x 5931 — screen column 142 of 320, i.e. dead centre, with 349 painted
+ * pixels of him still on the glass. The last thing the level showed was a man
+ * walking on the spot.
+ *
+ * `CLEAR_HOLD` is the old 170 and it is a **minimum, not the length**: the
+ * jingle is the reward and cutting it short to chase a short walk-out would
+ * trade one mismatch for another. The scene now ends on the later of the two,
+ * the jingle finishing and the body leaving the frame.
+ *
+ * `WALKOUT_MAX` is the fuse. A walk-out is real physics — he can be stopped by
+ * a wall the level happens to end with, and if the ground runs out past the
+ * goal he falls instead of walks — and a clear sequence that never ends is
+ * worse than an early cut. Measured across every level with a flagpole
+ * (tools/verify.mjs, "a cleared level ends with the player walked out of the
+ * view"): the longest is 3-1 at **320 frames** from the grab, i.e. 150 past
+ * the jingle, and 240 leaves room for a level whose goal sits further from its
+ * end than any of today's. The same gate asserts the fuse does not fire, so if
+ * one ever does the failure is a named level and not a shrug.
+ */
+const CLEAR_HOLD = 170;
+const WALKOUT_MAX = 240;
 
 /*
  * How far above the ground a ceiling pipe's mouth may be and still be enterable.
@@ -3576,6 +3635,21 @@ export class LevelScene {
    * pinta kertoo yhdellä silmäyksellä "yli puolivälin", ja merkit kertovat
    * halutessa tarkan luvun ilman että lukua tarvitsee kirjoittaa mihinkään.
    */
+  /**
+   * The coin surface as it is being *drawn*, which is not always the count.
+   *
+   * While the tube is flushing, `tubeFill` has already jumped to what will be
+   * left and `coins` has already paid — the difference between them **is** the
+   * animation. One reading, because the cube on the horizon and the glass in
+   * the corner have to be draining the same liquid; two would be two gauges
+   * disagreeing about the same sixty-four coins.
+   */
+  tubeShown() {
+    if (this.tubeFlush <= 0) return this.tubeFill;
+    const t = this.tubeFlush / COIN_FLUSH;
+    return Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * t);
+  }
+
   drawCoinTube(ctx) {
     const box = this.tubeBox();
     const h = box.bottom - box.top;
@@ -3597,9 +3671,7 @@ export class LevelScene {
     /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
      * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
     const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
-    const shown = this.tubeFlush > 0
-      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
-      : this.tubeFill;
+    const shown = this.tubeShown();
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -4099,11 +4171,34 @@ export class LevelScene {
   /**
    * Walking into the fortress door once it has swung open.
    *
-   * It is the same transit as a pipe, turned on its side: the body slides its
-   * own width further in and is not drawn past the line it was already
-   * standing at, so it goes *into* the doorway rather than stopping in front
-   * of it. Nothing arrives at the far end, because the far end of this one is
-   * the end of the level — see the 'hold' branch of `updateTransit`.
+   * It is the same transit as a pipe, turned on its side: the body walks
+   * further in and is not drawn past the line it disappears behind, so it goes
+   * *into* the doorway rather than stopping in front of it. Nothing arrives at
+   * the far end, because the far end of this one is the end of the level — see
+   * the 'hold' branch of `updateTransit`.
+   *
+   * WHERE HE GOES BEHIND THE DOOR, AND WHY IT IS THE FAR JAMB (20.8.2026).
+   *
+   * Omistaja: *"make sure they seem to ENTER the door, ie. go behind it only
+   * AFTER they start hitting the right border of the door."*
+   *
+   * The line was `p.x + p.w` — wherever his nose happened to be on the frame
+   * the tile was touched. Measured in 1-F that is x 2754.05, i.e. **2 px past
+   * the near jamb of a doorway that runs 2752…2784**: the clip started on the
+   * first frame and ate him from the front while he was still standing in the
+   * opening. Read as a man being swallowed by the doorframe, not one walking
+   * through a door.
+   *
+   * It is now the door's own far border, so the whole approach and the whole
+   * crossing are drawn in front — the leaves are open and he passes them — and
+   * the clip only begins on the frame his leading edge reaches the far jamb.
+   * `far` and not "right", because a door entered from the right is the same
+   * event mirrored, and the near jamb is then the one he must clear.
+   *
+   * The slide follows from the line rather than from his own width: it has to
+   * carry the *whole* body past `far`, which in 1-F is 48 px and not 18. See
+   * `DOOR_STEP` for why the frame count is derived from that distance and not
+   * the other way round.
    */
   enterDoor(tx, ty) {
     const p = this.player;
@@ -4114,6 +4209,10 @@ export class LevelScene {
     while (right < this.w - 1 && info(this.tileAt(right + 1, ty)).door) right++;
     const middle = (left + right + 1) * TILE / 2;
     const dirX = middle >= p.cx ? 1 : -1;
+    // The jamb at the far end of the walk, and the 4 px past it that make the
+    // difference between "gone" and "gone but for a pixel of shoulder".
+    const far = dirX > 0 ? (right + 1) * TILE : left * TILE;
+    const slide = dirX > 0 ? (far + 4) - p.x : (far - 4) - (p.x + p.w);
 
     p.vx = 0;
     p.vy = 0;
@@ -4122,12 +4221,9 @@ export class LevelScene {
     p.beginTransit({
       kind: 'door',
       axis: 'x',
-      slide: dirX * (p.w + 4),
-      /* The edge the body disappears behind is where its leading edge already
-       * is, not the door's own boundary: the player is inside the frame by the
-       * time this runs, and clipping at the frame would chop them on the first
-       * frame instead of taking them in. */
-      hide: dirX > 0 ? p.x + p.w : p.x,
+      slide,
+      inFrames: Math.max(1, Math.round(Math.abs(slide) / DOOR_STEP)),
+      hide: far,
       hideDir: dirX,
     });
     /* `doorin` eikä `door`: oven aukeaminen ja siitä sisään käveleminen olivat
@@ -4167,10 +4263,28 @@ export class LevelScene {
     t.f++;
 
     if (t.phase === 'in') {
-      const k = Math.min(1, t.f / TRANSIT_IN);
+      /* A pipe swallows a body whole and takes the same time doing it whatever
+       * the body is, so `TRANSIT_IN` is right for it and stays its default. A
+       * door is a distance (see `enterDoor`), so it brings its own count. The
+       * fallback is also what an old quicksave's transit deserialises to. */
+      const frames = t.inFrames || TRANSIT_IN;
+      const k = Math.min(1, t.f / frames);
       if (t.axis === 'x') p.x = t.fromX + t.slide * k;
       else p.y = t.fromY + t.slide * k;
-      if (t.f >= TRANSIT_IN) { t.phase = 'hold'; t.f = 0; }
+      if (t.kind === 'door') {
+        /* WALKING, NOT BEING PUSHED. The scene owns the body while a transit
+         * runs and `Player.update` returns before its own animation, so the
+         * legs are frozen unless someone steps them — and `state()` reads
+         * `onGround` and `vx`, which `beginTransit` cleared, so the sprite was
+         * drawn in its **jump** pose for the whole walk-in. Both are put back
+         * here from the transit's own numbers rather than guessed: the pace is
+         * the slide divided by its frames, which is `DOOR_STEP` by
+         * construction. */
+        p.onGround = true;
+        p.vx = t.slide / frames;
+        p.walkAnim(Math.abs(p.vx));
+      }
+      if (t.f >= frames) { t.phase = 'hold'; t.f = 0; }
       return;
     }
 
@@ -4689,7 +4803,7 @@ export class LevelScene {
     } else if (this.state === 'clear') {
       this.player.update(input);
       this.stateTimer++;
-      if (this.stateTimer > 170) {
+      if (this.stateTimer > CLEAR_HOLD && this.walkedOut()) {
         this.game.finishLevel({ cleared: true, card: this.wonCard });
         return;
       }
@@ -4746,6 +4860,7 @@ export class LevelScene {
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
     this.updateProps();
+    this.updateBrink();
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
@@ -5150,6 +5265,11 @@ export class LevelScene {
     /* Kiire alkaa siitä pinnasta jolta ei enää ehdi kauas: `FUEL_HURRY`
      * kolikkoa on kaksikymmentä sekuntia, eli suunnilleen yksi ruutu
      * juoksuvauhtia ja se hetki jona kannattaa lakata tutkimasta. */
+    /* What `setHurry` now does changed on 20.8.2026 and this call site did not:
+     * it used to lift the tempo by 1.4, and it now switches one voice of the
+     * track to double subdivisions while the pulse stays exactly where it was.
+     * The signal is the same event at the same coin; only its shape moved. See
+     * `DOUBLE_TIME` in `core/audio.js` for why. */
     if (st.coins === FUEL_HURRY) {
       Sfx.play('timewarn');
       Music.setHurry(true);
@@ -6284,6 +6404,14 @@ export class LevelScene {
     this.player.controllable = false;
     this.player.autoWalk = true;
     this.player.ducking = false;
+    /* The last thing a cleared level shows is him leaving it — see
+     * `walkedOut`. The flag is what lets him past the level's own right edge,
+     * which is otherwise a wall (`moveX`), and it is set here and not in the
+     * clear branch because there is exactly one caller with a body still in
+     * the room. **The fortress is the other caller and it is not one**: the
+     * door's transit ends with him inside the doorway and out of sight, and a
+     * man who has just entered a door does not then also walk off the map. */
+    this.player.offstage = !this.player.transit;
     /* Jäljellä oleva polttoaine pisteinä. Kolikoita **ei kuluteta** — säiliö
      * kannetaan seuraavaan kenttään — eli tämä on kuitti säästämisestä eikä
      * lunastus: nopea läpimeno maksaa enemmän kuin hidas, ja silti kaikki
@@ -6293,6 +6421,34 @@ export class LevelScene {
     Music.stop();
     Ambience.stop();
     Sfx.play('clear');
+  }
+
+  /**
+   * Is the cleared level's last picture over?
+   *
+   * Asked every frame once the jingle has had its `CLEAR_HOLD` frames, and it
+   * answers the only question the scene still has: **is he still in shot.**
+   *
+   * Three ways to be done, and each is a different level:
+   *
+   *   - **No body in the room.** The fortress ends inside its door and the
+   *     transit holds him there ('gone', see `updateTransit`); asking such a
+   *     body to leave the frame would keep the scene up for the fuse's whole
+   *     length with nothing on screen but an empty doorway.
+   *   - **Out of the frame.** The ordinary answer. The left edge of the box
+   *     past the right edge of the view, plus the 8 px of slack the sprite is
+   *     allowed to overhang its box by — the same 8 `drawPlayerInto` clips
+   *     with, and for the same reason.
+   *   - **The fuse.** Below the frame counts too: past the goal the ground is
+   *     whatever the level happened to end with, and a man who has walked off
+   *     the last tile is as gone as one who walked off the side. `WALKOUT_MAX`
+   *     covers the rest — a wall, a pit he is still falling down.
+   */
+  walkedOut() {
+    const p = this.player;
+    if (p.transit) return true;
+    if (this.stateTimer > CLEAR_HOLD + WALKOUT_MAX) return true;
+    return p.x >= this.cam.x + VIEW_W + 8 || p.y >= this.cam.y + this.viewH + 8;
   }
 
   /* --------------------------------- draw ------------------------------ */
@@ -6341,8 +6497,30 @@ export class LevelScene {
      */
     const span = Math.max(1, this.widthPx - VIEW_W);
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
+    /*
+     * The coin gauge is a tower on the horizon now, so it is handed to the
+     * backdrop rather than drawn over the picture afterwards: it has to be
+     * *inside* the layers, between the far ridge and the middle one, or the
+     * hills cannot sweep across its feet. `tubeBox` and the corner glass are
+     * gone with it — see `drawCoinTube`.
+     *
+     * `at` is a fixed starting offset and not a function of progress: the
+     * tower drifts at its own slow rate (`drawSkyTower`), so it says "far
+     * away" and nothing else. Position-as-progress would be a second answer
+     * to the question the sky already answers.
+     */
+    const tower = this.def.bg === 'none' || this.vertical ? null : {
+      at: 300,
+      fill: this.tubeShown(),
+      lives: Math.max(0, this.game.state.lives | 0),
+      tick: this.tick,
+      /* 0 while a red is climbing out of the cube, 1 once it is in place. See
+       * `drawTower`: this is the conversion, and it is the one thing the
+       * corner glass said that the cube did not. */
+      rising: this.tubeFlush > 0 ? 1 - this.tubeFlush / COIN_FLUSH : 1,
+    };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
-      bandDrop, clock);
+      bandDrop, clock, tower);
     /* Props sit in front of the haze that softens the hill/tilemap seam: they
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the
@@ -6714,6 +6892,67 @@ export class LevelScene {
    * to the sky, which is why `drawSkyName` tests the same two conditions from
    * the other side. One level, one way of saying it — DESIGN.md item 8.
    */
+  /**
+   * THE BRINK: a coin for getting out of a fall you had already lost.
+   *
+   * Owner: *"maybe you should get a coin for a near-death stunt (be falling
+   * into a chasm and then use the second or third jump to get out of there?)"*
+   *
+   * Three conditions, and every one of them is there to stop this paying for
+   * something that was never dangerous:
+   *
+   *   1. **Over a real pit.** Not a dip, not a ledge — a column with no solid
+   *      tile anywhere beneath it, which is to say the one thing in this game
+   *      that kills you for arriving at the bottom.
+   *   2. **Already committed.** `BRINK_DEEP` below the last ground he stood
+   *      on, so a hop across a gap does not count. You have to have been
+   *      falling long enough for it to have been the wrong decision.
+   *   3. **Saved by an air jump.** The recovery has to be the thing the owner
+   *      described — a jump spent in the air, not a lucky ledge.
+   *
+   * And it pays **once per fall**, on landing alive. Hovering over the same
+   * pit is one coin, not a coin a second: a reward you can stand still and
+   * farm is a reward that stops meaning anything the first time somebody
+   * notices.
+   */
+  pitUnder(tx, ty) {
+    if (tx < 0 || tx >= this.w) return false;
+    for (let y = Math.max(0, ty); y < this.h; y++) if (this.solidAt(tx, y)) return false;
+    return true;
+  }
+
+  updateBrink() {
+    const p = this.player;
+    if (!p || this.state !== 'play') return;
+    if (p.onGround) {
+      if (this.brink && this.brink.saved) {
+        /* Paid where he landed, not where he fell: the coin belongs to the
+         * moment it turned out to have worked. */
+        /* A real coin through the map's own door, so it flies to the gauge
+         * and counts exactly as a collected one does — a reward that arrives
+         * by a private route is a number, not a coin. */
+        this.addCoin(p.cx - 8, p.cy - 20, true);
+      }
+      this.brink = null;
+      this.brinkGroundY = p.y;
+      return;
+    }
+    const tx = Math.floor(p.cx / TILE);
+    const ty = Math.floor((p.y + p.h) / TILE);
+    if (!this.brink) {
+      const deep = this.brinkGroundY !== undefined
+        && p.y - this.brinkGroundY > BRINK_DEEP;
+      if (p.vy > 0 && deep && this.pitUnder(tx, ty)) {
+        this.brink = { jumps: p.airJumps, saved: false };
+      }
+      return;
+    }
+    /* An air jump spent *while over the pit* is what turns a fall into a
+     * stunt. Counted rather than watched for, so a jump that happened before
+     * he was ever in trouble cannot claim it. */
+    if (p.airJumps > this.brink.jumps) this.brink.saved = true;
+  }
+
   updateProps() {
     const camX = this.cam.x;
     this.props.update(camX, VIEW_W);

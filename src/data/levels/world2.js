@@ -43,6 +43,23 @@
  * Se on kolme kenttää kohti, ja tiukin pari koko maailmassa on 2-1:n aurinko ja
  * kasvi 30 saraketta erillään — puolitoista ruutua. Perustelut ovat kenttien
  * omissa kommenteissa.
+ *
+ * ## The music, 20.8.2026: `makam` and not `level`
+ *
+ * Every level here says `makam` now. Worlds 3, 4, 6, 7 and 8 have had a track
+ * of their own for some time and worlds 1, 2 and 5 shared the generic one, so
+ * "the desert" was a place the picture described and the sound did not.
+ *
+ * `makam` is maqam Bayati on D — a scale that is not the same going up as
+ * coming down, over a drone and an iqa' cycle, with a genuinely microtonal
+ * second degree. What it is *not* is the augmented-second shorthand that
+ * usually turns up when a game wants a desert, and the difference is
+ * structural rather than tasteful: see the track's own comment in
+ * `src/core/audio.js`. The desert daily field plays it too (`core/daily.js`).
+ *
+ * World 1 kept `level` on purpose. It is the front door, it is the most-heard
+ * track in the game, and it is the one whose bass the drum steals a channel
+ * from — moving it would have made a documented technique nearly inaudible.
  */
 
 
@@ -236,7 +253,7 @@ export const WORLD2_LEVELS = {
    * leaves the camera reading exactly what flat ground read.
    */
   '2-1': {
-    theme: 'desert', bg: 'dunes', music: 'level', letterbox: true,
+    theme: 'desert', bg: 'dunes', music: 'makam', letterbox: true,
     terrain: '2-1i',
     chunks: [
       'start', 'pipe_short', 'power', 'walkers', 'sun', 'corks',
@@ -321,7 +338,7 @@ export const WORLD2_LEVELS = {
    * rytmin opettelu ei riitä, on katsottava kumpaa odottaa.
    */
   '2-2': {
-    theme: 'desert', bg: 'dunes', music: 'level',
+    theme: 'desert', bg: 'dunes', music: 'makam',
     chunks: [
       'start', 'plat_float', 'power', 'sun', 'spikes', 'pit_twin',
       'walkers', 'sky_run', 'beanstalk', 'clouds', 'pit_bridge', 'brick_wall',
@@ -383,7 +400,7 @@ export const WORLD2_LEVELS = {
    * Chunk 1 is `pipe_short` in place of `flat` for the reason given in 2-1.
    */
   '2-N': {
-    theme: 'night', bg: 'dunes', music: 'level', wind: true, spotlight: true,
+    theme: 'night', bg: 'dunes', music: 'makam', wind: true, spotlight: true,
     /* Maastopassi, ks. `data/terrain.js`. Yön dyynit ovat sille luontevin
      * paikka koko maailmassa: tuuli liikkuu jo, ja nyt maakin. */
     terrain: true,
@@ -478,7 +495,7 @@ export const WORLD2_LEVELS = {
    * read the LAAVATIE row it prints.
    */
   '2-3': {
-    theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
+    theme: 'desert', bg: 'peaks', music: 'makam', letterbox: true,
     terrain: '2-3v',
     chunks: [
       /* Hössötin maailmaan 2: laji joka ei satuta kuuluu sinne missä pelaaja
@@ -524,7 +541,7 @@ export const WORLD2_LEVELS = {
    * the player — a narrower window would hide the top of every arc.
    */
   '2-M': {
-    theme: 'desert', bg: 'peaks', music: 'level',
+    theme: 'desert', bg: 'peaks', music: 'makam',
     /* Maastopassi, ks. `data/terrain.js`. */
     terrain: true,
     chunks: [
@@ -572,7 +589,7 @@ export const WORLD2_LEVELS = {
    * huomaa lankkujen olevan lankkuja.
    */
   '2-4': {
-    theme: 'desert', bg: 'dunes', music: 'level',
+    theme: 'desert', bg: 'dunes', music: 'makam',
     /* Maastopassi, ks. `data/terrain.js`. */
     terrain: true,
     chunks: [
@@ -617,7 +634,7 @@ export const WORLD2_LEVELS = {
    * ulkopuolella, ja rajaus on **crop eikä maski**.
    */
   '2-5': {
-    theme: 'desert', bg: 'peaks', music: 'level', letterbox: true,
+    theme: 'desert', bg: 'peaks', music: 'makam', letterbox: true,
     /* Maastopassi, ks. `data/terrain.js`. */
     terrain: true,
     chunks: [

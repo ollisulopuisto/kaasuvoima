@@ -122,13 +122,21 @@
  * that line would decide almost nothing — the piece would be heard in the
  * corridors and nowhere else.
  *
- * Hence `bossMusic` on 8-F, and it exists for exactly one level in the game.
- * The last fight is the only fight in this game whose music is not the boss
- * theme, and it is also the only fight whose music does not change when it
- * ends. The reason is in the piece: it is a night that gets louder until a bell
- * rings and the morning takes the same key in the major. That shape is a boss
- * fight and its door, and cutting it off to play something else at the moment
- * it resolves would be throwing away the ending twice.
+ * Hence `bossMusic` on 8-F. The last fight is the only fight in this game whose
+ * music does not change when it ends, and the reason is in the piece: it is a
+ * night that gets louder until a bell rings and the morning takes the same key
+ * in the major. That shape is a boss fight and its door, and cutting it off to
+ * play something else at the moment it resolves would be throwing away the
+ * ending twice.
+ *
+ * **And the other seven fights got their own (20.8.2026).** They played `boss`,
+ * the same track as every castle in worlds 1 to 6, which made the final rush
+ * sound like a rerun of them — precisely the reading this world is written
+ * against. They play `kello` now: three cycles of different length turning
+ * against each other and coming round together once every forty-eight steps,
+ * which is what seven fights back to back with no level in between actually
+ * feel like. Nothing was taken from `autiovuori` to pay for it — the corridors
+ * were always where it lived, and 8-F is untouched.
  */
 
 export const WORLD8_LEVELS = {
@@ -154,6 +162,7 @@ export const WORLD8_LEVELS = {
    */
   '8-1': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 0,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'keep_hole', 'keep_teeth',
       /* Kuura `keep_watch`in tilalle: maailman 8 sanasto on pelin ohuin
@@ -189,6 +198,7 @@ export const WORLD8_LEVELS = {
    */
   '8-2': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 1,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_watch', 'fort_spikes', 'keep_teeth',
       'keep_vault', 'fort_pillars', 'fort_spikes', 'keep_watch', 'boss_arena_big',
@@ -218,6 +228,7 @@ export const WORLD8_LEVELS = {
    */
   '8-3': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 2,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_hole', 'keep_watch', 'keep_croak',
       'keep_teeth', 'fort_gap', 'keep_stair', 'keep_vault', 'fort_gap',
@@ -272,6 +283,7 @@ export const WORLD8_LEVELS = {
    */
   '8-4': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 3,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_yoke', 'keep_hole', 'keep_grind',
       'keep_teeth', 'keep_watch', 'keep_hole', 'keep_yoke', 'boss_arena_big',
@@ -330,6 +342,7 @@ export const WORLD8_LEVELS = {
    */
   '8-5': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 7,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_pour', 'keep_watch', 'hyppy_harjoitus', 'fort_gap',
       'keep_teeth', 'keep_pour', 'keep_yoke', 'fort_gap', 'boss_arena_big',
@@ -356,6 +369,7 @@ export const WORLD8_LEVELS = {
    */
   '8-6': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 4,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_forge', 'fort_hall', 'hyppy_kampi', 'fort_gap',
       'keep_hole', 'keep_teeth', 'fort_gap', 'keep_croak', 'boss_arena',
@@ -384,6 +398,7 @@ export const WORLD8_LEVELS = {
    */
   '8-7': {
     theme: 'fortress', bg: 'none', music: 'autiovuori', boss: true, bossVariant: 5,
+    bossMusic: 'kello',
     chunks: [
       'keep_start', 'fort_power', 'keep_gate', 'fort_gap', 'keep_hole',
       'fort_burn', 'keep_teeth', 'fort_gap', 'keep_croak', 'keep_watch', 'hyppy_neula',
