@@ -25260,24 +25260,29 @@ const report = await page.evaluate(async (OVERWORLDS) => {
    * So this counts CONNECTED COMPONENTS of the core colour, which is the shape
    * of the complaint, and sweeps whole levels rather than a handful of poses.
    *
-   * Ice and cloud are excluded and it is not a dodge: their sun's core is pure
-   * white, and so are their clouds and their snow, so a colour test cannot tell
-   * the sun from the weather in those two themes. Four themes with a distinct
-   * core are measured across five levels and every camera position in them.
+   * ICE AND CLOUD ARE MEASURED TOO, and getting them in meant dropping the
+   * colour test rather than accepting an exclusion. Their sun's core is pure
+   * white and so are their clouds and their snow, so *identity* by colour
+   * cannot work there — but identity was never the question. The question is
+   * whether the disc is WHOLE.
+   *
+   * So this asks `sunPos` where the sun is, then walks a ring inside its rim
+   * and checks every point on that ring reaches the centre through unbroken
+   * bright pixels. A white cloud overlapping a white sun leaves no visible
+   * seam and correctly passes; a `?` block cutting through leaves points on
+   * the ring that cannot reach the middle, and fails. It tests the complaint
+   * in every theme instead of four of them.
    */
   {
     const A = await page.evaluate(async () => {
       const { LevelScene } = await import('/src/scenes/level.js');
+      const { sunPos } = await import('/src/gfx/backdrop.js');
       const game = window.sfb3;
-      /* only themes whose sun core is not shared with clouds or snow */
-      const CORES = { desert: [255, 242, 192], grass: [255, 253, 224],
-        night: [255, 248, 216], bone: [244, 240, 224] };
       const out = [];
-      for (const id of ['1-1', '2-1', '2-5', '6-1', '1-6']) {
+      for (const id of ['1-1', '2-1', '2-5', '6-1', '1-6', '3-1', '7-1', '2-N']) {
         let sc;
         try { sc = new LevelScene(game, id); } catch { continue; }
-        const core = CORES[sc.theme];
-        if (!core) continue;
+        if (sc.def.bg === 'none' || sc.vertical) continue;
         const c = document.createElement('canvas');
         c.width = 320; c.height = 240;
         const g = c.getContext('2d', { willReadFrequently: true });
@@ -25290,26 +25295,55 @@ const report = await page.evaluate(async (OVERWORLDS) => {
           g.fillStyle = '#000'; g.fillRect(0, 0, 320, 240);
           sc.draw(g);
           const d = g.getImageData(0, 0, 320, 240).data;
-          const seen = new Uint8Array(320 * 240);
-          const hit = (k) => d[k * 4] === core[0] && d[k * 4 + 1] === core[1]
-            && d[k * 4 + 2] === core[2];
-          let blobs = 0;
-          for (let k = 0; k < 320 * 240; k++) {
-            if (seen[k] || !hit(k)) continue;
-            const st = [k]; seen[k] = 1; let n = 0;
-            while (st.length) {
-              const j = st.pop(); const x = j % 320, y = (j / 320) | 0; n++;
-              for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || ny < 0 || nx >= 320 || ny >= 240) continue;
-                const nj = ny * 320 + nx;
-                if (!seen[nj] && hit(nj)) { seen[nj] = 1; st.push(nj); }
-              }
+          const clock = 1 - sc.levelProgress();
+          /* `sc.viewH`, not 240: the scene letterboxes, and passing the full
+           * canvas height put the expected centre a dozen pixels off — onto
+           * the sun's rim, where the flood starts from the wrong colour. The
+           * drawing asks with `this.viewH`, so the gate has to ask with the
+           * same number or it is measuring a sun that is not there. */
+          const { x: sx, y: sy } = sunPos(320, sc.viewH, clock, sc.cam.x);
+          const at = (x, y) => {
+            const k = ((y + sc.bar) * 320 + x) * 4;
+            return 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
+          };
+          const mid = at(sx, sy);
+          /* Flood the bright region from the sun's own centre. */
+          const seen = new Set();
+          const st = [[sx, sy]];
+          seen.add(sy * 320 + sx);
+          while (st.length) {
+            const [x, y] = st.pop();
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= 320 || ny + sc.bar >= 240) continue;
+              const key = ny * 320 + nx;
+              if (seen.has(key)) continue;
+              if (at(nx, ny) < mid - 40) continue;
+              if (Math.hypot(nx - sx, ny - sy) > 13) continue;
+              seen.add(key);
+              st.push([nx, ny]);
             }
-            if (n >= 20) blobs++;
           }
-          if (blobs !== 1 && !first) first = `${id} camX ${camX}: ${blobs}`;
-          if (blobs !== 1) bad++;
+          /*
+           * HOW MUCH OF THE DISC IS STILL ONE PIECE.
+           *
+           * Counting *interruptions* was the first version and it is too
+           * strict to mean anything: the level name is written across the sky
+           * in smoke, and a letter stroke crossing the sun detached a ring
+           * point in nine frames out of three hundred. A scratch is not two
+           * suns. What makes two suns is a BAR — something that takes a real
+           * share of the disc and leaves matching lobes either side.
+           *
+           * So this measures the fraction of the disc still connected to its
+           * own centre. A thin stroke costs a few per cent. The `?` block that
+           * caused the report costs about half.
+           */
+          const area = Math.PI * 11 * 11;
+          const whole = seen.size / area;
+          if (whole < 0.7) {
+            bad++;
+            if (!first) first = `${id} camX ${camX}: vain ${Math.round(whole * 100)} % kiekosta yhtenäistä`;
+          }
         }
         out.push({ id, theme: sc.theme, frames, bad, first });
       }
@@ -25318,7 +25352,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
 
     const broken = A.filter((r) => r.bad > 0);
     expect('aurinko on aina yksi yhtenäinen kiekko, ei kahta puolikasta',
-      A.length >= 4 && broken.length === 0,
+      A.length >= 6 && broken.length === 0,
       broken.length
         ? broken.map((r) => `${r.id}: ${r.bad}/${r.frames} — ${r.first}`).join('; ')
         : `${A.reduce((t, r) => t + r.frames, 0)} framea`
