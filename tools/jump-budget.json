@@ -40,12 +40,12 @@
     {
       "label": "running + fart jump",
       "speed": 2.5,
-      "height": 174,
-      "distance": 285,
-      "frames": 113
+      "height": 190,
+      "distance": 310,
+      "frames": 123
     }
   ],
   "gapTiles": 6,
-  "softGapTiles": 9,
+  "softGapTiles": 10,
   "wallTiles": 4
 }

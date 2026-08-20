@@ -25241,6 +25241,153 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `salaisin ${best} (${truth[best]}), nollakenttiä ${zeroes}`);
   }
 
+  /* ------------------------------ takakaasu ------------------------------ */
+  /*
+   * THE GAS LEAVES FROM BEHIND, AND THAT IS THE WHOLE COMBAT VERB.
+   *
+   * Owner: *"the 'fireballs' are actually ejected from the rear of the
+   * character… cos they're farts? Which means you can't just run and gun."*
+   *
+   * The naive version dies on one fact: the game scrolls right, so threats
+   * come from the right, and a weapon that only fires left is not harder, it
+   * is useless. Newton fixes it — gas out the back pushes you forward — and
+   * turns one rule into three shots, each a trade:
+   *
+   *   1. facing your direction of travel: covers your back, and shoves you on
+   *   2. facing backwards: hits what is ahead, and costs you ground
+   *   3. jump, turn, fire, turn back inside the window: hits ahead, costs
+   *      nothing
+   *
+   * Every one of those is measured here, plus the two rules that bound the
+   * whole territory and already bound the jump chain and the slope catapult:
+   * the cap must not rise, and ignoring the mechanic must not be punished.
+   */
+  {
+    const G = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const blank = () => ({ left: false, right: false, up: false, down: false,
+        jump: false, run: false, start: false, confirm: false, mute: false,
+        quicksave: false, quickload: false, slot: false, debug: false,
+        export: false, fx: false, touch: false, warp: false, reset: false });
+      const mk = () => ({ held: blank(), pressed: blank(), released: blank() });
+
+      const fresh = (type) => {
+        game.state = { lives: 5, coins: 0, score: 0, power: { type, level: 4 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [] };
+        const sc = new LevelScene(game, '1-1');
+        for (let y = 0; y < sc.h - 2; y++) sc.grid[y] = sc.grid[y].map(() => ' ');
+        for (let y = sc.h - 2; y < sc.h; y++) sc.grid[y] = sc.grid[y].map(() => '#');
+        sc.entities = sc.entities.filter((e) => e.kind === 'player');
+        sc.goal = null;
+        const i = mk();
+        for (let f = 0; f < 40; f++) { sc.update(i); i.pressed = blank(); }
+        return { sc, i };
+      };
+
+      const balls = (sc) => sc.entities.filter((e) => e.kind === 'projectile');
+
+      /* --- 1. which way does it come out --- */
+      const rear = (() => {
+        const { sc, i } = fresh('flower');
+        const p = sc.player;
+        p.facing = 1;
+        i.pressed.run = true;
+        sc.update(i); i.pressed = blank();
+        const b = balls(sc)[0];
+        return b ? { dir: Math.sign(b.vx), behind: b.x < p.x } : null;
+      })();
+
+      /* --- borrowed ammo leaves the mouth --- */
+      const mouth = (() => {
+        const { sc, i } = fresh('sylky');
+        const p = sc.player;
+        p.facing = 1;
+        i.pressed.run = true;
+        sc.update(i); i.pressed = blank();
+        const b = balls(sc)[0];
+        return b ? { dir: Math.sign(b.vx), ahead: b.x > p.x } : null;
+      })();
+
+      /* --- 2. the shove, and its ceiling --- */
+      const shove = (() => {
+        const { sc, i } = fresh('flower');
+        const p = sc.player;
+        p.facing = 1; p.vx = 1.0; p.onGround = true;
+        const before = p.vx;
+        p.recoil(false);
+        const pushed = p.vx - before;
+        /* and it may never carry past the number the budget was measured at */
+        p.vx = 3.45;
+        p.recoil(true);
+        const ceiling = p.vx;
+        /* a kick against your motion is paid in full */
+        p.vx = 2.0; p.facing = -1;
+        const back = p.vx;
+        p.recoil(false);
+        return { pushed: +pushed.toFixed(3), ceiling: +ceiling.toFixed(3),
+          cost: +(back - p.vx).toFixed(3) };
+      })();
+
+      /* --- 3. the refunded manoeuvre --- */
+      const trick = (fast) => {
+        const { sc, i } = fresh('flower');
+        const p = sc.player;
+        /* A full gauge, or the cap is MAX_RUN and the physics drags 3.4 down
+         * toward 2.5 every frame — a real loss, but not this mechanic's. */
+        p.pMeter = 9999;
+        p.vx = 3.4; p.facing = 1; p.onGround = false; p.vy = -4;
+        i.held.right = true;
+        sc.update(i);
+        const before = p.vx;
+        /* turn back the way we came */
+        i.held.right = false; i.held.left = true;
+        sc.update(i);
+        /* fire while facing backwards */
+        i.pressed.run = true; sc.update(i); i.pressed = blank();
+        const dipped = p.vx;
+        /* wait, or do not */
+        for (let f = 0; f < (fast ? 1 : 40); f++) { sc.update(i); i.pressed = blank(); }
+        /* and turn back to where we were going */
+        i.held.left = false; i.held.right = true;
+        sc.update(i);
+        return { before: +before.toFixed(2), dipped: +dipped.toFixed(2),
+          after: +p.vx.toFixed(2) };
+      };
+
+      return { rear, mouth, shove, quick: trick(true), slow: trick(false) };
+    });
+
+    expect('oma kaasu lähtee takaa, ei edestä',
+      !!G.rear && G.rear.dir === -1 && G.rear.behind,
+      G.rear ? `menosuuntaan katsoen ammus lähti suuntaan ${G.rear.dir}`
+        + `, takaa: ${G.rear.behind}` : 'ei ammusta');
+
+    expect('nielty ammus lähtee suusta eteenpäin',
+      !!G.mouth && G.mouth.dir === 1 && G.mouth.ahead,
+      G.mouth ? `sylky lähti suuntaan ${G.mouth.dir}, edestä: ${G.mouth.ahead}`
+        : 'ei ammusta');
+
+    expect('laukaus työntää eteenpäin muttei koskaan yli hyppybudjetin katon',
+      G.shove.pushed > 0.3 && G.shove.ceiling <= 3.5001 && G.shove.cost > 0.3,
+      `työntö +${G.shove.pushed}, katto ${G.shove.ceiling} (MAX_P 3.5),`
+      + ` vastaan ammuttuna hinta ${G.shove.cost}`);
+
+    /*
+     * The point of the whole mechanic: the same three inputs cost nothing when
+     * they are quick and cost real speed when they are not. If these two ever
+     * measure the same, the timing tier has silently stopped existing.
+     */
+    expect('täydellisesti ajoitettu käännös-laukaus-käännös ei maksa vauhtia',
+      G.quick.after >= G.quick.before - 0.05,
+      `ennen ${G.quick.before} -> laukauksen jälkeen ${G.quick.dipped}`
+      + ` -> käännöksen jälkeen ${G.quick.after}`);
+
+    expect('sama liike hitaasti tehtynä maksaa',
+      G.slow.after < G.quick.after - 0.2,
+      `nopea päätyy ${G.quick.after}, hidas ${G.slow.after}`);
+  }
+
   /* ------------------------------ tähtiketju ----------------------------- */
   /*
    * THE STAR IS THE THIRD CHAIN, AND IT DOES NOT BREAK ON LANDING.
