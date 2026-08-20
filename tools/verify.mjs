@@ -25241,6 +25241,80 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `salaisin ${best} (${truth[best]}), nollakenttiä ${zeroes}`);
   }
 
+  /* ------------------------------ tähtiketju ----------------------------- */
+  /*
+   * THE STAR IS THE THIRD CHAIN, AND IT DOES NOT BREAK ON LANDING.
+   *
+   * Owner: *"during invulnerability all kills should count as a chain, no?"*
+   *
+   * A chain in this game is an OWNER plus a break condition, and there were
+   * two: the player airborne, which breaks on landing, and a kicked shell,
+   * which breaks when it stops. The star kill went through `hitByShell` with
+   * no owner at all, so twelve seconds of invulnerable carnage paid as a dozen
+   * unrelated kills — the one power-up that exists to make a mess was the one
+   * that scored flat for it.
+   *
+   * The owner is `starRun` and deliberately NOT the player, and that is the
+   * whole thing worth gating: sharing the player's counter would mean landing
+   * broke the star chain, and landing is what you do constantly while a star
+   * is running. So this asserts the ladder climbs AND that it survives ground.
+   */
+  {
+    const S = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { CHAIN, CHAIN_LIFE } = await import('/src/core/points.js');
+      const game = window.sfb3;
+      game.state.lives = 3;
+      const sc = new LevelScene(game, '1-1');
+      for (let i = 0; i < 30; i++) sc.update(game.input);
+
+      /* one run of the star, with the player on the ground throughout */
+      sc.player.star = 600;
+      sc.player.onGround = true;
+      sc.update(game.input);
+      const born = !!sc.starRun;
+
+      const paid = [];
+      const before = game.state.lives;
+      for (let k = 0; k < CHAIN_LIFE; k++) {
+        const at = game.state.score;
+        sc.chained(sc.starRun, () => sc.chainReward(100, 0, 0));
+        paid.push(game.state.score - at);
+        /* land between every single kill: the player chain would die here */
+        sc.player.onGround = true;
+        sc.update(game.input);
+      }
+      const survived = !!sc.starRun && sc.starRun.chain === CHAIN_LIFE;
+
+      /* and it ends with the star */
+      sc.player.star = 0;
+      sc.update(game.input);
+      return {
+        born, survived, paid, gone: sc.starRun === null,
+        lives: game.state.lives - before,
+        top: CHAIN[CHAIN.length - 1],
+      };
+    });
+
+    expect('tähti on oma ketjunsa eikä katkea maahan laskeutumiseen',
+      S.born && S.survived,
+      `ketju syntyi ${S.born}, säilyi ${S.survived} yli`
+      + ` ${S.paid.length} maakosketuksen`);
+
+    const climbs = S.paid.every((n, i) => i === 0 || n >= S.paid[i - 1]);
+    expect('tähtiketju kiipeää samaa tikapuuta kuin muutkin',
+      climbs && S.paid[0] === 100 && S.paid[S.paid.length - 1] === 100 * S.top,
+      `${S.paid.slice(0, 5).join(', ')} … ${S.paid[S.paid.length - 1]}`
+      + ` (katto ${S.top}x)`);
+
+    expect('tähtiketju maksaa elämän kuten muutkin, ei useammin',
+      S.lives === 1,
+      `${S.paid.length} tappoa antoi ${S.lives} elämää`);
+
+    expect('ketju kuolee tähden mukana',
+      S.gone, `tähden jälkeen starRun ${S.gone ? 'null' : 'yhä olemassa'}`);
+  }
+
   /* --------------------------- punaisen räjähdys -------------------------- */
   /*
    * WHEN THE PLAYER DIES, A RED COIN VISIBLY COMES APART.
