@@ -1902,22 +1902,55 @@ export function drawSplinter(ctx, x, y, len, thick, frame, body, light, dark) {
   ctx.fillRect(x + d, y + (frame === 1 ? d - 1 : 0) + 1, 1, 1);
 }
 
+/**
+ * A HEXAGONAL COIN, because the game is made of hexagons now.
+ *
+ * Owner: *"now that we've gone full on hex and polyhedron, let's change coin
+ * shape to match that."* The map is a truncated octahedron, the gauge in the
+ * sky is the same solid, and the coin was the last round thing left.
+ *
+ * It is also better pixel art, which is the part that makes it worth doing
+ * rather than merely consistent. A circle at ten pixels across is four rows of
+ * almost the same length and reads as a rounded rectangle anyway; a hexagon at
+ * ten pixels has corners the grid can actually put somewhere, so the silhouette
+ * is exact instead of approximated.
+ *
+ * The spin is untouched — the same four widths, so it still turns at the same
+ * rate and still has the two-pixel edge-on frame. What changes is the profile:
+ * every row's half-width is a straight taper from 0.3 of the width at the flat
+ * top and bottom out to 0.5 at the middle, which is precisely a flat-topped
+ * hexagon and, being linear, costs nothing to compute.
+ */
 export function drawCoinSprite(ctx, x, y, tick) {
   const frames = [10, 6, 2, 6];
   const w = frames[Math.floor(tick / 6) % 4];
   const cx = x + 8;
-  const left = cx - Math.floor(w / 2);
-  ctx.fillStyle = '#a06800';
-  ctx.fillRect(left, y + 1, w, 14);
-  ctx.fillStyle = '#f0b000';
-  ctx.fillRect(left, y + 2, w, 12);
+  const H = 14;
+
+  /* Half-width at row `i`: 0.3w at the ends, 0.5w across the middle. */
+  const half = (i, width) => {
+    const t = Math.abs(i - (H - 1) / 2) / ((H - 1) / 2);
+    return Math.max(0.5, width * (0.5 - 0.2 * t));
+  };
+  const band = (color, top, rows, inset, width) => {
+    ctx.fillStyle = color;
+    for (let i = 0; i < rows; i++) {
+      const hw = Math.round(half(i + inset, width));
+      if (hw <= 0) continue;
+      ctx.fillRect(cx - hw, y + top + i, hw * 2, 1);
+    }
+  };
+
+  band('#a06800', 1, H, 0, w);
+  band('#f0b000', 2, H - 2, 1, w - 0.6);
   if (w > 3) {
-    ctx.fillStyle = '#ffe070';
-    ctx.fillRect(left + 1, y + 3, w - 2, 10);
+    band('#ffe070', 3, H - 4, 2, w - 2);
+    /* The edge line that says it has thickness, kept to the middle rows where
+     * the hexagon is at its widest and there is room for it. */
     ctx.fillStyle = '#c88800';
-    ctx.fillRect(left + Math.floor(w / 2), y + 5, 1, 6);
+    ctx.fillRect(cx, y + 5, 1, 6);
     ctx.fillStyle = '#fff8d0';
-    ctx.fillRect(left + 1, y + 3, 1, 3);
+    ctx.fillRect(cx - Math.round(half(4, w - 2)) + 1, y + 5, 1, 3);
   }
   // a sparkle that pops on the widest frame
   if (w === 10 && Math.floor(tick / 6) % 8 === 0) {
@@ -2295,8 +2328,88 @@ function drawSlope(ctx, ch, x, y, th, tx, ty, tick = 0) {
   void tick;
 }
 
+/**
+ * A HONEYCOMB LAID OVER THE TILES, kept strictly to the skin.
+ *
+ * Owner: *"now that we've gone full on hex and polyhedron… could we switch all
+ * tiles to be hex shaped? Maybe keep the flat stacking, but change the skin?
+ * This might be worth trying out on one stage first."* — and the middle
+ * sentence is the whole design. Collision, the jump budget, the level data and
+ * some nine hundred gates all assume a square grid; a real hex grid is a
+ * different game. A hex SURFACE is a Saturday, and it is reversible.
+ *
+ * The trick that makes it convincing is that the comb is drawn in WORLD SPACE
+ * rather than per tile. Tiles are drawn after the camera translate, so a
+ * repeating pattern lines up with the world by itself — the comb runs
+ * unbroken across tile seams, across the join between ground and brick, and
+ * does not slide when the camera moves. Fit hexagons inside each 16 px cell
+ * instead and every cell announces where its edges are, which is the opposite
+ * of what a honeycomb is for.
+ *
+ * Flat-topped hexagons 16 wide on a 12 px vertical pitch with alternate rows
+ * offset by half: that pattern repeats exactly in 16 by 24, so one small
+ * canvas tiles the whole world seamlessly.
+ */
+const combs = new Map();
+function hexComb(th) {
+  const key = th.groundDark;
+  let pat = combs.get(key);
+  if (pat) return pat;
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 24;
+  const g = c.getContext('2d');
+  g.strokeStyle = th.groundDark;
+  g.lineWidth = 1;
+  g.globalAlpha = 0.55;
+  /*
+   * 16 wide, 16 tall, with VERTICAL SIDES — the one hexagon that tiles a
+   * pixel grid without a fraction anywhere. Horizontal pitch 16, vertical
+   * pitch 12, alternate rows offset by 8, so the pattern repeats exactly in
+   * 16 by 24.
+   *
+   * The first attempt used 16 by 8, which is a squashed hexagon and does not
+   * tile at a 12 px pitch at all: it came out as a diamond mesh with gaps,
+   * which is a texture and not a comb.
+   */
+  const cell = (ox, oy) => {
+    g.beginPath();
+    g.moveTo(ox, oy + 4);
+    g.lineTo(ox + 8, oy);
+    g.lineTo(ox + 16, oy + 4);
+    g.lineTo(ox + 16, oy + 12);
+    g.lineTo(ox + 8, oy + 16);
+    g.lineTo(ox, oy + 12);
+    g.closePath();
+    g.stroke();
+  };
+  /* Nine copies, so every edge that leaves one side arrives on the other. */
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      cell(dx * 16, dy * 24);
+      cell(8 + dx * 16, 12 + dy * 24);
+      cell(-8 + dx * 16, 12 + dy * 24);
+    }
+  }
+  pat = g.canvas;
+  combs.set(key, pat);
+  return pat;
+}
+
+/** Lays the comb over one tile. The pattern is world-aligned, not tile-aligned. */
+export function drawHexSkin(ctx, x, y, themeName) {
+  const th = THEMES[themeName] || THEMES.grass;
+  const pat = ctx.createPattern(hexComb(th), 'repeat');
+  if (!pat) return;
+  ctx.fillStyle = pat;
+  ctx.fillRect(x, y, 16, 16);
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
+  /* The comb goes on afterwards, over whatever the tile normally draws, so
+   * every theme's own colours and the grass tops survive it untouched. */
+  const comb = opts.skin === 'hex'
+    && (ch === T.GROUND || ch === T.HARD || ch === T.BRICK);
   switch (ch) {
     case T.GROUND:
       drawGround(ctx, x, y, th, !isSolid(above), tx, ty, tick);
@@ -2351,4 +2464,5 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     case T.DOOR: drawDoor(ctx, x, y, th, tick, opts.doorOpen, opts.doorEdges); break;
     default: break;
   }
+  if (comb) drawHexSkin(ctx, x, y, themeName);
 }

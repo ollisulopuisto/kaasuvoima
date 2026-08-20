@@ -25480,6 +25480,112 @@ const report = await page.evaluate(async (OVERWORLDS) => {
           + ` ${A.length} kentässä (${A.map((r) => r.theme).join(', ')}), aina yksi`);
   }
 
+  /* ------------------------------ heksat --------------------------------- */
+  /*
+   * THE COIN IS A HEXAGON, AND ONE STAGE WEARS A COMB.
+   *
+   * Owner: *"now that we've gone full on hex and polyhedron, let's change coin
+   * shape to match that"* and *"could we switch all tiles to be hex shaped?
+   * Maybe keep the flat stacking, but change the skin? This might be worth
+   * trying out on one stage first."*
+   *
+   * Two claims worth holding. The coin's SILHOUETTE has to be a hexagon and
+   * not a rounded rectangle — measurable as a taper, since a hexagon's flat
+   * top is three fifths of its widest row and a rectangle's is all of it. And
+   * the comb has to be laid in WORLD space, not per tile: a comb that restarts
+   * at every tile edge is a texture, and every 16 px cell announcing where it
+   * ends is the opposite of what a honeycomb is for.
+   *
+   * The second is testable because the two spaces have different periods. The
+   * pattern repeats every 24 rows; tiles repeat every 16. So a world-aligned
+   * comb matches itself 24 rows down and a tile-locked one matches 16 rows
+   * down, and nothing else needs to be assumed.
+   */
+  {
+    const H = await page.evaluate(async () => {
+      const { drawCoinSprite } = await import('/src/gfx/tiles.js');
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+
+      /* --- the coin's profile --- */
+      const c = document.createElement('canvas');
+      c.width = 24; c.height = 20;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.fillStyle = '#000'; g.fillRect(0, 0, 24, 20);
+      drawCoinSprite(g, 4, 2, 0);                 // frame 0 is the widest
+      const d = g.getImageData(0, 0, 24, 20).data;
+      const rowWidth = (y) => {
+        let n = 0;
+        for (let x = 0; x < 24; x++) {
+          const k = (y * 24 + x) * 4;
+          if (d[k] > 60 || d[k + 1] > 40) n++;
+        }
+        return n;
+      };
+      const widths = [];
+      for (let y = 0; y < 20; y++) widths.push(rowWidth(y));
+      const widest = Math.max(...widths);
+      const lit = widths.filter((w) => w > 0);
+      const flatTop = lit[0];
+
+      /* --- the comb, and where it is anchored ---
+       *
+       * Tested on a bare canvas rather than on a level, because on a level the
+       * dirt's own texture also repeats every 16 rows and simply drowns this
+       * out — the first version of the test measured the tile noise and
+       * concluded the comb was tile-locked.
+       *
+       * The property is exact: the pattern's period is 24 and a tile's is 16,
+       * so a WORLD-anchored comb drawn at y=0 and at y=24 is identical, and is
+       * NOT identical at y=16. A tile-locked one would look the same at every
+       * y, because it would restart in each cell.
+       */
+      const { drawHexSkin } = await import('/src/gfx/tiles.js');
+      const sk = document.createElement('canvas');
+      sk.width = 16; sk.height = 48;
+      const sg = sk.getContext('2d', { willReadFrequently: true });
+      sg.fillStyle = '#3a2a18'; sg.fillRect(0, 0, 16, 48);
+      for (let y = 0; y < 48; y += 16) drawHexSkin(sg, 0, y, 'grass');
+      const sp = sg.getImageData(0, 0, 16, 48).data;
+      const strip = (y0) => {
+        const rows = [];
+        for (let y = y0; y < y0 + 16; y++) {
+          let r = '';
+          for (let x = 0; x < 16; x++) {
+            const k = (y * 16 + x) * 4;
+            r += sp[k] > 90 ? '.' : '#';
+          }
+          rows.push(r);
+        }
+        return rows.join('|');
+      };
+      const same24 = strip(0) === strip(24);
+      const same16 = strip(0) === strip(16);
+
+      const idOf = (id) => new LevelScene(game, id).def.skin || null;
+
+      return {
+        widest, flatTop, ratio: +(flatTop / widest).toFixed(2),
+        hexSkin: idOf('1-3'), plainSkin: idOf('1-1'),
+        same24, same16,
+      };
+    });
+
+    expect('kolikko on kuusikulmio eikä pyöristetty suorakaide',
+      H.ratio > 0.4 && H.ratio < 0.8,
+      `levein rivi ${H.widest} px, litteä yläreuna ${H.flatTop} px`
+      + ` — suhde ${H.ratio} (suorakaide antaisi 1.0)`);
+
+    expect('heksanahka on yhdessä kentässä eikä kaikissa',
+      H.hexSkin === 'hex' && H.plainSkin === null,
+      `1-3 skin ${H.hexSkin}, 1-1 skin ${H.plainSkin}`);
+
+    expect('kenno on ladottu maailmaan eikä laattoihin',
+      H.same24 && !H.same16,
+      `y=0 ja y=24 samat: ${H.same24} (kuvion jakso), y=0 ja y=16 samat:`
+      + ` ${H.same16} (laatan jakso — tosi tarkoittaisi laattaan lukittua)`);
+  }
+
   /* ------------------------- maailmanvaihto kuoriutuu -------------------- */
   /*
    * THE THREE THINGS THAT MAKE A TRANSITION READABLE.
