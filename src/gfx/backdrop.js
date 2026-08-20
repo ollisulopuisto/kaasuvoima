@@ -176,14 +176,7 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
    * Ilman `clock`ia (kartta, esittely, mikä tahansa muu piirtäjä) vanha
    * parallaksi jää voimaan: aurinko on silloin maisemaa eikä mittari.
    */
-  const timed = clock !== null && clock !== undefined;
-  const gone = timed ? Math.min(1, Math.max(0, 1 - clock)) : 0;
-  const cx = timed
-    ? Math.round(24 + (viewW - 48) * gone)
-    : Math.round(((238 - camX * 0.03) % (viewW + 120) + viewW + 120) % (viewW + 120) - 60);
-  const cy = timed
-    ? Math.round(viewH * 0.66 - Math.sin(gone * Math.PI) * viewH * 0.52)
-    : 34;
+  const { x: cx, y: cy } = sunPos(viewW, viewH, clock, camX);
   if (themeName === 'desert') disc(ctx, cx, cy, 15, '#fff2c0', '#ffd070', tick, true);
   else if (themeName === 'grass') disc(ctx, cx, cy, 12, '#fffde0', '#ffe98c', tick, true);
   else if (themeName === 'ice') disc(ctx, cx, cy, 11, '#ffffff', '#cfe6ff', tick, false);
@@ -199,25 +192,78 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
 }
 
 /**
- * The coin cube's own parallax, and it is the slowest thing in the picture.
+ * THE COIN CUBE HAS A LIFE OF ITS OWN.
  *
- * 0.06 against the far ridge's 0.14: over a level's worth of running it
- * crosses about a third of the screen, which is the "veeeeeerrryyy slowly"
- * the owner asked for. It is a **rate** and not a fraction of the level's
- * length, deliberately — tying it to progress would have made it a second
- * answer to the question the sun already answers, and DESIGN.md item 8 forbids
- * the game two ways of saying the same thing. A rate says only *far away*.
+ * Owner: *"now the cube is just slowly parallax scrolling out of view
+ * entirely. That's not good… maybe it just hovers in the sky, slowly moving in
+ * an unpredictable way, but it's going that way then the other way. It's got a
+ * life of its own. Maybe it's going up and down every now and then, picking up
+ * stuff."*
  *
- * It hangs above the far ridge rather than standing on the tilemap: it is
- * behind the hills, and something behind the hills whose feet are on the
- * player's floor is a thing the size of a house pretending to be a world.
+ * Parallax was the wrong idea and the symptom said so: a thing that scrolls
+ * belongs to the landscape, and anything that belongs to the landscape
+ * eventually goes past. This one has to still be there in an hour. So it is
+ * not scenery — it is a **creature**, and it stays with you because it is
+ * following you.
+ *
+ * ## Unpredictable, from three numbers that never line up
+ *
+ * Its drift is a sum of sines whose periods share no common multiple within
+ * any level's length, so the path never repeats and never settles into a
+ * rhythm you can read. That is the whole of "going that way then the other
+ * way": no randomness, nothing to save or seed, and no two moments alike.
+ *
+ * The three amplitudes add to 131 of the 160 pixels either side of centre,
+ * which is the budget: the cube is about 21 px from its middle to its edge, so
+ * anything wider than this and the wandering clips it on the frame instead of
+ * turning it round.
+ *
+ * ## And every so often it goes down for something
+ *
+ * `DIP_CYCLE` apart, it swoops, hangs at the bottom of the swoop and climbs
+ * back — the one movement in its repertoire that has an obvious *reason*, and
+ * therefore the one that turns a drifting shape into something with an errand.
+ * It is slow on the way down and slower at the bottom, which is what picking
+ * something up looks like from a long way off.
+ *
+ * ## The camera moves it, but never carries it away
+ *
+ * A plain parallax term was tried first and it is exactly the bug it was
+ * meant to fix, only slower: measured over twenty thousand frames of running
+ * right, even a rate of 0.03 walked the cube 1230 pixels off the left of a
+ * 320-pixel screen. Anything that *accumulates* with the camera eventually
+ * leaves. So the camera's contribution is a **sine of the camera position**
+ * — the cube leans as you run and leans back as you keep running, bounded
+ * forever by construction. It answers to your movement without ever being
+ * taken anywhere by it.
  */
-function drawSkyTower(ctx, tower, camX, groundY, th) {
+const DRIFT_PAR = 0.0016;
+const DIP_CYCLE = 940;
+const DIP_FALL = 0.22;
+
+function skyTowerAt(tick, camX, viewW, groundY) {
+  const t = tick;
+  /* Periods 1530, 3700 and 2210 frames: none divides another, so the sum has
+   * no period shorter than about seven minutes of play. */
+  const x = viewW * 0.5
+    + Math.sin(t * 0.0041) * (viewW * 0.26)
+    + Math.sin(t * 0.0017 + 1.3) * (viewW * 0.11)
+    + Math.sin(camX * DRIFT_PAR) * (viewW * 0.04);
+  const hover = Math.sin(t * 0.0028) * 13 + Math.sin(t * 0.0011 + 2.1) * 8;
+  /* The errand. Down over `DIP_FALL` of the cycle, held at the bottom, then up
+   * — eased at both ends so it reads as deliberate rather than dropped. */
+  const phase = (t % DIP_CYCLE) / DIP_CYCLE;
+  const dip = phase < DIP_FALL
+    ? Math.sin((phase / DIP_FALL) * Math.PI) ** 0.7 * 30
+    : 0;
+  return { x: Math.round(x), y: Math.round(groundY - 118 + hover + dip) };
+}
+
+function drawSkyTower(ctx, tower, camX, groundY, th, viewW) {
   if (!tower) return;
-  const span = 640;
-  const x = Math.round(((tower.at - camX * 0.06) % span + span) % span - 90);
+  const at = skyTowerAt(tower.tick || 0, camX, viewW, groundY);
   const sky = hex(th.sky[1]);
-  drawTower(ctx, x, groundY - 118, {
+  drawTower(ctx, at.x, at.y, {
     fill: tower.fill,
     lives: tower.lives,
     haze: 0.5,
@@ -225,6 +271,33 @@ function drawSkyTower(ctx, tower, camX, groundY, th) {
     phase: tower.tick || 0,
     rising: tower.rising === undefined ? 1 : tower.rising,
   });
+}
+
+/**
+ * WHERE THE SUN IS, and it is exported because the gate has to ask.
+ *
+ * With a `clock` it rises at the left, crosses, and sets at the right over the
+ * length of the level — which is the game's answer to *how far through am I*.
+ * Without one (the map, the interlude, anything not being played) it is
+ * scenery again and only drifts with the camera.
+ *
+ * Exported so `verify.mjs` can assert the crossing against the same arithmetic
+ * the drawing uses. Measuring it off the rendered pixels was tried first and
+ * is a worse test, not a better one: at both ends of the arc the sun sits low
+ * and near an edge, and in the cloud world its core is the same pure white as
+ * the clouds, so a colour-and-position detector reports "no sun" exactly at
+ * the two moments this most needs to be right.
+ */
+export function sunPos(viewW, viewH, clock, camX) {
+  const timed = clock !== null && clock !== undefined;
+  const gone = timed ? Math.min(1, Math.max(0, 1 - clock)) : 0;
+  return {
+    x: timed
+      ? Math.round(24 + (viewW - 48) * gone)
+      : Math.round(((238 - camX * 0.03) % (viewW + 120) + viewW + 120) % (viewW + 120) - 60),
+    y: timed ? Math.round(viewH * 0.66 - Math.sin(gone * Math.PI) * viewH * 0.52) : 34,
+    gone,
+  };
 }
 
 function disc(ctx, cx, cy, r, core, rim, tick, rays) {
@@ -410,7 +483,22 @@ function weather(ctx, themeName, camX, viewW, viewH, tick) {
 
 /* ------------------------------- fortress ------------------------------ */
 
-function fortressRoom(ctx, th, camX, viewW, viewH, tick) {
+/**
+ * THE SUN IS STILL DOING IT — YOU ARE JUST INDOORS.
+ *
+ * Owner: *"about inside… inside levels, it must be something different from
+ * the sun."* Different object, same fact, and that is the point: a fortress
+ * has no sky, but it has **windows**, and the light through them moves for
+ * exactly the reason the sun does. So the indicator is not a second invention;
+ * it is the first one seen from inside a building.
+ *
+ * A row of slits along the far wall, and one shaft alight — the one the sun is
+ * behind right now. It walks the wall as you cross the level, and the last
+ * slit is over the door. Nothing here is a bar or a number: it is a lit window
+ * in a dark room, and a lit window in a dark room is the thing your eye goes
+ * to without being asked.
+ */
+function fortressRoom(ctx, th, camX, viewW, viewH, tick, clock) {
   ctx.fillStyle = '#0b0b14';
   ctx.fillRect(0, 0, viewW, viewH);
 
@@ -446,8 +534,32 @@ function fortressRoom(ctx, th, camX, viewW, viewH, tick) {
     ctx.fillRect(x + 2, 20, 18, 36);
     ctx.fillStyle = '#0d0d18';
     for (let b = 0; b < 3; b++) ctx.fillRect(x + 5 + b * 6, 20, 2, 36);
-    ctx.fillStyle = 'rgba(90,120,190,0.07)';
-    ctx.fillRect(x - 6, 58, 34, viewH - 58);
+    /*
+     * THE SHAFT LEANS, AND THAT IS THE INDOOR CLOCK.
+     *
+     * Owner: *"inside levels, it must be something different from the sun."*
+     * Different object, same fact — and the object was already here. A
+     * fortress has no sky but it has windows, and light through a window
+     * moves for exactly the reason the sun does.
+     *
+     * A second row of lit slits was built first and thrown away: these
+     * windows already existed, and two kinds of window saying the same thing
+     * is the DESIGN.md item 8 mistake made in stone. So nothing is added. The
+     * spill through the existing ones **leans** — hard one way at the start of
+     * the level, upright in the middle, hard the other way at the end — and
+     * warms as it goes, because a fortress crossed is an afternoon spent.
+     *
+     * Leaning is the right channel for it: brightness would compete with the
+     * torches, which are the other light in this room and mean something else
+     * entirely. Nothing else in a fortress leans.
+     */
+    const lean = clock === null || clock === undefined
+      ? 0 : (Math.min(1, Math.max(0, 1 - clock)) - 0.5) * 2;
+    const warm = (1 + lean) / 2;
+    ctx.fillStyle = `rgba(${Math.round(90 + warm * 120)},${Math.round(120 + warm * 60)},190,0.07)`;
+    for (let d = 0; d < viewH - 58; d++) {
+      ctx.fillRect(Math.round(x - 6 + lean * d * 0.42), 58 + d, 34, 1);
+    }
   }
 
   // torches: bracket, flame and a pool of light
@@ -713,7 +825,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
   const th = THEMES[theme] || THEMES.grass;
 
   if (bg === 'none') {
-    fortressRoom(ctx, th, camX, viewW, viewH, tick);
+    fortressRoom(ctx, th, camX, viewW, viewH, tick, clock);
     return;
   }
 
@@ -766,7 +878,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
    * Smaller and paler are guesses the eye can argue with; something passing in
    * front of something else is not.
    */
-  drawSkyTower(ctx, tower, camX, groundY, th);
+  drawSkyTower(ctx, tower, camX, groundY, th, viewW);
 
   // Clouds sit between the far and mid ridges.
   const cloudShade = mix(th.cloud, th.sky[1], 0.45);

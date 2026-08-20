@@ -25099,6 +25099,75 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* --------------------------- edistyminen taivaalla ---------------------- */
+  /*
+   * MITEN PITKÄLLÄ OLEN (20.8.2026). Owner: *"we make sure that the sun or
+   * other similar item in the background tells us how far along we are in the
+   * map… let's make that explicit in all levels."*
+   *
+   * Three assertions, one per kind of level, because the axis that means
+   * "along" is different in each: sideways outdoors, upwards in a climb, and
+   * indoors there is no sky to put it in at all.
+   */
+  {
+    const P = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const fresh = (id) => {
+        game.state = { lives: 3, coins: 55, score: 0, power: { type: null, level: 0 },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 8, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0,
+          bestTimes: {} };
+        return new LevelScene(game, id);
+      };
+      /* Progress is read from the scene and the sun's position from the same
+       * `sunPos` the drawing calls, so this asserts the arithmetic that is
+       * actually on screen. A pixel detector was tried and is the worse test:
+       * at both ends of the arc the sun sits low and near an edge, and in the
+       * cloud world its core is the same white as the clouds, so it reported
+       * "no sun" at exactly the two moments that matter most. */
+      const { sunPos } = await import('/src/gfx/backdrop.js');
+      const march = (id, vertical) => {
+        const sc = fresh(id);
+        const out = [];
+        for (const target of [0, 0.5, 1]) {
+          for (let f = 0; f < 6000; f++) {
+            if (sc.levelProgress() >= target - 0.005) break;
+            if (vertical) sc.player.y -= 3; else sc.player.x += 4;
+            sc.updateCamera();
+          }
+          const clock = 1 - sc.levelProgress();
+          out.push({ p: +sc.levelProgress().toFixed(2),
+            sun: sunPos(320, 240, clock, sc.cam.x).x });
+        }
+        return out;
+      };
+      return { flat: march('1-1', false), climb: march('7-T', true), keep: march('1-F', false) };
+    });
+
+    /* The sun has to cross most of the screen, not merely twitch. */
+    const moved = (rows) => rows[2].sun - rows[0].sun > 200;
+
+    expect('aurinko kertoo kuinka pitkällä vaakakentässä ollaan',
+      P.flat[0].p < 0.05 && P.flat[2].p > 0.95 && moved(P.flat),
+      `edistyminen ${P.flat.map((r) => r.p).join(' -> ')}, aurinko`
+      + ` ${P.flat.map((r) => Math.round(r.sun)).join(' -> ')} px`);
+
+    /*
+     * The one this was built for. In a climb `x` barely changes, so the old
+     * reading left the sun standing still for the whole level — an indicator
+     * that was technically present and said nothing.
+     */
+    expect('pystykentässä mitta on korkeus, ja aurinko liikkuu sen mukana',
+      P.climb[0].p < 0.05 && P.climb[2].p > 0.95 && moved(P.climb),
+      `edistyminen ${P.climb.map((r) => r.p).join(' -> ')}, aurinko`
+      + ` ${P.climb.map((r) => Math.round(r.sun)).join(' -> ')} px`);
+
+    expect('linnakkeessa mitta on olemassa vaikka taivasta ei ole',
+      P.keep[0].p < 0.05 && P.keep[2].p > 0.95,
+      `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
+  }
+
   /* ------------------------------- lavat --------------------------------- */
   /*
    * LIIKKUVAT LAVAT (20.8.2026). Owner, asking again after a long time:
