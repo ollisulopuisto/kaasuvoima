@@ -1,6 +1,6 @@
 import { THEMES } from './tiles.js';
 import { hashNoise } from '../core/utils.js';
-import { drawTower } from './tower.js';
+import { drawTower, CUBE_R } from './tower.js';
 
 /**
  * Parallax scenery behind the tilemap. `bg` picks the silhouette style,
@@ -318,11 +318,73 @@ export function skyTowerAt(tick, camX, viewW, groundY) {
   return { x: Math.round(x), y: Math.round(groundY - 118 + hover + dip) };
 }
 
+/**
+ * The departure, as arithmetic, exported so the gate reads the same numbers
+ * the drawing does rather than trying to find a shrinking object in pixels.
+ *
+ * That is not a convenience. The first version of the gate hunted for gold in
+ * the sky band and measured the EXHAUST — counts swinging 312, 2967, 370,
+ * 1838 frame to frame — which is the same mistake as every sun detector in
+ * this repo: a measurement that finds something, reports confidently, and is
+ * not looking at the thing in question.
+ */
+export function launchAt(t, groundY) {
+  return {
+    lift: t * t * (groundY + 220),
+    r: Math.max(2, Math.round(CUBE_R * (1 - t * 0.86))),
+  };
+}
+
 function drawSkyTower(ctx, tower, camX, groundY, th, viewW) {
   if (!tower) return;
   const at = skyTowerAt(tower.tick || 0, camX, viewW, groundY);
   const sky = hex(th.sky[1]);
-  drawTower(ctx, at.x, at.y, {
+
+  /*
+   * IT FOLLOWS YOU UP, LATE.
+   *
+   * Owner: *"when we climb up a screen, the cube should follow the player
+   * there with a small delay!"* — and the delay is the whole of it. Following
+   * exactly would make it part of the camera, which is to say part of the
+   * HUD; following late makes it a thing that noticed you leaving and came
+   * after you. The lag is computed in the scene (`cubeLag`), because a
+   * follower needs memory and this function has none.
+   */
+  const chase = tower.lagY || 0;
+
+  /*
+   * IT LEAVES WHEN THE LEVEL DOES.
+   *
+   * Owner: *"once we finish a level, the coin cube could take off into
+   * space?"* It has hung there the whole level holding what you found, so
+   * when the level ends it takes the lot and goes.
+   *
+   * The rise is QUADRATIC and the shrink is not. A thing under thrust
+   * accelerates, so `t * t` is what makes it read as a launch rather than as
+   * a thing being slid off the top of the screen — and it is why the first
+   * second is almost still, which lets you notice it starting. The size,
+   * meanwhile, falls off with distance rather than with time, so it is small
+   * long before it is high: something that shrinks faster than it climbs is
+   * going AWAY, and something that climbs without shrinking is just leaving
+   * the frame.
+   */
+  const t = Math.max(0, Math.min(1, tower.launch || 0));
+  if (t >= 1) return;
+  const { lift, r } = launchAt(t, groundY);
+  if (t > 0) {
+    /* A short bright plume under it, the one thing that says the motion is
+     * its own doing. Two frames long at any moment, so it reads as thrust
+     * rather than as a tail drawn behind a moving object. */
+    const fy = Math.round(at.y - lift + r);
+    for (let i = 0; i < 5; i++) {
+      const a = (1 - i / 5) * 0.7 * Math.min(1, t * 6);
+      ctx.fillStyle = `rgba(255,${230 - i * 26},${120 - i * 20},${a.toFixed(3)})`;
+      const w = Math.max(1, r - i);
+      ctx.fillRect(Math.round(at.x - w / 2), fy + i * 2, w, 2);
+    }
+  }
+  drawTower(ctx, at.x, Math.round(at.y - lift + chase), {
+    r,
     fill: tower.fill,
     lives: tower.lives,
     /* Less haze than the hills it hangs among, for the same reason the tones

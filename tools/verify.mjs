@@ -25241,6 +25241,127 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `salaisin ${best} (${truth[best]}), nollakenttiä ${zeroes}`);
   }
 
+  /* --------------------------- kuutio lähtee ----------------------------- */
+  /*
+   * WHEN THE LEVEL ENDS, THE CUBE LEAVES.
+   *
+   * Owner: *"a little nice thing: once we finish a level, the coin cube could
+   * take off into space?"* It has hung there the whole level holding what you
+   * found, so when the level ends it takes the lot and goes.
+   *
+   * Three claims, and the third is the one that would rot quietly: it rises,
+   * it shrinks FASTER than it rises, and it only goes on a real clear. A death
+   * must leave it exactly where it is — the level is not finished, and a gauge
+   * that flies away when you fail is telling you the opposite of the truth.
+   */
+  {
+    const K = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+
+      const watch = (finish) => {
+        const sc = new LevelScene(game, '1-1');
+        for (let i = 0; i < 30; i++) sc.update(game.input);
+        const c = document.createElement('canvas');
+        c.width = 320; c.height = 240;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        /* the solid's gold, which nothing else in the sky band has */
+        const seenAt = () => {
+          g.fillStyle = '#000'; g.fillRect(0, 0, 320, 240);
+          sc.draw(g);
+          const d = g.getImageData(0, 0, 320, 150).data;
+          let n = 0, top = 999;
+          for (let y = 0; y < 150; y++) {
+            for (let x = 0; x < 320; x++) {
+              const i = (y * 320 + x) * 4;
+              if (d[i] > 110 && d[i] - d[i + 2] > 55 && d[i + 1] > d[i + 2]) {
+                n++;
+                if (y < top) top = y;
+              }
+            }
+          }
+          return { n, top };
+        };
+        const before = seenAt();
+        finish(sc);
+        const path = [];
+        for (let t = 0; t < 110; t++) {
+          sc.update(game.input);
+          if (t % 10 === 0) path.push({ t, ...seenAt(), l: +sc.cubeLaunch().toFixed(2) });
+        }
+        return { before, path, end: sc.cubeLaunch() };
+      };
+
+      const cleared = watch((sc) => sc.completeLevel('shroom'));
+      const died = watch((sc) => sc.player.die('pit'));
+      return { cleared, died };
+    });
+
+    const C = K.cleared;
+    expect('läpäisy lähettää kuution matkaan, kuolema ei',
+      C.end >= 1 && K.died.end === 0,
+      `läpäisyn jälkeen launch ${C.end}, kuoleman jälkeen ${K.died.end}`);
+
+    /*
+     * The shape of the departure, read from the same arithmetic the drawing
+     * uses. Hunting for it in pixels was the first version and it measured the
+     * EXHAUST — 312, 2967, 370, 1838 frame to frame — which is the same
+     * mistake as every sun detector here: confident, and not looking at the
+     * thing in question.
+     */
+    const L = await page.evaluate(async () => {
+      const { launchAt } = await import('/src/gfx/backdrop.js');
+      const at = (t) => launchAt(t, 192);
+      return { q: [0.25, 0.5, 0.75, 1].map((t) => ({ t, ...at(t) })), zero: at(0) };
+    });
+
+    const rising = L.q.every((p, i) => i === 0 || p.lift > L.q[i - 1].lift);
+    const accel = L.q[1].lift - L.q[0].lift < L.q[3].lift - L.q[2].lift;
+    expect('nousu kiihtyy, ei liu\'u tasaisesti ulos ruudusta',
+      L.zero.lift === 0 && rising && accel,
+      L.q.map((p) => `${p.t}: ${Math.round(p.lift)} px`).join(', '));
+
+    expect('kuutio kutistuu nopeammin kuin nousee',
+      L.q[1].r / L.zero.r < 0.6 && L.q[1].lift / L.q[3].lift < 0.4,
+      `puolivälissä säde ${L.q[1].r}/${L.zero.r} mutta noussut vasta`
+      + ` ${Math.round(L.q[1].lift / L.q[3].lift * 100)} % matkasta`);
+
+    /*
+     * AND IT FOLLOWS A CLIMB, LATE. Following exactly would make it part of
+     * the camera, which is to say part of the HUD. This measures that a climb
+     * genuinely opens a gap and that the gap then closes.
+     */
+    const F = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const sc = new LevelScene(game, '1-2');
+      for (let i = 0; i < 30; i++) sc.update(game.input);
+      /*
+       * The follower is driven directly rather than through `update`, and that
+       * is deliberate: a full update runs the camera, which re-derives `cam.y`
+       * from the player every frame and simply overwrote the climb this was
+       * trying to stage — the first version of this gate measured a 12 px gap
+       * that was its own test fighting the game. What is claimed here is how
+       * the FOLLOWER behaves given a camera that moves, and that is what this
+       * moves.
+       */
+      const gaps = [];
+      for (let t = 0; t < 90; t++) {
+        sc.cam.y -= 1.5;                       // a steady climb
+        sc.updateCubeLag();
+        gaps.push(Math.round(sc.cubeLag - sc.cam.y));
+      }
+      const opened = Math.max(...gaps);
+      for (let t = 0; t < 400; t++) sc.updateCubeLag();
+      return { opened, closed: Math.round(sc.cubeLag - sc.cam.y) };
+    });
+
+    expect('kiipeäminen jättää kuution jälkeen, ja se tulee perässä',
+      F.opened >= 30 && Math.abs(F.closed) < 6,
+      `kiivetessä jäi ${F.opened} px jälkeen (kuudennes ruudun korkeudesta),`
+      + ` sen jälkeen kurottu ${F.closed} px:iin`);
+  }
+
   /* ----------------------------- yksi aurinko ---------------------------- */
   /*
    * ONE SUN MEANS ONE *CONNECTED* SUN.
