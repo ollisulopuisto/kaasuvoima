@@ -25168,6 +25168,80 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
   }
 
+  /* ------------------------------ kolikkoimu ----------------------------- */
+  /*
+   * A PICKED-UP COIN HAS TO GO SOMEWHERE YOU CAN SEE.
+   *
+   * Owner: *"we've lost the 'suck the coins into the cube' animation."*
+   *
+   * Not lost — aimed at a hole. The flight machinery survived the move to the
+   * cube untouched: coins still leave the world on an arc every time one is
+   * picked up. But `coinToTube` still aimed at `tubeBox`, the corner glass,
+   * which is no longer drawn — and the flying coins were drawn INSIDE
+   * `drawCoinTube`, so switching the glass off switched off the only thing
+   * that made the flight visible. Coins have been flying invisibly into a
+   * corner that is not there.
+   *
+   * Two claims, because either alone would have passed while it was broken:
+   * the coin is VISIBLE while it flies, and it ARRIVES AT THE CUBE.
+   */
+  {
+    const C = await page.evaluate(async () => {
+      const { skyTowerAt } = await import('/src/gfx/backdrop.js');
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const game = window.sfb3;
+      const sc = new LevelScene(game, '1-1');
+      for (let i = 0; i < 40; i++) sc.update(game.input);
+      if (!sc.coinToTube) return { err: 'ei kenttää' };
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const g = c.getContext('2d');
+
+      /* one coin, picked up somewhere out in the world */
+      sc.coinToTube(sc.player.cx + 40, sc.player.cy, false, 0);
+      const path = [];
+      let litFrames = 0;
+      for (let t = 0; t < 90 && sc.coinFlights.length; t++) {
+        sc.updateCoinFlights();
+        const f = sc.coinFlights[0];
+        if (f) path.push({ x: Math.round(f.x), y: Math.round(f.y), phase: f.phase });
+        g.fillStyle = '#000'; g.fillRect(0, 0, 320, 240);
+        sc.draw(g);
+        const d = g.getImageData(0, 0, 320, 240).data;
+        /* a coin-gold pixel anywhere ABOVE the ground line and away from the
+         * HUD bar, i.e. one that can only be the coin in flight */
+        let lit = 0;
+        for (let y = 20; y < 200; y++) {
+          for (let x = 0; x < 320; x++) {
+            const i = (y * 320 + x) * 4;
+            if (d[i] > 200 && d[i + 1] > 140 && d[i + 1] < 215 && d[i + 2] < 90) lit++;
+          }
+        }
+        if (lit > 0) litFrames++;
+      }
+      const cube = skyTowerAt(sc.tick, sc.cam.x, 320, sc.viewH);
+      const end = path.length ? path[path.length - 1] : null;
+      return {
+        frames: path.length,
+        litFrames,
+        end,
+        cube: { x: cube.x, y: cube.y },
+        miss: end ? Math.round(Math.hypot(end.x - cube.x, end.y - cube.y)) : -1,
+        phases: [...new Set(path.map((p) => p.phase))],
+      };
+    });
+
+    expect('poimittu kolikko näkyy lennossa',
+      !C.err && C.litFrames >= 8,
+      C.err || `${C.frames} framea lennossa, kultaa näkyvissä ${C.litFrames}`
+        + ` framella, vaiheet ${(C.phases || []).join(' -> ')}`);
+
+    expect('kolikko lentää kuutioon eikä poistettuun kulmamittariin',
+      !C.err && C.miss >= 0 && C.miss <= 14,
+      C.err || `pääty ${C.end && C.end.x},${C.end && C.end.y},`
+        + ` kuutio ${C.cube.x},${C.cube.y} — ero ${C.miss} px`);
+  }
+
   /* ---------------------------- kartan rajaus ---------------------------- */
   /*
    * THE FRAME IS BUILT ROUND THE FACE, NOT ROUND THE SOLID.

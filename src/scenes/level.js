@@ -6,7 +6,7 @@ import {
 /* Vain kuninkaan verhoa varten, ks. `onKingForm`: saapuvan muodon maailma on
  * `WORLDS[i]`, ja sen väri luetaan sen teemasta. */
 import { WORLDS } from '../data/worlds.js';
-import { drawBackdrop } from '../gfx/backdrop.js';
+import { drawBackdrop, skyTowerAt } from '../gfx/backdrop.js';
 import { Lift, drawLift } from '../entities/lift.js';
 import { PropLayer } from '../gfx/props.js';
 import { drawGoal, drawItem, drawPlayer, WALK_FRAMES, TINTS } from '../gfx/sprites.js';
@@ -266,6 +266,13 @@ export const RED_KEEP = COIN_CAP - RED_COST;
 /** Kaaren kesto framessa, ja pudotuksen kiihtyvyys putkilon sisällä. */
 const COIN_ARC = 26;
 const COIN_DROP_G = 0.6;
+/**
+ * Frames the coin spends closing on the cube and shrinking into it.
+ *
+ * Short on purpose. The arc is the journey and this is the arrival, and an
+ * arrival that takes as long as the journey stops reading as an arrival.
+ */
+const COIN_SUCK = 9;
 /*
  * Lohkosta lyödyn kolikon pomppu: sama lähtönopeus ja sama painovoima kuin
  * vanhalla `CoinPop`illa, koska se liike oli oikein — vain sen loppu oli
@@ -3520,6 +3527,59 @@ export class LevelScene {
    * ei kuulu tuntea `VIEW_W`-vakiota, ne kysyvät kohtaukselta. */
   get viewW() { return VIEW_W; }
 
+  /**
+   * How far the scenery band has slid off the bottom. Read by the backdrop
+   * and by `cubeAt`, and defined once because they must not disagree: the
+   * coins aim at the cube, so a second copy of this number is a second cube.
+   */
+  bandDrop() {
+    return this.def.bands
+      ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
+  }
+
+  /** True when the coin cube is in this level's sky at all. */
+  skyCube() {
+    return !(this.def.bg === 'none' || this.vertical);
+  }
+
+  /**
+   * The cube, in screen coordinates — the same ones the flying coins use.
+   *
+   * `skyTowerAt` is the backdrop's own function, asked rather than copied,
+   * and `this.bar` is added because the backdrop is drawn inside the
+   * letterbox translate and the coin flights are not.
+   */
+  cubeAt() {
+    const at = skyTowerAt(this.tick, this.cam.x, VIEW_W, this.viewH + this.bandDrop());
+    return { x: at.x, y: at.y + this.bar };
+  }
+
+  /**
+   * WHERE A PICKED-UP COIN IS FLYING TO.
+   *
+   * Owner: *"we've lost the 'suck the coins into the cube' animation."* It
+   * was never lost, it was aimed at a hole: the flight still ran on every
+   * pickup, but it still aimed at `tubeBox` — the corner glass, which is no
+   * longer drawn — and the coins themselves were drawn INSIDE the glass's
+   * own draw call, so switching the glass off switched off the only thing
+   * that made the flight visible. Coins were flying invisibly into a corner
+   * that is not there.
+   *
+   * Now they fly to the cube, which is the object that actually receives
+   * them, and the arc got much better for free: the corner was a fixed point
+   * a few pixels from the edge, and the cube is high, central and DRIFTING,
+   * so the coins lead a moving target across open sky.
+   *
+   * Where there is no cube — a fortress, a climb — they fly up and out of
+   * the top of the frame. That is not a placeholder: the cube is somewhere
+   * up there in both cases, and a coin leaving the way it always does says
+   * more than a coin blinking out where it was picked up.
+   */
+  coinTarget() {
+    if (this.skyCube()) return this.cubeAt();
+    return { x: VIEW_W * 0.5, y: this.bar - 20 };
+  }
+
   tubeBox() {
     const top = this.bar + TUBE_PAD;
     const bottom = this.bar + this.viewH - TUBE_PAD;
@@ -3572,8 +3632,7 @@ export class LevelScene {
     const box = this.tubeBox();
     if (this.tubeFlash > 0) this.tubeFlash--;
     if (this.tubeFlush > 0) this.tubeFlush--;
-    const mouthX = box.x + box.w / 2;
-    const mouthY = box.top - 2;
+    const goal = this.coinTarget();
     for (const f of this.coinFlights) {
       if (f.wait > 0) { f.wait--; continue; }
       if (f.phase === 'pop') {
@@ -3595,15 +3654,30 @@ export class LevelScene {
       } else if (f.phase === 'arc') {
         f.t++;
         const k = Math.min(1, f.t / COIN_ARC);
-        f.x = f.x0 + (mouthX - f.x0) * k;
-        f.y = f.y0 + (mouthY - f.y0) * k - Math.sin(k * Math.PI) * 26;
-        if (k >= 1) { f.phase = 'drop'; f.vy = 0.6; }
+        /* Re-read every frame rather than aimed once at launch: the cube
+         * drifts, and a coin that flew at where the cube WAS would arrive
+         * beside it. The lift is a sine and not gravity because the coin is
+         * meant to look SUCKED and not thrown, and a suck is steady. */
+        f.x = f.x0 + (goal.x - f.x0) * k;
+        f.y = f.y0 + (goal.y - f.y0) * k - Math.sin(k * Math.PI) * 26;
+        if (k >= 1) { f.phase = 'suck'; f.t = 0; }
       } else {
-        f.vy += COIN_DROP_G;
-        f.y += f.vy;
-        f.x = mouthX;
-        const surface = box.bottom - this.tubeFill * box.pxPerCoin;
-        if (f.y >= surface - 1) {
+        /*
+         * THE LAST FEW PIXELS, and they are the whole point of the move.
+         *
+         * The glass got a *drop*: gravity onto the top of the stack, which
+         * said "it landed in there" because a glass is a thing you can see
+         * into. A cube cannot be seen into, so the arrival has to be told the
+         * other way round — the coin closes on the cube and SHRINKS as it
+         * goes, which is the only way a flat picture says "it went inside"
+         * rather than "it stopped in front".
+         */
+        f.t++;
+        const k = Math.min(1, f.t / COIN_SUCK);
+        f.x += (goal.x - f.x) * (0.25 + k * 0.5);
+        f.y += (goal.y - f.y) * (0.25 + k * 0.5);
+        f.shrink = k;
+        if (k >= 1) {
           f.phase = 'done';
           this.tubeFill++;
           this.tubeFlash = 8;
@@ -3666,6 +3740,34 @@ export class LevelScene {
     if (this.tubeFlush <= 0) return this.tubeFill;
     const t = this.tubeFlush / COIN_FLUSH;
     return Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * t);
+  }
+
+  /**
+   * THE COINS ON THEIR WAY TO THE CUBE.
+   *
+   * Its own method, and that is the actual bug fix. This loop used to live at
+   * the bottom of `drawCoinTube`, so hiding the corner glass hid the flight
+   * with it — the coins kept flying, every pickup, entirely invisibly. Two
+   * unrelated things drawn by one call is exactly the arrangement where
+   * switching one off silently switches off the other.
+   */
+  drawCoinFlights(ctx) {
+    for (const f of this.coinFlights) {
+      if (f.phase === 'suck') {
+        /* Shrinking into the cube. Drawn as a plain square rather than the
+         * sprite: at four pixels across a coin sprite is a smear, and the
+         * thing that has to read here is the *closing*, not the coin. */
+        const s = Math.max(2, Math.round(14 * (1 - f.shrink)));
+        const x = Math.round(f.x - s / 2);
+        const y = Math.round(f.y - s / 2);
+        ctx.fillStyle = '#ffe070';
+        ctx.fillRect(x, y, s, s);
+        ctx.fillStyle = '#f0b000';
+        ctx.fillRect(x + 1, y + 1, Math.max(1, s - 2), Math.max(1, s - 2));
+        continue;
+      }
+      drawCoinSprite(ctx, Math.round(f.x) - 8, Math.round(f.y) - 8, this.tick * 2);
+    }
   }
 
   drawCoinTube(ctx) {
@@ -3760,10 +3862,6 @@ export class LevelScene {
       ctx.fillRect(inner + 1, sparkY + 2, innerW - 2, 3);
     }
 
-    // lennossa
-    for (const f of this.coinFlights) {
-      drawCoinSprite(ctx, Math.round(f.x) - 8, Math.round(f.y) - 8, this.tick * 2);
-    }
   }
 
   storeReserve(kind) {
@@ -6504,8 +6602,7 @@ export class LevelScene {
     /* The scenery belongs to the ground band. Once the camera is above it —
      * up the beanstalk — the hills have to get out of the way, or a platform
      * twenty tiles in the air looks like it is standing on them. */
-    const bandDrop = this.def.bands
-      ? Math.max(0, (this.def.bands.main * TILE - this.cam.y) * 0.6) : 0;
+    const bandDrop = this.bandDrop();
     /* Aurinko on kentän kello, ks. `sky` backdropissa. Osuus lasketaan tässä
      * eikä siellä, koska `def.time` on kentän ominaisuus ja taustan piirtäjä
      * ei tiedä kentistä mitään — se saa yhden luvun väliltä 0…1. */
@@ -6638,7 +6735,11 @@ export class LevelScene {
      * kept rather than deleted because the gate still measures the glass to
      * prove the *scale* — two pixels per coin, a hundred to fill it — and that
      * measurement is about the numbers rather than about where they are drawn.
+     *
+     * The coins in flight are NOT gone with it, and keeping them was the
+     * whole repair: see `drawCoinFlights`.
      */
+    this.drawCoinFlights(ctx);
     this.drawSpeedPulse(ctx, camX, camY);
     if (this.bar) this.drawLetterbox(ctx);
     /* Lippu- ja korttikuvat kuuluvat kuvaan (ne ovat kentän oma tapahtuma),
