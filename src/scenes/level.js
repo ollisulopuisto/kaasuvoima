@@ -275,6 +275,26 @@ const COIN_DROP_G = 0.6;
 const COIN_SUCK = 9;
 
 /**
+ * How far above the cube a flying coin is thrown before it falls onto it.
+ *
+ * Owner: *"I think they should first fly HIGH UP and then fall down to the
+ * cube. That would make the size change more obvious, too."* — and the second
+ * sentence is the reason for the first. A coin that travels straight to the
+ * cube shrinks along a short line, and a shrink you see for half a second is
+ * a coin that got smaller for no reason. Thrown high, it spends most of the
+ * flight in open sky against nothing, falling — and a thing that is falling
+ * and getting smaller is a thing going AWAY, which is the whole claim.
+ *
+ * The apex is early rather than halfway (see `COIN_RISE`), so the rise is a
+ * throw and the fall is long enough to watch.
+ */
+const COIN_LOB = 74;
+const COIN_RISE = 0.72;
+
+/** How small a coin gets by the time it reaches the cube, before the suck. */
+const COIN_FAR = 0.44;
+
+/**
  * Frames a red coin takes to come apart when the player dies.
  *
  * Long enough to be watched, and it can afford to be: the death animation
@@ -3684,7 +3704,13 @@ export class LevelScene {
          * beside it. The lift is a sine and not gravity because the coin is
          * meant to look SUCKED and not thrown, and a suck is steady. */
         f.x = f.x0 + (goal.x - f.x0) * k;
-        f.y = f.y0 + (goal.y - f.y0) * k - Math.sin(k * Math.PI) * 26;
+        /* The lift peaks at k**COIN_RISE = 0.5, i.e. around a third of the
+         * way rather than half: up fast, down slow. */
+        f.y = f.y0 + (goal.y - f.y0) * k - Math.sin((k ** COIN_RISE) * Math.PI) * COIN_LOB;
+        /* Receding, not merely travelling. The coin is on its way to
+         * something far away, so it gets smaller for the whole trip and the
+         * suck only finishes what the flight started. */
+        f.shrink = k * (1 - COIN_FAR);
         if (k >= 1) { f.phase = 'suck'; f.t = 0; }
       } else {
         /*
@@ -3701,7 +3727,7 @@ export class LevelScene {
         const k = Math.min(1, f.t / COIN_SUCK);
         f.x += (goal.x - f.x) * (0.25 + k * 0.5);
         f.y += (goal.y - f.y) * (0.25 + k * 0.5);
-        f.shrink = k;
+        f.shrink = (1 - COIN_FAR) + k * COIN_FAR;
         if (k >= 1) {
           f.phase = 'done';
           this.tubeFill++;
@@ -3778,11 +3804,27 @@ export class LevelScene {
    */
   drawCoinFlights(ctx) {
     for (const f of this.coinFlights) {
+      if (f.phase === 'arc') {
+        /*
+         * Scaled in three steps rather than continuously. A coin sprite drawn
+         * at 0.63 of size is a coin with uneven pixels — this game is drawn on
+         * a grid and a smooth shrink is the one thing that says otherwise. Three
+         * sizes read as three distances, which is all that is needed.
+         */
+        const k = 1 - (f.shrink || 0);
+        const step = k > 0.82 ? 1 : k > 0.66 ? 0.75 : 0.5;
+        ctx.save();
+        ctx.translate(Math.round(f.x), Math.round(f.y));
+        ctx.scale(step, step);
+        drawCoinSprite(ctx, -8, -8, this.tick * 2);
+        ctx.restore();
+        continue;
+      }
       if (f.phase === 'suck') {
         /* Shrinking into the cube. Drawn as a plain square rather than the
          * sprite: at four pixels across a coin sprite is a smear, and the
          * thing that has to read here is the *closing*, not the coin. */
-        const s = Math.max(2, Math.round(14 * (1 - f.shrink)));
+        const s = Math.max(2, Math.round(16 * (1 - f.shrink)));
         const x = Math.round(f.x - s / 2);
         const y = Math.round(f.y - s / 2);
         ctx.fillStyle = '#ffe070';

@@ -1,4 +1,5 @@
 import { qMul, qNorm, qApply, qAxis } from '../core/quat.js';
+import { FACES } from '../data/solid.js';
 
 /**
  * THE COIN CUBE: another world out there, slowly filling with your coins.
@@ -8,6 +9,23 @@ import { qMul, qNorm, qApply, qAxis } from '../core/quat.js';
  * the better idea by some distance, because it is already the game's own
  * language. This game's worlds are solids you turn over; a gauge that is also
  * a solid, turning, far away, says *another one of those* without a word.
+ *
+ * ## It is the SAME solid the map is
+ *
+ * Owner: *"why isn't the cube an eight-sided object like the world map? Make
+ * it have the colors of the current slate the player is on."*
+ *
+ * Both halves finish the sentence this file already opened with. It said the
+ * gauge should say *another one of those* — and then drew a cube, which is
+ * another of nothing. Now it imports `FACES` straight out of `src/data/solid.js`
+ * and is a truncated octahedron: the identical eight hexagons and six squares
+ * you walk on the map, one object defined once. A world you have not reached
+ * yet, hanging there filling up with what you find.
+ *
+ * And it wears the level's own ground. The shell takes `groundTop` from the
+ * current theme, so on a meadow it is meadow-green and in the dunes it is
+ * sand — the same colour as the slate under your feet, which is what makes it
+ * read as somewhere you could stand rather than as an instrument.
  *
  * It began as a tower, on the same brief: keep the coin glass but put it in
  * the world, behind the hills, drifting so slowly that it is always in shot.
@@ -67,14 +85,18 @@ const TONES = [1, 0.72, 0.5];
 const NX = 5, NY = 5, NZ = 4;
 const CELLS = NX * NY * NZ;
 
-const VERTS = [];
-for (let i = 0; i < 8; i++) VERTS.push([i & 1 ? 1 : -1, i & 2 ? 1 : -1, i & 4 ? 1 : -1]);
-/** The six faces, as vertex indices wound the same way round. */
-const FACES = [
-  [0, 2, 6, 4], [1, 5, 7, 3],
-  [0, 4, 5, 1], [2, 3, 7, 6],
-  [0, 1, 3, 2], [4, 6, 7, 5],
-];
+/** The solid's own circumradius is sqrt(5); this brings it to `r` on screen. */
+const SCALE = 1 / Math.sqrt(5);
+
+/**
+ * How far out the coin lattice reaches, as a fraction of the circumradius.
+ *
+ * The solid's insphere is only 0.775 of its circumradius, so a box that fits
+ * entirely inside is small enough to rattle. This one is deliberately larger:
+ * its corners poke through the hexagons and the silhouette clip cuts them off,
+ * which is what a container filled to the brim actually looks like.
+ */
+const PILE = 0.72;
 
 function faded(hex, k, sky) {
   const n = parseInt(hex.slice(1), 16);
@@ -87,6 +109,42 @@ const shade = (hex, k) => {
   return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255]
     .map((v) => Math.round(v * k).toString(16).padStart(2, '0')).join('')}`;
 };
+
+/**
+ * THE BRIGHTEST THE SHELL MAY BE, and it is a measurement rather than a taste.
+ *
+ * Wearing the level's colours is the point, but the coins have to survive it.
+ * The surface tile (`groundTop`) was the first try and it fails on the bright
+ * half of the game: desert's sand is `#f0c060` against a gold of `#f0b000`,
+ * and ice, bone and cloud are brighter still — a gold shape on a gold shape,
+ * the same failure the spikes had on ice. An object drawn correctly and
+ * invisible anyway.
+ *
+ * Darkening those was the second try and it fails differently: scaling a
+ * near-white leaves GREY, so ice and cloud kept their luminance rule and lost
+ * the very thing the colour was for. There is no hue in white to preserve.
+ *
+ * So the shell is the theme's HILL colour, which is what the thing is floating
+ * among anyway, and which carries real hue in every theme — ice stays blue,
+ * bone stays violet, desert stays tan. Only the two brightest need capping at
+ * all, and capping a hued colour keeps the hue.
+ */
+const SHELL_LUMA = 122;
+const GOLD = '#f0b000';
+
+export const luma = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+};
+
+/** The level's ground colour, darkened just enough that gold reads on it. */
+export function shellOf(tint) {
+  const l = luma(tint);
+  return l <= SHELL_LUMA ? tint : shade(tint, SHELL_LUMA / l);
+}
+
+/** The gold the coins are drawn in, so the gate can compare the two. */
+export const COIN_GOLD = GOLD;
 
 /**
  * A red coin coming apart, `t` running 0 to 1.
@@ -155,33 +213,41 @@ function spin(phase) {
  * horizon.
  */
 export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
-  sky = [150, 190, 240], r = CUBE_R, phase = 0, rising = 1, burst = 0 } = {}) {
+  sky = [150, 190, 240], r = CUBE_R, phase = 0, rising = 1, burst = 0,
+  tint = '#3a4a6e' } = {}) {
+  const shell = shellOf(tint);
   const q = spin(phase);
-  const pts = VERTS.map((v) => {
-    const p = qApply(q, v);
+  const at = (v) => {
+    const p = qApply(q, [v[0] * SCALE, v[1] * SCALE, v[2] * SCALE]);
     const s = CAM_Z / (CAM_Z - p[2]);
     return { x: x + p[0] * r * s, y: y - p[1] * r * s, z: p[2] };
-  });
+  };
 
-  const seen = FACES.map((f) => ({
-    f,
-    depth: f.reduce((t, i) => t + pts[i].z, 0) / 4,
-  })).filter((d) => d.depth > -0.05).sort((a, b) => a.depth - b.depth);
+  /* Faces carry 6 or 4 corners now, so nothing may assume four. */
+  const seen = FACES.map((face) => {
+    const poly = face.verts.map(at);
+    return { poly, depth: poly.reduce((t, p) => t + p.z, 0) / poly.length };
+  }).filter((d) => d.depth > -0.05).sort((a, b) => a.depth - b.depth);
 
-  const path = (f) => {
+  const path = (poly) => {
     ctx.beginPath();
-    ctx.moveTo(pts[f[0]].x, pts[f[0]].y);
-    for (let i = 1; i < 4; i++) ctx.lineTo(pts[f[i]].x, pts[f[i]].y);
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
     ctx.closePath();
   };
 
   ctx.lineJoin = 'round';
   for (const d of seen) {
+    /* Fourteen faces on a sixteen-pixel solid, and still only THREE tones.
+     * More would be more accurate and less legible: the whole game quantises
+     * its shading to three steps, and a face that is nearly the tone of its
+     * neighbour reads as a smudge rather than as an edge. */
     const step = d.depth > 0.35 ? 0 : d.depth > -0.02 ? 1 : 2;
-    path(d.f);
-    ctx.fillStyle = faded(shade('#3a4a6e', TONES[step]), haze, sky);
+    d.step = step;
+    path(d.poly);
+    ctx.fillStyle = faded(shade(shell, TONES[step]), haze, sky);
     ctx.fill();
-    ctx.strokeStyle = faded('#20263a', haze * 0.8, sky);
+    ctx.strokeStyle = faded(shade(shell, 0.34), haze * 0.8, sky);
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -200,7 +266,11 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
    */
   const coins = Math.max(0, Math.min(CELLS, Math.round(fill)));
   if (coins > 0) {
-    const w = Math.max(2, Math.round(r * 0.4));
+    /* Derived from the lattice spacing rather than from `r`, because the pile
+     * no longer fills the whole radius: a block sized against `r` overlapped
+     * its neighbours and the pile tiled into one gold sheet. 0.82 of the gap
+     * leaves the seam that makes them read as separate coins. */
+    const w = Math.max(2, Math.round((2 / NX) * PILE * r * 0.82));
     const blocks = [];
     for (let iy = 0; iy < NY; iy++) {
       for (let k = 0; k < NX * NZ; k++) {
@@ -208,9 +278,9 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
         const cell = (k * 7) % (NX * NZ);
         if (iy * NX * NZ + k >= coins) break;
         const p = qApply(q, [
-          ((cell % NX) + 0.5) / NX * 2 - 1,
-          (iy + 0.5) / NY * 2 - 1,
-          (Math.floor(cell / NX) + 0.5) / NZ * 2 - 1,
+          (((cell % NX) + 0.5) / NX * 2 - 1) * PILE,
+          ((iy + 0.5) / NY * 2 - 1) * PILE,
+          ((Math.floor(cell / NX) + 0.5) / NZ * 2 - 1) * PILE,
         ]);
         const s2 = CAM_Z / (CAM_Z - p[2]);
         blocks.push({ x: x + p[0] * r * s2, y: y - p[1] * r * s2, z: p[2] });
@@ -221,8 +291,8 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
     ctx.save();
     ctx.beginPath();
     for (const d of seen) {
-      ctx.moveTo(pts[d.f[0]].x, pts[d.f[0]].y);
-      for (let i = 1; i < 4; i++) ctx.lineTo(pts[d.f[i]].x, pts[d.f[i]].y);
+      ctx.moveTo(d.poly[0].x, d.poly[0].y);
+      for (let i = 1; i < d.poly.length; i++) ctx.lineTo(d.poly[i].x, d.poly[i].y);
       ctx.closePath();
     }
     ctx.clip();
@@ -241,8 +311,8 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
      * receded as hard as the walls came out grey-green against the sky and
      * stopped being readable at all.
      */
-    const face = TONES.map((t) => faded(shade('#f0b000', t), haze * 0.3, sky));
-    const foot = TONES.map((t) => faded(shade('#f0b000', t * 0.6), haze * 0.3, sky));
+    const face = TONES.map((t) => faded(shade(GOLD, t), haze * 0.3, sky));
+    const foot = TONES.map((t) => faded(shade(GOLD, t * 0.6), haze * 0.3, sky));
     for (const b of blocks) {
       const step = b.z > 0.35 ? 0 : b.z > -0.02 ? 1 : 2;
       const bx = Math.round(b.x - w / 2);
