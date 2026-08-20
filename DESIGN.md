@@ -592,7 +592,8 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
 - **ES-moduulit vaativat http-palvelimen**, `file://` ei toimi.
 - **localStorage-avaimet**: `sfb3.save.v2` (edistyminen), `sfb3.savestate.1..3`
   (pikatallennukset), `sfb3.scores.v1` (pistetaulu), `sfb3.telemetry.v1`
-  (pelidata), `sfb3.fx.v1` (kuvaefektit), `sfb3.touch.v1` (ohjausmalli) ja
+  (pelidata), `sfb3.fx.v1` (kuvaefektit), `sfb3.touch.v1` (ohjausmalli),
+  `sfb3.ghost.v1` (aika-ajon haamut) ja
   `sfb3.daily.v1` (päivän pierun se yksi yritys). Jos muutat tallennuksen
   muotoa, nosta versionumeroa. **Päivän tulos on tarkoituksella oma avaimensa
   eikä kenttä `sfb3.save.v2`:ssa**: se vanhenee vuorokaudessa eikä ole
@@ -601,6 +602,14 @@ Nämä on opittu kantapään kautta. Lue ennen kuin muutat moottoria.
   `bestTimes` meni samaan tallennukseen, ja se on eri ratkaisu eri syystä eikä
   ristiriita: paras aika on kertynyttä edistymistä ja se säilyy, päivän tulos
   vanhenee huomiseen mennessä.
+- **The ghost trace is its own key, and it must stay that way.**
+  `sfb3.telemetry.v1` is anonymous by construction — a level, a tile, a cause,
+  nothing that ties two records together — and that promise is what makes
+  sending it one day (ROADMAP §2 phase 4) a decision somebody can still take.
+  A movement trace cannot make that promise: it is one continuous record of one
+  person playing one level. So it lives in `sfb3.ghost.v1`, `src/core/ghost.js`
+  reads and writes nothing else, and no export exists for it. A ghost must
+  never be merged into the telemetry log to save a key.
 - **Kuollut kohtaus lakkaa päivittämästä.** `LevelScene.update` palaa aikaisin
   140 framea kuoleman jälkeen. Testi joka haluaa ajaa kohtausta pitkään pitää
   pitää pelaaja hengissä — muuten se mittaa kuolemanimation pituutta eikä sitä

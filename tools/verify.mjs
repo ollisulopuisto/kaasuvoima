@@ -21557,6 +21557,549 @@ const report = await page.evaluate(async (OVERWORLDS) => {
   report.failures.push(...race.failures);
 }
 
+/* ---------------------------------- haamu -------------------------------- */
+/*
+ * THE GHOST is the path behind the eight numbers time attack already keeps
+ * (`src/core/ghost.js`). Five things about it are worth proving, and they are
+ * the five ways it could go wrong without anybody noticing:
+ *
+ *   1. **It survives the round trip.** A trace that decodes to something
+ *      slightly different from what was recorded is a ghost that runs a route
+ *      nobody ran, and the difference would be invisible.
+ *   2. **It stays inside its budget.** Measured on a real run rather than
+ *      assumed, because the whole design rests on "sampled, this fits in
+ *      localStorage and every frame does not".
+ *   3. **An absent ghost changes nothing.** The level before ghosts existed is
+ *      the level with an empty store, and a stale ghost must stay off screen.
+ *   4. **Recording does not perturb the simulation, and neither does
+ *      playback.** Measured as a frame sequence, the same way the mode itself
+ *      is measured — this is exactly the sort of claim that reads as obviously
+ *      true right up until a recorder starts reading a value it also advances.
+ *   5. **It reads as a ghost.** Measured in pixels: it is on screen, every
+ *      pixel of it is a blend rather than a body, and it is behind the player.
+ *
+ * And one thing that is not about the picture at all: the trace must not be
+ * able to leave with the telemetry log. Separate key, and no exporter.
+ */
+{
+  const haamu = await page.evaluate(async () => {
+    const checks = [];
+    const failures = [];
+    const expect = (name, ok, detail = '') => {
+      checks.push({ name, ok, detail });
+      if (!ok) failures.push(`${name}${detail ? ` (${detail})` : ''}`);
+    };
+    const game = window.sfb3;
+    const { LevelScene, VIEW_W, VIEW_H } = await import('/src/scenes/level.js');
+    const { drawPlayer, TINTS } = await import('/src/gfx/sprites.js');
+
+    /* Fetched defensively, exactly as the time-attack block fetches its module:
+     * a red block is only useful when it says what is missing. */
+    let G = null;
+    let gErr = '';
+    try {
+      G = await import('/src/core/ghost.js');
+    } catch (e) {
+      gErr = String((e && e.message) || e);
+    }
+    if (!G) {
+      expect('the ghost module loads', false, gErr);
+      return { checks, failures };
+    }
+
+    const blank = () => ({
+      left: false, right: false, up: false, down: false, jump: false, run: false,
+      start: false, mute: false, quicksave: false, quickload: false, slot: false, reset: false,
+    });
+    const mkInput = () => ({
+      held: blank(), pressed: blank(), released: blank(), consume(a) { this.pressed[a] = false; },
+    });
+    const reset = (extra = {}) => {
+      game.timeAttack = false;
+      game.state = {
+        lives: 5, coins: 400, score: 0, power: { type: null, level: 0 }, reserve: null,
+        world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [], secrets: {},
+        usedSaveState: false, continues: 0, bestTimes: {}, mode: 'easy', ...extra,
+      };
+      game.finishLevel = () => {};
+    };
+    const realRandom = Math.random;
+    let seed = 0;
+    const seeded = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+
+    /* The same trial run the time-attack block uses: one level, one input
+     * pattern, one seed — and the rows are the simulation rather than a sample
+     * of it, because a recorder that perturbs anything perturbs it there. */
+    const runTrace = (frames, tweak) => {
+      seed = 20260810;
+      Math.random = seeded;
+      reset();
+      game.timeAttack = true;
+      const scene = new LevelScene(game, '1-1');
+      scene.clockStopped = true;
+      if (tweak) tweak(scene);
+      const input = mkInput();
+      const rows = [];
+      for (let f = 0; f < frames; f++) {
+        input.held.right = true;
+        input.held.run = (f % 130) < 90;
+        input.held.jump = (f % 41) < 11;
+        input.pressed.jump = (f % 41) === 0;
+        scene.update(input);
+        const p = scene.player;
+        rows.push([
+          Math.round(p.x * 100), Math.round(p.y * 100),
+          Math.round(p.vx * 1000), Math.round(p.vy * 1000),
+          scene.tick, scene.state, game.state.score, game.state.coins,
+          Math.round(scene.cam.x * 100), Math.round(scene.cam.y * 100),
+        ].join(','));
+        if (scene.state !== 'play') break;
+      }
+      Math.random = realRandom;
+      game.timeAttack = false;
+      return { scene, rows };
+    };
+    const firstDiff = (a, b) => {
+      const n = Math.min(a.length, b.length);
+      for (let i = 0; i < n; i++) if (a[i] !== b[i]) return ` frame ${i}: ${a[i]} vs ${b[i]}`;
+      return a.length === b.length ? '' : ` length ${a.length} vs ${b.length}`;
+    };
+
+    const KEY = 'sfb3.ghost.v1';
+    const TKEY = 'sfb3.telemetry.v1';
+    const keepGhost = localStorage.getItem(KEY);
+    const keepTele = localStorage.getItem(TKEY);
+
+    /* One real run, kept for every measurement below that wants a real path. */
+    const real = runTrace(3600);
+    const rec = real.scene.ghost ? real.scene.ghost.rec : { x: [], y: [], flags: [] };
+    const runFrames = real.scene.race ? real.scene.race.frames : 0;
+
+    /* 1. Round trip, and it has to go through the disk rather than through the
+     * module's own cache — an encoder that only agrees with itself in memory
+     * would pass a test that never reloads. */
+    {
+      G.clearGhosts();
+      const stored = G.putGhost('koe', {
+        frames: runFrames, x: rec.x, y: rec.y, flags: rec.flags,
+      });
+      const back = G.getGhost('koe');
+      const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
+      const fromDisk = raw.runs && raw.runs.koe ? G.decodeTrace(raw.runs.koe.d) : null;
+      let bad = 0;
+      let firstBad = '';
+      for (let i = 0; i < rec.x.length; i++) {
+        const ok = back && fromDisk
+          && back.x[i] === rec.x[i] && back.y[i] === rec.y[i] && back.flags[i] === rec.flags[i]
+          && fromDisk.x[i] === rec.x[i] && fromDisk.y[i] === rec.y[i];
+        if (!ok) {
+          bad++;
+          if (!firstBad) {
+            firstBad = ` first at ${i}: ${rec.x[i]},${rec.y[i]},${rec.flags[i]}`
+              + ` -> ${back ? `${back.x[i]},${back.y[i]},${back.flags[i]}` : 'nothing'}`;
+          }
+        }
+      }
+      /* The pose at a sample boundary must be the sample itself: interpolation
+       * is for the frames between, and a codec that is half a step out would
+       * still look plausible on screen. */
+      const p0 = back ? G.poseAt(back, 0, 4) : null;
+      const pk = back ? G.poseAt(back, 8 * G.STEP, 4) : null;
+      expect('a ghost trace survives the store and the disk unchanged',
+        stored && !!back && bad === 0 && rec.x.length > 100
+          && back.n === rec.x.length && back.frames === runFrames
+          && !!p0 && p0.x === rec.x[0] && p0.y === rec.y[0]
+          && !!pk && pk.x === rec.x[8] && pk.y === rec.y[8],
+        `${rec.x.length} samples, ${bad} wrong;${firstBad} back: ${back ? back.n : 0}`
+        + ` samples / ${back ? back.frames : 0} frames`);
+    }
+
+    /* 2. Size, measured rather than remembered: bytes per sample off a real
+     * run, the cost of a minute derived from that, and a full set of 65. */
+    {
+      const b64 = G.encodeTrace(rec);
+      const perSample = (b64.length * 0.75) / Math.max(1, rec.x.length);
+      const minuteSamples = Math.ceil(3600 / G.STEP);
+      const minuteChars = Math.ceil((minuteSamples * perSample) / 3) * 4;
+
+      /* A minute-long trace, built by tiling the real one: the deltas are the
+       * cost, so repeating them measures the same bytes a long run would. */
+      const long = { x: [], y: [], flags: [] };
+      while (long.x.length < minuteSamples) {
+        for (let i = 0; i < rec.x.length && long.x.length < minuteSamples; i++) {
+          long.x.push(rec.x[i]);
+          long.y.push(rec.y[i]);
+          long.flags.push(rec.flags[i]);
+        }
+      }
+      G.clearGhosts();
+      for (let i = 0; i < 65; i++) {
+        G.putGhost(`koe-${i}`, { frames: 3600, x: long.x, y: long.y, flags: long.flags });
+      }
+      const fullChars = G.ghostChars();
+      const fullKept = G.ghostKeys().length;
+      expect('the ghosts stay inside the budget they were measured against',
+        perSample <= 3.25 && minuteChars <= 4200
+          && fullKept === 65 && fullChars <= G.MAX_CHARS,
+        `${perSample.toFixed(2)} bytes/sample, a minute is ${minuteChars} chars,`
+        + ` 65 levels ${fullChars} chars (ceiling ${G.MAX_CHARS}), ${fullKept} kept`);
+
+      /* And the ceiling holds when it is walked into: oldest out, newest in,
+       * store bounded. A cache that only stays small while nobody fills it is
+       * not bounded, it is untested. */
+      for (let i = 0; i < 60; i++) {
+        G.putGhost(`yli-${i}`, { frames: 3600, x: long.x, y: long.y, flags: long.flags });
+      }
+      const overChars = G.ghostChars();
+      const keys = G.ghostKeys();
+      expect('the ceiling holds when it is walked into: oldest out, newest in',
+        overChars <= G.MAX_CHARS && keys.includes('yli-59') && !keys.includes('koe-0')
+          && keys.length < 125,
+        `${keys.length} traces, ${overChars} chars (ceiling ${G.MAX_CHARS})`);
+      G.clearGhosts();
+    }
+
+    /* 3. No trace may end up in the telemetry log, and the ghost store may not
+     * have an exporter. This is not tidiness, it is the promise `ghost.js` and
+     * DESIGN.md §6 make: telemetry is anonymous by construction and a trace is
+     * not, so the two must never be able to leave together. */
+    {
+      localStorage.setItem(TKEY, JSON.stringify({ v: 1, events: [{ e: 'die', l: '1-1' }] }));
+      const before = localStorage.getItem(TKEY);
+      G.clearGhosts();
+      G.putGhost('1-1', { frames: runFrames, x: rec.x, y: rec.y, flags: rec.flags });
+      const after = localStorage.getItem(TKEY);
+      const raw = localStorage.getItem(KEY) || '';
+      const exporters = Object.keys(G).filter((k) => /export|download|upload|send|share|post/i.test(k));
+      expect('the trace goes to its own key, not to telemetry, and has no exporter',
+        before === after && raw.length > 0 && !raw.includes('"events"')
+          && exporters.length === 0,
+        `telemetry ${before === after ? 'untouched' : 'CHANGED'}, ghost key ${raw.length}`
+        + ` chars, exporters ${exporters.length ? exporters.join(',') : 'none'}`);
+    }
+
+    /* 4. Recording does not move the simulation. `scene.ghost = null` switches
+     * the recorder off entirely (every call site is one comparison), so the
+     * same level with the same input and the same seed is either identical as
+     * a frame sequence with it and without it, or the recorder is reading
+     * something it also advances. */
+    {
+      G.clearGhosts();
+      const on = runTrace(1200);
+      const off = runTrace(1200, (s) => { s.ghost = null; });
+      const diff = firstDiff(on.rows, off.rows);
+      expect('recording does not move the simulation on a single frame',
+        diff === '' && on.rows.length > 600
+          && !!on.scene.ghost && on.scene.ghost.rec.x.length > 100 && off.scene.ghost === null,
+        `${on.rows.length} frames,${diff || ' no differences'}; recorded`
+        + ` ${on.scene.ghost ? on.scene.ghost.rec.x.length : 0} samples`);
+    }
+
+    /* 5. Playback perturbs nothing either, and the ghost that is being played
+     * back has to actually be there — a check that only proves an absent ghost
+     * does nothing proves nothing at all. */
+    {
+      G.clearGhosts();
+      const empty = runTrace(1200);
+      G.putGhost('1-1', { frames: runFrames, x: rec.x, y: rec.y, flags: rec.flags });
+      /* The ghost is handed straight to the scene rather than through the best
+       * time, so the two runs differ in exactly one thing: whether a path is
+       * being replayed. */
+      const withGhost = runTrace(1200, (s) => { s.ghost.play = G.getGhost('1-1'); });
+      const diff = firstDiff(empty.rows, withGhost.rows);
+      const posed = withGhost.scene.ghost && withGhost.scene.ghost.pose;
+      expect('playing a ghost back moves nothing and touches nothing',
+        diff === '' && !!withGhost.scene.ghost.play && !!posed
+          && empty.scene.ghost.play === null,
+        `${empty.rows.length} frames,${diff || ' no differences'}; the ghost was`
+        + ` ${posed ? `at ${Math.round(posed.x)},${Math.round(posed.y)}` : 'MISSING'}`);
+    }
+
+    /* 6. An absent ghost changes nothing, and a stale one stays off screen.
+     * The save and the trace are in different keys on purpose, so they *can*
+     * disagree — and when they do the right answer is no ghost rather than the
+     * wrong ghost. */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g2 = c.getContext('2d');
+      /* The best time is set *before* the scene is built, because that is when
+       * the ghost is looked up — a mismatch arranged afterwards would prove
+       * nothing about the lookup. */
+      const shot = (best) => {
+        seed = 4242;
+        Math.random = seeded;
+        reset();
+        game.state.bestTimes['1-1'] = { frames: best, marks: new Array(8).fill(0) };
+        game.timeAttack = true;
+        const scene = new LevelScene(game, '1-1');
+        scene.clockStopped = true;
+        const input = mkInput();
+        for (let f = 0; f < 60; f++) {
+          input.held.right = true;
+          scene.update(input);
+        }
+        g2.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.draw(g2);
+        Math.random = realRandom;
+        game.timeAttack = false;
+        return { scene, px: g2.getImageData(0, 0, VIEW_W, VIEW_H).data };
+      };
+      G.clearGhosts();
+      const none = shot(runFrames + 90);
+      /* Same best, same everything — but now there is a stored trace whose
+       * length says it belongs to a different run than the one on the clock. */
+      G.putGhost('1-1', { frames: runFrames, x: rec.x, y: rec.y, flags: rec.flags });
+      const stale = shot(runFrames + 90);
+      const match = shot(runFrames);
+      let diff = 0;
+      let shown = 0;
+      for (let i = 0; i < none.px.length; i++) {
+        if (none.px[i] !== stale.px[i]) diff++;
+        if (none.px[i] !== match.px[i]) shown++;
+      }
+      expect('a stale ghost never reaches the screen, and an absent one changes no pixel',
+        none.scene.ghost !== null && none.scene.ghost.play === null
+          && stale.scene.ghost.play === null && diff === 0
+          && !!match.scene.ghost.play && shown > 0,
+        `absent: play ${none.scene.ghost && none.scene.ghost.play ? 'SET' : 'null'},`
+        + ` stale: play ${stale.scene.ghost && stale.scene.ghost.play ? 'SET — must not be' : 'null'},`
+        + ` ${diff} subpixels differ; the matching ghost drew ${shown}`);
+      G.clearGhosts();
+    }
+
+    /* 7. And it reads as a ghost. Three measurements off the pixels: it is on
+     * screen, every pixel of it is a blend rather than a body, and it is behind
+     * the player.
+     *
+     * The reference copy is drawn by hand through the same transform
+     * `drawGhost` uses (rounded camera, letterbox offset), because
+     * "translucent" is a claim *against something* — without an opaque version
+     * of the same frame the number would be a pixel count and nothing else. */
+    {
+      const c = document.createElement('canvas');
+      c.width = VIEW_W;
+      c.height = VIEW_H;
+      const g2 = c.getContext('2d');
+      reset();
+      game.timeAttack = true;
+      const scene = new LevelScene(game, '1-1');
+      scene.tick = 12;
+      game.timeAttack = false;
+      const p = scene.player;
+      const camX = Math.round(scene.cam.x);
+      const camY = Math.round(scene.cam.y);
+      const opts = {
+        type: null, level: 0, facing: 1, frame: 0, state: 'idle', ducking: false,
+        running: false, tick: scene.tick, idle: 0, theme: scene.theme, tint: TINTS.ghost,
+      };
+      const shot = (pose) => {
+        scene.ghost.pose = pose;
+        g2.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.draw(g2);
+        return g2.getImageData(0, 0, VIEW_W, VIEW_H).data;
+      };
+      const overlay = (pose, alpha) => {
+        scene.ghost.pose = null;
+        g2.clearRect(0, 0, VIEW_W, VIEW_H);
+        scene.draw(g2);
+        g2.save();
+        g2.globalAlpha = alpha;
+        g2.translate(0, scene.bar);
+        g2.translate(-camX, -camY);
+        drawPlayer(g2, Math.round(pose.x), Math.round(pose.y), { ...opts, facing: pose.facing });
+        g2.restore();
+        return g2.getImageData(0, 0, VIEW_W, VIEW_H).data;
+      };
+      const away = { x: p.x + 56, y: p.y, facing: 1, state: 'idle', level: 0, walk: 0, done: false };
+      const A = shot(null);
+      const B = shot(away);
+      const C = overlay(away, 1);
+      let inked = 0;
+      let body = 0;
+      let solid = 0;
+      let sumB = 0;
+      let sumC = 0;
+      for (let i = 0; i < A.length; i += 4) {
+        const dB = Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]);
+        const dC = Math.abs(A[i] - C[i]) + Math.abs(A[i + 1] - C[i + 1]) + Math.abs(A[i + 2] - C[i + 2]);
+        if (dB > 0) inked++;
+        if (dC > 0) {
+          body++;
+          sumB += dB;
+          sumC += dC;
+          if (B[i] === C[i] && B[i + 1] === C[i + 1] && B[i + 2] === C[i + 2]) solid++;
+        }
+      }
+      const ratio = sumC > 0 ? sumB / sumC : 1;
+
+      /* Behind: put the ghost exactly where the player is. What survives on
+       * screen is what the player's own sprite does not already cover. */
+      const on = { x: p.x, y: p.y, facing: p.facing, state: 'idle', level: 0, walk: 0, done: false };
+      const behind = shot(on);
+      const front = overlay(on, 0.45);
+      let behindPx = 0;
+      let frontPx = 0;
+      for (let i = 0; i < A.length; i += 4) {
+        if (A[i] !== behind[i] || A[i + 1] !== behind[i + 1] || A[i + 2] !== behind[i + 2]) behindPx++;
+        if (A[i] !== front[i] || A[i + 1] !== front[i + 1] || A[i + 2] !== front[i + 2]) frontPx++;
+      }
+      scene.ghost.pose = null;
+      expect('the ghost is on screen, is a blend and not a body, and is behind the player',
+        inked >= 120 && solid === 0 && ratio > 0.40 && ratio < 0.52
+          && frontPx > 0 && behindPx <= frontPx * 0.5,
+        `${inked} px of ink (body ${body}), ${solid} as solid as the body,`
+        + ` change is ${(ratio * 100).toFixed(1)} % of the body's;`
+        + ` over the player ${behindPx} px show, in front it would be ${frontPx}`);
+    }
+
+    /* 8. A trace is written for a record and for nothing else, and only in
+     * time attack. This is the path that goes through `completeLevel`, i.e. the
+     * only one where a trace reaches the disk at all. */
+    {
+      const finish = (frames, timeAttack) => {
+        seed = 99;
+        Math.random = seeded;
+        game.timeAttack = timeAttack;
+        const scene = new LevelScene(game, '1-1');
+        scene.clockStopped = true;
+        const input = mkInput();
+        for (let f = 0; f < frames; f++) {
+          input.held.right = true;
+          scene.update(input);
+        }
+        scene.completeLevel('shroom');
+        Math.random = realRandom;
+        game.timeAttack = false;
+        return scene;
+      };
+      const saveKey = 'sfb3.save.v2';
+      const keepSave = localStorage.getItem(saveKey);
+      reset();
+      G.clearGhosts();
+      const first = finish(300, true);
+      const afterFirst = G.getGhost('1-1');
+      const slower = finish(400, true);
+      const afterSlower = G.getGhost('1-1');
+      const faster = finish(200, true);
+      const afterFaster = G.getGhost('1-1');
+      reset();
+      G.clearGhosts();
+      const plain = finish(300, false);
+      const afterPlain = G.ghostKeys().length;
+      if (keepSave === null) localStorage.removeItem(saveKey);
+      else localStorage.setItem(saveKey, keepSave);
+      expect('a trace is stored for a record only, and only in time attack',
+        !!afterFirst && afterFirst.frames === 300
+          && !!afterSlower && afterSlower.frames === 300
+          && !!afterFaster && afterFaster.frames === 200
+          && plain.ghost === null && afterPlain === 0
+          && first.ghost !== null && slower.ghost !== null && faster.ghost !== null,
+        `300 frames -> ${afterFirst ? afterFirst.frames : 'no trace'},`
+        + ` 400 -> ${afterSlower ? afterSlower.frames : 'none'},`
+        + ` 200 -> ${afterFaster ? afterFaster.frames : 'none'};`
+        + ` ordinary round: recorder ${plain.ghost === null ? 'absent' : 'PRESENT — must not be'},`
+        + ` ${afterPlain} traces on disk`);
+    }
+
+    /* 9. Failure is silent. Private mode and a full quota are the same event as
+     * far as this file is concerned: `setItem` throws. Nothing about that may
+     * reach the game — the same rule `telemetry.js` follows, for a stronger
+     * reason, because the ghost is a garnish on a mode that works without it. */
+    {
+      const realSet = localStorage.setItem.bind(localStorage);
+      let threw = false;
+      let stored = null;
+      let readBack = null;
+      let built = null;
+      G.clearGhosts();
+      localStorage.setItem = () => { throw new Error('QuotaExceededError (test)'); };
+      try {
+        stored = G.putGhost('1-1', { frames: runFrames, x: rec.x, y: rec.y, flags: rec.flags });
+        /* The session keeps its ghost even when the disk refuses it: the store
+         * is in memory and only its persistence failed. */
+        readBack = G.getGhost('1-1');
+        reset();
+        game.timeAttack = true;
+        built = new LevelScene(game, '1-1');
+        built.update(mkInput());
+        game.timeAttack = false;
+      } catch (e) {
+        threw = true;
+      } finally {
+        localStorage.setItem = realSet;
+      }
+
+      /* Junk in the key is the same failure from the other side: a future
+       * version, a hand-edited row, a write that was cut off halfway. Loaded
+       * through a cache-busted import so the module reads the key rather than
+       * its own memory — the point is what happens on the *first* read. */
+      const junk = [
+        '{"v":1,"runs":{"1-1":{"f":100,"d":"!!!!!!"}},"order":["1-1"]}',
+        '{"v":1,"runs":{"1-1":{"f":100,"d":""}},"order":[]}',
+        '{"v":9,"runs":"a string where an object belongs"}',
+        '{ not json at all',
+        '',
+      ];
+      let junkOk = true;
+      let junkDetail = '';
+      for (let i = 0; i < junk.length; i++) {
+        try {
+          realSet(KEY, junk[i]);
+          const fresh = await import(`/src/core/ghost.js?junk=${i}`);
+          const got = fresh.getGhost('1-1');
+          const keys = fresh.ghostKeys();
+          if (got !== null || !Array.isArray(keys)) {
+            junkOk = false;
+            junkDetail += ` [${i}] returned ${got === null ? 'null' : 'a trace'}`;
+          }
+        } catch (e) {
+          junkOk = false;
+          junkDetail += ` [${i}] threw ${String((e && e.message) || e)}`;
+        }
+      }
+      /* And the nastier one: base64 that decodes cleanly into a path nobody
+       * ran. There is nothing to detect here — it is a valid trace of nonsense
+       * — so the only promise worth making is that it stays a number. */
+      let nonsense = null;
+      try {
+        realSet(KEY, '{"v":1,"runs":{"1-1":{"f":100,"d":"thisIsNotARealTrace"}},"order":["1-1"]}');
+        const fresh = await import('/src/core/ghost.js?junk=nonsense');
+        const got = fresh.getGhost('1-1');
+        const pose = got ? fresh.poseAt(got, 7, 4) : null;
+        nonsense = !got || (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y));
+      } catch {
+        nonsense = false;
+      }
+      localStorage.removeItem(KEY);
+      expect('a full quota and a junk key never break the game',
+        !threw && stored === true && !!readBack && !!built && junkOk && nonsense === true,
+        `threw ${threw ? 'YES' : 'no'}, the store returned ${stored} and still replays`
+        + ` ${readBack ? readBack.n : 0} samples from memory, the level`
+        + ` ${built ? 'built' : 'DID NOT BUILD'}; ${junk.length} junk stores`
+        + ` ${junkOk ? 'all read as empty' : `FAILED:${junkDetail}`},`
+        + ` decodable nonsense ${nonsense ? 'stayed finite' : 'BROKE'}`);
+    }
+
+    G.clearGhosts();
+    if (keepGhost === null) localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, keepGhost);
+    if (keepTele === null) localStorage.removeItem(TKEY);
+    else localStorage.setItem(TKEY, keepTele);
+    reset();
+    game.timeAttack = false;
+    game.paused = false;
+    game.toTitle();
+    return { checks, failures };
+  });
+  report.checks.push(...haamu.checks);
+  report.failures.push(...haamu.failures);
+}
+
 /* ------------------------- HUD-nauhan sarakkeet -------------------------- */
 /*
  * KUKAAN EI SAA VUOTAA SARAKKEESTAAN.

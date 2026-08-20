@@ -255,6 +255,15 @@ export const TINTS = {
   frozen: makeTint('#78c0ff', 0.62, 0.55),
   flash: makeTint('#fff0c0', 0.7, 0.45),
   spent: makeTint('#8c8878', 0.5, 0.65),
+  /*
+   * The time-attack ghost (`src/core/ghost.js`). The drain is the highest of
+   * any tint here on purpose: a ghost drawn in the player's own colours is a
+   * second player, and a second player is a thing you expect to be able to
+   * bump into. Draining almost all the hue out leaves the silhouette, the
+   * facing and the stride — everything that says "this is how you ran it" —
+   * and takes away everything that says "this is somebody standing there".
+   */
+  ghost: makeTint('#9fc8ff', 0.8, 0.9),
 };
 
 /**

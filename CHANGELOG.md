@@ -7,6 +7,95 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.50 — the run you already did, running beside you
+
+Owner: *"we've been talking about telemetry, but we definitely gotta include a
+ghost car run mechanic in there, right? So you can compete against yourself."*
+
+Time attack already knew which side of your best run you were on. What it kept
+was eight numbers, and eight numbers cannot be watched. This is the path.
+
+**What is recorded.** Position every fourth frame, plus one byte per sample
+holding facing, pose (idle / walk / jump / duck / climb) and the body size you
+were at the time. Position alone makes a cursor: a shape that slides along the
+floor at running speed reads as a bug rather than as a player. The walk cycle
+is *not* stored — the player's own `animFrame` advances with distance covered,
+so it is already a function of the positions in the trace, and replaying it
+from the interpolated speed costs nothing and gives a ghost that moves its legs
+faster when it is sprinting.
+
+**What it costs, measured.** 3.0 bytes per sample on real runs: a zigzag varint
+each for dx and dy, plus the flag byte, and the deltas are small enough that
+both varints are one byte essentially always. That is 1412 characters for the
+bot's 1407-frame run of 1-1, ~3.6 KB for a minute, and ~236 KB for a ghost on
+every one of the 65 levels — against 940 KB for the same set stored every frame
+as 16-bit ints, which is the version that does not fit. The store is capped at
+320 000 characters and evicts the least recently written ghost.
+
+**Why `STEP` is 4, and what the reasoning got wrong.** The argument said the
+error would be the sag of a parabola across the gap: gravity 0.3125 px/frame²
+gives a·s²/8 = 0.625 px. That turned out to be the *average* and not the worst
+case. Measured across three levels, linear replay is 0.60–0.62 px mean and
+2.1–2.3 px at the 95th percentile, but 8–9.4 px at the worst frames — and those
+frames are not curvature, they are **impacts**. A landing inside a gap is a
+velocity discontinuity, and no sampling grid catches an event it did not
+sample. There are 6–14 such frames in a whole run.
+
+Two fixes were tried and neither survived. **Easing the interpolation by the
+airborne flag** left the worst frame at exactly 8.0 px and made the average
+worse, 0.70 against 0.62: the discontinuity is inside the gap, so bending the
+curve around it moves the error rather than removing it. **Nearest sample, no
+interpolation** measured 3.4 px mean and 561 frames of a 1407-frame run past
+4 px — that is the version that reads as a cursor. Step 8 measures 24 px at
+worst and step 16 measures 56 px, so 4 is where the average is under a pixel
+and the set still fits in localStorage.
+
+**Why it is in its own store.** `telemetry.js` opens by promising anonymity by
+construction — a level, a tile, a cause, and nothing tying two records
+together — and that promise is what makes "send it somewhere one day"
+(ROADMAP §2 phase 4) a decision somebody can still take. A trace cannot make
+that promise: it **is** a run id, one continuous record of one person playing
+one level with their hesitations in it. So it lives in `sfb3.ghost.v1`,
+`src/core/ghost.js` touches nothing else, and it deliberately has **no
+exporter** — `telemetry.js` has `downloadExport` because its contents are meant
+to be handed over. The sharing half of the ROADMAP entry is a decision the
+owner has not taken, and code that is already written is a decision that has
+been taken quietly. The gate checks the separation as a measurement: storing a
+ghost must leave the telemetry key byte-identical, and the module must export
+nothing that looks like a way out.
+
+**Time attack only, and that is a decision rather than an omission.** An
+ordinary round has no clock, no split and no stored time, so a second body
+would be a picture with no reading attached to it — and the routes are not
+comparable anyway: a time-attack line is the fast one, an ordinary round stops
+for coins and secrets. The third reason is the one that decided it: time attack
+is a mode you enter on purpose, and keeping the recorder inside it keeps "is a
+trace being made of me" answerable by looking at which mode is on.
+
+**How it reads on screen**, measured in pixels rather than described: 177 px of
+ink for a body, every one of them a blend — zero pixels as solid as the body
+would have been — and the mean change is 45.9 % of what an opaque body changes,
+which is `GHOST_ALPHA` 0.45 doing what it says. It is drawn before the entities
+and therefore behind everything alive: put the ghost exactly on top of the
+player and only 48 of its 177 pixels survive, against all 177 if it were drawn
+in front. `TINTS.ghost` drains almost all the hue out, because a ghost in the
+player's own colours is a second player and a second player is a thing you
+expect to be able to bump into.
+
+**Save compatibility.** Nothing was added to `sfb3.save.v2` and no version was
+bumped: the trace is its own key, an old save simply has no ghost, and a level
+with no ghost is the level exactly as it was. The two stores can disagree — an
+old build drops `bestTimes` when it writes the save — so a stored trace is only
+replayed when its length still matches the best time on the clock. Mismatched
+means no ghost, never the wrong ghost.
+
+Gate: nine new checks under `haamu` in `tools/verify.mjs`. Round trip through
+the disk, the measured size budget and its ceiling under pressure, the
+telemetry separation, recording proved inert as a frame sequence, playback
+proved inert the same way, a stale ghost proved invisible pixel by pixel, the
+three pixel measurements above, storage on a record only, and a full quota and
+five kinds of junk in the key proved unable to break a level.
+
 ## v26.08.20.50 — he leaves on his own feet
 
 Owner: *"tweak the level end animations: after a normal level, the character
