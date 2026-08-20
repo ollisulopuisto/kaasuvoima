@@ -3661,10 +3661,7 @@ export class LevelScene {
     const th = THEMES[this.theme] || THEMES.grass;
     const first = Math.floor(camX / HEX_COL) - 1;
     const last = Math.ceil((camX + VIEW_W) / HEX_COL) + 1;
-    const solid = (tx, ty) => {
-      const ch = this.tileAt(tx, ty);
-      return ch === T.GROUND || ch === T.HARD || ch === T.BRICK;
-    };
+    const solid = (tx, ty) => this.tileAt(tx, ty) === T.GROUND;
     for (let col = first; col <= last; col++) {
       const cx = col * HEX_COL + Math.floor(HEX_COL / 2);
       const tx = Math.floor(cx / TILE);
@@ -3674,6 +3671,55 @@ export class LevelScene {
         const top = ty;
         while (ty < this.h && solid(tx, ty)) ty++;
         const bottom = ty;                       // first row past the run
+        /*
+         * NO GRASS UNDER A SLOPE, and this is the clipping the owner saw:
+         * *"there are weird clips in some places with hexes, when there's a
+         * slope starting or ending. But not every time."*
+         *
+         * A slope is not GROUND, so the scan walks past it and the hex mass
+         * starts on the row BELOW — which is right, the slope tile draws its
+         * own diagonal. But the grass cap was still being painted on that row,
+         * so a green stripe appeared *inside* the slope's empty triangle,
+         * cutting across the diagonal. Not every time, because it only shows
+         * on the empty side of the slope.
+         */
+        const over = this.tileAt(tx, top - 1);
+        const capped = over !== T.SLOPE_R && over !== T.SLOPE_L;
+        /*
+         * THE SEAMS ARE OFFSET BY THE GOLDEN RATIO, so the comb is not graph
+         * paper. Owner: *"maybe we could have an alternating rhythm in the
+         * overlapping, so that it's not always the same — something irregular,
+         * golden section etc."*
+         *
+         * Column `c` is pushed down by the fractional part of `c * 0.618`,
+         * which is the classic phyllotaxis trick: the golden ratio is the
+         * irrational that rational approximations converge to slowest, so the
+         * sequence never repeats and never clumps. Any simpler jitter either
+         * cycles — and a cycle at this scale reads as a pattern, which is what
+         * we are escaping — or bunches, leaving stretches where every column
+         * happens to line up again.
+         *
+         * The SURFACE is unaffected, and that is the whole reason this is safe
+         * to do: the top cell is clipped to the floor line, so however far the
+         * stack is pushed, what you walk on stays the same straight line. The
+         * jitter is visible only in where the seams below it fall.
+         */
+        /*
+         * THE CAP IS ANCHORED, THE STACK BELOW IT IS NOT.
+         *
+         * Offsetting every cell including the top one was the first try, and
+         * it cost the surface: a column whose cell lands with its POINT at the
+         * floor leaves a notch half a cell deep, and its neighbour, offset
+         * differently, no longer covers it. Measured, the scallop went from 5
+         * px to 7.
+         *
+         * So the top cell keeps its flat top exactly on the floor — the
+         * surface is unchanged, to the pixel — and the golden offset starts
+         * underneath it, where all it can do is move the seams. The first
+         * jittered cell is at most one full pitch below the cap, so the two
+         * always still touch.
+         */
+        const phi = ((col * 0.6180339887498949) % 1 + 1) % 1;
         let cy = top * TILE + HEX_H / 2;
         let head = true;
         while (cy - HEX_H / 2 < bottom * TILE) {
@@ -3692,21 +3738,28 @@ export class LevelScene {
             ctx.clip();
           }
           hexCell(ctx, cx, cy, th.ground, th.groundDark);
-          if (head) {
-            /* Grass on the cells that face the sky, cut to the hexagon so the
-             * skyline is hexagonal too and not a straight green line. */
+          if (head && capped) {
+            /*
+             * Grass on the surface, drawn at the FLOOR LINE rather than at the
+             * cell's own top, because the golden offset means those are no
+             * longer the same place. Clipped to the hexagon so the skyline is
+             * hexagonal and not a straight green stripe.
+             */
             ctx.save();
             hexCell(ctx, cx, cy, th.ground, null);
             ctx.clip();
             ctx.fillStyle = th.groundTop;
-            ctx.fillRect(cx - HEX_W, cy - HEX_H / 2, HEX_W * 2, 5);
+            ctx.fillRect(cx - HEX_W, top * TILE, HEX_W * 2, 5);
             ctx.fillStyle = th.groundTopDark;
-            ctx.fillRect(cx - HEX_W, cy - HEX_H / 2 + 5, HEX_W * 2, 1);
-            ctx.restore();
+            ctx.fillRect(cx - HEX_W, top * TILE + 5, HEX_W * 2, 1);
             ctx.restore();
           }
+          if (head) ctx.restore();
+          /* The cap steps down by a jittered amount; everything after it by a
+           * whole pitch, so one column's seams stay evenly spaced and only
+           * their PHASE differs from the next column's. */
+          cy += head ? HEX_H * (0.55 + phi * 0.45) : HEX_H;
           head = false;
-          cy += HEX_H;
         }
       }
     }
@@ -7648,7 +7701,10 @@ export class LevelScene {
         /* The hex grid draws the terrain itself, in columns, so the square
          * versions of those three must not be drawn underneath it. See
          * `drawHexTerrain`. */
-        if (this.hexGrid && (ch === T.GROUND || ch === T.HARD || ch === T.BRICK)) continue;
+        /* Only the GROUND is mass. Hard blocks and bricks keep their own
+         * identity — they are things you break and things you cannot — so they
+         * stay tiles and merely become hexagonal ones. See `drawTile`. */
+        if (this.hexGrid && ch === T.GROUND) continue;
         const bump = this.bumps.get(`${tx},${ty}`);
         const offset = bump === undefined ? 0 : Math.round(Math.sin((bump / 10) * Math.PI) * -6);
         drawTile(ctx, ch, tx * TILE, ty * TILE + offset, this.theme, tx, ty, this.tick,

@@ -2464,12 +2464,58 @@ export function drawHexSkin(ctx, x, y, themeName) {
   ctx.fillRect(x, y, 16, 16);
 }
 
+/**
+ * THE BLOCKS GO HEXAGONAL TOO, and they do it by being CLIPPED rather than
+ * redrawn.
+ *
+ * Owner: *"it's workable! Obviously all other tiles should be hex too, like
+ * the mystery tiles etc."* Right — a hexagonal world with square question
+ * blocks in it is a world with square question blocks in it.
+ *
+ * Every one of these already has art worth keeping: the `?` glyph and its
+ * bounce, the brick's courses, the hard block's bevel, the used block's dent.
+ * Redrawing them as hexagons would mean drawing all of it twice and keeping
+ * the two in step for ever. So the existing tile is drawn exactly as it always
+ * was, inside a hexagonal clip, and the outline goes on afterwards. One
+ * definition of what a question block looks like; two silhouettes.
+ *
+ * Sized 18 wide like the terrain cells, so a run of blocks overlaps by a
+ * couple of pixels and does not show daylight at the joins — the same reason
+ * the ground cells are stroked fat. See `hexCell`.
+ */
+export function hexBlockPath(ctx, x, y) {
+  const cx = x + 8;
+  const cy = y + 8;
+  ctx.beginPath();
+  ctx.moveTo(cx - HEX_W / 2, cy);
+  ctx.lineTo(cx - HEX_W / 4, cy - HEX_H / 2);
+  ctx.lineTo(cx + HEX_W / 4, cy - HEX_H / 2);
+  ctx.lineTo(cx + HEX_W / 2, cy);
+  ctx.lineTo(cx + HEX_W / 4, cy + HEX_H / 2);
+  ctx.lineTo(cx - HEX_W / 4, cy + HEX_H / 2);
+  ctx.closePath();
+}
+
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
   const th = THEMES[themeName] || THEMES.grass;
   /* The comb goes on afterwards, over whatever the tile normally draws, so
    * every theme's own colours and the grass tops survive it untouched. */
   const comb = opts.skin === 'hex'
     && (ch === T.GROUND || ch === T.HARD || ch === T.BRICK);
+  /* On a hex-grid level the blocks are the square art inside a hex clip. */
+  const hexed = opts.skin === 'hexgrid' && (ch === T.HARD || ch === T.BRICK
+    || ch === T.QCOIN || ch === T.QPOWER || ch === T.QSTAR || ch === T.USED
+    || ch === T.NOTE || ch === T.SWITCH);
+  if (hexed) {
+    ctx.save();
+    hexBlockPath(ctx, x, y);
+    /* Fattened the same way the ground cells are, so a row of blocks has no
+     * daylight at its joins. */
+    ctx.strokeStyle = th.hard || '#c8c8d8';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.clip();
+  }
   switch (ch) {
     case T.GROUND:
       drawGround(ctx, x, y, th, !isSolid(above), tx, ty, tick);
@@ -2525,4 +2571,11 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     default: break;
   }
   if (comb) drawHexSkin(ctx, x, y, themeName);
+  if (hexed) {
+    ctx.restore();
+    hexBlockPath(ctx, x, y);
+    ctx.strokeStyle = th.groundDark;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 }
