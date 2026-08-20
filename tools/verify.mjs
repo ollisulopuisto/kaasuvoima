@@ -21250,17 +21250,44 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         for (let i = 3; i < d.length; i += 4) if (d[i] > 0) boardPx++;
       }
 
+      let gaps = null;
+
       expect('kentän nimi kirjoitetaan taivaalle vain siellä missä ei ole tietä',
         intro > 100 && after === 0 && back > 100 && roadSky === 0 && inside === 0,
         `pystykentässä alussa ${intro} px, 600 framen kohdalla ${after} px,`
         + ` kierroksen jälkeen ${back} px; vaakakentän taivaalla ${roadSky} px,`
         + ` linnakkeessa ${inside} px`);
 
+      /*
+       * TWO SIGNS NEVER STAND IN THE SAME HOLE (20.8.2026).
+       *
+       * Owner, from play: *"make sure speed sign and world level sign don't
+       * overlap."* Every prop was born at the same spot in layer space, so two
+       * placed near the same moment were not unlucky — they were guaranteed.
+       * The gap is asserted against the widest thing this layer draws rather
+       * than against a number somebody liked.
+       */
+      {
+        const { PropLayer } = await import('/src/gfx/props.js');
+        const { textWidth: tw } = await import('/src/gfx/font.js');
+        const q = new PropLayer();
+        const first = q.place('card', 0, VIEW_W, { text: 'MAAILMA 1-1' });
+        const second = q.place('speed', 0, VIEW_W, { limit: 50 });
+        const third = q.place('speed', 30, VIEW_W, { limit: 80 });
+        const boardW = tw('MAAILMA 1-1') + 12;
+        gaps = { a: second.x - first.x, b: third.x - second.x, boardW };
+      }
+
       expect('vaakakentässä nimi on tienvarressa, ja se syntyy ruudun ulkopuolella',
         carded && boardPx === 0 && road.props.list[0].x - road.cam.x * 0.6 >= VIEW_W,
         `kyltti asetettu ${carded}, ruudulla ${boardPx} px,`
         + ` reunan takana ${carded ? Math.round(road.props.list[0].x - road.cam.x * 0.6) : -1}`
         + ` (ruudun leveys ${VIEW_W})`);
+
+      expect('kaksi kylttiä ei koskaan seiso samassa kuopassa',
+        gaps && gaps.a >= gaps.boardW && gaps.b >= gaps.boardW,
+        `peräkkäin ${gaps ? gaps.a : -1} ja ${gaps ? gaps.b : -1} px,`
+        + ` levein kyltti ${gaps ? gaps.boardW : -1} px`);
     }
 
     /* --- 7. karannut kuori ja pallojen katto --- */
