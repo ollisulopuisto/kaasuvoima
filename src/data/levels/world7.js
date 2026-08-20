@@ -78,6 +78,9 @@ export const WORLD7_LEVELS = {
    */
   '7-1': {
     theme: 'cloud', bg: 'clouds', music: 'cloud',
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     /* Terrain pass, see `data/terrain.js`. */
     terrain: true,
     chunks: [

@@ -505,6 +505,49 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### Kenno: yksi kenttä per teema, ja se päätös joka on nyt edessä
+
+*(Omistaja 20.8.2026: "i'd wanna try out more hex shapes and if they feel good,
+port the whole game over!" — ja kysyttäessä mitä "port the whole game over"
+tarkoittaa, vastaus oli **oikea heksatörmäysruudukko**, ei pelkkä nahka.)*
+
+Tehty 20.8.2026 (v26.08.20.52): kennonahka on nyt yhdessä käsintehdyssä
+kentässä **per teema** — 1-3, 1-F, 2-2, 2-N, 3-2, 4-2, 6-1, 7-1 — ja se mikä on
+kuusikulmio on yksi sääntö eikä laattalista: **maasto on kennoa, esineet
+eivät.** Murtuva lauta ja jää liittyivät joukkoon, läpiastuttava lauta sai oman
+matalan kuusikulmionsa (`hexLedgePath`, koska lohkoleikkaus olisi kutistanut
+16 px:n laudan 9:ään), ja jousi, hylly, lyhty ja piikki jäivät ulos syystä joka
+oli jo kirjoitettu niiden omiin kommentteihin.
+
+**Jokaiseen teemaan jäi neliökenttä sen viereen, ja se on se mitä portti
+seuraavaksi maksaa.** Vertailu kuuluu saman teeman sisälle — 1-1 ja 1-3
+eroavat tästä ja vain tästä. Jos kenno viedään koko peliin, tuo vertailu on
+ensimmäinen asia joka katoaa, joten se kannattaa käyttää nyt.
+
+**Ja se mitä omistaja pyysi on paljon isompi kuin nahka.** Oikea
+heksatörmäysruudukko ei ole tämän laajennus vaan sen korvaaja, ja hinta on
+kirjattu `gfx/tiles.js`:ään jo silloin kun nahka tehtiin: *"some nine hundred
+gates all assume a square grid; a real hex grid is a different game."* Se ei
+ole varaus vaan mitattu tosiasia tästä repositoriosta. Mitä se konkreettisesti
+tarkoittaa, ennen kuin kukaan lupaa aikataulua:
+
+- **`physics.js` on laatikkotörmäystä**, ja rinteet ovat jo poikkeus jonka piti
+  kirjoittaa erikseen (`slopeTop`, korkeuskäyrä sarakkeittain). Heksaruudukossa
+  *jokainen* laatta on rinne-tapaus.
+- **Hyppybudjetti on mitattu neliöinä.** `gapTiles` 6 ja `wallTiles` 4 ovat
+  luvut joiden päällä jokaisen kentän todistus lepää, ja ne ovat ruutuja.
+  Heksapiste ei ole ruutu, joten jokainen niistä on mitattava uudelleen.
+- **Kenttädata on merkkiruudukkoa.** 64 kenttää, generaattori, maastopassi ja
+  `tools/`in kymmenkunta mittaria lukevat kaikki riviä merkkejä.
+- **Portit.** Melkein kaikki `verify.mjs`:n kenttäväitteet on kirjoitettu
+  sarakkeista ja riveistä.
+
+Eli järjestys jos tähän mennään: **ensin pelataan nämä kahdeksan kenttää** ja
+päätetään tuntuuko kenno oikealta, koska se päätös on halpa ja peruttavissa ja
+se on portin ehto. Vasta sitten kysytään mitä oikea heksaruudukko maksaa, ja se
+kysymys ansaitsee oman mittauksensa eikä arviota.
+
+
 ### The pointy sphere: the overworld is the solid, and you walk on it
 
 *(Owner, 19.8.2026, after three redirections that each turned out to be the
@@ -1019,9 +1062,12 @@ whether the coyote clear is what changed it, whether the terrain seed `1-1a`
 put a ramp where the first jumps are, and only then anything about the jump
 itself.
 
-### Two overworld ideas from play, not yet built
+### ✔ Two overworld ideas from play — both built, and this heading was stale
 
-*(Owner, 19.8.2026.)*
+*(Owner, 19.8.2026. Found still marked "not yet built" on 20.8.2026 while
+looking for unbuilt work; both are in `src/gfx/props.js` and both show up in a
+screenshot of any level. The description below is kept because it is still an
+accurate account of what they do and why.)*
 
 **Speed limit signs in the parallax.** The owner's idea, and stated exactly:
 when the player crosses speed X, a road sign is placed into the backdrop

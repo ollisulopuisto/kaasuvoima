@@ -7,6 +7,63 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.52 — the comb spreads to every theme, and the rule that decides what wears it
+
+Owner, having played 1-3: *"i'd wanna try out more hex shapes and if they feel
+good, port the whole game over!"*
+
+The hex skin existed on exactly one stage and covered six tile characters, so
+"more hex shapes" is two separate gaps: tiles inside a comb level that were
+still square, and seven themes that had never seen a comb at all.
+
+**What is hexagonal is now one rule rather than a list.** Terrain is a comb;
+objects are not. The crumbling deck and ice join the hard block, the brick, the
+question blocks, the used block, the note and the switch — all four of those are
+theme-coloured, load-bearing, part of the surface the comb is a picture of. The
+spring, the gas shelf and the lamp stay square, and that was not a taste call:
+all three are already painted in **fixed colours rather than the theme's**, and
+the reason is written in their own comments — *"pelaajan tekemän esineen pitää
+näkyä jokaisessa maailmassa samana."* That is this same claim inverted. The
+world changes shape; a made object does not. Spikes stay out for a third reason:
+sharpness is their whole message, and a hexagonal spike is a blunt one.
+
+**The through-platform needed its own hexagon, and the block clip would have
+broken it.** `hexBlockPath` clips into a 16 px cell whose narrowest point — nine
+pixels — is at the cell's top edge, and a through-platform is a seven-pixel bar
+sitting exactly there. Clipped as a block it would have shrunk from 16 px to 9,
+which would have made the drawn ledge and the measured jump budget two different
+things. `hexLedgePath` is the same silhouette at the bar's own height: a
+hexagonal prism seen edge-on, which is what a ledge is. The walking surface does
+not move.
+
+**One hand-made level per theme now wears it** — 1-3, 1-F, 2-2, 2-N, 3-2, 4-2,
+6-1, 7-1 — and the limit is deliberate on both sides. The comb is painted in the
+theme's own colours, so *how it feels* is literally a different question in each
+palette: rolling honeycomb on grass, crystal on ice, grating in the factory. One
+stage in one world cannot answer that on behalf of eight. And every theme keeps
+a square level beside it, so the comparison stays inside the theme, which is the
+only place it means anything — 1-1 and 1-3 differ in this and nothing else. If
+the comb goes game-wide, that comparison is what is spent.
+
+Nothing about collision moved. The flag is still per level and still only
+touches drawing.
+
+**Three gates, and they measure the silhouette rather than the call site.** A
+tile is drawn onto magenta and its four corner pixels are read: a hexagon cuts
+all four, a square cuts none. So the claim under test is "is it a hexagon",
+which is the thing the owner is looking at, instead of "was the right function
+called". Each tile is measured both with and without the flag, because *four
+corners clear* alone cannot tell a clipped hexagon from art that was small
+already — `LUMP` and `LAMP` score four either way, and the assertion is the
+**difference**. The third gate walks every level definition and requires each
+theme to have a comb level and no generated level to have one, since
+`generated.js` has to come out of a regeneration byte-identical.
+
+The old gate read *"heksaruudukko on yhdessä kentässä eikä kaikissa"*, which was
+the right gate for the day it was written and is now the wrong sentence for the
+same property. It is reworded to what it still measures and still must: 1-3 is a
+comb and 1-1 is not, same world, same theme — the skin is a flag, not a switch.
+
 ## v26.08.20.51 — the manual, and a hint sheet that cannot go stale
 
 Owner: *"in the morning, after all the work is done, UPDATE THE README. Create

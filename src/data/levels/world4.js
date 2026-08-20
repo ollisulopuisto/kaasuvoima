@@ -102,6 +102,9 @@ export const WORLD4_LEVELS = {
    */
   '4-2': {
     theme: 'factory', bg: 'factory', music: 'factory',
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     chunks: [
       'start', 'fort_power', 'fac_lump', 'fac_belt', 'heartburn_pair', 'fac_shaft',
       'corks', 'fac_press', 'fac_duct_down', 'fac_gap', 'soup_stop', 'fac_vents',

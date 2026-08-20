@@ -130,6 +130,9 @@ export const WORLD3_LEVELS = {
    */
   '3-2': {
     theme: 'ice', bg: 'peaks', music: 'jaatie',
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     chunks: [
       'start_high', 'sky_run', 'power', 'plat_steps', 'flyer', 'pit_l',
       'clouds', 'beanstalk', 'switch_wall', 'cloud_run', 'pit_bridge', 'shell',

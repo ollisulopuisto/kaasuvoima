@@ -2484,16 +2484,42 @@ export function drawHexSkin(ctx, x, y, themeName) {
  * the ground cells are stroked fat. See `hexCell`.
  */
 export function hexBlockPath(ctx, x, y) {
-  const cx = x + 8;
-  const cy = y + 8;
+  hexPrismPath(ctx, x + 8, y + 8, HEX_W, HEX_H);
+}
+
+/**
+ * SAMA KUUSIKULMIO MATALANA, ja se on olemassa koska ohut lauta ei ole lohko.
+ *
+ * `hexBlockPath` leikkaa 16 px:n korkuiseen soluun, jonka kapein kohta on
+ * yhdeksän pikseliä laatan yläreunassa. Läpiastuttava lauta (`-`) on seitsemän
+ * pikseliä paksu ja se on **laatan yläreunassa**, eli lohkoleikkaus osuisi
+ * siihen kohtaan missä kuusikulmio on kapeimmillaan ja jättäisi siitä jäljelle
+ * yhdeksän pikselin tyngän. Mitattuna: 16 px leveä lauta kutistuisi 9:ään,
+ * eli hyppybudjetin mitta ja piirretty lauta lakkaisivat olemasta sama asia.
+ *
+ * Matala kuusikulmio ratkaisee sen ilman uutta muotoa: sama silhuetti, sama
+ * suhde, oma korkeus. Lauta on kuusikulmainen prisma sivusta katsottuna, mikä
+ * on täsmälleen se mitä se maailmassa on.
+ */
+function hexPrismPath(ctx, cx, cy, w, h) {
   ctx.beginPath();
-  ctx.moveTo(cx - HEX_W / 2, cy);
-  ctx.lineTo(cx - HEX_W / 4, cy - HEX_H / 2);
-  ctx.lineTo(cx + HEX_W / 4, cy - HEX_H / 2);
-  ctx.lineTo(cx + HEX_W / 2, cy);
-  ctx.lineTo(cx + HEX_W / 4, cy + HEX_H / 2);
-  ctx.lineTo(cx - HEX_W / 4, cy + HEX_H / 2);
+  ctx.moveTo(cx - w / 2, cy);
+  ctx.lineTo(cx - w / 4, cy - h / 2);
+  ctx.lineTo(cx + w / 4, cy - h / 2);
+  ctx.lineTo(cx + w / 2, cy);
+  ctx.lineTo(cx + w / 4, cy + h / 2);
+  ctx.lineTo(cx - w / 4, cy + h / 2);
   ctx.closePath();
+}
+
+/**
+ * Läpiastuttavan laudan kennomuoto. Korkeus on laudan oma paksuus (7 px) eikä
+ * solun, ja se on keskitetty laudan omaan keskikohtaan — pinta pysyy laatan
+ * yläreunassa, koska sinne jalka osuu ja siellä `physics.js` sen odottaa.
+ */
+const LEDGE_H = 7;
+export function hexLedgePath(ctx, x, y) {
+  hexPrismPath(ctx, x + 8, y + LEDGE_H / 2, HEX_W, LEDGE_H);
 }
 
 export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {}) {
@@ -2502,13 +2528,29 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
    * every theme's own colours and the grass tops survive it untouched. */
   const comb = opts.skin === 'hex'
     && (ch === T.GROUND || ch === T.HARD || ch === T.BRICK);
-  /* On a hex-grid level the blocks are the square art inside a hex clip. */
+  /*
+   * On a hex-grid level the blocks are the square art inside a hex clip.
+   *
+   * MITÄ LISTALLA ON JA MIKSI SE EI OLE KAIKKI. Kenno on **maaston** muoto.
+   * Murtuva lauta ja jää ovat maastoa siinä missä tiili — ne ovat teeman
+   * värisiä, ne kantavat painon ja ne ovat osa sitä pintaa jota kenno kuvaa.
+   *
+   * Ponnahduslauta, pieruhylly ja lyhty eivät ole, ja se ei ole makuasia vaan
+   * jo kirjoitettu sääntö: kaikki kolme on maalattu **kiinteillä väreillä eikä
+   * teeman omilla**, ja perustelu lukee niiden omissa kommenteissa — *"pelaajan
+   * tekemän esineen pitää näkyä jokaisessa maailmassa samana."* Maailma vaihtaa
+   * muotoa, esine ei; sama sääntö toisin päin. Piikki jää ulos kolmannesta
+   * syystä: sen terävyys on sen koko viesti, ja tylppä piikki on väärä lupaus.
+   */
   const hexed = opts.skin === 'hexgrid' && (ch === T.HARD || ch === T.BRICK
     || ch === T.QCOIN || ch === T.QPOWER || ch === T.QSTAR || ch === T.USED
-    || ch === T.NOTE || ch === T.SWITCH);
-  if (hexed) {
+    || ch === T.NOTE || ch === T.SWITCH || ch === T.CRUMBLE || ch === T.ICE);
+  /* Ohut lauta saa oman matalan kuusikulmionsa, ks. `hexLedgePath`. */
+  const hexLedge = opts.skin === 'hexgrid' && ch === T.PLATFORM;
+  if (hexed || hexLedge) {
     ctx.save();
-    hexBlockPath(ctx, x, y);
+    if (hexLedge) hexLedgePath(ctx, x, y);
+    else hexBlockPath(ctx, x, y);
     /* Fattened the same way the ground cells are, so a row of blocks has no
      * daylight at its joins. */
     ctx.strokeStyle = th.hard || '#c8c8d8';
@@ -2571,9 +2613,10 @@ export function drawTile(ctx, ch, x, y, themeName, tx, ty, tick, above, opts = {
     default: break;
   }
   if (comb) drawHexSkin(ctx, x, y, themeName);
-  if (hexed) {
+  if (hexed || hexLedge) {
     ctx.restore();
-    hexBlockPath(ctx, x, y);
+    if (hexLedge) hexLedgePath(ctx, x, y);
+    else hexBlockPath(ctx, x, y);
     ctx.strokeStyle = th.groundDark;
     ctx.lineWidth = 1;
     ctx.stroke();
