@@ -1191,6 +1191,206 @@ function weightedPiece(weights) {
   return entries[0][0];
 }
 
+/* ------------------------------ the grammar ----------------------------- */
+
+/**
+ * THE GRAMMAR LAYER: what this generator did not have, and what the owner has
+ * now asked for twice.
+ *
+ * *"The levels still feel too flat — not enough variation"*, and, earlier,
+ * *"ne tuntuvat tasaisilta ja toisteisilta"*. Four fitness functions were green
+ * both times. `tools/grammar.mjs` was written to find out what all four were
+ * missing, and it measured it: **a generated level shares 28.9 % of its
+ * five-clause phrases with one other generated level, against 11.5 % for a
+ * hand-made one**, and eight levels built with nothing but the seed changed
+ * share 32.6 % — so the shipped levels sit two thirds of the way to being
+ * literally one grammar.
+ *
+ * The cause is one line, and it is the loop this file used to contain:
+ *
+ *     while (x < width) { rest(); piece = weightedDraw(); piece(); }
+ *
+ * That is a stationary first-order draw. It has no memory, so it cannot build
+ * a motif; every level it makes is the same sentence with the nouns swapped,
+ * and no amount of new set pieces changes that — new pieces are new nouns.
+ *
+ * What replaces it is a PRODUCTION: two or three pieces in a fixed order with
+ * its own pacing written into it, so a level is a sequence of motifs rather
+ * than a spatter of independent draws. The productions are not written down
+ * here — each level makes up its own, and `drawProductions` says why at length,
+ * because the version that did write them down is the version that failed.
+ *
+ * **The layer is switched off in everything this repository ships.** See
+ * `grammar` in `buildLevel` for that decision and its cost.
+ *
+ * ## WHAT A PRODUCTION ASKS FOR IS A CATEGORY, NOT A PIECE, and that is what
+ * keeps every existing subtraction working.
+ *
+ * `weights` is the theme's vocabulary and `drop` is the world's subtraction
+ * from it — no hills in the factory, no lava in the ice world, and world 1's
+ * deliberately narrow list. A production that named `gap` and `stairs` outright
+ * would have walked straight through all of that. So it asks for a *kind* of
+ * challenge and the draw happens inside the theme's own weighting, restricted
+ * to that kind; a theme with nothing of that kind gets an ordinary free draw
+ * instead. Subtractive stays subtractive.
+ */
+const CATEGORIES = {
+  /** Things you jump over a hole to clear. */
+  LEAP: ['gap', 'stinkGap'],
+  /** Things you go up and over. */
+  CLIMB: ['stairs', 'hill', 'blockRow'],
+  /** Things on the floor that hurt. */
+  GROUND: ['spikes', 'lava', 'heartburn'],
+  /** Things that walk at you. */
+  CROWD: ['enemies'],
+  /** Things you cross above the floor. */
+  AIR: ['platforms', 'highReward'],
+  /** Things that stop you until you do something about them. */
+  GATE: ['corkGate', 'switchWall', 'crumbleWalk', 'pipe'],
+  /** Things that are only worth having. */
+  TREAT: ['coins', 'notes', 'sun'],
+};
+
+/**
+ * THE REST SHAPES: how the calm inside one production moves.
+ *
+ * A production's pacing is as much of its identity as its pieces are, so the
+ * rests come from a named shape rather than one per step at random — random
+ * rests average out to no shape at all, which is the flat loop again with extra
+ * steps. Every number is a multiplier on the calm the ramp already asked for,
+ * and every one of them is inside [0.45, 2.2]:
+ *
+ *   - 0.45 is the floor because `PIECES.rest` floors at three columns, and a
+ *     production asking for less would be asking the player to land and take
+ *     off in the same tile.
+ *   - 2.2 is the ceiling because past it the calm stops reading as pacing and
+ *     starts reading as the level having ended.
+ *
+ * Nothing here touches gap width, hazard width or block height; those stay
+ * where `ctx` caps them. A grammar may rearrange this game. It may not ask for
+ * a jump the measured budget does not carry.
+ */
+const REST_SHAPES = {
+  /** Arrives sooner and sooner. */
+  tighten: (i, n) => 1.5 - (0.95 * i) / Math.max(1, n - 1),
+  /** Opens out — the aftermath of something. */
+  loosen: (i, n) => 0.55 + (1.5 * i) / Math.max(1, n - 1),
+  /** Tight in the middle, room either side. */
+  valley: (i, n) => (i === 0 || i === n - 1 ? 1.7 : 0.5),
+  /** Room in the middle, tight either side. */
+  ridge: (i, n) => (i === 0 || i === n - 1 ? 0.5 : 1.9),
+  /** Calm, and then something already on top of you. */
+  ambush: (i) => (i === 0 ? 2.1 : 0.45),
+  /** One pace, held. */
+  even: () => 1,
+};
+
+const CATEGORY_NAMES = Object.keys(CATEGORIES);
+
+/**
+ * The grammar-off step list: one free draw at the level's own pace, i.e. the
+ * loop this generator had before productions existed. A module constant rather
+ * than something built per level, because building it would be the one thing
+ * this path may not do — see `grammar` in `buildLevel`.
+ */
+const FLAT_STEPS = [{ cat: null, rest: 1 }];
+
+/**
+ * A LEVEL SAMPLES ITS OWN PRODUCTIONS, AND THIS IS THE SECOND ATTEMPT AT THIS
+ * LAYER. The first is worth keeping because it failed for a reason.
+ *
+ * That one was a fixed table of ten hand-written productions — `crossing` was
+ * two leaps, `ladder` three climbs, `wringer` hazard-enemy-hazard — with each
+ * level drawing which of the ten it would use. It was measured on
+ * `tools/grammar.mjs`'s fixed point and it did not work: against a baseline of
+ * MURRE 0.86 and TOISTO 32.6 % it scored 0.88 and 33.4 % — no movement on one
+ * and **the wrong direction** on the other.
+ *
+ * The reason is the same trap one storey up wearing a different hat. Ten shared
+ * productions are ten shared sentences: every level that drew `crossing` emitted
+ * the same phrase as every other level that drew `crossing`. The change swapped
+ * *"one sentence, different words"* for *"ten sentences out of one phrasebook"*,
+ * which is more phrase repetition rather than less, and the meter said so
+ * immediately. A grammar layer whose grammar is a constant is not a grammar
+ * layer.
+ *
+ * So the productions are drawn per level. A level's grammar is four to six
+ * productions it made up itself: each two or three steps long, each step a
+ * category drawn from **this level's own taste in categories**, and the pacing
+ * across the steps taken from one of the shapes above.
+ */
+function drawProductions() {
+  /*
+   * The level's taste: a weighting over the categories, drawn once. This is
+   * what makes one level a level of holes and the next a level of ledges, and
+   * it is drawn per LEVEL rather than per production on purpose — a level whose
+   * every production drew freely would have no character of its own either,
+   * which is the same failure at a smaller scale.
+   */
+  const taste = {};
+  for (const name of CATEGORY_NAMES) taste[name] = 1 + Math.floor(rnd() * 5);
+  const shapes = Object.keys(REST_SHAPES);
+
+  const out = {
+    /** The old behaviour, kept by name: one free draw at the level's own pace. */
+    single: { steps: [{ cat: null, rest: 1 }] },
+    /** Room to breathe and something to pick up in it. */
+    breather: { steps: [{ cat: 'TREAT', rest: 2.2 }, { cat: null, rest: 1.6 }] },
+  };
+
+  const count = 4 + Math.floor(rnd() * 3);
+  for (let i = 0; i < count; i++) {
+    const n = 2 + Math.floor(rnd() * 2);
+    const shape = REST_SHAPES[shapes[Math.floor(rnd() * shapes.length)]];
+    /*
+     * One production in three is a GAUNTLET: the same category at every step.
+     * It is drawn as a KIND rather than written down as a named phrase, so a
+     * level can have a gauntlet of whatever it happens to like and two levels'
+     * gauntlets are of different things — which is the whole difference between
+     * this version and the one it replaced.
+     */
+    const one = rnd() < 0.34 ? weightedPiece(taste) : null;
+    const steps = [];
+    for (let k = 0; k < n; k++) {
+      steps.push({
+        cat: one || weightedPiece(taste),
+        rest: Math.max(0.45, Math.min(2.2, shape(k, n))),
+      });
+    }
+    out[`p${i}`] = { steps };
+  }
+  return out;
+}
+
+/**
+ * THE DIALECT: how often the level reaches for each of its own productions.
+ *
+ * `single` and `breather` are always in, and neither is a hedge:
+ *
+ *   - `single` is the free draw over the theme's whole weighting, and it is the
+ *     only step that can reach a piece no category asked for. Without it a
+ *     level's grammar would also be a silent second `drop` list — and
+ *     `gen-levels.mjs` fails a world outright if no level in it contains a
+ *     crumbling deck or a switch block, so a grammar that happened to exclude
+ *     `GATE` four times running would have failed the run rather than made a
+ *     duller world.
+ *   - `breather` is the pacing floor. Every other production may tighten; a
+ *     level with none of them is a level with no calm in it, and
+ *     `difficulty.mjs` would have scored that as an achievement.
+ */
+function drawDialect(productions) {
+  const out = {};
+  for (const name of Object.keys(productions)) out[name] = 1 + Math.floor(rnd() * 4);
+  /* Neither floor may dominate: a level that was three-quarters breather would
+   * be an empty field with a coin in it, and one that was three-quarters
+   * `single` would be the flat loop wearing a hat. */
+  out.breather = Math.min(out.breather, 2);
+  out.single = Math.min(out.single, 2);
+  return out;
+}
+
+/* ------------------------------------------------------------------------ */
+
 /**
  * THE THREE KNOBS, AND WHY THERE ARE THREE RATHER THAN ONE.
  *
@@ -1227,6 +1427,7 @@ function weightedPiece(weights) {
 export function buildLevel({
   seed = 0, theme, targetWidth, tuning = null, intensity = 1,
   enemiesPer100 = null, maxGap = null, drop = [], species = null, minIntro = 0,
+  grammar = false,
 }) {
   /* Sama rivi samassa paikassa kuin ennen: työkalu ajoi `rnd = mulberry32(seed)`
    * juuri ennen tätä kutsua, ja telemetriakierroksella uudestaan ennen toista.
@@ -1341,40 +1542,105 @@ export function buildLevel({
   const peak = Math.max(...ramp);
   let lastPiece = null;
 
-  while (x < targetWidth - 26) {
-    // The ramp modulates how much calm sits between challenges: the busiest
-    // quarter of the corpus gets the shortest rests.
-    const quarter = Math.min(3, Math.floor((x / targetWidth) * 4));
-    const tuned = tuning ? tuning.get(trace.length) : null;
-    ctx.restScale = ((1.35 - 0.6 * (ramp[quarter] / peak)) / intensity)
-      * (tuned ? tuned.restScale : 1);
-    ctx.ease = tuned ? tuned.ease : 0;
-    const from = x;
-    x += PIECES.rest(c, x, ctx);
+  /*
+   * THE LEVEL'S OWN GRAMMAR, drawn before its first column is written — WHEN IT
+   * IS ASKED FOR, AND IT IS NOT ASKED FOR BY DEFAULT.
+   *
+   * `grammar` is off unless a caller turns it on, and the default is not
+   * timidity. Two committed artefacts are functions of this loop's exact random
+   * stream, and both of them are gates:
+   *
+   *   - `src/data/generated.js`, 26 levels that are corpus-checked
+   *     (`origin: 'checked'`), difficulty-aimed and proven clearable at power 0.
+   *   - `src/data/daily-origin.js`, whose `fingerprint` is a hash of every
+   *     day's level in the checked window. `tools/verify.mjs` recomputes it
+   *     from this function on every run and fails if it moved.
+   *
+   * Both can only be rebuilt with the corpus behind `VGLC_DIR`, which is not in
+   * the repository and not in the release (DESIGN.md kohta 3, alakohta 1).
+   * Turning this on by default would therefore have done one of two things:
+   * turned the suite red, or — worse — got itself green by rebuilding 26 levels
+   * as `origin: 'not checked'`, trading the originality guarantee the whole
+   * approach rests on for a change whose measured gain is partial. So the layer
+   * ships switched off, and the switch is what `tools/grammar.mjs` flips to
+   * measure both ends of its scale in one run.
+   *
+   * OFF IS BYTE-IDENTICAL TO THE LOOP THIS FUNCTION HAD BEFORE PRODUCTIONS
+   * EXISTED, and that is checked rather than claimed: `node tools/gen-levels.mjs`
+   * rewrites `src/data/generated.js` unchanged. Nothing is drawn from `rnd`
+   * on this path — no productions, no dialect, and no phrase pick inside the
+   * loop — because a single wasted draw moves every column after it.
+   */
+  const productions = grammar ? drawProductions() : null;
+  const dialect = grammar ? drawDialect(productions) : null;
+  let lastPhrase = null;
 
-    /*
-     * A NOTE MAY NAME THE PIECE, AND THE WORLD MAY STILL SAY NO.
-     *
-     * `tuned.force` is the third thing feedback can ask for, after "easier" and
-     * "harder": *put a hill here*, *put a gap here*. It is looked up in
-     * `weights` rather than in `PIECES`, so a world that subtracted a piece
-     * (the `drop` list — no hills in the factory, no lava in the ice world)
-     * keeps its subtraction, and the refusal is recorded in the trace instead
-     * of being silently granted. A note is a request, not an override.
-     *
-     * The two draws above happen either way, forced or not. Overriding *after*
-     * the draw rather than instead of it keeps the random stream identical to
-     * the untuned build, which is what makes the rest of the level line up:
-     * every other note was resolved against that build's columns, and a forced
-     * piece that swallowed a draw would move them all.
-     */
-    let name = weightedPiece(weights);
-    if (name === lastPiece) name = weightedPiece(weights);   // avoid doubles
-    const asked = tuned ? tuned.force : null;
-    if (asked && Object.hasOwn(weights, asked)) name = asked;
-    lastPiece = name;
-    x += PIECES[name](c, x, ctx);
-    trace.push({ name, from, to: x, ...(asked ? { asked, honoured: name === asked } : {}) });
+  /** A draw from the theme's weighting, narrowed to one category of trouble. */
+  const drawIn = (cat) => {
+    if (!cat) return weightedPiece(weights);
+    const allowed = Object.fromEntries(Object.entries(weights)
+      .filter(([name]) => CATEGORIES[cat].includes(name)));
+    /* A theme that has none of this kind gets the ordinary draw. The cloud
+     * world has no `GATE` at all and the keep has no `AIR`; a phrase asking
+     * either of them for one is asking for something the world decided against,
+     * and the world wins — the same rule a note gets a few lines below. */
+    return Object.keys(allowed).length ? weightedPiece(allowed) : weightedPiece(weights);
+  };
+
+  while (x < targetWidth - 26) {
+    let phrase = null;
+    let steps = FLAT_STEPS;
+    if (grammar) {
+      phrase = weightedPiece(dialect);
+      if (phrase === lastPhrase) phrase = weightedPiece(dialect);   // avoid doubles
+      lastPhrase = phrase;
+      steps = productions[phrase].steps;
+    }
+
+    for (const step of steps) {
+      if (x >= targetWidth - 26) break;
+      // The ramp modulates how much calm sits between challenges: the busiest
+      // quarter of the corpus gets the shortest rests. The phrase's own `rest`
+      // multiplies it, which is how a motif carries its pacing with it.
+      const quarter = Math.min(3, Math.floor((x / targetWidth) * 4));
+      const tuned = tuning ? tuning.get(trace.length) : null;
+      ctx.restScale = ((1.35 - 0.6 * (ramp[quarter] / peak)) / intensity)
+        * step.rest * (tuned ? tuned.restScale : 1);
+      ctx.ease = tuned ? tuned.ease : 0;
+      const from = x;
+      x += PIECES.rest(c, x, ctx);
+
+      /*
+       * A NOTE MAY NAME THE PIECE, AND THE WORLD MAY STILL SAY NO.
+       *
+       * `tuned.force` is the third thing feedback can ask for, after "easier"
+       * and "harder": *put a hill here*, *put a gap here*. It is looked up in
+       * `weights` rather than in `PIECES`, so a world that subtracted a piece
+       * (the `drop` list — no hills in the factory, no lava in the ice world)
+       * keeps its subtraction, and the refusal is recorded in the trace instead
+       * of being silently granted. A note is a request, not an override.
+       *
+       * The two draws above happen either way, forced or not. Overriding
+       * *after* the draw rather than instead of it keeps the random stream
+       * identical to the untuned build, which is what makes the rest of the
+       * level line up: every other note was resolved against that build's
+       * columns, and a forced piece that swallowed a draw would move them all.
+       *
+       * A note outranks the phrase for the same reason it outranks the draw:
+       * it is a person saying what should be at that column, and the phrase is
+       * a guess. What it cannot outrank is still the world's `drop` list.
+       */
+      let name = drawIn(step.cat);
+      if (name === lastPiece) name = drawIn(step.cat);   // avoid doubles
+      const asked = tuned ? tuned.force : null;
+      if (asked && Object.hasOwn(weights, asked)) name = asked;
+      lastPiece = name;
+      x += PIECES[name](c, x, ctx);
+      trace.push({
+        name, from, to: x, ...(phrase ? { phrase } : {}),
+        ...(asked ? { asked, honoured: name === asked } : {}),
+      });
+    }
   }
 
   /*
