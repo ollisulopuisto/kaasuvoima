@@ -7,6 +7,52 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.53 — the cube was missing from sixteen levels, and no gate ever asked
+
+`drawBackdrop` branches on the background, and the **factory and cloud branches
+both returned before `drawSkyTower` was ever called**. `LevelScene` was doing its
+half correctly the whole time — it builds the tower object for every level whose
+background is not `none` and which is not a climb, and hands it over. The
+backdrop took it and dropped it on the floor.
+
+**This was not cosmetic.** Since the HUD strip was dismantled (v26.08.17), the
+cube *is* the lives readout and the coin gauge. Sixteen levels had neither:
+all of world 4 including its fortress, 5-5, 5-7, and 7-1, 7-3, 7-4, 7-5, 7-6,
+7-P. Roughly a quarter of the game with no lives count at all.
+
+**Why nobody caught it.** The cube was checked the day it shipped, on `hills`
+and on `dunes`. Those are the same branch. No gate ever asked any other
+background the question.
+
+The fix is one call in each branch, placed before `factoryYard` and `cloudSea`
+respectively, so the foreground still sweeps across the cube's feet the way the
+hill ridges do — the changing occlusion is the depth cue, and putting the tower
+on top would have traded one bug for a worse one. `groundY` is hoisted above
+both branches since they now need it too.
+
+**The gate does not look for the cube, it compares.** `drawSkyTower`'s own
+comment records what happens to detectors here: the first attempt hunted for
+gold in the sky band, found the **exhaust**, and reported counts swinging from
+312 to 2967 between frames. A colour search always finds something. So the gate
+renders each background **twice — once with the tower and once without** — and
+asks the difference. Zero changed pixels means it was never drawn. Then it asks
+*where* the difference is and checks that against `skyTowerAt`, the same
+function the drawing calls, which is exported for exactly this. A gate that
+compares cannot find the wrong thing, because it is not looking for anything.
+
+Both gates walk the background list derived from the level definitions rather
+than a hand-written one, so a new background is covered the day it is added.
+
+**One measured caveat, not fixed here.** Sampled over 66 positions across the
+drift cycle, the cube's visible fraction is 1.00 on hills, peaks, dunes and
+bones — nothing ever covers it — 0.95 mean / 0.46 worst in the factory, and
+**0.76 mean / 0.13 worst in the clouds**, where the cloud sea sits at exactly
+its height. So in world 7 there are stretches where the gauge is seven-eighths
+buried. That is a feel question rather than a correctness one and it is the
+owner's call; it is recorded in ROADMAP.md rather than silently tuned, because
+the obvious tuning is to draw the cube on top, which is the thing this fix
+deliberately did not do.
+
 ## v26.08.20.52 — the comb spreads to every theme, and the rule that decides what wears it
 
 Owner, having played 1-3: *"i'd wanna try out more hex shapes and if they feel

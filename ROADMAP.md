@@ -505,6 +505,44 @@ vaimeni siinä puhtaasti nollaan ilman yhtään menetettyä ikkunaa — mutta se
 
 ## Jonossa
 
+### Kuutio pilvitaustassa on hetkittäin lähes kokonaan piilossa
+
+Mitattu 20.8.2026 sen jälkeen kun kuutio vihdoin piirtyi tehdas- ja
+pilvitaustoihin (v26.08.20.53). 66 näytettä ajautumisjakson yli, näkyvä osuus
+kuution omasta jalanjäljestä:
+
+| tausta | keskiarvo | huonoin |
+| --- | --- | --- |
+| hills, peaks, dunes, bones | 1.00 | 1.00 |
+| factory | 0.95 | 0.46 |
+| **clouds** | **0.76** | **0.13** |
+
+Kaksi asiaa tästä kannattaa lukea, ja vain toinen on ongelma.
+
+**Neljässä taustassa kuutio ei ole koskaan minkään takana.** Keskiarvo 1.00
+tarkoittaa sitä kirjaimellisesti. `drawSkyTower`in oma kommentti lupaa että
+keski- ja lähiharjanteet *"sweep across its feet as you run"* — mitattuna ne
+eivät tee sitä kertaakaan, koska kuutio istuu `groundY - 118`:ssa eli
+harjanteiden latvojen yläpuolella. Lupaus on tosi vain tehtaassa ja pilvissä.
+Tämä ei riko mitään; se vain tarkoittaa että syvyysvihje jonka takia sijoitus
+valittiin toteutuu kahdessa taustassa kuudesta.
+
+**Pilvissä se menee toiseen ääripäähän.** Pilvimeri on täsmälleen kuution
+korkeudella, joten osan ajasta mittarista näkyy kahdeksasosa. Ja kuutio *on*
+elämälukema ja kolikkomittari — maailmassa 7 on siis pätkiä joissa niitä ei voi
+lukea.
+
+**Miksi tätä ei korjattu samalla.** Ilmeisin korjaus on piirtää kuutio
+pilvimeren päälle, ja se on juuri se mitä korjaus tietoisesti jätti tekemättä:
+silloin se lakkaa olemasta maisemassa ja muuttuu takaisin HUD-elementiksi,
+mikä on vastakkainen suunta kuin mihin jokainen tämän pelin lukema on viety.
+Oikea korjaus on todennäköisesti jakaa `cloudSea` kaukaiseen ja lähelläolevaan
+kerrokseen ja panna kuutio niiden väliin — sama ratkaisu kuin harjanteilla, ja
+silloin pilvissä olisi se vaihteleva peitto jota muualta puuttuu. Se on
+kuitenkin *"miltä se tuntuu"* -kysymys eikä oikeellisuuskysymys, ja se on
+omistajan päätettävä.
+
+
 ### Kenno: yksi kenttä per teema, ja se päätös joka on nyt edessä
 
 *(Omistaja 20.8.2026: "i'd wanna try out more hex shapes and if they feel good,

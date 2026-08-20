@@ -26733,6 +26733,110 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       K.at[0].gold === 0, `0 %: ${K.at[0].gold} kultapikseliä`);
   }
 
+  /*
+   * KUUTIO ON JOKAISESSA TAUSTASSA JOLLE SE ANNETAAN — ja tätä ei ollut.
+   *
+   * `drawBackdrop` haarautuu taustan mukaan, ja tehdas- ja pilvihaara
+   * **palasivat ennen kuin `drawSkyTower` ehdittiin kutsua**. `level.js` teki
+   * oman osuutensa oikein: se rakentaa torniolion ja antaa sen jokaiselle
+   * kentälle jonka tausta ei ole `none` eikä joka ole pystykenttä. Taustapiirto
+   * otti sen vastaan ja pudotti lattialle.
+   *
+   * Mitattuna 16 kenttää: koko maailma 4 linnakkeineen, 5-5, 5-7 sekä 7-1,
+   * 7-3, 7-4, 7-5, 7-6 ja 7-P. Niissä ei ole ollut elämälukemaa eikä
+   * kolikkomittaria lainkaan, koska molemmat asuvat kuutiossa sen jälkeen kun
+   * HUD-nauha purettiin.
+   *
+   * MIKSI TÄTÄ EI HUOMATTU: kuutio tarkistettiin sinä päivänä kun se tuli, ja
+   * se tarkistettiin `hills`- ja `dunes`-taustoilla. Molemmat kulkevat samaa
+   * haaraa. Yksikään portti ei koskaan kysynyt muilta.
+   *
+   * MITEN TÄMÄ MITATAAN, ja tässä on yksi tämän repon jo maksama oppitunti.
+   * `drawSkyTower`in oma kommentti varoittaa siitä: portti joka etsi kultaa
+   * taivaskaistalta löysi **pakokaasun** ja raportoi luottavaisesti lukuja
+   * jotka heittelivät 312:sta 2967:ään framejen välillä. Väriin perustuva
+   * etsintä löytää aina jotain.
+   *
+   * Joten tässä ei etsitä kuutiota. Sama tausta piirretään **kahdesti**, kerran
+   * tornin kanssa ja kerran ilman, ja kysytään erosta: jos yksikään pikseli ei
+   * muutu, kuutiota ei piirretty. Sitten kysytään **missä** ero on, ja se
+   * verrataan `skyTowerAt`in palauttamaan paikkaan — samaan funktioon jota
+   * piirto käyttää, koska se on viety ulos juuri tätä varten. Näin portti ei
+   * voi löytää väärää asiaa: se ei etsi mitään, se vertaa.
+   */
+  {
+    const B = await page.evaluate(async () => {
+      const { drawBackdrop, skyTowerAt } = await import('/src/gfx/backdrop.js');
+      const { levelIds, getLevel } = await import('/src/data/levels.js');
+
+      /* Ne taustat joille `level.js` antaa tornin, luettuna siitä samasta
+       * ehdosta eikä listasta: kaikki paitsi `none`, pystykentät pois. */
+      const bgs = new Map();
+      for (const id of levelIds()) {
+        const d = getLevel(id);
+        if (d.bg === 'none' || d.vertical) continue;
+        if (!bgs.has(d.bg)) bgs.set(d.bg, { theme: d.theme, level: id, n: 0 });
+        bgs.get(d.bg).n++;
+      }
+
+      const W = 320, H = 240, TICK = 300, CAMX = 640;
+      const shot = (bg, theme, tower) => {
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+        drawBackdrop(g, bg, theme, CAMX, W, H, TICK, 0, null, tower);
+        return g.getImageData(0, 0, W, H).data;
+      };
+
+      const out = [];
+      for (const [bg, info] of bgs) {
+        const tower = { tick: TICK, coins: 60, lives: 3, lagY: 0, launch: 0 };
+        const withCube = shot(bg, info.theme, tower);
+        const without = shot(bg, info.theme, null);
+        let diff = 0, minX = 1e9, maxX = -1, minY = 1e9, maxY = -1;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const k = (y * W + x) * 4;
+            if (withCube[k] !== without[k] || withCube[k + 1] !== without[k + 1]
+              || withCube[k + 2] !== without[k + 2]) {
+              diff++;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        const at = skyTowerAt(TICK, CAMX, W, H);
+        /* Onko laskettu paikka sen sisällä mikä muuttui? Väljästi, koska
+         * kuution ympärillä on utua ja pakokaasua ja ne ovat osa sitä. */
+        const inside = diff > 0 && at.x >= minX - 8 && at.x <= maxX + 8
+          && at.y >= minY - 8 && at.y <= maxY + 8;
+        out.push({ bg, theme: info.theme, level: info.level, levels: info.n,
+          diff, inside, at, box: [minX, minY, maxX, maxY] });
+      }
+      return out;
+    });
+
+    const blind = B.filter((b) => b.diff === 0);
+    expect('kuutio piirtyy jokaisessa taustassa jolle se annetaan',
+      blind.length === 0,
+      blind.length
+        ? `${blind.map((b) => `${b.bg} (${b.levels} kenttää, esim. ${b.level})`).join(', ')}`
+          + ` — ei yhtään muuttunutta pikseliä`
+        : `${B.length} taustaa: ${B.map((b) => `${b.bg} ${b.diff}px`).join(', ')}`);
+
+    /* Ja se on kuutio siellä missä sen pitääkin olla eikä jokin muu ero. */
+    const astray = B.filter((b) => b.diff > 0 && !b.inside);
+    expect('muuttunut alue on siellä minne skyTowerAt sanoo kuution menevän',
+      astray.length === 0,
+      astray.length
+        ? astray.map((b) => `${b.bg}: laskettu ${b.at.x},${b.at.y} ei ole`
+          + ` laatikossa ${b.box.join(',')}`).join('; ')
+        : `${B.length} taustaa, jokaisessa osuu`);
+  }
+
   /* ------------------------------- lavat --------------------------------- */
   /*
    * LIIKKUVAT LAVAT (20.8.2026). Owner, asking again after a long time:

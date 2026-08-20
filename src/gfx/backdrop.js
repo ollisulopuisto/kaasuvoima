@@ -987,21 +987,45 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
 
   sky(ctx, th, theme, viewW, viewH, camX, tick, clock);
 
+  /*
+   * The ground line every layer below is measured from. Hoisted above the two
+   * early-returning branches because they need it too — see the tower.
+   */
+  const groundY = viewH + drop;
+
   if (bg === 'factory') {
     /* Nothing is drawn above the yard, so here the sun can go straight in. */
     drawSun(ctx, theme, viewW, viewH, camX, tick, clock);
+    /*
+     * THE CUBE GOES IN EVERY BRANCH THAT IS GIVEN ONE, and for two days it
+     * went in only one.
+     *
+     * This branch and the cloud one below both returned before the tower was
+     * ever drawn. `LevelScene` was doing its half correctly — it builds the
+     * tower for every level whose background is not `none` and which is not a
+     * climb — and handed it to a function that dropped it on the floor. The
+     * cost was not cosmetic: since the HUD strip was dismantled the cube *is*
+     * the lives readout and the coin gauge, so sixteen levels had neither.
+     * All of world 4 including its fortress, 5-5, 5-7, and six of world 7.
+     *
+     * Before the yard, for the same reason the hills branch puts it between
+     * its far and mid ridges: the foreground has to sweep across its feet as
+     * you run. Changing occlusion is the depth cue the eye cannot argue with.
+     */
+    drawSkyTower(ctx, tower, camX, groundY, th, viewW);
     factoryYard(ctx, th, camX, viewW, viewH, tick);
     return;
   }
 
   if (bg === 'clouds') {
     drawSun(ctx, theme, viewW, viewH, camX, tick, clock);
-    cloudSea(ctx, th, camX, viewW, viewH, tick, viewH + drop);
+    /* Behind the cloud sea, so the nearer banks pass in front of it. Same
+     * reason as the factory branch above. */
+    drawSkyTower(ctx, tower, camX, groundY, th, viewW);
+    cloudSea(ctx, th, camX, viewW, viewH, tick, groundY);
     weather(ctx, theme, camX, viewW, viewH, tick);
     return;
   }
-
-  const groundY = viewH + drop;
 
   const shape = bg === 'dunes' ? 'round' : bg === 'peaks' ? 'peak' : 'dome';
   const farColor = mix(th.hillDark, th.sky[1], 0.62);
