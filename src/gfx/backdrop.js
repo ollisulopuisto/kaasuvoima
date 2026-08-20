@@ -177,19 +177,52 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
    * parallaksi jää voimaan: aurinko on silloin maisemaa eikä mittari.
    */
   const { x: cx, y: cy } = sunPos(viewW, viewH, clock, camX);
-  if (themeName === 'desert') disc(ctx, cx, cy, 15, '#fff2c0', '#ffd070', tick, true);
-  else if (themeName === 'grass') disc(ctx, cx, cy, 12, '#fffde0', '#ffe98c', tick, true);
-  else if (themeName === 'ice') disc(ctx, cx, cy, 11, '#ffffff', '#cfe6ff', tick, false);
-  else if (themeName === 'night') disc(ctx, cx, cy, 13, '#fff8d8', '#e8d89a', tick, false);
-  // Luulaakson kuu on pelin suurin ja kylmin: Danse macabre on keskiyö, ja
-  // keskiyö on tässä maailmassa kellonaika eikä tunnelma.
-  else if (themeName === 'bone') disc(ctx, cx, cy, 16, '#f4f0e0', '#b0b4c8', tick, false);
-  // Kaasukehän aurinko on pelin ainoa jolla on sädekehä ilman lämmintä
-  // taivasta: pilvikerroksen päällä valo tulee suoraan eikä ilmakehän läpi,
-  // joten se on valkoinen ja terävä eikä keltainen ja utuinen.
-  else if (themeName === 'cloud') disc(ctx, cx, cy, 13, '#ffffff', '#ffe8a0', tick, true);
-  else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
+  const sun = SUNS[themeName] || SUNS.default;
+  disc(ctx, cx, cy, sun.r, sun.core, sun.rim, tick, sun.rays);
 }
+
+/**
+ * Every theme's sun, in one table, because two things need it now.
+ *
+ * Luulaakson kuu on pelin suurin ja kylmin: Danse macabre on keskiyö, ja
+ * keskiyö on tässä maailmassa kellonaika eikä tunnelma. Kaasukehän aurinko on
+ * pelin ainoa jolla on sädekehä ilman lämmintä taivasta: pilvikerroksen päällä
+ * valo tulee suoraan eikä ilmakehän läpi, joten se on valkoinen ja terävä eikä
+ * keltainen ja utuinen.
+ */
+const SUNS = {
+  desert: { r: 15, core: '#fff2c0', rim: '#ffd070', rays: true },
+  grass: { r: 12, core: '#fffde0', rim: '#ffe98c', rays: true },
+  ice: { r: 11, core: '#ffffff', rim: '#cfe6ff', rays: false },
+  night: { r: 13, core: '#fff8d8', rim: '#e8d89a', rays: false },
+  bone: { r: 16, core: '#f4f0e0', rim: '#b0b4c8', rays: false },
+  cloud: { r: 13, core: '#ffffff', rim: '#ffe8a0', rays: true },
+  default: { r: 10, core: '#e8e8ff', rim: '#9a9ac8', rays: false },
+};
+
+/*
+ * WHERE THE SECOND SUN ACTUALLY WAS, since it took three attempts to find.
+ *
+ * Owner, twice: *"why does level KUUMA DYYNI have two suns?"* and then *"there
+ * DEFINITELY are two SEPARATE SUNS in level 2-1."*
+ *
+ * The first attempt blamed this glow's hard rim. That was a real fault and
+ * worth fixing, but it was not this. The second attempt blamed a cloud cutting
+ * the disc in half, drew crossing clouds thin, and fixed nothing — swept at
+ * every 24 px across 2-1, the five frames whose core colour formed two blobs
+ * are all a COIN passing in front, which no player would call a second sun.
+ * Both attempts also produced a detector that agreed with them, which is the
+ * lesson: a detector written to confirm a theory confirms it.
+ *
+ * Looked at instead of measured, the answer is in the picture and not in the
+ * sky at all. It is the COIN SOLID — round in outline, glowing gold, hanging
+ * in the same sky a few tiles from the sun, and at half a screen of haze with
+ * its facets only 0.72/0.5 apart it had no visible edges. A low-contrast round
+ * bright object beside the sun IS a second sun.
+ *
+ * So the fix is in `tower.js` and in the haze this file hands it, not here.
+ * See `TONES` there. There is nothing wrong with the sun.
+ */
 
 /**
  * THE COIN CUBE HAS A LIFE OF ITS OWN.
@@ -274,7 +307,12 @@ function drawSkyTower(ctx, tower, camX, groundY, th, viewW) {
   drawTower(ctx, at.x, at.y, {
     fill: tower.fill,
     lives: tower.lives,
-    haze: 0.5,
+    /* Less haze than the hills it hangs among, for the same reason the tones
+     * are spread: haze is what turned a faceted solid into a glowing blob, and
+     * a glowing blob in the sky beside the sun gets read as a second sun. It
+     * still recedes — it is smaller, paler and passed in front of — but not so
+     * far that it stops being an object. */
+    haze: 0.3,
     sky,
     /* The landscape you are standing in, so the thing in the sky is made of
      * the same stuff as the world under your feet. Owner: *"make it have the

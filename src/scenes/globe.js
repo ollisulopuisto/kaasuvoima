@@ -175,9 +175,35 @@ const TIP_FRAMES = 7;
  * the screen — and receding as it flattens is what opening out looks like
  * anyway.
  */
-const FOLD_OPEN = 34;
-const FOLD_FLAT = 12;
-const FOLD_SHUT = 30;
+/*
+ * KESTOT, JA NE OVAT PITKIÄ TARKOITUKSELLA.
+ *
+ * Omistaja: *"the warping between worlds animation is too hasty, which makes
+ * it hard to read"* ja *"changing between worlds could have some folding up or
+ * folding in and then folding out — instead of rotation, cos rotation = moving
+ * between levels."*
+ *
+ * Jälkimmäinen on tämän koko peruste. Kaksi siirtymää tarvitsee **kaksi eri
+ * verbiä**, tai ne ovat sama tapahtuma kahdella kestolla: kenttä kierähtää,
+ * maailma taittuu. Ero ei kuitenkaan ollut luettavissa, koska taitto oli 76
+ * framea ja kierähdys 37 — eli sama liike hitusen hitaampana.
+ *
+ * Nyt taitto kestää 132 framea, yli kolme kertaa kierähdyksen, ja sen muoto on
+ * eri: **aukea, PYSÄHDY LATTEANA, sulkeudu.** Se litteä hetki on se joka tekee
+ * tästä taiton eikä käännöksen — kierähdyksessä ei ole hetkeä jolloin mikään
+ * pysähtyy, ja tässä on, ja sen aikana katsoja ehtii nähdä että kappale on
+ * jotain muuta kuin se oli.
+ *
+ * Ja avautuminen ja sulkeutuminen on **pehmennetty** (`easeFold`): lineaarinen
+ * neliulotteinen kierto näyttää koneelta, ja hidas alku ja loppu antaa
+ * ääripäille ajan jossa ne luetaan.
+ */
+const FOLD_OPEN = 46;
+const FOLD_FLAT = 40;
+const FOLD_SHUT = 46;
+
+/** Slow at both ends, so the open and the shut are each read as an event. */
+const easeFold = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const NET_SCALE = 0.30;
 
 /**
@@ -833,7 +859,7 @@ export class GlobeScene {
     const total = FOLD_OPEN + FOLD_FLAT + FOLD_SHUT;
     f.t += 1;
     if (f.t <= FOLD_OPEN) {
-      this.fold = f.t / FOLD_OPEN;
+      this.fold = easeFold(f.t / FOLD_OPEN);
     } else if (f.t <= FOLD_OPEN + FOLD_FLAT) {
       this.fold = 1;
       if (!f.swapped) {
@@ -855,7 +881,7 @@ export class GlobeScene {
         Sfx.play('doorin');
       }
     } else {
-      this.fold = Math.max(0, 1 - (f.t - FOLD_OPEN - FOLD_FLAT) / FOLD_SHUT);
+      this.fold = Math.max(0, 1 - easeFold((f.t - FOLD_OPEN - FOLD_FLAT) / FOLD_SHUT));
     }
     if (f.t >= total) {
       /* Arriving on the face the door led to, standing on its edge, walking

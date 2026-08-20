@@ -75,8 +75,30 @@ const CAM_Z = 5.2;
 /** How tall one banked red coin is, floating above. */
 const RED_H = 4;
 
-/** Three quantised tones, the same rule the die and the globe are drawn by. */
-const TONES = [1, 0.72, 0.5];
+/**
+ * Three quantised tones, the same rule the die and the globe are drawn by —
+ * but SPREAD WIDER here than anywhere else, and that is a legibility fix
+ * rather than a style.
+ *
+ * Owner, twice: *"there DEFINITELY are two SEPARATE SUNS in level 2-1"* and
+ * *"sure still looks like a cube to me."* Both are the same fault seen from
+ * two sides. Swept across the whole of 2-1 there is exactly one sun disc in
+ * every frame — but this solid hangs in the same sky, is round in outline,
+ * glows gold, and at 0.72/0.5 through half a screen of haze its faces differed
+ * by too little to be read as faces. A low-contrast round bright object beside
+ * the sun is a second sun, and a solid whose facets do not show is a lump.
+ *
+ * Widening the tones fixes both at once: the facets become edges, the edges
+ * make it a polyhedron, and a polyhedron is not a sun.
+ *
+ * THE GOLD KEEPS THE NARROW SPREAD, and that is not an oversight. Measured,
+ * `#f0b000` at 0.34 is (82,60,0), which is not dark gold — it is brown, dark
+ * enough that the gate stopped counting it as gold at all and the pile lost a
+ * whole depth step. The shell has to be read as FACETS and the coins have to
+ * be read as COINS, and those want opposite things from a shading ramp.
+ */
+const TONES = [1, 0.62, 0.34];
+const GOLD_TONES = [1, 0.72, 0.5];
 
 /**
  * The coin lattice: 5 by 5 by 4 is a hundred cells for a hundred coins, so a
@@ -311,8 +333,8 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
      * receded as hard as the walls came out grey-green against the sky and
      * stopped being readable at all.
      */
-    const face = TONES.map((t) => faded(shade(GOLD, t), haze * 0.3, sky));
-    const foot = TONES.map((t) => faded(shade(GOLD, t * 0.6), haze * 0.3, sky));
+    const face = GOLD_TONES.map((t) => faded(shade(GOLD, t), haze * 0.3, sky));
+    const foot = GOLD_TONES.map((t) => faded(shade(GOLD, t * 0.6), haze * 0.3, sky));
     for (const b of blocks) {
       const step = b.z > 0.35 ? 0 : b.z > -0.02 ? 1 : 2;
       const bx = Math.round(b.x - w / 2);
