@@ -1270,6 +1270,62 @@ on ainoa kohta `tone`ssa jonka lopputulosta portti ei kuule. `AudioWorklet`
 korjaisi sekä sen että hard syncin hinnan yhdellä kertaa, ja se on ainoa syy
 jonka takia sen vielä joskus voisi tehdä.
 
+### The music pass — ✔ done 20.8.2026
+
+*(Owner: "i want a music pass … go write in different genres … avoid cliches …
+the speedup in the first tune sounds bad … i frigging LOOOOVE dramatic strings
+with bends, like gorecki". Written in English because it was asked for in
+English, and because everything new in this section is.)*
+
+Three things were asked for and all three are in. What is worth keeping here is
+the part that was not obvious before it was done.
+
+**The speed-up was two speed-ups.** `HURRY_SPEED` (the clock) and the `double
+time` variation (the arrangement) both shortened the step, and a fix that had
+only found one of them would have left the owner hearing the same fault every
+tenth pass. Both are now the same mechanism — one named voice re-articulates
+each note as two of half the length, everything else untouched — and the gate
+measures four numbers rather than one, because any three of them are also true
+of a plain tempo change. Measured on `jaatie`: lead 14 → 28 onsets, comp 4 → 4,
+bass 16 → 16, step 105.634 ms → 105.634 ms.
+
+**A borrowed melody is not the doubled voice.** This fell out of DESIGN.md kohta
+1 b rather than out of taste: re-cutting an expired composition into twice as
+many notes is the slide the naming rule exists to stop. `cave`, `bone` and
+`autiovuori` name their accompaniment instead, and the rule is written down in
+`DOUBLE_TIME` where the next person to add a track will read it.
+
+**Which line doubles cannot be inferred.** The first version picked "the comp,
+if there is one", and on the game's most-heard track that produced a 12 ms
+click, because `level`'s comp is single-step stabs. Every track names its own
+now, `null` is a legal answer, and the gate refuses a name that points at a
+voice with nothing long enough to subdivide — the failure mode being that all
+three mistakes look identical from outside.
+
+**Structure is checkable, costume is not.** Each of the six new genre tracks is
+gated on the one thing that would stop being true if the piece had been written
+the ordinary way: no bass note on beat one (the waltz), no chord on a beat and
+no repeated bass pitch in a bar (the polka), every bar of the tune exactly
+2+2+3 (the 7/8), three periods that meet only after two and a half passes (the
+cross-rhythm), every B natural rising and every B flat falling (the maqam), a
+canon that really is the tune sixteen steps late and a fifth down (the strings).
+None of those is "does it have the right notes in it"; all of them are "is it
+built the way the label claims".
+
+**The bend had to be built before the tracks that need it.** `glide` slid into a
+note from wherever the voice last was; nothing could slide *out* of one. `bend`
+and `cents` are two new note-mark fields, and `cents` is what makes a maqam
+possible at all — Bayati's second degree is not on the twelve-tone grid this
+sequencer counts in.
+
+**What is left, and it is a listening question.** Six tracks were placed by
+argument (see the changelog table). Whether the desert wants a maqam under it
+for eight levels, whether the houses want a valse triste or something jollier,
+and whether the strings on the game-over screen are moving or merely slow are
+things no gate can answer. The one that most deserves a real listen is `seiska`:
+7/8 is the only metre in this game that a player has never heard here before,
+and a whole world of it is either the best thing in the pass or the most tiring.
+
 ### Omistajan pyynnöt 17.8.2026 — vielä tekemättä
 
 1. ✔ **Vinot kentät — tehty 17.8.2026** (v26.08.18.13). 45° rinteet, oma

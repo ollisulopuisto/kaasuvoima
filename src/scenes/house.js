@@ -1,7 +1,7 @@
 import { drawText } from '../gfx/font.js';
 import { drawItem } from '../gfx/sprites.js';
 import { drawCoinSprite } from '../gfx/tiles.js';
-import { Sfx } from '../core/audio.js';
+import { Music, Sfx } from '../core/audio.js';
 
 /**
  * THE HOUSE, AND THE FOUR THINGS THAT HAPPEN IN ONE.
@@ -35,10 +35,33 @@ export class House {
    * @param node   the house node; its `game` field picks which of the four
    * @param onClose called once, with a message to show or an empty string
    */
+  /*
+   * THE HOUSE HAS ITS OWN TUNE NOW (20.8.2026), and it is a waltz.
+   *
+   * Until this pass the four rooms had no music at all: you walked in off the
+   * overworld and the overworld's tune kept playing, which is the one thing
+   * that makes a room not feel like a room. Every other place in this game
+   * announces itself by sound (DESIGN.md kohta 8 — music is the narrator, and
+   * the narrator was saying nothing here).
+   *
+   * A slow waltz rather than something jolly, because three of these four rooms
+   * are gambling and the fourth is a raffle. `valssi` is a valse triste with the
+   * bass a beat late; it is unhurried and it is not on your side, which is the
+   * correct temperature for a room that takes stakes.
+   *
+   * WHAT PLAYS AFTERWARDS IS REMEMBERED, NOT NAMED. The room does not know it
+   * was entered from an overworld — that is the whole point of `house.js`, one
+   * copy for two maps — so it restores whatever was playing when it opened
+   * instead of asserting `map`. `Music.play` is a no-op when the name has not
+   * changed, so a muted game (where `current` is whatever would resume) is
+   * unaffected.
+   */
   constructor(game, node, onClose) {
     this.game = game;
     this.node = node;
     this.onClose = onClose;
+    this.resumeTrack = Music.current;
+    Music.play('valssi');
     this.done = false;
     this.tick = 0;
     this.houseGame = HOUSE_GAMES.includes(node.game) ? node.game : 'items';
@@ -248,6 +271,7 @@ export class House {
     this.game.state.cleared[this.node.id] = true;
     this.game.persist();
     this.done = true;
+    if (this.resumeTrack) Music.play(this.resumeTrack);
     this.onClose(message || '');
   }
 
@@ -285,10 +309,12 @@ export class House {
         got = roll < 0.34 ? 'star' : roll < 0.67 ? 'soup' : null;
       }
       if (got) this.game.state.reserve = got;
-      this.game.state.cleared[this.node.id] = true;
-      this.game.persist();
-      this.done = true;
-      this.onClose(got ? 'SAIT ESINEEN VARASTOON' : 'ARPA OLI TYHJA');
+      /* Through `closeHouse` rather than repeating its body, which is what this
+       * used to do: the room now also has music to put back (see the
+       * constructor), and a second exit that forgets to would leave the waltz
+       * playing over the world map. The message is the only thing that differed
+       * between the two paths. */
+      this.closeHouse(got ? 'SAIT ESINEEN VARASTOON' : 'ARPA OLI TYHJA');
       /*
        * `reserve` eikä `powerup`, ja se on aamun korjaus loppuun asti.
        *

@@ -2311,6 +2311,18 @@ export function audioDiag() {
      */
     stolen: Music._stolenHits,
     silenced: Music._silencedNotes,
+    /*
+     * Double time as numbers rather than as a label.
+     *
+     * `doubling` is the line that is currently subdividing, and `onsets` is how
+     * many notes each voice has actually started. Together they are the whole
+     * claim — one count doubles and the rest do not move — and neither half
+     * proves it alone: a voice named in the table proves only that somebody
+     * typed a name, and counts without the name do not say which line was
+     * supposed to move. Same reasoning as `stolen`/`silenced` above.
+     */
+    doubling: Music._doubling() || 'none',
+    onsets: Object.fromEntries(Music._onsets),
   };
 }
 
@@ -2370,6 +2382,81 @@ function compile(notes) {
   return { map, len: step };
 }
 
+/**
+ * The same bar, written once and played `times`.
+ *
+ * Only the asymmetric-metre tracks need it, and they need it for a reason that
+ * is worth saying out loud: the sequencer's bar is sixteen steps, so a piece in
+ * sevens only stops drifting against the arrangement when its parts are a
+ * common multiple of seven and sixteen — a hundred and twelve steps, sixteen
+ * bars. Written out by hand that is a drone typed sixteen times, and a drone
+ * typed sixteen times is sixteen chances to typo one note of it.
+ *
+ * The notes themselves are still literals in the table, which is the part that
+ * matters: this repeats a bar, it does not compose one.
+ */
+const repeatBars = (times, bar) => Array.from({ length: times }, () => bar).flat();
+
+/**
+ * The same line again, `delay` steps later and `shift` semitones away, cut to
+ * `total` steps.
+ *
+ * A canon at a close interval is the oldest device in the Górecki/Pärt bag and
+ * the one that cannot be faked: the second voice has to be the *same* line, or
+ * the seconds and fourths that grind against each other are just a chord
+ * somebody chose. Deriving it here means the two voices cannot drift apart when
+ * the cell is edited — and the cut at `total` is not a compromise but the shape
+ * of the thing, since a round is always interrupted by its own next entry.
+ */
+const canonAt = (cell, delay, shift, total) => {
+  const out = delay > 0 ? [[null, delay]] : [];
+  let at = delay;
+  for (const [semi, len, mark] of cell) {
+    if (at >= total) break;
+    const span = Math.min(len, total - at);
+    out.push([semi === null ? null : semi + shift, span, mark]);
+    at += span;
+  }
+  if (at < total) out.push([null, total - at]);
+  return out;
+};
+
+/*
+ * THE CELL, and the reason it is a constant and not eight notes typed twice.
+ *
+ * A minor, stepwise, no leap wider than a third, and it ends where it started.
+ * Everything in `jouset` is this cell: the tune is the cell, the second voice
+ * is the cell late and low (`canonAt`), and the three other phrases are the
+ * cell with exactly one thing changed each. That is the whole method — one
+ * shape, repeated with mutations too small to announce themselves — and it is
+ * why the piece can hold still for four minutes without repeating a bar
+ * verbatim.
+ */
+const GORECKI_CELL = [
+  [0, 8], [2, 8], [3, 8], [2, 8], [0, 8], [-2, 4], [0, 4], [0, 16, 'v'],
+];
+
+/**
+ * The marks the strings play with, shared by the tune and its canon.
+ *
+ * Shared rather than copied because the canon *is* the tune: a bend that the
+ * second voice does not make is a bend that turns a canon into two different
+ * pieces played at once.
+ */
+const GORECKI_MARKS = {
+  /* Vibrato that arrives almost a second in. A string player does not shake a
+   * note that has only just started, and at this tempo a note lasts 3.6 s. */
+  v: { vibrato: 5, vibratoRate: 4, vibDelay: 0.9 },
+  /* A slow slide into the note — a portamento, in the bad old string-playing
+   * sense that the twentieth century took back on purpose. */
+  s: { glide: 0.8 },
+  /* And the two that leave the note instead of arriving at it: a semitone
+   * down, and a quarter tone down. The quarter tone is the one that hurts,
+   * because there is no note there to land on. */
+  b: { bend: -1, bendGlide: 0.9 },
+  q: { bend: -0.5, bendGlide: 0.85 },
+};
+
 const TRACKS = {
   /*
    * JÄÄTIE — maailman 3 oma raita, ja pelin ensimmäinen joka on kirjoitettu
@@ -2402,6 +2489,9 @@ const TRACKS = {
    */
   jaatie: {
     tempo: 142,
+    /* Double time subdivides this line and no other: the tune itself, and every note of it is an eighth or longer.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       wave: 'pulse', duty: 0.25, pwm: 0.16, pwmRate: 1.4,
       gain: 0.12, octave: 12, vibrato: 3, vibratoRate: 6.5, staccato: 0.9,
@@ -2444,6 +2534,9 @@ const TRACKS = {
 
   title: {
     tempo: 128,
+    /* Double time subdivides this line and no other: the tune; the title screen has no clock, so this is only ever the arrangement's own double-time pass.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       wave: 'square', gain: 0.15, detune: 9, octave: 12,
       notes: [
@@ -2495,6 +2588,9 @@ const TRACKS = {
    */
   map: {
     tempo: 138,
+    /* Double time subdivides this line and no other: the tune, over a bass that is already the busiest thing here.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     swing: 0.22,
     lead: {
       wave: 'triangle', gain: 0.13, detune: 6, vibrato: 3, staccato: 0.75,
@@ -2586,6 +2682,9 @@ const TRACKS = {
    */
   level: {
     tempo: 156,
+    /* Double time subdivides this line and no other: the tune. Not the comp: its stabs are one step long, and halved they measured 12 ms, which is a click.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     swing: 0.2,
     steal: {
       voice: 'bass',
@@ -2679,6 +2778,9 @@ const TRACKS = {
    */
   factory: {
     tempo: 168,
+    /* Double time subdivides this line and no other: the tune, over machinery that is not allowed to speed up.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       wave: 'square', gain: 0.11, detune: 12,
       notes: [
@@ -2777,6 +2879,9 @@ const TRACKS = {
       work: 'Vuorenkuninkaan luolassa',
     },
     tempo: 88,
+    /* Double time subdivides this line and no other: a borrowed tune, so the accompaniment doubles and Grieg does not.
+     * See `DOUBLE_TIME`. */
+    double: 'harm',
     /*
      * The accelerando, as a rate rather than a switch: `per` is how much of the
      * starting tempo is added per pass through the loop, and `max` is where it
@@ -2833,6 +2938,9 @@ const TRACKS = {
 
   fortress: {
     tempo: 116,
+    /* Double time subdivides this line and no other: the tune; there is so little else in this room that anything else would go unheard.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       wave: 'sawtooth', gain: 0.1, vibrato: 5, vibratoRate: 5,
       notes: [
@@ -2912,6 +3020,9 @@ const TRACKS = {
       work: 'Danse macabre',
     },
     tempo: 96,
+    /* Double time subdivides this line and no other: a borrowed tune, so the accompaniment doubles and Saint-Saens does not.
+     * See `DOUBLE_TIME`. */
+    double: 'harm',
     lead: {
       // Ksylofoni: kolmioaalto, lyhyt kesto ja melkein olematon pito. Isku ja
       // vaimeneminen, ei jatkuva sävel — se on koko ero soittimeen.
@@ -3029,6 +3140,9 @@ const TRACKS = {
    */
   cloud: {
     tempo: 104,
+    /* Double time subdivides this line and no other: the tune; its sixteenth runs are below the floor and stay exactly as written.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       // Kolmioaalto ja pitkä pito: puhallinmainen ääni, ei kanttiaallon terä.
       // Vibrato on hidas ja kapea, koska se on kannattelua eikä väristystä.
@@ -3186,6 +3300,9 @@ const TRACKS = {
       work: 'Yö Autiovuorella',
     },
     tempo: 132,
+    /* Double time subdivides this line and no other: a borrowed tune, so the accompaniment doubles and Mussorgsky does not.
+     * See `DOUBLE_TIME`. */
+    double: 'harm',
     lead: {
       /* Kanttiaalto ja kapea detune: tämä on ainoa raita jonka pitää kuulostaa
        * siltä että se huutaa. Staccato on pitkä, koska jouset eivät irrota. */
@@ -3287,6 +3404,9 @@ const TRACKS = {
    */
   star: {
     tempo: 208,
+    /* Double time subdivides this line and no other: the only track whose lead, harm and comp are all sixteenths already.
+     * See `DOUBLE_TIME`. */
+    double: 'bass',
     lead: {
       wave: 'square', gain: 0.13, detune: 8, octave: 12, staccato: 0.9,
       notes: [
@@ -3352,6 +3472,9 @@ const TRACKS = {
    */
   boss: {
     tempo: 176,
+    /* Double time subdivides this line and no other: the tune, over a bass that is busy carrying the hard-sync marks.
+     * See `DOUBLE_TIME`. */
+    double: 'lead',
     lead: {
       wave: 'sawtooth', gain: 0.12, detune: 16, vibrato: 4,
       notes: [
@@ -3388,6 +3511,575 @@ const TRACKS = {
       hat: 'xxxxxxxxxxxxxxxx',
     },
   },
+
+  /* ===================================================================== *
+   *  THE GENRE PASS (20.8.2026)                                           *
+   *                                                                       *
+   *  Owner: *"go write in different genres: a waltz, a polka, trad Eastern *
+   *  European folk music, something South of Sahara, Middle-East etc. but  *
+   *  avoid cliches."*                                                     *
+   *                                                                       *
+   *  The instruction that did the work is the last three words, and it is  *
+   *  also the one that decided how these six are written. Every one of     *
+   *  these genres has a costume — the oom-pah, the augmented second, the   *
+   *  bell-and-drum — and the costume is the part that is *not* the music.  *
+   *  So each track below takes the genre's **structure** instead: what its *
+   *  bar is, where its harmony moves, which way its scale runs. That is    *
+   *  also the only half that a three-voice chip sequencer can honestly     *
+   *  play, and it is the half that can be checked from the data rather     *
+   *  than from a listener's goodwill — which is why every one of these has *
+   *  a gate in `tools/verify.mjs` that reads the notes and not the label.  *
+   *                                                                       *
+   *  All six are written for this game (DESIGN.md kohta 1 b: no `source`   *
+   *  field, and none is asked for — the naming rule is about borrowed      *
+   *  music, not about all music). A genre is a convention and not a work;  *
+   *  that distinction is kohta 2 of the same document.                     *
+   * ===================================================================== */
+
+  /*
+   * VALSSI — a waltz, and a slow one, in B minor.
+   *
+   * NOT THE VIENNESE LILT, and the difference is in one part. The cliché is
+   * the accompaniment: root on the downbeat, chord on two and three, for ever.
+   * This bass has **no downbeat at all**. Beat one is silent in the bass and
+   * carried by the harmony alone; the root arrives on beat two and the fifth
+   * on beat three, so the ground shows up a beat after the bar does. That is a
+   * displaced bass, it is the reason this reads as unsteady rather than as
+   * genteel, and it is checkable: not one bass note falls on a bar line.
+   *
+   * The other half is the nordic valse triste rather than the ballroom. The
+   * tune is long and mostly falling, it ends its first half on the fifth
+   * without resolving, and the harmony walks i–VI–iv–i–VI–III–V–i, which is
+   * eight bars of minor with exactly **one** major dominant in it. That F#
+   * major in bar seven carries an A#, the raised leading tone, and it is the
+   * only note in the piece that is outside B natural minor. One note, once per
+   * pass, and the whole cadence hangs off it — the same kind of single-note
+   * claim as the cloud world's lydian fourth, and gated the same way.
+   *
+   * The bar is six sixteenths, so eight bars are 48 steps and every part of
+   * this track is a multiple of six: a waltz written over a four-square
+   * sequencer wanders against its own bar the moment one voice is not.
+   */
+  valssi: {
+    tempo: 84,
+    /* Double time subdivides this line and no other: the tune. A waltz whose
+     * *bass* subdivided would be back to the oom-pah this one is written
+     * against. See `DOUBLE_TIME`. */
+    double: 'lead',
+    lead: {
+      /* Triangle and a long hold: bowed rather than struck, and the vibrato
+       * arrives late enough that a short note never gets any. */
+      wave: 'triangle', gain: 0.12, staccato: 0.94, attack: 0.03, hold: 0.7,
+      marks: {
+        v: { vibrato: 5, vibratoRate: 5, vibDelay: 0.5 },
+        g: { glide: 0.5 },
+        /* The sigh at the end of the first phrase: the note is played and then
+         * the pitch leaves it, a semitone down. It is the one gesture that
+         * makes the half-cadence sound like giving up rather than pausing. */
+        b: { bend: -1, bendGlide: 0.8 },
+      },
+      phrases: [
+        // 0 — the statement: rises to the sixth, falls back, gives up on the fourth
+        [[-3, 4], [-2, 2],
+          [0, 6, 'v'],
+          [2, 4], [0, 2],
+          [-3, 6, 'v'],
+          [0, 4], [2, 2],
+          [5, 6, 'g'],
+          [4, 2], [2, 2], [0, 2],
+          [-3, 4], [-5, 2, 'b']],
+        // 1 — the answer: begins where the statement peaked and sinks home
+        [[5, 4], [4, 2],
+          [2, 6, 'v'],
+          [0, 4], [-2, 2],
+          [-3, 6, 'v'],
+          [-2, 4], [-3, 2],
+          [-5, 6],
+          [-3, 2], [-5, 2], [-7, 2],
+          [-10, 6, 'v']],
+      ],
+      notes: [[-3, 4], [-2, 2], [0, 6, 'v'], [2, 4], [0, 2], [-3, 6, 'v'],
+        [0, 4], [2, 2], [5, 6, 'g'], [4, 2], [2, 2], [0, 2], [-3, 4], [-5, 2, 'b']],
+    },
+    harm: {
+      /* One chord a bar, on the downbeat, held the whole bar — this is the only
+       * thing standing on beat one, which is what makes the bass's absence
+       * audible instead of merely quiet. i VI iv i VI III V i. */
+      wave: 'sawtooth', gain: 0.045, octave: -12, staccato: 0.95, attack: 0.04, hold: 0.75,
+      notes: [
+        [[-10, -7, -3], 6],
+        [[-14, -10, -7], 6],
+        [[-17, -14, -10], 6],
+        [[-10, -7, -3], 6],
+        [[-14, -10, -7], 6],
+        [[-19, -15, -12], 6],
+        /* The one major chord, and the only A# in the piece. */
+        [[-15, -11, -8], 6],
+        [[-10, -7, -3], 6],
+      ],
+    },
+    bass: {
+      /* Silent on one, root on two, fifth on three. Eight bars of it. */
+      wave: 'triangle', gain: 0.15, staccato: 0.62, attack: 0.006, hold: 0.35,
+      notes: [
+        [null, 2], [-22, 2], [-15, 2],
+        [null, 2], [-26, 2], [-19, 2],
+        [null, 2], [-29, 2], [-22, 2],
+        [null, 2], [-22, 2], [-15, 2],
+        [null, 2], [-26, 2], [-19, 2],
+        [null, 2], [-31, 2], [-24, 2],
+        [null, 2], [-27, 2], [-20, 2],
+        [null, 2], [-22, 2], [-15, 2],
+      ],
+    },
+    drums: {
+      /* A kick on one and a hat on two and three — the pulse the bass is
+       * refusing to play. Without it the displacement would just sound like a
+       * bar starting somewhere else. No snare: there is no backbeat in three. */
+      kick: 'x.....',
+      hat: '..x..x',
+    },
+  },
+
+  /*
+   * POLKKA — 2/4 and fast, in A mixolydian.
+   *
+   * NOT THE OOM-PAH, and this time the ban costs something, because in a polka
+   * the oom-pah is doing real work: it is what tells you where beat one is.
+   * Take it away and something else has to. Here it is two things, and they
+   * are the two the owner asked the interest to live in.
+   *
+   * **The harmonic rhythm is twice the usual.** The chord changes every half
+   * bar — eight chords in four bars, I bVII IV I ii IV bVII I — so the bar
+   * line is heard as a *change* rather than as a thump. The flat seventh is
+   * the mode: G natural in A major is what stops this sounding like a
+   * nineteenth-century ballroom and makes it sound like a village band, and it
+   * is one note.
+   *
+   * **The bass is a line, not a pump.** It walks the changes in eighths, root
+   * to third to root of the next chord, and it never plays the same note twice
+   * in a bar. The chords themselves are off the beat entirely: `harm` stabs on
+   * the second sixteenth of each beat, which is the one place a pumping
+   * accompaniment never is.
+   *
+   * The tune is the third thing, and it is written as contour: every bar is a
+   * leap up of a fourth or a fifth answered by a step down, and the second
+   * phrase is that shape climbing by step through the scale. A polka's melody
+   * is the part people whistle; this one is at least trying.
+   */
+  polkka: {
+    tempo: 184,
+    /* Double time subdivides this line and no other: the tune. See `DOUBLE_TIME`. */
+    double: 'lead',
+    lead: {
+      wave: 'pulse', duty: 0.375, gain: 0.13, detune: 7, staccato: 0.82,
+      phrases: [
+        // 0 — leaps answered by steps
+        [[0, 2], [7, 2], [10, 2], [5, 2],
+          [5, 2], [9, 2], [7, 1], [5, 1], [4, 2],
+          [2, 2], [9, 2], [5, 2], [14, 2],
+          [10, 2], [12, 1], [10, 1], [7, 2], [0, 2]],
+        // 1 — the same shape climbing the scale
+        [[0, 2], [4, 2], [7, 2], [4, 2],
+          [2, 2], [5, 2], [9, 2], [5, 2],
+          [4, 2], [7, 2], [12, 2], [7, 2],
+          [5, 2], [9, 2], [7, 1], [5, 1], [0, 2]],
+      ],
+      notes: [[0, 2], [7, 2], [10, 2], [5, 2],
+        [5, 2], [9, 2], [7, 1], [5, 1], [4, 2],
+        [2, 2], [9, 2], [5, 2], [14, 2],
+        [10, 2], [12, 1], [10, 1], [7, 2], [0, 2]],
+    },
+    harm: {
+      /* Two chords a bar and never on a beat: each one lands on the second
+       * sixteenth, which is exactly where an oom-pah would not be. */
+      wave: 'square', gain: 0.05, octave: -12, staccato: 0.3, attack: 0.005, hold: 0.2,
+      notes: [
+        [null, 2], [[0, 4, 7], 1], [null, 1], [null, 2], [[-2, 2, 5], 1], [null, 1],
+        [null, 2], [[5, 9, 12], 1], [null, 1], [null, 2], [[0, 4, 7], 1], [null, 1],
+        [null, 2], [[2, 5, 9], 1], [null, 1], [null, 2], [[5, 9, 12], 1], [null, 1],
+        [null, 2], [[-2, 2, 5], 1], [null, 1], [null, 2], [[0, 4, 7], 1], [null, 1],
+      ],
+    },
+    bass: {
+      /* A walking line in eighths: root, third, then into the next chord — and
+       * no pitch twice in the same bar, which is the arithmetic of "a line, not
+       * a pump" and is checked as such. */
+      wave: 'triangle', gain: 0.17, staccato: 0.55, attack: 0.004, hold: 0.3,
+      accent: 'x...x...',
+      notes: [
+        [-24, 2], [-20, 2], [-26, 2], [-22, 2],
+        [-19, 2], [-15, 2], [-24, 2], [-17, 2],
+        [-22, 2], [-19, 2], [-15, 2], [-12, 2],
+        [-26, 2], [-22, 2], [-24, 2], [-12, 2],
+      ],
+    },
+    drums: {
+      /* Eight-step patterns: one bar of 2/4 each. The snare is on the "and" of
+       * both beats rather than on beat two, because a backbeat here would put
+       * the missing oom-pah back in a different hat. */
+      kick: 'x...x...',
+      snare: '..x...x.',
+      hat: 'x.x.x.x.',
+    },
+  },
+
+  /*
+   * SEISKA — 7/8, counted 2+2+3, over a drone.
+   *
+   * THE METRE IS THE MATERIAL. "Eastern European folk" as a costume is a
+   * minor-key tune with an augmented second in it and a tambourine; the actual
+   * inheritance is **asymmetric metre**, which is a way of counting that has no
+   * equivalent anywhere in this game's other twelve tracks. A bar here is seven
+   * sixteenths in three groups — short, short, long — and the long group at the
+   * end is what makes every bar lean forward into the next.
+   *
+   * So the bar is 7 and the sequencer's bar is 16, and those two only agree
+   * after 112 steps. That is the loop: sixteen bars of seven, which is also
+   * seven bars of sixteen. Every voice and every drum pattern here is either 7
+   * or 112 or a divisor of one of them, and one note of the wrong length would
+   * set the whole track walking against its own arrangement. `repeatBars` above
+   * exists because of that arithmetic and for no other reason.
+   *
+   * E dorian, not harmonic minor: the mode is plain, and the interest is
+   * rhythmic. The tune is written in the groups — two notes, two notes, then
+   * one long one — so that the metre is audible from the melody alone even when
+   * the drums drop out, which they do in two of the ten sections.
+   *
+   * The drone is the other half of the tradition and the reason there is no
+   * chord progression: bass and harmony hold E and B for four bars at a time,
+   * and everything that moves is the tune. A drone is not a poor man's harmony;
+   * it is the thing that makes a mode sound like a mode instead of like a key.
+   */
+  seiska: {
+    tempo: 152,
+    /* Double time subdivides this line and no other: the tune. See `DOUBLE_TIME`. */
+    double: 'lead',
+    lead: {
+      /* Square through a closing filter, and deliberately not the ice
+       * world's breathing pulse: two tracks with the same signature timbre
+       * are one track heard twice. */
+      wave: 'square', gain: 0.13, detune: 4, staccato: 0.86,
+      cutoff: 3000, resonance: 4, sweep: 0.55,
+      notes: [
+        // bars 1-8: down from the fifth and back
+        [0, 2], [2, 2], [4, 3],
+        [2, 2], [0, 2], [-2, 3],
+        [-3, 2], [-2, 2], [0, 3],
+        [2, 2], [4, 2], [2, 3],
+        [5, 2], [4, 2], [2, 3],
+        [0, 2], [-2, 2], [-3, 3],
+        [-5, 2], [-3, 2], [0, 3],
+        [-3, 2], [-5, 2], [-5, 3],
+        // bars 9-16: the same ground, entered from above
+        [7, 2], [5, 2], [4, 3],
+        [2, 2], [4, 2], [5, 3],
+        [4, 2], [2, 2], [0, 3],
+        [-2, 2], [0, 2], [2, 3],
+        [0, 2], [-2, 2], [-3, 3],
+        [-5, 2], [-3, 2], [-2, 3],
+        [0, 2], [-3, 2], [-5, 3],
+        [-5, 2], [-5, 2], [-5, 3],
+      ],
+    },
+    harm: {
+      /* Open fifths, four bars each, and only one of them moves. */
+      wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.97, attack: 0.05, hold: 0.8,
+      notes: [
+        [[-17, -10], 28],
+        [[-17, -10], 28],
+        [[-19, -12], 28],
+        [[-17, -10], 28],
+      ],
+    },
+    bass: {
+      /* The drone with the metre in it: root, fifth, root held long. Sixteen
+       * bars of exactly that, which is what `repeatBars` is for. */
+      wave: 'triangle', gain: 0.17, staccato: 0.7, attack: 0.005, hold: 0.4,
+      accent: 'x......',
+      notes: repeatBars(16, [[-29, 2], [-22, 2], [-29, 3]]),
+    },
+    drums: {
+      /* Seven-step patterns, so they land on the groups instead of walking
+       * across them: kick on the first and third group, snare inside the second,
+       * hats alternating — which against seven never repeats the same way twice
+       * in a row. */
+      kick: 'x...x..',
+      snare: '..x....',
+      hat: 'x.x.x.x',
+    },
+  },
+
+  /*
+   * KELLO — interlocking cycles, three of them, in G.
+   *
+   * NOT A SCALE AND NOT A DRUM KIT. "Something South of Sahara" as a costume is
+   * a pentatonic tune with a hand drum under it, and both halves of that are
+   * wrong: the pentatonic is a European idea of the sound, and the drum is one
+   * instrument standing in for an ensemble. What actually travels is an
+   * **architecture** — several cycles of different length, each simple, each
+   * repeating, sounding at the same time so that the combination takes far
+   * longer to come round than any of its parts.
+   *
+   * So this track has no melody in the usual sense and no chord progression at
+   * all. It has three repeating figures of three different lengths:
+   *
+   *   - the **bell** (`comp`) is twelve steps with five uneven strokes on it,
+   *     at 0 2 5 7 10. Nothing about it is symmetrical, which is what stops the
+   *     ear settling on a downbeat.
+   *   - the **bass** is eight steps: three, three, two — uneven inside itself
+   *     as well as against everything else.
+   *   - the **hats** are five, which is the one that does the real damage: five
+   *     shares no factor with either of the others.
+   *
+   * Twelve against eight is three against two. Five against both of them is
+   * nothing at all: the three come back into line only after 120 steps, which
+   * is two and a half passes of this track, so **the combination never repeats
+   * inside a pass you can hear the start and end of**. That is the measurement
+   * rather than the boast — `verify.mjs` reads the three periods off the note
+   * lists (not off the voice lengths, which are all 48) and computes the least
+   * common multiple. Change one figure by a step and the number moves, and the
+   * gate prints how far.
+   *
+   * The tune sits above all of it in plain sixteens, three different bars of
+   * it, which is the fourth length and the only one that agrees with the pass.
+   *
+   * G major, seven notes, because the point is not which notes. The harmony is
+   * two open fifths, 24 steps each, and it moves as little as possible: the
+   * whole interest is in *when* things happen.
+   */
+  kello: {
+    tempo: 144,
+    /* Double time subdivides this line and no other: the tune. Never the bell —
+     * the bell is a cycle, and a cycle with twice the strokes is a different
+     * cycle. See `DOUBLE_TIME`. */
+    double: 'lead',
+    lead: {
+      wave: 'triangle', gain: 0.12, detune: 6, staccato: 0.8, attack: 0.01, hold: 0.5,
+      notes: [
+        [2, 3], [5, 3], [7, 2], [5, 2], [2, 3], [0, 3],
+        [5, 3], [7, 3], [9, 2], [7, 2], [5, 3], [2, 3],
+        [7, 3], [5, 3], [2, 2], [0, 2], [-2, 3], [2, 3],
+      ],
+    },
+    harm: {
+      wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.96, attack: 0.05, hold: 0.8,
+      notes: [
+        [[-14, -7], 24],
+        [[-12, -5], 24],
+      ],
+    },
+    comp: {
+      /* The bell: twelve steps, five strokes, two pitches and a third that
+       * arrives once. Short and hard, because a bell is a strike. */
+      wave: 'square', duty: 0.5, gain: 0.06, octave: 12,
+      staccato: 0.3, attack: 0.002, hold: 0.12,
+      notes: [
+        [2, 2], [7, 3], [2, 2], [5, 3], [2, 2],
+        [2, 2], [7, 3], [2, 2], [5, 3], [2, 2],
+        [2, 2], [7, 3], [2, 2], [5, 3], [2, 2],
+        [2, 2], [7, 3], [2, 2], [5, 3], [2, 2],
+      ],
+    },
+    bass: {
+      /* Eight steps, uneven inside itself: 3 3 2. */
+      wave: 'triangle', gain: 0.15, staccato: 0.62, attack: 0.005, hold: 0.35,
+      notes: repeatBars(6, [[-26, 3], [-19, 3], [-21, 2]]),
+    },
+    drums: {
+      /* Three lengths again and none of them sixteen — and the hats are the
+       * five, so the kit is where the phase actually lives. */
+      kick: 'x..x....',
+      snare: '..x.....x...',
+      hat: 'x.xx.',
+    },
+  },
+
+  /*
+   * MAKAM — maqam Bayati on D, over an iqa'.
+   *
+   * NOT THE AUGMENTED SECOND. The costume version of "Middle Eastern" is the
+   * harmonic minor with its one exotic-sounding gap, played over a drum; it is
+   * a nineteenth-century European shorthand and it is not how any of this music
+   * works. Two things that actually are structural, and both of them are in the
+   * data here rather than in the arrangement:
+   *
+   * **1. The scale is not the same going up and coming down.** A maqam is a
+   * path, not a set of pitches. Bayati on D climbs through B natural on its way
+   * to the top of the octave and comes back down through B flat, so the sixth
+   * degree depends on where you are heading. `verify.mjs` reads that off the
+   * note list directly: every B natural in this tune is followed by something
+   * higher and every B flat by something lower. Write the scale as a scale and
+   * the gate fails, which is the point — the difference is the maqam.
+   *
+   * **2. The second degree is not a semitone and not a tone.** Bayati's second
+   * is the note in between, roughly fifty cents above E flat, and it is the
+   * single most identifying sound in the whole family. The twelve-note grid
+   * this sequencer counts in cannot spell it, so the note carries a `cents`
+   * mark instead (see the two kinds of bend in `_emit`) — the first genuinely
+   * microtonal pitch in this game. It is also the reason this could not have
+   * been written before this pass: the capability had to exist first.
+   *
+   * The resting tones are the other half of the path. Phrases stop on the
+   * fourth (G, the ghammaz) halfway and on the tonic at the end, which is why
+   * the tune sounds like it is going somewhere without a chord ever changing —
+   * and no chord ever does. The accompaniment is a drone on D and A, because
+   * harmony in the European sense is the one thing this music does not have,
+   * and adding it would be the same mistake as the augmented second wearing a
+   * nicer suit.
+   *
+   * The rhythm is an iqa' rather than a beat: Maqsum, a sixteen-step cycle with
+   * two dums (low, at 0 and 8) and three teks (high, at 2, 6 and 12). The bass
+   * plays the dums as pitches, so the cycle is audible even with the kit
+   * dropped.
+   */
+  makam: {
+    tempo: 126,
+    /* Double time subdivides this line and no other: the tune. See `DOUBLE_TIME`. */
+    double: 'lead',
+    lead: {
+      wave: 'sawtooth', gain: 0.13, detune: 5, staccato: 0.9, attack: 0.02, hold: 0.6,
+      cutoff: 2400, resonance: 3, sweep: 0.8,
+      marks: {
+        /* The neutral second: half a semitone above E flat, which is the note
+         * between E flat and E. Only the second degree ever carries it. */
+        n: { cents: 50 },
+        /* Sliding between degrees is not ornament here, it is how the line is
+         * played; the two marks are a short slide in and a quarter tone out. */
+        g: { glide: 0.45 },
+        b: { bend: -0.5, bendGlide: 0.8 },
+      },
+      notes: [
+        // 1 — up to the ghammaz and back: D, E half-flat, F, G, A, G, F
+        [-7, 2], [-6, 2, 'n'], [-4, 2], [-2, 4], [0, 2], [-2, 2], [-4, 2],
+        // 2 — up through B natural to C, down through B flat
+        [-2, 2], [0, 2], [2, 2], [3, 4], [1, 2], [0, 2], [-2, 2],
+        // 3 — the upper tetrachord, and the descent is flat all the way
+        [0, 2], [3, 2], [5, 4, 'g'], [3, 2], [1, 2], [0, 2], [-2, 2],
+        // 4 — home, and the neutral second twice on the way in
+        [-2, 2], [-4, 2], [-6, 4, 'n'], [-7, 4], [-6, 2, 'n'], [-7, 2, 'b'],
+      ],
+    },
+    harm: {
+      /* A drone. Not a chord: the fifth is held for the whole piece and the
+       * only thing that changes is which octave of it is on top. */
+      wave: 'sawtooth', gain: 0.04, staccato: 0.98, attack: 0.06, hold: 0.85,
+      notes: [
+        [[-19, -12], 16], [[-19, -12], 16], [[-19, -12], 16], [[-19, -7], 16],
+      ],
+    },
+    bass: {
+      /* The dums of the iqa', as pitches: one long on the first, two on the
+       * second half of the cycle. */
+      wave: 'triangle', gain: 0.16, staccato: 0.6, attack: 0.005, hold: 0.35,
+      accent: 'x.......x.......',
+      notes: repeatBars(4, [[-31, 8], [-31, 4], [-24, 4]]),
+    },
+    drums: {
+      /* Maqsum: dum dum on 0 and 8, tek on 2, 6 and 12. */
+      kick: 'x.......x.......',
+      snare: '..x...x.....x...',
+      hat: 'x.x.x.x.x.x.x.x.',
+    },
+  },
+
+  /*
+   * JOUSET — the strings, and the one the owner asked for by name.
+   *
+   * *"i frigging LOOOOVE dramatic strings with bends, like gorecki and other
+   * 20th century non-romantic composers. go into their bag of tricks."*
+   *
+   * So: the bag, item by item, and each one is a decision here rather than a
+   * flavour.
+   *
+   *   - **Slow harmonic rhythm.** Two chords per pass. The bass changes once,
+   *     halfway, and that is the entire harmonic event of fourteen seconds.
+   *   - **Very long held tones.** The tempo is 66, so a step is 227 ms and the
+   *     cell's last note is three and a half seconds of one pitch. This is the
+   *     slowest track in the game by a factor of nearly two.
+   *   - **Canon at a close interval.** `harm` is the same line as `lead`, one
+   *     bar late and a fifth below (`canonAt`). It is derived rather than typed
+   *     so the two cannot drift apart, and it is cut off by the loop the way a
+   *     round always is.
+   *   - **Stacked seconds instead of triads.** Not written as chords — they
+   *     *happen*, because the canon puts the cell's second note against the
+   *     first. A second that a canon produces is a different object from a
+   *     second somebody voiced, and it is the reason this sounds like counted
+   *     lines rather than like a chord chart.
+   *   - **Open fifths.** The bass is nothing else: A-E, then G-D. No thirds
+   *     anywhere in it, so the mode is decided by the tune and never by the
+   *     accompaniment — the same solution `autiovuori` reached for the same
+   *     reason.
+   *   - **Tintinnabuli.** `comp` is Pärt's trick rather than Górecki's: it
+   *     plays *only* the notes of the tonic triad, A C E, moving with the tune
+   *     but never leaving the chord. Checkable in one line, and gated.
+   *   - **Glissandi and quarter-tone bends.** `GORECKI_MARKS`, and they are
+   *     the reason the `bend` field exists at all. Three of the four phrases
+   *     end on a note that slides off its own pitch, once by a semitone and
+   *     once by a quarter tone — the second one has nowhere to land, which is
+   *     precisely the effect.
+   *   - **Terraced dynamics rather than swells.** This one was free: the
+   *     arrangement machine already drops voices in and out between sections
+   *     without crossfading anything, which is exactly terracing. All this
+   *     track had to do was be written so that losing a voice is a change of
+   *     level rather than a hole.
+   *   - **One cell, mutated.** `GORECKI_CELL` is the piece. The four phrases
+   *     are it, it with one note raised, it a fourth higher, and it with the
+   *     descent stretched — each is a single alteration, and the arrangement
+   *     walks through them.
+   *
+   * There are **no drums**, and that is the last item on the list. Every other
+   * track in this table has a kit; this one is four string parts and silence
+   * where the beat would be, which is what makes the held notes sound held
+   * rather than sustained over something.
+   *
+   * A minor, aeolian throughout. `double: null` — this is the one track that
+   * opts out of double time, because a piece whose entire subject is how long a
+   * note can last has nothing to gain from a line subdividing, and the sections
+   * would have imposed it every tenth pass.
+   */
+  jouset: {
+    tempo: 66,
+    double: null,
+    lead: {
+      wave: 'sawtooth', gain: 0.12, detune: 8, staccato: 0.98, attack: 0.35, hold: 0.82,
+      cutoff: 1800, resonance: 1, sweep: 1.4,
+      marks: GORECKI_MARKS,
+      phrases: [
+        // 0 — the cell
+        GORECKI_CELL,
+        // 1 — the cell with its third note raised a step, and slid into
+        [[0, 8], [2, 8], [5, 8, 's'], [3, 8], [2, 8], [0, 4], [-2, 4], [0, 16, 'v']],
+        // 2 — the cell a fourth higher, and it comes off its last note
+        [[5, 8], [7, 8], [8, 8], [7, 8], [5, 8], [3, 4], [5, 4], [5, 12, 'v'], [5, 4, 'b']],
+        // 3 — the cell with the descent opened out, and a quarter tone at the end
+        [[0, 8], [2, 8], [3, 8], [5, 8], [3, 8], [2, 4], [0, 4], [0, 12, 'v'], [0, 4, 'q']],
+      ],
+      notes: GORECKI_CELL,
+    },
+    harm: {
+      /* The canon. Same line, one bar late, a fifth down, cut by the loop. */
+      wave: 'sawtooth', gain: 0.08, detune: 6, staccato: 0.98, attack: 0.4, hold: 0.82,
+      cutoff: 1400, resonance: 1, sweep: 1.3,
+      marks: GORECKI_MARKS,
+      notes: canonAt(GORECKI_CELL, 16, -7, 64),
+    },
+    comp: {
+      /* Tintinnabuli: A, C and E, and nothing else, ever. */
+      wave: 'triangle', gain: 0.045, octave: 12, staccato: 0.96, attack: 0.3, hold: 0.8,
+      notes: [
+        [3, 8], [0, 8], [3, 8], [0, 8], [-5, 8], [0, 8], [3, 8], [0, 8],
+      ],
+    },
+    bass: {
+      /* Open fifths, thirty-two steps each. Two chords in fourteen seconds. */
+      wave: 'triangle', gain: 0.13, staccato: 0.99, attack: 0.25, hold: 0.9,
+      notes: [
+        [[-24, -17], 32],
+        [[-26, -19], 32],
+      ],
+    },
+  },
 };
 
 const LOOKAHEAD_S = 0.15;
@@ -3410,9 +4102,72 @@ const VARIATIONS = [
   { label: 'lead octave up', leadOctave: 12 },
   { label: 'stripped', drop: ['comp', 'drums'], swingBoost: 0.06 },
   { label: 'thin comp', drop: ['harm', 'drums'] },
-  { label: 'double time', speed: 2, drop: ['harm'] },
+  { label: 'double time', doubleTime: true, drop: ['harm'] },
   { label: 'shout chorus', leadOctave: 12, swingBoost: 0.08 },
 ];
+
+/*
+ * DOUBLE TIME, AND WHY IT IS NOT A FASTER TEMPO (20.8.2026).
+ *
+ * Owner: *"the speedup in the first tune sounds bad. i think it'd better be a
+ * doubletime kinda thing where only one instrument switches to a faster
+ * subdivision but the others keep the same tempo."*
+ *
+ * Two places used to shorten the step: the `double time` variation (`speed: 2`)
+ * and the running-out-of-clock gear (`HURRY_SPEED`, 1.4x). Both moved the
+ * **pulse**, which is the one thing a listener is counting — the drums, the
+ * bass and the tune all sped up together, so nothing was heard *against*
+ * anything. A faster tempo is a different performance of the piece; double time
+ * is the same performance with one player subdividing. That is what a band
+ * actually does when the temperature rises, and it is why it reads as urgency
+ * rather than as a tape running fast.
+ *
+ * So: the step length never changes, the drums never change, and exactly one
+ * named voice re-articulates each of its notes as two of half the length. A
+ * written eighth becomes two sixteenths in that line only. The gate measures
+ * precisely that — the doubled voice's onsets double, every other voice's
+ * onsets land on the same audio-clock times as before, and `_stepDur` is
+ * untouched (`tools/verify.mjs`, "kaksinkertainen jako").
+ *
+ * WHICH VOICE IS NAMED, AND WHY IT IS NAMED RATHER THAN GUESSED. The right line
+ * is different in every track, and a rule that picks one ("the comp, if there
+ * is one") picks wrong more often than not: `level`'s comp is single-step stabs
+ * and doubling those is a rattle, not a subdivision. So every track names its
+ * own (`double`), and `null` opts out — which is what a piece whose whole
+ * subject is stillness has to be allowed to do (`jouset`).
+ *
+ * **A borrowed melody is never the doubled voice.** `cave`, `bone` and
+ * `autiovuori` name their accompaniment instead. DESIGN.md kohta 1 b lets an
+ * expired composition in on the condition that it is not quietly turned into
+ * something else, and re-cutting somebody else's tune into twice as many notes
+ * is exactly the slide that condition is written against. The accompaniment
+ * under it is ours.
+ *
+ * WHAT WENT WITH IT. `speed` on a variation, `HURRY_SPEED`, and the lead-in
+ * bar's tempo ramp are all gone. The ramp existed to slide into a gear change,
+ * and there is no gear left to slide into: the only thing that still moves a
+ * tempo is `accel` (the cave), which is a slope and announces itself by not
+ * announcing itself. Keeping the ramp would have left a mechanism in the file
+ * that nothing asks for, which this repo has already audited itself for once.
+ */
+const DOUBLE_TIME = 2;
+/**
+ * A note has to be at least this many steps long to be worth subdividing.
+ *
+ * A single-step note is *already* the sixteenth grid, so halving it produces a
+ * 30-millisecond blip at these tempos — measured on `level`'s comp, whose stabs
+ * are one step at 96 ms and became a 12 ms click. Notes below the floor are
+ * played once, unchanged. The gate checks that every track's named voice has
+ * notes long enough for the field to mean something, so this guard is a
+ * backstop and not the plan.
+ */
+const DOUBLE_MIN_LEN = 2;
+/**
+ * How much quieter the filled-in half is. A subdivision is a lighter stroke
+ * than the beat it fills; at equal gain the ear hears two notes instead of one
+ * note played faster, which is the wrong end of the effect.
+ */
+const DOUBLE_FILL_GAIN = 0.72;
 
 /**
  * Where the key goes, one entry per pass, and it is not arbitrary.
@@ -3480,9 +4235,6 @@ function sectionAt(cycle) {
   return { section: SECTIONS[0], last: false, index: 0 };
 }
 
-/** How much the tempo lifts once the level clock gets scary. */
-const HURRY_SPEED = 1.4;
-
 /**
  * How much faster a track is playing by a given step — its accelerando.
  *
@@ -3516,7 +4268,6 @@ export const Music = {
   _swing: 0,
   _transpose: 0,
   _nextTranspose: 0,
-  _nextStepDur: 0,
   _changing: false,
   _section: null,
   _loopLen: 16,
@@ -3534,6 +4285,17 @@ export const Music = {
   _reserved: new Map(),
   _stolenHits: 0,
   _silencedNotes: 0,
+  /*
+   * How many notes each voice has actually started since `play`.
+   *
+   * The double-time claim is "one line got denser and nothing else moved", and
+   * that is two numbers per voice rather than a parameter: a count that doubles
+   * and counts that do not. Counting here rather than in the gate means the
+   * gate measures the sequencer that plays, not a copy of its arithmetic — the
+   * same reason `_stolenHits` and `_silencedNotes` live here. One integer per
+   * voice per track, cleared on `play`.
+   */
+  _onsets: new Map(),
   /** Mistä sävelestä portamento lähtee: äänen viimeksi soittama korkeus. */
   _lastPitch: new Map(),
 
@@ -3574,6 +4336,7 @@ export const Music = {
     this._cycle = 0;
     this._reserved.clear();
     this._lastPitch.clear();
+    this._onsets.clear();
     this._stolenHits = 0;
     this._silencedNotes = 0;
     this._applyVariation();
@@ -3590,11 +4353,32 @@ export const Music = {
     }
   },
 
-  /** Time-is-running-out mode: same tune, driven harder. */
+  /**
+   * Time-is-running-out mode: same tune, same tempo, one line subdividing.
+   *
+   * This used to multiply the tempo by 1.4 and it is the change the owner
+   * asked for by ear on 20.8.2026 — see `DOUBLE_TIME` above for what replaced
+   * it and why. Nothing here has to be recomputed any more, because the step
+   * length no longer depends on the hurry: `_emit` reads the flag when it
+   * decides how many times the named voice speaks.
+   */
   setHurry(on) {
-    if (this._hurry === !!on) return;
     this._hurry = !!on;
-    if (this._voices) this._applyVariation();
+  },
+
+  /**
+   * The voice that is subdividing right now, or `null`.
+   *
+   * Two independent things can ask for it — the clock (`_hurry`) and the
+   * arrangement's `double time` section — and the answer is the same either
+   * way and never compounds: two halves, not four quarters. Doubling twice
+   * would be a tempo change wearing a different name, which is the thing this
+   * mechanism exists to stop being.
+   */
+  _doubling() {
+    if (!this._track) return null;
+    const wanted = this._hurry || !!(this._variation && this._variation.doubleTime);
+    return wanted ? (this._track.double || null) : null;
   },
 
   _applyVariation() {
@@ -3616,11 +4400,10 @@ export const Music = {
     }
     this._nextTranspose = this._changing ? next.section.key : here.section.key;
 
-    const rate = (speedOf) => 60 / (this._track.tempo * speedOf * (this._hurry ? HURRY_SPEED : 1)) / 4;
-    this._stepDur = rate(v.speed || 1);
-    this._nextStepDur = this._changing
-      ? rate(VARIATIONS[next.section.variation].speed || 1)
-      : this._stepDur;
+    /* One sixteenth of the written tempo, and nothing multiplies it any more.
+     * The arrangement changes what is played, never how fast the bar goes by;
+     * `accel` is the single exception and it rides on top in `_tick`. */
+    this._stepDur = 60 / (this._track.tempo * 4);
     this._swing = (this._track.swing || 0) + (v.swingBoost || 0);
   },
 
@@ -3658,17 +4441,15 @@ export const Music = {
         this._applyVariation();
       }
       const local = this._step % this._loopLen;
-      // Inside the lead-in bar the step length slides toward the next section's
-      // tempo, so a change of gear is heard coming instead of just happening.
-      const leadFrom = this._loopLen - LEAD_IN_STEPS;
-      const inLead = this._changing && local >= leadFrom;
-      const geared = inLead
-        ? this._stepDur + (this._nextStepDur - this._stepDur) * ((local - leadFrom) / LEAD_IN_STEPS)
-        : this._stepDur;
-      // The accelerando rides on top of whatever gear the arrangement is in,
-      // rather than replacing it: a track that both accelerates and hits a
-      // double-time section should do both.
-      const dur = geared / paceAt(this._track, this._step, this._loopLen);
+      // The lead-in bar is still a bar of build — a snare fill and, before a
+      // key change, the dominant of where we are going. What it no longer does
+      // is slide the tempo, because no section changes the tempo any more (see
+      // `DOUBLE_TIME`): a ramp into a gear that does not exist is a ramp into
+      // nothing.
+      const inLead = this._changing && local >= this._loopLen - LEAD_IN_STEPS;
+      // The accelerando is the only thing left that moves the clock, and it is
+      // a slope rather than a gear: every step is a hair shorter than the last.
+      const dur = this._stepDur / paceAt(this._track, this._step, this._loopLen);
       const swing = this._step % 2 ? this._swing * dur : 0;
       this._emit(this._step, this._nextTime + swing, inLead, dur);
       this._step++;
@@ -3771,6 +4552,10 @@ export const Music = {
     const stealing = !!steal && !drop.includes('drums') && this._stealsAt(step);
     if (stealing) this._reserved.set(steal.voice, at + steal.frames / PAL_HZ);
 
+    /* Which line is subdividing, asked once per step rather than once per
+     * voice: it is a property of the moment, not of the voice. */
+    const doubling = this._doubling();
+
     for (const voice of this._voices) {
       // The bass is never dropped and never transposed out of its riff: the
       // groove is the one thing every variation is allowed to lean on.
@@ -3802,42 +4587,84 @@ export const Music = {
        */
       const prev = this._lastPitch.get(voice.name);
       const gliding = !!(m && m.glide > 0) && chord.length === 1 && prev !== undefined;
-      for (const one of chord) {
-        const target = one + octave + this._transpose;
-        tone({
-          type: voice.wave,
-          from: freq(gliding ? prev : target),
-          to: freq(target),
-          glide: gliding ? m.glide : 1,
-          dur: dur * (voice.staccato || 0.98),
-          gain: voice.gain * (accent ? 1.5 : 1) / Math.sqrt(chord.length),
-          attack: voice.attack || 0.012,
-          hold: voice.hold || 0.62,
-          detune: voice.detune || 0,
-          /* Nuottimerkki voittaa äänen oman asetuksen, ja vain merkityllä
-           * nuotilla: `marks`-taulu on SID-ajurin taulukko, jossa ääni antaa
-           * oletuksen ja nuotti poikkeuksen. */
-          vibrato: m && m.vibrato !== undefined ? m.vibrato : (voice.vibrato || 0),
-          vibratoRate: m && m.vibratoRate !== undefined
-            ? m.vibratoRate : (voice.vibratoRate || 6),
-          vibDelay: m && m.vibDelay !== undefined ? m.vibDelay : (voice.vibDelay || 0),
-          /* SID-sanasto kulkee ääneltä läpi sellaisenaan, ks. `tone`. Ei
-           * oletuksia tässä: nolla tarkoittaa "ei tätä ominaisuutta", ja
-           * jokainen vanha raita soi täsmälleen kuten ennenkin. */
-          duty: voice.duty || 0,
-          pwm: voice.pwm || 0,
-          pwmRate: voice.pwmRate || 3,
-          ring: voice.ring || 0,
-          arp: voice.arp || null,
-          arpRate: voice.arpRate || 50,
-          cutoff: voice.cutoff || 0,
-          resonance: voice.resonance || 0,
-          sweep: voice.sweep || 1,
-          sync: m && m.sync ? m.sync : 0,
-          syncTo: m && m.syncTo !== undefined ? m.syncTo : null,
-          bus: musicBus,
-          delay,
-        });
+      /*
+       * TWO KINDS OF BEND, AND THEY ARE NOT THE SAME KIND (20.8.2026).
+       *
+       * `glide` slides *into* a note from wherever the voice last was: it is
+       * phrasing between two written pitches, and it has been here since the
+       * cloud world. `bend` slides *out of* the note it is written on, by a
+       * number of semitones that need not be a whole one — the written pitch
+       * sounds, and then the pitch leaves it. That is the gesture the owner
+       * asked for by name ("dramatic strings with bends"), and no combination
+       * of the old fields could say it, because both ends of the old ramp were
+       * notes somebody had written down.
+       *
+       * They are exclusive rather than stacked: `tone` ramps once, and a note
+       * that slid in and then out would need two, which is a different feature
+       * (and, for strings, a different bow stroke). `bend` wins where both are
+       * written, because the mark is on this note and the glide is about the
+       * last one.
+       *
+       * `cents` is the third and quietest of the three: a fixed offset in
+       * hundredths of a semitone, applied to the whole note. It is here for
+       * `makam`, whose second degree is neither a minor nor a major second but
+       * the note between them — the twelve-tone grid cannot spell it, and a
+       * maqam without it is a scale wearing a costume.
+       */
+      const cents = (m && m.cents) || 0;
+      const tuning = cents ? Math.pow(2, cents / 1200) : 1;
+      const bend = (m && m.bend) || 0;
+      /*
+       * The subdivision. `reps` is 1 everywhere except in the one voice this
+       * track has named, and only while something has asked for double time —
+       * see `DOUBLE_TIME`. The note's total length does not change, so nothing
+       * downstream of here (the steal, the next note, the bar line) moves.
+       */
+      const reps = voice.name === doubling && len >= DOUBLE_MIN_LEN ? DOUBLE_TIME : 1;
+      const sub = dur / reps;
+      for (let rep = 0; rep < reps; rep++) {
+        for (const one of chord) {
+          const target = one + octave + this._transpose;
+          const home = freq(target) * tuning;
+          tone({
+            type: voice.wave,
+            // A filled-in half starts where the written note is: it re-strikes
+            // the pitch, it does not slide into it again.
+            from: bend ? home : (gliding && rep === 0 ? freq(prev) : home),
+            to: bend ? freq(target + bend) * tuning : home,
+            glide: bend ? (m.bendGlide || 1) : (gliding && rep === 0 ? m.glide : 1),
+            dur: sub * (voice.staccato || 0.98),
+            gain: voice.gain * (accent && rep === 0 ? 1.5 : 1)
+              * (rep === 0 ? 1 : DOUBLE_FILL_GAIN) / Math.sqrt(chord.length),
+            attack: voice.attack || 0.012,
+            hold: voice.hold || 0.62,
+            detune: voice.detune || 0,
+            /* Nuottimerkki voittaa äänen oman asetuksen, ja vain merkityllä
+             * nuotilla: `marks`-taulu on SID-ajurin taulukko, jossa ääni antaa
+             * oletuksen ja nuotti poikkeuksen. */
+            vibrato: m && m.vibrato !== undefined ? m.vibrato : (voice.vibrato || 0),
+            vibratoRate: m && m.vibratoRate !== undefined
+              ? m.vibratoRate : (voice.vibratoRate || 6),
+            vibDelay: m && m.vibDelay !== undefined ? m.vibDelay : (voice.vibDelay || 0),
+            /* SID-sanasto kulkee ääneltä läpi sellaisenaan, ks. `tone`. Ei
+             * oletuksia tässä: nolla tarkoittaa "ei tätä ominaisuutta", ja
+             * jokainen vanha raita soi täsmälleen kuten ennenkin. */
+            duty: voice.duty || 0,
+            pwm: voice.pwm || 0,
+            pwmRate: voice.pwmRate || 3,
+            ring: voice.ring || 0,
+            arp: voice.arp || null,
+            arpRate: voice.arpRate || 50,
+            cutoff: voice.cutoff || 0,
+            resonance: voice.resonance || 0,
+            sweep: voice.sweep || 1,
+            sync: m && m.sync ? m.sync : 0,
+            syncTo: m && m.syncTo !== undefined ? m.syncTo : null,
+            bus: musicBus,
+            delay: delay + rep * sub,
+          });
+        }
+        this._onsets.set(voice.name, (this._onsets.get(voice.name) || 0) + 1);
       }
       this._lastPitch.set(voice.name, chord[chord.length - 1] + octave + this._transpose);
     }

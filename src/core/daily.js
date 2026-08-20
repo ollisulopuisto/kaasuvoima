@@ -108,8 +108,28 @@ export function dayLabel(day) {
  */
 const DAILY_THEMES = ['grass', 'desert', 'night', 'ice', 'factory', 'bone', 'cloud'];
 
-/** Kunkin teeman oma raita, samat nimet kuin `PLAN`issa `gen-levels.mjs`:ssä. */
-const DAILY_MUSIC = { factory: 'factory', bone: 'bone', cloud: 'cloud' };
+/**
+ * Kunkin teeman oma raita, samat nimet kuin `PLAN`issa `gen-levels.mjs`:ssä.
+ *
+ * Four of the seven used to fall through to the generic `level` track, and two
+ * of those were holes rather than decisions (20.8.2026): an ice field played
+ * the grass world's music even though the ice world has had a track of its own
+ * since `jaatie` was written, and the desert had none to fall back to at all.
+ * Both are named now, and the two remaining fall-throughs are deliberate —
+ * `grass` is the theme `level` was written for, so that is not a gap.
+ *
+ * Night gets `kello`, which is not the theme's own world music (there is no
+ * night world; night is a mood the desert wears). Interlocking cycles that only
+ * agree once a pass are the right thing for a field you get one attempt at.
+ */
+const DAILY_MUSIC = {
+  desert: 'makam',
+  ice: 'jaatie',
+  night: 'kello',
+  factory: 'factory',
+  bone: 'bone',
+  cloud: 'cloud',
+};
 
 /**
  * Siemen, ja miksi siinä on kaksi termiä.

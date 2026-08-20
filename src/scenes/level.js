@@ -5026,6 +5026,11 @@ export class LevelScene {
     /* Kiire alkaa siitä pinnasta jolta ei enää ehdi kauas: `FUEL_HURRY`
      * kolikkoa on kaksikymmentä sekuntia, eli suunnilleen yksi ruutu
      * juoksuvauhtia ja se hetki jona kannattaa lakata tutkimasta. */
+    /* What `setHurry` now does changed on 20.8.2026 and this call site did not:
+     * it used to lift the tempo by 1.4, and it now switches one voice of the
+     * track to double subdivisions while the pulse stays exactly where it was.
+     * The signal is the same event at the same coin; only its shape moved. See
+     * `DOUBLE_TIME` in `core/audio.js` for why. */
     if (st.coins === FUEL_HURRY) {
       Sfx.play('timewarn');
       Music.setHurry(true);
