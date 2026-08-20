@@ -25241,6 +25241,51 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `salaisin ${best} (${truth[best]}), nollakenttiä ${zeroes}`);
   }
 
+  /* -------------------------- kaksi eri siirtymää ------------------------ */
+  /*
+   * A LEVEL ROLLS. A WORLD FOLDS. THEY MUST NOT LOOK THE SAME.
+   *
+   * Owner: *"changing between worlds could have some folding up or folding in
+   * and then folding out — instead of rotation, cos rotation = moving between
+   * levels"* and *"the warping between worlds animation is too hasty, which
+   * makes it hard to read."*
+   *
+   * Both sentences are one requirement. Two transitions need two verbs, or
+   * they are the same event at two speeds — and they WERE: 76 frames against
+   * 37, the same motion slightly slower. So this gates the difference rather
+   * than the durations: the world change has to be much longer, and it has to
+   * contain a HELD moment, which is the thing a rotation can never have.
+   */
+  {
+    const F = await page.evaluate(async () => {
+      const g = await import('/src/scenes/globe.js');
+      return g.FOLD_TIMING ? g.FOLD_TIMING : null;
+    });
+    /* read from the module if it exposes them, else from the source text */
+    const src = await readFile(join(ROOT, 'src/scenes/globe.js'), 'utf8');
+    const num = (name) => {
+      const m = new RegExp(`const ${name} = (\\d+);`).exec(src);
+      return m ? Number(m[1]) : null;
+    };
+    const open = num('FOLD_OPEN');
+    const flat = num('FOLD_FLAT');
+    const shut = num('FOLD_SHUT');
+    const roll = num('ROLL_FRAMES');
+    const tip = num('TIP_FRAMES');
+    const fold = open + flat + shut;
+    const spin = roll + tip * 2;
+    void F;
+
+    expect('maailmanvaihto kestää selvästi kauemmin kuin kentänvaihto',
+      fold >= spin * 2.5,
+      `taitto ${fold} framea, kierähdys ${spin} — suhde`
+      + ` ${(fold / spin).toFixed(1)}x`);
+
+    expect('taitossa on pysähtynyt hetki, jollaista kierähdyksessä ei ole',
+      flat >= 30 && flat >= open * 0.6,
+      `litteä hetki ${flat} framea (aukeaminen ${open}, sulkeutuminen ${shut})`);
+  }
+
   /* ------------------------------ takakaasu ------------------------------ */
   /*
    * THE GAS LEAVES FROM BEHIND, AND THAT IS THE WHOLE COMBAT VERB.
