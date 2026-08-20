@@ -302,6 +302,20 @@ const COIN_FAR = 0.44;
  * before the screen changes and nobody has to catch it.
  */
 const RED_BURST = 34;
+
+/**
+ * Frames the coin cube takes to leave, once the level is cleared.
+ *
+ * Owner: *"a little nice thing: once we finish a level, the coin cube could
+ * take off into space?"* — yes, and it costs nothing to be right about, since
+ * the clear sequence holds the picture for `CLEAR_HOLD` frames anyway. 96 is
+ * comfortably inside that, so the departure is over before the card comes up
+ * and nobody has to catch it.
+ */
+const CUBE_LAUNCH = 96;
+
+/** How much of the gap to the camera the cube closes each frame. */
+const CUBE_CHASE = 0.035;
 /*
  * Lohkosta lyödyn kolikon pomppu: sama lähtönopeus ja sama painovoima kuin
  * vanhalla `CoinPop`illa, koska se liike oli oikein — vain sen loppu oli
@@ -1920,6 +1934,13 @@ export class LevelScene {
     this.starRun = null;
     /** Tick the player died on, or null. Drives the red coin's blast. */
     this.deathAt = null;
+    /** Tick the level was cleared on, or null. Drives the cube's departure. */
+    this.clearAt = null;
+    /**
+     * The cube's own memory of where the camera was, which is what makes it a
+     * follower rather than part of the frame. See `updateCubeLag`.
+     */
+    this.cubeLag = null;
 
     /*
      * LINNAKKEEN OVI — mistä kuolema palauttaa, kun areenalle on kerran päästy.
@@ -3584,6 +3605,41 @@ export class LevelScene {
     return Math.max(0, Math.min(1, (this.tick - this.deathAt) / RED_BURST));
   }
 
+  /**
+   * How far through its departure the cube is: 0 while you are playing, 1 gone.
+   *
+   * Read as a tick difference from the clear, for the same reason the red
+   * coin's blast is: a timer needs somebody to tick it, and the clock is the
+   * one thing certainly still running. Only a real clear launches it — a
+   * fortress door and a death both leave it where it is, because it has not
+   * finished its job in either case.
+   */
+  cubeLaunch() {
+    if (this.state !== 'clear' || this.clearAt === null) return 0;
+    return Math.max(0, Math.min(1, (this.tick - this.clearAt) / CUBE_LAUNCH));
+  }
+
+  /**
+   * THE CUBE CHASES THE CAMERA, AND IT IS ALWAYS BEHIND.
+   *
+   * A first-order lag: each frame it closes a fixed FRACTION of whatever gap
+   * is left, so it never quite arrives and never overshoots. That shape is the
+   * point — a constant speed would make it a lift, and arriving would make it
+   * part of the frame. Something that is always a little behind is something
+   * that is following you.
+   *
+   * `CUBE_CHASE` is small enough that a fast climb genuinely leaves it: at
+   * 0.035 a beanstalk sprint opens a gap of most of a screen before it starts
+   * closing, which is what makes the catching-up worth looking at.
+   *
+   * Snapped rather than eased on the first frame, or every level would open
+   * with the cube sliding in from wherever the last one ended.
+   */
+  updateCubeLag() {
+    if (this.cubeLag === null) { this.cubeLag = this.cam.y; return; }
+    this.cubeLag += (this.cam.y - this.cubeLag) * CUBE_CHASE;
+  }
+
   /** True when the coin cube is in this level's sky at all. */
   skyCube() {
     return !(this.def.bg === 'none' || this.vertical);
@@ -5066,6 +5122,8 @@ export class LevelScene {
      * first went and where it did nothing at all: `enter` runs once, and a
      * star is picked up in the middle of a level.
      */
+    this.updateCubeLag();
+
     const starring = !!(this.player && this.player.star > 0);
     if (starring && !this.starRun) this.starRun = { chain: 0 };
     else if (!starring && this.starRun) this.starRun = null;
@@ -6630,6 +6688,7 @@ export class LevelScene {
     if (this.state !== 'play') return;
     this.state = 'clear';
     this.stateTimer = 0;
+    this.clearAt = this.tick;
     this.recordClear();
     this.wonCard = card;
     this.player.controllable = false;
@@ -6767,6 +6826,16 @@ export class LevelScene {
        * is spent from the stock, so the stock is where it has to be seen
        * leaving. See `drawTower`. */
       burst: this.redBurst(),
+      /* Owner: *"once we finish a level, the coin cube could take off into
+       * space?"* It has been hanging there the whole level holding what you
+       * found; when the level ends it takes the lot and goes. See
+       * `cubeLaunch` and `drawSkyTower`. */
+      launch: this.cubeLaunch(),
+      /* Owner: *"when we climb up a screen, the cube should follow the player
+       * there with a small delay!"* Positive while the camera has climbed and
+       * the cube has not caught up yet, which draws it lower down the screen —
+       * exactly the picture of something left behind and coming. */
+      lagY: this.cubeLag === null ? 0 : this.cubeLag - this.cam.y,
     };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
       bandDrop, clock, tower);
