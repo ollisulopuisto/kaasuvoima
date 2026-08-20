@@ -279,7 +279,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-1': {
-    theme: 'grass', bg: 'hills', music: 'level', origin: 'checked',
+    theme: 'grass', bg: 'hills', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                         ",
       "                                                                                                                                                                                                                         ",
@@ -300,7 +300,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-2': {
-    theme: 'desert', bg: 'dunes', music: 'level', origin: 'checked',
+    theme: 'desert', bg: 'dunes', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                              ",
       "                                                                                                                                                                                                                                              ",
@@ -321,7 +321,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-3': {
-    theme: 'ice', bg: 'peaks', music: 'level', origin: 'checked',
+    theme: 'ice', bg: 'peaks', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                                          ",
       "                                                                                                                                                                                                                                                          ",
@@ -342,7 +342,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-4': {
-    theme: 'night', bg: 'dunes', music: 'level', origin: 'checked',
+    theme: 'night', bg: 'dunes', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                                                         ",
       "                                                                                                                                                                                                                                                                         ",
@@ -363,7 +363,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-5': {
-    theme: 'factory', bg: 'factory', music: 'factory', origin: 'checked',
+    theme: 'factory', bg: 'factory', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                                      ",
       "                                                                                                                                                                                                                                                      ",
@@ -384,7 +384,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-6': {
-    theme: 'ice', bg: 'peaks', music: 'level', origin: 'checked',
+    theme: 'ice', bg: 'peaks', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                          ",
       "                                                                                                                                                                                                                                          ",
@@ -405,7 +405,7 @@ export const GENERATED_LEVELS = {
     ],
   },
   '5-7': {
-    theme: 'factory', bg: 'factory', music: 'factory', origin: 'checked',
+    theme: 'factory', bg: 'factory', music: 'seiska', origin: 'checked',
     rows: [
       "                                                                                                                                                                                                                                                                                ",
       "                                                                                                                                                                                                                                                                                ",

@@ -309,6 +309,15 @@ const NAME_Y = 22;
  * that raised the limit *back down* would be nagging; a road that keeps
  * conceding is funny, and the last sign is the concession.
  */
+/**
+ * How far below the ground he left counts as *committed* to a fall.
+ *
+ * Two tiles. One is a hop and three is most of the way to the seam a cave
+ * level hides under — two is the depth at which a player has stopped choosing
+ * and started reacting, which is the moment this reward exists to notice.
+ */
+const BRINK_DEEP = TILE * 2;
+
 const SIGN_LIMITS = [30, 50, 80, 120, 0];
 const SIGN_GAP = 640;
 
@@ -3502,6 +3511,21 @@ export class LevelScene {
    * pinta kertoo yhdellä silmäyksellä "yli puolivälin", ja merkit kertovat
    * halutessa tarkan luvun ilman että lukua tarvitsee kirjoittaa mihinkään.
    */
+  /**
+   * The coin surface as it is being *drawn*, which is not always the count.
+   *
+   * While the tube is flushing, `tubeFill` has already jumped to what will be
+   * left and `coins` has already paid — the difference between them **is** the
+   * animation. One reading, because the cube on the horizon and the glass in
+   * the corner have to be draining the same liquid; two would be two gauges
+   * disagreeing about the same sixty-four coins.
+   */
+  tubeShown() {
+    if (this.tubeFlush <= 0) return this.tubeFill;
+    const t = this.tubeFlush / COIN_FLUSH;
+    return Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * t);
+  }
+
   drawCoinTube(ctx) {
     const box = this.tubeBox();
     const h = box.bottom - box.top;
@@ -3523,9 +3547,7 @@ export class LevelScene {
     /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
      * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
     const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
-    const shown = this.tubeFlush > 0
-      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
-      : this.tubeFill;
+    const shown = this.tubeShown();
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -4714,6 +4736,7 @@ export class LevelScene {
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
     this.updateProps();
+    this.updateBrink();
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
@@ -5118,6 +5141,11 @@ export class LevelScene {
     /* Kiire alkaa siitä pinnasta jolta ei enää ehdi kauas: `FUEL_HURRY`
      * kolikkoa on kaksikymmentä sekuntia, eli suunnilleen yksi ruutu
      * juoksuvauhtia ja se hetki jona kannattaa lakata tutkimasta. */
+    /* What `setHurry` now does changed on 20.8.2026 and this call site did not:
+     * it used to lift the tempo by 1.4, and it now switches one voice of the
+     * track to double subdivisions while the pulse stays exactly where it was.
+     * The signal is the same event at the same coin; only its shape moved. See
+     * `DOUBLE_TIME` in `core/audio.js` for why. */
     if (st.coins === FUEL_HURRY) {
       Sfx.play('timewarn');
       Music.setHurry(true);
@@ -6345,8 +6373,30 @@ export class LevelScene {
      */
     const span = Math.max(1, this.widthPx - VIEW_W);
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
+    /*
+     * The coin gauge is a tower on the horizon now, so it is handed to the
+     * backdrop rather than drawn over the picture afterwards: it has to be
+     * *inside* the layers, between the far ridge and the middle one, or the
+     * hills cannot sweep across its feet. `tubeBox` and the corner glass are
+     * gone with it — see `drawCoinTube`.
+     *
+     * `at` is a fixed starting offset and not a function of progress: the
+     * tower drifts at its own slow rate (`drawSkyTower`), so it says "far
+     * away" and nothing else. Position-as-progress would be a second answer
+     * to the question the sky already answers.
+     */
+    const tower = this.def.bg === 'none' || this.vertical ? null : {
+      at: 300,
+      fill: this.tubeShown(),
+      lives: Math.max(0, this.game.state.lives | 0),
+      tick: this.tick,
+      /* 0 while a red is climbing out of the cube, 1 once it is in place. See
+       * `drawTower`: this is the conversion, and it is the one thing the
+       * corner glass said that the cube did not. */
+      rising: this.tubeFlush > 0 ? 1 - this.tubeFlush / COIN_FLUSH : 1,
+    };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
-      bandDrop, clock);
+      bandDrop, clock, tower);
     /* Props sit in front of the haze that softens the hill/tilemap seam: they
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the
@@ -6663,6 +6713,67 @@ export class LevelScene {
    * to the sky, which is why `drawSkyName` tests the same two conditions from
    * the other side. One level, one way of saying it — DESIGN.md item 8.
    */
+  /**
+   * THE BRINK: a coin for getting out of a fall you had already lost.
+   *
+   * Owner: *"maybe you should get a coin for a near-death stunt (be falling
+   * into a chasm and then use the second or third jump to get out of there?)"*
+   *
+   * Three conditions, and every one of them is there to stop this paying for
+   * something that was never dangerous:
+   *
+   *   1. **Over a real pit.** Not a dip, not a ledge — a column with no solid
+   *      tile anywhere beneath it, which is to say the one thing in this game
+   *      that kills you for arriving at the bottom.
+   *   2. **Already committed.** `BRINK_DEEP` below the last ground he stood
+   *      on, so a hop across a gap does not count. You have to have been
+   *      falling long enough for it to have been the wrong decision.
+   *   3. **Saved by an air jump.** The recovery has to be the thing the owner
+   *      described — a jump spent in the air, not a lucky ledge.
+   *
+   * And it pays **once per fall**, on landing alive. Hovering over the same
+   * pit is one coin, not a coin a second: a reward you can stand still and
+   * farm is a reward that stops meaning anything the first time somebody
+   * notices.
+   */
+  pitUnder(tx, ty) {
+    if (tx < 0 || tx >= this.w) return false;
+    for (let y = Math.max(0, ty); y < this.h; y++) if (this.solidAt(tx, y)) return false;
+    return true;
+  }
+
+  updateBrink() {
+    const p = this.player;
+    if (!p || this.state !== 'play') return;
+    if (p.onGround) {
+      if (this.brink && this.brink.saved) {
+        /* Paid where he landed, not where he fell: the coin belongs to the
+         * moment it turned out to have worked. */
+        /* A real coin through the map's own door, so it flies to the gauge
+         * and counts exactly as a collected one does — a reward that arrives
+         * by a private route is a number, not a coin. */
+        this.addCoin(p.cx - 8, p.cy - 20, true);
+      }
+      this.brink = null;
+      this.brinkGroundY = p.y;
+      return;
+    }
+    const tx = Math.floor(p.cx / TILE);
+    const ty = Math.floor((p.y + p.h) / TILE);
+    if (!this.brink) {
+      const deep = this.brinkGroundY !== undefined
+        && p.y - this.brinkGroundY > BRINK_DEEP;
+      if (p.vy > 0 && deep && this.pitUnder(tx, ty)) {
+        this.brink = { jumps: p.airJumps, saved: false };
+      }
+      return;
+    }
+    /* An air jump spent *while over the pit* is what turns a fall into a
+     * stunt. Counted rather than watched for, so a jump that happened before
+     * he was ever in trouble cannot claim it. */
+    if (p.airJumps > this.brink.jumps) this.brink.saved = true;
+  }
+
   updateProps() {
     const camX = this.cam.x;
     this.props.update(camX, VIEW_W);

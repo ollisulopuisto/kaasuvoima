@@ -1526,26 +1526,62 @@ function drawTree(ctx, x, y, th, tx, ty, tick, burn = 0) {
  */
 export const SPIKE_TOP = 6;
 
+/**
+ * SPIKES CARRY THEIR OWN DARKNESS.
+ *
+ * Owner, from play: *"the contrast of the spikes is TERRIBLE especially in ice
+ * levels but probably elsewhere too."* — and it was, for a reason that only
+ * shows up in one world. The teeth were pale grey with a white highlight, which
+ * is a fine tooth against grass, dirt or factory plate, and is **white on
+ * white** against `#cfe6ff` ice and a snowfield. The one tile in this game
+ * whose entire job is to say *do not touch* was invisible in the world that has
+ * the most of them.
+ *
+ * A hazard cannot depend on what is behind it. So each tooth is drawn twice:
+ * a dark silhouette a pixel proud on every side, then the pale body inside it.
+ * Dark-on-light and light-on-dark are then both true at once, and the shape
+ * reads on any ground this game has or ever adds.
+ *
+ * The teeth also taper now. A two-pixel pillar is a railing; a spike is a
+ * thing with a point, and the point is the part that says what it does.
+ */
 function drawSpike(ctx, x, y, tick) {
+  /* Rows of the tooth, from the tip down: how wide it is and where it starts,
+   * relative to the tooth's 4 px cell. */
+  const ROWS = [
+    [6, 1, 1], [7, 1, 1], [8, 1, 2], [9, 1, 2],
+    [10, 0, 3], [11, 0, 3], [12, 0, 3], [13, 0, 3],
+  ];
   for (let i = 0; i < 4; i++) {
     const bx = x + i * 4;
-    ctx.fillStyle = '#c8c8d8';
-    ctx.fillRect(bx + 1, y + 12, 2, 4);
-    ctx.fillRect(bx + 1, y + 9, 2, 3);
-    ctx.fillRect(bx + 1, y + 6, 2, 3);
-    ctx.fillStyle = '#f4f4ff';
-    ctx.fillRect(bx + 1, y + 6, 1, 6);
+    /* The silhouette first, one pixel proud all round. Drawn as its own pass
+     * rather than as a stroke: at this size a stroke lands on half pixels. */
+    ctx.fillStyle = '#26263a';
+    for (const [dy, ox, w] of ROWS) {
+      ctx.fillRect(bx + ox - 1, y + dy - 1, w + 2, 3);
+    }
+  }
+  for (let i = 0; i < 4; i++) {
+    const bx = x + i * 4;
+    for (const [dy, ox, w] of ROWS) {
+      ctx.fillStyle = '#c8c8d8';
+      ctx.fillRect(bx + ox, y + dy, w, 1);
+      ctx.fillStyle = '#f4f4ff';
+      ctx.fillRect(bx + ox, y + dy, 1, 1);
+    }
   }
   // a glint travelling along the row
   const g = Math.floor(tick / 10) % 8;
   if (g < 4) {
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x + g * 4 + 1, y + 6, 2, 2);
+    ctx.fillRect(x + g * 4 + 1, y + 7, 1, 2);
   }
+  /* The bed the teeth stand in, dark enough to be the shadow they need on a
+   * pale floor and to be the edge they need on a dark one. */
+  ctx.fillStyle = '#26263a';
+  ctx.fillRect(x, y + 13, TILE, 3);
   ctx.fillStyle = '#6f6f8a';
-  ctx.fillRect(x, y + 14, TILE, 2);
-  ctx.fillStyle = '#4a4a60';
-  ctx.fillRect(x, y + 15, TILE, 1);
+  ctx.fillRect(x, y + 14, TILE, 1);
 }
 
 /**

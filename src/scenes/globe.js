@@ -124,6 +124,41 @@ const FOLD_FLAT = 12;
 const FOLD_SHUT = 30;
 const NET_SCALE = 0.30;
 
+/**
+ * THE FOURTH DIMENSION, and why the first fold was not one.
+ *
+ * Owner: *"the hypercube animation (ie warping between worlds) should be more
+ * EXACT, now it feels like a bunch of shapes moving. Think in 4d."* — right on
+ * both counts. The first version lerped each face from where it was in three
+ * dimensions to where it would sit in a flat net. That is a **tween between
+ * two pictures**; nothing in it rotated, nothing in it was four-dimensional,
+ * and shapes sliding to marks is exactly what it looked like.
+ *
+ * A tesseract is not a cube that moves. It is **two cubes joined corner to
+ * corner**, turned in a plane that has no equivalent in three dimensions, so
+ * that the inner one swells through the outer and becomes it. That is the
+ * whole of the effect and it is the one thing no 3D animation can fake.
+ *
+ * So the two worlds are the two cells. The one you are leaving sits at
+ * `w = +1` — nearer in the fourth dimension, therefore **larger** — and the
+ * one you are arriving at sits at `w = -1`, nested small inside it. Turning
+ * the `xw` plane through π carries each into the other's place. You do not
+ * watch a world be replaced; you watch it turn inside out and find the next
+ * one was in there all along.
+ *
+ * `W_EYE` is how far the eye is along the fourth axis, and it is the only
+ * number here with any taste in it. Large and the two cells are nearly the
+ * same size, so the nesting disappears and it reads as a cross-fade. Small and
+ * the inner one shrinks to a dot and the join struts fan out like an
+ * explosion. 3.2 puts the inner cell at 0.52 of the outer.
+ *
+ * The divide is **normalised against `w = +1`**, so the cell nearest in the
+ * fourth dimension is exactly the size the solid is at rest. Without that, a
+ * turn began and ended with the object jumping to 1.6 times its size — the
+ * perspective divide is a ratio, and a ratio needs somewhere to be 1.
+ */
+const W_EYE = 3.2;
+
 /** The die's easing, so the two solids in this game move the same way. */
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
 const LAND_FRAMES = 9;
@@ -519,62 +554,39 @@ export class GlobeScene {
    * leaves last and arrives first — because everything moving at once is an
    * explosion and not a fold. The die learned this the same way.
    */
-  faceCorners(face) {
-    const solid = face.verts.map((v) => this.project(v));
-    if (this.fold <= 0) return solid;
-    const home = this.here;
-    if (!this.net || this.netHome !== home) {
-      this.net = netLayout(home);
-      this.netHome = home;
-    }
-    const spot = this.net.get(face);
-    /*
-     * THE OUTSIDE PEELS OFF FIRST AND HOME GOES LAST — the opposite of the
-     * die's fold, and for a reason the die did not have. Home is already
-     * square to the camera and its place in the net is the middle, so moving
-     * it first swung a full-size hexagon across the screen and hid the rest of
-     * the solid behind it for a third of the animation. Letting it sit while
-     * everything peels away around it is also what the sentence describing
-     * this says out loud: the world comes apart around the face you are
-     * standing on.
-     */
-    const ring = face === home ? 2
-      : home.sides.some((sd) => sd.to && sd.to.kind === face.kind
-        && sd.to.index === face.index) ? 1 : 0;
-    const span = 1 - 0.18 * 2;
-    const t = ease(clamp((this.fold - ring * 0.18) / span, 0, 1));
-    if (t <= 0) return solid;
-    const flat = netCorners(home, face, spot).map(([x, y]) => ({
-      x: CX + x * R,
-      y: CY + y * R,
-      z: 0,
-    }));
-    /* An arc, so a face reads as swinging down rather than sliding across. */
-    const lift = Math.sin(t * Math.PI) * 16;
-    /*
-     * THE SHRINK IS GLOBAL, and that is the whole difference between a fold
-     * and a collapse. Building the net at `NET_SCALE` directly meant the home
-     * face — which leaves first — was at a third of its size while the outer
-     * faces were still full sized, and the middle of the animation was a
-     * sliver with everything piled in the centre. The net is built full size
-     * and the *picture* recedes as it opens, so every face shrinks together
-     * and the shape stays a shape the whole way.
-     */
-    /* The shrink LEADS the spread rather than tracking it: eased in step with
-     * the fold, the faces reached their far positions while the picture was
-     * still most of its full size and half a dozen of them flew off the edges
-     * of the screen. Reaching net scale by two thirds of the way through keeps
-     * the whole net in frame at the moment it is widest. */
-    const k = 1 - (1 - NET_SCALE) * Math.min(1, this.fold * 1.6);
-    return solid.map((p, i) => {
-      const x = p.x + (flat[i].x - p.x) * t;
-      const y = p.y + (flat[i].y - p.y) * t - lift;
-      return {
-        x: CX + (x - CX) * k,
-        y: CY + (y - CY) * k,
-        z: p.z * (1 - t),
-      };
+  /**
+   * A face's corners in the fourth dimension, for one of the two cells.
+   *
+   * `cell` is +1 for the world being left and -1 for the world being entered.
+   * The point is lifted to `(x, y, z, w)`, turned in the **xw plane** — a
+   * rotation with no three-dimensional equivalent, which is the entire reason
+   * this reads as 4D and the old fold did not — and then divided by its
+   * distance along w before the ordinary camera ever sees it.
+   *
+   * Note which pairs turn: `xw` moves x into w, so the object does not spin
+   * about an axis, it *turns through* the direction it is thickest in. That is
+   * why the inside comes out.
+   */
+  cellCorners(face, cell, turn) {
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    return face.verts.map((v) => {
+      const x0 = v[0] * SCALE;
+      const w0 = cell;
+      /* The xw rotation. Everything else about the point is untouched, which
+       * is what makes this a rotation rather than a move. */
+      const x = x0 * c - w0 * sn;
+      const w = x0 * sn + w0 * c;
+      const k = (W_EYE - 1) / (W_EYE - w);
+      const p = qApply(this.rot, [x * k, v[1] * SCALE * k, v[2] * SCALE * k]);
+      const s = CAM_Z / (CAM_Z - p[2]);
+      return { x: CX + p[0] * R * s, y: CY - p[1] * R * s, z: p[2], w };
     });
+  }
+
+  faceCorners(face) {
+    if (this.fold <= 0) return face.verts.map((v) => this.project(v));
+    return this.cellCorners(face, 1, this.fold * Math.PI);
   }
 
   /** A solid-local point on the screen, plus its depth for painter order. */
@@ -770,6 +782,11 @@ export class GlobeScene {
       this.fold = 1;
       if (!f.swapped) {
         f.swapped = true;
+        /* The swap still happens at the turn's halfway point, but it is no
+         * longer the moment the picture changes — both worlds have been on
+         * screen since the first frame. It is only where the *data* crosses
+         * over, so the cell that is now in front is the one being drawn from
+         * `byFace`. */
         this.world = f.door.world;
         const laid = facesOfWorld(WORLDS[this.world]);
         this.byFace = laid.byFace;
@@ -985,29 +1002,79 @@ export class GlobeScene {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     this.drawFloor(ctx);
 
-    const drawn = FACES.map((f) => {
-      const pts = this.faceCorners(f);
-      const depth = pts.reduce((s, p) => s + p.z, 0) / pts.length;
-      return { f, pts, depth };
-    }).filter((d) => d.depth > 0.05 || this.fold > 0.5).sort((a, b) => a.depth - b.depth);
+    /*
+     * BOTH CELLS, AND THE STRUTS BETWEEN THEM.
+     *
+     * Two copies of the solid — the world being left and the world being
+     * entered — turned together through the xw plane, plus a line joining
+     * every corner to its twin. The struts are not decoration: without them
+     * this is two solids that happen to be nested, and with them it is one
+     * object with two ends. A tesseract is *the joining*; the cubes are what
+     * it joins.
+     */
+    const turn = this.fold * Math.PI;
+    const cells = this.fold > 0
+      ? [{ cell: -1, world: this.folding ? this.folding.door.world : this.world },
+        { cell: 1, world: this.world }]
+      : [{ cell: 1, world: this.world }];
+
+    const drawn = [];
+    for (const c of cells) {
+      for (const f of FACES) {
+        const pts = this.fold > 0 ? this.cellCorners(f, c.cell, turn)
+          : this.faceCorners(f);
+        const depth = pts.reduce((t, p) => t + p.z, 0) / pts.length;
+        /* Sorted by w first and depth second while folded: the cell further
+         * along the fourth axis is behind *everything* in the nearer one,
+         * however its own faces happen to lie. */
+        const w = pts.reduce((t, p) => t + (p.w || 0), 0) / pts.length;
+        drawn.push({ f, pts, depth, w, cell: c.cell, forWorld: c.world });
+      }
+    }
+    drawn.sort((a, b) => (a.w - b.w) || (a.depth - b.depth));
+    const visible = drawn.filter((d) => d.depth > 0.05 || this.fold > 0);
 
     ctx.fillStyle = SHADOW;
-    for (const d of drawn) {
+    for (const d of visible) {
+      if (this.fold > 0) break;
       poly(ctx, d.pts, SHADOW_DX, SHADOW_DY);
       ctx.fill();
+    }
+
+    if (this.fold > 0) {
+      ctx.strokeStyle = 'rgba(120,130,190,0.5)';
+      ctx.lineWidth = 1;
+      const inner = new Map();
+      for (const d of drawn) if (d.cell === -1) inner.set(d.f, d.pts);
+      for (const d of drawn) {
+        if (d.cell !== 1) continue;
+        const twin = inner.get(d.f);
+        if (!twin) continue;
+        ctx.beginPath();
+        for (let n = 0; n < d.pts.length; n++) {
+          ctx.moveTo(d.pts[n].x, d.pts[n].y);
+          ctx.lineTo(twin[n].x, twin[n].y);
+        }
+        ctx.stroke();
+      }
     }
 
     ctx.lineJoin = 'round';
     for (const d of drawn) {
       const here = d.f === this.here;
       const room = d.f.kind === 'square';
-      const node = d.f.kind === 'hex' ? this.byFace[d.f.index] : null;
+      /* Each cell wears its own world's colours, which is the whole point of
+       * showing both: what you are turning into is visibly a different place
+       * before you get there, not the same place relabelled at the end. */
+      const forWorld = d.forWorld === undefined ? this.world : d.forWorld;
+      const own = forWorld === this.world ? this.byFace : null;
+      const node = d.f.kind === 'hex' && own ? own[d.f.index] : null;
       /* A face is the colour of its level's difficulty, so the solid is a
        * difficulty chart you can turn over — the same five tiers the map's
        * plaques use, from the same `nodePips`. */
       const base = room ? '#8890b0'
         : node ? TIER_COLORS[Math.max(1, nodePips(node))]
-          : TIER_COLORS[Math.max(1, pipsFor(worldMedian(this.world)))];
+          : TIER_COLORS[Math.max(1, pipsFor(worldMedian(forWorld)))];
       /* A locked face is a tone deeper than the depth alone would make it, so
        * the solid shows how much of the world is still shut from any angle. */
       const shut = d.f.kind === 'hex'
@@ -1118,7 +1185,20 @@ export class GlobeScene {
         ctx.fillStyle = ink;
         ctx.fillRect(x - 2, y - 2, 4, 4);
       }
-      this.drawMarker(ctx, k, lead, this.onHere(s.u, s.v), ink);
+      /*
+       * OUTSIDE THE FACE, past where the pawn can stand.
+       *
+       * Owner: *"we maybe need to reposition and resize the level icons on the
+       * overworld map, cos now the player completely overlaps them."* Measured
+       * at the end of a walk: **39 %** of the destination marker was behind
+       * him. Not sometimes — a walk ends at the edge midpoint and the marker
+       * was drawn at the edge midpoint, so it was every walk, every time.
+       *
+       * 1.34 puts them clear of the rim, which is also where they belong:
+       * a marker labels the *door*, and a door is on the boundary rather than
+       * inside the room.
+       */
+      this.drawMarker(ctx, k, lead, this.onHere(s.u * 1.34, s.v * 1.34), ink);
     }
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(Math.round(hub.x) - 3, Math.round(hub.y) - 3, 6, 6);
@@ -1134,9 +1214,9 @@ export class GlobeScene {
       /* A bar across the road. The one marker that says "not this way"
        * without having to say what is behind it. */
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 7, y - 5, 14, 10);
+      ctx.fillRect(x - 6, y - 4, 12, 8);
       ctx.fillStyle = ink;
-      ctx.fillRect(x - 5, y - 1, 10, 2);
+      ctx.fillRect(x - 4, y - 1, 8, 2);
       return;
     }
     if (lead === 'room' || lead === 'spent') {
@@ -1145,14 +1225,14 @@ export class GlobeScene {
        * learn it twice. */
       const spent = lead === 'spent';
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 9, y - 9, 18, 17);
+      ctx.fillRect(x - 8, y - 8, 16, 15);
       ctx.fillStyle = spent ? '#9a6a6a' : '#e04040';
-      ctx.fillRect(x - 7, y - 7, 14, 7);
+      ctx.fillRect(x - 6, y - 6, 12, 6);
       ctx.fillStyle = '#f8f8f8';
-      ctx.fillRect(x - 5, y - 6, 3, 3);
-      ctx.fillRect(x + 2, y - 5, 3, 3);
+      ctx.fillRect(x - 4, y - 5, 3, 3);
+      ctx.fillRect(x + 2, y - 5, 2, 3);
       ctx.fillStyle = '#f0d8b0';
-      ctx.fillRect(x - 5, y, 10, 5);
+      ctx.fillRect(x - 4, y, 9, 5);
       ctx.fillStyle = '#6a4018';
       ctx.fillRect(x - 2, y + 1, 4, 4);
       return;
@@ -1163,11 +1243,11 @@ export class GlobeScene {
        * that leaves. */
       const door = this.doorHere();
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 9, y - 10, 18, 17);
+      ctx.fillRect(x - 8, y - 9, 16, 15);
       ctx.fillStyle = ink;
-      ctx.fillRect(x - 7, y - 8, 3, 13);
-      ctx.fillRect(x + 4, y - 8, 3, 13);
-      ctx.fillRect(x - 7, y - 8, 14, 3);
+      ctx.fillRect(x - 6, y - 7, 2, 11);
+      ctx.fillRect(x + 4, y - 7, 2, 11);
+      ctx.fillRect(x - 6, y - 7, 12, 2);
       if (door) {
         drawText(ctx, String(door.level), x, y - 2, { color: ink, align: 'center' });
       }
@@ -1180,9 +1260,9 @@ export class GlobeScene {
     const label = node && node.level ? node.level.split('-')[1] : '?';
     const done = lead === 'cleared';
     ctx.fillStyle = '#202038';
-    ctx.fillRect(x - 8, y - 7, 16, 15);
-    ctx.fillStyle = done ? '#404060' : '#f8f8f8';
     ctx.fillRect(x - 7, y - 6, 14, 13);
+    ctx.fillStyle = done ? '#404060' : '#f8f8f8';
+    ctx.fillRect(x - 6, y - 5, 12, 11);
     drawText(ctx, label, x, y - 3, {
       color: done ? '#8fe04a' : '#202038', align: 'center',
     });

@@ -91,8 +91,28 @@ export class GameOverScene {
     this.choice = 0;
   }
 
+  /*
+   * SILENCE WAS THE OLD ANSWER, AND IT WAS THE WRONG ONE (20.8.2026).
+   *
+   * `Music.stop()` here was not a decision so much as an absence: the run ends,
+   * the death sound plays, and then the player sits in a dead room choosing
+   * between two futures with nothing in the air. Every console game this one is
+   * descended from has a game-over cue, and the reason is not decoration — the
+   * screen is a *pause in a run*, and silence reads as the machine having
+   * stopped rather than as the story taking a breath.
+   *
+   * `jouset` is the string piece, and it is here rather than anywhere faster
+   * because this is the only screen in the game where nothing is being asked of
+   * the hands. Slow harmonic rhythm and held tones need a listener who is not
+   * doing anything else, and a menu with two options is exactly that listener.
+   * The same track plays over the ending card, which is a deliberate pairing
+   * and not a saving of effort: see `EndingScene`.
+   *
+   * The death sound still fires on top. It is an event and this is a room, and
+   * they are on different buses (DESIGN.md kohta 8).
+   */
   enter() {
-    Music.stop();
+    Music.play('jouset');
     Sfx.play('die');
   }
 
@@ -201,8 +221,24 @@ export class EndingScene {
     this.tick = 0;
   }
 
+  /*
+   * THE ENDING AND THE GAME OVER SHARE A TRACK, AND THAT IS THE POINT.
+   *
+   * This screen used to borrow the world map's tune, which is the sound of
+   * *between levels* — the last thing the last screen of the game should say.
+   * It plays `jouset` now, the same string piece as the game-over card.
+   *
+   * Two opposite screens, one piece, on purpose. The music this is written
+   * after does exactly that: Górecki's third symphony is a lament that ends in
+   * light, and nothing in the notes decides which of the two you are hearing —
+   * the words over it do. Here the screen supplies the words. Over JATKA VAI
+   * LOPETA it is a lament; over ONNEKSI OLKOON, with the prince on his back and
+   * the gases free, the same held fifths read as the sun coming up. Writing two
+   * pieces would have been the easy call and it would have thrown away the one
+   * observation that made the track worth writing.
+   */
   enter() {
-    Music.play('map');
+    Music.play('jouset');
     Sfx.play('clear');
   }
 
@@ -260,9 +296,19 @@ export class VictoryScene {
     this.power = game.state.power;
   }
 
+  /*
+   * A POLKA FOR THE PEA SOUP (20.8.2026).
+   *
+   * The title theme was standing in here, and it was standing in badly: the
+   * title theme is the sound of *not having started yet*, played over the one
+   * card that exists to say you just finished the hardest thing in the world.
+   * `polkka` is 2/4, fast, and over in the four seconds this card lasts — and a
+   * village dance is the right register for a man sitting down to a bowl of
+   * soup, which is the only thing this game has an opinion about.
+   */
   enter() {
     Sfx.play('clear');
-    Music.play('title');
+    Music.play('polkka');
   }
 
   update(input) {

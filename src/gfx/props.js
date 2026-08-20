@@ -33,6 +33,16 @@ import { drawText, textWidth } from './font.js';
 export const PROP_AHEAD = 48;
 
 /**
+ * The room a prop takes on the road, in layer pixels.
+ *
+ * The widest thing drawn here is the level-name board: `textWidth` of eleven
+ * characters plus its border is about 78 px. 100 clears that with room for
+ * the posts and enough air that the two read as separate objects rather than
+ * as one long hoarding.
+ */
+const PROP_CLEAR = 100;
+
+/**
  * The parallax rate of the prop layer.
  *
  * The backdrop's nearest strip runs at 0.5 and the tilemap at 1.0, so 0.6
@@ -73,7 +83,27 @@ export class PropLayer {
    * prop never has to know how fast its layer moves.
    */
   place(kind, camX, viewW, data = {}) {
-    const prop = { kind, x: Math.round(camX * PROP_PAR) + viewW + PROP_AHEAD, ...data };
+    /*
+     * QUEUED BEHIND WHATEVER IS ALREADY WAITING.
+     *
+     * Owner: *"make sure speed sign and world level sign don't overlap."* —
+     * and they could, exactly. Every prop was born at the same spot, `viewW +
+     * PROP_AHEAD` in layer space, so two placed near the same moment stood in
+     * the same hole: a speed limit inside a name board, both unreadable, and
+     * no amount of luck involved because the spawn point is a constant.
+     *
+     * A new prop is pushed right until it clears everything still off-screen
+     * by `PROP_CLEAR`. That is measured against the widest thing this layer
+     * draws — a name board is `textWidth('MAAILMA 1-1') + 12`, about 78 px —
+     * plus a margin, so the two arrive one after the other instead of
+     * together. It costs the second one a moment, which is the correct price:
+     * a sign you cannot read is worth less than a sign that is late.
+     */
+    let x = Math.round(camX * PROP_PAR) + viewW + PROP_AHEAD;
+    for (const other of this.list) {
+      if (other.x + PROP_CLEAR > x) x = other.x + PROP_CLEAR;
+    }
+    const prop = { kind, x, ...data };
     this.list.push(prop);
     return prop;
   }

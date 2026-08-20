@@ -1,5 +1,6 @@
 import { THEMES } from './tiles.js';
 import { hashNoise } from '../core/utils.js';
+import { drawTower } from './tower.js';
 
 /**
  * Parallax scenery behind the tilemap. `bg` picks the silhouette style,
@@ -197,12 +198,62 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
   else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
 }
 
+/**
+ * The coin cube's own parallax, and it is the slowest thing in the picture.
+ *
+ * 0.06 against the far ridge's 0.14: over a level's worth of running it
+ * crosses about a third of the screen, which is the "veeeeeerrryyy slowly"
+ * the owner asked for. It is a **rate** and not a fraction of the level's
+ * length, deliberately — tying it to progress would have made it a second
+ * answer to the question the sun already answers, and DESIGN.md item 8 forbids
+ * the game two ways of saying the same thing. A rate says only *far away*.
+ *
+ * It hangs above the far ridge rather than standing on the tilemap: it is
+ * behind the hills, and something behind the hills whose feet are on the
+ * player's floor is a thing the size of a house pretending to be a world.
+ */
+function drawSkyTower(ctx, tower, camX, groundY, th) {
+  if (!tower) return;
+  const span = 640;
+  const x = Math.round(((tower.at - camX * 0.06) % span + span) % span - 90);
+  const sky = hex(th.sky[1]);
+  drawTower(ctx, x, groundY - 118, {
+    fill: tower.fill,
+    lives: tower.lives,
+    haze: 0.5,
+    sky,
+    phase: tower.tick || 0,
+    rising: tower.rising === undefined ? 1 : tower.rising,
+  });
+}
+
 function disc(ctx, cx, cy, r, core, rim, tick, rays) {
   if (rays) {
-    ctx.fillStyle = `rgba(255,236,160,${0.06 + 0.02 * Math.sin(tick / 30)})`;
-    for (let dy = -r * 2; dy <= r * 2; dy++) {
-      const half = Math.round(Math.sqrt(Math.max(0, (r * 2) ** 2 - dy * dy)));
-      ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+    /*
+     * THE GLOW FALLS OFF, and before it did it was being read as a second sun.
+     *
+     * Owner, from play: *"why does level KUUMA DYYNI have two suns? That feels
+     * like an error."* — it is one sun. Scanned across the whole of 2-1 by the
+     * sun's exact core colour, sixty camera positions, exactly one disc in
+     * every frame. What the second one was is **this**: a hard-edged circle at
+     * twice the radius and six per cent alpha, which is not a glow, it is a
+     * faint disc with a rim. A rim is an edge and an edge is an object.
+     *
+     * Drawn now as concentric bands whose alpha falls to nothing at the
+     * outside, so the halo has no border to be mistaken for one. Same light,
+     * same size, no second object.
+     */
+    const bands = 7;
+    const outer = r * 2;
+    for (let b = bands; b >= 1; b--) {
+      const rr = (outer * b) / bands;
+      const fade = 1 - (b - 1) / bands;
+      const a = (0.055 + 0.018 * Math.sin(tick / 30)) * fade * fade;
+      ctx.fillStyle = `rgba(255,236,160,${a.toFixed(4)})`;
+      for (let dy = -rr; dy <= rr; dy++) {
+        const half = Math.round(Math.sqrt(Math.max(0, rr * rr - dy * dy)));
+        ctx.fillRect(cx - half, cy + Math.round(dy), half * 2, 1);
+      }
     }
   }
   ctx.fillStyle = rim;
@@ -657,7 +708,8 @@ function cloudSea(ctx, th, camX, viewW, viewH, tick, groundY) {
  * the player's feet twenty tiles up in the air would say the climb never
  * happened. Zero — every ordinary level — is the picture this always drew.
  */
-export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0, clock = null) {
+export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
+  clock = null, tower = null) {
   const th = THEMES[theme] || THEMES.grass;
 
   if (bg === 'none') {
@@ -698,6 +750,23 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
     }
   });
   tileStrip(ctx, farStrip, -camX * 0.14, groundY - FAR_H, viewW);
+
+  /*
+   * THE COIN TOWER GOES HERE, and where is the whole point.
+   *
+   * Owner: *"make sure the bottom part of the tower integrates nicely with
+   * the other layers, maybe the layers reveal and hide some parts of the
+   * bottom at times?"* — and this is the one line that does it. Between the
+   * far ridge and the middle one, the tower is behind everything that scrolls
+   * faster than it, so the middle and near crests **sweep across its feet as
+   * you run**: sometimes you see it standing on the hills, sometimes only its
+   * lit top over a treeline.
+   *
+   * That changing occlusion is the strongest depth cue a flat picture has.
+   * Smaller and paler are guesses the eye can argue with; something passing in
+   * front of something else is not.
+   */
+  drawSkyTower(ctx, tower, camX, groundY, th);
 
   // Clouds sit between the far and mid ridges.
   const cloudShade = mix(th.cloud, th.sky[1], 0.45);
