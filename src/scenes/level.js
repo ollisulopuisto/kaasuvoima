@@ -1916,6 +1916,8 @@ export class LevelScene {
     this.coinFlights = [];
     this.tubeFlash = 0;
     this.tubeFlush = 0;
+    /** Kill chain owned by one run of the star, or null. */
+    this.starRun = null;
     /** Tick the player died on, or null. Drives the red coin's blast. */
     this.deathAt = null;
 
@@ -5058,6 +5060,16 @@ export class LevelScene {
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
     this.updateProps();
+    /*
+     * ONE RUN OF THE STAR IS ONE CHAIN, so the counter is born with the star
+     * and dies with it. Per frame and not in `enter`, which is where this
+     * first went and where it did nothing at all: `enter` runs once, and a
+     * star is picked up in the middle of a level.
+     */
+    const starring = !!(this.player && this.player.star > 0);
+    if (starring && !this.starRun) this.starRun = { chain: 0 };
+    else if (!starring && this.starRun) this.starRun = null;
+
     this.updateBrink();
     this.updateBumps();
     this.updateCrumbles();
@@ -6543,7 +6555,28 @@ export class LevelScene {
        * needs her three — and so one death path serves every enemy type.
        */
       if (p.star > 0) {
-        e.hitByShell(e.cx >= p.cx ? 1 : -1);
+        /*
+         * THE STAR IS THE THIRD CHAIN, and it was the one that was missing.
+         *
+         * Owner: *"during invulnerability all kills should count as a chain,
+         * no?"* — yes, and the structure had already been built for it twice.
+         * A chain here is an OWNER plus a break condition: the player airborne
+         * is one and breaks on landing, a kicked shell is another and breaks
+         * when it stops. The star is the third and breaks when the star does.
+         *
+         * Until now this line called `hitByShell` bare, so twelve seconds of
+         * invulnerable carnage scored as a dozen unrelated kills — no ladder,
+         * no rising sound, no life. The one power-up that exists to make a
+         * mess was the one that paid flat for it.
+         *
+         * The owner is `starRun` and NOT the player, which matters: sharing
+         * the player's counter would mean landing broke the star chain, and
+         * landing is the one thing you do constantly while a star is running.
+         */
+        const step = this.starRun ? this.starRun.chain || 0 : 0;
+        if (this.chained(this.starRun, () => e.hitByShell(e.cx >= p.cx ? 1 : -1))) {
+          killSound(step);
+        }
         continue;
       }
 
