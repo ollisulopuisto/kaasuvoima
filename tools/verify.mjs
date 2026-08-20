@@ -25658,7 +25658,12 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `levein rivi ${H.widest} px, litteä yläreuna ${H.flatTop} px`
       + ` — suhde ${H.ratio} (suorakaide antaisi 1.0)`);
 
-    expect('heksaruudukko on yhdessä kentässä eikä kaikissa',
+    /* Kennonahka on kentän oma valinta eikä globaali tila: 1-3 on kennoa ja
+     * 1-1 ei ole, samassa maailmassa ja samalla teemalla. Tämä portti oli
+     * ennen "yhdessä kentässä eikä kaikissa" — rajaus on sittemmin laajennettu
+     * teemaa kohti yhteen, mutta se mitä tämä mittaa on yhä sama ja yhä se
+     * mikä pitää pystyä perumaan: lippu, ei kytkin. */
+    expect('kennonahka on kentän oma lippu eikä globaali tila',
       H.hexSkin === 'hexgrid' && H.plainSkin === null,
       `1-3 skin ${H.hexSkin}, 1-1 skin ${H.plainSkin}`);
 
@@ -25779,6 +25784,114 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       H.same24 && !H.same16,
       `y=0 ja y=24 samat: ${H.same24} (kuvion jakso), y=0 ja y=16 samat:`
       + ` ${H.same16} (laatan jakso — tosi tarkoittaisi laattaan lukittua)`);
+  }
+
+  /*
+   * MAASTO ON KENNOA, ESINEET EIVÄT — ja se on yksi sääntö eikä laattalista.
+   *
+   * Omistaja 20.8.2026: *"i'd wanna try out more hex shapes and if they feel
+   * good, port the whole game over!"* Kennonahka oli yhdessä kentässä ja se
+   * kattoi kuusi laattaa; loput maastosta oli yhä neliöitä sen keskellä.
+   *
+   * Raja on vedetty siitä mikä tiedostossa jo luki. Hylly, ponnahduslauta ja
+   * lyhty on kirjoitettu **kiinteillä väreillä eikä teeman omilla**, ja
+   * perustelu on niiden kommenteissa sanasta sanaan: *"pelaajan tekemän
+   * esineen pitää näkyä jokaisessa maailmassa samana."* Se on sama väite kuin
+   * tämä, toisin päin — maailma vaihtaa muotoa, esine ei. Ja piikin terävyys
+   * on sen koko viesti: kuusikulmainen piikki on tylppä piikki.
+   *
+   * Mitataan siluetista eikä laattalistasta: laatan neljä kulmapikseliä.
+   * Kuusikulmio leikkaa ne kaikki neljä — sen levein kohta on laatan
+   * keskiviivalla ja ylä- ja alareuna ovat yhdeksän pikseliä kapeammat —
+   * neliö ei leikkaa yhtään. Näin gate ei kysy "kutsuttiinko oikeaa funktiota"
+   * vaan "onko se kuusikulmio", ja se on se asia jota omistaja katsoo.
+   */
+  {
+    const X = await page.evaluate(async () => {
+      const { drawTile, T } = await import('/src/gfx/tiles.js');
+      /* Laatta magentalle pohjalle: kulma on leikattu jos magenta näkyy läpi.
+       * Magenta siksi ettei yksikään teema maalaa sitä. */
+      const corners = (ch, hex) => {
+        const c = document.createElement('canvas');
+        c.width = 16; c.height = 16;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.fillStyle = 'rgb(255,0,255)'; g.fillRect(0, 0, 16, 16);
+        drawTile(g, ch, 0, 0, 'grass', 3, 3, 0, ' ', hex ? { skin: 'hexgrid' } : {});
+        const d = g.getImageData(0, 0, 16, 16).data;
+        const clear = ([x, y]) => {
+          const k = (y * 16 + x) * 4;
+          return d[k] === 255 && d[k + 1] === 0 && d[k + 2] === 255;
+        };
+        return [[0, 0], [15, 0], [0, 15], [15, 15]].filter(clear).length;
+      };
+      /*
+       * Lipputon piirto on mukana jokaisesta, koska pelkkä "kennona neljä"
+       * ei erota leikattua kuusikulmiota laatasta joka oli valmiiksi pieni:
+       * `LUMP` ja `LAMP` antavat neljä kummallakin tavalla. Väite on **ero**.
+       */
+      const measure = (names) => names.map((n) => ({
+        n, plain: corners(T[n], false), hex: corners(T[n], true),
+      }));
+      return {
+        terrain: measure(['HARD', 'BRICK', 'QCOIN', 'QPOWER', 'QSTAR', 'USED',
+          'NOTE', 'SWITCH', 'CRUMBLE', 'ICE', 'PLATFORM']),
+        objects: measure(['SPRING', 'SHELF', 'SPIKE']),
+      };
+    });
+
+    const cut = X.terrain.filter((t) => t.hex === 4);
+    const uncut = X.terrain.filter((t) => t.hex !== 4);
+    expect('kennokentässä jokainen maastolaatta on kuusikulmio',
+      uncut.length === 0,
+      uncut.length ? uncut.map((t) => `${t.n} ${t.hex}/4`).join(', ')
+        : `${cut.length} laattaa, kaikki neljä kulmaa leikattu`);
+
+    /* Ja se leikkaus on tämän lipun tekemä eikä laatan oma pienuus. */
+    const flat = X.terrain.filter((t) => t.plain === 4);
+    expect('kuusikulmaisuus tulee kennolipusta eikä laatan omasta muodosta',
+      flat.length === 0,
+      flat.length ? `valmiiksi kulmattomia: ${flat.map((t) => t.n).join(', ')}`
+        : `${X.terrain.length} laattaa, jokainen neliö ilman lippua`);
+
+    const bent = X.objects.filter((t) => t.plain !== t.hex);
+    expect('pelaajan tekemät esineet ja piikit näyttävät samalta kennon päällä',
+      bent.length === 0,
+      bent.length ? bent.map((t) => `${t.n} ${t.plain}->${t.hex}`).join(', ')
+        : X.objects.map((t) => `${t.n} ${t.hex}`).join(', '));
+  }
+
+  /*
+   * KENNONAHKA ON JOKAISESSA TEEMASSA, ei enää yhdessä kentässä.
+   *
+   * Aiempi portti luki *"heksaruudukko on yhdessä kentässä eikä kaikissa"* ja
+   * se oli oikea portti sille päivälle: kokeilu kuului rajata yhteen kenttään
+   * ennen kuin kukaan tiesi miltä se tuntuu. Omistaja on nyt pelannut sen ja
+   * pyytänyt lisää, joten väite vaihtuu — muttei katoa. Rajaus on nyt
+   * **käsintehdyt kentät, yksi per teema**, ja molemmat puolet mitataan:
+   * jokaisella teemalla on kennokenttä, eikä yksikään generoitu ole saanut
+   * sitä (`generated.js` tulee siirrosta ulos tavulleen samana).
+   */
+  {
+    const S = await page.evaluate(async () => {
+      const { levelIds, getLevel } = await import('/src/data/levels.js');
+      const skins = {};
+      const byTheme = {};
+      for (const id of levelIds()) {
+        const def = getLevel(id);
+        if (def.skin) skins[id] = def.skin;
+        const th = def.theme || 'grass';
+        (byTheme[th] ||= []).push([id, def.skin || null]);
+      }
+      const themes = Object.keys(byTheme).sort();
+      const covered = themes.filter((t) => byTheme[t].some(([, s]) => s === 'hexgrid'));
+      return { skins, themes, covered };
+    });
+
+    const missing = S.themes.filter((t) => !S.covered.includes(t));
+    expect('jokaisessa teemassa on yksi kennokenttä',
+      missing.length === 0,
+      missing.length ? `ilman kennoa: ${missing.join(', ')}`
+        : `${S.covered.length} teemaa, kennokentät ${Object.keys(S.skins).join(' ')}`);
   }
 
   /* ------------------------- maailmanvaihto kuoriutuu -------------------- */
@@ -26618,6 +26731,110 @@ const report = await page.evaluate(async (OVERWORLDS) => {
 
     expect('tyhjä kuutio on tyhjä',
       K.at[0].gold === 0, `0 %: ${K.at[0].gold} kultapikseliä`);
+  }
+
+  /*
+   * KUUTIO ON JOKAISESSA TAUSTASSA JOLLE SE ANNETAAN — ja tätä ei ollut.
+   *
+   * `drawBackdrop` haarautuu taustan mukaan, ja tehdas- ja pilvihaara
+   * **palasivat ennen kuin `drawSkyTower` ehdittiin kutsua**. `level.js` teki
+   * oman osuutensa oikein: se rakentaa torniolion ja antaa sen jokaiselle
+   * kentälle jonka tausta ei ole `none` eikä joka ole pystykenttä. Taustapiirto
+   * otti sen vastaan ja pudotti lattialle.
+   *
+   * Mitattuna 16 kenttää: koko maailma 4 linnakkeineen, 5-5, 5-7 sekä 7-1,
+   * 7-3, 7-4, 7-5, 7-6 ja 7-P. Niissä ei ole ollut elämälukemaa eikä
+   * kolikkomittaria lainkaan, koska molemmat asuvat kuutiossa sen jälkeen kun
+   * HUD-nauha purettiin.
+   *
+   * MIKSI TÄTÄ EI HUOMATTU: kuutio tarkistettiin sinä päivänä kun se tuli, ja
+   * se tarkistettiin `hills`- ja `dunes`-taustoilla. Molemmat kulkevat samaa
+   * haaraa. Yksikään portti ei koskaan kysynyt muilta.
+   *
+   * MITEN TÄMÄ MITATAAN, ja tässä on yksi tämän repon jo maksama oppitunti.
+   * `drawSkyTower`in oma kommentti varoittaa siitä: portti joka etsi kultaa
+   * taivaskaistalta löysi **pakokaasun** ja raportoi luottavaisesti lukuja
+   * jotka heittelivät 312:sta 2967:ään framejen välillä. Väriin perustuva
+   * etsintä löytää aina jotain.
+   *
+   * Joten tässä ei etsitä kuutiota. Sama tausta piirretään **kahdesti**, kerran
+   * tornin kanssa ja kerran ilman, ja kysytään erosta: jos yksikään pikseli ei
+   * muutu, kuutiota ei piirretty. Sitten kysytään **missä** ero on, ja se
+   * verrataan `skyTowerAt`in palauttamaan paikkaan — samaan funktioon jota
+   * piirto käyttää, koska se on viety ulos juuri tätä varten. Näin portti ei
+   * voi löytää väärää asiaa: se ei etsi mitään, se vertaa.
+   */
+  {
+    const B = await page.evaluate(async () => {
+      const { drawBackdrop, skyTowerAt } = await import('/src/gfx/backdrop.js');
+      const { levelIds, getLevel } = await import('/src/data/levels.js');
+
+      /* Ne taustat joille `level.js` antaa tornin, luettuna siitä samasta
+       * ehdosta eikä listasta: kaikki paitsi `none`, pystykentät pois. */
+      const bgs = new Map();
+      for (const id of levelIds()) {
+        const d = getLevel(id);
+        if (d.bg === 'none' || d.vertical) continue;
+        if (!bgs.has(d.bg)) bgs.set(d.bg, { theme: d.theme, level: id, n: 0 });
+        bgs.get(d.bg).n++;
+      }
+
+      const W = 320, H = 240, TICK = 300, CAMX = 640;
+      const shot = (bg, theme, tower) => {
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+        drawBackdrop(g, bg, theme, CAMX, W, H, TICK, 0, null, tower);
+        return g.getImageData(0, 0, W, H).data;
+      };
+
+      const out = [];
+      for (const [bg, info] of bgs) {
+        const tower = { tick: TICK, coins: 60, lives: 3, lagY: 0, launch: 0 };
+        const withCube = shot(bg, info.theme, tower);
+        const without = shot(bg, info.theme, null);
+        let diff = 0, minX = 1e9, maxX = -1, minY = 1e9, maxY = -1;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const k = (y * W + x) * 4;
+            if (withCube[k] !== without[k] || withCube[k + 1] !== without[k + 1]
+              || withCube[k + 2] !== without[k + 2]) {
+              diff++;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        const at = skyTowerAt(TICK, CAMX, W, H);
+        /* Onko laskettu paikka sen sisällä mikä muuttui? Väljästi, koska
+         * kuution ympärillä on utua ja pakokaasua ja ne ovat osa sitä. */
+        const inside = diff > 0 && at.x >= minX - 8 && at.x <= maxX + 8
+          && at.y >= minY - 8 && at.y <= maxY + 8;
+        out.push({ bg, theme: info.theme, level: info.level, levels: info.n,
+          diff, inside, at, box: [minX, minY, maxX, maxY] });
+      }
+      return out;
+    });
+
+    const blind = B.filter((b) => b.diff === 0);
+    expect('kuutio piirtyy jokaisessa taustassa jolle se annetaan',
+      blind.length === 0,
+      blind.length
+        ? `${blind.map((b) => `${b.bg} (${b.levels} kenttää, esim. ${b.level})`).join(', ')}`
+          + ` — ei yhtään muuttunutta pikseliä`
+        : `${B.length} taustaa: ${B.map((b) => `${b.bg} ${b.diff}px`).join(', ')}`);
+
+    /* Ja se on kuutio siellä missä sen pitääkin olla eikä jokin muu ero. */
+    const astray = B.filter((b) => b.diff > 0 && !b.inside);
+    expect('muuttunut alue on siellä minne skyTowerAt sanoo kuution menevän',
+      astray.length === 0,
+      astray.length
+        ? astray.map((b) => `${b.bg}: laskettu ${b.at.x},${b.at.y} ei ole`
+          + ` laatikossa ${b.box.join(',')}`).join('; ')
+        : `${B.length} taustaa, jokaisessa osuu`);
   }
 
   /* ------------------------------- lavat --------------------------------- */

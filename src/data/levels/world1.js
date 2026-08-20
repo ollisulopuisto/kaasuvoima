@@ -199,12 +199,32 @@ export const WORLD1_LEVELS = {
      * shaped? Maybe keep the flat stacking, but change the skin? This might be
      * worth trying out on one stage first."*
      *
-     * Tämä on se yksi kenttä. Käsintehty (generoituun ei saa koskea käsin —
+     * Tämä oli se yksi kenttä. Käsintehty (generoituun ei saa koskea käsin —
      * `generated.js` tulee siirrosta ulos tavulleen samana), varhainen, ja
      * maastopassi antaa sille aaltoilevan maan eli paljon pintaa katsottavaksi.
      * Lippu koskee vain piirtoa: törmäys, hyppybudjetti ja kenttädata ovat
      * samat kuin joka muussakin kentässä — kävelypinta on pikselilleen siellä
      * missä ennenkin, ja kennot ovat sen alla. Ks. `drawHexTerrain`.
+     *
+     * JA SITTEN SE LAAJENI, 20.8.2026. Omistaja pelasi tämän ja pyysi lisää:
+     * *"i'd wanna try out more hex shapes and if they feel good, port the
+     * whole game over!"* Rajaus on nyt **yksi käsintehty kenttä per teema** —
+     * 2-2, 2-N, 3-2, 4-2, 6-1, 7-1, 1-F ja tämä — ja se on rajaus eikä
+     * puolittainen kytkin, kahdesta syystä.
+     *
+     * Kenno on maalattu **teeman omilla väreillä**, joten "miltä se tuntuu" on
+     * kirjaimellisesti eri kysymys jokaisessa paletissa: ruoholla se on
+     * kumpuilevaa kennoa, jäällä se on kidettä ja tehtaassa se on ritilää.
+     * Yksi kenttä yhdessä maailmassa ei voi vastata siihen kahdeksan puolesta,
+     * ja se on juuri se päätös joka nyt on edessä.
+     *
+     * Ja **jokaiseen teemaan jää neliökenttä sen viereen**. Vertailu kuuluu
+     * saman teeman sisälle: 1-1 ja 1-3 eroavat tästä ja vain tästä, ja niin
+     * eroaa jokainen pari. Jos kenno viedään koko peliin, tuo vertailu on se
+     * mikä katoaa — joten se kannattaa käyttää ennen kuin se katoaa.
+     *
+     * Mikä on kennoa ja mikä ei, on yksi sääntö eikä laattalista: **maasto on
+     * kennoa, esineet eivät.** Perustelu on `gfx/tiles.js`:n `drawTile`ssa.
      */
     skin: 'hexgrid',
     /* Maastopassi (`data/terrain.js`): kokoaja päättää palikoiden lattiatasot
@@ -275,6 +295,9 @@ export const WORLD1_LEVELS = {
    */
   '1-F': {
     theme: 'fortress', bg: 'none', music: 'fortress', boss: true, bossVariant: 0,
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     /*
      * The chunk order is the one this level was written with. The flyer's
      * first appearance in the whole game is in `root_drop`, and after world 1's

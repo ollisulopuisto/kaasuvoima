@@ -63,6 +63,9 @@ export const WORLD6_LEVELS = {
    */
   '6-1': {
     theme: 'bone', bg: 'bones', music: 'bone',
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     /* Terrain pass, see `data/terrain.js`. */
     terrain: true,
     /*

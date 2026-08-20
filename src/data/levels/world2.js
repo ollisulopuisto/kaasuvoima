@@ -339,6 +339,9 @@ export const WORLD2_LEVELS = {
    */
   '2-2': {
     theme: 'desert', bg: 'dunes', music: 'makam',
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     chunks: [
       'start', 'plat_float', 'power', 'sun', 'spikes', 'pit_twin',
       'walkers', 'sky_run', 'beanstalk', 'clouds', 'pit_bridge', 'brick_wall',
@@ -401,6 +404,9 @@ export const WORLD2_LEVELS = {
    */
   '2-N': {
     theme: 'night', bg: 'dunes', music: 'makam', wind: true, spotlight: true,
+    /* Tämän teeman kennokenttä. Perustelu rajaukselle ja sille mitä lippu
+     * koskee on 1-3:ssa (`world1.js`) — se on se kenttä josta tämä lähti. */
+    skin: 'hexgrid',
     /* Maastopassi, ks. `data/terrain.js`. Yön dyynit ovat sille luontevin
      * paikka koko maailmassa: tuuli liikkuu jo, ja nyt maakin. */
     terrain: true,
