@@ -3461,6 +3461,21 @@ export class LevelScene {
    * pinta kertoo yhdellä silmäyksellä "yli puolivälin", ja merkit kertovat
    * halutessa tarkan luvun ilman että lukua tarvitsee kirjoittaa mihinkään.
    */
+  /**
+   * The coin surface as it is being *drawn*, which is not always the count.
+   *
+   * While the tube is flushing, `tubeFill` has already jumped to what will be
+   * left and `coins` has already paid — the difference between them **is** the
+   * animation. One reading, because the cube on the horizon and the glass in
+   * the corner have to be draining the same liquid; two would be two gauges
+   * disagreeing about the same sixty-four coins.
+   */
+  tubeShown() {
+    if (this.tubeFlush <= 0) return this.tubeFill;
+    const t = this.tubeFlush / COIN_FLUSH;
+    return Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * t);
+  }
+
   drawCoinTube(ctx) {
     const box = this.tubeBox();
     const h = box.bottom - box.top;
@@ -3482,9 +3497,7 @@ export class LevelScene {
     /* Huuhtelun aikana pinta laskee täydestä siihen kolmannekseen joka jää,
      * ei nollaan: `RED_COST` kolikkoa lähtee ja `RED_KEEP` jää lasiin. */
     const flushT = this.tubeFlush > 0 ? this.tubeFlush / COIN_FLUSH : 0;
-    const shown = this.tubeFlush > 0
-      ? Math.round(RED_KEEP + (COIN_CAP - RED_KEEP) * flushT)
-      : this.tubeFill;
+    const shown = this.tubeShown();
     for (let i = 0; i < shown; i++) {
       const y = box.bottom - (i + 1) * box.pxPerCoin;
       const tenth = (i + 1) % 10 === 0;
@@ -6232,8 +6245,30 @@ export class LevelScene {
      */
     const span = Math.max(1, this.widthPx - VIEW_W);
     const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
+    /*
+     * The coin gauge is a tower on the horizon now, so it is handed to the
+     * backdrop rather than drawn over the picture afterwards: it has to be
+     * *inside* the layers, between the far ridge and the middle one, or the
+     * hills cannot sweep across its feet. `tubeBox` and the corner glass are
+     * gone with it — see `drawCoinTube`.
+     *
+     * `at` is a fixed starting offset and not a function of progress: the
+     * tower drifts at its own slow rate (`drawSkyTower`), so it says "far
+     * away" and nothing else. Position-as-progress would be a second answer
+     * to the question the sky already answers.
+     */
+    const tower = this.def.bg === 'none' || this.vertical ? null : {
+      at: 300,
+      fill: this.tubeShown(),
+      lives: Math.max(0, this.game.state.lives | 0),
+      tick: this.tick,
+      /* 0 while a red is climbing out of the cube, 1 once it is in place. See
+       * `drawTower`: this is the conversion, and it is the one thing the
+       * corner glass said that the cube did not. */
+      rising: this.tubeFlush > 0 ? 1 - this.tubeFlush / COIN_FLUSH : 1,
+    };
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
-      bandDrop, clock);
+      bandDrop, clock, tower);
     /* Props sit in front of the haze that softens the hill/tilemap seam: they
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the

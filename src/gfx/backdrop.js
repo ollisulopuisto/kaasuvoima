@@ -1,5 +1,6 @@
 import { THEMES } from './tiles.js';
 import { hashNoise } from '../core/utils.js';
+import { drawTower } from './tower.js';
 
 /**
  * Parallax scenery behind the tilemap. `bg` picks the silhouette style,
@@ -195,6 +196,35 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
   // joten se on valkoinen ja terävä eikä keltainen ja utuinen.
   else if (themeName === 'cloud') disc(ctx, cx, cy, 13, '#ffffff', '#ffe8a0', tick, true);
   else disc(ctx, cx, cy, 10, '#e8e8ff', '#9a9ac8', tick, false);
+}
+
+/**
+ * The coin cube's own parallax, and it is the slowest thing in the picture.
+ *
+ * 0.06 against the far ridge's 0.14: over a level's worth of running it
+ * crosses about a third of the screen, which is the "veeeeeerrryyy slowly"
+ * the owner asked for. It is a **rate** and not a fraction of the level's
+ * length, deliberately — tying it to progress would have made it a second
+ * answer to the question the sun already answers, and DESIGN.md item 8 forbids
+ * the game two ways of saying the same thing. A rate says only *far away*.
+ *
+ * It hangs above the far ridge rather than standing on the tilemap: it is
+ * behind the hills, and something behind the hills whose feet are on the
+ * player's floor is a thing the size of a house pretending to be a world.
+ */
+function drawSkyTower(ctx, tower, camX, groundY, th) {
+  if (!tower) return;
+  const span = 640;
+  const x = Math.round(((tower.at - camX * 0.06) % span + span) % span - 90);
+  const sky = hex(th.sky[1]);
+  drawTower(ctx, x, groundY - 118, {
+    fill: tower.fill,
+    lives: tower.lives,
+    haze: 0.5,
+    sky,
+    phase: tower.tick || 0,
+    rising: tower.rising === undefined ? 1 : tower.rising,
+  });
 }
 
 function disc(ctx, cx, cy, r, core, rim, tick, rays) {
@@ -678,7 +708,8 @@ function cloudSea(ctx, th, camX, viewW, viewH, tick, groundY) {
  * the player's feet twenty tiles up in the air would say the climb never
  * happened. Zero — every ordinary level — is the picture this always drew.
  */
-export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0, clock = null) {
+export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
+  clock = null, tower = null) {
   const th = THEMES[theme] || THEMES.grass;
 
   if (bg === 'none') {
@@ -719,6 +750,23 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
     }
   });
   tileStrip(ctx, farStrip, -camX * 0.14, groundY - FAR_H, viewW);
+
+  /*
+   * THE COIN TOWER GOES HERE, and where is the whole point.
+   *
+   * Owner: *"make sure the bottom part of the tower integrates nicely with
+   * the other layers, maybe the layers reveal and hide some parts of the
+   * bottom at times?"* — and this is the one line that does it. Between the
+   * far ridge and the middle one, the tower is behind everything that scrolls
+   * faster than it, so the middle and near crests **sweep across its feet as
+   * you run**: sometimes you see it standing on the hills, sometimes only its
+   * lit top over a treeline.
+   *
+   * That changing occlusion is the strongest depth cue a flat picture has.
+   * Smaller and paler are guesses the eye can argue with; something passing in
+   * front of something else is not.
+   */
+  drawSkyTower(ctx, tower, camX, groundY, th);
 
   // Clouds sit between the far and mid ridges.
   const cloudShade = mix(th.cloud, th.sky[1], 0.45);
