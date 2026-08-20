@@ -202,10 +202,11 @@ export const WORLD1_LEVELS = {
      * Tämä on se yksi kenttä. Käsintehty (generoituun ei saa koskea käsin —
      * `generated.js` tulee siirrosta ulos tavulleen samana), varhainen, ja
      * maastopassi antaa sille aaltoilevan maan eli paljon pintaa katsottavaksi.
-     * Lippu koskee vain piirtoa: ruudukko, törmäys ja hyppybudjetti ovat
-     * samat kuin joka muussakin kentässä. Ks. `drawHexSkin`.
+     * Lippu koskee vain piirtoa: törmäys, hyppybudjetti ja kenttädata ovat
+     * samat kuin joka muussakin kentässä — kävelypinta on pikselilleen siellä
+     * missä ennenkin, ja kennot ovat sen alla. Ks. `drawHexTerrain`.
      */
-    skin: 'hex',
+    skin: 'hexgrid',
     /* Maastopassi (`data/terrain.js`): kokoaja päättää palikoiden lattiatasot
      * ja kirjoittaa siirtymät rinteinä. Maailman 1 kolmesta käsintehdystä
      * kentästä tämä on se joka sen saa — 1-1 opettaa eikä piilota mitään, ja
