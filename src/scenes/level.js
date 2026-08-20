@@ -6524,8 +6524,21 @@ export class LevelScene {
      * ongelman jonka kello ratkaisi väärin — luolassa aurinkoa ei näy, mutta
      * matkan näkee muutenkin.
      */
-    const span = Math.max(1, this.widthPx - VIEW_W);
-    const clock = 1 - Math.max(0, Math.min(1, this.player ? this.player.x / span : 0));
+    /*
+     * HOW FAR THROUGH THE LEVEL YOU ARE, MEASURED ON THE AXIS THAT MOVES.
+     *
+     * Owner: *"we make sure that the sun or other similar item in the
+     * background tells us how far along we are in the map… let's make that
+     * explicit in all levels."*
+     *
+     * It already did, on `x`, and that is the whole of the level in a
+     * horizontal one. In a **vertical** level `x` hardly changes at all, so
+     * the sun sat almost still for the length of a climb — the indicator was
+     * technically present and said nothing. A climb's progress is height, and
+     * height runs the other way: the goal is *above*, so the fraction is how
+     * far the ceiling has come down to meet you.
+     */
+    const clock = 1 - this.levelProgress();
     /*
      * The coin gauge is a tower on the horizon now, so it is handed to the
      * backdrop rather than drawn over the picture afterwards: it has to be
@@ -6615,7 +6628,17 @@ export class LevelScene {
     ctx.restore();
     /* Putkilo on ruutukoordinaateissa kuten vauhtisykäys: se ei ole maailmassa
      * vaikka maailman kolikot lentävät siihen. */
-    this.drawCoinTube(ctx);
+    /*
+     * THE CORNER GLASS IS GONE. Owner: *"hide the existing left side meter,
+     * that's not necessary now that we have the cube."*
+     *
+     * It was the last permanent readout on the screen, and the cube took over
+     * every job it had: the level falls the same way, the tenth-coin marks are
+     * the same marks, and the lives are countable above it. `drawCoinTube` is
+     * kept rather than deleted because the gate still measures the glass to
+     * prove the *scale* — two pixels per coin, a hundred to fill it — and that
+     * measurement is about the numbers rather than about where they are drawn.
+     */
     this.drawSpeedPulse(ctx, camX, camY);
     if (this.bar) this.drawLetterbox(ctx);
     /* Lippu- ja korttikuvat kuuluvat kuvaan (ne ovat kentän oma tapahtuma),
@@ -6951,6 +6974,27 @@ export class LevelScene {
     if (tx < 0 || tx >= this.w) return false;
     for (let y = Math.max(0, ty); y < this.h; y++) if (this.solidAt(tx, y)) return false;
     return true;
+  }
+
+  /**
+   * 0 at the start of the level and 1 at its end, on whichever axis this level
+   * is actually travelled along.
+   *
+   * One reading, because everything that shows progress has to agree: the sun
+   * outdoors, the shafts of light in a fortress, and anything added later. Two
+   * readings would be two answers to *how far through am I*, which is the
+   * question a player asks most often and can least afford to get twice.
+   */
+  levelProgress() {
+    const p = this.player;
+    if (!p) return 0;
+    if (this.vertical) {
+      const top = this.goal ? this.goal.y : 0;
+      const span = Math.max(1, this.spawn.y - top);
+      return Math.max(0, Math.min(1, (this.spawn.y - p.y) / span));
+    }
+    const span = Math.max(1, this.widthPx - VIEW_W);
+    return Math.max(0, Math.min(1, p.x / span));
   }
 
   updateLifts() {
