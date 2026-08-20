@@ -199,10 +199,31 @@ function sky(ctx, th, themeName, viewW, viewH, camX, tick, clock) {
 
 function disc(ctx, cx, cy, r, core, rim, tick, rays) {
   if (rays) {
-    ctx.fillStyle = `rgba(255,236,160,${0.06 + 0.02 * Math.sin(tick / 30)})`;
-    for (let dy = -r * 2; dy <= r * 2; dy++) {
-      const half = Math.round(Math.sqrt(Math.max(0, (r * 2) ** 2 - dy * dy)));
-      ctx.fillRect(cx - half, cy + dy, half * 2, 1);
+    /*
+     * THE GLOW FALLS OFF, and before it did it was being read as a second sun.
+     *
+     * Owner, from play: *"why does level KUUMA DYYNI have two suns? That feels
+     * like an error."* — it is one sun. Scanned across the whole of 2-1 by the
+     * sun's exact core colour, sixty camera positions, exactly one disc in
+     * every frame. What the second one was is **this**: a hard-edged circle at
+     * twice the radius and six per cent alpha, which is not a glow, it is a
+     * faint disc with a rim. A rim is an edge and an edge is an object.
+     *
+     * Drawn now as concentric bands whose alpha falls to nothing at the
+     * outside, so the halo has no border to be mistaken for one. Same light,
+     * same size, no second object.
+     */
+    const bands = 7;
+    const outer = r * 2;
+    for (let b = bands; b >= 1; b--) {
+      const rr = (outer * b) / bands;
+      const fade = 1 - (b - 1) / bands;
+      const a = (0.055 + 0.018 * Math.sin(tick / 30)) * fade * fade;
+      ctx.fillStyle = `rgba(255,236,160,${a.toFixed(4)})`;
+      for (let dy = -rr; dy <= rr; dy++) {
+        const half = Math.round(Math.sqrt(Math.max(0, rr * rr - dy * dy)));
+        ctx.fillRect(cx - half, cy + Math.round(dy), half * 2, 1);
+      }
     }
   }
   ctx.fillStyle = rim;

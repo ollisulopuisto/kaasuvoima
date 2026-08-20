@@ -1118,7 +1118,20 @@ export class GlobeScene {
         ctx.fillStyle = ink;
         ctx.fillRect(x - 2, y - 2, 4, 4);
       }
-      this.drawMarker(ctx, k, lead, this.onHere(s.u, s.v), ink);
+      /*
+       * OUTSIDE THE FACE, past where the pawn can stand.
+       *
+       * Owner: *"we maybe need to reposition and resize the level icons on the
+       * overworld map, cos now the player completely overlaps them."* Measured
+       * at the end of a walk: **39 %** of the destination marker was behind
+       * him. Not sometimes — a walk ends at the edge midpoint and the marker
+       * was drawn at the edge midpoint, so it was every walk, every time.
+       *
+       * 1.34 puts them clear of the rim, which is also where they belong:
+       * a marker labels the *door*, and a door is on the boundary rather than
+       * inside the room.
+       */
+      this.drawMarker(ctx, k, lead, this.onHere(s.u * 1.34, s.v * 1.34), ink);
     }
     ctx.fillStyle = '#f4f4f0';
     ctx.fillRect(Math.round(hub.x) - 3, Math.round(hub.y) - 3, 6, 6);
@@ -1134,9 +1147,9 @@ export class GlobeScene {
       /* A bar across the road. The one marker that says "not this way"
        * without having to say what is behind it. */
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 7, y - 5, 14, 10);
+      ctx.fillRect(x - 6, y - 4, 12, 8);
       ctx.fillStyle = ink;
-      ctx.fillRect(x - 5, y - 1, 10, 2);
+      ctx.fillRect(x - 4, y - 1, 8, 2);
       return;
     }
     if (lead === 'room' || lead === 'spent') {
@@ -1145,14 +1158,14 @@ export class GlobeScene {
        * learn it twice. */
       const spent = lead === 'spent';
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 9, y - 9, 18, 17);
+      ctx.fillRect(x - 8, y - 8, 16, 15);
       ctx.fillStyle = spent ? '#9a6a6a' : '#e04040';
-      ctx.fillRect(x - 7, y - 7, 14, 7);
+      ctx.fillRect(x - 6, y - 6, 12, 6);
       ctx.fillStyle = '#f8f8f8';
-      ctx.fillRect(x - 5, y - 6, 3, 3);
-      ctx.fillRect(x + 2, y - 5, 3, 3);
+      ctx.fillRect(x - 4, y - 5, 3, 3);
+      ctx.fillRect(x + 2, y - 5, 2, 3);
       ctx.fillStyle = '#f0d8b0';
-      ctx.fillRect(x - 5, y, 10, 5);
+      ctx.fillRect(x - 4, y, 9, 5);
       ctx.fillStyle = '#6a4018';
       ctx.fillRect(x - 2, y + 1, 4, 4);
       return;
@@ -1163,11 +1176,11 @@ export class GlobeScene {
        * that leaves. */
       const door = this.doorHere();
       ctx.fillStyle = '#20202e';
-      ctx.fillRect(x - 9, y - 10, 18, 17);
+      ctx.fillRect(x - 8, y - 9, 16, 15);
       ctx.fillStyle = ink;
-      ctx.fillRect(x - 7, y - 8, 3, 13);
-      ctx.fillRect(x + 4, y - 8, 3, 13);
-      ctx.fillRect(x - 7, y - 8, 14, 3);
+      ctx.fillRect(x - 6, y - 7, 2, 11);
+      ctx.fillRect(x + 4, y - 7, 2, 11);
+      ctx.fillRect(x - 6, y - 7, 12, 2);
       if (door) {
         drawText(ctx, String(door.level), x, y - 2, { color: ink, align: 'center' });
       }
@@ -1180,9 +1193,9 @@ export class GlobeScene {
     const label = node && node.level ? node.level.split('-')[1] : '?';
     const done = lead === 'cleared';
     ctx.fillStyle = '#202038';
-    ctx.fillRect(x - 8, y - 7, 16, 15);
-    ctx.fillStyle = done ? '#404060' : '#f8f8f8';
     ctx.fillRect(x - 7, y - 6, 14, 13);
+    ctx.fillStyle = done ? '#404060' : '#f8f8f8';
+    ctx.fillRect(x - 6, y - 5, 12, 11);
     drawText(ctx, label, x, y - 3, {
       color: done ? '#8fe04a' : '#202038', align: 'center',
     });
