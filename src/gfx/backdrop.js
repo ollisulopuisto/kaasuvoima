@@ -241,7 +241,15 @@ const DRIFT_PAR = 0.0016;
 const DIP_CYCLE = 940;
 const DIP_FALL = 0.22;
 
-function skyTowerAt(tick, camX, viewW, groundY) {
+/**
+ * WHERE THE CUBE IS, and it is exported because the coins have to know.
+ *
+ * A picked-up coin flies to it, so the flight and the drawing have to agree
+ * about a moving target — and the cube moves on purpose, so agreeing by
+ * copying the arithmetic into two files would mean two cubes within a minute.
+ * See `LevelScene.cubeAt`.
+ */
+export function skyTowerAt(tick, camX, viewW, groundY) {
   const t = tick;
   /* Periods 1530, 3700 and 2210 frames: none divides another, so the sum has
    * no period shorter than about seven minutes of play. */
