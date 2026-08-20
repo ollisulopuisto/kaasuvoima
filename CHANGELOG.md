@@ -7,6 +7,59 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.20.50 — he leaves on his own feet
+
+Owner: *"tweak the level end animations: after a normal level, the character
+should walk out the right hand side. on castle levels: make sure they seem to
+ENTER the door, ie. go behind it only AFTER they start hitting the right border
+of the door."*
+
+Two endings, and both were animations that stopped short of the thing they were
+animating.
+
+**The flagpole.** The clear sequence already set `autoWalk`, so he was already
+walking — he just never arrived anywhere. Measured on 1-1: the pole is at
+x 5696, the level ends at 6112, the camera runs out of level at 5792 and stops,
+and 170 frames later the scene cut with him at x 5931, **screen column 142 of
+320**. Dead centre, 349 painted pixels of him still on the glass, walking on
+the spot. The cut is now the later of two things, the jingle finishing and the
+body leaving the frame; `CLEAR_HOLD` is the old 170 and is a minimum rather
+than the length.
+
+The second half of it was not in the clear sequence at all. `moveX` answers
+`T.HARD` for every column past the grid — that lookup is what makes the sides
+of a level walls — so the last 14 px of the walk were into a wall that is in no
+level's data. `Player.offstage` waives *that* wall and nothing else: a real
+tile in the last real column still stops him, and the clear sequence carries a
+fuse for it. Measured over all fifty flagpole levels the longest walk-out is
+3-1 at 320 frames from the grab; the fuse burns at 410.
+
+**The fortress door.** The clip line was `p.x + p.w` on the frame the tile was
+touched, which in 1-F is x 2755 — **3 px past the near jamb of a doorway that
+runs 2752…2784**. The body started disappearing on the first frame of the
+walk-in, at the wrong end of the door, which reads as a doorframe swallowing a
+man rather than a man walking through a door. It is now the door's own far
+border, so the approach and the crossing are drawn in front of the open leaves
+and the clip begins on the frame his leading edge reaches the far jamb: frame
+18 at x 2782.5.
+
+That turned the walk-in from a step into a crossing, and the units were wrong
+for a crossing. `TRANSIT_IN` is a frame count, which suits a pipe — one tile,
+one body, swallowed whole — but the door is 48 px of travel and covering it in
+14 frames is 3.1 px a frame, twice a walk. The distance now sets the frame
+count at `MAX_WALK`, which is 32 frames; and because a transit returns out of
+`Player.update` before its own animation, the legs were frozen and `state()`
+was drawing the **jump** pose for the whole of it. `walkAnim` came out of
+`update` so the doorway can step the same cadence, and the pace and the pose
+are read from the transit's own numbers.
+
+Both endings are gates now, and both were run red first. The door one is
+measured from rendered pixels — paint the frame, paint it with the player
+suppressed, paint it with the clip lifted — and it runs the same walk from two
+different distances to assert the flip lands on the same **x** and a different
+**frame**, because "the door decides" and "frame 18 decides" are only
+distinguishable when the approach changes length.
+
 ## v26.08.20.50 — the music pass: double time, six genres and a bend
 
 Owner: *"i want a music pass: SID chip sounds are lovely! love em. go write in
