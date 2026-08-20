@@ -206,40 +206,16 @@ const FOLD_SHUT = 46;
 const easeFold = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
 const NET_SCALE = 0.30;
 
-/**
- * THE FOURTH DIMENSION, and why the first fold was not one.
+/*
+ * THE FOURTH DIMENSION IS GONE, AND THAT IS THE POINT.
  *
- * Owner: *"the hypercube animation (ie warping between worlds) should be more
- * EXACT, now it feels like a bunch of shapes moving. Think in 4d."* — right on
- * both counts. The first version lerped each face from where it was in three
- * dimensions to where it would sit in a flat net. That is a **tween between
- * two pictures**; nothing in it rotated, nothing in it was four-dimensional,
- * and shapes sliding to marks is exactly what it looked like.
- *
- * A tesseract is not a cube that moves. It is **two cubes joined corner to
- * corner**, turned in a plane that has no equivalent in three dimensions, so
- * that the inner one swells through the outer and becomes it. That is the
- * whole of the effect and it is the one thing no 3D animation can fake.
- *
- * So the two worlds are the two cells. The one you are leaving sits at
- * `w = +1` — nearer in the fourth dimension, therefore **larger** — and the
- * one you are arriving at sits at `w = -1`, nested small inside it. Turning
- * the `xw` plane through π carries each into the other's place. You do not
- * watch a world be replaced; you watch it turn inside out and find the next
- * one was in there all along.
- *
- * `W_EYE` is how far the eye is along the fourth axis, and it is the only
- * number here with any taste in it. Large and the two cells are nearly the
- * same size, so the nesting disappears and it reads as a cross-fade. Small and
- * the inner one shrinks to a dot and the join struts fan out like an
- * explosion. 3.2 puts the inner cell at 0.52 of the outer.
- *
- * The divide is **normalised against `w = +1`**, so the cell nearest in the
- * fourth dimension is exactly the size the solid is at rest. Without that, a
- * turn began and ended with the object jumping to 1.6 times its size — the
- * perspective divide is a ratio, and a ratio needs somewhere to be 1.
+ * A tesseract rotation lived here for a day. It was exact and it was
+ * unreadable — owner: *"just WEIRD"* — because being a correct projection of a
+ * 4D turn is not the same as being legible on a 100 px solid. Everything moved
+ * at once, nothing stayed put, and both worlds were on screen the whole time,
+ * so there was never a frame that said *the first world is gone*. See `peeled`
+ * for what replaced it and why.
  */
-const W_EYE = 3.2;
 
 /** The die's easing, so the two solids in this game move the same way. */
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
@@ -598,6 +574,7 @@ export class GlobeScene {
     this.grown = new Map();
     this.leaving = null;
     this.fold = 0;
+    this.closing = false;
     this.folding = null;
     this.landed = false;
     /* Start on the face of the node the save is standing on, so coming back
@@ -637,38 +614,96 @@ export class GlobeScene {
    * explosion and not a fold. The die learned this the same way.
    */
   /**
-   * A face's corners in the fourth dimension, for one of the two cells.
+   * THE PEEL, rebuilt from first principles after the 4D version was tried.
    *
-   * `cell` is +1 for the world being left and -1 for the world being entered.
-   * The point is lifted to `(x, y, z, w)`, turned in the **xw plane** — a
-   * rotation with no three-dimensional equivalent, which is the entire reason
-   * this reads as 4D and the old fold did not — and then divided by its
-   * distance along w before the ordinary camera ever sees it.
+   * Owner: *"the warp to a different world on the overworld map is just WEIRD
+   * right now. Rethink it from first principles."*
    *
-   * Note which pairs turn: `xw` moves x into w, so the object does not spin
-   * about an axis, it *turns through* the direction it is thickest in. That is
-   * why the inside comes out.
+   * A transition is readable when three things hold, and the tesseract
+   * rotation broke all three, which is exactly why it looked like *"a bunch of
+   * shapes moving"*:
+   *
+   *   1. **Something must persist.** The eye needs one thing to hold onto.
+   *      Under an xw rotation every face moves at once and nothing is fixed.
+   *   2. **The motion must start where the event did.** You walked through a
+   *      door on one particular face. A rotation of the whole solid has no
+   *      opinion about which face that was.
+   *   3. **The two states must be sequential.** Old leaves, then new arrives.
+   *      Both cells were on screen together the whole way, so there was never
+   *      a moment that said *the first world is gone*.
+   *
+   * So: THE FACE YOU ARE STANDING ON DOES NOT MOVE. It is the door — the one
+   * thing genuinely common to both worlds, because you walked through it — and
+   * it is the anchor for everything else. The rest of the solid hinges away
+   * from it out to its slot in the net (`netLayout`, already built around
+   * home) and fades as it goes. What is left at the flat moment is a single
+   * face alone in space, which is what *between worlds* should look like. Then
+   * the new world's faces come in from the net and close around that same
+   * face.
+   *
+   * Neighbours leave first and far faces last, so the solid opens outward from
+   * the door rather than everywhere at once; on the way back the order
+   * reverses, so the last thing to seat is the face beside you.
    */
-  cellCorners(face, cell, turn) {
-    const c = Math.cos(turn);
-    const sn = Math.sin(turn);
-    return face.verts.map((v) => {
-      const x0 = v[0] * SCALE;
-      const w0 = cell;
-      /* The xw rotation. Everything else about the point is untouched, which
-       * is what makes this a rotation rather than a move. */
-      const x = x0 * c - w0 * sn;
-      const w = x0 * sn + w0 * c;
-      const k = (W_EYE - 1) / (W_EYE - w);
-      const p = qApply(this.rot, [x * k, v[1] * SCALE * k, v[2] * SCALE * k]);
-      const s = CAM_Z / (CAM_Z - p[2]);
-      return { x: CX + p[0] * R * s, y: CY - p[1] * R * s, z: p[2], w };
+  ringOf(face) {
+    if (face === this.here) return 0;
+    for (const side of this.here.sides) {
+      if (side.to && side.to.kind === face.kind && side.to.index === face.index) return 1;
+    }
+    return 2;
+  }
+
+  /**
+   * A face's corners part-way out to the net, kept RIGID.
+   *
+   * The straight lerp between solid corners and net corners is what made the
+   * first fold look like slivers: a polygon whose corners each travel their
+   * own straight line collapses through the middle of the journey. So the
+   * centre travels, and the corner offsets travel, and then each offset is
+   * pushed back out to the length it should have at this instant. The face
+   * stays a face the whole way across.
+   */
+  peeled(face, p) {
+    const spot = this.net && this.net.get(face);
+    if (!spot || p <= 0) return face.verts.map((v) => this.project(v));
+
+    const flat = netCorners(this.here, face, spot).map(([px, py]) => [
+      this.here.centre[0] + this.here.u[0] * px + this.here.v[0] * py,
+      this.here.centre[1] + this.here.u[1] * px + this.here.v[1] * py,
+      this.here.centre[2] + this.here.u[2] * px + this.here.v[2] * py,
+    ]);
+    const mean = (list) => [0, 1, 2].map((i) =>
+      list.reduce((t, q) => t + q[i], 0) / list.length);
+    const cs = mean(face.verts);
+    const cf = mean(flat);
+    const len = (v) => Math.hypot(v[0], v[1], v[2]) || 1e-6;
+
+    return face.verts.map((v, i) => {
+      const a = [v[0] - cs[0], v[1] - cs[1], v[2] - cs[2]];
+      const b = [flat[i][0] - cf[0], flat[i][1] - cf[1], flat[i][2] - cf[2]];
+      const o = [0, 1, 2].map((k) => a[k] + (b[k] - a[k]) * p);
+      const want = len(a) + (len(b) - len(a)) * p;
+      const k = want / len(o);
+      return this.project([0, 1, 2].map((m) =>
+        cs[m] + (cf[m] - cs[m]) * p + o[m] * k));
     });
   }
 
+  /** How far out face `f` is at the moment, and how solid it still looks. */
+  foldState(face) {
+    const t = this.fold;
+    if (t <= 0) return { p: 0, alpha: 1 };
+    if (face === this.here) return { p: 0, alpha: 1 };
+    /* Ring 1 leads on the way out and trails on the way back, so the solid
+     * opens from the door and closes toward it. */
+    const ring = this.ringOf(face);
+    const lead = this.closing ? (ring === 1 ? 0.22 : 0) : (ring === 1 ? 0 : 0.22);
+    const p = Math.max(0, Math.min(1, (t - lead) / (1 - 0.22)));
+    return { p, alpha: 1 - p };
+  }
+
   faceCorners(face) {
-    if (this.fold <= 0) return face.verts.map((v) => this.project(v));
-    return this.cellCorners(face, 1, this.fold * Math.PI);
+    return this.peeled(face, this.foldState(face).p);
   }
 
   /** A solid-local point on the screen, plus its depth for painter order. */
@@ -858,6 +893,11 @@ export class GlobeScene {
     const f = this.folding;
     const total = FOLD_OPEN + FOLD_FLAT + FOLD_SHUT;
     f.t += 1;
+    /* The net is laid out around the face you are standing on, once, when the
+     * peel begins — it is the anchor and it must not be re-derived from a face
+     * that has since changed. */
+    if (!this.net) this.net = netLayout(this.here);
+    this.closing = f.t > FOLD_OPEN + FOLD_FLAT;
     if (f.t <= FOLD_OPEN) {
       this.fold = easeFold(f.t / FOLD_OPEN);
     } else if (f.t <= FOLD_OPEN + FOLD_FLAT) {
@@ -869,6 +909,16 @@ export class GlobeScene {
          * screen since the first frame. It is only where the *data* crosses
          * over, so the cell that is now in front is the one being drawn from
          * `byFace`. */
+        /*
+         * THE DOOR FACE BECOMES THE LANDING FACE, and the swap happens while
+         * only that face is on screen. Everything else has faded out to the
+         * net by now, so there is nothing visible to jump — the one face the
+         * eye is holding onto is the one that stays, and it simply belongs to
+         * a different world on the far side of this frame.
+         */
+        this.face = f.door.face;
+        this.rot = tilted(qBetween(this.here.normal, [0, 0, 1]));
+        this.net = netLayout(this.here);
         this.world = f.door.world;
         const laid = facesOfWorld(WORLDS[this.world]);
         this.byFace = laid.byFace;
@@ -887,6 +937,7 @@ export class GlobeScene {
       /* Arriving on the face the door led to, standing on its edge, walking
        * in — the same ending the roll has, because you did arrive by walking. */
       this.fold = 0;
+      this.closing = false;
       this.face = f.door.face;
       this.rot = tilted(qBetween(this.here.normal, [0, 0, 1]));
       this.net = null;
@@ -1003,6 +1054,7 @@ export class GlobeScene {
     this.grown = new Map();
     this.leaving = null;
     this.fold = 0;
+    this.closing = false;
     this.folding = null;
     this.landed = false;
         this.mode = 'walk';
@@ -1094,26 +1146,17 @@ export class GlobeScene {
      * object with two ends. A tesseract is *the joining*; the cubes are what
      * it joins.
      */
-    const turn = this.fold * Math.PI;
-    const cells = this.fold > 0
-      ? [{ cell: -1, world: this.folding ? this.folding.door.world : this.world },
-        { cell: 1, world: this.world }]
-      : [{ cell: 1, world: this.world }];
-
     const drawn = [];
-    for (const c of cells) {
-      for (const f of FACES) {
-        const pts = this.fold > 0 ? this.cellCorners(f, c.cell, turn)
-          : this.faceCorners(f);
-        const depth = pts.reduce((t, p) => t + p.z, 0) / pts.length;
-        /* Sorted by w first and depth second while folded: the cell further
-         * along the fourth axis is behind *everything* in the nearer one,
-         * however its own faces happen to lie. */
-        const w = pts.reduce((t, p) => t + (p.w || 0), 0) / pts.length;
-        drawn.push({ f, pts, depth, w, cell: c.cell, forWorld: c.world });
-      }
+    for (const f of FACES) {
+      const st = this.foldState(f);
+      if (st.alpha <= 0.02) continue;
+      const pts = this.peeled(f, st.p);
+      const depth = pts.reduce((t, p) => t + p.z, 0) / pts.length;
+      drawn.push({ f, pts, depth, w: 0, alpha: st.alpha, forWorld: this.world });
     }
     drawn.sort((a, b) => (a.w - b.w) || (a.depth - b.depth));
+    /* While it is peeling every piece is drawn: a face on its way to the net
+     * has left the solid, so back-face culling has nothing to say about it. */
     const visible = drawn.filter((d) => d.depth > 0.05 || this.fold > 0);
 
     ctx.fillStyle = SHADOW;
@@ -1121,24 +1164,6 @@ export class GlobeScene {
       if (this.fold > 0) break;
       poly(ctx, d.pts, SHADOW_DX, SHADOW_DY);
       ctx.fill();
-    }
-
-    if (this.fold > 0) {
-      ctx.strokeStyle = 'rgba(120,130,190,0.5)';
-      ctx.lineWidth = 1;
-      const inner = new Map();
-      for (const d of drawn) if (d.cell === -1) inner.set(d.f, d.pts);
-      for (const d of drawn) {
-        if (d.cell !== 1) continue;
-        const twin = inner.get(d.f);
-        if (!twin) continue;
-        ctx.beginPath();
-        for (let n = 0; n < d.pts.length; n++) {
-          ctx.moveTo(d.pts[n].x, d.pts[n].y);
-          ctx.lineTo(twin[n].x, twin[n].y);
-        }
-        ctx.stroke();
-      }
     }
 
     ctx.lineJoin = 'round';
@@ -1164,11 +1189,15 @@ export class GlobeScene {
       const step = here ? 0
         : Math.min(2, (d.depth > 0.55 ? 1 : 2) + (shut ? 1 : 0));
       poly(ctx, d.pts, 0, 0);
+      /* Fading as it reaches the net is what makes the old world LEAVE rather
+       * than lie down flat and wait. */
+      ctx.globalAlpha = d.alpha === undefined ? 1 : d.alpha;
       ctx.fillStyle = shade(base, TONES[step]);
       ctx.fill();
       ctx.strokeStyle = here ? '#ffd048' : INK;
       ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     /* Roads, scenery and the pawn are on the face, and while the solid is in
