@@ -25168,6 +25168,182 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       `edistyminen ${P.keep.map((r) => r.p).join(' -> ')}`);
   }
 
+  /* ------------------------------- kyltit -------------------------------- */
+  /*
+   * A SIGNPOST HAS TO REACH THE FLOOR.
+   *
+   * Owner: *"make sure all the signs have feet that reach all the way down,
+   * because they move in parallax with the bg and it sometimes makes it look
+   * like they're standing on air."*
+   *
+   * Both halves of that are right, and the second explains the first. A sign
+   * is planted once, at the ground height where it was driven in — which is
+   * the fix for the post growing and shrinking as it crossed a ledge. But the
+   * prop layer scrolls at PROP_PAR and the terrain scrolls at 1, so the ground
+   * it was planted on slides out from under it within a few seconds by
+   * construction. There is no height that stays correct.
+   *
+   * So the post stops ending anywhere. It runs from the sign head down to the
+   * floor of the layer and the terrain, which is drawn afterwards, covers
+   * however much of it is underground at this moment. Nothing has to be
+   * correct, because nothing is visible to be wrong.
+   */
+  {
+    const S = await page.evaluate(async () => {
+      const { PropLayer } = await import('/src/gfx/props.js');
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const g = c.getContext('2d');
+      const look = (kind, extra) => {
+        const layer = new PropLayer();
+        /* `place` puts a new prop off the right edge to scroll in; drag it
+         * into shot, since this is about what it looks like, not when. */
+        const prop = layer.plant(layer.place(kind, 0, 320, extra), 150);
+        prop.x = 160;
+        g.fillStyle = '#7fb0e8'; g.fillRect(0, 0, 320, 240);
+        layer.draw(g, 0, 320, 240);
+        const d = g.getImageData(0, 0, 320, 240).data;
+        /* the post's two greys */
+        const isPost = (i) => {
+          const r = d[i], gg = d[i + 1], b = d[i + 2];
+          return Math.abs(r - gg) < 12 && Math.abs(gg - b) < 14 && r > 70 && r < 160;
+        };
+        let head = -1, foot = -1, gaps = 0, inPost = false;
+        for (let y = 0; y < 240; y++) {
+          let any = false;
+          for (let x = 0; x < 320; x++) if (isPost((y * 320 + x) * 4)) { any = true; break; }
+          if (any) { if (head < 0) head = y; foot = y; inPost = true; }
+          else if (inPost && head >= 0) gaps++;
+        }
+        return { kind, head, foot, gaps };
+      };
+      return [look('speed', { limit: 30 }), look('card', { text: 'KOEKENTTÄ' })];
+    });
+
+    for (const sign of S) {
+      expect(`kyltin ${sign.kind} jalka yltää kerroksen pohjaan asti`,
+        sign.foot >= 239,
+        `pylväs ulottuu riviltä ${sign.head} riville ${sign.foot} (pohja 239),`
+        + ` ${sign.gaps} katkoa matkalla`);
+    }
+  }
+
+  /* ---------------------------- kolikkokuutio ---------------------------- */
+  /*
+   * THE CUBE HAS TO FILL LIKE A SOLID, NOT LIKE A STICKER.
+   *
+   * Owner, on the first version: *"I like the outsides of the cube, but the
+   * way it fills up doesn't look right. It feels like there's a 2D texture
+   * that's been applied to a 3D object."*
+   *
+   * Exactly right, and the cause was one line of drawing: the gold was a
+   * single flat colour clipped to the whole silhouette, so it crossed three
+   * differently-lit faces without changing tone once. Nothing marked an edge,
+   * so the eye read a decal over a shape rather than a substance inside one.
+   *
+   * These gates measure the property that was missing rather than the fix
+   * that was chosen, so they stay meaningful if the fill is ever redrawn: the
+   * gold has to carry DEPTH SHADING of its own, and the quantity has to be
+   * monotone in the coin count. A flat band passes the second and fails the
+   * first, which is the whole complaint.
+   */
+  {
+    const K = await page.evaluate(async () => {
+      const { drawTower } = await import('/src/gfx/tower.js');
+      const c = document.createElement('canvas');
+      c.width = 90; c.height = 90;
+      const g = c.getContext('2d');
+      const shot = (fill) => {
+        g.fillStyle = '#7fb0e8'; g.fillRect(0, 0, 90, 90);
+        drawTower(g, 45, 45, { fill, lives: 0, haze: 0, phase: 300 });
+        const d = g.getImageData(0, 0, 90, 90).data;
+        let gold = 0, rows = 0, widest = 0;
+        for (let yy = 0; yy < 90; yy++) {
+          const tones = new Map();
+          for (let xx = 0; xx < 90; xx++) {
+            const i = (yy * 90 + xx) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+            /* gold: red leads, blue trails badly */
+            if (r > 90 && r - b > 60 && gg > b) {
+              gold++;
+              const k = `${r},${gg},${b}`;
+              tones.set(k, (tones.get(k) || 0) + 1);
+            }
+          }
+          /* tones with real width, so an antialiased rim cannot fake depth */
+          const wide = [...tones.values()].filter((n) => n >= 3).length;
+          if (wide > 0) rows++;
+          widest = Math.max(widest, wide);
+        }
+        return { gold, rows, widest };
+      };
+      return { at: [0, 20, 50, 80, 100].map((f) => ({ f, ...shot(f) })) };
+    });
+
+    /*
+     * ACROSS a row is where the flat band gave itself away. It was one colour
+     * from one side of the silhouette to the other at every height and every
+     * fill level — measured, a maximum of ONE tone per row — so no face edge
+     * ever showed in the gold. Depth-shaded blocks cannot do that.
+     */
+    expect('kulta varjostuu syvyyden mukaan, ei ole yksi litteä sävy',
+      K.at.filter((a) => a.f > 0).every((a) => a.widest >= 3),
+      `sävyjä leveimmällä rivillä: ${K.at.filter((a) => a.f > 0)
+        .map((a) => `${a.f} % -> ${a.widest}`).join(', ')} (litteä nauha antoi 1)`);
+
+    const areas = K.at.map((a) => a.gold);
+    expect('kullan määrä kasvaa kolikkoluvun mukana',
+      areas.every((n, i) => i === 0 || n > areas[i - 1]),
+      `${K.at.map((a) => `${a.f} % -> ${a.gold} px`).join(', ')}`);
+
+    /*
+     * THE ORBIT MUST NEVER HIDE A LIFE.
+     *
+     * Owner: *"maybe the red coins could orbit?"* — yes, and the reason they
+     * were lifted above the cube in the first place is the reason the ring is
+     * tilted rather than face-on: the hills sweep this thing's feet, and a
+     * life is the one reading you cannot afford to lose to a passing
+     * treeline. A face-on orbit puts half of every revolution BEHIND the
+     * solid. So the claim is geometric and this measures it through a whole
+     * revolution: the lowest red pixel stays above the highest shell pixel.
+     */
+    const O = await page.evaluate(async () => {
+      const { drawTower } = await import('/src/gfx/tower.js');
+      const c = document.createElement('canvas');
+      c.width = 120; c.height = 120;
+      const g = c.getContext('2d');
+      let worst = 999, at = 0;
+      for (let ph = 0; ph < 1500; ph += 7) {
+        g.fillStyle = '#7fb0e8'; g.fillRect(0, 0, 120, 120);
+        drawTower(g, 60, 78, { fill: 100, lives: 6, haze: 0, phase: ph });
+        const d = g.getImageData(0, 0, 120, 120).data;
+        let redLow = -1, shellHigh = 999;
+        for (let yy = 0; yy < 120; yy++) {
+          for (let xx = 0; xx < 120; xx++) {
+            const i = (yy * 120 + xx) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+            /* A red coin, and NOT the gold's own dark foot, which also has
+             * little blue: gold stays yellow all the way down its shading
+             * ramp (green about three quarters of red), a red coin does not
+             * (green about a fifth). Measured, the first version of this test
+             * reported the gold at (121,88,3) as a red and failed by 22 px. */
+            if (r > 120 && b < 90 && gg < r * 0.45) redLow = Math.max(redLow, yy);
+            else if (b > r && r < 110 && b < 180) shellHigh = Math.min(shellHigh, yy);
+          }
+        }
+        const gap = shellHigh - redLow;
+        if (gap < worst) { worst = gap; at = ph; }
+      }
+      return { worst, at };
+    });
+
+    expect('punaiset kiertävät kuutiota menemättä koskaan sen taakse',
+      O.worst > 0,
+      `koko kierroksen ajan alin punainen on ${O.worst} px kuution yläreunan`
+      + ` yläpuolella (tiukin kohta framella ${O.at})`);
+
+    expect('tyhjä kuutio on tyhjä',
+      K.at[0].gold === 0, `0 %: ${K.at[0].gold} kultapikseliä`);
+  }
+
   /* ------------------------------- lavat --------------------------------- */
   /*
    * LIIKKUVAT LAVAT (20.8.2026). Owner, asking again after a long time:

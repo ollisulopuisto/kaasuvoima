@@ -154,19 +154,48 @@ export class PropLayer {
       const x = Math.round(p.x - camX * PROP_PAR);
       if (x > viewW + REAP) continue;
       const base = p.base === undefined ? groundY : p.base;
-      if (p.kind === 'speed') drawSpeedSign(ctx, x, base, p.limit);
-      else if (p.kind === 'card') drawNameBoard(ctx, x, base, p.text);
+      /*
+       * `base` is where the sign HEAD hangs — the ground it was driven into,
+       * frozen at planting. `groundY` is the floor of the layer, and the post
+       * runs all the way down to it. See `post`.
+       */
+      if (p.kind === 'speed') drawSpeedSign(ctx, x, base, p.limit, groundY);
+      else if (p.kind === 'card') drawNameBoard(ctx, x, base, p.text, groundY);
     }
   }
 }
 
-/** A post, drawn from the ground up. Returns the y of its top. */
-function post(ctx, x, groundY, h) {
+/**
+ * A post. Hangs its head `h` above `groundY` and runs down to `floorY`.
+ * Returns the y of its top, which is where the sign board goes.
+ *
+ * THE FOOT DOES NOT STOP AT THE GROUND, and that is deliberate. Owner: *"make
+ * sure all the signs have feet that reach all the way down, because they move
+ * in parallax with the bg and it sometimes makes it look like they're standing
+ * on air."*
+ *
+ * Both halves of that are right, and the second is why the first cannot be
+ * solved by picking a better height. A sign is planted once, at the ground it
+ * was driven into — that is the fix for the post growing and shrinking as it
+ * crossed a ledge. But the prop layer scrolls at PROP_PAR and the terrain
+ * scrolls at 1, so within seconds that ground has slid out from under it *by
+ * construction*. No height stays true, because the two layers disagree about
+ * where the world is.
+ *
+ * So the post stops ending anywhere. It runs to the floor, and the terrain —
+ * drawn afterwards, in front — covers however much of it happens to be
+ * underground this frame. Nothing has to be correct because nothing is
+ * visible to be wrong, and a post vanishing into whatever is in front of it
+ * is what a post does anyway.
+ */
+function post(ctx, x, groundY, h, floorY = groundY) {
+  const top = groundY - h;
+  const depth = Math.max(h, floorY - top);
   ctx.fillStyle = '#8c8c94';
-  ctx.fillRect(x - 1, groundY - h, 3, h);
+  ctx.fillRect(x - 1, top, 3, depth);
   ctx.fillStyle = '#5c5c66';
-  ctx.fillRect(x + 1, groundY - h, 1, h);
-  return groundY - h;
+  ctx.fillRect(x + 1, top, 1, depth);
+  return top;
 }
 
 /**
@@ -175,9 +204,9 @@ function post(ctx, x, groundY, h) {
  * is the joke's punchline and the reason the numerals are worth escalating
  * towards. The road tries 30, then 50, then 80, and eventually stops trying.
  */
-function drawSpeedSign(ctx, x, groundY, limit) {
+function drawSpeedSign(ctx, x, groundY, limit, floorY = groundY) {
   const R = 13;
-  const top = post(ctx, x, groundY, POST_H);
+  const top = post(ctx, x, groundY, POST_H, floorY);
   const cy = top - R;
 
   ctx.beginPath();
@@ -217,13 +246,13 @@ function drawSpeedSign(ctx, x, groundY, limit) {
  * of running — but where there is a road, the road can say it, and a sign you
  * pass is a place you arrived at rather than a caption over the picture.
  */
-function drawNameBoard(ctx, x, groundY, text) {
+function drawNameBoard(ctx, x, groundY, text, floorY = groundY) {
   const label = String(text).toUpperCase();
   const w = textWidth(label) + 12;
   const h = 15;
   const left = x - Math.round(w / 2);
-  post(ctx, left + 5, groundY, POST_H);
-  post(ctx, left + w - 5, groundY, POST_H);
+  post(ctx, left + 5, groundY, POST_H, floorY);
+  post(ctx, left + w - 5, groundY, POST_H, floorY);
   const top = groundY - POST_H - h;
 
   ctx.fillStyle = '#f4f4f0';

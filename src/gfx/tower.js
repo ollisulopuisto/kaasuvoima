@@ -16,15 +16,25 @@ import { qMul, qNorm, qApply, qAxis } from '../core/quat.js';
  * the object is different, and it is different in the direction the rest of
  * the game was already going.
  *
- * ## The liquid is the trick
+ * ## A hundred blocks, one per coin
  *
- * The gold is drawn as a **level**, not as a fill of each face: one horizontal
- * line in screen space, the same for every face, with the cube's whole
- * silhouette as the clip. So the surface stays flat while the cube turns
- * under it, which is what a liquid in a rotating glass does and what nothing
- * else in this picture does. It is also why the reading survives the rotation
- * — the height of the line is the number of coins, and the turning cannot
- * change a horizontal.
+ * It filled as a liquid first — one horizontal line in screen space with the
+ * whole silhouette as the clip — and the owner named the fault before the
+ * second look: *"it feels like there's a 2D texture that's been applied to a
+ * 3D object."* Measured, the complaint is one number: the gold showed
+ * **exactly one tone on every row of every fill level**, because a single
+ * flat colour crossed three differently-lit faces without ever changing at an
+ * edge. Nothing marked a face boundary, so the eye read a sticker over a
+ * shape rather than a substance inside one.
+ *
+ * So the coins are a **lattice**: 5 by 5 by 4, which is a hundred cells for a
+ * hundred coins, one block each. Each block is shaded by its own depth, so
+ * the gold now carries the same three tones the shell does and the pile turns
+ * with the box instead of sliding across it.
+ *
+ * One block per coin also makes the gauge countable, and a layer is exactly
+ * twenty — so the tape marks the liquid needed are gone. The structure is the
+ * scale.
  *
  * ## Why it reads as far away
  *
@@ -49,6 +59,13 @@ const RED_H = 4;
 
 /** Three quantised tones, the same rule the die and the globe are drawn by. */
 const TONES = [1, 0.72, 0.5];
+
+/**
+ * The coin lattice: 5 by 5 by 4 is a hundred cells for a hundred coins, so a
+ * block is a coin and a layer is exactly twenty of them.
+ */
+const NX = 5, NY = 5, NZ = 4;
+const CELLS = NX * NY * NZ;
 
 const VERTS = [];
 for (let i = 0; i < 8; i++) VERTS.push([i & 1 ? 1 : -1, i & 2 ? 1 : -1, i & 4 ? 1 : -1]);
@@ -125,19 +142,37 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
   }
 
   /*
-   * THE LEVEL, drawn once for the whole solid rather than per face.
+   * THE PILE.
    *
-   * Clipped to every visible face at once and filled below one horizontal
-   * line, so the surface stays flat while the cube turns beneath it. Hazed
-   * far less than the shell: atmospheric perspective washes out what reflects
-   * the light and barely touches what carries it, and a gold that receded as
-   * hard as the walls came out grey-green against the sky and stopped being
-   * readable at all.
+   * Cells are filled bottom layer first, and scrambled within a layer by a
+   * stride coprime with its size — otherwise a layer grows as a row at a time
+   * and the pile reads as stripes appearing rather than as coins landing.
+   *
+   * Painted back to front and clipped to the silhouette, because a block near
+   * the near-bottom corner projects a little outside the outline and a coin
+   * hanging off the edge of the box is the one thing that would break the
+   * illusion completely.
    */
-  const top = y - r * 1.35;
-  const bottom = y + r * 1.35;
-  const lineY = Math.round(bottom - (bottom - top) * Math.max(0, Math.min(1, fill / 100)));
-  if (fill > 0) {
+  const coins = Math.max(0, Math.min(CELLS, Math.round(fill)));
+  if (coins > 0) {
+    const w = Math.max(2, Math.round(r * 0.4));
+    const blocks = [];
+    for (let iy = 0; iy < NY; iy++) {
+      for (let k = 0; k < NX * NZ; k++) {
+        /* 7 and NX*NZ share no factor, so this visits every cell of the layer */
+        const cell = (k * 7) % (NX * NZ);
+        if (iy * NX * NZ + k >= coins) break;
+        const p = qApply(q, [
+          ((cell % NX) + 0.5) / NX * 2 - 1,
+          (iy + 0.5) / NY * 2 - 1,
+          (Math.floor(cell / NX) + 0.5) / NZ * 2 - 1,
+        ]);
+        const s2 = CAM_Z / (CAM_Z - p[2]);
+        blocks.push({ x: x + p[0] * r * s2, y: y - p[1] * r * s2, z: p[2] });
+      }
+    }
+    blocks.sort((a, b) => a.z - b.z);
+
     ctx.save();
     ctx.beginPath();
     for (const d of seen) {
@@ -146,19 +181,33 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
       ctx.closePath();
     }
     ctx.clip();
-    ctx.fillStyle = faded('#f0b000', haze * 0.3, sky);
-    ctx.fillRect(x - r * 2, lineY, r * 4, bottom - lineY + 2);
-    /* Every tenth coin a brighter line, the measure-tape trick the corner
-     * glass used: the surface says "past halfway" at a glance and the marks
-     * give the exact number to anybody who wants to count. */
-    for (let n = 10; n < 100; n += 10) {
-      const ly = Math.round(bottom - (bottom - top) * (n / 100));
-      if (ly < lineY) break;
-      ctx.fillStyle = faded('#c88800', haze * 0.3, sky);
-      ctx.fillRect(x - r * 2, ly, r * 4, 1);
+    /*
+     * The six colours are built ONCE, not once per block.
+     *
+     * There are only three depth steps and two tones each, but `faded` parses
+     * a hex string, maps three channels and joins them, so doing it inside the
+     * loop is two hundred string allocations every frame for six distinct
+     * answers. Measured, that alone pushed the whole effect pass past its
+     * frame budget — the drawing was never the cost, the arithmetic about the
+     * drawing was.
+     *
+     * Hazed far less than the shell: atmospheric perspective washes out what
+     * reflects the light and barely touches what carries it, and a gold that
+     * receded as hard as the walls came out grey-green against the sky and
+     * stopped being readable at all.
+     */
+    const face = TONES.map((t) => faded(shade('#f0b000', t), haze * 0.3, sky));
+    const foot = TONES.map((t) => faded(shade('#f0b000', t * 0.6), haze * 0.3, sky));
+    for (const b of blocks) {
+      const step = b.z > 0.35 ? 0 : b.z > -0.02 ? 1 : 2;
+      const bx = Math.round(b.x - w / 2);
+      const by = Math.round(b.y - w / 2);
+      ctx.fillStyle = face[step];
+      ctx.fillRect(bx, by, w, w);
+      /* one dark row along the foot: without it the blocks tile into a sheet */
+      ctx.fillStyle = foot[step];
+      ctx.fillRect(bx, by + w - 1, w, 1);
     }
-    ctx.fillStyle = faded('#ffe070', haze * 0.25, sky);
-    ctx.fillRect(x - r * 2, lineY, r * 4, 1);
     ctx.restore();
   }
 
@@ -197,19 +246,62 @@ export function drawTower(ctx, x, y, { fill = 0, lives = 0, haze = 0.42,
    */
   const climb = Math.max(0, Math.min(1, rising));
   const eased = climb < 0.5 ? 2 * climb * climb : 1 - ((-2 * climb + 2) ** 2) / 2;
-  for (let i = 0; i < Math.min(lives, 6); i++) {
-    const bob = Math.round(Math.sin(phase / 26 + i * 1.1) * 2);
-    const home = top - 8 - i * (RED_H + 2) + bob;
-    const newest = i === Math.min(lives, 6) - 1 && climb < 1;
+
+  /*
+   * The ring's centre sits a clear margin above the cube's top vertex, and it
+   * is tilted rather than face-on. That is the whole design: at this tilt the
+   * far half of the orbit rides ABOVE the solid instead of behind it, so no
+   * coin is ever occluded by the cube at any point in the revolution — while
+   * the near half still dips forward far enough to read as an orbit and not a
+   * row. Owner asked whether they could circle it; they can, as long as the
+   * circle never puts one behind anything.
+   */
+  const top = y - r * 1.35;
+  /*
+   * The clearance is not a guess. A vertex of a cube of radius r reaches
+   * 1.73 r above centre when it points straight up, so the ring's centre has
+   * to clear THAT and not the flat `top` used for layout — and the near half
+   * of the orbit dips by RING_R * TILT below the centre, which has to come
+   * out of the same budget. Measured through a whole revolution with the
+   * gold switched off, 16 px of lift left the lowest red 2 px BELOW the
+   * highest shell pixel — nearly right is not right, so 22.
+   */
+  const RING_Y = top - 22;
+  const RING_R = r * 1.3;
+  const TILT = 0.3;
+  const n = Math.min(lives, 6);
+  const orbit = [];
+  for (let i = 0; i < n; i++) {
+    /* evenly spaced round the ring, so a gained life slots in rather than
+     * piling on the end: the spacing itself says how many there are */
+    const a = phase * 0.021 + (i / Math.max(1, n)) * Math.PI * 2;
+    const oz = Math.sin(a);
+    const s2 = CAM_Z / (CAM_Z - oz * 0.7);
+    orbit.push({
+      i,
+      x: x + Math.cos(a) * RING_R * s2,
+      y: RING_Y + oz * RING_R * TILT * s2 + Math.sin(phase / 26 + i * 1.1) * 1.5,
+      z: oz,
+      s: s2,
+    });
+  }
+  orbit.sort((a, b) => a.z - b.z);
+
+  for (const o of orbit) {
+    const newest = o.i === n - 1 && climb < 1;
     /* Out of the middle of the cube, not off its lid: it was in there. */
-    const cy = Math.round(newest ? y + (home - y) * eased : home);
+    const cy = Math.round(newest ? y + (o.y - y) * eased : o.y);
+    const cx = Math.round(newest ? x + (o.x - x) * eased : o.x);
+    /* smaller at the back, which is the depth cue the row above never had */
+    const w = Math.max(7, Math.round(12 * o.s * 0.92));
+    const h = Math.max(3, Math.round(RED_H * o.s * 0.92));
     if (newest) ctx.globalAlpha = Math.min(1, eased * 2.2);
     ctx.fillStyle = faded('#5c0c0c', haze * 0.3, sky);
-    ctx.fillRect(Math.round(x - 6), cy, 12, RED_H);
+    ctx.fillRect(Math.round(cx - w / 2), cy, w, h);
     ctx.fillStyle = faded('#d83030', haze * 0.3, sky);
-    ctx.fillRect(Math.round(x - 6), cy, 11, RED_H - 1);
+    ctx.fillRect(Math.round(cx - w / 2), cy, w - 1, h - 1);
     ctx.fillStyle = faded('#ff6060', haze * 0.3, sky);
-    ctx.fillRect(Math.round(x - 5), cy + 1, 8, 1);
+    ctx.fillRect(Math.round(cx - w / 2) + 1, cy + 1, Math.max(1, w - 4), 1);
     ctx.globalAlpha = 1;
   }
 }
