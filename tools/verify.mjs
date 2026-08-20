@@ -23759,6 +23759,137 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       + ` liikkeessä ${V.moved}/240 framea`);
   }
 
+  /* --------------------- ketjuhyppy ja kuilun partaalta ------------------- */
+  /*
+   * TWO THINGS THE OWNER ASKED FOR, 20.8.2026, and four assertions between
+   * them — two of which are the ones that stop either becoming pumping again.
+   *
+   *   "consecutive well-timed jumps should up the speed a bit, and maybe you
+   *    should get a coin for a near-death stunt (be falling into a chasm and
+   *    then use the second or third jump to get out of there?)"
+   */
+  {
+    const K = await page.evaluate(async () => {
+      const { LevelScene } = await import('/src/scenes/level.js');
+      const { P_METER_MAX, MAX_P } = await import('/src/entities/player.js');
+      const { TILE } = await import('/src/data/worlds.js');
+      const game = window.sfb3;
+      const fresh = (powerLevel = 0) => {
+        game.state = { lives: 3, coins: 20, score: 0,
+          power: { type: powerLevel ? 'shroom' : null, level: powerLevel },
+          reserve: null, world: 0, node: 'w1-1', cleared: {}, worldsOpen: 1, cards: [],
+          secrets: {}, checks: {}, doors: {}, usedSaveState: false, continues: 0,
+          bestTimes: {} };
+        return new LevelScene(game, '1-1');
+      };
+      const key = (held, pressed = {}) => ({ held, pressed, released: {}, consume() {} });
+
+      /* 1 & 2. The refund, measured in isolation: a full meter on the ground
+       *        below running speed drains; leaving inside the window hands
+       *        back exactly what it cost, and riding it out hands back
+       *        nothing at all. */
+      const landing = (wait) => {
+        const sc = fresh();
+        const p = sc.player;
+        for (let f = 0; f < 30; f++) sc.update(key({}));
+        p.pMeter = P_METER_MAX;
+        p.sinceLanding = 0;
+        p.chain = 0;
+        p.landingDrain = 0;
+        const start = p.pMeter;
+        for (let f = 0; f < wait; f++) sc.update(key({}));
+        const before = p.pMeter;
+        sc.update(key({ jump: true }, { jump: true }));
+        return { drained: +(start - before).toFixed(2), refund: +(p.pMeter - before).toFixed(2) };
+      };
+      const quick = landing(4);
+      const slow = landing(20);
+
+      /* 3. The cap does not move. `MAX_P` is what the jump budget was measured
+       *    at, and the slope catapult has the same assertion for the same
+       *    reason. */
+      const sc = fresh();
+      const p = sc.player;
+      p.pMeter = P_METER_MAX;
+      let top = 0;
+      for (let f = 0; f < 600; f++) {
+        const held = { right: true, run: true };
+        const pressed = p.onGround ? { jump: true } : {};
+        if (p.onGround) held.jump = true;
+        sc.update(key(held, pressed));
+        top = Math.max(top, Math.abs(p.vx));
+      }
+
+      /* 4. The brink. Counted at `addCoin` rather than off `state.coins`,
+       *    which also drains as fuel — a delta over a wait measures the clock
+       *    as much as the reward. */
+      const scan = fresh(2);
+      let pit = -1;
+      for (let tx = 4; tx < scan.w - 4; tx++) if (scan.pitUnder(tx, 0)) { pit = tx; break; }
+      const drop = (save, deep = true) => {
+        const s2 = fresh(2);
+        const q = s2.player;
+        for (let f = 0; f < 20; f++) s2.update(key({}));
+        let awarded = 0;
+        const real = s2.addCoin.bind(s2);
+        s2.addCoin = (...a) => { awarded++; return real(...a); };
+        q.x = pit * TILE + 2; q.y = 40; q.vy = 1; q.vx = 0; q.onGround = false;
+        s2.brinkGroundY = deep ? 40 : 40 - TILE;
+        let used = false;
+        for (let f = 0; f < 240 && s2.state === 'play'; f++) {
+          const pressed = {};
+          if (save && s2.brink && !used && q.y > 40 + TILE * 3) { pressed.jump = true; used = true; }
+          s2.update(key(used ? { left: true } : {}, pressed));
+          if (q.onGround) break;
+        }
+        for (let f = 0; f < 60 && s2.state === 'play'; f++) s2.update(key({}));
+        return { awarded, alive: s2.state === 'play' };
+      };
+      const rescued = drop(true);
+      const doomed = drop(false);
+      const hopped = (() => {
+        const s2 = fresh(2);
+        const q = s2.player;
+        for (let f = 0; f < 20; f++) s2.update(key({}));
+        let awarded = 0;
+        const real = s2.addCoin.bind(s2);
+        s2.addCoin = (...a) => { awarded++; return real(...a); };
+        q.x = pit * TILE + 2; q.y = 40; q.vy = 1; q.onGround = false;
+        s2.brinkGroundY = 40 - TILE;
+        for (let f = 0; f < 12; f++) s2.update(key({}, f === 2 ? { jump: true } : {}));
+        q.y = 40; q.onGround = true;
+        for (let f = 0; f < 60 && s2.state === 'play'; f++) s2.update(key({}));
+        return awarded;
+      })();
+      return { quick, slow, top: +top.toFixed(4), MAX_P, pit, rescued, doomed, hopped };
+    });
+
+    expect('ajoissa jatkettu hyppy maksaa laskeutumisen takaisin',
+      K.quick.drained > 0 && Math.abs(K.quick.refund - K.quick.drained) < 0.01,
+      `valui ${K.quick.drained}, palautui ${K.quick.refund}`);
+
+    expect('ikkunan jälkeen ei palauteta mitään — ohittaminen maksaa saman kuin ennen',
+      K.slow.drained > K.quick.drained && K.slow.refund <= 0,
+      `valui ${K.slow.drained}, palautui ${K.slow.refund}`);
+
+    /*
+     * The one that keeps this from being pumping again. `MAX_P` is the number
+     * `gapTiles` 6 and `wallTiles` 4 were measured at, and every level's
+     * clearability is proved against it — so a speed skill may hold the cap
+     * and may never raise it. Six hundred frames of perfect chaining.
+     */
+    expect('ketju ei nosta kattoa — MAX_P on hyppybudjetin mitta',
+      Math.abs(K.top - K.MAX_P) < 0.001,
+      `huippunopeus ${K.top}, MAX_P ${K.MAX_P}`);
+
+    expect('kuilusta pelastautuminen maksaa kolikon, putoaminen ja hyppely eivät',
+      K.pit > 0 && K.rescued.awarded === 1 && K.rescued.alive
+      && K.doomed.awarded === 0 && !K.doomed.alive && K.hopped === 0,
+      `kuilu sarakkeessa ${K.pit}: pelastui ${K.rescued.awarded} kolikkoa (elossa`
+      + ` ${K.rescued.alive}), putosi ${K.doomed.awarded} (elossa ${K.doomed.alive}),`
+      + ` matala loikka ${K.hopped}`);
+  }
+
   /* ------------------------------ maailmannoppa -------------------------- */
   /*
    * NOPPA AUKEAA JA SULKEUTUU (19.8.2026).

@@ -309,6 +309,15 @@ const NAME_Y = 22;
  * that raised the limit *back down* would be nagging; a road that keeps
  * conceding is funny, and the last sign is the concession.
  */
+/**
+ * How far below the ground he left counts as *committed* to a fall.
+ *
+ * Two tiles. One is a hop and three is most of the way to the seam a cave
+ * level hides under — two is the depth at which a player has stopped choosing
+ * and started reacting, which is the moment this reward exists to notice.
+ */
+const BRINK_DEEP = TILE * 2;
+
 const SIGN_LIMITS = [30, 50, 80, 120, 0];
 const SIGN_GAP = 640;
 
@@ -4622,6 +4631,7 @@ export class LevelScene {
     if (this.state !== 'dead') this.collisions(input);
     this.updateCamera();
     this.updateProps();
+    this.updateBrink();
     this.updateBumps();
     this.updateCrumbles();
     this.updateShelves();
@@ -6535,6 +6545,67 @@ export class LevelScene {
    * to the sky, which is why `drawSkyName` tests the same two conditions from
    * the other side. One level, one way of saying it — DESIGN.md item 8.
    */
+  /**
+   * THE BRINK: a coin for getting out of a fall you had already lost.
+   *
+   * Owner: *"maybe you should get a coin for a near-death stunt (be falling
+   * into a chasm and then use the second or third jump to get out of there?)"*
+   *
+   * Three conditions, and every one of them is there to stop this paying for
+   * something that was never dangerous:
+   *
+   *   1. **Over a real pit.** Not a dip, not a ledge — a column with no solid
+   *      tile anywhere beneath it, which is to say the one thing in this game
+   *      that kills you for arriving at the bottom.
+   *   2. **Already committed.** `BRINK_DEEP` below the last ground he stood
+   *      on, so a hop across a gap does not count. You have to have been
+   *      falling long enough for it to have been the wrong decision.
+   *   3. **Saved by an air jump.** The recovery has to be the thing the owner
+   *      described — a jump spent in the air, not a lucky ledge.
+   *
+   * And it pays **once per fall**, on landing alive. Hovering over the same
+   * pit is one coin, not a coin a second: a reward you can stand still and
+   * farm is a reward that stops meaning anything the first time somebody
+   * notices.
+   */
+  pitUnder(tx, ty) {
+    if (tx < 0 || tx >= this.w) return false;
+    for (let y = Math.max(0, ty); y < this.h; y++) if (this.solidAt(tx, y)) return false;
+    return true;
+  }
+
+  updateBrink() {
+    const p = this.player;
+    if (!p || this.state !== 'play') return;
+    if (p.onGround) {
+      if (this.brink && this.brink.saved) {
+        /* Paid where he landed, not where he fell: the coin belongs to the
+         * moment it turned out to have worked. */
+        /* A real coin through the map's own door, so it flies to the gauge
+         * and counts exactly as a collected one does — a reward that arrives
+         * by a private route is a number, not a coin. */
+        this.addCoin(p.cx - 8, p.cy - 20, true);
+      }
+      this.brink = null;
+      this.brinkGroundY = p.y;
+      return;
+    }
+    const tx = Math.floor(p.cx / TILE);
+    const ty = Math.floor((p.y + p.h) / TILE);
+    if (!this.brink) {
+      const deep = this.brinkGroundY !== undefined
+        && p.y - this.brinkGroundY > BRINK_DEEP;
+      if (p.vy > 0 && deep && this.pitUnder(tx, ty)) {
+        this.brink = { jumps: p.airJumps, saved: false };
+      }
+      return;
+    }
+    /* An air jump spent *while over the pit* is what turns a fall into a
+     * stunt. Counted rather than watched for, so a jump that happened before
+     * he was ever in trouble cannot claim it. */
+    if (p.airJumps > this.brink.jumps) this.brink.saved = true;
+  }
+
   updateProps() {
     const camX = this.cam.x;
     this.props.update(camX, VIEW_W);
