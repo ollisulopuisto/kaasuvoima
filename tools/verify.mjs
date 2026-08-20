@@ -25480,6 +25480,80 @@ const report = await page.evaluate(async (OVERWORLDS) => {
           + ` ${A.length} kentässä (${A.map((r) => r.theme).join(', ')}), aina yksi`);
   }
 
+  /* ------------------------- maailmanvaihto kuoriutuu -------------------- */
+  /*
+   * THE THREE THINGS THAT MAKE A TRANSITION READABLE.
+   *
+   * Owner: *"the warp to a different world on the overworld map is just WEIRD
+   * right now. Rethink it from first principles."*
+   *
+   * The tesseract rotation that lived here was an exact projection of a 4D
+   * turn and completely unreadable, and the reasons are general enough to gate
+   * rather than to remember:
+   *
+   *   1. SOMETHING PERSISTS. The face you walked through does not move, all
+   *      the way across. It is the one thing genuinely common to both worlds.
+   *   2. THE OLD WORLD LEAVES BEFORE THE NEW ARRIVES. There is a moment with
+   *      exactly one face on screen — the door, alone. Under the rotation both
+   *      worlds were up the whole time, so no frame ever said *the first one
+   *      is gone*.
+   *   3. IT OPENS FROM THE DOOR. Neighbours go first and far faces last, so
+   *      the solid comes apart outward from where the event happened rather
+   *      than everywhere at once.
+   */
+  {
+    const P = await page.evaluate(async () => {
+      const { GlobeScene } = await import('/src/scenes/globe.js');
+      const { FACES } = await import('/src/data/solid.js');
+      const game = window.sfb3;
+      game.state.worldsOpen = 8;
+      const sc = new GlobeScene(game, 0, 0);
+      const home = sc.here;
+      sc.folding = { t: 0, door: { world: 2, face: 3 }, land: { id: 'w3-1' }, swapped: false };
+      sc.mode = 'fold';
+
+      const mid = (pts) => ({
+        x: pts.reduce((t, p) => t + p.x, 0) / pts.length,
+        y: pts.reduce((t, p) => t + p.y, 0) / pts.length,
+      });
+      const start = mid(sc.peeled(home, 0));
+      let drift = 0, alone = 0, frames = 0;
+      let ring1First = true;
+      for (let t = 0; t < 140; t++) {
+        sc.update(game.input);
+        if (sc.mode !== 'fold') break;
+        frames++;
+        /* 1. the door stays put */
+        const now = mid(sc.faceCorners(sc.here));
+        drift = Math.max(drift, Math.hypot(now.x - start.x, now.y - start.y));
+        /* 2. how many faces are actually on screen */
+        const up = FACES.filter((f) => sc.foldState(f).alpha > 0.02).length;
+        if (up === 1) alone++;
+        /* 3. neighbours lead on the way out */
+        if (sc.fold > 0.1 && sc.fold < 0.6 && !sc.closing) {
+          const near = FACES.filter((f) => sc.ringOf(f) === 1);
+          const far = FACES.filter((f) => sc.ringOf(f) === 2);
+          const avg = (l) => l.reduce((a, f) => a + sc.foldState(f).p, 0) / l.length;
+          if (avg(near) <= avg(far)) ring1First = false;
+        }
+      }
+      return { drift: Math.round(drift), alone, frames, ring1First };
+    });
+
+    expect('ovi ei liiku koko taitoksen aikana',
+      P.drift <= 1,
+      `sivu jolla seisot siirtyi ${P.drift} px ${P.frames} framen aikana`);
+
+    expect('on hetki jolloin ruudulla on vain ovi',
+      P.alone >= 20,
+      `${P.alone} framea joissa yksi ainoa sivu näkyvissä`);
+
+    expect('kappale aukeaa ovesta ulospäin, ei kaikkialta yhtä aikaa',
+      P.ring1First,
+      P.ring1First ? 'naapurit lähtevät ennen kaukaisia'
+        : 'kaukaiset lähtivät yhtä aikaa naapurien kanssa tai ennen');
+  }
+
   /* -------------------------- kaksi eri siirtymää ------------------------ */
   /*
    * A LEVEL ROLLS. A WORLD FOLDS. THEY MUST NOT LOOK THE SAME.
