@@ -3,8 +3,31 @@ import { drawGasPuff } from '../gfx/sprites.js';
 import { drawSplinter, THEMES } from '../gfx/tiles.js';
 import { drawText } from '../gfx/font.js';
 
+/*
+ * KOLME UUTTA VALINNAISTA KENTTÄÄ, ja ne ovat kaikki oletukseltaan entinen
+ * käytös (21.8.2026).
+ *
+ * Puff on tässä pelissä ollut **tapahtuman** merkki: kuolema, tallaus,
+ * maahanisku, telegrafi. Jokainen sellainen nousee ylös ja leviää satunnaisesti,
+ * mikä on oikein tapahtumalle — se ei ole menossa mihinkään, se vain tapahtui.
+ *
+ * Vihollisten kaasunpoisto (`Enemy.vent`) on eri asia: se on **liikkeen
+ * sivutuote**, ja sivutuotteella on suunta, koska liikkeellä on suunta. Siksi
+ * `vx`/`vy` voi antaa suoraan sen sijaan että ne arvottaisiin, ja siksi `dim`
+ * on olemassa: jatkuva efekti joka näyttää yhtä vahvalta kuin kuoleman puuska
+ * opettaa lukemaan kuoleman puuskaa väärin (DESIGN.md kohta 8). Vent-puuska on
+ * yksi hiukkanen kolmanneksen kirkkaudella siinä missä `spawnPuff` on neljä
+ * täydellä.
+ *
+ * `vent` itse on kirjanpitoa eikä ulkonäköä: kenttä laskee elävät
+ * kaasuhiukkaset yhdessä paikassa (`VENT_MAX`), jotta ruudullinen vihollisia ei
+ * voi hukuttaa kuvaa.
+ */
 export class Puff extends Entity {
-  constructor(level, x, y, { spread = 0, size = 4, life = 24, brown = false } = {}) {
+  constructor(level, x, y, {
+    spread = 0, size = 4, life = 24, brown = false, vx = null, vy = null,
+    dim = 1, vent = false,
+  } = {}) {
     super(level, x - size, y - size, size * 2, size * 2);
     this.kind = 'effect';
     this.alwaysActive = true;
@@ -13,8 +36,10 @@ export class Puff extends Entity {
     this.life = life;
     this.size = size;
     this.brown = brown;
-    this.vx = (Math.random() - 0.5) * spread;
-    this.vy = -0.3 - Math.random() * 0.4;
+    this.dim = dim;
+    this.vented = vent;
+    this.vx = vx === null ? (Math.random() - 0.5) * spread : vx;
+    this.vy = vy === null ? -0.3 - Math.random() * 0.4 : vy;
   }
 
   update() {
@@ -27,7 +52,7 @@ export class Puff extends Entity {
 
   draw(ctx) {
     const t = this.life / this.maxLife;
-    drawGasPuff(ctx, this.cx, this.cy, t, this.size * (1.6 - t * 0.6), this.brown);
+    drawGasPuff(ctx, this.cx, this.cy, t * this.dim, this.size * (1.6 - t * 0.6), this.brown);
   }
 }
 

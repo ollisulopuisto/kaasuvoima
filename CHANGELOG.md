@@ -7,6 +7,128 @@ Alkuperää ja tekijänoikeuksia koskevat periaatteet ovat [DESIGN.md](DESIGN.md
 
 ---
 
+## v26.08.21.54 — 5-1 sai sävelmän, viholliset kaasun, ja seisoskelu sään
+
+Kolme omistajan pyyntöä samassa erässä, ja kaksi niistä paljasti saman vian
+kuin edellinen merkintä: **haara joka palasi ennen kuin se ehti piirtää.**
+
+### 5-1: *"music in 5-1 is horrible"*
+
+Metri ei ollut vika. `seiska` on 7/8 laskettuna 2+2+3, ja se on edelleen. Vika
+oli kolme asiaa, ja ne kaikki vetivät kohti konetta joka ei väsy eikä hengitä:
+
+- **Yksi ainoa sävelmä.** Raidalla ei ollut `phrases`-kenttää lainkaan, joten
+  `SECTIONS`in kymmenen osiota — jotka on kirjoitettu *valitsemaan neljästä eri
+  melodiasta* — soittivat kaikki samat 48 nuottia. Kierros on yksitoista
+  sekuntia, ja sitä toistui kaksikymmentä kertaa peräkkäin niin että vain hattu
+  vaihtui. Kolme ja puoli minuuttia yhtätoista sekuntia. Sekvensseri hyväksyi
+  tämän täydellisesti (`phrase % length` yhdellä fraasilla on aina se yksi),
+  eikä yksikään portti kysynyt asiaa.
+- **Ei yhtään taukoa.** Neljäkymmentäkahdeksan nuottia peräkkäin, joka tahdissa
+  sama rytmi. Epäsymmetrinen metri kaatuu jo valmiiksi eteenpäin; kun sitä ei
+  koskaan päästetä irti, se lakkaa olemasta ryhmitys ja muuttuu tikitykseksi.
+- **Melodia oli asteikko.** Lähes joka väli sekunti, joka tahti ylös tai alas
+  peräkkäisiä säveliä. Ei hahmoa, siis ei mitään mitä tunnistaa palatessaan.
+
+Nyt neljä fraasia — pää, riffi, korkea ja harva — joissa on hyppy, sekvenssi ja
+kadenssi. Basso sai neljän tahdin hahmon kuudentoista samanlaisen sijaan.
+Säestys nousi tasolle 0,055 (oli 0,04, eli huhu). Hi-hat oli seitsemän askelta
+pitkä eli sama joka tahdissa, ja sen isku kuudennella osui yhden
+kuudestoistaosan ennen seuraavaa tahtiviivaa: **flam jokaisen tahdin lopussa.**
+Nyt rummut ovat neljäntoista askeleen kuvioita, eli kahden tahdin mittaisia,
+ja se flam on jäljellä kerran kahdessa tahdissa avohattuna ja tarkoituksella.
+Lyijyn suodin oli Q-4 pyyhkäisy jokaisella nuotilla — kvaak per nuotti
+yhdentoista sekunnin ajan — ja on nyt Q-2 ja lyhyempi; oktaavi alas samasta
+syystä kuin `map`illa, koska "oktaavi ylös" -osiot soivat 1760 hertsissä.
+
+**Uusi sääntö jonka portti mittaa: tauko ei koskaan osu pitkälle ryhmälle.**
+Se on se mikä sallii harvan fraasin rikkomatta metriä — kahden lyhyen ryhmän
+paikalla saa olla hiljaisuus, kolmen askeleen ryhmän paikalla ei koskaan, joten
+tahdin pisin isku kuuluu myös niissä kahdessa osiossa joissa ei ole rumpuja.
+Portti tarkistaa lisäksi että fraaseja on neljä ja ne ovat *eri* fraaseja, että
+jokainen hengittää, että jokainen on 2+2+3 (ei vain se yksi jonka `notes`
+sattuu olemaan), ja että raita on E-doorinen korotettuine sekstineen.
+
+### Viholliset: *"the enemies should fart, too … in relation to their movement"*
+
+Viisi lajia kaasunpoistoa, eikä yhtään taulukkoa lajeista. Ensimmäinen versio
+olisi ollut `get ventKind()` kahdessakymmenessäkahdeksassa luokassa, eli
+kaksikymmentäkahdeksan mahdollisuutta olla eri mieltä kuin laji itse: sammakko
+kävelee silloin kun se ei hypi, karvapallo lentää rinteen yli, ja pyörre ei
+kirjoita `vx`:ää lainkaan vaan oman paikkansa.
+
+Niinpä `Enemy.ventAt` **mittaa liikkeen**: yksi vektori, kuljettu matka eikä
+aikomus, ja se ratkaisee sekä lajin että suunnan.
+
+| kun keho | se päästää | ja suunta on |
+|---|---|---|
+| on ilmassa ja nousee | `thrust`, tasainen suihku | **alas**, kehon alta |
+| osuu maahan kovaa | `burst`, leveä pamaus | **sivuille**, jalkojen tasalta |
+| kävelee | `stride`, yksi puuska per askel | **taakse** |
+| liikkuu ilmassa nousematta | `wake`, vanavesi | **kuljettua matkaa vastaan** |
+| ei liiku | `seep`, harva kupla | **ylös** |
+
+Askelväli on nopeuden funktio (`VENT_STRIDE_PX` 14 px), joten kaksinkertainen
+vauhti on kaksinkertainen tiheys ja askel on askel riippumatta siitä kuka
+kävelee. Vaihe tulee syntymäpaikasta samalla siemenellä kuin iho, koska rivi
+tahdissa purskuttavia kävelijöitä on yksi olio eikä viisi.
+
+**Nämä eivät saa näyttää kuolemalta.** `spawnPuff` on neljä hiukkasta täydellä
+kirkkaudella ja tarkoittaa tässä pelissä tapahtumaa; vent on yksi hiukkanen
+kolmasosalla (DESIGN.md kohta 8). **Eivätkä ne saa kuulua kuin harvoin:** vain
+`burst` soi, vain lähellä ja korkeintaan 24 framen välein, uudella
+`pihahdus`-äänellä joka on sama `farty` kuin pelaajan oma mutta 0,1 s ja
+voimakkuudella 0,09 — alle kolmasosa hiljaisimmasta äänestä jonka pelaaja itse
+tekee. Jatkuva ääni ei ole signaali vaan huminaa.
+
+Portti lukee suunnat etumerkkeinä (`ventAt` palauttaa puuskan sen sijaan että
+lisäisi sen kenttään, juuri tätä varten) ja vaatii kolme asiaa: kävelijä
+purskuttaa askelia **eikä mitään muuta**, suihku menee alas sillä framella
+jolla keho menee ylös, ja paikallaan oleva **vain vuotaa** — eli olemassaolo ei
+ole syy purskuttaa. Se kolmas on se jonka rikkoutumista kukaan ei huomaisi: se
+ei näyttäisi väärältä, se vain lakkaisi tarkoittamasta mitään.
+
+### Sää: puolikas oli, ja se puolikas oli ääni
+
+`updateDrift` on laskenut paikallaan oltuja frameja 19.8. asti ja
+`Ambience.hold(this.drift * 0.8)` on **kuulunut** koko sen ajan. Kuva puuttui:
+`weatherScale` luettiin vain kekälesateen tiheydessä ja kulovalkean
+etenemisessä, eli kahdessa kentässä yhdeksästäkymmenestä. Kohta 8 vaatii
+kumpaakin puolta yhdessä, ja tässä ääni oli yksin.
+
+**Ja sama vika kuin edellisessä merkinnässä, yksi funktio sivussa.**
+`drawBackdrop` kutsui `weather()`ia kahdesta haarasta viidestä: `bg: 'none'` ja
+`bg: 'factory'` palasivat ennen sitä. Ne kaksi ovat ne joita **jokainen
+linnake ja jokainen tehdaskenttä käyttää** — kaksitoista linnaketta, neljä
+tehdasta, yksi pilvi- ja yksi luukenttä. `weather()`in oma
+tehdas/linnake-haara, ne kaksikymmentä nousevaa kekälettä, oli siis
+**saavuttamatonta koodia**: kirjoitettu, katselmoitu, eikä kertaakaan piirretty.
+
+Paikallaan olon sää on **oma kerroksensa** eikä kerroin vanhaan, ja kahdesta
+syystä. Vanhat hiukkaset ovat tilattomia — paikka on
+`(siemen*jänne - tick*nopeus) % jänne` — joten nopeuden muuttaminen kesken
+lennon siirtäisi koko kerroksen kerralla toiseen kohtaan ruutua. Ja tihenevä
+lumisade on yhä lumisade: uusi signaali vanhan näköisenä on tasan se mitä kohta
+8 kieltää. Niinpä nopeudet ovat vakioita ja vain peitto kasvaa, kahtena
+alikerroksena joista hidas tulee näkyviin ensimmäisen puolikkaan aikana ja
+nopea vasta toisen. Pop-vapaata (alfa 0 on näkymätön, ei poissa) ja
+porrastettua, eli seisoskelu tuntuu kiihtyvältä eikä päälle kytketyltä.
+
+**Akseli on kentän muoto**, ja se on koko "vary according to layout" -pyyntö:
+vaakakentässä juonteet kulkevat vasemmalle, pystykentässä putoavat alas. Sama
+viesti kummassakin — ilma työntää takaisin sinne mistä tulit — ja se osoittaa
+aina poispäin maalista, joten sitä ei tarvitse selittää. Väri on teeman oma,
+koska tämä on huoneen ilmaa eikä uusi esine.
+
+Portti ei kysy "kutsutaanko `weather`ia" vaan luetteloi **ne tausta/teema-parit
+joita kentät oikeasti käyttävät** (12 kpl) ja vaatii jokaiselta kuvan, sitten
+portaikon, sitten akselin — vaakajuonteen jokaisella pikselillä on naapuri
+oikealla, pystyjuonteen alla. Akseli on se puolisko jonka rikkoutuminen olisi
+näkymättömintä: sää olisi yhä siellä, se vain kertoisi kiipeäjälle
+vastatuulesta jota ei ole.
+
+---
+
 ## v26.08.20.53 — the cube was missing from sixteen levels, and no gate ever asked
 
 `drawBackdrop` branches on the background, and the **factory and cloud branches

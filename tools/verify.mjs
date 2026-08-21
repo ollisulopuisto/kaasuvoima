@@ -8855,6 +8855,212 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       found.length === 0, found.length ? found.join(', ') : 'numerorivi vain');
   }
 
+  /* ------------------------ paikallaan olon sää ------------------------- */
+  /*
+   * SÄÄ JOKA VAIVAA SEISOSKELIJAA: KOLME VÄITETTÄ, KAIKKI PIKSELEISTÄ.
+   *
+   * Omistaja 21.8.2026: *"they should be global and vary according to theme &
+   * level layout (horizontal / vertical)"*. Kolme sanaa, kolme mittausta — ja
+   * ensimmäinen niistä on siellä koska tämä vika oli jo kerran tapahtunut
+   * huomaamatta.
+   *
+   *   - **Globaali tarkoittaa jokaista taustaa.** `weather()` kutsuttiin
+   *     kahdesta paikasta viidestä: `bg: 'none'` ja `bg: 'factory'` palasivat
+   *     ennen sitä, eli kuudessatoista kentässä ei ollut säätä lainkaan ja
+   *     `weather()`in oma tehdas/linnake-haara oli saavuttamatonta koodia.
+   *     Kukaan ei nähnyt sitä, koska puuttuva koriste ei kaada mitään. Siksi
+   *     tämä portti ei kysy "kutsutaanko `weather`ia" vaan luetteloi **ne
+   *     taustat joita kentät oikeasti käyttävät** ja vaatii jokaiselta kuvan.
+   *     Uusi tausta joka unohtaa sään kaatuu tähän eikä katselmukseen.
+   *   - **Vaiva kasvaa.** Nolla pikseliä liikkeessä, vähän puolivälissä,
+   *     selvästi enemmän täydellä. Portaikko eikä kytkin: kytkin ilmestyisi
+   *     kerralla ja lukisi virheeltä.
+   *   - **Akseli on kentän muoto.** Vaakakentässä juonteet ovat vaakasuoria ja
+   *     pystykentässä pystysuoria, ja se on luettavissa naapuripikseleistä:
+   *     juonne jonka jokaisella pikselillä on naapuri oikealla on vaakajuonne.
+   *     Tämä on se puolisko jonka rikkoutuminen olisi kaikkein
+   *     näkymättömintä — sää olisi yhä siellä, se vain osoittaisi väärään
+   *     suuntaan, eli kertoisi kiipeäjälle vastatuulesta jota ei ole.
+   */
+  {
+    const { drawBackdrop } = await import('/src/gfx/backdrop.js');
+    const { getLevel, levelIds } = await import('/src/data/levels.js');
+    const W = 320;
+    const H = 240;
+    const shot = (bg, theme, bite, vertical) => {
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const g = c.getContext('2d');
+      drawBackdrop(g, bg, theme, 0, W, H, 300, 0, null, null, bite, vertical);
+      return g.getImageData(0, 0, W, H).data;
+    };
+    /* Muuttuneiden pikselien indeksit. Vertailu tehdään aina samaa `tick`iä
+     * vasten, joten kaikki ero on `bite`n ansiota eikä animaation. */
+    const moved = (a, b) => {
+      const px = [];
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) px.push(i / 4);
+      }
+      return px;
+    };
+    const shape = (px) => {
+      const set = new Set(px);
+      let right = 0;
+      let down = 0;
+      for (const p of px) {
+        if (set.has(p + 1)) right++;
+        if (set.has(p + W)) down++;
+      }
+      return { right, down, n: px.length };
+    };
+
+    /* Ne taustat joita pelissä oikeasti on, teemoineen. */
+    const combos = new Map();
+    for (const id of levelIds()) {
+      const def = getLevel(id);
+      combos.set(`${def.bg}/${def.theme}`, [def.bg, def.theme]);
+    }
+    const blind = [];
+    const steps = [];
+    for (const [key, [bg, theme]] of combos) {
+      const calm = shot(bg, theme, 0, false);
+      const half = moved(calm, shot(bg, theme, 0.4, false)).length;
+      const full = moved(calm, shot(bg, theme, 1, false)).length;
+      if (full < 100) blind.push(`${key} ${full}px`);
+      else if (!(half > 0 && full > half * 2)) steps.push(`${key} puoli ${half} täysi ${full}`);
+    }
+
+    const calm = shot('hills', 'grass', 0, false);
+    const across = shape(moved(calm, shot('hills', 'grass', 1, false)));
+    const down = shape(moved(calm, shot('hills', 'grass', 1, true)));
+
+    expect('paikallaan olon sää näkyy jokaisella taustalla jota jokin kenttä käyttää',
+      blind.length === 0,
+      blind.join(', ') || `${combos.size} tausta/teema-paria, kaikilla kuva`);
+    expect('sää kasvaa portaittain eikä ilmesty kerralla',
+      steps.length === 0, steps.join('; ') || `${combos.size} paria`);
+    expect('vaakakentässä sää kulkee vaakaan ja pystykentässä pystyyn',
+      across.right > across.n * 0.8 && across.down < across.n * 0.1
+      && down.down > down.n * 0.8 && down.right < down.n * 0.1,
+      `vaaka: oikealle ${across.right}/${across.n} alas ${across.down}; `
+      + `pysty: alas ${down.down}/${down.n} oikealle ${down.right}`);
+  }
+
+  /* --------------------------- vihollisten kaasu ------------------------- */
+  /*
+   * KAASUNPOISTO: LIIKE ON SYY, JA SYY ON MITATTAVISSA.
+   *
+   * Omistaja 21.8.2026 pyysi vihollisille pieruja — *"of different kinds. make
+   * it so it has a reason, ie. in relation to their movement."* Se on kaksi
+   * väitettä, ja kumpikin on numero eikä tunnelma:
+   *
+   *   - **Laji seuraa liikettä.** Kävelijä maassa purskuttaa askelia eikä
+   *     mitään muuta. Lentäjä nousussa suihkuttaa. Keho joka ei liiku vuotaa —
+   *     ja vain vuotaa, eli **olemassaolo ei riitä syyksi**. Se kolmas on se
+   *     jonka rikkoutuminen olisi näkymätöntä: jos paikallaan seisova alkaa
+   *     purskuttaa askelia, kukaan ei huomaa mitään väärää, se vain lakkaa
+   *     tarkoittamasta mitään.
+   *   - **Suunta on liikettä vastaan.** Askel purkautuu taaksepäin, suihku
+   *     alaspäin sillä framella jolla keho menee ylöspäin. Nämä ovat
+   *     etumerkkejä, joten portti lukee etumerkit. Suunta joka kääntyisi
+   *     väärinpäin näyttäisi edelleen kaasulta — se vain valehtelisi siitä
+   *     mihin otus on menossa, ja juuri se on koko efektin ainoa sisältö.
+   *
+   * `ventAt` palauttaa puuskan sen sijaan että lisäisi sen kenttään, ja se on
+   * tämän portin takia: sivuvaikutuksesta ei voi lukea suuntaa ilman että
+   * hiukkanen ensin syntyy, ja hiukkanen joka ehti syntyä on jo liikkunut.
+   *
+   * Lisäksi budjetti, koska sen ohi menee vahingossa: `spawnVent` hylkää
+   * ruudun ulkopuolisen ja hylkää kaiken kun `VENT_MAX` on täynnä. Kumpikaan
+   * ei näy pelissä muuten kuin ruutunopeutena, eli väärin päin kirjoitettuna
+   * kumpikaan ei kaataisi mitään — ne vain maksaisivat.
+   */
+  {
+    const { Walker, Flyer } = await import('/src/entities/enemies.js');
+    reset();
+    const W = 48;
+    const ventRows = Array.from({ length: 16 }, () => ' '.repeat(W));
+    {
+      const put = (y, x, str) => {
+        ventRows[y] = ventRows[y].slice(0, x) + str + ventRows[y].slice(x + str.length);
+      };
+      put(14, 0, '#'.repeat(W));
+      put(15, 0, '#'.repeat(W));
+      put(13, 1, '1');
+      put(13, 44, 'F');
+    }
+    const s = new LevelScene(game, 'kFix', {
+      id: 'kFix', theme: 'grass', bg: 'hills', music: 'level', time: 9999,
+      boss: false, bossVariant: 0, bands: null, rows: ventRows,
+    });
+    game.setScene(s);
+    const i = mkInput();
+    for (let f = 0; f < 8; f++) { s.update(i); i.pressed = blank(); }
+    s.entities = s.entities.filter((e) => e.kind !== 'enemy');
+
+    /* Yksi otus, N framea, ja jokainen puuska talteen sellaisena kuin se
+     * syntyi — laji, suunta, ja se liike josta se luettiin. */
+    const watch = (make, frames, pin) => {
+      const e = s.add(make());
+      e.active = true;
+      const seen = [];
+      for (let f = 0; f < frames; f++) {
+        if (pin) pin(e);
+        e.update();
+        const v = e.ventAt();
+        if (v) seen.push({ ...v, evx: e.vx, evy: e.vy });
+      }
+      e.remove = true;
+      s.entities = s.entities.filter((x) => !x.remove);
+      const kinds = {};
+      for (const v of seen) kinds[v.kind] = (kinds[v.kind] || 0) + 1;
+      return { seen, kinds, list: Object.entries(kinds).map(([k, n]) => `${k}×${n}`).join(' ') };
+    };
+
+    const walker = watch(() => new Walker(s, 10 * 16, 13 * 16), 180);
+    const flyer = watch(() => new Flyer(s, 20 * 16, 8 * 16), 180);
+    /* Sama laji kuin ensimmäisessä, liike nollattuna: ero tuloksissa on siis
+     * liikkeen ansiota eikä lajin. */
+    const still = watch(() => new Walker(s, 30 * 16, 13 * 16), 300, (e) => {
+      e.vx = 0; e.x = 30 * 16; e.onGround = true;
+    });
+
+    const strides = walker.seen.filter((v) => v.kind === 'stride');
+    const backwards = strides.filter((v) => Math.sign(v.vx) !== -Math.sign(v.evx || 1));
+    const jets = flyer.seen.filter((v) => v.kind === 'thrust');
+    const upsideDown = jets.filter((v) => !(v.vy > 0));
+
+    expect('kävelevä vihollinen purskuttaa askelia eikä mitään muuta',
+      strides.length >= 4 && Object.keys(walker.kinds).join() === 'stride',
+      walker.list || 'ei yhtään puuskaa');
+    expect('askel purkautuu taaksepäin, aina',
+      strides.length > 0 && backwards.length === 0,
+      `${strides.length} askelta, väärään suuntaan ${backwards.length}`);
+    expect('nouseva vihollinen suihkuttaa alaspäin, aina',
+      jets.length >= 4 && upsideDown.length === 0,
+      `${jets.length} suihkua, ylöspäin ${upsideDown.length} — ${flyer.list}`);
+    expect('paikallaan oleva vain vuotaa: olemassaolo ei ole syy purskuttaa',
+      Object.keys(still.kinds).join() === 'seep' && still.seen.length >= 1,
+      still.list || 'ei yhtään puuskaa');
+
+    /* Budjetti. Ruudun ulkopuolinen ei synny lainkaan, ja katon täytyttyä ei
+     * synny mitään — kumpikin luettuna kentän hiukkasmäärästä eikä lipuista. */
+    const gasCount = () => s.entities.filter((e) => e.vented).length;
+    s.entities = s.entities.filter((e) => e.kind !== 'effect');
+    s.ventLive = 0;
+    const far = { kind: 'seep', x: s.cam.x + 4000, y: s.cam.y + 8, vx: 0, vy: -0.2, size: 1, life: 20, brown: true, dim: 0.3 };
+    for (let n = 0; n < 20; n++) s.spawnVent(far);
+    const offscreen = gasCount();
+    const near = { ...far, x: s.cam.x + 40, y: s.cam.y + 40 };
+    for (let n = 0; n < 400; n++) { s.spawnVent(near); s.ventLive = gasCount(); }
+    const capped = gasCount();
+    expect('ruudun ulkopuolella ei purskuteta lainkaan',
+      offscreen === 0, `${offscreen} hiukkasta kaukana kamerasta`);
+    expect('kaasuhiukkasilla on katto jonka yli ei mennä',
+      capped > 0 && capped <= 60, `${capped} elävää hiukkasta 400 yrityksestä`);
+  }
+
   /* ------------------------------- lentäjä ------------------------------- */
   /* Reported from play: stomp a flyer, it loses its wings, and the same jump
    * kills the walker underneath. `Flyer.stomp` appends the walker to the array
@@ -18675,19 +18881,42 @@ const report = await page.evaluate(async (OVERWORLDS) => {
   }
 
   /*
-   * 7. SEISKA — 7/8 on rakenne eikä maku.
+   * 7. SEISKA — 7/8 on rakenne eikä maku, ja sävelmä on sävelmä eikä asteikko.
    *
-   * Kaksi asiaa, ja niistä jälkimmäinen on se joka tekee epäsymmetrisestä
-   * tahtilajista musiikkia eikä laskuharjoitusta.
+   * Kaksi ensimmäistä väitettä koskevat metriä. Kolme viimeistä ovat uusia ja
+   * ne ovat siellä koska omistaja kuuli mitä niiden puuttuminen tarkoitti:
+   * *"music in 5-1 is horrible"* (21.8.2026). Metri oli kunnossa koko ajan —
+   * raita oli silti kone, ks. `TRACKS.seiska`.
    *
    *   - **Kaikki on seitsemää ja sataakahtatoista.** Seitsemän ja kuusitoista
    *     sopivat yhteen vasta 112 askeleen kohdalla, joten yksikin ääni väärän
    *     mittaisena panee raidan vaeltamaan omaa sovitustaan vasten. Se
-   *     kuulostaisi rikkinäiseltä, ei väärältä.
-   *   - **Melodia on ryhmitelty 2+2+3.** Jokainen seitsemän askeleen tahti
-   *     lyijyssä on tasan kolme nuottia, ja niiden pituudet ovat 2, 2 ja 3
-   *     siinä järjestyksessä. Ilman tätä metri olisi vain rumpukuvio, ja rummut
-   *     pudotetaan kahdessa osiossa kymmenestä.
+   *     kuulostaisi rikkinäiseltä, ei väärältä. Fraasit ovat mukana mitassa,
+   *     koska `_loopLen` lasketaan `notes`ista ja fraasi vaihdetaan sen tilalle
+   *     vasta osiota valittaessa: väärän mittainen fraasi ei näkyisi missään
+   *     ennen kuin se osio tulee vastaan.
+   *   - **Melodia on ryhmitelty 2+2+3.** Jokainen seitsemän askeleen tahti on
+   *     tasan kolme nuottia, ja niiden pituudet ovat 2, 2 ja 3 siinä
+   *     järjestyksessä. Ilman tätä metri olisi vain rumpukuvio, ja rummut
+   *     pudotetaan kahdessa osiossa kymmenestä. Tämä koskee **jokaista**
+   *     fraasia eikä vain sitä yhtä jonka `notes` sattuu olemaan.
+   *   - **Sävelmiä on neljä ja ne ovat eri sävelmiä.** `SECTIONS` valitsee
+   *     fraasin numerolla 0-3, ja `_applyVariation` ottaa modulon: raita jolla
+   *     on yksi fraasi kelpaa sekvensserille täydellisesti ja soittaa samat
+   *     yksitoista sekuntia kaksikymmentä kertaa peräkkäin. Juuri niin tässä
+   *     kävikin, eikä mikään portti nähnyt sitä.
+   *   - **Tauko ei koskaan osu pitkälle ryhmälle.** Tämä on se sääntö joka
+   *     sallii harvan fraasin rikkomatta metriä: kun kahden lyhyen ryhmän
+   *     paikalla saa olla hiljaisuus mutta kolmen askeleen ryhmän paikalla ei
+   *     koskaan, tahdin pisin isku kuuluu aina — myös siinä kahdessa osiossa
+   *     joissa ei ole rumpuja lainkaan.
+   *   - **Jokainen fraasi hengittää.** Vähintään neljä taukoa. Vanhassa
+   *     melodiassa niitä oli nolla, ja se on mitattavissa oleva ero eikä
+   *     makuasia: nuottirivi ilman yhtään taukoa on rivi jota ei voi fraseerata.
+   *
+   * Lisäksi sävellaji: raita on E-doorinen, ja doorisen tekee **korotettu
+   * seksti** (C#). Sen puuttuminen tekisi tästä tavallisen mollin, mikä on
+   * täsmälleen se yksi sävel jota kukaan ei osaisi etsiä.
    */
   {
     Sfx.resume();
@@ -18697,23 +18926,65 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     const track = Music._track;
     const lens = [
       ...(Music._voices || []).map((v) => `${v.name} ${v.len}`),
+      ...(Music._phrases || []).map((p, i) => `fraasi${i} ${p.len}`),
       ...Object.entries(track.drums || {}).map(([k, p]) => `${k} ${p.length}`),
     ];
     const sevens = lens.every((s) => Number(s.split(' ')[1]) % 7 === 0);
     const loopOk = Music._loopLen === 112;
-    const lead = track.lead.notes;
+    const phrases = track.lead.phrases || [];
+    /* `notes` on mukana koska se on se lista jonka sekvensseri kääntää ennen
+     * kuin yksikään osio on valinnut fraasia, eli se soi aina ensimmäisenä. */
+    const tunes = [track.lead.notes, ...phrases];
     const wrong = [];
-    for (let i = 0; i < lead.length; i += 3) {
-      const group = [lead[i], lead[i + 1], lead[i + 2]].map((n) => (n ? n[1] : '?'));
-      if (group.join(',') !== '2,2,3') wrong.push(`tahti ${i / 3}: ${group.join('+')}`);
+    const longSilent = [];
+    const rests = [];
+    for (const [n, tune] of tunes.entries()) {
+      if (tune.length !== 48) { wrong.push(`melodia ${n}: ${tune.length} nuottia`); continue; }
+      let holes = 0;
+      for (let i = 0; i < tune.length; i += 3) {
+        const bar = [tune[i], tune[i + 1], tune[i + 2]];
+        const group = bar.map((x) => (x ? x[1] : '?'));
+        if (group.join(',') !== '2,2,3') wrong.push(`melodia ${n} tahti ${i / 3}: ${group.join('+')}`);
+        if (bar[2][0] === null) longSilent.push(`melodia ${n} tahti ${i / 3}`);
+        if (bar[0][0] === null) holes++;
+        if (bar[1][0] === null) holes++;
+      }
+      rests.push(holes);
     }
+    const distinct = new Set(phrases.map((p) => JSON.stringify(p))).size;
+    /* E-doorinen A:sta laskettuna: E F# G A B C# D. */
+    const DORIAN = [0, 2, 4, 5, 7, 9, 10];
+    const pc = new Array(12).fill(0);
+    for (const name of ['lead', 'harm', 'bass']) {
+      const voice = track[name];
+      if (!voice) continue;
+      for (const list of [voice.notes, ...(voice.phrases || [])]) {
+        for (const [semi] of list) {
+          if (semi === null || semi === undefined) continue;
+          for (const s of Array.isArray(semi) ? semi : [semi]) pc[((s % 12) + 12) % 12]++;
+        }
+      }
+    }
+    const outside = pc
+      .map((n, k) => ({ k, n }))
+      .filter((x) => x.n && !DORIAN.includes(x.k));
     Music.stop();
     Music.current = null;
     expect('seiska on 7/8 ja pysyy siinä: kaikki pituudet ovat seitsemän monikertoja',
       sevens && loopOk, `${lens.join(', ')}; kierros ${Music._loopLen}`);
-    expect('seiskan melodia on ryhmitelty 2+2+3 joka tahdissa',
-      wrong.length === 0 && lead.length === 48,
-      wrong.slice(0, 4).join('; ') || `${lead.length} nuottia, 16 tahtia, kaikki 2+2+3`);
+    expect('seiskan jokainen melodia on ryhmitelty 2+2+3 joka tahdissa',
+      wrong.length === 0 && tunes.length === 5,
+      wrong.slice(0, 4).join('; ') || `${tunes.length} melodiaa, kussakin 16 tahtia, kaikki 2+2+3`);
+    expect('seiskalla on neljä eri sävelmää eikä yksi kahdellekymmenelle kierrokselle',
+      phrases.length === 4 && distinct === 4,
+      `${phrases.length} fraasia, joista erilaisia ${distinct}`);
+    expect('seiskan tauot osuvat lyhyille ryhmille, ei koskaan pitkälle',
+      longSilent.length === 0, longSilent.slice(0, 4).join('; ') || 'ei yhtään vaiennettua kolmosta');
+    expect('seiskan jokainen sävelmä hengittää: taukoja on',
+      rests.length === 5 && rests.every((n) => n >= 4), `taukoja melodioittain ${rests.join(', ')}`);
+    expect('seiska on E-doorinen: korotettu seksti soi, asteikon ulkopuolta ei ole',
+      outside.length === 0 && pc[4] >= 8,
+      `C# ${pc[4]} kertaa, ulkopuolella ${outside.map((x) => `pc${x.k}×${x.n}`).join(' ') || 'ei mitään'}`);
   }
 
   /*

@@ -500,7 +500,109 @@ function disc(ctx, cx, cy, r, core, rim, tick, rays) {
 
 /* ------------------------------- weather ------------------------------- */
 
-function weather(ctx, themeName, camX, viewW, viewH, tick) {
+/*
+ * SÄÄ JOKA ALKAA VAIVATA KUN SEISOT PAIKALLASI (21.8.2026).
+ *
+ * Omistaja: *"did we ever wire up the weather effects that start bugging you if
+ * you just stand around? they should be global and vary according to theme &
+ * level layout (horizontal / vertical)"*
+ *
+ * Puolikas oli. `LevelScene.updateDrift` on laskenut paikallaan oltuja frameja
+ * 19.8.2026 asti ja `Ambience.hold(this.drift * 0.8)` on **kuulunut** koko sen
+ * ajan — mutta kuva puuttui kaikkialta paitsi kahdesta kentästä, koska
+ * `weatherScale` luettiin vain kekälesateen tiheydessä ja kulovalkean
+ * etenemisessä. Toisin sanoen kaksi kenttää yhdeksästäkymmenestä. DESIGN.md
+ * kohta 8 vaatii kumpaakin puolta yhdessä, ja tässä ääni oli yksin.
+ *
+ * MIKSI TÄMÄ ON OMA KERROKSENSA EIKÄ KERROIN VANHAAN. Ensimmäinen ajatus on
+ * kertoa teeman omien hiukkasten määrä ja nopeus `drift`illä, ja se on väärin
+ * kahdesti. Ensinnäkin **se popsahtaa**: nämä hiukkaset ovat tilattomia,
+ * paikka on `(siemen*jänne - tick*nopeus) % jänne`, ja nopeuden muuttaminen
+ * kesken lennon siirtää koko kerroksen kerralla toiseen kohtaan ruutua.
+ * Toiseksi se olisi tehnyt uudesta signaalista vanhan näköisen, mikä on
+ * täsmälleen se mitä kohta 8 kieltää: lumisade joka tihenee on yhä lumisade,
+ * eikä pelaaja opi siitä mitään.
+ *
+ * Niinpä nopeudet ovat vakioita ja **vain peitto kasvaa**. Kaksi alikerrosta:
+ * hidas tulee näkyviin ensimmäisen puolikkaan aikana, nopea vasta toisen. Se on
+ * pop-vapaa (alfa 0 on näkymätön, ei poissa) ja se on porrastus, eli
+ * paikallaan olo tuntuu **kiihtyvältä** eikä päälle kytketyltä.
+ *
+ * AKSELI ON KENTÄN MUOTO, ja se on koko "vary according to layout" -pyyntö.
+ * Vaakakentässä juonteet kulkevat **vasemmalle**, eli sitä suuntaa vastaan
+ * johon kenttä etenee: vastatuuli. Pystykentässä ne putoavat **alas**, eli
+ * sitä vastaan johon kiipeäjä on menossa. Sama viesti kummassakin — ilma
+ * työntää takaisin sinne mistä tulit — ja se on luettavissa ilman että kukaan
+ * selittää sitä, koska se osoittaa aina poispäin maalista.
+ *
+ * VÄRI ON TEEMAN OMA, koska tämä on huoneen ilmaa eikä uusi esine. Sama
+ * aine kuin se mitä teema muutenkin lennättää, vain ajettuna. Huurre, hiekka,
+ * kekäle ja siitepöly pysyvät siis toisistaan erottuvina myös silloin kun
+ * pelaaja on seissyt kymmenen sekuntia.
+ */
+/** Juonteita alikerrosta kohti. Kaksikymmentä täyttää ruudun ahdistamatta. */
+const DRIFT_STREAKS = 20;
+/** Peitto täydellä vaivalla. Sää joka peittää kentän on kentän peittävä sää. */
+const DRIFT_ALPHA = 0.42;
+/** Juonteen pituus pikseleinä: lyhin täydellä, pisin täydellä vaivalla. */
+const DRIFT_LEN = [4, 22];
+/** Teeman oma aine, ajettuna: sama väri kuin sen omassa säässä. */
+const DRIFT_TINT = {
+  ice: [255, 255, 255],
+  desert: [255, 228, 180],
+  night: [200, 200, 255],
+  bone: [190, 235, 255],
+  cloud: [255, 255, 255],
+  factory: [255, 170, 70],
+  fortress: [255, 170, 70],
+  grass: [255, 255, 220],
+};
+
+/**
+ * Se kerros joka kertoo että olet seissyt liian kauan.
+ *
+ * `bite` on 0..1 (`LevelScene.drift`), `vertical` kentän muoto. Tilaton kuten
+ * kaikki muukin tässä tiedostossa: pelkkä `tick`, `camX` ja hajautettu siemen,
+ * joten pikatallennus ei kanna siitä riviäkään.
+ */
+function driftWeather(ctx, themeName, camX, viewW, viewH, tick, bite, vertical) {
+  if (bite <= 0.01) return;
+  const [r, g, b] = DRIFT_TINT[themeName] || DRIFT_TINT.grass;
+  const len = Math.round(DRIFT_LEN[0] + (DRIFT_LEN[1] - DRIFT_LEN[0]) * bite);
+  for (let layerIndex = 0; layerIndex < 2; layerIndex++) {
+    /* Hidas kerros nousee ensimmäisen puolikkaan aikana, nopea toisen. */
+    const fade = Math.max(0, Math.min(1, bite * 2 - layerIndex));
+    if (fade <= 0) continue;
+    const speed = layerIndex ? 5.5 : 2.2;
+    for (let i = 0; i < DRIFT_STREAKS; i++) {
+      const seed = hashNoise(i, 101 + layerIndex * 17);
+      const off = hashNoise(i * 37 + 13, 113 + layerIndex);
+      const a = (DRIFT_ALPHA * fade * (0.45 + seed * 0.55)).toFixed(3);
+      ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+      if (vertical) {
+        /* Alas kuilua pitkin: parallaksi on vaakasuunnassa, koska sekin on se
+         * suunta johon kamera pystykentässä liikkuu vähiten. */
+        const span = viewH + 60;
+        const x = Math.round(off * viewW);
+        const y = ((seed * span + tick * (speed + seed * 2)) % span + span) % span - 30;
+        ctx.fillRect(x, Math.round(y), 1, len + Math.round(seed * 8));
+      } else {
+        const span = viewW + 80;
+        const x = ((seed * span - tick * (speed + seed * 2) - camX * 0.3) % span + span)
+          % span - 40;
+        const y = Math.round(off * viewH);
+        ctx.fillRect(Math.round(x), y, len + Math.round(seed * 8), 1);
+      }
+    }
+  }
+}
+
+function weather(ctx, themeName, camX, viewW, viewH, tick, bite = 0, vertical = false) {
+  ambientWeather(ctx, themeName, camX, viewW, viewH, tick);
+  driftWeather(ctx, themeName, camX, viewW, viewH, tick, bite, vertical);
+}
+
+function ambientWeather(ctx, themeName, camX, viewW, viewH, tick) {
   if (themeName === 'ice') {
     // snow: two depths, the near flakes bigger and faster
     for (let layerIndex = 0; layerIndex < 2; layerIndex++) {
@@ -977,11 +1079,28 @@ function cloudSea(ctx, th, camX, viewW, viewH, tick, groundY) {
  * happened. Zero — every ordinary level — is the picture this always drew.
  */
 export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
-  clock = null, tower = null) {
+  clock = null, tower = null, bite = 0, vertical = false) {
   const th = THEMES[theme] || THEMES.grass;
 
+  /*
+   * SÄÄ KUULUU JOKAISEEN HAARAAN, ja kahdessa se puuttui (21.8.2026).
+   *
+   * `weather()` kutsuttiin vain kahdesta paikasta: pilvimerestä ja
+   * harjannepolun hännästä. Kaksi haaraa palasi ennen sitä — `bg: 'none'` ja
+   * `bg: 'factory'` — ja juuri ne kaksi ovat ne joita **jokainen linnake ja
+   * jokainen tehdaskenttä käyttää**: kaksitoista linnaketta, neljä tehdasta,
+   * yksi pilvikenttä ja yksi luukenttä. Seuraus ei ollut vain puuttuva
+   * koriste: `weather()`in oma `factory`/`fortress`-haara, ne kaksikymmentä
+   * nousevaa kekälettä, oli **saavuttamatonta koodia** — kirjoitettu, luettu
+   * kaksi kertaa koodikatselmuksessa, eikä kertaakaan piirretty ruudulle.
+   *
+   * Sama vika olisi toistunut nyt: paikallaan olon sää olisi jäänyt pois
+   * täsmälleen niistä kentistä joissa seisoskelu on tavallisinta, eli
+   * pomohuoneiden edustoilta.
+   */
   if (bg === 'none') {
     fortressRoom(ctx, th, camX, viewW, viewH, tick, clock);
+    weather(ctx, theme, camX, viewW, viewH, tick, bite, vertical);
     return;
   }
 
@@ -1014,6 +1133,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
      */
     drawSkyTower(ctx, tower, camX, groundY, th, viewW);
     factoryYard(ctx, th, camX, viewW, viewH, tick);
+    weather(ctx, theme, camX, viewW, viewH, tick, bite, vertical);
     return;
   }
 
@@ -1023,7 +1143,7 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
      * reason as the factory branch above. */
     drawSkyTower(ctx, tower, camX, groundY, th, viewW);
     cloudSea(ctx, th, camX, viewW, viewH, tick, groundY);
-    weather(ctx, theme, camX, viewW, viewH, tick);
+    weather(ctx, theme, camX, viewW, viewH, tick, bite, vertical);
     return;
   }
 
@@ -1164,5 +1284,5 @@ export function drawBackdrop(ctx, bg, theme, camX, viewW, viewH, tick, drop = 0,
   ctx.fillStyle = haze;
   ctx.fillRect(0, groundY - 30, viewW, 30);
 
-  weather(ctx, theme, camX, viewW, viewH, tick);
+  weather(ctx, theme, camX, viewW, viewH, tick, bite, vertical);
 }
