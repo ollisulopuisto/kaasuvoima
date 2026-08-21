@@ -1237,6 +1237,29 @@ const SFX = {
     maybeVox(0.18, { word: 'hup', dur: 0.2, pitch: 300, bend: 0.8, gain: 0.26 });
   },
   fart: () => farty({ dur: 0.3, base: 150, gain: 0.32, wobble: 24 }),
+  /*
+   * PIHAHDUS — vihollisen laskeutuminen, ja se on tarkoituksella pelaajan
+   * pierun pikkuveli eikä oma soittimensa.
+   *
+   * Sama `farty`, eli sama keho: se mitä nämä otukset päästävät ulos on samaa
+   * ainetta kuin se millä pelaaja lentää, ja kaksi eri soitinta olisi sanonut
+   * ettei ole. Ero on kolme lukua, ja jokainen niistä on siellä missä se on
+   * jotta tämä **ei koskaan voita** mitään mikä on pelaajan oma:
+   *
+   *   - **kesto 0,10 s** — `fart` on 0,3. Tämä on pihaus eikä lause.
+   *   - **voimakkuus 0,09** — `fart` on 0,32, `coin` 0,32. Alle kolmasosa
+   *     hiljaisimmasta asiasta jonka pelaaja itse tekee, koska tämän kuuluu
+   *     tulla huoneesta eikä käsistä.
+   *   - **perustaajuus 260** — `fart` on 150 ja `bigfart` 92. Ylöspäin eikä
+   *     alaspäin: pieni keho, pieni putki, eikä sekaannuksen vaaraa siihen
+   *     matalaan jyrähdykseen jolla pomo kasvaa.
+   *
+   * `vary` on korotettu, koska tätä kuullaan useammin kuin mitään muuta ääntä
+   * tässä taulussa: kaksi peräkkäin identtistä pihahdusta kuulostaa
+   * silmukalta, ja silmukka on juuri se mikä paljastaa efektin efektiksi.
+   * Tiheyden katto on soittajan puolella (`VENT_SFX_GAP`) eikä täällä.
+   */
+  pihahdus: () => farty({ dur: 0.1, base: 260, gain: 0.09, wobble: 34, wet: 0.15, vary: 1.5 }),
   bigfart: () => farty({ dur: 0.46, base: 92, gain: 0.38, wobble: 17, wet: 0.8 }),
   squeak: () => farty({ dur: 0.14, base: 320, gain: 0.2, wobble: 42, wet: 0.35 }),
   flight: () => noise({ dur: 0.2, from: 420, to: 1600, q: 3, gain: 0.16, attack: 0.05 }),
@@ -3750,6 +3773,34 @@ const TRACKS = {
    * chord progression: bass and harmony hold E and B for four bars at a time,
    * and everything that moves is the tune. A drone is not a poor man's harmony;
    * it is the thing that makes a mode sound like a mode instead of like a key.
+   *
+   * MITÄ TÄSSÄ OLI VIKANA, ELI MIKSI SÄVELMÄ ON KIRJOITETTU UUSIKSI (21.8.2026).
+   *
+   * Owner, kentästä 5-1: *"music in 5-1 is horrible."* Metri ei ollut vika.
+   * Vika oli kolme asiaa, ja ne kaikki vetivät samaan suuntaan — kohti
+   * konetta, joka ei väsy eikä hengitä:
+   *
+   *   - **Yksi ainoa sävelmä.** Tässä raidassa ei ollut `phrases`-kenttää
+   *     lainkaan, joten `SECTIONS`in kymmenen osiota — jotka on kirjoitettu
+   *     valitsemaan neljästä eri melodiasta — soittivat kaikki samat 48
+   *     nuottia. Kierros on 112 askelta eli yksitoista sekuntia, ja sitä
+   *     toistui kaksikymmentä perättäistä kertaa niin että vain hattu vaihtui.
+   *     Se on kolme ja puoli minuuttia yhtätoista sekuntia.
+   *   - **Ei yhtään taukoa.** Neljäkymmentäkahdeksan nuottia, ei yhtään
+   *     hengähdystä, ja joka tahdissa täsmälleen sama rytmi. Epäsymmetrinen
+   *     metri on jo valmiiksi eteenpäin kaatuva; kun sitä ei koskaan päästetä
+   *     irti, se lakkaa olemasta ryhmitys ja muuttuu tikitykseksi.
+   *   - **Melodia oli asteikko.** Vanhassa lyijyssä lähes joka väli oli
+   *     sekunti ja joka tahti kulki ylös tai alas peräkkäisiä säveliä:
+   *     nuottirivi jossa ei ole yhtään hahmoa, siis ei mitään mitä voisi
+   *     tunnistaa palatessaan.
+   *
+   * Niinpä: neljä fraasia, joissa on hyppy, sekvenssi ja kadenssi, ja joissa on
+   * taukoja — mutta **tauko ei koskaan osu pitkälle ryhmälle**. Se on se sääntö
+   * joka pitää metrin luettavana silloinkin kun melodia harvenee, ja se on
+   * mitattavissa nuoteista, joten `verify.mjs` mittaa sen. Basso sai neljän
+   * tahdin hahmon kuudentoista samanlaisen sijaan, säestys sai kuultavan
+   * tason, ja hi-hat lakkasi rikkomasta jokaista tahtiviivaa.
    */
   seiska: {
     tempo: 152,
@@ -3758,33 +3809,132 @@ const TRACKS = {
     lead: {
       /* Square through a closing filter, and deliberately not the ice
        * world's breathing pulse: two tracks with the same signature timbre
-       * are one track heard twice. */
-      wave: 'square', gain: 0.13, detune: 4, staccato: 0.86,
-      cutoff: 3000, resonance: 4, sweep: 0.55,
-      notes: [
-        // bars 1-8: down from the fifth and back
-        [0, 2], [2, 2], [4, 3],
-        [2, 2], [0, 2], [-2, 3],
-        [-3, 2], [-2, 2], [0, 3],
-        [2, 2], [4, 2], [2, 3],
-        [5, 2], [4, 2], [2, 3],
+       * are one track heard twice.
+       *
+       * The filter used to be `cutoff: 3000, resonance: 4, sweep: 0.55` — a Q-4
+       * peak sliding down through the harmonics of every single note. On a tune
+       * that never rested that was a quack per note for eleven seconds at a
+       * time, which is the sort of thing the ear stops hearing as timbre and
+       * starts hearing as a fault. Gentler peak, shorter slide: still a filter
+       * that moves, no longer a wah pedal stuck on.
+       *
+       * `octave: -12` for the same reason `map` has it: the phrases reach up to
+       * A above the staff, and two of the ten sections put the lead up another
+       * octave on top of that. Written where it was, those sections sat at 1760
+       * Hz, which is where a square wave over a laptop speaker stops being a
+       * melody and becomes a smoke alarm. */
+      wave: 'square', gain: 0.13, detune: 4, staccato: 0.82,
+      octave: -12,
+      cutoff: 2600, resonance: 2, sweep: 0.7,
+      phrases: [
+        /* 1. THE HEAD. The motif is a leap up and a walk back down — E up to B,
+         * then step home — which is a shape rather than a scale, and it is what
+         * the ear has to be able to recognise when bars 9-11 sequence it down a
+         * step at a time. Four four-bar sentences: statement, answer, the
+         * sequence, the cadence. */
+        [[-5, 2], [2, 2], [0, 3],
+          [-2, 2], [-3, 2], [-5, 3],
+          [2, 2], [7, 2], [5, 3],
+          [4, 2], [2, 2], [0, 3],
+          [null, 2], [2, 2], [0, 3],
+          [-2, 2], [-3, 2], [-2, 3],
+          [0, 2], [-2, 2], [-3, 3],
+          [-5, 2], [null, 2], [-5, 3],
+          [5, 2], [4, 2], [2, 3],
+          [4, 2], [2, 2], [0, 3],
+          [2, 2], [0, 2], [-2, 3],
+          [0, 2], [null, 2], [7, 3],
+          [7, 2], [5, 2], [4, 3],
+          [2, 2], [4, 2], [5, 3],
+          [2, 2], [0, 2], [-2, 3],
+          [-3, 2], [null, 2], [-5, 3]],
+        /* 2. THE RIFF. Low, repetitive and full of holes: every second bar
+         * opens on silence, so the drone underneath is what states the downbeat
+         * and the tune answers it. Bars 9-12 are bars 1-4 lifted onto A, which
+         * is the mode's fourth and the only place a drone piece can go without
+         * a chord change. */
+        [[-5, 2], [-5, 2], [-3, 3],
+          [null, 2], [-5, 2], [-2, 3],
+          [-5, 2], [-5, 2], [0, 3],
+          [null, 2], [-2, 2], [-3, 3],
+          [-5, 2], [-5, 2], [-3, 3],
+          [null, 2], [-5, 2], [-2, 3],
+          [0, 2], [2, 2], [0, 3],
+          [-3, 2], [null, 2], [-5, 3],
+          [0, 2], [0, 2], [2, 3],
+          [null, 2], [0, 2], [4, 3],
+          [0, 2], [0, 2], [5, 3],
+          [null, 2], [4, 2], [2, 3],
+          [2, 2], [0, 2], [-2, 3],
+          [null, 2], [-2, 2], [-3, 3],
+          [0, 2], [-2, 2], [-3, 3],
+          [-5, 2], [null, 2], [-5, 3]],
+        /* 3. THE HIGH ONE, and the phrase the shout chorus is written for. It
+         * climbs to the octave twice and spends both bar 1 and bar 9 on C# —
+         * the raised sixth, i.e. the one note that makes this dorian and not
+         * plain minor. A mode whose characteristic note only ever appears in
+         * passing is a mode on paper. */
+        [[2, 2], [4, 2], [7, 3],
+          [9, 2], [7, 2], [5, 3],
+          [4, 2], [2, 2], [4, 3],
+          [null, 2], [7, 2], [7, 3],
+          [7, 2], [9, 2], [12, 3],
+          [10, 2], [9, 2], [7, 3],
+          [5, 2], [4, 2], [2, 3],
+          [0, 2], [null, 2], [2, 3],
+          [4, 2], [5, 2], [7, 3],
+          [9, 2], [10, 2], [12, 3],
+          [10, 2], [7, 2], [5, 3],
+          [4, 2], [null, 2], [2, 3],
+          [0, 2], [2, 2], [4, 3],
+          [5, 2], [4, 2], [2, 3],
+          [0, 2], [-2, 2], [-3, 3],
+          [-5, 2], [null, 2], [7, 3]],
+        /* 4. THE SPARSE ONE. Two of the three groups in most bars are silence,
+         * which is the only way to write a long note in a grid that insists on
+         * 2+2+3 — and it is the phrase the arrangement gives to the two thinnest
+         * sections, where there are no drums to fill the holes. The metre still
+         * reads, because the silence is never on the long group: whatever else
+         * drops out, the third beat of every bar sounds. */
+        [[-5, 2], [null, 2], [2, 3],
+          [null, 2], [null, 2], [0, 3],
+          [-2, 2], [null, 2], [-3, 3],
+          [null, 2], [null, 2], [-5, 3],
+          [0, 2], [null, 2], [4, 3],
+          [null, 2], [null, 2], [2, 3],
+          [5, 2], [null, 2], [4, 3],
+          [null, 2], [2, 2], [2, 3],
+          [7, 2], [null, 2], [5, 3],
+          [null, 2], [null, 2], [4, 3],
+          [2, 2], [null, 2], [0, 3],
+          [null, 2], [null, 2], [-2, 3],
+          [-3, 2], [null, 2], [-5, 3],
+          [null, 2], [-5, 2], [-3, 3],
+          [-2, 2], [-3, 2], [-5, 3],
+          [null, 2], [null, 2], [-5, 3]],
+      ],
+      notes: [[-5, 2], [2, 2], [0, 3],
+        [-2, 2], [-3, 2], [-5, 3],
+        [2, 2], [7, 2], [5, 3],
+        [4, 2], [2, 2], [0, 3],
+        [null, 2], [2, 2], [0, 3],
+        [-2, 2], [-3, 2], [-2, 3],
         [0, 2], [-2, 2], [-3, 3],
-        [-5, 2], [-3, 2], [0, 3],
-        [-3, 2], [-5, 2], [-5, 3],
-        // bars 9-16: the same ground, entered from above
+        [-5, 2], [null, 2], [-5, 3],
+        [5, 2], [4, 2], [2, 3],
+        [4, 2], [2, 2], [0, 3],
+        [2, 2], [0, 2], [-2, 3],
+        [0, 2], [null, 2], [7, 3],
         [7, 2], [5, 2], [4, 3],
         [2, 2], [4, 2], [5, 3],
-        [4, 2], [2, 2], [0, 3],
-        [-2, 2], [0, 2], [2, 3],
-        [0, 2], [-2, 2], [-3, 3],
-        [-5, 2], [-3, 2], [-2, 3],
-        [0, 2], [-3, 2], [-5, 3],
-        [-5, 2], [-5, 2], [-5, 3],
-      ],
+        [2, 2], [0, 2], [-2, 3],
+        [-3, 2], [null, 2], [-5, 3]],
     },
     harm: {
-      /* Open fifths, four bars each, and only one of them moves. */
-      wave: 'sawtooth', gain: 0.04, octave: -12, staccato: 0.97, attack: 0.05, hold: 0.8,
+      /* Open fifths, four bars each, and only one of them moves. Louder than it
+       * was (0,04) because at that level it was a rumour: a drone nobody can
+       * hear is three voices' worth of arithmetic doing the work of two. */
+      wave: 'sawtooth', gain: 0.055, octave: -12, staccato: 0.97, attack: 0.05, hold: 0.8,
       notes: [
         [[-17, -10], 28],
         [[-17, -10], 28],
@@ -3793,23 +3943,40 @@ const TRACKS = {
       ],
     },
     bass: {
-      /* The drone with the metre in it: root, fifth, root held long. Sixteen
-       * bars of exactly that, which is what `repeatBars` is for. */
+      /* The drone with the metre in it: root, fifth, root held long — and now a
+       * four-bar figure rather than the same bar sixteen times. Two bars of the
+       * plain drone, then the landing moves (F#, then G into E), so the line
+       * still holds E and B for four bars at a time but arrives somewhere at the
+       * end of each four. Sixteen identical bars is not a drone, it is a stuck
+       * record, and it was the other half of why this track wore out. */
       wave: 'triangle', gain: 0.17, staccato: 0.7, attack: 0.005, hold: 0.4,
-      accent: 'x......',
-      notes: repeatBars(16, [[-29, 2], [-22, 2], [-29, 3]]),
+      accent: 'x......x...x..',
+      notes: repeatBars(4, [
+        [-29, 2], [-22, 2], [-29, 3],
+        [-29, 2], [-22, 2], [-29, 3],
+        [-29, 2], [-22, 2], [-27, 3],
+        [-26, 2], [-22, 2], [-29, 3],
+      ]),
     },
     drums: {
-      /* Seven-step patterns, so they land on the groups instead of walking
-       * across them: kick on the first and third group, snare inside the second,
-       * hats alternating — which against seven never repeats the same way twice
-       * in a row. */
-      kick: 'x...x..',
-      snare: '..x....',
-      hat: 'x.x.x.x',
+      /* Fourteen-step patterns, i.e. two bars — and every stroke is on a group
+       * head or deliberately off one.
+       *
+       * The hats used to be `x.x.x.x`, which is seven long and therefore the
+       * same every bar. Worse, the stroke on step 6 sits inside the long group
+       * and lands one sixteenth before the next downbeat, so every single bar
+       * ended in a flam. Now the odd bars state the grouping and nothing else
+       * (0, 2, 4) and the even bars add an open hat on 6 as a lift into the
+       * next bar — the flam kept, but once every two bars and on purpose.
+       *
+       * Kick on the first and third group of each bar, plus a pickup at the end
+       * of the second bar; snare on the long group in odd bars and on the
+       * second group in even ones, so the backbeat itself is asymmetric. */
+      kick: 'x...x..x...x.x',
+      snare: '....x....x...g',
+      hat: 'x.x.x..x.x.x.o',
     },
   },
-
   /*
    * KELLO — interlocking cycles, three of them, in G.
    *

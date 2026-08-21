@@ -101,6 +101,22 @@ const GOAL_HEIGHT = 6 * TILE;
  * täydempänä, mitään ei oteta pois: täydennys on lattia eikä nollaus, ja juuri
  * siksi säästämisellä on merkitystä.
  */
+/*
+ * KAASUNPOISTON KATTO JA SEN ÄÄNI. Ks. `spawnVent` ja `Enemy.ventAt`.
+ *
+ * Kuusikymmentä elävää kaasuhiukkasta on mitattu eikä arvattu: tiheimmässä
+ * ruudussa tässä pelissä on kolmisentoista vihollista, ja kolmestatoista
+ * suihkuttavasta (`VENT_THRUST_EVERY` 3, elinikä 10) syntyy kerralla noin
+ * 43 hiukkasta. Katto on siis sen yläpuolella mutta kaukana siitä määrästä
+ * jolla ruudusta tulisi tasaisen ruskea, ja se on olemassa siltä varalta että
+ * joku joskus kirjoittaa kentän jossa on kaksinkertainen määrä otuksia.
+ */
+const VENT_MAX = 60;
+/** Vähintään tämän verran frameja kahden kuuluvan pihahduksen väliin. */
+const VENT_SFX_GAP = 24;
+/** Pikseliä pelaajasta: kauempana laskeutuvaa ei kuulu. Noin ruudun puolikas. */
+const VENT_SFX_NEAR = 150;
+
 const FUEL_DRAIN = 72;
 const FUEL_HURRY = 17;
 export const FUEL_FLOOR = 25;
@@ -1148,12 +1164,19 @@ const CAM_FALL_LEAD = 3;
  *     A gate that never fires and a gate that always fires are not the same
  *     kind of thing, and the measurement is the difference.
  *   - **`CAM_SNAP` applied to every level, this applies to none of the existing
- *     ones.** It is behind `def.vertical`, which no shipped level sets, so the
- *     30 levels that measured `CAM_SNAP` at zero execute not one line of this.
- *     `verify.mjs` records `cam.x`/`cam.y` per frame over a scripted run of
- *     every shipped level at two power levels and compares the whole recording
- *     with the one taken before this landed: identical to the fourth decimal,
- *     900 frames a level.
+ *     ones.** It is behind `def.vertical`, which no level set on the day this
+ *     was written, so the 30 levels that measured `CAM_SNAP` at zero execute
+ *     not one line of this. `verify.mjs` records `cam.x`/`cam.y` per frame over
+ *     a scripted run of every shipped level at two power levels and compares
+ *     the whole recording with the one taken before this landed: identical to
+ *     the fourth decimal, 900 frames a level.
+ *
+ *     **Kolme kenttää asettaa sen nykyään** (21.8.2026): `6-K`, `7-T` ja `7-P`,
+ *     joista viimeinen vaihtaa akselia kesken kentän `segments`in kautta.
+ *     Mittaus yllä on siis se mitä *silloin* mitattiin eikä väite tästä
+ *     päivästä, ja se on jätetty tähän sellaisenaan — mutta `this.vertical` on
+ *     nyt oikeasti käytössä, ja sitä lukee myös se kerros joka päättää mihin
+ *     suuntaan paikallaan olon sää kulkee (`driftWeather`, gfx/backdrop.js).
  *
  * **THE TRIGGER IS `camAnchor`, AND THAT CHOICE IS THE WHOLE DESIGN.** The
  * anchor is the last feet position the player actually *settled* at (see
@@ -1876,6 +1899,10 @@ export class LevelScene {
     /** How many pages this climb has taken. Reported, never played on. */
     this.camPages = 0;
     this.tick = 0;
+    /* Kaasunpoiston kaksi laskuria, ks. `spawnVent`: eläviä kaasuhiukkasia
+     * viime framella, ja se frame jolla viimeksi kuului pihahdus. */
+    this.ventLive = 0;
+    this.ventHeard = -VENT_SFX_GAP;
     /* Kello on nyt putkilon pinta (`updateTimer`). `def.time` jää dataan, koska
      * kenttien pituus on mitattu sitä vasten ja aika-ajon jako lukee sitä —
      * mutta pelaajaa se ei enää tapa. */
@@ -3071,6 +3098,42 @@ export class LevelScene {
     for (let i = 0; i < 4; i++) {
       this.add(new Puff(this, x, y, { spread: 1.6, size: 3, brown }));
     }
+  }
+
+  /**
+   * Yhden vihollisen yksi kaasupuuska, ja kentän kolme veto-oikeutta siihen.
+   *
+   * `Enemy.ventAt` päättää *mitä* ja *mihin suuntaan* — se on liikkeen asia ja
+   * asuu siellä missä liike on. Tämä päättää *saako sen näkyä*, koska kaikki
+   * kolme ehtoa ovat kentän tietoja eivätkä yhden olion:
+   *
+   *   - **Näkyykö se.** Vihollinen pysyy aktiivisena 240 pikseliä kameran taakse
+   *     (`updateEntities`), eli ruudun ulkopuolella purskuttaisi kymmenkunta
+   *     otusta joita kukaan ei näe. Hiukkanen jota ei voi nähdä on hinta ilman
+   *     signaalia.
+   *   - **Mahtuuko se.** `VENT_MAX` on koko kentän yhteinen katto eläville
+   *     kaasuhiukkasille. Ilman sitä ruudullinen kävelijöitä on ruudullinen
+   *     ruskeaa, ja pahin tapaus sattuisi juuri silloin kun ruudulla on eniten
+   *     muutakin katsottavaa. Katto ei jonota vaan hylkää: myöhästynyt puuska
+   *     on väärässä paikassa, koska se olio on jo jatkanut matkaa.
+   *   - **Kuuluuko se.** Vain `burst`, eli laskeutuminen — ja sekin vain
+   *     lähellä ja korkeintaan `VENT_SFX_GAP` framen välein. Perustelu on
+   *     `Enemy.ventAt`in lopussa: jatkuva ääni ei ole signaali vaan huminaa.
+   */
+  spawnVent(v) {
+    if (v.x < this.cam.x - 16 || v.x > this.cam.x + VIEW_W + 16) return;
+    if (v.y < this.cam.y - 16 || v.y > this.cam.y + this.viewH + 16) return;
+    if (this.ventLive >= VENT_MAX) return;
+    this.ventLive++;
+    this.add(new Puff(this, v.x, v.y, {
+      size: v.size, life: v.life, brown: v.brown, dim: v.dim,
+      vx: v.vx, vy: v.vy, vent: true,
+    }));
+    if (v.kind !== 'burst' || this.tick - this.ventHeard < VENT_SFX_GAP) return;
+    const p = this.player;
+    if (!p || Math.abs(p.cx - v.x) > VENT_SFX_NEAR) return;
+    this.ventHeard = this.tick;
+    Sfx.play('pihahdus');
   }
 
   /** The blast under a mid-air fart jump: knocks over anything just below. */
@@ -5720,16 +5783,31 @@ export class LevelScene {
   updateEntities() {
     const camL = this.cam.x - 64;
     const camR = this.cam.x + VIEW_W + 96;
+    /* Kaasuhiukkaset lasketaan tässä eikä `spawnVent`issä, koska tässä
+     * käydään lista läpi joka tapauksessa: budjetti saa maksaa yhden
+     * yhteenlaskun framessa, ei yhtä listan läpikäyntiä puuskaa kohti. Luku on
+     * edellisen framen tilanne, mikä riittää — katto on kynnys eikä kirjanpito.
+     * Ks. `spawnVent`. */
+    let vents = 0;
     for (const e of this.entities) {
       if (!e.active) {
         if (e.alwaysActive || (e.x < camR && e.x + e.w > camL)) e.active = true;
         else continue;
       }
       e.update();
+      /* Kaasunpoisto päivityksen jälkeen ja täältä eikä lajien omista
+       * `update`eista: se lukee **mitatun** siirtymän, joten se on pakko lukea
+       * sen jälkeen kun kaikki tämän framen liike on tapahtunut — myös se osa
+       * jonka joku muu kirjoitti (lautta, karvapallo, tuuli). Yksi kutsupaikka
+       * on myös se mikä tekee tästä lajista riippumattoman: uusi vihollinen
+       * purskuttaa oikein kirjoittamatta riviäkään. */
+      if (e.kind === 'enemy' && e.vent) e.vent();
+      if (e.vented === true) vents++;
       // `alwaysActive` means the entity is part of the level's state, not just
       // scenery near the camera — a boss must never be tidied away.
       if (!e.alwaysActive && e.x + e.w < this.cam.x - 240 && e.kind === 'enemy') e.remove = true;
     }
+    this.ventLive = vents;
     this.entities = this.entities.filter((e) => !e.remove);
   }
 
@@ -7010,8 +7088,12 @@ export class LevelScene {
        * exactly the picture of something left behind and coming. */
       lagY: this.cubeLag === null ? 0 : this.cubeLag - this.cam.y,
     };
+    /* Kaksi viimeistä: paikallaan olon puraisu ja kentän akseli. Sää on
+     * diegeettinen — se on tämän huoneen ilmaa — joten sen kasvaminen kuuluu
+     * taustalle eikä HUDiin, ja `Ambience.hold` on soittanut saman luvun
+     * ääneen jo kahden päivän ajan (ks. `driftWeather` backdrop.js:ssä). */
     drawBackdrop(ctx, this.def.bg, this.theme, this.cam.x, VIEW_W, this.viewH, this.tick,
-      bandDrop, clock, tower);
+      bandDrop, clock, tower, this.drift, this.vertical);
     /* Props sit in front of the haze that softens the hill/tilemap seam: they
      * are roadside and the hills are landscape, so the haze belongs behind
      * them. Still behind the camera translate — a prop is backdrop, and the

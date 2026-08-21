@@ -67,6 +67,37 @@ export const FLIP_FRAMES = 210;
 export const FLIP_LONG = 420;
 const FLIP_WARN = 60;
 
+/*
+ * KAASUNPOISTON LUVUT. Ks. `Enemy.ventAt`.
+ *
+ * Kaikki tiheydet ovat frameja, koska ne kaikki vertautuvat samaan asiaan:
+ * kuinka usein tämä saa näkyä. Peli pyörii kuudessakymmenessä.
+ */
+/** Alle tämän mitattu siirtymä on paikallaan oloa eikä liikettä (px/frame). */
+const VENT_MOVE = 0.12;
+/** Nousuksi lasketaan vasta tämä, ettei putoamisen loppuvaihe ole nousua. */
+const VENT_RISE = 0.35;
+/** Suihkun oma nopeus alaspäin: hitaampi kuin putoaminen, eli se jää alle. */
+const VENT_JET = 0.9;
+/** Framea ilmassa ennen kuin laskeutuminen on laskeutuminen eikä kompurointi. */
+const VENT_AIR_MIN = 6;
+/** Kuinka kovaa on tultava alas, jotta se puristaa kaasun ulos (px/frame). */
+const VENT_LAND_MIN = 1.6;
+/** Suihkun ja vanaveden tiheys. Kolme on tiheä; kuusi on jälki eikä pilvi. */
+const VENT_THRUST_EVERY = 3;
+const VENT_WAKE_EVERY = 6;
+/**
+ * Askelväli pikseleinä: puuska syntyy suunnilleen kerran tässä matkassa, joten
+ * kaksinkertainen vauhti on kaksinkertainen tiheys ja **askel on askel**
+ * riippumatta siitä kuka kävelee. Neljätoista pikseliä on vajaa laatta, eli
+ * tavallisen kävelijän vauhdilla (0,7 px/frame) noin joka kahdeskymmenes frame.
+ */
+const VENT_STRIDE_PX = 14;
+/** Nopeinkaan otus ei purskuta tätä tiheämmin. */
+const VENT_STRIDE_MIN = 5;
+/** Vuoto: kerran kahdessa sekunnissa, vaiheistettuna syntymäpaikan mukaan. */
+const VENT_SEEP_EVERY = 120;
+
 /**
  * The light an enemy is giving off this frame, in the shared-object idiom the
  * sprite styles already use: the draw loop copies the four numbers out of it
@@ -136,6 +167,13 @@ export class Enemy extends Entity {
      * kentän, joten puuskan keskellä otettu pikatallennus palautuu puuskan
      * keskelle ilman riviäkään tallennuskoodia. */
     this.drift = 0;
+    /* Kaasunpoiston kirjanpito: edellinen keskipiste, framea ilmassa, ja kovin
+     * alaspäin mitattu siirtymä sen aikana. Tavallisia lukuja ja
+     * konstruktorissa, samasta syystä kuin `sunk` ja `drift` — ks. `ventAt`. */
+    this.ventPrev = null;
+    this.ventPrevY = null;
+    this.ventAir = 0;
+    this.ventDrop = 0;
   }
 
   /* ==================== MAASTO → OLIO: kaksi funktiota ====================
@@ -485,6 +523,151 @@ export class Enemy extends Entity {
     if (!this.bubbled) return { x: this.x, y: this.y, w: this.w, h: this.h };
     const r = bubbleRadius(this.w, this.h);
     return { x: this.cx - r, y: this.cy - r, w: r * 2, h: r * 2 };
+  }
+
+
+  /* ========================= KAASUNPOISTO =========================
+   *
+   * Omistaja 21.8.2026: *"the enemies should fart, too. particle effects! of
+   * different kinds. make it so it has a reason, ie. in relation to their
+   * movement."*
+   *
+   * MIKSI TÄMÄ EI OLE TAULUKKO LAJEISTA. Ensimmäinen versio tästä olisi ollut
+   * `get ventKind()` jokaisessa kahdessakymmenessäkahdeksassa luokassa —
+   * kävelijä puskee, lentäjä suihkuttaa, kasvi tihkuu — ja se olisi ollut
+   * kaksikymmentäkahdeksan mahdollisuutta olla eri mieltä kuin laji itse.
+   * Sammakko *kävelee* silloin kun se ei hyppää, karvapallo *lentää* rinteen
+   * yli, ja pyörre ei kirjoita `vx`:ää lainkaan vaan oman paikkansa. Laji joka
+   * julistaa liikkumistapansa on laji joka valehtelee sinä framena kun se tekee
+   * jotain muuta.
+   *
+   * Niinpä tämä **mittaa liikkeen** eikä kysy lajilta. Jokainen frame vertaa
+   * keskipistettä edelliseen, ja se yksi vektori — kuljettu matka, ei aikomus —
+   * ratkaisee sekä lajin että suunnan:
+   *
+   *   thrust   ilmassa ja nousussa. Kaasu on se mikä pitää sen siellä, joten se
+   *            purkautuu **alas**, kehon alta, tasaisena suihkuna.
+   *   burst    laskeutumisframe. Keho puristuu kokoon ja ilma lähtee
+   *            **sivuille**, jalkojen tasalta, sitä leveämmin mitä kovempaa
+   *            pudotus oli.
+   *   stride   jalat maassa ja vauhtia. Yksi puuska askelta kohti **taakse**,
+   *            ja askelväli on nopeuden funktio: kiireinen otus puskee tiheään.
+   *   wake     liikkuu ilmassa muttei nouse — kelluja, pyörre, kaartuva lentäjä.
+   *            Vanavesi **vastakkaiseen suuntaan kuin kuljettu matka**.
+   *   seep     ei käytännössä liiku. Mikään ei kuluta sitä, joten se vuotaa:
+   *            harvakseltaan, pieninä kuplina, **ylös**.
+   *
+   * Jokainen suunta on siis luettu siitä samasta vektorista josta laji luettiin,
+   * eli "sillä on syy" on tässä kirjaimellisesti totta eikä tunnelmaa.
+   *
+   * MIKSI NÄMÄ EIVÄT SAA NÄYTTÄÄ KUOLEMALTA. `spawnPuff` on neljä hiukkasta
+   * täydellä kirkkaudella ja se tarkoittaa tässä pelissä tapahtumaa. Vent on
+   * yksi hiukkanen kolmasosakirkkaudella. DESIGN.md kohta 8: uusi signaali joka
+   * näyttää vanhalta opettaa lukemaan vanhaa väärin, ja tässä väärin luettu
+   * signaali on "tuo kuoli juuri".
+   *
+   * ÄÄNESTÄ. Kohta 8 vaatii kuvan ja äänen yhdessä, ja se on tässä ratkaistu
+   * yhdellä rajauksella: **vain `burst` kuuluu**, ja sekin harvoin ja vain
+   * lähellä (`Level.spawnVent`). Kolme jatkuvaa lajia ovat vaiti, koska
+   * jatkuva ääni ei ole signaali vaan huminaa — ja ruudullinen kävelijöitä
+   * jotka kaikki pihahtavat joka askeleella olisi täsmälleen se.
+   *
+   * TALLENNUS. `ventPrev`, `ventAir` ja `ventDrop` ovat tavallisia lukuja
+   * konstruktorissa, samasta syystä kuin `sunk` ja `drift`: `savestate.js`
+   * sarjallistaa jokaisen olion jokaisen oman kentän, joten kesken hypyn otettu
+   * pikatallennus palautuu kesken hypyn ilman riviäkään tallennuskoodia.
+   */
+
+  /**
+   * Se mitä keho juuri nyt maksaa, ja mihin suuntaan se sen maksaa.
+   *
+   * Palauttaa `null` kun mitään ei pidä syntyä tällä framella — kuollut,
+   * kuplassa, kumossa, kyydissä, tai kyseessä on laji jonka väli ei vielä
+   * täyttynyt. Erillään `vent`istä siksi että `verify.mjs` lukee tämän suoraan:
+   * väite "suunta on liikettä vastaan" on tarkistettavissa vain jos suunta on
+   * palautusarvo eikä sivuvaikutus.
+   */
+  ventAt() {
+    if (this.dying || this.remove || this.bubbled || this.flipped || this.rolledBy) return null;
+
+    /* Mitattu siirtymä, ei `vx`: pyörre kirjoittaa paikkansa suoraan, kyydissä
+     * ollut kirjoitetaan toisen olion toimesta, ja nostettu lautta siirtää
+     * matkustajansa. Kaikki kolme ovat liikettä, eikä yksikään näy `vx`:ssä. */
+    const dx = this.ventPrev === null ? 0 : this.cx - this.ventPrev;
+    const dy = this.ventPrevY === null ? 0 : this.cy - this.ventPrevY;
+    this.ventPrev = this.cx;
+    this.ventPrevY = this.cy;
+
+    /* Laskeutuminen luetaan ennen kuin ilmalaskuri nollataan, koska juuri se
+     * on tapahtuma eikä tila: yksi frame, ja voima on se vauhti jolla tultiin. */
+    const landing = this.onGround && this.ventAir > VENT_AIR_MIN ? this.ventDrop : 0;
+    if (this.onGround) { this.ventAir = 0; this.ventDrop = 0; } else {
+      this.ventAir++;
+      this.ventDrop = Math.max(this.ventDrop, dy);
+    }
+
+    const feet = this.y + this.h;
+    /* Vaihe syntymäpaikasta: rivi samanlaisia kävelijöitä ei saa puskea
+     * tahdissa, koska tahdissa puskeva rivi on yksi olio eikä viisi. Sama
+     * siemen kuin iholla, ja siksi sama pikalatauksen jälkeen. */
+    const phase = Math.round(this.skin * 1000);
+
+    if (landing >= VENT_LAND_MIN) {
+      const wide = Math.min(2.2, 0.6 + landing * 0.35);
+      return {
+        kind: 'burst', x: this.cx, y: feet - 1,
+        vx: (this.tick % 2 ? 1 : -1) * wide, vy: -0.12,
+        size: 2, life: 12, brown: true, dim: 0.45,
+      };
+    }
+
+    if (!this.onGround) {
+      if (dy < -VENT_RISE) {
+        if ((this.tick + phase) % VENT_THRUST_EVERY) return null;
+        return {
+          kind: 'thrust', x: this.cx - dx * 2, y: feet - 1,
+          vx: dx * 0.25, vy: VENT_JET,
+          size: 1, life: 10, brown: false, dim: 0.35,
+        };
+      }
+      if (Math.hypot(dx, dy) > VENT_MOVE) {
+        if ((this.tick + phase) % VENT_WAKE_EVERY) return null;
+        const len = Math.hypot(dx, dy);
+        return {
+          kind: 'wake', x: this.cx, y: this.cy,
+          vx: -dx / len * 0.5, vy: -dy / len * 0.5 - 0.1,
+          size: 1, life: 16, brown: false, dim: 0.3,
+        };
+      }
+      return null;
+    }
+
+    const speed = Math.abs(dx);
+    if (speed > VENT_MOVE) {
+      /* Askelväli nopeudesta: nopea otus puskee tiheään, hidas harvoin. Sama
+       * suhde kuin jalkojen animaatiolla, ja siksi se näyttää askeleelta. */
+      const every = Math.max(VENT_STRIDE_MIN, Math.round(VENT_STRIDE_PX / speed));
+      if ((this.tick + phase) % every) return null;
+      const back = -Math.sign(dx);
+      return {
+        kind: 'stride', x: this.cx + back * (this.w / 2 + 1), y: feet - 2,
+        vx: back * 0.55, vy: -0.18,
+        size: 2, life: 14, brown: true, dim: 0.4,
+      };
+    }
+
+    if ((this.tick + phase) % VENT_SEEP_EVERY) return null;
+    return {
+      kind: 'seep', x: this.cx, y: this.y + 1,
+      vx: 0, vy: -0.22,
+      size: 1, life: 26, brown: true, dim: 0.3,
+    };
+  }
+
+  /** Se puolisko joka näkyy. Kenttä päättää mahtuuko se budjettiin. */
+  vent() {
+    const v = this.ventAt();
+    if (v) this.level.spawnVent(v);
   }
 
   /** Goes limp and falls out of the world. */
