@@ -15075,6 +15075,11 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       getComputedStyle(document.documentElement).touchAction === 'manipulation',
       getComputedStyle(document.documentElement).touchAction);
 
+    const shellStyle = getComputedStyle(document.getElementById('shell')).touchAction;
+    const bodyStyle = getComputedStyle(document.body).touchAction;
+    expect('the page margin beside the canvas carries the rule itself, not only the root',
+      shellStyle === 'manipulation' && bodyStyle === 'manipulation', `body "${bodyStyle}", #shell "${shellStyle}"`);
+
     const playing = getComputedStyle(root).touchAction;
     touch.setZoomed?.(true);
     const zoomedRoot = getComputedStyle(document.documentElement).touchAction;
@@ -15099,9 +15104,11 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     const second = tap(document.body, 42, 41);
     const tool = root.querySelector('.tool');
     const onTool = tap(tool, 4, 4) || tap(tool, 4, 4);
-    expect('a double tap beside the game is swallowed, and the controls are not',
-      first === false && second === true && onTool === false,
-      `1. "${first}" 2. "${second}" työkalu "${onTool}"`);
+    const pad = root.querySelector('.key');
+    const onPad = tap(pad, 300, 300) === false && tap(pad, 301, 300) === true;
+    expect('a double tap beside the game or on the overlay is swallowed, and the toolbar is not',
+      first === false && second === true && onTool === false && onPad,
+      `1. "${first}" 2. "${second}" työkalu "${onTool}" ohjain ${onPad}`);
   }
 
   /* ------------------------------ kuvaefektit -------------------------- */

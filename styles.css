@@ -23,6 +23,15 @@
 html { touch-action: manipulation; }
 html.zoomed { touch-action: auto; }
 
+/*
+ * Sama sääntö myös `body`lle ja `#shell`ille, vyö ja henkselit. iOS:n Safari ei
+ * aina lue juurielementin `touch-action`ia, ja sivun reunus kanvaasin vieressä
+ * on juuri `#shell`, johon kaksoisnapautus osuu. Zoomatussa tilassa nämä
+ * jäävät pois, jotta `html.zoomed` antaa kaikki eleet takaisin.
+ */
+html:not(.zoomed) body,
+html:not(.zoomed) #shell { touch-action: manipulation; }
+
 html, body {
   margin: 0;
   height: 100%;
