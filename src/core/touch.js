@@ -185,9 +185,10 @@ export const Touch = {
     /*
      * Belt: swallow the second tap of a double tap ourselves. Deliberately
      * narrow — one finger only, within 350 ms and 40 px of the first, and never
-     * on the overlay, where the toolbar buttons are ordinary DOM and need the
-     * synthetic click that `preventDefault` would eat. Nothing else on the page
-     * listens for clicks, so outside the overlay there is nothing to break.
+     * on a toolbar button, which is ordinary DOM and needs the synthetic click
+     * that `preventDefault` would eat. The rest of the overlay is hit-tested
+     * from pointer events, which have already fired by touchend, and nothing
+     * else on the page listens for clicks.
      */
     let lastTap = -Infinity;
     let lastX = 0;
@@ -197,7 +198,7 @@ export const Touch = {
       const t = e.changedTouches[0];
       if (!t) return;
       const el = t.target;
-      if (el && el.closest && el.closest('#touch')) return;
+      if (el && el.closest && el.closest('button')) return;
       const now = performance.now();
       const near = Math.abs(t.clientX - lastX) < 40 && Math.abs(t.clientY - lastY) < 40;
       if (now - lastTap < 350 && near && e.cancelable) e.preventDefault();
