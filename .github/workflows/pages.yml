@@ -49,12 +49,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `enablement: true` yrittää kytkeä Pagesin päälle jos se ei jo ole.
       # Yksityisellä repolla ilmaisversiossa tämä kaatuu, ja sen kuuluukin
       # kaataa: hiljaa onnistuva julkaisu joka ei julkaise mitään on pahempi.
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
@@ -62,9 +62,9 @@ jobs:
       # mutta ne ovat pieniä ja niiden poissulkeminen tarkoittaisi listaa jota
       # pitää muistaa päivittää — ja unohdettu rivi on tässä juuri se vika
       # jonka takia peli lakkaa toimimasta. Ladataan kaikki.
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: '.'
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
