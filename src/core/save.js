@@ -2,6 +2,8 @@
  * oletukset päälle, joten sen kautta luettuna puuttuvaa kenttää ei voi nähdä. */
 export const KEY = 'sfb3.save.v2';
 
+import { encrypt, decrypt } from './crypto.js';
+
 /**
  * ELÄMÄT, JOILLA KIERROS ALKAA.
  *
@@ -156,11 +158,21 @@ export const DEFAULT_SAVE = () => ({
 });
 
 export const Save = {
-  load() {
+  async load() {
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return DEFAULT_SAVE();
-      return { ...DEFAULT_SAVE(), ...JSON.parse(raw) };
+      let parsed;
+      const decrypted = await decrypt(raw);
+      if (decrypted !== null) {
+        parsed = JSON.parse(decrypted);
+      } else {
+        /* Vanhat tallennukset oli talletettu selkeänä tekstinä. Luetaan ne
+         * sellaisinaan, jotta olemassa olevat pelaajat pitävät edistyksensä;
+         * seuraava write tallentaa salattuna. */
+        parsed = JSON.parse(raw);
+      }
+      return { ...DEFAULT_SAVE(), ...parsed };
     } catch {
       return DEFAULT_SAVE();
     }
@@ -179,9 +191,9 @@ export const Save = {
    * `write` → `load`, joten seuraava lisäys kaatuu tähän eikä pelaajan
    * tallennukseen.
    */
-  write(state) {
+  async write(state) {
     try {
-      localStorage.setItem(KEY, JSON.stringify({
+      const payload = JSON.stringify({
         lives: state.lives,
         coins: state.coins,
         score: state.score,
@@ -202,7 +214,8 @@ export const Save = {
         taught: state.taught || {},
         checks: state.checks || {},
         mode: state.mode || 'easy',
-      }));
+      });
+      localStorage.setItem(KEY, await encrypt(payload));
     } catch {
       /* private mode / storage full — the game just won't persist */
     }
