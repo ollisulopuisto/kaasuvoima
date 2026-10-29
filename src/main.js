@@ -13,7 +13,7 @@ import {
 import { DieScene } from './scenes/die.js';
 import { GlobeScene } from './scenes/globe.js';
 import { makePower } from './entities/player.js';
-import { writeSlot, readSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
+import { writeSlot, readSlot, hasSlot, restoreState, SLOT_COUNT } from './core/savestate.js';
 import { NameEntryScene, HighScoreScene } from './scenes/scores.js';
 import { ShareScene } from './scenes/share.js';
 import { DailyScene } from './scenes/daily.js';
@@ -50,7 +50,8 @@ class Game {
     this.ctx = canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
     this.input = Input;
-    this.adoptState(Save.load());
+    /* Tallennus ladataan asynkronisesti käynnistyksessä (ks. boot lopussa),
+     * ei synkronisesti rakentajassa, koska `Save.load` nyt purkaa salauksen. */
     this.scene = null;
     this.paused = false;
     this.pauseBlink = 0;
@@ -164,10 +165,10 @@ class Game {
    * kertoo kesken kentän ollaanko sitä edellä, tilaa ei ladata, ja kello käy
    * myös taukovalikossa.
    */
-  startTimeAttack() {
+  async startTimeAttack() {
     this.timeAttack = true;
-    if (Save.exists()) this.continueGame();
-    else this.newGame();
+    if (Save.exists()) await this.continueGame();
+    else await this.newGame();
   }
 
   /**
@@ -445,17 +446,17 @@ class Game {
    * vasta sen jälkeen. Ilman sitä järjestystä `newGame()` ilman argumenttia
    * lukisi juuri tyhjennetyn tallennuksen ja vastaisi aina HELPPO.
    */
-  newGame(mode = this.mode) {
+  async newGame(mode = this.mode) {
     Save.clear();
-    this.adoptState(Save.load());
+    this.adoptState(await Save.load());
     this.state.mode = modeId(mode);
     this.state.node = startNode(WORLDS[0]).id;
     this.persist();
     this.toWorldMap();
   }
 
-  continueGame() {
-    this.adoptState(Save.load());
+  async continueGame() {
+    this.adoptState(await Save.load());
     /* Resuming a save whose stock is gone *is* a continue — the run reached
      * PELI POIKKI and the tab was closed instead of the choice being made — so
      * it hands out exactly what the choice hands out, from the same constant.
@@ -635,9 +636,9 @@ class Game {
     return true;
   }
 
-  quickSave() {
+  async quickSave() {
     if (this.timeAttackRefusesStates()) return;
-    const snap = writeSlot(this, this.slot);
+    const snap = await writeSlot(this, this.slot);
     if (!snap) {
       this.toast('TILAA EI VOI TALLENTAA TÄSSÄ');
       Sfx.play('bump');
@@ -647,9 +648,9 @@ class Game {
     Sfx.play('select');
   }
 
-  quickLoad() {
+  async quickLoad() {
     if (this.timeAttackRefusesStates()) return;
-    const snap = readSlot(this.slot);
+    const snap = await readSlot(this.slot);
     if (!snap) {
       this.toast(`TILA ${this.slot} ON TYHJÄ`);
       Sfx.play('bump');
@@ -992,7 +993,7 @@ class Game {
       /* Kursori alkaa aina JATKAsta. Muistettu LATAA tekisi START+hypystä
        * vahvistamattoman ja tuhoavan pikalatauksen. */
       this.pauseIndex = 0;
-      this.pauseSlotFilled = this.paused ? !!readSlot(this.slot) : false;
+      this.pauseSlotFilled = this.paused ? !!hasSlot(this.slot) : false;
       Sfx.play('cursor');
     }
     /* Kello käy taukovalikossa, ja tämä rivi on koko toteutus: kohtaus ei
@@ -1056,14 +1057,14 @@ class Game {
       this.quickSave();
       /* Paikka jonka juuri kirjoitti ei ole enää tyhjä. Ilman tätä valikko
        * väitti (TYHJÄ) siitä mitä se itse oli tallentanut. */
-      this.pauseSlotFilled = !!readSlot(this.slot);
+      this.pauseSlotFilled = !!hasSlot(this.slot);
       return;
     }
     if (pick === 'load') { this.quickLoad(); return; }
     if (pick === 'slot') {
       this.slot = (this.slot % SLOT_COUNT) + 1;
       this.toast(`TALLENNUSPAIKKA ${this.slot}`);
-      this.pauseSlotFilled = !!readSlot(this.slot);
+      this.pauseSlotFilled = !!hasSlot(this.slot);
       Sfx.play('cursor');
     }
   }
@@ -1273,13 +1274,18 @@ Input.onFirstInput = () => {
  * alkuruutu näkee haasteen jo ensimmäisellä framella. */
 game.challenge = takeChallenge();
 
-game.toTitle();
-requestAnimationFrame((t) => game.frame(t));
+/* Käynnistys odottaa tallennuksen purkua ennen ensimmäistä ruutua. `Save.load`
+ * on asynkroninen, koska tallenne puretaan salauksesta localStoragesta. */
+(async () => {
+  game.adoptState(await Save.load());
+  game.toTitle();
+  requestAnimationFrame((t) => game.frame(t));
 
-// Handy while tuning: `window.sfb3.state` in the console.
-window.sfb3 = game;
-// …and `window.sfb3.telemetry.summary('1-1')` to see where a level is killing
-// people without having to squint at the heatmap.
-game.telemetry = { summary: levelSummary, count: eventCount, clear: clearTelemetry };
-game.fx = PostFX;
-game.touch = Touch;
+  // Handy while tuning: `window.sfb3.state` in the console.
+  window.sfb3 = game;
+  // …and `window.sfb3.telemetry.summary('1-1')` to see where a level is killing
+  // people without having to squint at the heatmap.
+  game.telemetry = { summary: levelSummary, count: eventCount, clear: clearTelemetry };
+  game.fx = PostFX;
+  game.touch = Touch;
+})();

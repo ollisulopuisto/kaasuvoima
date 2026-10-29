@@ -8,6 +8,7 @@ import {
 import { Item, FartBall, Beanstalk } from '../entities/items.js';
 import { claimIds } from '../entities/entity.js';
 import { Puff, ScorePop, BrickPiece, PoundWave } from '../entities/effects.js';
+import { encrypt, decrypt } from './crypto.js';
 
 /**
  * Emulator-style save states: a whole snapshot of the running game, taken and
@@ -242,27 +243,41 @@ export function restoreState(game, snap) {
   return true;
 }
 
-export function writeSlot(game, slot) {
+export async function writeSlot(game, slot) {
   const snap = captureState(game);
   if (!snap) return null;
   try {
-    localStorage.setItem(KEY(slot), JSON.stringify(snap));
+    localStorage.setItem(KEY(slot), await encrypt(JSON.stringify(snap)));
     return snap;
   } catch {
     return null;
   }
 }
 
-export function readSlot(slot) {
+export async function readSlot(slot) {
   try {
     const raw = localStorage.getItem(KEY(slot));
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const decrypted = await decrypt(raw);
+    if (decrypted !== null) return JSON.parse(decrypted);
+    /* Vanhat pikatallennukset oli selkeää tekstistä — luetaan sellaisenaan. */
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-export function slotLabel(slot) {
-  const snap = readSlot(slot);
+/* Synkroninen olemassaolotarkistus taukovalikon "tyhjä/täytetty" -ilmaisua
+ * varten. Ei pura sisältöä, joten se on turvallinen kutsua joka framella. */
+export function hasSlot(slot) {
+  try {
+    return localStorage.getItem(KEY(slot)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export async function slotLabel(slot) {
+  const snap = await readSlot(slot);
   return snap ? snap.label : null;
 }
