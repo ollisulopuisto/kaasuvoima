@@ -103,7 +103,28 @@ const report = await page.evaluate(async (OVERWORLDS) => {
   const { levelIds, getLevel: getLevelDef } = await import('/src/data/levels.js');
   const { captureState, restoreState } = await import('/src/core/savestate.js');
   const { WORLDS } = await import('/src/data/worlds.js');
-  const { DEFAULT_SAVE } = await import('/src/core/save.js');
+  const { DEFAULT_SAVE, Save: asyncSave } = await import('/src/core/save.js');
+  const { decrypt: decryptSave } = await import('/src/core/crypto.js');
+  // Scene actions fire persistence without awaiting it. Track their real writes
+  // so disk assertions wait for encryption, without changing the shipped API.
+  const pendingSaves = new Set();
+  const originalWrite = asyncSave.write;
+  asyncSave.write = (...args) => {
+    const pending = originalWrite.apply(asyncSave, args);
+    pendingSaves.add(pending);
+    pending.finally(() => pendingSaves.delete(pending));
+    return pending;
+  };
+  const flushSaves = async () => {
+    while (pendingSaves.size) await Promise.all([...pendingSaves]);
+  };
+  const storedSave = async (key) => {
+    await flushSaves();
+    const stored = localStorage.getItem(key);
+    if (!stored) return {};
+    const plain = await decryptSave(stored);
+    return JSON.parse(plain ?? stored);
+  };
   const game = window.sfb3;
 
   const blank = () => ({
@@ -3899,8 +3920,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     game.setScene(sSave);
     game.pendingNode = WORLDS[0].nodes.find((n) => n.id === 'w1-f');
     game.slot = 2;
-    game.quickSave();
-    game.quickLoad();
+    await game.quickSave();
+    await game.quickLoad();
     const after = game.scene;
     const bossBack = after.entities.filter((e) => e.constructor.name === 'Boss').length;
     expect('a save state in the fortress keeps the boss',
@@ -6399,8 +6420,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     game.setScene(s);
     game.state.usedSaveState = false;
     game.slot = 3;
-    game.quickSave();
-    game.quickLoad();
+    await game.quickSave();
+    await game.quickLoad();
     expect('loading a save state marks the run as assisted', game.state.usedSaveState === true);
   }
 
@@ -7486,8 +7507,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       for (let f = 0; f < 8; f++) s.update(i);
       const midway = !!s.player.transit && s.player.transit.phase === 'in';
       game.slot = 3;
-      game.quickSave();
-      game.quickLoad();
+      await game.quickSave();
+      await game.quickLoad();
       const back = game.scene;
       const restored = !!(back.player.transit && back.player.transit.phase === 'in');
       const idle = mkInput();
@@ -8069,10 +8090,10 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       hold(s, i, [], 60);
       const saved = Music.current;
       game.slot = 3;
-      game.quickSave();
+      await game.quickSave();
       Music.play('title');                     // jotain aivan muuta väliin
       const between = Music.current;
-      game.quickLoad();
+      await game.quickLoad();
       const back = game.scene;
       expect('a quicksave taken in the cave loads back into the cave music',
         saved === 'cave' && between === 'title' && bandOf(back) === 2
@@ -8833,9 +8854,10 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       const k = mkInput();
       k.pressed.jump = true;
       game.scene.update(k);
+      await flushSaves();
       expect('jatko antaa täsmälleen ne elämät jotka se näytti, ja ne säilyvät',
-        game.state.lives === CONTINUE_LIVES && Save.load().lives === CONTINUE_LIVES,
-        `elämät ${game.state.lives}, tallennuksessa ${Save.load().lives},`
+        game.state.lives === CONTINUE_LIVES && (await Save.load()).lives === CONTINUE_LIVES,
+        `elämät ${game.state.lives}, tallennuksessa ${(await Save.load()).lives},`
         + ` luvattu ${CONTINUE_LIVES}`);
     }
   }
@@ -9190,12 +9212,13 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     game.state.continues = 5;
     game.persist();
     const { Save } = await import('/src/core/save.js');
-    expect('the continue count is written to the save', Save.load().continues === 5,
-      `${Save.load().continues}`);
+    await flushSaves();
+    expect('the continue count is written to the save', (await Save.load()).continues === 5,
+      `${(await Save.load()).continues}`);
 
     reset();
     game.state.continues = 6;
-    game.newGame();
+    await game.newGame();
     expect('starting a new game resets the continue count',
       game.state.continues === 0, `${game.state.continues}`);
     scores.clearScores();
@@ -11264,8 +11287,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
 
     /* …and it has to still be there tomorrow. */
     const before = localStorage.getItem('sfb3.save.v2');
-    Save.write(game.state);
-    const reloaded = Save.load();
+    await Save.write(game.state);
+    const reloaded = await Save.load();
     expect('löydetty salaisuus kestää tallennuksen',
       secretTally(reloaded, '1-2').found === 2, JSON.stringify(reloaded.secrets || null));
 
@@ -11276,7 +11299,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       reserve: null, world: 0, node: 'w1-2', cleared: { 'w1-1': true }, worldsOpen: 1,
     }));
     let old = null; let oldErr = '';
-    try { old = Save.load(); } catch (e) { oldErr = e.message; }
+    try { old = await Save.load(); } catch (e) { oldErr = e.message; }
     const oldReads = old && secretTally(old, '1-2');
     expect('vanha tallennus ilman salaisuustietoa latautuu ja lukee nollaksi',
       !!old && old.lives === 3 && !!old.secrets && oldReads.found === 0
@@ -13368,8 +13391,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
        * kentän päälle, joten tämä mittaa nimenomaan `write`in listaa — sitä
        * käsin kirjoitettua kohtaa jossa `doors` kerran unohtui. */
       const saveMod = await import('/src/core/save.js');
-      saveMod.Save.write({ ...game.state, taught: { peek: true } });
-      const reloaded = !!(saveMod.Save.load().taught || {}).peek;
+      await saveMod.Save.write({ ...game.state, taught: { peek: true } });
+      const reloaded = !!((await saveMod.Save.load()).taught || {}).peek;
 
       expect('vilkaisun opetus näkyy vain kun se on totta, ja loppuu opittuna',
         shown > 5 && idle === 0 && flat === 0 && learned && kept && reloaded,
@@ -13919,6 +13942,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     settleUI();
     const fromTitle = game.scene.constructor.name;
     tap('Enter');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const afterTitle = game.scene.constructor.name;
 
     /* Kartalla kursori pannaan **kentän** solmuun: aloitussolmu ei ole kenttä,
@@ -13940,6 +13964,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     settleUI();
     const inChooser = game.scene.constructor.name;
     tap('Enter');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const chose = game.scene.constructor.name;
     reset();
     game.chooseDifficulty();
@@ -19819,8 +19844,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
      */
     const { Save, KEY: SAVE_KEY } = await import('/src/core/save.js');
     const want = DEFAULT_SAVE();
-    Save.write({ ...want, doors: { '3-F': true }, secrets: { '1-1': ['a'] } });
-    const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    await Save.write({ ...want, doors: { '3-F': true }, secrets: { '1-1': ['a'] } });
+    const raw = await storedSave(SAVE_KEY);
     const roundTrip = Object.keys(want).filter((k) => raw[k] === undefined);
     expect('jokainen tallennuksen kenttä selviää kierroksesta write -> load',
       roundTrip.length === 0,
@@ -20748,7 +20773,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         }
         // …ja peli lähtee käyntiin. Se on se mitä roskalinkki ei saa estää.
         const before = game.scene.constructor.name;
-        game.newGame();
+        await game.newGame();
         const started = game.scene.constructor.name;
         return {
           booted: true,
@@ -21210,6 +21235,29 @@ const report = await page.evaluate(async (OVERWORLDS) => {
     const { getLevel, levelIds } = await import('/src/data/levels.js');
     const { Save } = await import('/src/core/save.js');
     const { captureState, restoreState } = await import('/src/core/savestate.js');
+  const { Save: asyncSave } = await import('/src/core/save.js');
+  const { decrypt: decryptSave } = await import('/src/core/crypto.js');
+  // Scene actions fire persistence without awaiting it. Track their real writes
+  // so disk assertions wait for encryption, without changing the shipped API.
+  const pendingSaves = new Set();
+  const originalWrite = asyncSave.write;
+  asyncSave.write = (...args) => {
+    const pending = originalWrite.apply(asyncSave, args);
+    pendingSaves.add(pending);
+    pending.finally(() => pendingSaves.delete(pending));
+    return pending;
+  };
+  const flushSaves = async () => {
+    while (pendingSaves.size) await Promise.all([...pendingSaves]);
+  };
+  const storedSave = async (key) => {
+    await flushSaves();
+    const stored = localStorage.getItem(key);
+    if (!stored) return {};
+    const plain = await decryptSave(stored);
+    return JSON.parse(plain ?? stored);
+  };
+
     const { TILE } = await import('/src/gfx/tiles.js');
     const font = await import('/src/gfx/font.js');
 
@@ -21503,9 +21551,9 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       game.scene = new LevelScene(game, '1-1');
       game.scene.time = 275;
       game.slot = 1;
-      game.quickSave();
+      await game.quickSave();
       game.scene.time = 100;
-      game.quickLoad();
+      await game.quickLoad();
       const plainLoaded = game.scene.time;
       const plainStar = !!game.state.usedSaveState;
 
@@ -21515,7 +21563,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       game.scene = new LevelScene(game, '1-1');
       game.scene.time = 100;
       const before = game.scene;
-      game.quickLoad();
+      await game.quickLoad();
       const sameScene = game.scene === before;
       const timedTime = game.scene.time;
       const timedStar = !!game.state.usedSaveState;
@@ -21571,7 +21619,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         usedSaveState: true, continues: 2, secrets: { '1-1': ['a'] },
       };
       localStorage.setItem(KEY, JSON.stringify(old));
-      const loaded = Save.load();
+      const loaded = await Save.load();
       const oldKept = Object.keys(old)
         .filter((k) => JSON.stringify(loaded[k]) !== JSON.stringify(old[k]));
       let emptyTimes = false;
@@ -21579,8 +21627,8 @@ const report = await page.evaluate(async (OVERWORLDS) => {
         emptyTimes = !!TA && Object.keys(TA.bestTimes(loaded)).length === 0;
       } catch { emptyTimes = false; }
 
-      Save.write({ ...loaded, bestTimes: { '1-1': { frames: 812, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) } } });
-      const raw = JSON.parse(localStorage.getItem(KEY));
+      await Save.write({ ...loaded, bestTimes: { '1-1': { frames: 812, marks: marks(1, 2, 3, 4, 5, 6, 7, 8) } } });
+      const raw = await storedSave(KEY);
       const wrote = !!(raw.bestTimes && raw.bestTimes['1-1'] && raw.bestTimes['1-1'].frames === 812);
       /* Vanha lataaja on tasan tämä: vanhat oletukset, ja tallennus niiden
        * päälle. Uusi kenttä on sille tuntematon avain jota se ei lue. */
@@ -21801,7 +21849,7 @@ const report = await page.evaluate(async (OVERWORLDS) => {
       reset();
       const first = finish(200, true);
       const afterFirst = TA ? TA.bestFor(game.state, '1-1') : null;
-      const onDisk = JSON.parse(localStorage.getItem(KEY) || '{}');
+      const onDisk = await storedSave(KEY);
       const slower = finish(300, true);
       const afterSlower = TA ? TA.bestFor(game.state, '1-1') : null;
       const faster = finish(150, true);
